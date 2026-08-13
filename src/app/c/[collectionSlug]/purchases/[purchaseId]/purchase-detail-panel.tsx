@@ -10,7 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DialogShell,
   DialogBody,
@@ -38,10 +38,12 @@ import {
   usePurchaseReturn,
   useLotReturn,
   useInvalidateLotCopies,
+  useLocationRefUsage,
   type LotCopiesParams,
 } from "./use-lot-copies-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import {
   DELIVERY_STATES,
   deliveryStateLabel,
@@ -876,6 +878,8 @@ type RunFn = (
 
 interface BulkChanges {
   locationId?: string | null;
+  /** The ref card's identifier, written with the location in one act (#565). */
+  locationRef?: string | null;
   deliveryState?: string;
   inCollection?: boolean;
   forSale?: boolean;
@@ -892,6 +896,9 @@ interface BulkScopeClient {
   purchaseId?: string;
   issueKey?: string;
   onlyOpenLots?: boolean;
+  /** The list's active filter chip, so "select everything matching" resolves to the whole filtered
+   * set on the server rather than the rows scrolled into view (#565). */
+  filter?: LotCopyFilter;
 }
 
 /** A bulk-action target: either an explicit id list (a single copy from its row menu) or a
@@ -909,6 +916,7 @@ function bulkTargetCount(t: BulkTarget): number {
  * mark-sorted), used by both the id-list and scoped bulk requests. */
 function appendBulkChanges(fd: FormData, changes: BulkChanges): void {
   if (changes.locationId !== undefined) fd.set("locationId", changes.locationId ?? "");
+  if (changes.locationRef !== undefined) fd.set("locationRef", changes.locationRef ?? "");
   if (changes.deliveryState) fd.set("deliveryState", changes.deliveryState);
   if (changes.inCollection !== undefined) fd.set("inCollection", String(changes.inCollection));
   if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
@@ -930,8 +938,12 @@ function useCopyEditing(ctx: {
   certificateStatuses: CertificateStatusData[];
   isPending: boolean;
   run: RunFn;
+  /** Called after any bulk change lands, so a caller holding a selection can drop it — the copies
+   * it named have just been acted on (#565). */
+  onBulkDone?: () => void;
 }) {
   const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
+  const { onBulkDone } = ctx;
   // Catalog-number rendering context for the quick-price dialog (#147): reuse the same
   // per-area vendor maps the copy rows use so numbers format identically.
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -943,6 +955,7 @@ function useCopyEditing(ctx: {
   const [copyError, setCopyError] = useState<string | undefined>();
   const [bulkMove, setBulkMove] = useState<BulkTarget | null>(null);
   const [bulkSort, setBulkSort] = useState<BulkTarget | null>(null);
+  const [bulkFile, setBulkFile] = useState<BulkTarget | null>(null);
 
   /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
   function runBulk(itemIds: string[], changes: BulkChanges) {
@@ -960,6 +973,8 @@ function useCopyEditing(ctx: {
       () => {
         setBulkMove(null);
         setBulkSort(null);
+        setBulkFile(null);
+        onBulkDone?.();
       }
     );
   }
@@ -976,6 +991,7 @@ function useCopyEditing(ctx: {
         if (scope.purchaseId) fd.set("purchaseId", scope.purchaseId);
         if (scope.issueKey) fd.set("issueKey", scope.issueKey);
         if (scope.onlyOpenLots) fd.set("onlyOpenLots", "true");
+        if (scope.filter && scope.filter !== "none") fd.set("filter", scope.filter);
         appendBulkChanges(fd, changes);
         const { bulkUpdateLotItemsScopedAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsScopedAction(fd);
@@ -985,6 +1001,8 @@ function useCopyEditing(ctx: {
       () => {
         setBulkMove(null);
         setBulkSort(null);
+        setBulkFile(null);
+        onBulkDone?.();
       }
     );
   }
@@ -1169,6 +1187,34 @@ function useCopyEditing(ctx: {
         />
       )}
 
+      {bulkFile && (
+        <FileCopiesDialog
+          count={bulkTargetCount(bulkFile)}
+          locations={locations}
+          collectionId={collectionId}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setBulkFile(null);
+              setCopyError(undefined);
+            }
+          }}
+          onConfirm={({ locationId, locationRef }) =>
+            applyBulk(bulkFile, {
+              // Filing *is* sorting (#565): the delivery lifecycle already says a `delivered` copy
+              // is "sorted and filed", so this is `Mark all copies sorted` with an address on it.
+              markSorted: true,
+              // The work unit is `to sort` whatever the copy's disposition — an album copy and a
+              // stock copy are both being put away — so no disposition is written here at all.
+              keepDisposition: true,
+              locationId,
+              locationRef,
+            })
+          }
+        />
+      )}
+
       {bulkSort && (
         <MarkSortedDialog
           count={bulkTargetCount(bulkSort)}
@@ -1203,6 +1249,7 @@ function useCopyEditing(ctx: {
     removeCopy,
     setBulkMove,
     setBulkSort,
+    setBulkFile,
     setEditCopyItem,
     setEditStampItem,
     setIdentifyItem,
@@ -1369,6 +1416,18 @@ function estimateFor(
   if (w == null || w <= 0) return null;
   return Math.round(((poolBase * w) / weightBase) * 100) / 100;
 }
+
+/** The plain-text controls in the selection action bar (#565) — "select all matching", "clear".
+ * Underlined text rather than buttons, so the one real action in the bar reads as the button. */
+const SELECTION_LINK: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-secondary)",
+  textDecoration: "underline",
+};
 
 const COPIES_MUTED_STYLE: React.CSSProperties = {
   padding: "0.875rem 1.25rem",
@@ -1584,6 +1643,20 @@ function LotCard({
     if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [highlighted]);
 
+  // Which copies the action bar is about (#565). Ticked ids are held across filter changes and
+  // paging on purpose: narrowing to "to sort", ticking a run, then clearing the chip is one pass
+  // over a lot, and a selection that emptied itself at every chip press would make that impossible.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // "Everything matching the current filter" is a *scope*, not a list of ids: the filtered set runs
+  // past the loaded page, so it is resolved server-side, exactly as `Mark all copies sorted` is.
+  // The chip it was taken under is what is stored, so changing the chip retires it by derivation —
+  // "all 40 to sort" must never silently become "all 900".
+  const [allMatchingFilter, setAllMatchingFilter] = useState<LotCopyFilter | null>(null);
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setAllMatchingFilter(null);
+  }, []);
+
   const copy = useCopyEditing({
     collectionId,
     areas,
@@ -1592,8 +1665,9 @@ function LotCard({
     certificateStatuses,
     isPending,
     run: onRun,
+    onBulkDone: clearSelection,
   });
-  const { copyError, setCopyError, setBulkMove, setBulkSort } = copy;
+  const { copyError, setCopyError, setBulkMove, setBulkSort, setBulkFile } = copy;
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
@@ -1646,10 +1720,33 @@ function LotCard({
     filter,
   };
 
+  // How many copies the current chip is showing — the number "select everything matching" claims,
+  // taken from the whole-lot summary rather than counted off the loaded page (#565).
+  const filteredCount =
+    filter === "to-sort"
+      ? toSortCount
+      : filter === "unpriced"
+        ? blockingCount
+        : filter === "no-photos"
+          ? noPhotoCount
+          : totalCount;
+
+  // The select-all only stands while its own chip is still on; the ticked ids stay either way,
+  // being the collector's own choices.
+  const allMatching = allMatchingFilter === filter;
+
+  // What the action bar acts on: a server-resolved scope carrying the list's own filter when the
+  // whole matching set is selected, an explicit id list otherwise (#565/#172).
+  const selectionCount = allMatching ? filteredCount : selectedIds.size;
+  const selectionTarget: BulkTarget | null = allMatching
+    ? { kind: "scope", scope: { lotId: lot.id, filter }, count: filteredCount }
+    : selectedIds.size > 0
+      ? { kind: "ids", ids: [...selectedIds] }
+      : null;
+
   function renderRow(it: ItemListItem) {
-    return (
+    const row = (
       <CopyRow
-        key={it.id}
         collectionId={collectionId}
         item={it}
         open={open}
@@ -1662,6 +1759,42 @@ function LotCard({
         vendorMapFor={vendorMapFor}
         copy={copy}
       />
+    );
+    // A closed lot's copies are read-only, so they get no checkbox — and no strip either, since
+    // there is no mixed list to keep aligned.
+    if (!open) return <div key={it.id}>{row}</div>;
+    const checked = allMatching || selectedIds.has(it.id);
+    return (
+      <div
+        key={it.id}
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          background: checked ? "var(--color-accent-soft)" : undefined,
+        }}
+      >
+        <label style={SELECT_STRIP}>
+          <input
+            type="checkbox"
+            checked={checked}
+            // While "everything matching" is on, the target is a server-resolved scope that runs
+            // past the loaded rows, so a row cannot be lifted out of it — the boxes read as ticked
+            // and are frozen, and the bar carries the way back to picking copies one by one.
+            disabled={allMatching}
+            onChange={() =>
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(it.id)) next.delete(it.id);
+                else next.add(it.id);
+                return next;
+              })
+            }
+            aria-label="Select this copy"
+            style={{ cursor: allMatching ? "default" : "pointer" }}
+          />
+        </label>
+        <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+      </div>
     );
   }
 
@@ -2022,6 +2155,67 @@ function LotCard({
                           ? "No photos only"
                           : "To sort only"}{" "}
                       <Icon name="close" size="sm" />
+                    </button>
+                  </Tooltip>
+                </div>
+              )}
+
+              {/* Selection action bar (#565) — what the ticked copies can be done to. It sits above
+                  the rows rather than floating: this screen already pins a lot header and an issue
+                  header, and a third floating strip would be the third thing covering the list. */}
+              {open && selectionCount > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0.5rem 1.25rem",
+                    borderBottom: "1px solid var(--color-border)",
+                    background: "var(--color-accent-soft)",
+                  }}
+                >
+                  <span
+                    style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}
+                  >
+                    {selectionCount} cop{selectionCount === 1 ? "y" : "ies"} selected
+                    {allMatching && " — everything matching this filter"}
+                  </span>
+                  {/* Offered whenever the filtered set is bigger than what is ticked: the whole set
+                      lives on the server and routinely runs past the loaded rows (#172), so this is
+                      the only way to say "all of them" honestly. */}
+                  {!allMatching && filteredCount > selectionCount && (
+                    <Tooltip content="Selects every copy the current filter matches, including the ones further down the list that have not loaded yet.">
+                      <button
+                        type="button"
+                        onClick={() => setAllMatchingFilter(filter)}
+                        style={SELECTION_LINK}
+                      >
+                        Select all {filteredCount} matching
+                      </button>
+                    </Tooltip>
+                  )}
+                  <button type="button" onClick={clearSelection} style={SELECTION_LINK}>
+                    Clear
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <Tooltip content="File these copies into a location, optionally under a shared ref, and mark them delivered.">
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => setBulkFile(selectionTarget!)}
+                      style={{
+                        ...INPUT_STYLE,
+                        width: "auto",
+                        cursor: isPending ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                        color: "#fff",
+                        background: "var(--color-action-primary)",
+                        border: "none",
+                        padding: "0.3125rem 0.75rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <Icon name="location" size="sm" /> File copies…
                     </button>
                   </Tooltip>
                 </div>
@@ -2643,6 +2837,173 @@ function LocationPickerDialog({
  * exactly the decisions that took the longest to make. It is deliberately distinct from
  * turning all three chips off, which *clears* the dispositions — that is why it is a chip of
  * its own and not an empty selection, which the collector cannot tell apart from "none". */
+/**
+ * Record, in one act, that a batch of copies has been **put away** (#565): a location, an optional
+ * ref, and `delivered`.
+ *
+ * Sorting a lot sends its copies two ways and it is one act either way — stock onto transport cards
+ * carrying a running ref (`A147`), keepers into an album where the album itself is the address. So
+ * the ref is what differs, not whether the copy gets filed, and this is one dialog with an optional
+ * ref rather than two actions.
+ *
+ * Nothing is **allocated** here. The index cards are printed blank and ahead of time (the strip is
+ * on the Locations screen), the stamps are packed onto a card, and only then is the filing
+ * recorded — so the app suggests the number the strip is up to and takes confirmation, rather than
+ * handing out refs behind the collector's back.
+ *
+ * The suggestion comes from the **target location**, never the lot: the box is shared across every
+ * purchase, and a per-lot counter would drop two `A147`s from two stockbooks into one box. A
+ * location nothing has ever been ref'd in suggests nothing and stays blank — the normal case for an
+ * album, and the reason the ref is optional at all.
+ */
+function FileCopiesDialog({
+  count,
+  locations,
+  collectionId,
+  isPending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  count: number;
+  locations: LocationData[];
+  collectionId: string;
+  isPending: boolean;
+  error?: string;
+  onClose: () => void;
+  onConfirm: (result: { locationId: string; locationRef: string }) => void;
+}) {
+  const params = useParams<{ collectionSlug: string }>();
+  const [locationId, setLocationId] = useState(() => {
+    const last = readLast(LS_LAST_LOCATION, collectionId);
+    return locations.some((l) => l.id === last && l.assignable) ? last : "";
+  });
+  // Only the *typed* ref is state; until the collector types, the box simply shows the location's
+  // suggestion. Derived rather than copied in, so switching location re-suggests on its own — and
+  // once they have typed, what they typed stands, because a typed ref is their answer to "where is
+  // this strip actually up to".
+  const [typedRef, setTypedRef] = useState<string | null>(null);
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+
+  const usage = useLocationRefUsage(collectionId, locationId);
+  const suggestion = usage.data?.suggestion ?? null;
+  const ref = typedRef ?? suggestion ?? "";
+
+  const trimmedRef = ref.trim();
+  // A ref already in use is a **confirmation, not an error**: a card holding twenty stamps is
+  // rarely filled in one sitting, so topping one up is the normal path. It is still worth saying
+  // out loud, because an unexpected collision (a typo) reads differently from an expected one.
+  const collision = trimmedRef
+    ? (usage.data?.refs.find((r) => r.ref.toLocaleLowerCase() === trimmedRef.toLocaleLowerCase())
+        ?.count ?? 0)
+    : 0;
+
+  const copies = `${count} cop${count === 1 ? "y" : "ies"}`;
+  return (
+    <DialogShell title="File copies" onClose={onClose} maxWidth="26rem">
+      <form
+        style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!locationId) return;
+          writeLast(LS_LAST_LOCATION, collectionId, locationId);
+          onConfirm({ locationId, locationRef: trimmedRef });
+        }}
+      >
+        <DialogBody>
+          <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+            Puts {copies} away: files {count === 1 ? "it" : "them"} into one location and marks{" "}
+            {count === 1 ? "it" : "them"} <strong>delivered</strong>. Each copy keeps its own
+            disposition, and copies already sorted keep their delivery status (the location still
+            applies).
+          </p>
+
+          <LabelWithError htmlFor="file-copies-location">Location</LabelWithError>
+          {locations.length === 0 ? (
+            <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+              No locations defined yet. Add some on the Locations screen first.
+            </p>
+          ) : (
+            <LocationTreeSelect
+              locations={locations}
+              locationTree={locationTree}
+              name="locationId"
+              selectedId={locationId}
+              onSelectedIdChange={(id) => {
+                setLocationId(id);
+                // The counter belongs to the location, so a ref typed for the last one means
+                // nothing here — drop back to the new location's own suggestion.
+                setTypedRef(null);
+              }}
+              onlyAssignableSelectable
+              disabled={isPending}
+            />
+          )}
+
+          <div style={{ marginTop: "1rem" }}>
+            <LabelWithError htmlFor="file-copies-ref">Ref (optional)</LabelWithError>
+            <input
+              id="file-copies-ref"
+              type="text"
+              value={ref}
+              onChange={(e) => setTypedRef(e.target.value)}
+              disabled={isPending || !locationId}
+              placeholder={locationId ? (suggestion ?? "No refs used here yet") : "Choose a location first"}
+              style={{ ...INPUT_STYLE, fontVariantNumeric: "tabular-nums" }}
+            />
+            <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+              {!locationId
+                ? "The ref numbers a card inside a location, so pick the location first."
+                : usage.isLoading
+                  ? "Reading this location’s refs…"
+                  : suggestion == null
+                    ? "Nothing has been ref’d in this location yet — leave it blank for an album, where the location is the address."
+                    : `Next free ref here is ${suggestion}.`}{" "}
+              {locationId && (
+                <Link
+                  href={`/c/${params.collectionSlug}/locations/ref-cards?locationId=${locationId}${
+                    trimmedRef ? `&start=${encodeURIComponent(trimmedRef)}` : ""
+                  }`}
+                  target="_blank"
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  Print blank ref cards
+                </Link>
+              )}
+            </p>
+            {collision > 0 && (
+              <p
+                style={{
+                  margin: "0.5rem 0 0",
+                  fontSize: "0.75rem",
+                  color: "var(--color-warning)",
+                }}
+              >
+                <Icon name="warning" size="sm" /> {trimmedRef} already holds {collision} cop
+                {collision === 1 ? "y" : "ies"} here. Adding {copies} to it.
+              </p>
+            )}
+          </div>
+        </DialogBody>
+        <DialogActions
+          actionLabel={
+            isPending
+              ? "Filing…"
+              : collision > 0
+                ? `Add to ${trimmedRef}`
+                : trimmedRef
+                  ? `File as ${trimmedRef}`
+                  : "File copies"
+          }
+          onCancel={onClose}
+          disabled={isPending || !locationId}
+          error={error}
+        />
+      </form>
+    </DialogShell>
+  );
+}
+
 function MarkSortedDialog({
   count,
   locations,

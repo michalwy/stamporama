@@ -8,6 +8,7 @@ import type {
   LotIntakeSummary,
   PurchaseIntakeSummary,
 } from "@/lib/items";
+import type { LocationRefUsage } from "@/lib/locations";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 
 interface LotCopiesPage {
@@ -161,6 +162,24 @@ export function useLotReturn(collectionId: string, lotId: string, enabled = true
       return res.json();
     },
     enabled,
+  });
+}
+
+/** The refs already written in one storage location, and the next one to suggest (#565). Read when
+ * the file dialog's location changes — the whole set at once, because a location holds as many refs
+ * as it has cards in it, and having them client-side is what lets the dialog answer *"`A147`
+ * already holds 12 copies"* the moment a ref is typed instead of a round trip per keystroke. */
+export function useLocationRefUsage(collectionId: string, locationId: string) {
+  return useQuery<LocationRefUsage>({
+    queryKey: ["location-ref-usage", collectionId, locationId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/locations/${locationId}/ref-usage`
+      );
+      if (!res.ok) throw new Error("Failed to fetch location refs");
+      return res.json();
+    },
+    enabled: !!locationId,
   });
 }
 

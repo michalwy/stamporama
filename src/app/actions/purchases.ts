@@ -27,7 +27,11 @@ import {
   type LotBulkChanges,
   type LotBulkScope,
 } from "@/lib/lots";
+import type { LotCopyFilter } from "@/lib/items";
 import type { ArrivingCopy } from "@/lib/want-rules";
+
+/** The intake list's filter chips, as the scoped bulk action accepts them off a form (#565). */
+const LOT_COPY_FILTERS = new Set(["unpriced", "to-sort", "no-photos"]);
 import { parsePhotoChangeSet } from "@/lib/photos";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -430,6 +434,9 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
   const changes: LotBulkChanges = {};
   // A present `locationId` field (even empty) signals a location change; absent means leave it.
   if (formData.has("locationId")) changes.locationId = optionalStr(formData, "locationId");
+  // The ref card's identifier, written in the same act as the filing (#565). Present-but-empty clears it,
+  // which is how a card is taken off a batch that no longer sits on one.
+  if (formData.has("locationRef")) changes.locationRef = optionalStr(formData, "locationRef");
   const deliveryState = optionalStr(formData, "deliveryState");
   if (deliveryState) changes.deliveryState = deliveryState;
   // A present disposition field (value "true"/"false") signals a flag change; absent leaves it.
@@ -490,6 +497,10 @@ export async function bulkUpdateLotItemsScopedAction(
   const issueKey = optionalStr(formData, "issueKey");
   if (issueKey) scope.issueKey = issueKey;
   if (str(formData, "onlyOpenLots") === "true") scope.onlyOpenLots = true;
+  // The list's own filter chip, so "everything matching" means what the collector is looking at
+  // (#565). An unknown value is dropped rather than refused — it can only narrow the target.
+  const filter = optionalStr(formData, "filter");
+  if (filter && LOT_COPY_FILTERS.has(filter)) scope.filter = filter as LotCopyFilter;
   if (!scope.lotId && !scope.purchaseId) {
     return { status: "error", message: "No lot selected." };
   }

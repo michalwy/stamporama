@@ -29,6 +29,7 @@ const COLLAPSE_STORAGE_KEY = "stamporama:location-mgmt-collapsed";
 
 interface LocationsPanelProps {
   collectionId: string;
+  collectionSlug: string;
   initialLocations: LocationData[];
 }
 
@@ -203,6 +204,7 @@ function LocationForm({
 
 export function LocationsPanel({
   collectionId,
+  collectionSlug,
   initialLocations,
 }: LocationsPanelProps) {
   const router = useRouter();
@@ -416,6 +418,23 @@ export function LocationsPanel({
                     icon: "edit",
                     onSelect: () => openDialog({ kind: "edit", location }),
                   },
+                  // Blank index cards for this box (#565), printed *before* anything is packed
+                  // onto them — which is why this lives here, on the location, rather than only
+                  // inside the filing dialog that comes after the packing.
+                  ...(location.assignable
+                    ? [
+                        {
+                          key: "ref-cards",
+                          label: "Print blank ref cards…",
+                          icon: "print" as const,
+                          separatorBefore: true,
+                          onSelect: () =>
+                            router.push(
+                              `/c/${collectionSlug}/locations/ref-cards?locationId=${location.id}`
+                            ),
+                        },
+                      ]
+                    : []),
                   {
                     key: "delete",
                     label: "Delete",

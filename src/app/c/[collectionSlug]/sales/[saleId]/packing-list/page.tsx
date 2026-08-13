@@ -13,8 +13,8 @@ import { loadIssuePrefixMap } from "@/lib/issue-prefix";
 import { buildPackingList } from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { saleStatusMeta } from "../../sale-status";
-import { PrintButton } from "./print-button";
-import { GeneratedAt } from "./generated-at";
+import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
+import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
 import { PackingSheet } from "./packing-sheet";
 import { Icon } from "@/app/icons";
 

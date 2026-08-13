@@ -2,8 +2,8 @@
 
 import { Icon } from "@/app/icons";
 
-/** Opens the browser's print dialog for the packing list (#330). The sheet itself is a plain
- * server render — this is the only interactive part, and it hides itself on paper. */
+/** Opens the browser's print dialog for a printable sheet (#330, #565). The sheets themselves are
+ * plain server renders — this is the only interactive part, and it hides itself on paper. */
 export function PrintButton() {
   return (
     <button

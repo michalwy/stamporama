@@ -64,3 +64,62 @@ export function compareLocationRef(a: string | null, b: string | null): number {
   // Same prefix, same number — order by the raw text so the result is stable (`A01` vs `A1`).
   return COLLATOR.compare(ra, rb);
 }
+
+// ── Allocating the next ref (#565) ───────────────────────────────────────────
+//
+// Filing a batch of copies suggests the ref the printed strip of ref cards is up to. The suggestion
+// is derived from the refs **already used in the target location** and nowhere else: the box is
+// shared across purchases, so a per-lot counter would drop two `A147`s from two different
+// stockbooks into one box.
+
+/** The next ref after `ref` — its trailing number plus one, in the same shape: separators and
+ * zero-padding are kept (`B-3000` → `B-3001`, `A007` → `A008`), because the strip in the box is
+ * written one way and a suggestion in another shape reads as a different strip. Null when `ref`
+ * carries no trailing number, which is a ref that cannot be counted from. */
+export function incrementLocationRef(ref: string): string | null {
+  const trimmed = ref.trim();
+  const match = /^(.*?)(\d+)$/.exec(trimmed);
+  if (!match) return null;
+  const [, head, digits] = match;
+  // Through BigInt, so a ref longer than 2^53 counts on rather than rounding — the same care
+  // `compareDigits` takes for the same reason.
+  const next = (BigInt(digits) + 1n).toString();
+  return head + next.padStart(digits.length, "0");
+}
+
+/**
+ * The ref to suggest for a location, given every ref already written in it: one past the highest,
+ * or null when the location has never been ref'd in.
+ *
+ * Null is the **normal** answer for an album or stockbook, where the location itself is the
+ * address — the ref is optional and this action files copies going into the collection just as
+ * much as stock, so a location that uses no refs must suggest none rather than inventing `1`.
+ *
+ * "Highest" is {@link compareLocationRef}'s order, which sorts by prefix first: a box holding
+ * `A1…A200` and `B1…B5` suggests `B6`, since `B` is the strip currently being filled. Refs with no
+ * trailing number are ignored — they are labels, not a counter.
+ */
+export function nextLocationRef(refs: Iterable<string | null | undefined>): string | null {
+  let best: string | null = null;
+  for (const raw of refs) {
+    const ref = raw?.trim();
+    if (!ref || parseLocationRef(ref).digits == null) continue;
+    if (best == null || compareLocationRef(ref, best) > 0) best = ref;
+  }
+  return best == null ? null : incrementLocationRef(best);
+}
+
+/** A run of `count` consecutive refs starting at `start` — what a strip of blank ref cards carries
+ * (#565). Empty when `start` has no trailing number to count from, which is the caller's cue that
+ * there is nothing to print rather than a strip of one. */
+export function locationRefStrip(start: string, count: number): string[] {
+  const first = start.trim();
+  if (!first || parseLocationRef(first).digits == null) return [];
+  const strip = [first];
+  for (let i = 1; i < count; i++) {
+    const next = incrementLocationRef(strip[strip.length - 1]);
+    if (!next) break;
+    strip.push(next);
+  }
+  return strip;
+}

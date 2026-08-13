@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { compareLocationRef, nextLocationRef } from "./location-ref";
 
 // Server-side CRUD for storage locations (`Location`), collection-scoped (#56).
 // Adjacency-list hierarchy mirroring `CollectionArea` (see areas.ts): grouping-only
@@ -65,6 +66,62 @@ export async function getLocations(
     itemCount: l._count.items,
     childCount: l._count.children,
   }));
+}
+
+/** One in-location ref and how many copies currently sit under it. */
+export interface LocationRefInUse {
+  ref: string;
+  count: number;
+}
+
+export interface LocationRefUsage {
+  /** Every ref written in this location, in walk order, with its copy count. */
+  refs: LocationRefInUse[];
+  /** The ref to offer when filing into this location, or null when it uses none (#565). */
+  suggestion: string | null;
+}
+
+/**
+ * What refs a location already holds, and the one to suggest next (#565).
+ *
+ * Read whole rather than asked one ref at a time: a location has as many refs as it has cards in
+ * it, not as many as it has copies, so the whole set is small — and holding it client-side is what
+ * lets the file dialog answer *"`A147` already holds 12 copies"* the instant a ref is typed,
+ * without a round trip per keystroke. Blank and null refs are folded away here for the same reason
+ * {@link listItemLocationGroups} folds them: "nothing is written on these" is one answer, and the
+ * database cannot merge the two into it.
+ */
+export async function getLocationRefUsage(
+  ownerId: string,
+  collectionId: string,
+  locationId: string
+): Promise<LocationRefUsage> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { collectionId: true },
+  });
+  if (!location || location.collectionId !== collectionId) {
+    throw new Error("Location not found or access denied.");
+  }
+
+  const grouped = await prisma.item.groupBy({
+    by: ["locationRef"],
+    where: { collectionId, locationId, NOT: { locationRef: null } },
+    _count: { id: true },
+  });
+
+  const counts = new Map<string, number>();
+  for (const g of grouped) {
+    const ref = g.locationRef?.trim();
+    if (!ref) continue;
+    counts.set(ref, (counts.get(ref) ?? 0) + g._count.id);
+  }
+
+  const refs = [...counts.entries()]
+    .map(([ref, count]) => ({ ref, count }))
+    .sort((a, b) => compareLocationRef(a.ref, b.ref));
+  return { refs, suggestion: nextLocationRef(refs.map((r) => r.ref)) };
 }
 
 export async function createLocation(

@@ -57,10 +57,31 @@ lists). In the **Storage** section:
   locations appear for context but are greyed out — expand them to reach the storage
   inside.
 - Optionally type a **Ref** — a free-text identifier *within* that location, such as a
-  page or pocket (`p.12`). The ref is just a note to help you find the copy; it does not
-  have to be unique.
+  page or pocket (`p.12`), or the number written on a ref card (`A147`). The ref is
+  shared by however many copies sit under it, and it does not have to be unique.
 
 Leave the location empty to record a copy you haven't filed anywhere yet.
+
+A whole batch is filed at once from the purchase screen — see
+[Filing a batch in one action](purchases.md#filing-a-batch-in-one-action). There the ref is
+suggested for you: it is the **next free one in that location**, so the strip of cards a box
+is on carries on across purchases.
+
+## Printing blank ref cards
+
+If you file stock onto transport cards, each card carries one or more small index cards with a
+running ref written on them — *ref cards*. They are printed **blank and ahead of time**: you
+print a strip, pack the stamps onto a card, and only then record the filing — which is why
+Stamporama never hands out a ref behind your back.
+
+A location's **⋮** menu → **Print blank ref cards…** opens a printable strip. It starts at the
+next free ref in that location and prints as many cards as you ask for; change the start ref
+if your strip is somewhere else, and use **Print** for the browser's print dialog. Cutting
+guides are dashed and the cards carry the ref and nothing else.
+
+Nothing is reserved by printing — a ref becomes real only when copies are filed under it. Since
+refs allocated in packing order land as contiguous runs, a transport card ends up covering a
+range, and finding `A148` is scrolling the box to the card whose range covers it.
 
 ## Finding copies by location
 

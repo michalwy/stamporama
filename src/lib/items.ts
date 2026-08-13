@@ -2113,6 +2113,30 @@ export interface LotIntakePageOptions {
   pageSize?: number;
 }
 
+/**
+ * The `where` fragment for the intake filters a **column** can answer. `unpriced` is deliberately
+ * absent: it is a derived valuation no column carries, so it is resolved to an id set instead (see
+ * {@link listUnpricedItemIds}). Shared by the paged read and the scoped bulk write (#565), so
+ * "select everything matching this filter" targets exactly the rows the list is showing.
+ */
+export function lotCopyFilterWhere(filter: LotCopyFilter | undefined): Prisma.ItemWhereInput {
+  if (filter === "to-sort") return { deliveryState: TO_SORT_DELIVERY_STATE };
+  if (filter === "no-photos") return { photos: { none: {} } };
+  return {};
+}
+
+/** The ids within `where` that the `unpriced` filter selects — copies staying in the allocation
+ * with no base-currency catalog weight, which is a valuation and not a column (#121). Bounded by
+ * the scope, exactly as a page fetch under that filter already is. */
+export async function listUnpricedItemIds(
+  collectionId: string,
+  where: Prisma.ItemWhereInput
+): Promise<string[]> {
+  const rows = await prisma.item.findMany({ where, select: ITEM_LIST_SELECT });
+  const enriched = await enrichItemRows(collectionId, rows);
+  return enriched.filter(isBlockingCopy).map((i) => i.id);
+}
+
 /** Prisma `where` fragment narrowing intake reads to a single lot or a whole purchase's lots. */
 function issueKeyWhere(issueKey: string | undefined): Prisma.ItemWhereInput {
   if (!issueKey) return {};
@@ -2151,8 +2175,7 @@ async function getIntakePage(
         collectionId,
         ...scopeWhere,
         ...issueWhere,
-        ...(filter === "to-sort" ? { deliveryState: TO_SORT_DELIVERY_STATE } : {}),
-        ...(filter === "no-photos" ? { photos: { none: {} } } : {}),
+        ...lotCopyFilterWhere(filter),
       },
       // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
       // intake can stamp many copies with near-identical timestamps (#172).

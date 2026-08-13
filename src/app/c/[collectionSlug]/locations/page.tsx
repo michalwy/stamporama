@@ -47,7 +47,11 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
         them however your storage is organized; mark the ones that actually hold copies
         as assignable, then file inventory copies into them.
       </p>
-      <LocationsPanel collectionId={collection.id} initialLocations={locations} />
+      <LocationsPanel
+        collectionId={collection.id}
+        collectionSlug={collectionSlug}
+        initialLocations={locations}
+      />
     </div>
   );
 }

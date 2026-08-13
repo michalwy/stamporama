@@ -355,6 +355,8 @@ whatever granularity suits the parcel:
   sorted**.
 - **A whole issue** — in the **By issue** view, each issue header has a **📍** (move to
   location) and a **✓** (mark sorted) button acting on that issue's copies.
+- **A batch you pick yourself** — tick the checkbox on each copy's row and use **File
+  copies…** in the bar that appears (see [Filing a batch](#filing-a-batch-in-one-action)).
 - **A single copy** — edit it right on the row: its **delivery chip** is a dropdown for
   setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it
   to advance one step, and its **disposition** shows all three flags — **In collection / For
@@ -395,6 +397,45 @@ open — handy for a mixed album bought sight-unseen.
 If a copy turns out to be a **different variant** than expected, its **⋮** menu →
 **Identify variant** re-points it to the right one (available when the copy is linked to a
 base stamp with variants).
+
+### Filing a batch in one action
+
+Putting a batch away — into a location, optionally under a shared **ref**, and marking it
+delivered — is one action rather than three. While a lot is open, each copy's row carries a
+checkbox: tick the ones you have just packed together, and a bar appears above the list with
+**File copies…**.
+
+The selection survives the filter chips and scrolling, so you can narrow to **N to sort**, tick
+your way down the list, and clear the chip without losing what you picked. The bar also offers
+**Select all N matching**, which means *every* copy the current filter matches — including the
+ones further down that have not loaded yet, not just the rows on screen. While that is on, the
+row checkboxes are frozen (there is no list of ids to lift one out of); press **Clear** to go
+back to picking copies individually.
+
+The dialog asks for:
+
+- a **location**, pre-filled with the last one you used, and
+- a **ref** — optional.
+
+The ref is the identifier written on the **ref card** that goes with the stamps: one small
+card usually covers a whole transport card's worth, with a per-series card whenever a set
+should come out in one grab. It is suggested as **the next free ref in that location** — never
+per lot, because the box is shared across every purchase — so filing continues the strip the
+box is already on. A location nothing has ever been ref'd in suggests nothing and stays blank,
+which is the normal case for an album or stockbook: there the location *is* the address.
+
+Typing a ref that is **already in use** is not an error. Cards get topped up over several
+sittings, so the dialog says *"A147 already holds 12 copies"* and the button reads **Add to
+A147** — which also catches the typo, since an unexpected collision reads differently from an
+expected one.
+
+Filing marks the copies **delivered** and leaves each one's **disposition** exactly as it is:
+the batch on your desk is *to sort* whether it is headed for the collection or for stock, and
+the ref is what differs between the two, not whether the copy gets filed. Copies already
+sorted, damaged, or not delivered keep their delivery status, and the location still applies.
+
+Blank cards are printed **before** you pack — see
+[Printing blank ref cards](locations.md#printing-blank-ref-cards).
 
 ### Closing a lot
 

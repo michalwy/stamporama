@@ -4,8 +4,11 @@ import { prisma } from "./db";
 import {
   allocateItemNumbers,
   listItemsPaginated,
+  listUnpricedItemIds,
+  lotCopyFilterWhere,
   valuateItemsByIds,
   type ItemListItem,
+  type LotCopyFilter,
 } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
@@ -826,6 +829,11 @@ function inCollectionForDelivery(state: string): boolean | undefined {
 
 export interface LotBulkChanges {
   locationId?: string | null;
+  /** The in-location ref written on the filed copies (#565) — the ref card the transport card
+   * carries. Only meaningful alongside a `locationId`, since a ref identifies a place *within* a
+   * location; sending one without is refused rather than silently dropped. Empty/blank clears it,
+   * and clearing the location clears the ref with it (a ref means nothing on an unfiled copy). */
+  locationRef?: string | null;
   deliveryState?: string;
   inCollection?: boolean;
   forSale?: boolean;
@@ -836,6 +844,14 @@ export interface LotBulkChanges {
    * `delivered` transition still apply — this is the disposition's "leave as is", mirroring
    * the one the location picker already offers. Ignored when any flag is given. */
   keepDisposition?: boolean;
+}
+
+/** A ref addresses a place *inside* a location, so one arriving without a location to sit in is a
+ * caller mistake and is refused rather than written where nothing can read it back (#565). */
+function assertRefHasLocation(changes: LotBulkChanges): void {
+  if (changes.locationRef !== undefined && !changes.locationId) {
+    throw new Error("A location is needed before copies can be given a ref.");
+  }
 }
 
 /** True when `changes` would touch nothing (used to short-circuit a no-op bulk update). */
@@ -882,7 +898,15 @@ async function applyLotBulkChanges(
       await tx.item.updateMany({
         where: baseWhere,
         data: changes.locationId
-          ? { locationId: changes.locationId }
+          ? {
+              locationId: changes.locationId,
+              // The ref rides with the location it belongs to, so filing a batch onto one card is
+              // a single write (#565). Absent means "leave whatever each copy carries" — the plain
+              // move action still has no ref to say anything about.
+              ...(changes.locationRef !== undefined
+                ? { locationRef: changes.locationRef?.trim() || null }
+                : {}),
+            }
           : { locationId: null, locationRef: null },
       });
     }
@@ -971,6 +995,7 @@ export async function bulkUpdateLotItems(
   if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
+  assertRefHasLocation(changes);
   if (isNoopBulk(changes)) return { count: 0, delivered: [] };
 
   const rows = await prisma.item.findMany({
@@ -1012,6 +1037,13 @@ export interface LotBulkScope {
   issueKey?: string;
   /** Only copies whose owning lot is still open (skips already-closed lots). */
   onlyOpenLots?: boolean;
+  /**
+   * Narrow to the copies the list is currently showing (#565). "Select everything matching the
+   * current filter" has to mean the whole filtered set on the server, not the rows scrolled into
+   * view, so the chip the collector pressed travels with the scope and is applied to the write —
+   * exactly the rule `Mark all copies sorted` already follows for the unfiltered lot.
+   */
+  filter?: LotCopyFilter;
 }
 
 /** Build the collection-scoped Prisma `where` for a {@link LotBulkScope}. */
@@ -1023,6 +1055,7 @@ function lotBulkScopeWhere(collectionId: string, scope: LotBulkScope): Prisma.It
     collectionId,
     ...(scope.lotId ? { lotId: scope.lotId } : {}),
     ...(Object.keys(lotRelation).length > 0 ? { lot: lotRelation } : {}),
+    ...lotCopyFilterWhere(scope.filter),
     ...(scope.issueKey
       ? scope.issueKey === "__none__"
         ? { stamp: { issueMemberships: { none: {} } } }
@@ -1048,10 +1081,18 @@ export async function bulkUpdateLotItemsScoped(
   if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
+  assertRefHasLocation(changes);
   if (isNoopBulk(changes)) return { count: 0, delivered: [] };
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
 
-  const where = lotBulkScopeWhere(collectionId, scope);
+  const scopeWhere = lotBulkScopeWhere(collectionId, scope);
+  // `unpriced` is the one filter no column answers (#565): it is a derived valuation, so the scope
+  // is resolved to the ids that valuation selects, the same fallback the paged read already makes
+  // under that chip. Every other filter is already in the `where`.
+  const where =
+    scope.filter === "unpriced"
+      ? { AND: [scopeWhere, { id: { in: await listUnpricedItemIds(collectionId, scopeWhere) } }] }
+      : scopeWhere;
   const count = await prisma.item.count({ where });
   if (count === 0) return { count: 0, delivered: [] };
   const delivered = await applyLotBulkChanges(where, changes);
