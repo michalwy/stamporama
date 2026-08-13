@@ -62,8 +62,8 @@ lists). In the **Storage** section:
 
 Leave the location empty to record a copy you haven't filed anywhere yet.
 
-A whole batch is filed at once from the purchase screen — see
-[Filing a batch in one action](purchases.md#filing-a-batch-in-one-action). There the ref is
+A whole batch is put away at once from the purchase screen — see
+[Two acts: Store and Move](purchases.md#two-acts-store-and-move). There the ref is
 suggested for you: it is the **next free one in that location**, so the strip of cards a box
 is on carries on across purchases.
 

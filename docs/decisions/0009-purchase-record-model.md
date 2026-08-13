@@ -112,9 +112,9 @@ The lifecycle of a purchased copy (#121) is **`ordered → to_sort → delivered
   `Purchase.status` to `arrived`, moves every `ordered` copy to `to_sort`, and can file the
   whole order into one location (e.g. an "incoming box") in one step.
 - **`delivered`** — sorted and in hand: the collector filed the copy (proper location,
-  corrected condition/variant if needed). The **bulk "Mark sorted"** action (per lot / per
-  issue) sets `delivered` **and** the collector-chosen disposition (defaulting to
-  `inCollection`). Setting `delivered` on a single copy inline
+  corrected condition/variant if needed). The bulk **Store** action (over whatever is selected,
+  #571) sets `delivered` **and**, when one is chosen, the collector's disposition — leaving each
+  copy's own standing otherwise. Setting `delivered` on a single copy inline
   deliberately **leaves disposition to the collector** (a delivered copy may go straight to
   sale/trade rather than the collection), prompting them to pick `inCollection` / `forSale` /
   `forTrade`. Moving a copy *back* to a pre-arrival state clears `inCollection`.
@@ -244,8 +244,11 @@ by-lot cards, and **per purchase** (`getPurchaseIntakePage`, `{ lot: { purchaseI
 order-level view (the "By lot" toggle off), so that view is one globally-ordered flat/by-issue
 stream across every lot — not a stack of per-lot sections. Its estimate denominator is per lot
 (`getPurchaseIntakeSummary.lotWeightBase[lotId]`) since each copy's estimate uses its own lot's
-pool; issue groups are merged across the purchase's lots, and per-issue bulk actions scope to
-`{ purchaseId, issueKey, onlyOpenLots }`.
+pool; issue groups are merged across the purchase's lots. The copy **selection** (#571) is one for
+the whole order, held above every view of it and scoped to
+`{ purchaseId, selectors, itemIds, onlyOpenLots }` — one bar over all the lots rather than one per
+card, since a batch being put away routinely spans them. `onlyOpenLots` because a closed lot's
+copies are read-only on this screen in every view, on the lot card as much as here.
 
 ## Addendum: the disposal axis (#394, #396)
 

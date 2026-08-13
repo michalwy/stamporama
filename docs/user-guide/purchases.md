@@ -261,8 +261,8 @@ matter how many copies the lot holds or how far you have scrolled.
 **Large lots.** A lot's copies **stream in as you scroll** — the list loads more rows when you
 reach the bottom, and the header counts (*to sort*, *unpriced*, *no photos*, the copy total) and the live
 estimate are figured over the whole lot on the server. There is no cap: a "stockbook" lot with
-thousands of positions shows every copy, and **Mark all copies sorted** / **Move all copies to
-a location** act on the entire lot (or issue group), not just the rows you have loaded.
+thousands of positions shows every copy, and ticking a whole lot or a whole issue group means
+**every copy the list is showing** — resolved on the server, not just the rows you have loaded.
 
 **Grouping the copies view.** Above the lots, a **Group by** control has two toggles —
 **Lot** and **Issue** — that shape how the whole order's copies are shown:
@@ -286,8 +286,9 @@ required/total stamp count) and can be collapsed or expanded. **Lot cards themse
 collapsed** — an order is read as the lots in it, and a lot's copies are a second question. Open
 one with its **caret**, or the toolbar's **Expand all** (which becomes **Collapse all** once they
 all are). A lot you add while the screen is open opens by itself. **Lot management** (add stamps,
-edit price, close/reopen, delete, whole-lot move/mark-sorted) lives only in a **by-lot** view —
-the issue-only and flat views are for sweeping through copies and sorting them.
+edit price, close/reopen, delete) lives only in a **by-lot** view. Sorting is not lot management,
+so **Store** and **Move to location** work in every view — the issue-only and flat views are for
+sweeping through copies and sorting them, and that is exactly what those two acts are for.
 
 **How close a series is to a complete set for sale.** In a grouped-by-issue view, each issue
 header also carries one figure per [checklist](collections.md#checklists) the issue has — the
@@ -384,22 +385,33 @@ location later, during sorting.
 ### Sorting copies
 
 Sorting is where **To sort** copies become **Delivered** (in your collection). Work at
-whatever granularity suits the parcel:
+whatever granularity suits the parcel — everything works the same way: **tick what you mean, then
+use the bar that appears at the top of the order** (see
+[Two acts](#two-acts-store-and-move)). There are three checkboxes and they behave alike —
 
-- **A whole lot** — its **⋮** menu → **Move all copies to location…** or **Mark all copies
-  sorted**.
-- **A whole issue** — in the **By issue** view, each issue header has a **📍** (move to
-  location) and a **✓** (mark sorted) button acting on that issue's copies.
-- **A batch you pick yourself** — tick the checkbox on each copy's row and use **File
-  copies…** in the bar that appears (see [Filing a batch](#filing-a-batch-in-one-action)).
-- **A single copy** — edit it right on the row: its **delivery chip** is a dropdown for
-  setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it
-  to advance one step, and its **disposition** shows all three flags — **In collection / For
-  sale / For trade** — as chips you click to toggle instantly (no expand or confirm step). Its
-  **location chip** (or the **📍 Set location** button when it has none) opens the location
-  tree-select. For condition or certificate changes use its **⋮** menu → **Edit copy** — e.g.
-  if the seller shipped a different condition than expected (MH instead of MNH), correct it
-  there.
+- **A whole lot** — the checkbox in its header, which works on a **collapsed** card too.
+- **A whole issue** — the checkbox on the issue header, in any **By issue** view.
+- **A batch you pick yourself** — the checkbox on each copy's row.
+
+A container's box shows a **dash** when only part of it is ticked, and unticking something
+underneath one simply leaves it out. Ticking a lot or an issue means every copy in it, including
+the ones further down the list that have not loaded yet — and when a filter chip is on, it means
+every copy **that chip is showing** (pressing the chip afterwards releases that tick, since it no
+longer describes what you are looking at).
+
+There is **one selection for the whole order and one bar**, above the lots. A batch on your desk
+does not respect lot boundaries — copies from three lots go onto one transport card in one act —
+so the selection spans lots, and the bar is pressed once rather than once per card. Changing
+**Group by** or the sort order is a change of view and leaves what you picked standing.
+
+You can also edit **a single copy** right on its row: its **delivery chip** is a dropdown for
+setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it
+to advance one step, and its **disposition** shows all three flags — **In collection / For
+sale / For trade** — as chips you click to toggle instantly (no expand or confirm step). Its
+**location chip** (or the **📍 Set location** button when it has none) opens the location
+tree-select. For condition or certificate changes use its **⋮** menu → **Edit copy** — e.g.
+if the seller shipped a different condition than expected (MH instead of MNH), correct it
+there.
 
 To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
 just the copies waiting to be sorted; click it again (or the **To sort only ✕** button) to show
@@ -414,48 +426,55 @@ so you can see what still needs photographing, and click it again (or **No photo
 show all. Unlike the *to sort* and *unpriced* chips, this one stays available after the lot is
 closed, since photographing usually happens once the stamps are in hand.
 
-**Mark sorted** (whole lot or whole issue) moves *not-yet-sorted* copies (ordered / to sort /
-in transit) to **Delivered** and asks which **disposition** to file them under — In collection
-(the default), For sale, and/or For trade — so a batch headed for sale doesn't have to be
-un-filed afterwards. Pick **Leave as is** instead when you have already set dispositions copy
-by copy: the batch is still marked delivered, but each copy keeps the disposition it carries.
-(That is different from turning all three chips off, which *clears* the dispositions.) The
-same dialog also lets you file the copies into a **location** in one step (pre-filled with the
-last one you used; leave it *as-is* to skip). Copies already sorted, damaged, or not delivered
-keep their delivery status, but a chosen location still applies.
-
-When you file copies into a **location** (moving a lot/issue, or a single copy), the picker
-remembers the last location you used and pre-selects it, so filing copy after copy into the
-same box is one click. New copies can still be identified into a lot at any time while it is
-open — handy for a mixed album bought sight-unseen.
+When you put copies into a **location** (storing, moving, or setting one copy's), the picker
+remembers the last location you used and pre-selects it, so working box after box is one click.
+New copies can still be identified into a lot at any time while it is open — handy for a mixed
+album bought sight-unseen.
 
 If a copy turns out to be a **different variant** than expected, its **⋮** menu →
 **Identify variant** re-points it to the right one (available when the copy is linked to a
 base stamp with variants).
 
-### Filing a batch in one action
+### Two acts: Store and Move
 
-Putting a batch away — into a location, optionally under a shared **ref**, and marking it
-delivered — is one action rather than three. While a lot is open, each copy's row carries a
-checkbox: tick the ones you have just packed together, and a bar appears above the list with
-**File copies…**.
+Once something is ticked, a bar appears above the list with the two things you can do to it.
+They are two, and deliberately not one dialog with a *mark them sorted* checkbox: relocating a
+card and declaring a batch worked through are different claims, and a checkbox nobody notices
+would quietly make the second one for you.
 
-The selection survives the filter chips and scrolling, so you can narrow to **N to sort**, tick
+**Store** puts copies away — where they now live, the ref card they sit on, what they are being
+kept for, and **delivered**, in one act. It asks for:
+
+- a **location** — *Leave as is* or one you pick, pre-filled with the last one you used;
+- a **ref** — optional, and only once a location is chosen (a ref numbers a card *inside* a
+  location, so there is nowhere to put one otherwise);
+- a **disposition** — *Leave as is* (the default), or **In collection / For sale / For trade**.
+
+Leaving the location alone is the ordinary path for a batch you already filed **copy by copy**
+during the pass: it declares them sorted without overwriting where each of them was put. The
+disposition's *Leave as is* works the same way, and is different from turning all three chips
+off, which *clears* the dispositions. Copies already sorted, damaged, or not delivered keep
+their delivery status — anything else you set still applies to them.
+
+**Move to location** changes where copies live and claims nothing else: no disposition, no
+delivery status. That is the act of filing a parcel into an incoming box on arrival, or
+shifting a card between boxes months later. Its location is **required** — the change of
+address *is* the act.
+
+Ticked copies survive the filter chips and scrolling, so you can narrow to **N to sort**, tick
 your way down the list, and clear the chip without losing what you picked. The bar also offers
-**Select all N matching**, which means *every* copy the current filter matches — including the
-ones further down that have not loaded yet, not just the rows on screen. While that is on, the
-row checkboxes are frozen (there is no list of ids to lift one out of); press **Clear** to go
-back to picking copies individually.
+**Select the whole order** — every copy of it still in an open lot, which is how you reach
+everything from the flat copy list, where there is no heading to tick. Press **Clear** to start
+again.
 
-The dialog asks for:
+Copies in a **closed** lot get no checkbox anywhere: they are read-only until you reopen it.
 
-- a **location**, pre-filled with the last one you used, and
-- a **ref** — optional.
+#### The ref
 
 The ref is the identifier written on the **ref card** that goes with the stamps: one small
 card usually covers a whole transport card's worth, with a per-series card whenever a set
 should come out in one grab. It is suggested as **the next free ref in that location** — never
-per lot, because the box is shared across every purchase — so filing continues the strip the
+per lot, because the box is shared across every purchase — so storing continues the strip the
 box is already on. A location nothing has ever been ref'd in suggests nothing and stays blank,
 which is the normal case for an album or stockbook: there the location *is* the address.
 
@@ -463,11 +482,6 @@ Typing a ref that is **already in use** is not an error. Cards get topped up ove
 sittings, so the dialog says *"A147 already holds 12 copies"* and the button reads **Add to
 A147** — which also catches the typo, since an unexpected collision reads differently from an
 expected one.
-
-Filing marks the copies **delivered** and leaves each one's **disposition** exactly as it is:
-the batch on your desk is *to sort* whether it is headed for the collection or for stock, and
-the ref is what differs between the two, not whether the copy gets filed. Copies already
-sorted, damaged, or not delivered keep their delivery status, and the location still applies.
 
 Blank cards are printed **before** you pack — see
 [Printing blank ref cards](locations.md#printing-blank-ref-cards).

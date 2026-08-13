@@ -250,7 +250,7 @@ The review happens when a copy reaches **your hands** — the moment it becomes 
 
 - a copy added by hand starts delivered, so the review comes straight away;
 - a copy bought on a purchase order starts *ordered*, and gets its review when you sort it
-  (**Mark sorted**) or set it to *delivered* yourself;
+  (**Store**) or set it to *delivered* yourself;
 - a parcel won at auction and settled into a purchase arrives the same way, so it reaches
   the same question — nothing about buying at auction skips it.
 

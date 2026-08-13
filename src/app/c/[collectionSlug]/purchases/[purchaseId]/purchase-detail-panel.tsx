@@ -32,6 +32,18 @@ import type { IssueHeader } from "@/lib/issues";
 import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import {
+  EMPTY_SELECTION,
+  containerBoxState,
+  dropFilteredContainers,
+  isRowSelected,
+  resolveSelection,
+  toggleContainer,
+  toggleRow,
+  type CopyContainer,
+  type CopyRef,
+  type CopySelection,
+} from "@/lib/lot-selection";
+import {
   useLotCopiesInfinite,
   usePurchaseCopiesInfinite,
   useLotSummary,
@@ -42,6 +54,9 @@ import {
   usePurchaseSetCompleteness,
   useInvalidateLotCopies,
   useLocationRefUsage,
+  useLotSelectionCount,
+  bulkScopeFields,
+  type BulkScopeClient,
   type LotCopiesParams,
 } from "./use-lot-copies-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
@@ -276,6 +291,21 @@ export function PurchaseDetailPanel({
     matches: WantMatchForCopy[];
   } | null>(null);
 
+  // *Which copies the action bar is about* (#565/#571) — see `lot-selection.ts` for the model.
+  //
+  // Held **here**, above every view of this order's copies, not inside a lot card. A batch on the
+  // desk does not respect lot boundaries: copies from three lots go onto one transport card in one
+  // act, so a selection per card would draw an action bar over each of them and make the collector
+  // press the same button once per lot. It also means switching how the copies are grouped — by
+  // lot, by issue, flat — is a change of *view* and leaves what was picked standing.
+  //
+  // Ticked copies are held across the filter chips on purpose: narrowing to "to sort", ticking a
+  // run, then clearing the chip is one pass over a lot. Whole containers taken *under* a chip are
+  // the exception and are retired when that chip changes (`dropFilteredContainers`), since "all 40
+  // to sort" must not silently become "all 900".
+  const [selection, setSelection] = useState<CopySelection>(EMPTY_SELECTION);
+  const clearSelection = useCallback(() => setSelection(EMPTY_SELECTION), []);
+
   function run(
     fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
@@ -303,6 +333,44 @@ export function PurchaseDetailPanel({
       }
     });
   }
+
+  // The bar's own copy of the bulk dialogs (Store / Move). The cards keep theirs for the per-copy
+  // actions on a row; these two belong to the selection, which lives here.
+  const selectionEditing = useCopyEditing({
+    collectionId,
+    areas,
+    locations,
+    conditions,
+    certificateStatuses,
+    isPending,
+    run,
+    onBulkDone: clearSelection,
+  });
+
+  // Whole containers resolve to a server-side scope, since their copies run past the loaded rows;
+  // a handful of ticks is just a list (#565/#172/#571). `onlyOpenLots` because a closed lot's
+  // copies are read-only on this screen in every view, so none of them ever gets a checkbox.
+  const resolvedSelection = resolveSelection(selection);
+  const selectionScope: BulkScopeClient | null =
+    resolvedSelection.kind === "scope"
+      ? { purchaseId: purchase.id, onlyOpenLots: true, ...resolvedSelection.scope }
+      : null;
+  // A scope cannot be counted on the client — a group ticked under a chip has no local figure and
+  // `unpriced` is a valuation, not a column — so the bar's number comes from where the write will
+  // read it. An id list needs no round trip.
+  const scopeCount = useLotSelectionCount(collectionId, selectionScope).data?.count;
+  const selectionCount =
+    resolvedSelection.kind === "ids"
+      ? resolvedSelection.ids.length
+      : resolvedSelection.kind === "scope"
+        ? scopeCount
+        : 0;
+  const selectionTarget: BulkTarget | null =
+    resolvedSelection.kind === "ids"
+      ? { kind: "ids", ids: resolvedSelection.ids }
+      : selectionScope
+        ? { kind: "scope", scope: selectionScope, count: selectionCount ?? 0 }
+        : null;
 
   // Apply a delivery-status transition, shared by the inline select and the quick-advance
   // button (#159). Arriving moves copies to "to sort" and can bulk-file them, so it routes
@@ -612,6 +680,25 @@ export function PurchaseDetailPanel({
         <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>
       )}
 
+      {/* Selection action bar (#565/#571) — one for the whole order, above every view of its
+          copies. It sits in the flow rather than floating: this screen already pins a lot header
+          and an issue header, and a third floating strip would be the third thing covering the
+          list. */}
+      {selectionTarget && (
+        <CopySelectionBar
+          count={selectionCount}
+          isPending={isPending}
+          onSelectAll={
+            containerBoxState(selection, {}) === "on"
+              ? null
+              : () => setSelection((sel) => toggleContainer(sel, {}))
+          }
+          onClear={clearSelection}
+          onStore={() => selectionEditing.setBulkStore(selectionTarget)}
+          onMove={() => selectionEditing.setBulkMove(selectionTarget)}
+        />
+      )}
+
       {purchase.lots.length === 0 ? (
         <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
           No lots yet. Add a priced lot, then identify copies into it.
@@ -640,6 +727,8 @@ export function PurchaseDetailPanel({
               groupByIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
+              selection={selection}
+              setSelection={setSelection}
               onRun={run}
             />
           ))}
@@ -659,6 +748,8 @@ export function PurchaseDetailPanel({
           sortKey={sortKey}
           sortDir={sortDir}
           isPending={isPending}
+          selection={selection}
+          setSelection={setSelection}
           run={run}
         />
       )}
@@ -822,6 +913,9 @@ export function PurchaseDetailPanel({
 
       {/* The open wants the copies just taken in could satisfy (#532; ADR-0032 §7). Raised by both
           intake paths through `run`, and closing nothing on its own. */}
+      {/* The Store / Move dialogs the selection bar opens. */}
+      {selectionEditing.dialogs}
+
       {wantReview && (
         <WantReviewDialog
           collectionId={collectionId}
@@ -864,6 +958,10 @@ interface LotCardProps {
    * copies by before rendering. */
   sortKey: string;
   sortDir: string;
+  /** The order's one selection (#571), held above the cards: a batch on the desk routinely spans
+   *  lots, and a selection per card would put an action bar over every one of them. */
+  selection: CopySelection;
+  setSelection: React.Dispatch<React.SetStateAction<CopySelection>>;
   onRun: RunFn;
 }
 
@@ -890,18 +988,6 @@ interface BulkChanges {
   markSorted?: boolean;
   /** Mark-sorted only (#274): leave each copy's disposition untouched instead of writing one. */
   keepDisposition?: boolean;
-}
-
-/** A server-resolved bulk scope (#172): a whole lot, an issue group within a lot, or an issue
- * across a purchase's open lots. Mirrors the server `LotBulkScope` minus the collection id. */
-interface BulkScopeClient {
-  lotId?: string;
-  purchaseId?: string;
-  issueKey?: string;
-  onlyOpenLots?: boolean;
-  /** The list's active filter chip, so "select everything matching" resolves to the whole filtered
-   * set on the server rather than the rows scrolled into view (#565). */
-  filter?: LotCopyFilter;
 }
 
 /** A bulk-action target: either an explicit id list (a single copy from its row menu) or a
@@ -957,8 +1043,7 @@ function useCopyEditing(ctx: {
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
   const [copyError, setCopyError] = useState<string | undefined>();
   const [bulkMove, setBulkMove] = useState<BulkTarget | null>(null);
-  const [bulkSort, setBulkSort] = useState<BulkTarget | null>(null);
-  const [bulkFile, setBulkFile] = useState<BulkTarget | null>(null);
+  const [bulkStore, setBulkStore] = useState<BulkTarget | null>(null);
 
   /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
   function runBulk(itemIds: string[], changes: BulkChanges) {
@@ -975,26 +1060,21 @@ function useCopyEditing(ctx: {
       },
       () => {
         setBulkMove(null);
-        setBulkSort(null);
-        setBulkFile(null);
+        setBulkStore(null);
         onBulkDone?.();
       }
     );
   }
 
-  /** Apply a bulk change to a server-resolved scope (a whole lot/issue), so it covers copies
-   * beyond the loaded page (#172). */
+  /** Apply a bulk change to a server-resolved scope (whole issue groups, or a whole filtered
+   * list), so it covers copies beyond the loaded page (#172/#571). */
   function runScopedBulk(scope: BulkScopeClient, changes: BulkChanges) {
     setCopyError(undefined);
     run(
       async () => {
         const fd = new FormData();
         fd.set("collectionId", collectionId);
-        if (scope.lotId) fd.set("lotId", scope.lotId);
-        if (scope.purchaseId) fd.set("purchaseId", scope.purchaseId);
-        if (scope.issueKey) fd.set("issueKey", scope.issueKey);
-        if (scope.onlyOpenLots) fd.set("onlyOpenLots", "true");
-        if (scope.filter && scope.filter !== "none") fd.set("filter", scope.filter);
+        for (const [name, value] of bulkScopeFields(scope)) fd.set(name, value);
         appendBulkChanges(fd, changes);
         const { bulkUpdateLotItemsScopedAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsScopedAction(fd);
@@ -1003,8 +1083,7 @@ function useCopyEditing(ctx: {
       },
       () => {
         setBulkMove(null);
-        setBulkSort(null);
-        setBulkFile(null);
+        setBulkStore(null);
         onBulkDone?.();
       }
     );
@@ -1170,8 +1249,9 @@ function useCopyEditing(ctx: {
           title="Move copies to location"
           message={
             <>
-              File {bulkTargetCount(bulkMove)} cop{bulkTargetCount(bulkMove) === 1 ? "y" : "ies"}{" "}
-              into one location. Choose <em>None</em> to clear their location instead.
+              Move {bulkTargetCount(bulkMove)} cop{bulkTargetCount(bulkMove) === 1 ? "y" : "ies"}{" "}
+              into one location, changing nothing else about them. Choose <em>None</em> to clear
+              their location instead.
             </>
           }
           actionLabel="Move here"
@@ -1190,54 +1270,31 @@ function useCopyEditing(ctx: {
         />
       )}
 
-      {bulkFile && (
-        <FileCopiesDialog
-          count={bulkTargetCount(bulkFile)}
+      {bulkStore && (
+        <StoreCopiesDialog
+          count={bulkTargetCount(bulkStore)}
           locations={locations}
           collectionId={collectionId}
           isPending={isPending}
           error={copyError}
           onClose={() => {
             if (!isPending) {
-              setBulkFile(null);
+              setBulkStore(null);
               setCopyError(undefined);
             }
           }}
-          onConfirm={({ locationId, locationRef }) =>
-            applyBulk(bulkFile, {
-              // Filing *is* sorting (#565): the delivery lifecycle already says a `delivered` copy
-              // is "sorted and filed", so this is `Mark all copies sorted` with an address on it.
-              markSorted: true,
-              // The work unit is `to sort` whatever the copy's disposition — an album copy and a
-              // stock copy are both being put away — so no disposition is written here at all.
-              keepDisposition: true,
-              locationId,
-              locationRef,
-            })
-          }
-        />
-      )}
-
-      {bulkSort && (
-        <MarkSortedDialog
-          count={bulkTargetCount(bulkSort)}
-          locations={locations}
-          collectionId={collectionId}
-          isPending={isPending}
-          error={copyError}
-          onClose={() => {
-            if (!isPending) {
-              setBulkSort(null);
-              setCopyError(undefined);
-            }
-          }}
-          onConfirm={({ disposition, locationId }) =>
-            applyBulk(bulkSort, {
+          onConfirm={({ disposition, locationId, locationRef }) =>
+            applyBulk(bulkStore, {
+              // Storing *is* sorting (#565/#571): the delivery lifecycle already says a
+              // `delivered` copy is "sorted and filed", so this is one act with an address on it.
               markSorted: true,
               // A null disposition is the dialog's "leave as is" (#274): send no flags and
               // suppress the server's `inCollection` default.
               ...(disposition ?? { keepDisposition: true }),
-              ...(locationId ? { locationId } : {}),
+              // An absent location is the dialog's own "leave as is" — declaring a batch sorted
+              // must not overwrite the filings made copy by copy during the pass (#571). The ref
+              // rides with the location it addresses, so it goes only when one was chosen.
+              ...(locationId ? { locationId, locationRef } : {}),
             })
           }
         />
@@ -1251,8 +1308,7 @@ function useCopyEditing(ctx: {
     runBulk,
     removeCopy,
     setBulkMove,
-    setBulkSort,
-    setBulkFile,
+    setBulkStore,
     setEditCopyItem,
     setEditStampItem,
     setIdentifyItem,
@@ -1467,13 +1523,114 @@ function CopyPageList({
   }
   return (
     <>
-      {items.map(renderRow)}
+      {/* One argument on purpose: `map` would otherwise pass its index into whatever second
+          parameter a caller's `renderRow` happens to declare. */}
+      {items.map((it) => renderRow(it))}
       <InfiniteScrollSentinel
         onLoadMore={() => query.fetchNextPage()}
         hasMore={!!query.hasNextPage}
         isLoading={query.isFetchingNextPage}
       />
     </>
+  );
+}
+
+/**
+ * *What the ticked copies can be done to* (#565/#571) — the two acts, side by side.
+ *
+ * **Store** puts copies away: an address, the ref card they sit on, what they are kept for, and
+ * `delivered`. **Move to location** changes where they live and claims nothing else. They are two
+ * buttons rather than one dialog with a *mark them sorted* box, because a collector relocating a
+ * card who does not notice a pre-ticked box would silently declare copies sorted that nobody
+ * touched — two names that mean different things cannot be got wrong that way.
+ *
+ * Shared by the lot card and the order-level views, since sorting is what all three are for.
+ */
+function CopySelectionBar({
+  count,
+  isPending,
+  onSelectAll,
+  onClear,
+  onStore,
+  onMove,
+}: {
+  /** Undefined while the server is still counting a scope — the bar keeps its shape and says so
+   *  rather than flashing a wrong number. */
+  count: number | undefined;
+  isPending: boolean;
+  /** Offered while the order is not already wholly ticked. It is the one affordance that reaches
+   *  every copy from any view — the flat copy list has no heading to hang a checkbox on — and it
+   *  is resolved on the server like every other container (#172). */
+  onSelectAll: (() => void) | null;
+  onClear: () => void;
+  onStore: () => void;
+  onMove: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        padding: "0.5rem 1.25rem",
+        borderBottom: "1px solid var(--color-border)",
+        background: "var(--color-accent-soft)",
+      }}
+    >
+      <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}>
+        {count == null
+          ? "Counting the selection…"
+          : `${count} cop${count === 1 ? "y" : "ies"} selected`}
+      </span>
+      {onSelectAll && (
+        <Tooltip content="Selects every copy in this order that is still in an open lot, including the ones further down that have not loaded yet.">
+          <button type="button" onClick={onSelectAll} style={SELECTION_LINK}>
+            Select the whole order
+          </button>
+        </Tooltip>
+      )}
+      <button type="button" onClick={onClear} style={SELECTION_LINK}>
+        Clear
+      </button>
+      <span style={{ flex: 1 }} />
+      <Tooltip content="Change where these copies live, and nothing else about them.">
+        <button
+          type="button"
+          disabled={isPending || !count}
+          onClick={onMove}
+          style={{
+            ...INPUT_STYLE,
+            width: "auto",
+            cursor: isPending ? "not-allowed" : "pointer",
+            fontWeight: 600,
+            padding: "0.3125rem 0.75rem",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Icon name="location" size="sm" /> Move to location…
+        </button>
+      </Tooltip>
+      <Tooltip content="Put these copies away: a location, an optional ref, a disposition, and mark them delivered.">
+        <button
+          type="button"
+          disabled={isPending || !count}
+          onClick={onStore}
+          style={{
+            ...INPUT_STYLE,
+            width: "auto",
+            cursor: isPending ? "not-allowed" : "pointer",
+            fontWeight: 600,
+            color: "#fff",
+            background: "var(--color-action-primary)",
+            border: "none",
+            padding: "0.3125rem 0.75rem",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Icon name="check" size="sm" /> Store…
+        </button>
+      </Tooltip>
+    </div>
   );
 }
 
@@ -1525,8 +1682,7 @@ function IssueGroupSection({
   collapsed,
   stickyTop,
   onToggle,
-  onMove,
-  onMarkSorted,
+  select,
   completeness,
   children,
 }: {
@@ -1539,8 +1695,8 @@ function IssueGroupSection({
   /** Where this issue header pins — just below the pinned lot header/label above it. */
   stickyTop: number;
   onToggle: () => void;
-  onMove?: () => void;
-  onMarkSorted?: () => void;
+  /** Tick this whole group into the screen's selection (#571). */
+  select?: { state: "on" | "off" | "partial"; onChange: () => void; label: string };
   /** This issue's per-checklist for-sale completeness (#563), absent while it loads. */
   completeness?: ChecklistSetCompleteness[];
   children: React.ReactNode;
@@ -1566,8 +1722,7 @@ function IssueGroupSection({
           vendorMap={vendorMap}
           collapsed={collapsed}
           onToggle={onToggle}
-          onMove={onMove}
-          onMarkSorted={onMarkSorted}
+          select={select}
           completeness={completeness}
         />
       </div>
@@ -1607,6 +1762,8 @@ function LotCard({
   groupByIssue,
   sortKey,
   sortDir,
+  selection,
+  setSelection,
   onRun,
 }: LotCardProps) {
   const [dialog, setDialog] = useState<
@@ -1650,20 +1807,6 @@ function LotCard({
     if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [highlighted]);
 
-  // Which copies the action bar is about (#565). Ticked ids are held across filter changes and
-  // paging on purpose: narrowing to "to sort", ticking a run, then clearing the chip is one pass
-  // over a lot, and a selection that emptied itself at every chip press would make that impossible.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // "Everything matching the current filter" is a *scope*, not a list of ids: the filtered set runs
-  // past the loaded page, so it is resolved server-side, exactly as `Mark all copies sorted` is.
-  // The chip it was taken under is what is stored, so changing the chip retires it by derivation —
-  // "all 40 to sort" must never silently become "all 900".
-  const [allMatchingFilter, setAllMatchingFilter] = useState<LotCopyFilter | null>(null);
-  const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-    setAllMatchingFilter(null);
-  }, []);
-
   const copy = useCopyEditing({
     collectionId,
     areas,
@@ -1672,9 +1815,8 @@ function LotCard({
     certificateStatuses,
     isPending,
     run: onRun,
-    onBulkDone: clearSelection,
   });
-  const { copyError, setCopyError, setBulkMove, setBulkSort, setBulkFile } = copy;
+  const { copyError, setCopyError } = copy;
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
@@ -1746,18 +1888,22 @@ function LotCard({
           ? noPhotoCount
           : totalCount;
 
-  // The select-all only stands while its own chip is still on; the ticked ids stay either way,
-  // being the collector's own choices.
-  const allMatching = allMatchingFilter === filter;
+  // The container this lot's header checkbox stands for. It carries the chip the tick was taken
+  // under, so the write means the set the collector was looking at (#565); pressing a chip retires
+  // it (`onFilterChange` below), which is what keeps a filter nothing here can evaluate from ever
+  // being judged against a row.
+  const lotContainer: CopyContainer = {
+    lotId: lot.id,
+    ...(filter === "none" ? {} : { filter }),
+  };
+  const lotBoxState = containerBoxState(selection, lotContainer);
 
-  // What the action bar acts on: a server-resolved scope carrying the list's own filter when the
-  // whole matching set is selected, an explicit id list otherwise (#565/#172).
-  const selectionCount = allMatching ? filteredCount : selectedIds.size;
-  const selectionTarget: BulkTarget | null = allMatching
-    ? { kind: "scope", scope: { lotId: lot.id, filter }, count: filteredCount }
-    : selectedIds.size > 0
-      ? { kind: "ids", ids: [...selectedIds] }
-      : null;
+  /** Press a filter chip. The containers taken under the old chip stop meaning what they said, so
+   *  they go with it — the loose ticks are the collector's own choices and stay. */
+  function changeFilter(next: typeof filterMode) {
+    setFilterMode(next);
+    setSelection((s) => dropFilteredContainers(s, lot.id));
+  }
 
   function renderRow(it: ItemListItem) {
     const row = (
@@ -1778,7 +1924,10 @@ function LotCard({
     // A closed lot's copies are read-only, so they get no checkbox — and no strip either, since
     // there is no mixed list to keep aligned.
     if (!open) return <div key={it.id}>{row}</div>;
-    const checked = allMatching || selectedIds.has(it.id);
+    // Where the copy sits comes from the copy itself, not from the heading it happens to be under,
+    // so the same selection reads correctly grouped or flat (#571).
+    const ref: CopyRef = { id: it.id, lotId: it.lotId ?? null, issueKey: it.issueId ?? "__none__" };
+    const checked = isRowSelected(selection, ref);
     return (
       <div
         key={it.id}
@@ -1792,20 +1941,12 @@ function LotCard({
           <input
             type="checkbox"
             checked={checked}
-            // While "everything matching" is on, the target is a server-resolved scope that runs
-            // past the loaded rows, so a row cannot be lifted out of it — the boxes read as ticked
-            // and are frozen, and the bar carries the way back to picking copies one by one.
-            disabled={allMatching}
-            onChange={() =>
-              setSelectedIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(it.id)) next.delete(it.id);
-                else next.add(it.id);
-                return next;
-              })
-            }
+            // Unticking a copy a group or the lot above it covers is an *exclusion*, not a shorter
+            // list — the container's other copies run past the loaded rows and cannot be
+            // enumerated to replace it (#571). So the box is never frozen, at any level.
+            onChange={() => setSelection((s) => toggleRow(s, ref))}
             aria-label="Select this copy"
-            style={{ cursor: allMatching ? "default" : "pointer" }}
+            style={{ cursor: "pointer" }}
           />
         </label>
         <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
@@ -1813,13 +1954,6 @@ function LotCard({
     );
   }
 
-  // Whole-lot bulk target (move all / mark all): resolved server-side by lot id, so it covers
-  // every copy — not just a loaded page (#172).
-  const lotBulkTarget: BulkTarget = {
-    kind: "scope",
-    scope: { lotId: lot.id },
-    count: totalCount,
-  };
   const actions: RowAction[] = [
     ...(open
       ? ([
@@ -1834,23 +1968,9 @@ function LotCard({
             onSelect: () => setDialog("attach"),
           },
           { key: "price", label: "Edit lot", icon: "edit", onSelect: () => setDialog("edit-price") },
-          ...(totalCount > 0
-            ? ([
-                {
-                  key: "bulk-move",
-                  label: "Move all copies to location…",
-                  icon: "location",
-                  separatorBefore: true,
-                  onSelect: () => setBulkMove(lotBulkTarget),
-                },
-                {
-                  key: "bulk-sort",
-                  label: "Mark all copies sorted",
-                  icon: "check",
-                  onSelect: () => setBulkSort(lotBulkTarget),
-                },
-              ] satisfies RowAction[])
-            : []),
+          // The whole-lot bulk entries that used to sit here are gone (#571): the lot header's own
+          // checkbox selects every copy the list is showing, and the bar above the rows carries
+          // Store and Move. A menu entry beside them would be the third door again.
           {
             key: "close",
             label: "Close lot",
@@ -1945,6 +2065,31 @@ function LotCard({
         }}
       >
       <div style={{ padding: "0.875rem 1.25rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+        {/* The third checkbox, one level up from an issue group's (#571). It works on a collapsed
+            card on purpose: lot cards start collapsed, and making a whole-lot action wait for an
+            expand would be the click the ⋮ entries used to save, back by another route. */}
+        {open && filteredCount > 0 && (
+          <Tooltip
+            content={
+              filter === "none"
+                ? "Select every copy in this lot"
+                : "Select every copy the current filter is showing"
+            }
+          >
+            <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={lotBoxState === "on"}
+                ref={(el) => {
+                  if (el) el.indeterminate = lotBoxState === "partial";
+                }}
+                onChange={() => setSelection((sel) => toggleContainer(sel, lotContainer))}
+                aria-label="Select every copy this lot is showing"
+                style={{ cursor: "pointer" }}
+              />
+            </label>
+          </Tooltip>
+        )}
         <button
           type="button"
           onClick={onToggleExpanded}
@@ -1992,7 +2137,7 @@ function LotCard({
             <button
               type="button"
               onClick={() =>
-                setFilterMode((m) => (m === "to-sort" ? "none" : "to-sort"))
+                changeFilter(filterMode === "to-sort" ? "none" : "to-sort")
               }
               style={{
                 ...tintChip("warning", "").style,
@@ -2016,7 +2161,7 @@ function LotCard({
             <button
               type="button"
               onClick={() =>
-                setFilterMode((m) => (m === "unpriced" ? "none" : "unpriced"))
+                changeFilter(filterMode === "unpriced" ? "none" : "unpriced")
               }
               style={{
                 ...tintChip("error", `${blockingCount} unpriced`).style,
@@ -2040,7 +2185,7 @@ function LotCard({
             <button
               type="button"
               onClick={() =>
-                setFilterMode((m) => (m === "no-photos" ? "none" : "no-photos"))
+                changeFilter(filterMode === "no-photos" ? "none" : "no-photos")
               }
               style={{
                 ...tintChip("accent", "").style,
@@ -2150,7 +2295,7 @@ function LotCard({
                   <Tooltip content="Clear filter">
                     <button
                       type="button"
-                      onClick={() => setFilterMode("none")}
+                      onClick={() => changeFilter("none")}
                       style={{
                         ...tintChip(
                           filterMode === "unpriced"
@@ -2170,67 +2315,6 @@ function LotCard({
                           ? "No photos only"
                           : "To sort only"}{" "}
                       <Icon name="close" size="sm" />
-                    </button>
-                  </Tooltip>
-                </div>
-              )}
-
-              {/* Selection action bar (#565) — what the ticked copies can be done to. It sits above
-                  the rows rather than floating: this screen already pins a lot header and an issue
-                  header, and a third floating strip would be the third thing covering the list. */}
-              {open && selectionCount > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    padding: "0.5rem 1.25rem",
-                    borderBottom: "1px solid var(--color-border)",
-                    background: "var(--color-accent-soft)",
-                  }}
-                >
-                  <span
-                    style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}
-                  >
-                    {selectionCount} cop{selectionCount === 1 ? "y" : "ies"} selected
-                    {allMatching && " — everything matching this filter"}
-                  </span>
-                  {/* Offered whenever the filtered set is bigger than what is ticked: the whole set
-                      lives on the server and routinely runs past the loaded rows (#172), so this is
-                      the only way to say "all of them" honestly. */}
-                  {!allMatching && filteredCount > selectionCount && (
-                    <Tooltip content="Selects every copy the current filter matches, including the ones further down the list that have not loaded yet.">
-                      <button
-                        type="button"
-                        onClick={() => setAllMatchingFilter(filter)}
-                        style={SELECTION_LINK}
-                      >
-                        Select all {filteredCount} matching
-                      </button>
-                    </Tooltip>
-                  )}
-                  <button type="button" onClick={clearSelection} style={SELECTION_LINK}>
-                    Clear
-                  </button>
-                  <span style={{ flex: 1 }} />
-                  <Tooltip content="File these copies into a location, optionally under a shared ref, and mark them delivered.">
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => setBulkFile(selectionTarget!)}
-                      style={{
-                        ...INPUT_STYLE,
-                        width: "auto",
-                        cursor: isPending ? "not-allowed" : "pointer",
-                        fontWeight: 600,
-                        color: "#fff",
-                        background: "var(--color-action-primary)",
-                        border: "none",
-                        padding: "0.3125rem 0.75rem",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <Icon name="location" size="sm" /> File copies…
                     </button>
                   </Tooltip>
                 </div>
@@ -2262,24 +2346,19 @@ function LotCard({
                           return next;
                         })
                       }
-                      onMove={
+                      select={
                         open
-                          ? () =>
-                              setBulkMove({
-                                kind: "scope",
-                                scope: { lotId: lot.id, issueKey: group.key },
-                                count: group.count,
-                              })
-                          : undefined
-                      }
-                      onMarkSorted={
-                        open
-                          ? () =>
-                              setBulkSort({
-                                kind: "scope",
-                                scope: { lotId: lot.id, issueKey: group.key },
-                                count: group.count,
-                              })
+                          ? {
+                              state: containerBoxState(selection, {
+                                ...lotContainer,
+                                issueKey: group.key,
+                              }),
+                              onChange: () =>
+                                setSelection((sel) =>
+                                  toggleContainer(sel, { ...lotContainer, issueKey: group.key })
+                                ),
+                              label: "Select this issue's copies",
+                            }
                           : undefined
                       }
                     >
@@ -2550,6 +2629,8 @@ function OrderCopiesView({
   sortKey,
   sortDir,
   isPending,
+  selection,
+  setSelection,
   run,
 }: {
   collectionId: string;
@@ -2565,6 +2646,10 @@ function OrderCopiesView({
   sortKey: string;
   sortDir: string;
   isPending: boolean;
+  /** The order's one selection (#571), shared with the by-lot view — switching how the copies are
+   *  grouped is a change of view, not of what was picked. */
+  selection: CopySelection;
+  setSelection: React.Dispatch<React.SetStateAction<CopySelection>>;
   run: RunFn;
 }) {
   const copy = useCopyEditing({
@@ -2609,9 +2694,8 @@ function OrderCopiesView({
     const open = lotStatusByLot.get(lotId) === "open";
     const poolBase = poolBaseByLot.get(lotId) ?? null;
     const weightBase = summary?.lotWeightBase[lotId] ?? 0;
-    return (
+    const row = (
       <CopyRow
-        key={it.id}
         collectionId={collectionId}
         item={it}
         open={open}
@@ -2624,6 +2708,32 @@ function OrderCopiesView({
         vendorMapFor={vendorMapFor}
         copy={copy}
       />
+    );
+    // A closed lot's copies are read-only here exactly as they are on their own lot card, so they
+    // get no checkbox — which is also why the scope carries `onlyOpenLots` (#571).
+    if (!open) return <div key={it.id}>{row}</div>;
+    const ref: CopyRef = { id: it.id, lotId: it.lotId ?? null, issueKey: it.issueId ?? "__none__" };
+    const checked = isRowSelected(selection, ref);
+    return (
+      <div
+        key={it.id}
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          background: checked ? "var(--color-accent-soft)" : undefined,
+        }}
+      >
+        <label style={SELECT_STRIP}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => setSelection((sel) => toggleRow(sel, ref))}
+            aria-label="Select this copy"
+            style={{ cursor: "pointer" }}
+          />
+        </label>
+        <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+      </div>
     );
   };
 
@@ -2645,13 +2755,8 @@ function OrderCopiesView({
           const collapsed = collapsedGroups.has(group.key);
           const header = group.key === "__none__" ? null : issueHeaderById[group.key];
           const areaId = header?.collectionAreaId ?? null;
-          // Per-issue bulk targets this issue's copies across the purchase's **open** lots.
-          const canBulk = group.openCount > 0;
-          const issueScope = {
-            kind: "scope" as const,
-            scope: { purchaseId, issueKey: group.key, onlyOpenLots: true },
-            count: group.openCount,
-          };
+          // Only groups with copies in a still-open lot can be selected — the rest are read-only.
+          const canSelect = group.openCount > 0;
           return (
             <IssueGroupSection
               key={group.key}
@@ -2671,8 +2776,16 @@ function OrderCopiesView({
                   return next;
                 })
               }
-              onMove={canBulk ? () => copy.setBulkMove(issueScope) : undefined}
-              onMarkSorted={canBulk ? () => copy.setBulkSort(issueScope) : undefined}
+              select={
+                canSelect
+                  ? {
+                      state: containerBoxState(selection, { issueKey: group.key }),
+                      onChange: () =>
+                        setSelection((sel) => toggleContainer(sel, { issueKey: group.key })),
+                      label: "Select this issue's copies",
+                    }
+                  : undefined
+              }
             >
               <PurchaseCopyFlatList
                 collectionId={collectionId}
@@ -2846,25 +2959,28 @@ function LocationPickerDialog({
   );
 }
 
-/** Confirm dialog for the bulk "Mark sorted" action (lot / issue): choose the disposition
- * applied to the sorted copies (rather than defaulting to in-collection) and, optionally, a
- * location to file them into in the same step — pre-filled with the last location used, like
- * the standalone move picker (#121). Only not-yet-sorted copies are transitioned to
- * `delivered`; the location applies to every selected copy.
- *
- * The disposition has its own **Leave as is** (#274), mirroring the location's: some copies
- * were already filed one by one during the sort pass, and a blanket value would overwrite
- * exactly the decisions that took the longest to make. It is deliberately distinct from
- * turning all three chips off, which *clears* the dispositions — that is why it is a chip of
- * its own and not an empty selection, which the collector cannot tell apart from "none". */
 /**
- * Record, in one act, that a batch of copies has been **put away** (#565): a location, an optional
- * ref, and `delivered`.
+ * Record, in one act, that a batch of copies has been **put away** (#565/#571): where they now
+ * live, the ref card they sit on, what they are being kept for, and `delivered`.
+ *
+ * **One dialog, because it was never two writes.** *Mark all copies sorted*, *File copies* and
+ * *Move all copies* were three doors onto the same bulk update, and which one a collector opened
+ * decided what they were allowed to say — file a whole issue group and there was nowhere to type
+ * the ref. Store asks all of it at once; *Move to location* stays separate because it makes no
+ * claim that anything was worked through (#571).
+ *
+ * **Every field may be left alone**, and that is what makes the merge a superset rather than a
+ * trade. The location's *Leave as is* is today's mark-sorted with no location chosen — the
+ * documented path for a batch whose copies were filed one at a time during the pass, where a
+ * blanket address would overwrite exactly the decisions that took longest to make. The
+ * disposition's own *Leave as is* (#274) is the same idea, and is deliberately distinct from
+ * turning all three chips off, which *clears* the dispositions.
  *
  * Sorting a lot sends its copies two ways and it is one act either way — stock onto transport cards
  * carrying a running ref (`A147`), keepers into an album where the album itself is the address. So
- * the ref is what differs, not whether the copy gets filed, and this is one dialog with an optional
- * ref rather than two actions.
+ * the ref is what differs, not whether the copy gets put away, and it is optional for that reason.
+ * A ref still needs a location to sit in (`assertRefHasLocation`), since it addresses a place
+ * *inside* one — so *Leave as is* and a ref together is refused.
  *
  * Nothing is **allocated** here. The index cards are printed blank and ahead of time (the strip is
  * on the Locations screen), the stamps are packed onto a card, and only then is the filing
@@ -2876,7 +2992,7 @@ function LocationPickerDialog({
  * location nothing has ever been ref'd in suggests nothing and stays blank — the normal case for an
  * album, and the reason the ref is optional at all.
  */
-function FileCopiesDialog({
+function StoreCopiesDialog({
   count,
   locations,
   collectionId,
@@ -2891,13 +3007,24 @@ function FileCopiesDialog({
   isPending: boolean;
   error?: string;
   onClose: () => void;
-  onConfirm: (result: { locationId: string; locationRef: string }) => void;
+  onConfirm: (result: {
+    /** The disposition to write, or null for "leave each copy's own untouched" (#274). */
+    disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean } | null;
+    /** Blank means "leave each copy where it sits" — no location is written at all (#571). */
+    locationId: string;
+    locationRef: string;
+  }) => void;
 }) {
   const params = useParams<{ collectionSlug: string }>();
   const [locationId, setLocationId] = useState(() => {
     const last = readLast(LS_LAST_LOCATION, collectionId);
     return locations.some((l) => l.id === last && l.assignable) ? last : "";
   });
+  const [flags, setFlags] = useState({ inCollection: true, forSale: false, forTrade: false });
+  // "Leave as is" is a mode over the three chips, not a fourth flag: the chips keep whatever
+  // they were set to, so stepping in and back out of it does not lose the choice made first.
+  // It leads, because storing a batch is rarely the moment its destiny is decided.
+  const [keepDisposition, setKeepDisposition] = useState(true);
   // Only the *typed* ref is state; until the collector types, the box simply shows the location's
   // suggestion. Derived rather than copied in, so switching location re-suggests on its own — and
   // once they have typed, what they typed stands, because a typed ref is their answer to "where is
@@ -2920,25 +3047,27 @@ function FileCopiesDialog({
 
   const copies = `${count} cop${count === 1 ? "y" : "ies"}`;
   return (
-    <DialogShell title="File copies" onClose={onClose} maxWidth="26rem">
+    <DialogShell title="Store copies" onClose={onClose} maxWidth="26rem">
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={(e) => {
           e.preventDefault();
-          if (!locationId) return;
-          writeLast(LS_LAST_LOCATION, collectionId, locationId);
-          onConfirm({ locationId, locationRef: trimmedRef });
+          if (locationId) writeLast(LS_LAST_LOCATION, collectionId, locationId);
+          onConfirm({
+            disposition: keepDisposition ? null : flags,
+            locationId,
+            locationRef: trimmedRef,
+          });
         }}
       >
         <DialogBody>
           <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-            Puts {copies} away: files {count === 1 ? "it" : "them"} into one location and marks{" "}
-            {count === 1 ? "it" : "them"} <strong>delivered</strong>. Each copy keeps its own
-            disposition, and copies already sorted keep their delivery status (the location still
-            applies).
+            Puts {copies} away and marks {count === 1 ? "it" : "them"}{" "}
+            <strong>delivered</strong>. Copies already sorted, damaged, or not delivered keep
+            their delivery status — anything set below still applies to them.
           </p>
 
-          <LabelWithError htmlFor="file-copies-location">Location</LabelWithError>
+          <LabelWithError htmlFor="store-copies-location">Location</LabelWithError>
           {locations.length === 0 ? (
             <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
               No locations defined yet. Add some on the Locations screen first.
@@ -2957,15 +3086,16 @@ function FileCopiesDialog({
               }}
               onlyAssignableSelectable
               disabled={isPending}
+              noneOptionLabel="— Leave as is"
             />
           )}
 
           <div style={{ marginTop: "1rem" }}>
-            <LabelWithError htmlFor="file-copies-ref">Ref (optional)</LabelWithError>
+            <LabelWithError htmlFor="store-copies-ref">Ref (optional)</LabelWithError>
             <input
-              id="file-copies-ref"
+              id="store-copies-ref"
               type="text"
-              value={ref}
+              value={locationId ? ref : ""}
               onChange={(e) => setTypedRef(e.target.value)}
               disabled={isPending || !locationId}
               placeholder={locationId ? (suggestion ?? "No refs used here yet") : "Choose a location first"}
@@ -2991,7 +3121,7 @@ function FileCopiesDialog({
                 </Link>
               )}
             </p>
-            {collision > 0 && (
+            {locationId && collision > 0 && (
               <p
                 style={{
                   margin: "0.5rem 0 0",
@@ -3004,158 +3134,75 @@ function FileCopiesDialog({
               </p>
             )}
           </div>
+
+          <div style={{ marginTop: "1rem" }}>
+            <LabelWithError htmlFor="store-copies-disposition">Disposition</LabelWithError>
+            <div id="store-copies-disposition" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <Tooltip content="Keep whatever disposition each copy already carries — only the delivery status (and anything set above) change">
+                <button
+                  type="button"
+                  aria-pressed={keepDisposition}
+                  disabled={isPending}
+                  onClick={() => setKeepDisposition(true)}
+                  style={{
+                    ...CHIP,
+                    cursor: isPending ? "not-allowed" : "pointer",
+                    fontWeight: keepDisposition ? 600 : 500,
+                    color: keepDisposition ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: keepDisposition ? "var(--color-accent)" : "var(--color-border)",
+                    background: keepDisposition ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                  }}
+                >
+                  {keepDisposition && <Icon name="check" size="xs" />} Leave as is
+                </button>
+              </Tooltip>
+              {/* The three flags are one selection against "Leave as is": picking any of them
+                  leaves that mode, and turning them all off *clears* the dispositions. */}
+              {DISPOSITION_FLAGS.map((d) => {
+                const on = !keepDisposition && flags[d.key];
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={isPending}
+                    onClick={() => {
+                      if (keepDisposition) {
+                        setKeepDisposition(false);
+                        setFlags((f) => (f[d.key] ? f : { ...f, [d.key]: true }));
+                        return;
+                      }
+                      setFlags((f) => ({ ...f, [d.key]: !f[d.key] }));
+                    }}
+                    style={{
+                      ...CHIP,
+                      cursor: isPending ? "not-allowed" : "pointer",
+                      fontWeight: on ? 600 : 500,
+                      color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                      background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                      opacity: keepDisposition ? 0.6 : 1,
+                    }}
+                  >
+                    <Icon name={on ? "check" : "add"} size="xs" /> {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </DialogBody>
         <DialogActions
           actionLabel={
             isPending
-              ? "Filing…"
-              : collision > 0
-                ? `Add to ${trimmedRef}`
-                : trimmedRef
-                  ? `File as ${trimmedRef}`
-                  : "File copies"
+              ? "Storing…"
+              : !locationId
+                ? "Store copies"
+                : collision > 0
+                  ? `Add to ${trimmedRef}`
+                  : trimmedRef
+                    ? `Store as ${trimmedRef}`
+                    : "Store copies"
           }
-          onCancel={onClose}
-          disabled={isPending || !locationId}
-          error={error}
-        />
-      </form>
-    </DialogShell>
-  );
-}
-
-function MarkSortedDialog({
-  count,
-  locations,
-  collectionId,
-  isPending,
-  error,
-  onClose,
-  onConfirm,
-}: {
-  count: number;
-  locations: LocationData[];
-  collectionId: string;
-  isPending: boolean;
-  error?: string;
-  onClose: () => void;
-  onConfirm: (result: {
-    /** The disposition to write, or null for "leave each copy's own untouched" (#274). */
-    disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean } | null;
-    locationId: string;
-  }) => void;
-}) {
-  const [flags, setFlags] = useState({ inCollection: true, forSale: false, forTrade: false });
-  // "Leave as is" is a mode over the three chips, not a fourth flag: the chips keep whatever
-  // they were set to, so stepping in and back out of it does not lose the choice made first.
-  const [keepDisposition, setKeepDisposition] = useState(false);
-  const [locationId, setLocationId] = useState(() => {
-    const last = readLast(LS_LAST_LOCATION, collectionId);
-    return locations.some((l) => l.id === last && l.assignable) ? last : "";
-  });
-  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
-  return (
-    <DialogShell title="Mark copies sorted" onClose={onClose} maxWidth="26rem">
-      <form
-        style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (locationId) writeLast(LS_LAST_LOCATION, collectionId, locationId);
-          onConfirm({ disposition: keepDisposition ? null : flags, locationId });
-        }}
-      >
-        <DialogBody>
-          <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-            Marks {count} cop{count === 1 ? "y" : "ies"} as <strong>delivered</strong>
-            {keepDisposition ? (
-              <>
-                , leaving {count === 1 ? "its" : "each copy’s"} own disposition untouched.
-              </>
-            ) : (
-              <>
-                {" "}
-                and files{count === 1 ? " it" : " them"} with the disposition below.
-              </>
-            )}{" "}
-            Copies already sorted, damaged, or not delivered keep their delivery status (the
-            location still applies).
-          </p>
-          <LabelWithError htmlFor="mark-sorted-disposition">Disposition</LabelWithError>
-          <div id="mark-sorted-disposition" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <Tooltip content="Keep whatever disposition each copy already carries — only the delivery status (and location) change">
-              <button
-                type="button"
-                aria-pressed={keepDisposition}
-                disabled={isPending}
-                onClick={() => setKeepDisposition(true)}
-                style={{
-                  ...CHIP,
-                  cursor: isPending ? "not-allowed" : "pointer",
-                  fontWeight: keepDisposition ? 600 : 500,
-                  color: keepDisposition ? "var(--color-accent)" : "var(--color-text-secondary)",
-                  borderColor: keepDisposition ? "var(--color-accent)" : "var(--color-border)",
-                  background: keepDisposition ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-                }}
-              >
-                {keepDisposition && <Icon name="check" size="xs" />} Leave as is
-              </button>
-            </Tooltip>
-            {/* The three flags are one selection against "Leave as is": picking any of them
-                leaves that mode, and turning them all off *clears* the dispositions. */}
-            {DISPOSITION_FLAGS.map((d) => {
-              const on = !keepDisposition && flags[d.key];
-              return (
-                <button
-                  key={d.key}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={isPending}
-                  onClick={() => {
-                    if (keepDisposition) {
-                      setKeepDisposition(false);
-                      setFlags((f) => (f[d.key] ? f : { ...f, [d.key]: true }));
-                      return;
-                    }
-                    setFlags((f) => ({ ...f, [d.key]: !f[d.key] }));
-                  }}
-                  style={{
-                    ...CHIP,
-                    cursor: isPending ? "not-allowed" : "pointer",
-                    fontWeight: on ? 600 : 500,
-                    color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-                    borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-                    background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-                    opacity: keepDisposition ? 0.6 : 1,
-                  }}
-                >
-                  <Icon name={on ? "check" : "add"} size="xs" /> {d.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ marginTop: "1rem" }}>
-            <LabelWithError htmlFor="mark-sorted-locationId-button">Location (optional)</LabelWithError>
-            {locations.length === 0 ? (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                No locations defined yet. Add some on the Locations screen first.
-              </p>
-            ) : (
-              <LocationTreeSelect
-                locations={locations}
-                locationTree={locationTree}
-                name="locationId"
-                selectedId={locationId}
-                onSelectedIdChange={setLocationId}
-                onlyAssignableSelectable
-                disabled={isPending}
-                noneOptionLabel="— Leave as-is"
-              />
-            )}
-          </div>
-        </DialogBody>
-        <DialogActions
-          actionLabel={isPending ? "Marking…" : "Mark sorted"}
           onCancel={onClose}
           disabled={isPending}
           error={error}

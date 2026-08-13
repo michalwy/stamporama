@@ -1028,40 +1028,173 @@ export interface BulkUpdateResult {
   delivered: ArrivingCopy[];
 }
 
+/**
+ * One ticked container of the intake screen's selection (#571): a lot, an issue group, a lot's
+ * issue group, or — with every field absent — everything the target holds. `filter` is the list's
+ * chip at the moment it was ticked, so "all 40 to sort" is written as those 40 and never as all
+ * 900 (#565).
+ */
+export interface LotBulkSelector {
+  lotId?: string;
+  /** An issue id, or `"__none__"` for copies belonging to no issue. */
+  issueKey?: string;
+  filter?: LotCopyFilter;
+}
+
 export interface LotBulkScope {
   /** All copies identified into this purchase lot. */
   lotId?: string;
   /** All copies identified into any lot of this purchase (order-level view). */
   purchaseId?: string;
-  /** Narrow to a single issue group: an issue id, or `"__none__"` for copies with no issue. */
-  issueKey?: string;
+  /**
+   * The ticked containers, **unioned** (#571). A list because a selection is one act however many
+   * lots and issue groups it spans — a batch on the desk does not respect lot boundaries, and
+   * splitting it into a write per container would leave the act half-done on a failure.
+   */
+  selectors?: LotBulkSelector[];
+  /**
+   * Copies ticked one by one, taken **in addition to** {@link selectors}. A selection routinely
+   * mixes the two — a whole group plus a handful from the next one.
+   */
+  itemIds?: string[];
+  /** Containers lifted back out of a broader tick. */
+  excludeSelectors?: LotBulkSelector[];
+  /** Copies lifted back out of a container above them. The container's other copies run past the
+   *  loaded page, so unticking one is an exclusion and not a shorter list. */
+  excludeItemIds?: string[];
   /** Only copies whose owning lot is still open (skips already-closed lots). */
   onlyOpenLots?: boolean;
-  /**
-   * Narrow to the copies the list is currently showing (#565). "Select everything matching the
-   * current filter" has to mean the whole filtered set on the server, not the rows scrolled into
-   * view, so the chip the collector pressed travels with the scope and is applied to the write —
-   * exactly the rule `Mark all copies sorted` already follows for the unfiltered lot.
-   */
-  filter?: LotCopyFilter;
 }
 
-/** Build the collection-scoped Prisma `where` for a {@link LotBulkScope}. */
-function lotBulkScopeWhere(collectionId: string, scope: LotBulkScope): Prisma.ItemWhereInput {
+const LOT_COPY_FILTERS = new Set<string>(["unpriced", "to-sort", "no-photos"]);
+
+/** One selector off the wire, keeping only the fields it is allowed to carry. */
+function parseSelector(raw: unknown): LotBulkSelector | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const sel: LotBulkSelector = {};
+  if (typeof o.lotId === "string" && o.lotId) sel.lotId = o.lotId;
+  if (typeof o.issueKey === "string" && o.issueKey) sel.issueKey = o.issueKey;
+  // An unknown chip is dropped rather than refused — it can only ever narrow the target.
+  if (typeof o.filter === "string" && LOT_COPY_FILTERS.has(o.filter)) {
+    sel.filter = o.filter as LotCopyFilter;
+  }
+  return sel;
+}
+
+function parseSelectors(raw: string | null | undefined): LotBulkSelector[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map(parseSelector).filter((s): s is LotBulkSelector => s !== null);
+}
+
+/**
+ * Read a {@link LotBulkScope} out of a request, whatever carries it: `lotId` or `purchaseId` for
+ * the target, `onlyOpenLots=true`, the ticked containers as JSON (`selectors`,
+ * `excludeSelectors`), and the ticked copies as comma-separated ids (`itemIds`,
+ * `excludeItemIds`).
+ *
+ * Takes a getter rather than a `FormData` so the scoped write (a form) and the selection count (a
+ * query string) read the *same* definition — the bar's number and the write it precedes must not
+ * be able to disagree about what was selected (#571).
+ */
+export function readLotBulkScope(get: (name: string) => string | null): LotBulkScope {
+  const scope: LotBulkScope = {};
+  const one = (name: string) => get(name)?.trim() || undefined;
+  const list = (name: string) =>
+    (get(name) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  scope.lotId = one("lotId");
+  scope.purchaseId = one("purchaseId");
+  const selectors = parseSelectors(get("selectors"));
+  if (selectors.length > 0) scope.selectors = selectors;
+  const excludeSelectors = parseSelectors(get("excludeSelectors"));
+  if (excludeSelectors.length > 0) scope.excludeSelectors = excludeSelectors;
+  const itemIds = list("itemIds");
+  if (itemIds.length > 0) scope.itemIds = itemIds;
+  const excludeItemIds = list("excludeItemIds");
+  if (excludeItemIds.length > 0) scope.excludeItemIds = excludeItemIds;
+  if (get("onlyOpenLots") === "true") scope.onlyOpenLots = true;
+  return scope;
+}
+
+/** One issue group as a `where`: an issue id, or `"__none__"` for copies belonging to none. */
+function issueKeyWhere(issueKey: string): Prisma.ItemWhereInput {
+  return issueKey === "__none__"
+    ? { stamp: { issueMemberships: { none: {} } } }
+    : { stamp: { issueMemberships: { some: { issueId: issueKey } } } };
+}
+
+/** One container as a `where`, minus the `unpriced` chip, which no column carries and which is
+ *  resolved separately (see {@link resolveLotBulkScope}). */
+function selectorWhere(sel: LotBulkSelector): Prisma.ItemWhereInput {
+  return {
+    ...(sel.lotId ? { lotId: sel.lotId } : {}),
+    ...(sel.issueKey ? issueKeyWhere(sel.issueKey) : {}),
+    ...lotCopyFilterWhere(sel.filter),
+  };
+}
+
+/**
+ * Build the collection-scoped Prisma `where` for a {@link LotBulkScope}.
+ *
+ * Three layers (#571). The **target** is what the screen is about — a lot, or a purchase's lots —
+ * and every other layer sits inside it, so an id or a container the client names can only ever
+ * reach a copy already in view. Inside it, the **union** of the ticked containers and the ticked
+ * copies; a scope naming neither is the whole target, which is how a single-copy row action and
+ * the old whole-lot buttons still resolve. Then the **exclusions**, which is how unticking
+ * something under a container works at all — the container's other copies run past the loaded
+ * page, so there is no shorter list to fall back to.
+ */
+function lotBulkScopeWhere(
+  collectionId: string,
+  scope: LotBulkScope,
+  /** Per-selector id lists standing in for the `unpriced` chip, which no column carries. */
+  unpriced?: { selectors: (string[] | null)[]; excludeSelectors: (string[] | null)[] }
+): Prisma.ItemWhereInput {
   const lotRelation: Prisma.PurchaseLotWhereInput = {};
   if (scope.purchaseId) lotRelation.purchaseId = scope.purchaseId;
   if (scope.onlyOpenLots) lotRelation.status = "open";
-  return {
-    collectionId,
-    ...(scope.lotId ? { lotId: scope.lotId } : {}),
-    ...(Object.keys(lotRelation).length > 0 ? { lot: lotRelation } : {}),
-    ...lotCopyFilterWhere(scope.filter),
-    ...(scope.issueKey
-      ? scope.issueKey === "__none__"
-        ? { stamp: { issueMemberships: { none: {} } } }
-        : { stamp: { issueMemberships: { some: { issueId: scope.issueKey } } } }
-      : {}),
-  };
+  const and: Prisma.ItemWhereInput[] = [
+    {
+      collectionId,
+      ...(scope.lotId ? { lotId: scope.lotId } : {}),
+      ...(Object.keys(lotRelation).length > 0 ? { lot: lotRelation } : {}),
+    },
+  ];
+
+  const withUnpriced = (
+    sel: LotBulkSelector,
+    ids: string[] | null | undefined
+  ): Prisma.ItemWhereInput =>
+    ids ? { AND: [selectorWhere(sel), { id: { in: ids } }] } : selectorWhere(sel);
+
+  const named: Prisma.ItemWhereInput[] = [
+    ...(scope.selectors ?? []).map((sel, i) => withUnpriced(sel, unpriced?.selectors[i])),
+    ...(scope.itemIds?.length ? [{ id: { in: scope.itemIds } }] : []),
+  ];
+  if (named.length === 1) and.push(named[0]);
+  else if (named.length > 1) and.push({ OR: named });
+
+  if (scope.excludeSelectors?.length) {
+    and.push({
+      NOT: {
+        OR: scope.excludeSelectors.map((sel, i) =>
+          withUnpriced(sel, unpriced?.excludeSelectors[i])
+        ),
+      },
+    });
+  }
+  if (scope.excludeItemIds?.length) and.push({ NOT: { id: { in: scope.excludeItemIds } } });
+  return { AND: and };
 }
 
 /** Apply a bulk change to every copy matching a server-resolved {@link LotBulkScope} (#172).
@@ -1085,16 +1218,50 @@ export async function bulkUpdateLotItemsScoped(
   if (isNoopBulk(changes)) return { count: 0, delivered: [] };
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
 
-  const scopeWhere = lotBulkScopeWhere(collectionId, scope);
-  // `unpriced` is the one filter no column answers (#565): it is a derived valuation, so the scope
-  // is resolved to the ids that valuation selects, the same fallback the paged read already makes
-  // under that chip. Every other filter is already in the `where`.
-  const where =
-    scope.filter === "unpriced"
-      ? { AND: [scopeWhere, { id: { in: await listUnpricedItemIds(collectionId, scopeWhere) } }] }
-      : scopeWhere;
+  const where = await resolveLotBulkScope(collectionId, scope);
   const count = await prisma.item.count({ where });
   if (count === 0) return { count: 0, delivered: [] };
   const delivered = await applyLotBulkChanges(where, changes);
   return { count, delivered };
+}
+
+/** The scope as a fully-resolved `where`, including the one filter no column carries. */
+async function resolveLotBulkScope(
+  collectionId: string,
+  scope: LotBulkScope
+): Promise<Prisma.ItemWhereInput> {
+  // `unpriced` is the one chip no column answers (#565): it is a derived valuation, so a container
+  // carrying it is resolved to the ids that valuation selects — the same fallback the paged read
+  // already makes under that chip — bounded by the container it belongs to, never the whole
+  // collection.
+  const target = lotBulkScopeWhere(collectionId, {
+    lotId: scope.lotId,
+    purchaseId: scope.purchaseId,
+    onlyOpenLots: scope.onlyOpenLots,
+  });
+  const resolveOne = async (sel: LotBulkSelector): Promise<string[] | null> =>
+    sel.filter === "unpriced"
+      ? listUnpricedItemIds(collectionId, { AND: [target, selectorWhere(sel)] })
+      : null;
+  const unpriced = {
+    selectors: await Promise.all((scope.selectors ?? []).map(resolveOne)),
+    excludeSelectors: await Promise.all((scope.excludeSelectors ?? []).map(resolveOne)),
+  };
+  return lotBulkScopeWhere(collectionId, scope, unpriced);
+}
+
+/** How many copies a {@link LotBulkScope} holds (#571) — what the selection bar says it is about.
+ *
+ * The bar cannot count its own selection: a ticked issue group under a filter chip has no
+ * client-side figure (the summaries count whole groups), and `unpriced` is a valuation rather than
+ * a column. So the number shown and the number written are read from the same place, and cannot
+ * drift apart. */
+export async function countLotBulkScope(
+  ownerId: string,
+  collectionId: string,
+  scope: LotBulkScope
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (!scope.lotId && !scope.purchaseId) return 0;
+  return prisma.item.count({ where: await resolveLotBulkScope(collectionId, scope) });
 }

@@ -24,14 +24,10 @@ import {
   markPurchaseArrived,
   bulkUpdateLotItems,
   bulkUpdateLotItemsScoped,
+  readLotBulkScope,
   type LotBulkChanges,
-  type LotBulkScope,
 } from "@/lib/lots";
-import type { LotCopyFilter } from "@/lib/items";
 import type { ArrivingCopy } from "@/lib/want-rules";
-
-/** The intake list's filter chips, as the scoped bulk action accepts them off a form (#565). */
-const LOT_COPY_FILTERS = new Set(["unpriced", "to-sort", "no-photos"]);
 import { parsePhotoChangeSet } from "@/lib/photos";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -476,11 +472,9 @@ export async function bulkUpdateLotItemsAction(
   }
 }
 
-/** Bulk-update every copy matching a server-resolved scope (a whole lot, an issue group within
- * a lot, or an issue across a purchase's open lots), so "mark all sorted" / "move all" are
- * correct for lots with more copies than one loaded page (#172). The scope is read from the
- * form: `collectionId` (required) plus `lotId` or `purchaseId`, optional `issueKey`, and
- * `onlyOpenLots=true`. Change fields are the same as {@link bulkUpdateLotItemsAction}. */
+/** Bulk-update every copy a server-resolved scope holds, so a selection covering whole issue
+ * groups or a whole lot is correct for lots with more copies than one loaded page (#172/#571).
+ * Change fields are the same as {@link bulkUpdateLotItemsAction}. */
 export async function bulkUpdateLotItemsScopedAction(
   formData: FormData
 ): Promise<PurchaseActionState> {
@@ -489,18 +483,7 @@ export async function bulkUpdateLotItemsScopedAction(
   if (!collectionId) {
     return { status: "error", message: "Missing collection." };
   }
-  const scope: LotBulkScope = {};
-  const lotId = optionalStr(formData, "lotId");
-  if (lotId) scope.lotId = lotId;
-  const purchaseId = optionalStr(formData, "purchaseId");
-  if (purchaseId) scope.purchaseId = purchaseId;
-  const issueKey = optionalStr(formData, "issueKey");
-  if (issueKey) scope.issueKey = issueKey;
-  if (str(formData, "onlyOpenLots") === "true") scope.onlyOpenLots = true;
-  // The list's own filter chip, so "everything matching" means what the collector is looking at
-  // (#565). An unknown value is dropped rather than refused — it can only narrow the target.
-  const filter = optionalStr(formData, "filter");
-  if (filter && LOT_COPY_FILTERS.has(filter)) scope.filter = filter as LotCopyFilter;
+  const scope = readLotBulkScope((name) => formData.get(name)?.toString() ?? null);
   if (!scope.lotId && !scope.purchaseId) {
     return { status: "error", message: "No lot selected." };
   }

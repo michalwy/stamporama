@@ -11,6 +11,7 @@ import type {
 import type { LocationRefUsage } from "@/lib/locations";
 import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
 import type { PurchaseReturn } from "@/lib/purchase-return";
+import type { CopyContainer } from "@/lib/lot-selection";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -46,6 +47,64 @@ export const lotCopiesKeys = {
   purchaseCompleteness: (collectionId: string, purchaseId: string) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "completeness"] as const,
 };
+
+/** A server-resolved bulk scope (#172/#571): the lot or purchase the screen is about, plus the
+ * selection's own dimensions. Mirrors the server `LotBulkScope` minus the collection id. */
+export interface BulkScopeClient {
+  lotId?: string;
+  purchaseId?: string;
+  onlyOpenLots?: boolean;
+  /** The ticked containers — a lot, an issue group, or everything — unioned. */
+  selectors?: CopyContainer[];
+  /** Copies ticked one by one, taken in addition to the containers. */
+  itemIds?: string[];
+  excludeSelectors?: CopyContainer[];
+  excludeItemIds?: string[];
+}
+
+/** The scope as name/value pairs — the one encoding both the count read and the write use, so
+ * what the bar says it is about and what the write touches cannot drift apart (#571). The
+ * containers go as JSON: they are records with three optional fields, and flattening them into
+ * parallel lists is exactly how a lot and an issue key end up paired with the wrong partner. */
+export function bulkScopeFields(scope: BulkScopeClient): [string, string][] {
+  const out: [string, string][] = [];
+  const put = (name: string, value: string | undefined) => {
+    if (value) out.push([name, value]);
+  };
+  put("lotId", scope.lotId);
+  put("purchaseId", scope.purchaseId);
+  put("selectors", scope.selectors?.length ? JSON.stringify(scope.selectors) : undefined);
+  put(
+    "excludeSelectors",
+    scope.excludeSelectors?.length ? JSON.stringify(scope.excludeSelectors) : undefined
+  );
+  put("itemIds", scope.itemIds?.join(","));
+  put("excludeItemIds", scope.excludeItemIds?.join(","));
+  if (scope.onlyOpenLots) out.push(["onlyOpenLots", "true"]);
+  return out;
+}
+
+/** How many copies the current selection holds (#571). Read from the server because the bar
+ * cannot count itself: a ticked issue group under a filter chip has no client-side figure, and
+ * `unpriced` is a valuation rather than a column. `placeholderData` keeps the last number on
+ * screen while a tick is being counted, so the bar never blinks to nothing mid-selection. */
+export function useLotSelectionCount(collectionId: string, scope: BulkScopeClient | null) {
+  const fields = scope ? bulkScopeFields(scope) : [];
+  return useQuery<{ count: number }>({
+    queryKey: ["lot-copies", collectionId, "selection-count", fields] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/selection-count?${new URLSearchParams(
+          fields
+        ).toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to count the selection");
+      return res.json();
+    },
+    placeholderData: (prev) => prev,
+    enabled: !!scope,
+  });
+}
 
 function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchParams {
   const sp = new URLSearchParams();

@@ -138,8 +138,13 @@ const MISSING_SHOWN = 3;
  * Collapsible issue-group header for a lot's copies, grouped by owning issue — the area chip,
  * issue title, "N in lot" count, catalog chips, and stamp-count badge, with an expand toggle.
  * Shared by the purchase-order intake view (#121) and the sale-lot composition view (#164) so
- * both group identically. Optional `onMove` / `onMarkSorted` add per-issue bulk actions
- * (purchase intake only); `countLabel` overrides the "in lot" wording.
+ * both group identically. `countLabel` overrides the "in lot" wording.
+ *
+ * Optional `select` (purchase intake only, #571) puts this group's copies into the screen's
+ * selection in one click — the affordance replacing the per-issue 📍/✓ buttons that used to sit
+ * here. It is the Inventory duplicates grouping's own group-row checkbox, dash and all, so a
+ * collector meets one convention rather than two; what the tick *means* is the caller's business,
+ * since the group's copies run past the loaded page and only the server can enumerate them.
  *
  * `completeness` (#563) is likewise purchase-intake only: *can I list this series?* is the question
  * a sorting pass asks, and it means nothing on a sale's sold units or an offer's composition, where
@@ -155,8 +160,7 @@ export function LotIssueGroupHeader({
   vendorMap,
   collapsed,
   onToggle,
-  onMove,
-  onMarkSorted,
+  select,
   completeness,
 }: {
   header: IssueHeader | null | undefined;
@@ -168,8 +172,13 @@ export function LotIssueGroupHeader({
   vendorMap: Map<string, AreaCatalogEntry>;
   collapsed: boolean;
   onToggle: () => void;
-  onMove?: () => void;
-  onMarkSorted?: () => void;
+  /** Tick this whole issue group into the screen's selection (#571). */
+  select?: {
+    /** `partial` draws the dash — some of the group is in, the rest is not. */
+    state: "on" | "off" | "partial";
+    onChange: () => void;
+    label: string;
+  };
   /** Per-checklist for-sale completeness for this issue (#563), absent while it is still loading
    *  and on the screens that do not ask the question. */
   completeness?: ChecklistSetCompleteness[];
@@ -188,6 +197,27 @@ export function LotIssueGroupHeader({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        {select && (
+          <Tooltip content={select.label}>
+            {/* Stops the click reaching the header, whose own job is collapsing the group. */}
+            <label
+              onClick={(e) => e.stopPropagation()}
+              style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }}
+            >
+              <input
+                type="checkbox"
+                checked={select.state === "on"}
+                ref={(el) => {
+                  // "Some of them" is a third state the DOM only exposes as a property.
+                  if (el) el.indeterminate = select.state === "partial";
+                }}
+                onChange={select.onChange}
+                aria-label={select.label}
+                style={{ cursor: "pointer" }}
+              />
+            </label>
+          </Tooltip>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -244,36 +274,6 @@ export function LotIssueGroupHeader({
           </span>
         </Tooltip>
 
-        {onMove && (
-          <Tooltip content="Move this issue's copies to a location" align="end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMove();
-              }}
-              aria-label="Move this issue's copies to a location"
-              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
-            >
-              <Icon name="location" size="sm" />
-            </button>
-          </Tooltip>
-        )}
-        {onMarkSorted && (
-          <Tooltip content="Mark this issue's copies sorted" align="end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkSorted();
-              }}
-              aria-label="Mark this issue's copies sorted"
-              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
-            >
-              <Icon name="check" size="sm" />
-            </button>
-          </Tooltip>
-        )}
       </div>
 
       {header &&
@@ -285,7 +285,8 @@ export function LotIssueGroupHeader({
             display: "flex",
             alignItems: "center",
             gap: "0.375rem",
-            paddingLeft: "1.75rem",
+            // Lines up under the title, which the selection checkbox pushes across when present.
+            paddingLeft: select ? "3rem" : "1.75rem",
             marginTop: "0.3rem",
             flexWrap: "wrap",
           }}

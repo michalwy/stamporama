@@ -257,7 +257,7 @@ without passing through intake at all — so the whole buying path, the one wher
 never asked the question.
 
 The rule is now one line: **the review happens when a copy becomes `delivered`.** A hand-added copy
-is reviewed on creation because that is when it arrives; an ordered one waits for *Mark sorted* or an
+is reviewed on creation because that is when it arrives; an ordered one waits for *Store* or an
 explicit delivery state. This closes the auction-settlement gap without a second review being bolted
 onto settlement — every route converges on the same transition — and it asks the question at the only
 moment it can be answered honestly, with the stamp in hand.
