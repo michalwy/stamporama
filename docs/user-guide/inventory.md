@@ -754,6 +754,12 @@ getting the listings made, and both of those belong on the offer's own screen on
 exists. If you want the price filled in from the copy's catalog value, use the ordinary
 [create form](#the-new-offer-shortcuts) instead — quick mode is for the bulk case.
 
+What the offers *do* carry is whatever the platform itself says about listings on it: its **default
+listing type** and, on an auction platform, its **default starting price**. Quick mode never asks
+those two questions, so the platform's own answers stand — exactly as they would if you had opened
+the create form and left both fields alone. Both are set on the platform's contact, under
+[Platform](contacts.md).
+
 Press **Done** (or the button at the top again) to leave. Two things to know:
 
 - The mode is **not remembered**. It is off every time you open the list, so a click can never list

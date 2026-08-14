@@ -113,11 +113,16 @@ async function readOfferInput(
   }
 
   // How the listing is sold (#449): a quick buy at a stated price, or an auction whose figure moves
-  // with the bidding. Unknown / absent reads as `fixed` — the only thing an offer could be before,
-  // and the reading that claims the least. The starting price is the auction's opening figure and is
-  // optional even there (an auction picked up mid-flight may have no recorded opening); the domain
-  // drops it on a quick buy rather than storing a figure about a format the listing is not in.
-  const listingType = normalizeListingType(str(formData, "listingType"));
+  // with the bidding. An **absent** field is *not stated* and is passed on as `undefined`, so the
+  // domain can fall back to the platform's own default (#449/#362) — a form that never asked the
+  // question (quick offer mode, #537/#589) must not answer it with a `fixed` of its own, which is
+  // also what silently denied those offers the platform's default starting price. A value that *is*
+  // sent and unrecognised still reads as `fixed`, the reading that claims the least. The starting
+  // price is the auction's opening figure and is optional even there (an auction picked up
+  // mid-flight may have no recorded opening); the domain drops it on a quick buy rather than
+  // storing a figure about a format the listing is not in.
+  const rawListingType = str(formData, "listingType");
+  const listingType = rawListingType ? normalizeListingType(rawListingType) : undefined;
   const starting = parseStartingPrice(str(formData, "startingPrice"));
   if (!starting.ok) return { ok: false, message: starting.message };
 
