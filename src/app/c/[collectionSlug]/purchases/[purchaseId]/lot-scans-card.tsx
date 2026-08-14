@@ -99,7 +99,11 @@ export function LotScansCard({
   const batches = data?.batches ?? [];
   const fromAuction = data?.fromAuction ?? false;
   const expansion = useBatchExpansion();
-  const openTile = batches.flatMap((b) => b.tiles).find((t) => t.id === tileId) ?? null;
+  // The tile and the batch it was cut from — the batch because the dialog looks *into* the tile
+  // (#585) and the scans behind it are where anything past the tile photo's own resolution comes
+  // from.
+  const openBatch = batches.find((b) => b.tiles.some((t) => t.id === tileId)) ?? null;
+  const openTile = openBatch?.tiles.find((t) => t.id === tileId) ?? null;
   // Tiles whose copy is on no line of the auction description. A signal worth surfacing, not a
   // problem to hide: the parcel holds something nobody announced.
   const undescribed = batches.flatMap((b) => b.tiles).filter((t) => t.outsideDescription).length;
@@ -326,6 +330,10 @@ export function LotScansCard({
           collectionId={collectionId}
           lotId={lotId}
           tile={openTile}
+          // `ScanSheetData` already answers both questions the deep look asks — which scan, and
+          // whether the retention sweep has taken it (#578) — so the dialog is handed the sheets
+          // rather than a second read of them.
+          sheets={{ front: openBatch?.front ?? null, back: openBatch?.back ?? null }}
           lotOpen={lotOpen}
           fromAuction={fromAuction}
           // The copies list searches internal numbers, so a copy's own number is the address that

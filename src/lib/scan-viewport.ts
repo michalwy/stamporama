@@ -1,6 +1,11 @@
-// Zoom and pan for the cut editor (#579, ADR-0033 §6): the view transform between a sheet's
-// pixels and the pixels on screen, and the region of the original that the transform makes worth
-// fetching.
+// Zoom and pan over a scan (#579, ADR-0033 §6): the view transform between a picture's own pixels
+// and the pixels on screen, and the region of the original that the transform makes worth fetching.
+//
+// **The picture is a sheet or a crop of one.** The cut editor shows a whole card; the tile dialog
+// (#585) shows one tile, which is a rectangle of the very same scan. Everything below is about a
+// picture and a viewport and asks nothing about which of the two it is — a crop's own pixels are
+// still the scan's pixels, so `1:1` means the same thing and a region request only has to be
+// re-addressed to the sheet it was taken from ({@link regionOnSheet}) before it becomes a URL.
 //
 // Pure — no DOM, no React, no Prisma. It lives beside `scan-boxes.ts` rather than inside the editor
 // for the reason that module gives: the editor is a client component, the region route is a server
@@ -171,23 +176,34 @@ const REGION_GRID_PX = 128;
  * then lands inside a crop that is already on screen. */
 const REGION_MARGIN = 0.25;
 
-/** A crop of the original to display over the `view` derivative. */
+/** A crop of the original to display over the derivative currently on screen. */
 export interface RegionRequest {
-  /** Where on the sheet, in whole sheet pixels. */
+  /** Where on the **picture**, in whole scan pixels — sheet coordinates already when the picture is
+   * the whole sheet, and otherwise one {@link regionOnSheet} away from them. */
   box: Box;
   /** Width to render it at, in image pixels — enough for the screen and no more. */
   renderWidth: number;
 }
 
 /**
- * The crop of the original worth fetching for what is currently on screen, or null when the `view`
- * derivative is still the better answer.
+ * The crop of the original worth fetching for what is currently on screen, or null when the
+ * derivative already on screen is still the better answer.
  *
- * **Null below the view's own scale.** The editor shows `view`, capped at `FULL_MAX_EDGE`; while
- * one display pixel covers a whole view pixel or more, the view is showing every pixel the screen
- * can and the original would only send more bytes for the same picture. Past that point the browser
- * is upscaling — magnifying a threefold downscale rather than showing more stamp — and that is
- * precisely where the retained original earns its keep.
+ * `picture` is what is being displayed: its size in **scan pixels** and the width of the derivative
+ * standing in for it — the `view` copy of a card in the cut editor, the tile's own `full` photo in
+ * the identification dialog.
+ *
+ * **Null below the derivative's own scale.** While one display pixel covers a whole derivative pixel
+ * or more, that derivative is showing every pixel the screen can and the original would only send
+ * more bytes for the same picture. Past that point the browser is upscaling — magnifying a downscale
+ * rather than showing more stamp — and that is precisely where the retained original earns its keep.
+ *
+ * **Null when the derivative is not a downscale at all.** A tile of a single stamp is around 1400 px
+ * against a `FULL_MAX_EDGE` of 2500, so its photo already carries every pixel the scan has of it
+ * (#585); a card small enough to survive the cap is the same case in the editor. Fetching then costs
+ * a full decode of a 30 Mpx original to hand back the pixels the screen is already showing, and no
+ * amount of zoom changes that — so the question is settled here, once, rather than by every caller
+ * deciding whether it has a deeper source worth asking.
  *
  * `dpr` is the display's device-pixel ratio and affects only how large the crop is rendered, never
  * whether one is fetched: a HiDPI screen at fit is the ordinary case and must not turn into a
@@ -195,12 +211,14 @@ export interface RegionRequest {
  */
 export function regionRequest(
   v: Viewport,
-  sheet: SheetSize & { viewWidth: number },
+  picture: SheetSize & { viewWidth: number },
   size: ViewportSize,
   dpr = 1,
   maxRenderWidth = 2500
 ): RegionRequest | null {
+  const sheet = picture;
   if (sheet.width <= 0 || sheet.height <= 0 || size.width <= 0 || size.height <= 0) return null;
+  if (sheet.viewWidth >= sheet.width) return null;
   const viewScale = sheet.viewWidth / sheet.width;
   if (v.scale <= viewScale) return null;
 
@@ -226,6 +244,28 @@ export function regionRequest(
     Math.max(1, Math.ceil(box.w * v.scale * dpr))
   );
   return { box, renderWidth };
+}
+
+/**
+ * The same request, addressed to the **sheet** the picture is a crop of.
+ *
+ * The region route speaks sheet pixels and validates in them, while a viewport speaks its own
+ * picture's — identical while the picture *is* the sheet, and off by the tile's own corner as soon
+ * as it is not (#585). The translation lives here rather than in either caller for the reason the
+ * whole module does: a number meaning different things across the client/server line is a crop of
+ * somewhere else, served with an `immutable` header.
+ *
+ * `renderWidth` is untouched — how large a crop is rendered is a fact about the screen, not about
+ * where on the card the crop was taken.
+ */
+export function regionOnSheet(
+  r: RegionRequest,
+  origin: { x: number; y: number }
+): RegionRequest {
+  return {
+    box: { ...r.box, x: r.box.x + origin.x, y: r.box.y + origin.y },
+    renderWidth: r.renderWidth,
+  };
 }
 
 /** A stable key for a request — what the editor caches on and what the route's URL is built from,

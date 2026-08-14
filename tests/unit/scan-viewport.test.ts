@@ -11,6 +11,7 @@ import {
   isFitted,
   panBy,
   regionKey,
+  regionOnSheet,
   regionRequest,
   toSheetPoint,
   zoomBy,
@@ -139,6 +140,56 @@ describe("regionRequest", () => {
     const b = regionRequest(panBy(v, -3, -2, CARD, SIZE), CARD, SIZE);
     assert.ok(a && b);
     assert.equal(regionKey(a), regionKey(b));
+  });
+});
+
+// A tile is a second picture over the same machinery (#585): the picture is the tile's crop of the
+// card, and its derivative is the tile's own `full` photo.
+const TILE_BOX = { x: 1280, y: 768, w: 1400, h: 1600 };
+const TILE_SIZE = { width: 900, height: 700 };
+
+describe("regionRequest over a picture that is not a downscale", () => {
+  it("asks for nothing at any zoom", () => {
+    // The ordinary single stamp at 1200 dpi: ~1400 px, under `FULL_MAX_EDGE`, so the tile photo
+    // already carries every pixel the scan has of it. A region could only re-send them, at the
+    // price of a full decode of a 30 Mpx original.
+    const tile = { width: TILE_BOX.w, height: TILE_BOX.h, viewWidth: TILE_BOX.w };
+    for (const scale of [0.5, 1, 3, MAX_SCALE]) {
+      const v = zoomTo(fitViewport(tile, TILE_SIZE), scale, { x: 450, y: 350 }, tile, TILE_SIZE);
+      assert.equal(regionRequest(v, tile, TILE_SIZE, 2), null, `at scale ${scale}`);
+    }
+  });
+
+  it("still asks once the picture is capped — a block wider than the cap", () => {
+    const block = { width: 4200, height: 2600, viewWidth: 2500 };
+    const v = zoomTo(fitViewport(block, TILE_SIZE), 1, { x: 450, y: 350 }, block, TILE_SIZE);
+    assert.ok(regionRequest(v, block, TILE_SIZE));
+  });
+});
+
+describe("regionOnSheet", () => {
+  it("re-addresses a picture's crop to the sheet it was taken from", () => {
+    const block = { width: TILE_BOX.w, height: TILE_BOX.h, viewWidth: 700 };
+    const v = zoomTo(fitViewport(block, TILE_SIZE), 2, { x: 450, y: 350 }, block, TILE_SIZE);
+    const r = regionRequest(v, block, TILE_SIZE);
+    assert.ok(r);
+    const onSheet = regionOnSheet(r, { x: TILE_BOX.x, y: TILE_BOX.y });
+    assert.equal(onSheet.box.x, r.box.x + TILE_BOX.x);
+    assert.equal(onSheet.box.y, r.box.y + TILE_BOX.y);
+    // The crop keeps its size and how large it is rendered — only where it is changes.
+    assert.equal(onSheet.box.w, r.box.w);
+    assert.equal(onSheet.box.h, r.box.h);
+    assert.equal(onSheet.renderWidth, r.renderWidth);
+    // And it lands inside the tile's own rectangle of the card, never beside it.
+    assert.ok(onSheet.box.x + onSheet.box.w <= TILE_BOX.x + TILE_BOX.w);
+    assert.ok(onSheet.box.y + onSheet.box.h <= TILE_BOX.y + TILE_BOX.h);
+  });
+
+  it("is the identity for a picture that is the whole sheet", () => {
+    const v = zoomTo(fitViewport(CARD, SIZE), 1, { x: 600, y: 400 }, CARD, SIZE);
+    const r = regionRequest(v, CARD, SIZE);
+    assert.ok(r);
+    assert.deepEqual(regionOnSheet(r, { x: 0, y: 0 }), r);
   });
 });
 

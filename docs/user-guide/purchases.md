@@ -296,9 +296,28 @@ many discards and notes are about to go with them.
 
 #### Working through the tiles
 
-Click a tile. Its front and back fill the dialog, big enough to see a crop that took half a stamp or
-a piece nobody could identify — which is the whole reason for reviewing tiles rather than trusting
-the cut, since the intake step that follows never shows them.
+Click a tile. **The picture is the dialog**: the tile fills it, with the answer beside it. A crop
+that took half a stamp or a piece nobody could identify is visible at this size and nowhere else —
+the intake step that follows never shows the images — which is the whole reason for reviewing tiles
+rather than trusting the cut.
+
+**Zoom it instead of reaching for a loupe.** The tile zooms and pans exactly as the cut editor does:
+the wheel zooms to the pointer, dragging moves the picture, <kbd>+</kbd> / <kbd>−</kbd> and
+<kbd>0</kbd> do the same from the keyboard, and **Fit** and **1:1** are in the toolbar. That is the
+point of scanning at 1200 dpi in the first place: the perforation teeth, the watermark and the plate
+flaw you would settle a variant by are already in the picture, so telling two variants apart is a
+pass at the keyboard rather than one at the desk.
+
+**1:1 means one screen pixel per pixel of the scan** — past it you are enlarging, not seeing more.
+For a single stamp the tile's own image *is* the whole scan of it; for something larger than the
+image cap — a block, a long strip — the part you are looking at is fetched from the **full-resolution
+card scan**, and the percentage picks up a dot while it is showing that. Once a card's scans have
+been swept by the retention setting there is nothing deeper to fetch, and the tile's own image is
+what you see; by then the card has been worked through and the close look is over.
+
+**Switching front to back keeps the zoom and the position.** Telling a variant apart is a
+comparison, so flipping sides leaves you looking at the same part of the stamp at the same
+magnification rather than starting again from Fit.
 
 **Every tile opens the same dialog, whatever state it is in, and no tile takes you off this screen
 when you click it.** One waiting to be dealt with opens on its three answers; a discarded one opens

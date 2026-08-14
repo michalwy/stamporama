@@ -7,7 +7,6 @@ import {
   DialogSecondaryButton,
   DialogShell,
 } from "@/app/dialog-shell";
-import { Icon, type IconName } from "@/app/icons";
 import {
   MIN_BOX_EDGE_PX,
   mergeBoxes,
@@ -22,13 +21,13 @@ import {
   clampOffsets,
   fitViewport,
   panBy,
-  regionKey,
-  regionRequest,
   toSheetPoint,
   zoomBy,
   type Viewport,
   type ViewportSize,
 } from "@/lib/scan-viewport";
+import { ScanToolButton } from "./scan-tool-button";
+import { useSheetRegion } from "./use-sheet-region";
 
 /**
  * The cut review editor (#566, ADR-0033), zoomable since #579.
@@ -117,20 +116,6 @@ interface Region {
 let nextRegionId = 0;
 const newRegion = (box: Box): Region => ({ id: `r${nextRegionId++}`, box });
 
-/** A crop of the original currently drawn over the `view` derivative: where it sits on the sheet,
- * and the URL it came from. Held only once it has finished loading, so what is on screen is never
- * replaced by a half-arrived image. */
-interface Detail {
-  key: string;
-  box: Box;
-  url: string;
-}
-
-/** How long the viewport must be still before a region is fetched. Each region costs a full decode
- * of a 30 Mpx original server-side, so a pan must not ask for one per frame — this, plus the grid
- * `regionRequest` snaps to, is what keeps a drag across a card to a handful of fetches. */
-const REGION_DEBOUNCE_MS = 200;
-
 export function ScanCutEditor({
   collectionId,
   sheet,
@@ -164,7 +149,6 @@ export function ScanCutEditor({
   const fittedRef = useRef(true);
   /** Space is the hand tool, as everywhere else that draws on an image. */
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const [detail, setDetail] = useState<Detail | null>(null);
 
   const sheetSize = useMemo(
     () => ({ width: sheet.width, height: sheet.height }),
@@ -256,49 +240,18 @@ export function ScanCutEditor({
 
   // ── Detail from the original ───────────────────────────────────────────────────────────────
 
-  const regionSheet = useMemo(
-    () => ({ width: sheet.width, height: sheet.height, viewWidth: sheet.viewWidth }),
-    [sheet.width, sheet.height, sheet.viewWidth]
-  );
-  /** The region last asked for. A load that arrives after the view has moved on is dropped against
-   * this, so a slow fetch cannot paint a stale crop over the card. */
-  const wantedRegion = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (size.width === 0) return;
-    const request = regionRequest(view, regionSheet, size, window.devicePixelRatio || 1);
-    const key = request ? regionKey(request) : null;
-    if (key === wantedRegion.current) return;
-
-    // Everything, including *clearing* the crop, waits out the debounce — so a wheel spun past the
-    // threshold and back does not blink the detail away and fetch it again.
-    const timer = setTimeout(() => {
-      wantedRegion.current = key;
-      if (!request) {
-        // Back below the view's own scale: the derivative has every pixel the screen can show, and
-        // leaving a crop up would keep one part of the card sharper than the rest for no reason.
-        setDetail(null);
-        return;
-      }
-      const loaded = regionKey(request);
-      const { box, renderWidth } = request;
-      const url =
-        `/api/collections/${collectionId}/scan-sheets/${sheet.id}/region` +
-        `?x=${box.x}&y=${box.y}&w=${box.w}&h=${box.h}&rw=${renderWidth}`;
-      // Preloaded rather than rendered straight into an `<img>`: swapping `src` blanks the element
-      // while the next one decodes, which at 8× would flash the card away exactly when the
-      // collector is looking hardest at it. A repeat of a crop already fetched comes from the
-      // browser's cache — the route marks these immutable, since a sheet's bytes never change.
-      const image = new Image();
-      image.onload = () => {
-        if (wantedRegion.current === loaded) setDetail({ key: loaded, box, url });
-      };
-      // A region that fails to arrive is a soft failure: the `view` underneath is still a picture
-      // of the card, and the cut can still be edited over it.
-      image.src = url;
-    }, REGION_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [collectionId, regionSheet, sheet.id, size, view]);
+  // The whole card is the picture, so its origin on the sheet is zero and the hook's translation is
+  // the identity — which is the point of it living outside this file: the tile dialog (#585) shows
+  // one rectangle of the same scan and needs the same effects around a different origin.
+  const detail = useSheetRegion({
+    collectionId,
+    sheetId: sheet.id,
+    width: sheet.width,
+    height: sheet.height,
+    viewWidth: sheet.viewWidth,
+    view,
+    size,
+  });
 
   const selectedRegions = useMemo(
     () => regions.filter((r) => selected.has(r.id)),
@@ -777,7 +730,7 @@ function Toolbar({
         {selectedCount > 0 ? `${selectedCount} selected` : "nothing selected"}
       </span>
       <span style={{ flex: 1 }} />
-      <ToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={onZoomOut} />
+      <ScanToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={onZoomOut} />
       <span
         style={{
           fontSize: "0.8125rem",
@@ -796,28 +749,28 @@ function Toolbar({
       >
         {Math.round(zoom * 100)}%{detailed ? " ·" : ""}
       </span>
-      <ToolButton icon="zoomIn" label="+" hint="Zoom in (+)" onClick={onZoomIn} />
-      <ToolButton
+      <ScanToolButton icon="zoomIn" label="+" hint="Zoom in (+)" onClick={onZoomIn} />
+      <ScanToolButton
         icon="zoomFit"
         label="Fit"
         hint="The whole card on screen (0)"
         active={fitted}
         onClick={onFit}
       />
-      <ToolButton
+      <ScanToolButton
         label="1:1"
         hint="One screen pixel per pixel of the scan itself — the size a crop is actually taken at"
         active={!fitted && Math.abs(zoom - 1) < 1e-6}
         onClick={onActualSize}
       />
-      <ToolButton
+      <ScanToolButton
         icon="merge"
         label="Merge"
         hint="Two boxes that halved one stamp become the rectangle holding both"
         disabled={selectedCount < 2}
         onClick={onMerge}
       />
-      <ToolButton
+      <ScanToolButton
         icon="splitColumns"
         label="Split ↔"
         hint="Cut the selected box into a left and a right — click where the seam is"
@@ -825,7 +778,7 @@ function Toolbar({
         active={mode === "split-v"}
         onClick={() => onMode(mode === "split-v" ? "select" : "split-v")}
       />
-      <ToolButton
+      <ScanToolButton
         icon="splitRows"
         label="Split ↕"
         hint="Cut the selected box into a top and a bottom"
@@ -833,14 +786,14 @@ function Toolbar({
         active={mode === "split-h"}
         onClick={() => onMode(mode === "split-h" ? "select" : "split-h")}
       />
-      <ToolButton
+      <ScanToolButton
         icon="delete"
         label="Delete"
         hint="Remove the selected boxes — a shadow, a fibre, the card's edge"
         disabled={selectedCount === 0}
         onClick={onDelete}
       />
-      <ToolButton
+      <ScanToolButton
         icon="clear"
         label="Clear all"
         hint="Start the cut again from an empty card"
@@ -848,49 +801,6 @@ function Toolbar({
         onClick={onClear}
       />
     </div>
-  );
-}
-
-function ToolButton({
-  icon,
-  label,
-  hint,
-  disabled,
-  active,
-  onClick,
-}: {
-  /** Optional: `1:1` is its own picture, and the vocabulary is deliberately not the place to invent
-   * a glyph for a ratio that reads perfectly well as two characters. */
-  icon?: IconName;
-  label: string;
-  hint: string;
-  disabled?: boolean;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={hint}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        padding: "0.3125rem 0.625rem",
-        borderRadius: "0.375rem",
-        fontSize: "0.8125rem",
-        border: "1px solid var(--color-border-strong)",
-        background: active ? "var(--color-action-primary)" : "var(--color-bg-elevated)",
-        color: active ? "#fff" : "var(--color-text-secondary)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {icon && <Icon name={icon} size="sm" />}
-      {label}
-    </button>
   );
 }
 

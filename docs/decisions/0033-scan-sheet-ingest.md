@@ -372,6 +372,50 @@ The physical rule follows from all of this and is in the user guide: **leave abo
 tooth of gap between stamps when laying out the card.** It is the one input to detection quality
 that is entirely in the collector's hands.
 
+## What #585 added: the same viewport over a tile, which is where the detail was all along
+
+#579 justified zoom by the *cut*. The larger prize was one step later. Deciding **which variant** a
+stamp is comes down to perforation teeth, a watermark, a plate flaw or a shade — work done with a
+loupe over the physical piece, *after* it has been scanned at 1200 dpi, where all of that detail was
+already sitting unlooked-at while the dialog showed it at the size of a postage stamp. So the tile
+became the dialog: large, zoomable, pannable, with the outcome beside it.
+
+It is a **second caller, not a second implementation.** `scan-viewport.ts` was written for the cut
+editor but is about a picture and a viewport, and a tile is a rectangle of the very same card — its
+size in *scan* pixels is the tile's own box, so `1:1` keeps meaning one screen pixel per scan pixel
+without a single new number. Two things were generalised **in place** rather than forked:
+
+- `regionOnSheet` — a viewport speaks its own picture's pixels, the region route speaks the sheet's,
+  and the two differ by the tile's corner. The translation belongs beside the arithmetic it belongs
+  to, for the reason the module exists at all.
+- `regionRequest` now answers **null when the derivative is not a downscale.** A single stamp's tile
+  is ~1400 px against a `FULL_MAX_EDGE` of 2500, so its photo already carries every pixel the scan
+  has of it; asking for a region would cost a full decode of a 30 Mpx original to hand back what is
+  already on screen. Stating it once, where the escalation is decided, beats every caller deciding
+  whether it has a deeper source worth asking — and it was quietly true of a small card in the editor
+  too.
+
+The effects around that call were **shared rather than copied** (`use-sheet-region.ts`): the debounce,
+the preload-before-swap and the drop-a-late-load guard are as particular as the arithmetic, and a
+second copy of them is a second set of ways to paint a stale crop over a stamp.
+
+Two product calls decide whether this actually replaces a loupe. **Switching front to back keeps the
+zoom and the pan** — telling a variant apart is a comparison, and being thrown back to fit on every
+flip is what makes a comparison expensive; the scale being in scan pixels is what makes that exact
+rather than approximate across two crops of one card. And **1:1 is measured against the scan**, as in
+the editor: a control that lied about it would be worse than none here, the whole question being what
+is real detail and what is enlargement.
+
+**What #578 leaves is the fallback, and it is testable now.** A swept sheet keeps its row and loses
+its bytes, and both scan routes answer 404 deliberately — so the deep source is *known* to be absent
+rather than discovered by a failed fetch. `scan-tile-view.ts` decides which sides a tile has and
+which of them still have a card behind them, pure and away from the DOM, so the swept case is a unit
+test rather than a screen reached by waiting for a cron job. A `consumed` tile is deliberately in the
+same case: its pictures are read through the copy that owns them now, that copy's front can have been
+replaced from the Copies screen, and nothing on the tile would say so — a sharp crop of the card
+painted over a photograph of something else is the one failure this escalation must not have, and by
+then the close look is over anyway.
+
 ## Still open
 
 - The batch has no name of its own. A lot with six cards is *batch 1…6*, which is enough while a card

@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { Icon } from "@/app/icons";
 import {
   DialogActions,
-  DialogBody,
   DialogFooter,
   DialogLinkButton,
   DialogSecondaryButton,
@@ -19,16 +18,22 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
+import { tileSideViews, type TileSheetRef } from "@/lib/scan-tile-view";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
+import { TileZoomView } from "./tile-zoom-view";
 import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
  * One tile, and the three ends it can reach (#567).
  *
- * The tile's own images fill the dialog, and that is its entire reason for existing: the intake
- * step that follows never shows them, and a crop that took half a stamp or a piece nobody could
- * identify is only visible at this size. Reviewing tiles rather than trusting the cut is the whole
- * point of the pass.
+ * **The tile is the dialog** (#585), not a thumbnail above the controls: a picture large enough to
+ * be zoomed and panned, with the outcome beside it. That is the dialog's entire reason for
+ * existing — the intake step that follows never shows the images, and a crop that took half a stamp
+ * or a piece nobody could identify is only visible at this size. Since #585 it answers the harder
+ * question too: at 1200 dpi the perforations, the watermark and the plate flaw are already in the
+ * tile's own photo, so telling two variants apart is a pass at the keyboard rather than one under a
+ * loupe. `tile-zoom-view.tsx` is the picture and `scan-viewport.ts` all of its arithmetic — this
+ * file only decides what is *asked* about the tile.
  *
  * So the dialog **opens on an outcome, never on a menu of them**, and which one is *derived from
  * whether there is anything **this tile** can be assigned to* — not from where the lot came from.
@@ -65,6 +70,10 @@ interface Props {
   collectionId: string;
   lotId: string;
   tile: ScanTileData;
+  /** The batch's two scans, for the deeper look past the tile photo's own resolution (#585). A
+   * missing or swept sheet (#578) is not an error here — it is the absence of a second source, and
+   * the tile's photo carries the pass on its own. */
+  sheets: { front: TileSheetRef | null; back: TileSheetRef | null };
   /** Whether the lot is still open. A closed lot takes no new copies (its pool has been split
    * across the copies it had), but a photograph is not money — assigning and discarding stay. */
   lotOpen: boolean;
@@ -131,6 +140,7 @@ export function TileIdentifyDialog({
   collectionId,
   lotId,
   tile,
+  sheets,
   lotOpen,
   fromAuction,
   copyHref,
@@ -142,6 +152,11 @@ export function TileIdentifyDialog({
   const [pending, startTransition] = useTransition();
 
   const settled = tile.state !== "unidentified";
+
+  /** The sides there are to look at, and which of them still have a retained scan behind them.
+   * Decided in a pure module, so a swept batch (#578) is a case a unit test reaches rather than one
+   * that first runs on a collector's screen. */
+  const viewSides = tileSideViews(tile, sheets);
 
   // Lifted out of the assign list, because *whether the list holds anything* is what chooses the
   // opening mode. TanStack hashes the key structurally, so rebuilding the params per render is
@@ -207,39 +222,64 @@ export function TileIdentifyDialog({
     <DialogShell
       title={`Tile ${tile.position + 1}`}
       onClose={onClose}
-      maxWidth={!settled && mode === "assign" ? "44rem" : "32rem"}
+      // Sized for the picture rather than for the text beside it, and the same shape as the cut
+      // editor: the two surfaces that show a scan large are the two that are worth a whole screen.
+      maxWidth="min(96vw, 82rem)"
+      height="90vh"
     >
-      <DialogBody>
-        <TileImages tile={tile} collectionId={collectionId} />
-
-        {settled ? (
-          <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
-        ) : mode === null ? (
-          // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
-          // on identify meanwhile: a mode that arrives a moment later is a dialog that moves under
-          // the hand of someone already reading it.
-          <Muted>Checking what this lot already holds…</Muted>
-        ) : mode === "assign" ? (
-          <AssignList
-            copies={candidates}
-            roles={roles}
-            fromAuction={fromAuction}
-            disabled={pending}
-            hasMore={copies.hasNextPage ?? false}
-            loadingMore={copies.isFetchingNextPage}
-            onLoadMore={() => void copies.fetchNextPage()}
-            onPick={(itemId) => run(() => assignTileAction(tile.id, itemId), true)}
-          />
-        ) : (
-          <IdentifyIntro lotOpen={lotOpen} />
+      {/* The picture takes the room and the outcome sits beside it in a column of its own, which
+          scrolls on its own so a lot's whole copy list can never push the tile off screen. */}
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          minHeight: 0,
+          gap: "1.25rem",
+          padding: "1.25rem 1.5rem",
+        }}
+      >
+        {viewSides.length > 0 && (
+          <TileZoomView collectionId={collectionId} sides={viewSides} position={tile.position} />
         )}
 
-        {error && (
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-            {error}
-          </p>
-        )}
-      </DialogBody>
+        <div
+          style={{
+            width: viewSides.length > 0 ? "24rem" : "100%",
+            flexShrink: 0,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {settled ? (
+            <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
+          ) : mode === null ? (
+            // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
+            // on identify meanwhile: a mode that arrives a moment later is a dialog that moves under
+            // the hand of someone already reading it.
+            <Muted>Checking what this lot already holds…</Muted>
+          ) : mode === "assign" ? (
+            <AssignList
+              copies={candidates}
+              roles={roles}
+              fromAuction={fromAuction}
+              disabled={pending}
+              hasMore={copies.hasNextPage ?? false}
+              loadingMore={copies.isFetchingNextPage}
+              onLoadMore={() => void copies.fetchNextPage()}
+              onPick={(itemId) => run(() => assignTileAction(tile.id, itemId), true)}
+            />
+          ) : (
+            <IdentifyIntro lotOpen={lotOpen} />
+          )}
+
+          {error && (
+            <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
 
       {settled ? (
         <DialogFooter>
@@ -314,54 +354,6 @@ export function TileIdentifyDialog({
   );
 }
 
-// ── The images ───────────────────────────────────────────────────────────────────────────────
-
-/**
- * The tile's two crops, at the size the whole dialog exists for.
- *
- * A consumed tile has no photo rows of its own — but only because consuming **reassigns** them to
- * the copy rather than copying them, so the copy's front and back *are* this tile's, and following
- * them there is how a consumed tile shows itself rather than an empty panel (#584). The strip
- * already does exactly this with the thumbnail.
- *
- * Nothing to show is then one honest case: the copy was deleted afterwards and its images went with
- * it.
- */
-function TileImages({ tile, collectionId }: { tile: ScanTileData; collectionId: string }) {
-  const shots = [
-    { id: tile.frontPhotoId ?? tile.item?.frontPhotoId ?? null, label: "Front" },
-    { id: tile.backPhotoId ?? tile.item?.backPhotoId ?? null, label: "Back" },
-  ].filter((s) => s.id != null);
-  if (shots.length === 0) return null;
-  return (
-    <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
-      {shots.map((shot) => (
-        <figure key={shot.label} style={{ margin: 0, textAlign: "center" }}>
-          {/* Served by an authenticated route at whatever size the stamp was — the call every
-              other photo on this screen makes. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/collections/${collectionId}/photos/${shot.id}/full`}
-            alt={`Tile ${tile.position + 1}, ${shot.label.toLowerCase()}`}
-            style={{
-              display: "block",
-              maxWidth: "14rem",
-              maxHeight: "16rem",
-              objectFit: "contain",
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.375rem",
-              background: "var(--color-bg-subtle)",
-            }}
-          />
-          <figcaption style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-            {shot.label}
-          </figcaption>
-        </figure>
-      ))}
-    </div>
-  );
-}
-
 // ── The identify outcome, as it arrives ──────────────────────────────────────────────────────
 
 /** What the dialog says when it opens on *identify*: one line, because the images above it are the
@@ -370,7 +362,7 @@ function IdentifyIntro({ lotOpen }: { lotOpen: boolean }) {
   return (
     <p
       style={{
-        margin: "1rem 0 0",
+        margin: 0,
         fontSize: "0.8125rem",
         color: lotOpen ? "var(--color-text-secondary)" : "var(--color-error)",
       }}
@@ -407,7 +399,7 @@ function AssignList({
   onPick: (itemId: string) => void;
 }) {
   return (
-    <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         {fromAuction
           ? "This lot came from an auction sale, so its copies are the lines that were described in order to bid. Pick the one this tile shows."
@@ -543,7 +535,7 @@ function SettledTile({
   if (tile.state === "consumed") {
     return (
       <div
-        style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
+        style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
       >
         {tile.item ? (
           <>
@@ -576,7 +568,7 @@ function SettledTile({
   }
 
   return (
-    <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         <strong>Discarded.</strong> The image is kept and the tile no longer counts as
         unidentified. It survives the lot closing: for a card bought sight-unseen these tiles are
