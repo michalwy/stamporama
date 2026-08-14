@@ -333,9 +333,45 @@ same dialog has the field. Worth doing on the piece whose reason you will not re
 
 **Worked tiles stay where they are.** The strip is a map of the card on your desk — tile 7 on screen
 is the seventh piece on the stockbook — so nothing disappears or shuffles up as you go, which is what
-lets you keep matching a tile to the piece in your tweezers. A tile you have dealt with simply steps
-back: it keeps its picture, and the label under it says which copy it became or that it was
-discarded. Clicking a copy's tile opens that copy; clicking a discarded one opens its note.
+lets you keep matching a tile to the piece in your tweezers. Clicking a copy's tile opens that copy;
+clicking a discarded one opens its note.
+
+**The tiles still waiting are the ones that stand out.** A tile nobody has dealt with wears a
+coloured edge; a tile you have finished with lets its picture step back and takes a small mark in
+its top corner saying what became of it — a **tick** for one that became a copy, a **crossed circle**
+for one you discarded. The mark sits over the scan rather than being a shade of it, so it reads the
+same on a pale stamp as on a dark one, and the two ends never look like more and less of the same
+thing: one piece became something, the other deliberately became nothing. The label underneath still
+gives the copy number, which is what you read when you want the detail rather than the glance.
+
+#### Batches you have finished with
+
+A card whose tiles have all been dealt with is **set aside**. The Card scans section then shows only
+the batches with work left in them, above a line reading *12 worked-through batches — show*. Press
+it and they come back, each folded up into its own header line: its number, how many tiles it held,
+how many became copies, how many you discarded, and the day you finished it. Open any of them with
+the caret and every tile it ever held is still there, in the positions they had on the card.
+
+Nothing is ever deleted. A strip is the record of a card that came into the house, and for a
+stockbook bought sight-unseen the discarded tiles on it are the only record of what was inside — so
+a worked batch is put away, never thrown away, and the count above the list is always the way back
+to it. That is also why the count sits on the section itself: with every finished batch put away
+there would be no batch header left to hang it on.
+
+Which batches are open is worked out from the work itself, not remembered as a setting: **a batch
+with tiles still waiting shows, and opens, by itself**, the same way a lot you add while the screen
+is open opens by itself. Put a discarded tile back in the queue and its batch has something waiting
+again, so it comes back to the list on its own. Finish the last tile on a card and it goes the other
+way — the strip leaves the list and the count above it goes up by one.
+
+**Batches are never reordered.** Batch order is the order the cards came in, and the pile on your
+desk is in that order too — moving the unfinished ones to the top would break the one thing the
+numbering is for. Revealed batches come back **in place**, among the live ones, not gathered at the
+end.
+
+The **N tiles unidentified** chip in the lot header does the same hiding for its own reason, so
+while it is pressed the count is not offered — one question should not have two controls that can
+disagree.
 
 The picture on a consumed tile is the copy's own front photograph — the same image, which moved to
 the copy rather than being duplicated, so you will see it again on the copy's row below. The only

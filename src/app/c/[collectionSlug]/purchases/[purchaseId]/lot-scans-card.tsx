@@ -96,10 +96,15 @@ export function LotScansCard({
 
   const batches = data?.batches ?? [];
   const fromAuction = data?.fromAuction ?? false;
+  const expansion = useBatchExpansion();
   const openTile = batches.flatMap((b) => b.tiles).find((t) => t.id === tileId) ?? null;
   // Tiles whose copy is on no line of the auction description. A signal worth surfacing, not a
   // problem to hide: the parcel holds something nobody announced.
   const undescribed = batches.flatMap((b) => b.tiles).filter((t) => t.outsideDescription).length;
+  // A carton is fifty cards, and fifty header lines is still a wall to read past — so a
+  // worked-through batch is not merely collapsed but **set aside**, behind the count below.
+  const doneCount = batches.filter((b) => b.doneAt != null).length;
+  const [showDone, setShowDone] = useState(false);
 
   /**
    * Re-read what a write changed — **everywhere it is visible, not just on the surface that made
@@ -271,10 +276,30 @@ export function LotScansCard({
         </Muted>
       )}
 
+      {/* **The way back to the batches that are set aside** (#583). It lives here, in the card's
+          own body above the list, and not on the batches themselves: with every worked batch
+          hidden there is no header left to hang it on, and a control that disappears along with
+          what it reveals is a section that has quietly lost its only door.
+
+          Suppressed under the *only unidentified* chip, which already hides the same batches for
+          its own reason and says so in the banner above — two controls answering one question, one
+          of them contradicting the other, is worse than the wall of headers.
+
+          Not persisted, for the reason the collapse rule is not: which batches are worth looking
+          at is a fact about the work. Reaching for the record of a card you finished last week is
+          a deliberate act, and it should start from the same place every time. */}
+      {doneCount > 0 && !onlyUnidentified && (
+        <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone((v) => !v)} />
+      )}
+
       {batches
         // A batch whose tiles are all dealt with has nothing to show under the chip, and an empty
         // bordered box saying so would be the noise the chip was pressed to get away from.
         .filter((b) => !onlyUnidentified || b.tiles.some((t) => t.state === "unidentified"))
+        // Worked-through batches are set aside until asked for — and come back **in place** when
+        // they are, never gathered at the end: batch order is card order, and the pile on the desk
+        // is in the same order.
+        .filter((b) => showDone || b.doneAt == null)
         .map((batch) => (
         <BatchSection
           key={batch.batchNo}
@@ -282,6 +307,8 @@ export function LotScansCard({
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           onlyUnidentified={onlyUnidentified}
+          expanded={expansion.isExpanded(batch)}
+          onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
           busy={uploading || pending || detecting}
           detecting={detecting}
@@ -374,6 +401,91 @@ export function LotScansCard({
   );
 }
 
+/**
+ * Which batches are open (#583) — **derived from the work, never remembered.**
+ *
+ * A stockbook of five hundred pieces is a dozen cards or more, so after a week the section is
+ * mostly strips nobody needs to look at any more. A worked-through batch therefore collapses to its
+ * header line — it does not *disappear*: the strip is the record of a card that came in, position
+ * *n* on screen was position *n* on the card, and a batch that vanished when finished would take
+ * that record with it. So it stays openable, and opens on every tile it ever held.
+ *
+ * The rule reads **`ScanSheet.batchDoneAt`** (#567), which is stamped when the last tile of a batch
+ * leaves `unidentified` and cleared when a discard is put back or the batch is re-cut. Nothing here
+ * recomputes "no tile is still waiting" beside it: two rules for one question is how the header and
+ * the layout come to disagree about whether a card is finished.
+ *
+ * Neither shared expansion hook fits, which is why this one is local:
+ *
+ *  - `useCardExpansion` (#382) is collapsed-by-default plus "a card that appears while the screen is
+ *    open opens itself". Here the baseline is the opposite — a batch with work left in it is open —
+ *    and it is a fact about the batch, not about when it turned up.
+ *  - `useGroupExpansion` (#538) carries one mode for the whole list. Here every batch answers for
+ *    itself.
+ *
+ * Toggles are held as **explicit choices**, not as a XOR against the default: a collector who opens
+ * a finished batch and then puts one of its discards back has said "keep this open", and flipping it
+ * shut because the derived default moved underneath would be the app arguing with them. A batch
+ * finished while the screen is open and never touched here does fold itself away — that is the rule
+ * working, and the caret is one click.
+ */
+function useBatchExpansion() {
+  const [choices, setChoices] = useState<Map<number, boolean>>(new Map());
+  return {
+    isExpanded: (batch: ScanBatchData) => choices.get(batch.batchNo) ?? batch.doneAt == null,
+    toggle: (batch: ScanBatchData) =>
+      setChoices((prev) => {
+        const next = new Map(prev);
+        next.set(batch.batchNo, !(prev.get(batch.batchNo) ?? batch.doneAt == null));
+        return next;
+      }),
+  };
+}
+
+/**
+ * The door back to the batches that have been set aside (#583).
+ *
+ * Worded as a **count of what is there**, not as a filter that is on — "12 worked-through batches"
+ * is a fact about the parcel and reads as one whether or not they happen to be showing, whereas
+ * *Hide finished* would leave a collector who has never pressed it wondering what it is hiding.
+ * The caret is the same one the batches themselves open on, one level up.
+ */
+function SetAsideToggle({
+  count,
+  shown,
+  onToggle,
+}: {
+  count: number;
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        alignSelf: "flex-start",
+        padding: "0.25rem 0.5rem",
+        marginLeft: "-0.5rem",
+        background: "none",
+        border: "none",
+        borderRadius: "0.375rem",
+        font: "inherit",
+        fontSize: "0.8125rem",
+        color: "var(--color-text-muted)",
+        cursor: "pointer",
+      }}
+    >
+      <Icon name={shown ? "collapse" : "expand"} size="sm" />
+      {count} worked-through {count === 1 ? "batch" : "batches"}
+      <span style={{ color: "var(--color-text-secondary)" }}>{shown ? "— hide" : "— show"}</span>
+    </button>
+  );
+}
+
 /** How many of a batch's tiles were discarded — what a re-cut is about to take with it. */
 function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
   return (
@@ -389,6 +501,8 @@ function BatchSection({
   collectionId,
   collectionSlug,
   onlyUnidentified,
+  expanded,
+  onToggleExpanded,
   onOpenTile,
   busy,
   detecting,
@@ -402,6 +516,10 @@ function BatchSection({
   collectionId: string;
   collectionSlug: string;
   onlyUnidentified: boolean;
+  /** Whether this batch shows its tiles, or only its summary line (#583). Derived from
+   * `batchDoneAt` by the section above, which owns the rule for the whole card. */
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onOpenTile: (tileId: string) => void;
   busy: boolean;
   /** Whether the wait the buttons are in is a detection pass, so they can say which wait it is. */
@@ -432,8 +550,11 @@ function BatchSection({
   const frontTiles = shown.filter((t) => t.frontBox != null);
   const backOnly = shown.filter((t) => t.frontBox == null);
   // Counted off every tile, not the filtered ones: what the batch says about itself must not
-  // change because a chip is pressed.
+  // change because a chip is pressed — and when the batch is collapsed (#583) this line is the
+  // whole of it, so it has to say how many tiles the card held and what became of them.
+  const held = batch.tiles.filter((t) => t.frontBox != null).length;
   const waiting = batch.tiles.filter((t) => t.state === "unidentified").length;
+  const consumed = batch.tiles.filter((t) => t.state === "consumed").length;
   const discarded = batch.tiles.filter((t) => t.state === "discarded").length;
 
   const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet => ({
@@ -458,11 +579,31 @@ function BatchSection({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+        {/* The lot card's own caret (#382), one level down. Batch order is card order and the pile
+            on the desk is in the same order, so a worked batch folds up where it stands and is
+            never moved to the bottom — the numbering exists for that one correspondence. */}
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-label={expanded ? "Collapse this batch" : "Show this batch's tiles"}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-muted)",
+            padding: 0,
+            display: "inline-flex",
+          }}
+        >
+          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
+        </button>
         <strong style={{ fontSize: "0.8125rem" }}>Batch {batch.batchNo}</strong>
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          {frontTiles.length} {frontTiles.length === 1 ? "tile" : "tiles"}
+          {held} {held === 1 ? "tile" : "tiles"}
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
+          {/* What is left leads, as it does everywhere else on this screen. */}
           {waiting > 0 && ` · ${waiting} waiting`}
+          {consumed > 0 && ` · ${consumed} ${consumed === 1 ? "copy" : "copies"}`}
           {discarded > 0 && ` · ${discarded} discarded`}
           {/* The moment the batch was finished with. Shown because it is also the moment its
               retained scan stopped being able to do anything (#578 is what acts on it). */}
@@ -470,7 +611,10 @@ function BatchSection({
         </span>
         <span style={{ flex: 1 }} />
 
-        {batch.front && !batch.front.cut && (
+        {/* The buttons belong to the batch's contents, so they fold away with them: a finished
+            batch is one line, and Re-cut / Delete on a line that shows nothing would be a
+            destructive click over a card the collector cannot currently see. */}
+        {expanded && batch.front && !batch.front.cut && (
           <SmallButton
             onClick={() => onReview(editorSheet(batch.front!), null)}
             disabled={busy}
@@ -478,7 +622,7 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the front cut"}
           </SmallButton>
         )}
-        {batch.front?.cut && !batch.back && (
+        {expanded && batch.front?.cut && !batch.back && (
           <UploadButton
             label="Add back scan"
             small
@@ -487,7 +631,7 @@ function BatchSection({
             onFile={onUploadBack}
           />
         )}
-        {batch.back && !batch.back.cut && (
+        {expanded && batch.back && !batch.back.cut && (
           <SmallButton
             onClick={() => onReview(editorSheet(batch.back!), frontTiles.length)}
             disabled={busy}
@@ -495,7 +639,7 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the back cut"}
           </SmallButton>
         )}
-        {batch.tiles.length > 0 && (
+        {expanded && batch.tiles.length > 0 && (
           <SmallButton
             onClick={() =>
               onRecut(
@@ -515,19 +659,21 @@ function BatchSection({
             <Icon name="refresh" size="sm" /> Re-cut
           </SmallButton>
         )}
-        <SmallButton onClick={onDelete} disabled={busy} danger>
-          <Icon name="delete" size="sm" /> Delete batch
-        </SmallButton>
+        {expanded && (
+          <SmallButton onClick={onDelete} disabled={busy} danger>
+            <Icon name="delete" size="sm" /> Delete batch
+          </SmallButton>
+        )}
       </div>
 
-      {batch.tiles.length === 0 && batch.front && !batch.front.cut && (
+      {expanded && batch.tiles.length === 0 && batch.front && !batch.front.cut && (
         <Muted>
           The scan is stored. Review the proposed boxes — correcting them, and drawing any the
           detection missed — to cut it into tiles.
         </Muted>
       )}
 
-      {frontTiles.length > 0 && (
+      {expanded && frontTiles.length > 0 && (
         <div
           style={{
             display: "grid",
@@ -552,7 +698,7 @@ function BatchSection({
         </div>
       )}
 
-      {backOnly.length > 0 && (
+      {expanded && backOnly.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           <span style={{ fontSize: "0.8125rem", color: "var(--color-warning)" }}>
             These backs found no front in the same position. Drag each one onto the tile it belongs
@@ -591,6 +737,23 @@ function BatchSection({
  *
  * An **unidentified** tile opens the three-outcomes dialog; a **discarded** one opens it too, where
  * its note is written and it can be put back.
+ *
+ * **The emphasis is on the tiles still waiting, and the state is *marked* rather than shaded**
+ * (#582). The strip is read to answer what is *left*, so the queue is what stands out: a waiting
+ * tile wears the accent edge this app uses everywhere for "this needs you", and a settled one
+ * simply lets its picture recede. It used to be the other way round — everything drawn alike with
+ * the done pile at 60% — and on a strip of forty that is not a difference the eye can find, because
+ * the scans themselves vary in brightness far more than the fade does: a pale stamp on a dark card
+ * already read as handled.
+ *
+ * A fade also cannot say **which** end a tile reached, and the two are not degrees of one thing —
+ * one piece became a copy, the other deliberately became nothing. So each carries a corner badge,
+ * `photo-thumb.tsx`'s own device for exactly this problem: an opaque mark with a hairline ring,
+ * which says the same thing over a black margin as over a bright stamp. They differ on three axes
+ * at once — filled versus outlined, accent versus neutral, `check` versus `excluded` — so that at
+ * thumbnail size neither can be mistaken for a weaker version of the other. The copy number in the
+ * footer stays as the consumed tile's own anchor; the badge is what is legible at a glance, and the
+ * number is what is legible when you look.
  */
 function TileCell({
   tile,
@@ -622,33 +785,49 @@ function TileCell({
     color: "inherit",
     textDecoration: "none",
     cursor: "pointer",
-    border: `1px solid ${
-      over
-        ? "var(--color-action-primary)"
-        : tile.outsideDescription
-          ? "var(--color-warning-border)"
-          : "var(--color-border)"
+    // Always two pixels, so nothing shifts by a pixel as a tile settles — only the colour moves.
+    // A tile still waiting takes the accent edge; a settled one drops back to the plain border,
+    // and the warning edge of a copy nobody described (#567) outranks both, being the one thing
+    // here that is news rather than state.
+    border: `2px solid ${
+      tile.outsideDescription
+        ? "var(--color-warning-border)"
+        : settled
+          ? "var(--color-border)"
+          : "var(--color-accent)"
     }`,
+    // The drop target needs its own signal now that waiting tiles are accent-edged already —
+    // and a droppable tile is by definition one of them, so a halo rather than a fourth colour.
+    boxShadow: over ? "0 0 0 3px var(--color-accent-soft)" : undefined,
     borderRadius: "0.375rem",
     overflow: "hidden",
     background: droppable ? "var(--color-bg-subtle)" : "transparent",
-    // A tile that has been dealt with steps back without disappearing: it is still part of the
-    // record of the card, and a discarded one is the only record there is.
-    opacity: settled ? 0.6 : 1,
     position: "relative",
   };
 
   const body = (
     <>
-      <TileImage
-        photoId={photoId}
-        collectionId={collectionId}
-        alt={`Tile ${tile.position + 1}, front`}
-        // The one honest placeholder: the copy this tile became has been deleted, so its images
-        // went with it and there is nothing left to show. Said in words, because a broken-looking
-        // square is what every consumed tile used to look like.
-        emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
-      />
+      {/* The crop is inset from the frame rather than flush with it. A tile is a scan of a stamp
+          on a black card, so its own edges are often dark — and an edge drawn right up against
+          them merges into the picture, which is exactly the legibility the coloured edge is here
+          to provide. The gap is what makes it read as a frame at all. */}
+      <div style={{ padding: "0.25rem 0.25rem 0" }}>
+        <TileImage
+          photoId={photoId}
+          collectionId={collectionId}
+          alt={`Tile ${tile.position + 1}, front`}
+          // A tile that has been dealt with steps back without disappearing: it is still part of
+          // the record of the card, and a discarded one is the only record there is. The *picture*
+          // is what recedes, never the badge or the label over it — a mark that faded with the
+          // scan would be the fade this replaced, wearing a shape.
+          dimmed={settled}
+          // The one honest placeholder: the copy this tile became has been deleted, so its images
+          // went with it and there is nothing left to show. Said in words, because a broken-looking
+          // square is what every consumed tile used to look like.
+          emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
+        />
+      </div>
+      {settled && <TileStateBadge state={tile.state} />}
       <div
         style={{
           display: "flex",
@@ -711,6 +890,50 @@ function TileCell({
   );
 }
 
+/**
+ * What became of a settled tile, said in the corner of its square (#582).
+ *
+ * `photo-thumb.tsx`'s reserved-slot marker is the pattern: a corner badge rather than a coloured
+ * frame, opaque and hairline-ringed, so it says the same thing over a black card margin as over a
+ * bright stamp. That independence from the photograph is the whole point — the thing a fade could
+ * never manage on a strip where the scans vary more than the fade did.
+ *
+ * The two ends are drawn as **different kinds of mark, not two strengths of one**: a copy is a
+ * filled accent tick — something was made — and a discard is an outlined neutral `excluded` — the
+ * app's own glyph for a thing deliberately set aside. Filled versus outlined survives being 15 px
+ * across, which two hues of the same badge would not.
+ *
+ * `aria-hidden`: the cell's `title` already names the outcome in words, and a screen reader reading
+ * "became copy #00042" does not also need "check".
+ */
+function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
+  if (state !== "consumed" && state !== "discarded") return null;
+  const consumed = state === "consumed";
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        top: "0.15rem",
+        left: "0.15rem",
+        width: "0.95rem",
+        height: "0.95rem",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "0.25rem",
+        background: consumed ? "var(--color-accent)" : "var(--color-bg-elevated)",
+        color: consumed ? "#fff" : "var(--color-text-muted)",
+        boxShadow: consumed
+          ? "0 0 0 1px rgba(0,0,0,0.25)"
+          : "0 0 0 1px var(--color-border-strong)",
+      }}
+    >
+      <Icon name={consumed ? "check" : "excluded"} size="xs" />
+    </span>
+  );
+}
+
 function tileTitle(tile: ScanTileData): string {
   const head = `Tile ${tile.position + 1}`;
   if (tile.state === "consumed") {
@@ -750,10 +973,13 @@ function BackOnlyTile({
       onDragEnd={onDragEnd}
       style={{
         width: "5.5rem",
-        border: "1px solid var(--color-warning-border)",
+        border: "2px solid var(--color-warning-border)",
         borderRadius: "0.375rem",
         overflow: "hidden",
         cursor: "grab",
+        // Inset for the same reason a tile's crop is (#582): a scan's own dark edge merging into
+        // the frame is what makes the frame stop saying anything.
+        padding: "0.25rem",
       }}
     >
       <TileImage
@@ -769,11 +995,15 @@ function TileImage({
   photoId,
   collectionId,
   alt,
+  dimmed,
   emptyLabel,
 }: {
   photoId: string | null;
   collectionId: string;
   alt: string;
+  /** Let the picture recede — a tile that has been dealt with (#582). Only the image: the badge
+   * and the label sit outside it, and the whole point of them is that they do not fade. */
+  dimmed?: boolean;
   /** Said instead of the bare icon when there is a *reason* the square is empty, rather than
    * merely no image — a consumed tile whose copy was deleted took its pictures with it. */
   emptyLabel?: string;
@@ -789,6 +1019,7 @@ function TileImage({
           background: "var(--color-bg-subtle)",
           padding: "0.25rem",
           textAlign: "center",
+          opacity: dimmed ? 0.55 : 1,
         }}
       >
         <Icon name="noPhoto" size={emptyLabel ? "sm" : "lg"} />
@@ -807,7 +1038,13 @@ function TileImage({
     <img
       src={`/api/collections/${collectionId}/photos/${photoId}/thumb`}
       alt={alt}
-      style={{ display: "block", width: "100%", aspectRatio: "1", objectFit: "contain" }}
+      style={{
+        display: "block",
+        width: "100%",
+        aspectRatio: "1",
+        objectFit: "contain",
+        opacity: dimmed ? 0.55 : 1,
+      }}
     />
   );
 }
