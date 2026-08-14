@@ -37,7 +37,10 @@ import {
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
 import { AmountWithBase } from "./auction-base-amount";
-import { BidRecommendationPopover } from "./bid-recommendation-popover";
+import {
+  BidRecommendationPopover,
+  RECOMMENDATION_CARET_SLOT,
+} from "./bid-recommendation-popover";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -63,6 +66,15 @@ const MUTED_AMOUNT: React.CSSProperties = {
   ...AMOUNT,
   fontWeight: 500,
   color: "var(--color-text-muted)",
+};
+
+/** Every cell of the recommendation column (#576): the caret that marks the value cell as a way in
+ * hangs in a slot of its own past the right edge, and the whole column keeps that slot clear —
+ * headroom, the empty dash and the base-currency readings included. Reserved on the *cell* rather
+ * than inside the trigger, because the column has to line up with itself down the list, not just
+ * within the one line that draws a caret. */
+const RECOMMENDATION_CELL: React.CSSProperties = {
+  paddingRight: RECOMMENDATION_CARET_SLOT,
 };
 
 /** Column heading and row label in the amounts grid — small, muted, and never competing with the
@@ -1005,8 +1017,10 @@ export function AuctionLotRow({
               //
               // Track 10 is the recommendation (#511), the *worth* section's second column against
               // the same two labels — which is exactly what the note below said anything answering
-              // "what is this worth" should be.
-              gridTemplateColumns: "3rem 5.5rem 5.5rem 1.75rem 5.5rem 1.75rem 1px 3.5rem 6rem 6.5rem",
+              // "what is this worth" should be. It is a slot wider than the figures need (#576):
+              // its cells keep a caret track clear at their right edge, and the extra rem is what
+              // gives the heading and the figures the room they had before it existed.
+              gridTemplateColumns: "3rem 5.5rem 5.5rem 1.75rem 5.5rem 1.75rem 1px 3.5rem 6rem 7.5rem",
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
@@ -1070,7 +1084,8 @@ export function AuctionLotRow({
                 reason composition is structured (#353) — and beside it what it is worth **bidding**
                 (#511), which is a different question and therefore a column and not a footnote. */}
             <span style={GRID_HEAD}>Catalogue</span>
-            <span style={GRID_HEAD}>Recommended</span>
+            {/* Its own column's slot too, so the heading stays over the figures it names (#576). */}
+            <span style={{ ...GRID_HEAD, ...RECOMMENDATION_CELL }}>Recommended</span>
 
             <span style={GRID_LABEL}>bid</span>
             {/* What the lot stands at — the one field the daily loop writes. Once a result has been
@@ -1239,30 +1254,32 @@ export function AuctionLotRow({
                 one they are looking at, so it is the thing they click.
                 A lot with nothing described has no figure and no panel — a bare dash, not a
                 control that would open to explain that it has nothing to explain. */}
-            {withBase(
-              recommendedFair,
-              lot.recommendation === null ? (
-                <Tooltip content="Nothing described yet. Say what the lot holds and a recommendation follows.">
-                  <span style={MUTED_AMOUNT}>—</span>
-                </Tooltip>
-              ) : (
-                // Opens even with no figure behind it: a described lot nothing could price is
-                // precisely the one whose empty cell needs explaining, and the panel is where the
-                // unanchored lines are counted.
-                <BidRecommendationPopover
-                  collectionId={collectionId}
-                  lotId={lot.id}
-                  currency={lot.currency}
-                  onPickCeiling={editable ? applyMaxBid : undefined}
-                >
-                  {recommendedFair === null ? (
+            <span style={RECOMMENDATION_CELL}>
+              {withBase(
+                recommendedFair,
+                lot.recommendation === null ? (
+                  <Tooltip content="Nothing described yet. Say what the lot holds and a recommendation follows.">
                     <span style={MUTED_AMOUNT}>—</span>
-                  ) : (
-                    <span style={AMOUNT}>{recommendedFair}</span>
-                  )}
-                </BidRecommendationPopover>
-              )
-            )}
+                  </Tooltip>
+                ) : (
+                  // Opens even with no figure behind it: a described lot nothing could price is
+                  // precisely the one whose empty cell needs explaining, and the panel is where the
+                  // unanchored lines are counted.
+                  <BidRecommendationPopover
+                    collectionId={collectionId}
+                    lotId={lot.id}
+                    currency={lot.currency}
+                    onPickCeiling={editable ? applyMaxBid : undefined}
+                  >
+                    {recommendedFair === null ? (
+                      <span style={MUTED_AMOUNT}>—</span>
+                    ) : (
+                      <span style={AMOUNT}>{recommendedFair}</span>
+                    )}
+                  </BidRecommendationPopover>
+                )
+              )}
+            </span>
 
             <span style={GRID_LABEL}>all-in</span>
             {withBase(
@@ -1359,25 +1376,27 @@ export function AuctionLotRow({
                 the book"; this one answers "am I still inside what the evidence says to pay", and
                 on a lot with recorded results behind it that is the sharper of the two. Same
                 arithmetic, same colours, same omission of shipping. */}
-            {withBase(
-              recommendedHeadroom,
-              <Tooltip content="The recommended fair figure less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
-                <span
-                  style={{
-                    ...AMOUNT,
-                    fontWeight: 500,
-                    color:
-                      recommendedHeadroom === null
-                        ? "var(--color-text-muted)"
-                        : Number(recommendedHeadroom) < 0
-                          ? "var(--color-error)"
-                          : "var(--color-success)",
-                  }}
-                >
-                  {recommendedHeadroom ?? "—"}
-                </span>
-              </Tooltip>
-            )}
+            <span style={RECOMMENDATION_CELL}>
+              {withBase(
+                recommendedHeadroom,
+                <Tooltip content="The recommended fair figure less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
+                  <span
+                    style={{
+                      ...AMOUNT,
+                      fontWeight: 500,
+                      color:
+                        recommendedHeadroom === null
+                          ? "var(--color-text-muted)"
+                          : Number(recommendedHeadroom) < 0
+                            ? "var(--color-error)"
+                            : "var(--color-success)",
+                    }}
+                  >
+                    {recommendedHeadroom ?? "—"}
+                  </span>
+                </Tooltip>
+              )}
+            </span>
           </div>
 
           <Tooltip content={`Closes ${formatInstant(lot.endsAt)}`}>

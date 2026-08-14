@@ -37,6 +37,18 @@ import {
 
 const PANEL_Z_INDEX = 200;
 
+/**
+ * The caret's own track, to the right of the figure (#576).
+ *
+ * The recommendation column is right-aligned like every other amount on the row, so a caret drawn
+ * *in flow* after the figure pushes that figure left by its own width — and only on the rows that
+ * have one. The digits then failed to line up with the row above, with the headroom line directly
+ * below, and with the cell's own base-currency reading. So the caret is taken **out of flow** and
+ * hung in a reserved slot past the right edge, which the cells of that column pad for
+ * unconditionally: the track is there whether or not a given row draws anything in it.
+ */
+export const RECOMMENDATION_CARET_SLOT = "0.95rem";
+
 const PANEL: React.CSSProperties = {
   position: "fixed",
   width: "30rem",
@@ -388,9 +400,8 @@ export function BidRecommendationPopover({
             setOpen((v) => !v);
           }}
           style={{
-            display: "inline-flex",
-            alignItems: "baseline",
-            gap: "0.2rem",
+            position: "relative",
+            display: "inline-block",
             background: "none",
             border: "none",
             padding: 0,
@@ -401,8 +412,23 @@ export function BidRecommendationPopover({
           {children}
           {/* The caret is what says the figure is a way in rather than just a number. Always drawn,
               never revealed on hover: a disclosure the collector has to discover by sweeping the
-              row is a disclosure most of them never find. */}
-          <span style={{ color: "var(--color-text-muted)", lineHeight: 1 }}>
+              row is a disclosure most of them never find. Positioned in the reserved slot beside
+              the figure rather than in flow after it (#576), so it costs the figure no width and
+              every row's digits land in the same place. */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: "100%",
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "inline-flex",
+              justifyContent: "center",
+              width: RECOMMENDATION_CARET_SLOT,
+              color: "var(--color-text-muted)",
+              lineHeight: 1,
+            }}
+          >
             <Icon name="caret" size="xs" />
           </span>
         </button>
