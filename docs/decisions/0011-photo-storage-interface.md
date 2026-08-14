@@ -138,6 +138,42 @@ anticipated — no schema change, no caller edits:
   removes the disk bytes so the `stamporama-data` volume can eventually be retired. Idempotent
   (selects only rows still on `filesystem`); not required to enable GCS.
 
+### 8. Large uploads chunk over HTTP; they do not upload straight to storage (#590)
+
+A card scanned at 1200 dpi is 100–200 MB, and the request never reached the app: Cloudflare caps a
+body at 100 MB and nginx defaults `client_max_body_size` to 1 MB, so `MAX_UPLOAD_BYTES` (200 MB) was
+asking the operator's proxy for something most of them refuse.
+
+The obvious fix — **signed upload URLs, bytes straight to the bucket** — is refused here, and seam 2
+is why. `resolveUrl` exists precisely because *reads* can be redirected on one backend and must be
+streamed on the other, and that fork is the app's to take, once, behind the interface. There is no
+matching fork for writes, and there cannot be a useful one: the filesystem binding has no URL to
+sign. A direct-to-storage upload path would therefore make large scans a feature of the **GCS
+backend alone** — callers learning where the bytes go, which is the one thing this ADR exists to
+prevent.
+
+So chunking sits in the **HTTP layer**, above storage: an upload is opened, its pieces are written
+to local disk, and finalize joins them and hands the result to the same function the single-request
+route used to call. Three consequences.
+
+The interface grows **neither `append` nor `compose`** — GCS composes (32 sources, chained) and a
+filesystem appends, and the two share nothing but a name, so a method covering both would be a fork
+wearing an abstraction's clothes.
+
+**The parts are not storage objects at all.** They go under `STAMPORAMA_DATA_DIR/scan-uploads/`
+whatever the active backend is, and only the assembled sheet is `put`. A chunk is written once, read
+once and deleted, so routing it through a bucket would send a 200 MB card up as parts and pull it
+straight back down seconds later to assemble it — 400 MB of transfer for bytes that never needed to
+leave the machine. This is emphatically **not a cache of a remote object** (#591 is that, with its
+own policy): these bytes were never remote, so there is nothing to invalidate or evict. Which is
+also why `Storage` needs no notion of a temporary object: staging that is written, read and deleted
+in one flow is not what the interface is for.
+
+And it stays true that **both backends run the same upload code**, which is the property that made
+the `Storage` seam worth having in the first place.
+
+The mechanism, its retry rule and its sweep are in `docs/agents/storage-and-jobs.md`.
+
 ## Consequences
 
 - Self-hosted deployments must mount a writable volume at `STAMPORAMA_DATA_DIR`

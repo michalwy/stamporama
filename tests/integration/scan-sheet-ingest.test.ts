@@ -216,7 +216,7 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    return uploadSheet(userId, purchaseId, { bytes, mime: "image/png", side: "front" });
+    return uploadSheet(userId, purchaseId, { source: bytes, mime: "image/png", side: "front" });
   }
 
   it("retains the scan at full size and derives a view for the editor", async () => {
@@ -311,7 +311,7 @@ describe("scan sheet ingest (#566)", () => {
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
     const back = await uploadSheet(userId, purchaseId, {
-      bytes: backBytes,
+      source: backBytes,
       mime: "image/png",
       side: "back",
       batchNo: front.batchNo,
@@ -354,7 +354,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: strayBox, colour: GREEN },
     ]);
     const back = await uploadSheet(userId, purchaseId, {
-      bytes: backBytes,
+      source: backBytes,
       mime: "image/png",
       side: "back",
       batchNo: front.batchNo,
@@ -394,7 +394,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: strayBox, colour: GREEN },
     ]);
     const back = await uploadSheet(userId, purchaseId, {
-      bytes: backBytes,
+      source: backBytes,
       mime: "image/png",
       side: "back",
       batchNo: front.batchNo,
@@ -549,7 +549,7 @@ describe("scan sheet ingest (#566)", () => {
     // At upload, which is where the name is usually known — at the scanner.
     const bytes = await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: RED }]);
     const front = await uploadSheet(userId, purchaseId, {
-      bytes,
+      source: bytes,
       mime: "image/png",
       side: "front",
       label: "  Klaser Polska 1  ",
@@ -559,7 +559,7 @@ describe("scan sheet ingest (#566)", () => {
     // A back joins a batch that is already named rather than arriving nameless beside it, so
     // either sheet answers for the batch exactly as `batchDoneAt` does.
     const back = await uploadSheet(userId, purchaseId, {
-      bytes,
+      source: bytes,
       mime: "image/png",
       side: "back",
       batchNo: front.batchNo,
@@ -685,7 +685,7 @@ describe("scan sheet ingest (#566)", () => {
 
     // Nothing has been cut yet, so the wrong file can simply be uploaded again.
     const second = await uploadSheet(userId, purchaseId, {
-      bytes: await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: BLUE }]),
+      source: await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: BLUE }]),
       mime: "image/png",
       side: "front",
       batchNo: first.batchNo,
@@ -701,7 +701,7 @@ describe("scan sheet ingest (#566)", () => {
     await assert.rejects(
       () =>
         uploadSheet(userId, purchaseId, {
-          bytes: replacement,
+          source: replacement,
           mime: "image/png",
           side: "front",
           batchNo: first.batchNo,
@@ -718,7 +718,7 @@ describe("scan sheet ingest (#566)", () => {
     await assert.rejects(
       () =>
         uploadSheet(userId, purchaseId, {
-          bytes: orphanBack,
+          source: orphanBack,
           mime: "image/png",
           side: "back",
           batchNo: 1,

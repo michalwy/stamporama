@@ -1,4 +1,7 @@
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import sharp from "sharp";
+import type { StorageInput } from "../storage/types";
 import {
   FULL_MAX_EDGE,
   isAcceptedMime,
@@ -35,10 +38,23 @@ import type { Box } from "../scan-boxes";
  * on screen and a box handed to `extract` mean the same thing.
  */
 
+/**
+ * Where a sheet's bytes are, on the way in.
+ *
+ * A `Buffer` is the ordinary case. A **path** is the chunked upload (#590): its parts are assembled
+ * into one local file, and handing that file's path to `sharp` — which takes one — is what keeps a
+ * 200 MB card from ever being resident whole. Nothing else about a sheet differs between the two;
+ * this is only how the bytes are reached.
+ */
+export type SheetSource = Buffer | { path: string };
+
 /** A sheet upload, ready to be stored: the bytes to retain and the derivative to display. */
 export interface PreparedSheet {
-  /** The upload's own bytes, stored under `original.<ext>` and never resampled. */
-  original: Buffer;
+  /** Open the upload's own bytes for storing under `original.<ext>`, never resampled. A function
+   * rather than a value because for a file-backed source it is a read stream, and one created for a
+   * `put` that then never happens is a descriptor left open — so it is opened at the moment it is
+   * consumed. */
+  openOriginal: () => StorageInput;
   mime: AcceptedMime;
   /** Oriented dimensions of the original — the coordinate space every box lives in. */
   width: number;
@@ -54,14 +70,16 @@ export interface PreparedSheet {
  * unchanged — this function deliberately produces no `full` and no `thumb`, because a sheet is not
  * a photo of anything. */
 export async function prepareSheet(
-  input: Buffer,
+  input: SheetSource,
   declaredMime: string
 ): Promise<PreparedSheet> {
   if (!isAcceptedMime(declaredMime)) {
     throw new UnsupportedImageError(`Unsupported image type: ${declaredMime}`);
   }
 
-  const base = sharp(input, { failOn: "error" }).rotate();
+  // `sharp` reads a path as readily as a buffer, and for a 1200 dpi card that is the difference
+  // between decoding a file and holding it in memory *while* decoding it (#590).
+  const base = sharp(Buffer.isBuffer(input) ? input : input.path, { failOn: "error" }).rotate();
   const meta = await base.metadata();
   const actualMime = mimeOf(meta.format);
   if (!actualMime) {
@@ -83,11 +101,11 @@ export async function prepareSheet(
   const oriented = orientedSize(meta, { width: view.info.width, height: view.info.height });
 
   return {
-    original: input,
+    openOriginal: () => (Buffer.isBuffer(input) ? input : createReadStream(input.path)),
     mime: actualMime,
     width: oriented.width,
     height: oriented.height,
-    sizeBytes: input.byteLength,
+    sizeBytes: Buffer.isBuffer(input) ? input.byteLength : (await stat(input.path)).size,
     view: {
       buffer: view.data,
       width: view.info.width,

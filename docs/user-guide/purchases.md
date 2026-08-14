@@ -212,6 +212,25 @@ The card itself can stay as it is — a black card with the creases and weave of
 used is what the detection was fitted on. What it does need is an **even** black: a shadow falling
 across one half of the card, or a lamp on one side of it, is the case most likely to confuse it.
 
+#### While the scan is uploading
+
+A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so the upload says how it is going,
+and it does so in **two stages that mean different things**:
+
+- **Uploading the scan…**, with a bar and a percentage. That is real: it counts the pieces of the
+  file the app has actually taken, not what your browser has handed to the network.
+- **Preparing the scan…**, with no percentage. The bytes are all in; what is happening now is the
+  app opening a very large image and making the working copy the cut editor draws. It takes a few
+  seconds and there is nothing to measure, so it says so rather than showing a number that would
+  sit still. **Seeing this means the upload has succeeded.**
+
+The scan is sent in pieces, which is what makes a card this size possible at all — most self-hosted
+setups sit behind something that refuses a single upload that large. It also means a hiccup costs
+you a piece and not the whole card: a dropped request is retried on its own. If the connection
+gives up entirely you are told, and nothing half-sent is left behind.
+
+Cancel by leaving the page; a scan that never finished arriving is cleaned up on its own.
+
 #### Naming a card
 
 Beside **Add card scan** there is an optional **name**: type one and it rides with the card you are

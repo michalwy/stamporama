@@ -92,7 +92,7 @@ describe("retained-scan retention (#578)", () => {
     });
     await createLot(userId, purchase.id, 100);
     const sheet = await uploadSheet(userId, purchase.id, {
-      bytes: await card(),
+      source: await card(),
       mime: "image/png",
       side: "front",
     });

@@ -26,6 +26,12 @@ import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import { TileIdentifyDialog } from "./tile-identify-dialog";
 import { useInvalidateLotCopies } from "./use-lot-copies-query";
 import { useInvalidatePurchaseScans, usePurchaseScans } from "./use-purchase-scans-query";
+import { IndeterminateBar, ProgressBar } from "@/app/progress-bar";
+import {
+  SheetUploadError,
+  uploadSheetInChunks,
+  type SheetUploadProgress,
+} from "./upload-sheet-chunks";
 
 /**
  * An order's card scans (#566, ADR-0033) and the tiles cut from them (#567).
@@ -103,6 +109,12 @@ export function PurchaseScansCard({
    * re-reads the tile after a refetch instead of showing the state it had when it was opened. */
   const [tileId, setTileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /** How far the scan being sent has got (#590), or null while none is. Two phases and not one
+   * number: *uploading* is the chunks the server has acknowledged, and *preparing* is the assembly
+   * and the ~140 Mpx decode that follow the last one — seconds of server work with nothing crossing
+   * the wire, which a bar parked at 100% would report as a hang at exactly the moment the upload
+   * had succeeded. */
+  const [progress, setProgress] = useState<SheetUploadProgress | null>(null);
   /** The name to give the **next** card added (#587). Held here rather than remembered anywhere:
    * a name belongs to one card, and the last one typed is the wrong default for the next. */
   const [newLabel, setNewLabel] = useState("");
@@ -185,29 +197,32 @@ export function PurchaseScansCard({
     }
   };
 
-  /** Send a scan and open the editor on it — the two halves of "add a card" are one act to the
-   * collector, and a sheet uploaded with no cut drawn is exactly what a re-cut starts from anyway. */
+  /**
+   * Send a scan and open the editor on it — the two halves of "add a card" are one act to the
+   * collector, and a sheet uploaded with no cut drawn is exactly what a re-cut starts from anyway.
+   *
+   * The scan goes up **in chunks** (#590): a 1200 dpi card is 100–200 MB and no ordinary proxy
+   * passes a body that size. What that buys here, beyond the upload working at all, is a measure —
+   * the chunks the server has acknowledged — so the wait says how far it has got instead of
+   * nothing.
+   */
   const upload = async (file: File, side: "front" | "back", batchNo?: number) => {
     setError(null);
     setUploading(true);
+    setProgress({ phase: "uploading", fraction: 0 });
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("side", side);
-      if (batchNo != null) form.set("batchNo", String(batchNo));
-      // The name typed beside the button rides with the card it names (#587), and is cleared
-      // afterwards: it is a name for *this* card, not a setting, and carrying it to the next one
-      // is how three cards end up all called "Klaser Polska 1".
-      if (side === "front" && newLabel.trim()) form.set("label", newLabel.trim());
-      const res = await fetch(
-        `/api/collections/${collectionId}/purchases/${purchaseId}/scan-sheets`,
-        { method: "POST", body: form }
-      );
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? "Failed to upload the scan.");
-        return;
-      }
+      const body = await uploadSheetInChunks({
+        collectionId,
+        purchaseId,
+        file,
+        side,
+        batchNo,
+        // The name typed beside the button rides with the card it names (#587), and is cleared
+        // afterwards: it is a name for *this* card, not a setting, and carrying it to the next one
+        // is how three cards end up all called "Klaser Polska 1".
+        label: side === "front" && newLabel.trim() ? newLabel.trim() : null,
+        onProgress: setProgress,
+      });
       if (side === "front") setNewLabel("");
       refresh();
       await openProposed(
@@ -217,10 +232,13 @@ export function PurchaseScansCard({
               .length ?? null)
           : null
       );
-    } catch {
-      setError("Failed to upload the scan.");
+    } catch (err) {
+      setError(
+        err instanceof SheetUploadError ? err.message : "Failed to upload the scan."
+      );
     } finally {
       setUploading(false);
+      setProgress(null);
     }
   };
 
@@ -368,10 +386,21 @@ export function PurchaseScansCard({
         <UploadButton
           label="Add card scan"
           busy={uploading}
-          busyLabel={detecting ? "Finding the stamps…" : undefined}
+          busyLabel={
+            detecting
+              ? "Finding the stamps…"
+              : progress?.phase === "preparing"
+                ? "Preparing…"
+                : undefined
+          }
           onFile={(f) => void upload(f, "front")}
         />
       </header>
+
+      {/* Above the fold of the section rather than inside it: the button that starts an upload is in
+          the header and works with the section collapsed, so a bar that only appeared when it
+          happened to be open would leave the frequent case silent. */}
+      {progress && <SheetUploadProgressBar progress={progress} />}
 
       {!open ? null : (
         <>
@@ -1387,6 +1416,42 @@ function CutReportBanner({
         </button>
       </div>
     </Banner>
+  );
+}
+
+/**
+ * How far the card scan being sent has got (#590).
+ *
+ * The photo editor's upload treatment, in its single-file case: the same bar, the same label-plus-
+ * percentage line above it, because a card is one file and the strip's aggregate bar is what that
+ * already looks like. Nothing new is invented for it.
+ *
+ * **The two phases are told apart, and only one of them is a number.** *Uploading* is the chunks the
+ * server has acknowledged — a real measure, and the one that exists only because the upload is in
+ * parts. *Preparing* is what follows the last chunk: the parts are assembled and `prepareSheet`
+ * decodes a ~140 Mpx image and derives the `view`, which is seconds with nothing crossing the wire.
+ * There is no honest fraction for it, so the bar stops claiming one and the label says what is
+ * happening — a determinate bar sitting at 100% would read as a hang at precisely the moment the
+ * upload had in fact succeeded.
+ */
+function SheetUploadProgressBar({ progress }: { progress: SheetUploadProgress }) {
+  const uploading = progress.phase === "uploading";
+  return (
+    <div style={{ marginBottom: "0.75rem" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: "0.75rem",
+          color: "var(--color-text-secondary)",
+          marginBottom: "0.25rem",
+        }}
+      >
+        <span>{uploading ? "Uploading the scan…" : "Preparing the scan…"}</span>
+        {uploading && <span>{Math.round(progress.fraction * 100)}%</span>}
+      </div>
+      {uploading ? <ProgressBar fraction={progress.fraction} /> : <IndeterminateBar />}
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { prisma } from "./db";
 import {
   getActiveStorage,
@@ -12,7 +13,7 @@ import {
 } from "./storage";
 import { deletePhotoVariants } from "./photos";
 import { MAX_UPLOAD_BYTES, UnsupportedImageError } from "./photos/process";
-import { cutSheet, extractSheetRegion, prepareSheet } from "./photos/sheet";
+import { cutSheet, extractSheetRegion, prepareSheet, type SheetSource } from "./photos/sheet";
 import {
   MAX_BATCH_LABEL_LENGTH,
   isBatchLabelTooLong,
@@ -125,7 +126,10 @@ export async function uploadSheet(
   ownerId: string,
   purchaseId: string,
   input: {
-    bytes: Buffer;
+    /** The scan's bytes, or the local file the chunked upload assembled them into (#590). A card
+     * arriving in parts is assembled on disk and handed over as a **path**, so nothing between the
+     * first chunk and `sharp` ever holds a 200 MB scan whole. */
+    source: SheetSource;
     mime: string;
     side: SheetSide;
     batchNo?: number;
@@ -138,13 +142,13 @@ export async function uploadSheet(
 ): Promise<UploadedSheet> {
   const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
 
-  if (input.bytes.byteLength > MAX_UPLOAD_BYTES) {
+  if ((await sourceSize(input.source)) > MAX_UPLOAD_BYTES) {
     throw new ScanValidationError("Scan is too large (max 200 MB).");
   }
 
   let prepared;
   try {
-    prepared = await prepareSheet(input.bytes, input.mime);
+    prepared = await prepareSheet(input.source, input.mime);
   } catch (err) {
     if (err instanceof UnsupportedImageError) throw new ScanValidationError(err.message);
     throw err;
@@ -181,7 +185,7 @@ export async function uploadSheet(
   const mime = prepared.mime;
 
   try {
-    await storage.put(sheetVariantKey(prefix, "original", mime), prepared.original, mime);
+    await storage.put(sheetVariantKey(prefix, "original", mime), prepared.openOriginal(), mime);
     await storage.put(sheetVariantKey(prefix, "view", mime), prepared.view.buffer, mime);
   } catch (err) {
     await deleteSheetVariants(storage.backend, prefix, mime);
@@ -231,6 +235,12 @@ export async function uploadSheet(
     viewWidth: prepared.view.width,
     viewHeight: prepared.view.height,
   };
+}
+
+/** How large the scan is, before anything decodes it. A path is `stat`ed rather than read: the cap
+ * is a policy question and answering it must not be the thing that pulls 200 MB into memory. */
+async function sourceSize(source: SheetSource): Promise<number> {
+  return Buffer.isBuffer(source) ? source.byteLength : (await stat(source.path)).size;
 }
 
 function requireBatchNo(input: { side: SheetSide; batchNo?: number }): number {

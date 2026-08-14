@@ -9,7 +9,9 @@
 // there is no separate compose service:
 //
 //   - the orphan-GC sweep for abandoned photo staging uploads (#112) — an hourly, idempotent
-//     `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion;
+//     `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion. Since #590 it takes the
+//     chunked card-scan uploads that never finished in the same pass, on the same TTL: they are the
+//     same class of bytes and answering for them separately would be a second mechanism;
 //   - the offer photo generation worker (#311) — drains the render queue one job at a time and
 //     requeues anything a previous process left mid-render;
 //   - the closed-offer photo purge (#512) — an hourly pass deleting the generated images of listings
@@ -28,6 +30,7 @@
 //     when nothing did, where a sync re-reads the whole account.
 
 import { gcStaleUploads } from "@/lib/photos";
+import { gcStaleScanUploads } from "@/lib/scan-uploads";
 import { formatBytes } from "@/lib/format-bytes";
 import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
@@ -52,6 +55,10 @@ export async function start(): Promise<void> {
   // volume or bucket surfaces in the logs immediately rather than on the first upload (#138).
   await logStorageStartup();
 
+  // Abandoned staging, both kinds, in one pass on one TTL: a dropped-but-unsaved photo (#112) and a
+  // card scan that stopped arriving halfway through (#590) are the same class of thing — bytes the
+  // collector has not committed to anything — so `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS` answers for
+  // both rather than a second variable saying the same thing about the same bytes.
   const sweep = async () => {
     try {
       const swept = await gcStaleUploads();
@@ -60,6 +67,17 @@ export async function start(): Promise<void> {
       }
     } catch (err) {
       console.error("[photo-gc] sweep failed", err);
+    }
+    try {
+      const scans = await gcStaleScanUploads();
+      if (scans.uploads > 0) {
+        console.log(
+          `[photo-gc] swept ${scans.uploads} abandoned card scan upload(s), ` +
+            `freeing ${formatBytes(scans.bytes)}`
+        );
+      }
+    } catch (err) {
+      console.error("[photo-gc] scan upload sweep failed", err);
     }
   };
 

@@ -1531,6 +1531,8 @@ model Purchase {
   // Retained card scans and the tiles cut from them (#566/#586, ADR-0033).
   scanSheets ScanSheet[]
   scanTiles  ScanTile[]
+  // Card scans still arriving in chunks (#590). Staging: a finished upload deletes its own row.
+  scanUploads ScanUpload[]
   // The auction settlement this purchase was transcribed from, when it came from one (ADR-0021).
   auctionSale AuctionSale?
 
@@ -1694,6 +1696,61 @@ model ScanTile {
   @@index([purchaseId, state])
   @@index([itemId])
   @@map("scan_tile")
+}
+
+// A card scan arriving in **parts** (#590) — the row that holds an upload together between the
+// request that opens it and the one that finalizes it.
+//
+// A 1200 dpi card is 100–200 MB and no ordinary deployment can carry that in one request body:
+// nginx defaults `client_max_body_size` to 1 MB and Cloudflare caps at 100 MB, so the app's own
+// 200 MB `MAX_UPLOAD_BYTES` was asking the operator's proxy for something it refuses. Chunking
+// removes the requirement rather than restating it at a higher number.
+//
+// The parts do **not** go to the storage backend. They live on local disk under
+// `STAMPORAMA_DATA_DIR/scan-uploads/<id>/`, whatever `STAMPORAMA_STORAGE_BACKEND` says: a chunk is
+// written once, read once and deleted, so sending it to a bucket would mean 200 MB going up as
+// parts and coming straight back down to be assembled seconds later. Only the assembled sheet is
+// handed to the storage interface. This is not a cache of a remote object (#591) — a chunk was
+// never remote.
+//
+// The row is what makes an abandoned upload findable: a directory says what is on disk but not
+// whose it is or when it last moved, and a sweep trusting a listing would be one race away from
+// deleting an upload mid-flight. It is staging in the same sense a `PhotoUpload` is, and is swept
+// on the same TTL by the same pass.
+model ScanUpload {
+  id             String   @id @default(cuid())
+  /** The order the finished scan belongs to — and, through it, the collection every chunk request
+   * is checked against. */
+  purchaseId     String
+  /** Everything the finalize step will hand `uploadSheet`, captured at open time: a chunk request
+   * carries bytes and an index and nothing else. */
+  side           String
+  batchNo        Int?
+  label          String?
+  mime           String
+  /** The size the client declared, checked against `MAX_UPLOAD_BYTES` before a byte is sent — a
+   * scan too large is refused at the open rather than after 200 MB have crossed the wire. */
+  totalBytes     Int
+  /** The chunk size this upload was opened at. Held per upload rather than read from the
+   * environment at finalize time, so a restart mid-upload cannot change the arithmetic under an
+   * upload already in flight. */
+  chunkBytes     Int
+  /** How many parts have been stored. Also the index of the **next** part expected: chunks arrive
+   * in order, so this is both the progress the client is acknowledged with and the count the
+   * sweep addresses the parts by. */
+  receivedChunks Int      @default(0)
+  receivedBytes  Int      @default(0)
+  createdAt      DateTime @default(now())
+  /** Bumped by every accepted chunk, so the sweep measures an upload's age from the last sign of
+   * life rather than from when it was opened — a 200 MB card over a slow line can legitimately
+   * take longer than the TTL to send. */
+  updatedAt      DateTime @updatedAt
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([updatedAt])
+  @@map("scan_upload")
 }
 
 // Non-inventory line of a purchase (ADR-0009 §1), e.g. a magnifier bought alongside

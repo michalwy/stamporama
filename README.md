@@ -40,6 +40,13 @@ docker compose --profile autoupdate up -d
 
 Uploaded photos — and the listing images generated for offers — are stored in the `stamporama-data` Docker volume (mounted at `/data`) by default. Back it up alongside your database — losing the volume loses the images.
 
+If you put the app **behind a reverse proxy** — nginx, Caddy, a Cloudflare tunnel — there is one
+thing worth knowing: a stockbook card scanned at 1200 dpi is 100–200 MB, and card scans are
+therefore uploaded in **chunks** so no single request carries the whole file. The proxy has to pass
+the **chunk** size (512 KB by default), not the file size, which every common default already does —
+so there is usually nothing to configure. Only a proxy set *below* that needs anything: lower
+`STAMPORAMA_UPLOAD_CHUNK_KB` to match it.
+
 Alternatively, photos can be stored in **Google Cloud Storage** — the installer asks for the bucket and service-account key and sets it up for you (or configure it by hand via the GCS section of `.env.prod.example`). Photos are served via short-lived signed URLs so bytes bypass the app. Switching is safe at any time — existing filesystem photos keep serving from the volume while new photos write to GCS, and the optional `pnpm photos:migrate:gcs` command moves old photos across so the volume can be retired.
 
 There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).

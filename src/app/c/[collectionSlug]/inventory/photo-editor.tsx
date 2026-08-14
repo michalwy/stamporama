@@ -18,6 +18,9 @@ import {
 } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+// The upload bar lives in `@/app/progress-bar` since #590, where the card-scan upload draws the
+// same treatment: it began here, and a second one drawn beside it would be the divergence.
+import { ProgressBar } from "@/app/progress-bar";
 import { THUMB_OBJECT_FIT } from "./photo-thumb";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
@@ -977,42 +980,6 @@ function RoleButton({
   );
 }
 
-// --- Progress bar (aggregate strip + per-card overlay) ---
-
-/** A slim determinate progress bar. `rounded` off gives square corners for the card-bottom
- * variant that sits flush against the thumbnail edges. */
-function ProgressBar({
-  fraction,
-  rounded = true,
-}: {
-  fraction: number;
-  rounded?: boolean;
-}) {
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
-  return (
-    <div
-      role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(pct)}
-      style={{
-        height: rounded ? "0.375rem" : "0.25rem",
-        borderRadius: rounded ? "999px" : 0,
-        background: "var(--color-bg-page)",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          height: "100%",
-          width: `${pct}%`,
-          background: "var(--color-accent)",
-          transition: "width 0.15s ease-out",
-        }}
-      />
-    </div>
-  );
-}
 
 // --- Full-width dropzone ---
 

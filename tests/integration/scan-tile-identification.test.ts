@@ -107,7 +107,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   }> {
     const { purchaseId, lotId } = await newOrder();
     const sheet = await uploadSheet(userId, purchaseId, {
-      bytes: await card(),
+      source: await card(),
       mime: "image/png",
       side: "front",
     });
