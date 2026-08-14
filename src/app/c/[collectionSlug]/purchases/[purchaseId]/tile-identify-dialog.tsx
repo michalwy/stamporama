@@ -18,7 +18,8 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
-import { useLotCopiesInfinite } from "./use-lot-copies-query";
+import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
+import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
  * One tile, and the three ends it can reach (#567).
@@ -28,16 +29,24 @@ import { useLotCopiesInfinite } from "./use-lot-copies-query";
  * identify is only visible at this size. Reviewing tiles rather than trusting the cut is the whole
  * point of the pass.
  *
- * So the dialog **opens on an outcome, never on a menu of them**. It arrives showing the answer its
- * provenance makes likely, and the other two sit in the footer where they cost one click from
- * wherever it opened:
+ * So the dialog **opens on an outcome, never on a menu of them**, and which one is *derived from
+ * whether there is anything **this tile** can be assigned to* — not from where the lot came from.
+ * The candidate list is copies holding none of the roles the tile carries, so a non-empty one means
+ * assigning is genuinely available: every line on a freshly settled auction lot, the handful of
+ * hand-entered copies on a stockbook lot, and nothing at all once they have been photographed. That
+ * is right in both places the `fromAuction` flag was wrong — an auction lot whose lines are already
+ * photographed goes straight to identify, and a stockbook lot with two hand-entered copies offers
+ * them. The list is empty more often than a looser one would be, and lands on identify more often
+ * as a result; that is the correct answer, not a reason to loosen it.
  *
- * - a tile from an **auction settlement** opens on *assign* — the lot's copies are the lines that
- *   were described and bid on, and they want photographs rather than identification;
- * - every **other** tile opens on *identify*, the stockbook answer.
+ * The other two answers sit in the footer, one click from wherever it opened. A chooser standing in
+ * front of them would be a screen whose whole content is three buttons, and a card of forty would
+ * mean forty of them showing nothing.
  *
- * A chooser standing in front of these would be a screen whose whole content is three buttons, and
- * a card of forty would mean forty of them showing nothing.
+ * The candidate query is keyed by the lot **and the slots asked for**, so a card of like tiles — the
+ * ordinary case — is one fetch, served from cache for every tile after the first. The dialog
+ * therefore **settles once and never jumps**: on the first tile it waits for the answer rather than
+ * opening on identify and switching under the collector's hand when the list arrives.
  *
  * **Discard acts immediately**, with no note asked for. On a parcel full of junk it is the frequent
  * answer, and it is safe to make it cheap precisely because it is reversible — *Put back in the
@@ -51,16 +60,61 @@ interface Props {
   /** Whether the lot is still open. A closed lot takes no new copies (its pool has been split
    * across the copies it had), but a photograph is not money — assigning and discarding stay. */
   lotOpen: boolean;
-  /** Whether this lot was transcribed from a won auction lot, which is what makes assigning the
-   * ordinary path rather than the exception. */
+  /** Whether this lot was transcribed from a won auction lot. Used **only to word** the assign
+   * list's explanation — that those copies are the lines that were described in order to bid.
+   * It decides nothing, which was always its real job. */
   fromAuction: boolean;
   onIdentifyNew: () => void;
-  onDone: () => void;
+  /**
+   * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
+   * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
+   * touches no copy at all, so invalidating them would be re-fetching a lot's whole copy list to
+   * learn that nothing about it moved.
+   */
+  onDone: (touchedCopy: boolean) => void;
   onClose: () => void;
 }
 
 /** The outcome the dialog is *showing*. Discard is not one of them — it is a button that acts. */
 type Mode = "identify" | "assign";
+
+/**
+ * How long the candidate list stays fresh, so tile after tile opens from cache instead of pausing
+ * on a refetch the latch below would wait for.
+ *
+ * Short on purpose. Every write **on this screen** invalidates the namespace and so beats this
+ * outright (`isInvalidated` short-circuits ahead of `staleTime`) — intake, attach, assign, removing
+ * a copy. What does not reach it is a photo added to one of these copies from the *Copies* screen,
+ * since nothing there invalidates `lot-copies`. Half a minute keeps a card's tiles instant while
+ * bounding that window to something shorter than walking between two screens; the cost of being
+ * wrong is one candidate offered that the write then refuses by name, or one missing that a reopen
+ * brings back.
+ */
+const ASSIGN_LIST_STALE_MS = 30 * 1000;
+
+/**
+ * The copies a tile could be assigned to: this lot's, holding **none of the roles this tile
+ * carries**.
+ *
+ * Derived from the tile rather than restated, and it is the same question `assignTileToCopy` asks
+ * before it refuses (`tile-photo-roles.ts` owns the comparison). A list that offers what the write
+ * refuses is the defect: asking the weaker *"has any free slot"* offered a front-only tile copies
+ * that merely lacked a back, and picking one failed.
+ *
+ * Not `no-photos` either, which is a different and wrong set — a copy with a back and no front can
+ * take a front-only tile, and `no-photos` would hide it.
+ *
+ * The params object is what the query is keyed by, so tiles needing the same slots — a whole card of
+ * front-only tiles, the ordinary case — share one fetch, and a tile needing different slots gets its
+ * own list rather than a wrongly cached one.
+ */
+function assignParams(tile: ScanTileData): LotCopiesParams {
+  return {
+    sort: "catalog",
+    sortDir: "asc",
+    freePhotoSlots: tilePhotoRoles(tile),
+  };
+}
 
 export function TileIdentifyDialog({
   collectionId,
@@ -72,24 +126,65 @@ export function TileIdentifyDialog({
   onDone,
   onClose,
 }: Props) {
-  const [mode, setMode] = useState<Mode>(fromAuction ? "assign" : "identify");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const settled = tile.state !== "unidentified";
 
-  const run = (fn: () => Promise<{ status: string; message?: string }>) => {
+  // Lifted out of the assign list, because *whether the list holds anything* is what chooses the
+  // opening mode. TanStack hashes the key structurally, so rebuilding the params per render is
+  // free: two tiles needing the same slots hash to the same key and share one fetch.
+  //
+  // The `staleTime` is what keeps that true now the latch below waits for a fetch to finish: at the
+  // screen's default of 0 the cached answer is stale the instant it arrives, so every tile of a card
+  // would re-ask and wait on it.
+  const roles = tilePhotoRoles(tile);
+  const copies = useLotCopiesInfinite(
+    collectionId,
+    lotId,
+    assignParams(tile),
+    !settled,
+    ASSIGN_LIST_STALE_MS
+  );
+  const candidates = copies.data?.pages.flatMap((p) => p.items) ?? [];
+
+  // Latched, never re-derived: the query could refetch and answer differently, and a dialog that
+  // changed mode under the collector's hand mid-tile is exactly what waiting for the first answer
+  // exists to avoid. A query error latches as "nothing to assign to", which is the safe reading.
+  //
+  // **`isFetching`, not just `isPending`.** A closed dialog leaves an *inactive* query, and
+  // invalidating one only marks it stale — nothing refetches until an observer mounts again. So
+  // reopening the dialog after copies were added elsewhere ("Add stamps") hands this render the old
+  // answer with `isPending` already false, and latching there pinned the mode to the state of the
+  // lot before those copies existed: the list stayed empty until a full page reload. Waiting for the
+  // refetch that the mount itself kicks off is what makes the answer current.
+  //
+  // Race-free rather than hopefully-ordered: the observer computes its optimistic result with
+  // `fetchState` applied whenever it will fetch on mount, so `isFetching` is already true on the
+  // first render after an invalidation — never briefly false with stale data in hand.
+  const [mode, setMode] = useState<Mode | null>(null);
+  if (mode === null && !copies.isPending && !copies.isFetching) {
+    setMode(candidates.length > 0 ? "assign" : "identify");
+  }
+
+  /** `touchedCopy` rides with each call rather than being inferred afterwards: the action itself is
+   *  the only thing that knows whether a copy changed hands. */
+  const run = (
+    fn: () => Promise<{ status: string; message?: string }>,
+    touchedCopy: boolean
+  ) => {
     setError(null);
     startTransition(async () => {
       const result = await fn();
       if (result.status === "error") setError(result.message ?? "That did not work.");
-      else onDone();
+      else onDone(touchedCopy);
     });
   };
 
   const discard = (
     <DialogSecondaryButton
-      onClick={() => run(() => discardTileAction(tile.id, ""))}
+      // A discard changes the tile and nothing else — its images stay where they are.
+      onClick={() => run(() => discardTileAction(tile.id, ""), false)}
       disabled={pending}
     >
       <Icon name="delete" size="sm" /> {pending ? "Working…" : "Discard"}
@@ -106,14 +201,22 @@ export function TileIdentifyDialog({
         <TileImages tile={tile} collectionId={collectionId} />
 
         {settled ? (
-          <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n))} />
+          <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
+        ) : mode === null ? (
+          // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
+          // on identify meanwhile: a mode that arrives a moment later is a dialog that moves under
+          // the hand of someone already reading it.
+          <Muted>Checking what this lot already holds…</Muted>
         ) : mode === "assign" ? (
           <AssignList
-            collectionId={collectionId}
-            lotId={lotId}
+            copies={candidates}
+            roles={roles}
             fromAuction={fromAuction}
             disabled={pending}
-            onPick={(itemId) => run(() => assignTileAction(tile.id, itemId))}
+            hasMore={copies.hasNextPage ?? false}
+            loadingMore={copies.isFetchingNextPage}
+            onLoadMore={() => void copies.fetchNextPage()}
+            onPick={(itemId) => run(() => assignTileAction(tile.id, itemId), true)}
           />
         ) : (
           <IdentifyIntro lotOpen={lotOpen} />
@@ -131,7 +234,7 @@ export function TileIdentifyDialog({
           {tile.state === "discarded" && (
             <div style={{ marginRight: "auto" }}>
               <DialogSecondaryButton
-                onClick={() => run(() => undiscardTileAction(tile.id))}
+                onClick={() => run(() => undiscardTileAction(tile.id), false)}
                 disabled={pending}
               >
                 Put back in the queue
@@ -140,11 +243,19 @@ export function TileIdentifyDialog({
           )}
           <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
         </DialogFooter>
+      ) : mode === null ? (
+        // Nothing to offer until the mode is known — offering an action that might be the wrong one
+        // is what waiting is for.
+        <DialogFooter>
+          <DialogSecondaryButton onClick={onClose}>Cancel</DialogSecondaryButton>
+        </DialogFooter>
       ) : mode === "assign" ? (
         // Assign is the *showing* outcome, so picking a copy row is the action and the footer
         // carries only the two ways out of it — each one click, not a round trip through a menu.
         <DialogFooter>
-          <div style={{ marginRight: "auto", display: "flex", gap: "0.5rem" }}>
+          <div
+            style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
             <DialogSecondaryButton onClick={onIdentifyNew} disabled={pending || !lotOpen}>
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
@@ -163,12 +274,17 @@ export function TileIdentifyDialog({
           onCancel={onClose}
           onAction={onIdentifyNew}
           leading={
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <>
               {discard}
-              <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
-                <Icon name="link" size="sm" /> Assign to a copy on this lot
-              </DialogSecondaryButton>
-            </div>
+              {/* Only when there is something to assign to — which is the very condition that chose
+                  identify over assign, so this is one expression rather than a second rule. Without
+                  it the button is always here and always opens an empty list. */}
+              {candidates.length > 0 && (
+                <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
+                  <Icon name="link" size="sm" /> Assign to a copy on this lot
+                </DialogSecondaryButton>
+              )}
+            </>
           }
         />
       )}
@@ -239,39 +355,41 @@ function IdentifyIntro({ lotOpen }: { lotOpen: boolean }) {
 // ── Assigning to a copy already on the lot ───────────────────────────────────────────────────
 
 function AssignList({
-  collectionId,
-  lotId,
+  copies,
+  roles,
   fromAuction,
   disabled,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   onPick,
 }: {
-  collectionId: string;
-  lotId: string;
+  /** Already narrowed to copies holding none of `roles` — the dialog above owns the query, because
+   * whether this list holds anything is what chose to show it. */
+  copies: ItemListItem[];
+  /** The slots this tile needs, for the sentence that explains who is missing and why. */
+  roles: TilePhotoRole[];
   fromAuction: boolean;
   disabled: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onPick: (itemId: string) => void;
 }) {
-  // The lot's own copies, in catalogue order. Unfiltered on purpose: a copy that already has a
-  // front but no back is exactly one this tile might complete, and the `no-photos` filter would
-  // hide it.
-  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useLotCopiesInfinite(
-    collectionId,
-    lotId,
-    { sort: "catalog", sortDir: "asc", filter: "none" }
-  );
-  const copies = data?.pages.flatMap((p) => p.items) ?? [];
-
   return (
     <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         {fromAuction
-          ? "This lot came from an auction sale, so its copies are the lines that were described. Pick the one this tile shows."
+          ? "This lot came from an auction sale, so its copies are the lines that were described in order to bid. Pick the one this tile shows."
           : "Pick the copy this tile shows. Its images move onto that copy."}
       </p>
-      {isLoading && <Muted>Loading the lot&rsquo;s copies…</Muted>}
-      {!isLoading && copies.length === 0 && (
+      {/* Why a copy the collector knows is on this lot may not be here — and it is about *this*
+          tile, not about free slots in general. Said up front, because the alternative is
+          concluding the list is broken and going looking for a bug. */}
+      <Muted>{listScope(roles)}</Muted>
+      {copies.length === 0 && (
         <Muted>
-          This lot holds no copies yet. Identify the tile as a new copy instead.
+          No copy on this lot can take it. Identify the tile as a new copy instead.
         </Muted>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
@@ -279,11 +397,11 @@ function AssignList({
           <CopyRow key={copy.id} copy={copy} disabled={disabled} onPick={() => onPick(copy.id)} />
         ))}
       </div>
-      {hasNextPage && (
+      {hasMore && (
         <button
           type="button"
-          onClick={() => void fetchNextPage()}
-          disabled={isFetchingNextPage}
+          onClick={onLoadMore}
+          disabled={loadingMore}
           style={{
             alignSelf: "flex-start",
             background: "none",
@@ -294,12 +412,12 @@ function AssignList({
             cursor: "pointer",
           }}
         >
-          {isFetchingNextPage ? "Loading…" : "Show more copies"}
+          {loadingMore ? "Loading…" : "Show more copies"}
         </button>
       )}
       {/* A tile that matches none of the lines is the parcel disagreeing with its description —
           which is information, not a problem to hide, so the way out of this list says so. */}
-      {fromAuction && copies.length > 0 && (
+      {fromAuction && (
         <Muted>
           None of these? Then the parcel holds something its description never listed — press{" "}
           <em>Identify as new copy</em> below.
@@ -307,6 +425,18 @@ function AssignList({
       )}
     </div>
   );
+}
+
+/** What this tile carries, and therefore which copies cannot take it. Worded from the roles in
+ * hand, so it says the same thing the filter did rather than a general claim about free slots. */
+function listScope(roles: TilePhotoRole[]): string {
+  if (roles.length === 2) {
+    return "This tile carries a front and a back, so only copies with neither are listed — one that already has either side cannot take it.";
+  }
+  if (roles[0] === "back") {
+    return "This tile carries a back, so only copies without one are listed — a copy that already has a back cannot take it.";
+  }
+  return "This tile carries a front, so only copies without one are listed — a copy that already has a front cannot take it.";
 }
 
 function CopyRow({
@@ -319,8 +449,6 @@ function CopyRow({
   onPick: () => void;
 }) {
   const numbers = copy.catalogNumbers.map((n) => n.number).join(" · ");
-  const hasFront = copy.photos.some((p) => p.role === "front");
-  const hasBack = copy.photos.some((p) => p.role === "back");
   return (
     <button
       type="button"
@@ -357,15 +485,10 @@ function CopyRow({
           · {copy.conditionAbbreviation}
         </span>
       </span>
-      {/* What the copy is still missing — the reason this path exists at all. */}
+      {/* What the copy already holds — the reason this path exists at all. From the shared helper,
+          so the row and the filter above it describe slots the same way. */}
       <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-        {hasFront && hasBack
-          ? "front + back"
-          : hasFront
-            ? "front only"
-            : hasBack
-              ? "back only"
-              : "no photos"}
+        {describeFreeSlots(copy.photos)}
       </span>
     </button>
   );

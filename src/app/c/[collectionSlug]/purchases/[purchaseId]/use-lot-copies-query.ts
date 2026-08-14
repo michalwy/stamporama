@@ -12,6 +12,7 @@ import type { LocationRefUsage } from "@/lib/locations";
 import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { CopyContainer } from "@/lib/lot-selection";
+import { formatTilePhotoRoles, type TilePhotoRole } from "@/lib/tile-photo-roles";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -22,6 +23,10 @@ export interface LotCopiesParams {
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
   filter?: LotCopyFilter;
+  /** Photo slots that must be free, for a scan tile's assign list (#567). Part of the params, so it
+   * is part of the query key: two tiles needing different slots are two different lists, and one
+   * needing the same slots is served from cache. */
+  freePhotoSlots?: readonly TilePhotoRole[];
   /** Restrict to a single issue group (issue id or `"__none__"`) for the grouped view. */
   issueKey?: string;
 }
@@ -113,6 +118,9 @@ function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchPar
   if (params.sortDir) sp.set("sortDir", params.sortDir);
   if (params.filter) sp.set("filter", params.filter);
   if (params.issueKey) sp.set("issueKey", params.issueKey);
+  if (params.freePhotoSlots?.length) {
+    sp.set("freePhotoSlots", formatTilePhotoRoles(params.freePhotoSlots));
+  }
   return sp;
 }
 
@@ -123,10 +131,21 @@ export function useLotCopiesInfinite(
   collectionId: string,
   lotId: string,
   params: LotCopiesParams,
-  enabled = true
+  enabled = true,
+  /**
+   * How long a fetched page stays fresh. Default 0, as everywhere else on this screen.
+   *
+   * The scan-tile assign list (#567) sets one, because it *waits* for a non-stale answer before
+   * choosing which outcome to open on: at the default every reopen refetches, so a card of forty
+   * tiles would pause forty times. Invalidation is unaffected — `isInvalidated` short-circuits
+   * ahead of `staleTime` in `isStaleByTime` — so every write on this screen still forces the next
+   * open to re-ask, which is what the caller's window is sized against.
+   */
+  staleTime = 0
 ) {
   return useInfiniteQuery<LotCopiesPage>({
     queryKey: lotCopiesKeys.list(collectionId, lotId, params),
+    staleTime,
     queryFn: async ({ pageParam }) => {
       const sp = buildCopyParams(params, pageParam as string | undefined);
       const res = await fetch(

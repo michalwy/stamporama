@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
+import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma } from "./db";
 import { getCollectionBaseCurrency } from "./pricing";
 import {
@@ -2099,6 +2100,29 @@ function isBlockingCopy(item: ItemListItem): boolean {
   return item.deliveryState !== "not_delivered" && item.value.baseAmount == null;
 }
 
+/**
+ * The `where` fragment for "a copy that could take a tile carrying these roles" (#567).
+ *
+ * **Not** a `LotCopyFilter`. That union is a chip vocabulary and it also types
+ * `LotBulkSelector.filter`, where a tile-shaped, role-parameterised filter would be meaningless to
+ * a bulk write. This is an option of its own, asked for only by the assign list.
+ *
+ * One clause per role the tile carries, `AND`-ed: a tile with a front and a back needs a copy with
+ * *neither*, and a front-only tile needs a copy with no front — a copy merely missing its back
+ * cannot take it, which is the looseness this replaced. Empty roles means no constraint, so a caller
+ * that asks for nothing is not silently given an empty list.
+ *
+ * Its in-memory twin is `canTakeTileRoles` in `tile-photo-roles.ts`, which is what the write's
+ * refusal is built from. The two run over the same rows, and the tests hold them against each other
+ * so a list that offers what the write refuses fails loudly rather than quietly.
+ */
+export function freePhotoSlotsWhere(
+  roles: readonly TilePhotoRole[]
+): Prisma.ItemWhereInput {
+  if (roles.length === 0) return {};
+  return { AND: roles.map((role) => ({ photos: { none: { role } } })) };
+}
+
 export type LotCopySort = "added" | "year" | "catalog" | "price" | "name";
 export type LotCopyFilter = "none" | "unpriced" | "to-sort" | "no-photos";
 
@@ -2106,6 +2130,10 @@ export interface LotIntakePageOptions {
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
   filter?: LotCopyFilter;
+  /** Restrict to copies that could take a scan tile carrying these photo roles (#567) — i.e. copies
+   * holding **none** of them. Separate from `filter` because it is parameterised by the tile in
+   * hand rather than being one of the header chips; see {@link freePhotoSlotsWhere}. */
+  freePhotoSlots?: readonly TilePhotoRole[];
   /** Restrict to a single issue group: an issue id, or `"__none__"` for copies with no issue.
    * Feeds the grouped-by-issue lot view's per-group pagination (#172). */
   issueKey?: string;
@@ -2158,6 +2186,7 @@ async function getIntakePage(
   const sort = opts.sort ?? "added";
   const sortDir = opts.sortDir ?? "asc";
   const filter = opts.filter ?? "none";
+  const freeSlots = opts.freePhotoSlots ?? [];
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const issueWhere = issueKeyWhere(opts.issueKey);
@@ -2176,6 +2205,7 @@ async function getIntakePage(
         ...scopeWhere,
         ...issueWhere,
         ...lotCopyFilterWhere(filter),
+        ...freePhotoSlotsWhere(freeSlots),
       },
       // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
       // intake can stamp many copies with near-identical timestamps (#172).
@@ -2191,7 +2221,7 @@ async function getIntakePage(
   }
 
   const rows = await prisma.item.findMany({
-    where: { collectionId, ...scopeWhere, ...issueWhere },
+    where: { collectionId, ...scopeWhere, ...issueWhere, ...freePhotoSlotsWhere(freeSlots) },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: ITEM_LIST_SELECT,
   });

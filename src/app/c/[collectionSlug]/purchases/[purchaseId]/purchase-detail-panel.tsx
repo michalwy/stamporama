@@ -68,7 +68,10 @@ import {
   deliveryStateToken,
 } from "@/lib/delivery-state";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
-import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import {
+  useCollectionFormats,
+  useInvalidateInventory,
+} from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
@@ -205,6 +208,9 @@ export function PurchaseDetailPanel({
   // The purchase list is a client-side infinite query with a 30s stale time, so it survives a
   // back-navigation from here and would keep showing the pre-edit delivery status (#440).
   const { invalidateList: invalidatePurchaseList } = useInvalidatePurchases();
+  // What the catalogue screens say about a stamp — held counts, want state, the stamp's own
+  // photo — all move when a copy is taken in, and none of it lives in the two namespaces above.
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const [isPending, startTransition] = useTransition();
   const [addingLot, setAddingLot] = useState(false);
   const [arriving, setArriving] = useState(false);
@@ -325,6 +331,16 @@ export function PurchaseDetailPanel({
         // won't reflect copy/lot mutations — invalidate the lot-copies pages and summaries too.
         invalidateLotCopies(collectionId);
         invalidatePurchaseList(collectionId);
+        // …and everything the **catalogue** side says about the stamps these copies point at: the
+        // copies-held badge and want marker on every picker row (#348/#532), the holdings line in
+        // the intake step itself (#562), and the stamp's own thumbnail, which a copy's first front
+        // photo may have just become (#149's auto-seed, reached from the tile path too).
+        //
+        // Cheap to be generous with: these queries are inactive while this screen is up, so
+        // invalidating them only marks them stale and the refetch happens when the picker is next
+        // opened. What it buys is that the picker cannot open on the state of the collection as it
+        // was before the last copy was taken in — which is exactly what it did.
+        invalidateInventory(collectionId);
         onDone?.(result);
         // Asked *after* the intake dialog has closed and only when something matches: a review with
         // nothing in it is a dialog that says "no news", which is not worth a click.
@@ -2535,8 +2551,10 @@ function LotCard({
                   const { identifyTileAction } = await import("@/app/actions/scans");
                   const r = await identifyTileAction(tileId, fd);
                   if (r.status === "error") setCopyError(r.message);
-                  // The tile's own section reads a separate query, so the copy invalidation the
-                  // shared runner does would leave the card showing a tile that is already a copy.
+                  // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
+                  // so both namespaces are re-read: the shared runner below invalidates the copies,
+                  // and this adds the scans, without which the strip keeps showing a tile that is
+                  // already a copy. (`lot-scans-card.tsx` states the rule the other outcomes follow.)
                   else void invalidateLotScans(collectionId);
                   return r;
                 }

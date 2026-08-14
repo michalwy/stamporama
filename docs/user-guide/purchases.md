@@ -251,20 +251,25 @@ a piece nobody could identify — which is the whole reason for reviewing tiles 
 the cut, since the intake step that follows never shows them.
 
 The dialog **opens on the likely answer rather than asking which one you want**, and the other two
-are always one click away in its footer. There are three:
+are always one click away in its footer. It opens on *assign* when this lot holds a copy that could
+still take **this tile's** images, and on *identify* when it does not — so a settled auction lot
+starts on its list of lines, the same lot starts on identify once they are all photographed, and a
+stockbook lot with a couple of hand-entered copies offers them. There are three answers:
 
-- **Identify as a new copy** — the stockbook path, and what the dialog opens on for an ordinary
-  lot. It leads into the same browse popup and condition step as
-  [Add stamps](#identifying-stamps-intake), with the same remembered choices, and the tile's images
-  move onto the copy it creates. There is no photo uploader in that step, because the pictures are
-  already in hand. A whole-set button is not offered either: a tile is one piece.
-- **Assign to a copy on this lot** — the auction path, and what the dialog opens on for a lot that
-  came from [settling an auction sale](auctions.md#settling-a-parcel-into-a-purchase). Such a lot
-  already holds identified copies, because the contents had to be described in order to bid. Those
-  copies need *photographs*, not identification, so you pick from the lot's own short list of named
-  lines — matching pictures against ten known stamps rather than identifying from scratch. Each row
-  says what that copy is still missing (*no photos*, *front only*). This stays available on a
-  **closed** lot: closing froze the money, not the photographs.
+- **Identify as a new copy** — the stockbook path. It leads into the same browse popup and condition
+  step as [Add stamps](#identifying-stamps-intake), with the same remembered choices, and the tile's
+  images move onto the copy it creates. There is no photo uploader in that step, because the pictures
+  are already in hand. A whole-set button is not offered either: a tile is one piece.
+- **Assign to a copy on this lot** — the auction path. A lot settled from an
+  [auction sale](auctions.md#settling-a-parcel-into-a-purchase) already holds identified copies,
+  because the contents had to be described in order to bid. Those copies need *photographs*, not
+  identification, so you pick from the lot's own short list — matching pictures against ten known
+  stamps rather than identifying from scratch. Only copies that can actually take **this** tile are
+  listed: a tile with a front goes onto a copy that has no front, and one with both sides onto a copy
+  with neither. If a copy you know is on the lot is missing from the list, it already has the side
+  this tile carries — the line above the list says which that is, and each row says what the copy
+  already holds. This stays available on a **closed** lot: closing froze the money, not the
+  photographs.
 - **Discard** — junk, damaged beyond interest, unidentifiable. One click, and it asks for nothing:
   on a parcel full of junk this is the frequent answer, and it is safe to make it that cheap because
   it is reversible — **Put back in the queue** is in the same dialog. The tile **keeps its image**,

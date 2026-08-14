@@ -185,14 +185,32 @@ export function DialogFooter({ children }: { children: ReactNode }) {
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
 
+/**
+ * Every dialog button, so the three variants are the same shape and only their colours differ.
+ *
+ * Two details exist to keep a footer's buttons the **same height**, which they were not:
+ *
+ * - `inline-flex` centring rather than the default inline layout. `Icon` is an inline-block with a
+ *   `vertical-align` below the baseline, so an icon inside a button stretches its line box and the
+ *   button grows — leaving *Discard* and *Assign…* a couple of pixels taller than a plain-text
+ *   primary beside them. Laid out as a centred flex row, the icon no longer participates in a line
+ *   box at all. Deliberately **no `gap`**: call sites write `<Icon /> Label`, and that literal space
+ *   is their spacing — adding a gap would silently widen every one of them.
+ * - a **transparent** border rather than none. The secondary and destructive variants draw a 1px
+ *   border; without a placeholder here the primary would be 2px shorter whenever the content
+ *   exceeds `minHeight`.
+ */
 const baseBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   minHeight: "2.25rem",
   padding: "0.375rem 1rem",
   borderRadius: "0.375rem",
   fontSize: "0.875rem",
   fontWeight: 500,
   cursor: "pointer",
-  border: "none",
+  border: "1px solid transparent",
 };
 
 export function DialogPrimaryButton({
@@ -275,9 +293,13 @@ type DialogActionsProps = {
   error?: ReactNode;
   onCancel?: () => void;
   onAction?: () => void;
-  /** Content pinned to the left of the footer, opposite the buttons. For a control that qualifies
-   *  the action itself — e.g. "regenerate photos after saving" (#328) — rather than another field:
-   *  it belongs beside the button it changes, not at the end of the form. */
+  /** Content pinned to the left of the footer, opposite the buttons — its own group, laid out as a
+   *  row so several items in it read as one set rather than as loose buttons.
+   *
+   *  Two things belong here. A control that **qualifies the action** — "regenerate photos after
+   *  saving" (#328) — because it belongs beside the button it changes rather than at the end of the
+   *  form. And the **other ways out**: a step back, or an alternative outcome (#567's *Discard*),
+   *  which are neither the action nor cancelling and would otherwise crowd them. */
   leading?: ReactNode;
 };
 
@@ -293,21 +315,40 @@ export function DialogActions({
   leading,
 }: DialogActionsProps) {
   const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
+  // Two groups, by role: the other ways out on the left, cancel and the action on the right. Each
+  // group is spaced tightly within itself and pushed apart by the gap between them, so a footer of
+  // four buttons reads as two decisions rather than as four unrelated ones. Grouping this way is
+  // also what stops `leading` from setting the spacing by accident, which is what it did when it
+  // was a bare `margin-right: auto` and its content sat in the same run as the buttons.
   return (
     <DialogFooter>
-      {leading != null && <div style={{ marginRight: "auto", minWidth: 0 }}>{leading}</div>}
-      <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
-        {cancelLabel}
-      </DialogSecondaryButton>
-      <div style={{ position: "relative" }}>
-        <ErrorBubble>{error}</ErrorBubble>
-        <ActionButton
-          type={onAction ? "button" : "submit"}
-          onClick={onAction}
-          disabled={disabled}
+      {leading != null && (
+        <div
+          style={{
+            marginRight: "auto",
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+          }}
         >
-          {actionLabel}
-        </ActionButton>
+          {leading}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
+          {cancelLabel}
+        </DialogSecondaryButton>
+        <div style={{ position: "relative" }}>
+          <ErrorBubble>{error}</ErrorBubble>
+          <ActionButton
+            type={onAction ? "button" : "submit"}
+            onClick={onAction}
+            disabled={disabled}
+          >
+            {actionLabel}
+          </ActionButton>
+        </div>
       </div>
     </DialogFooter>
   );

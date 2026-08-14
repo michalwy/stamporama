@@ -10,9 +10,24 @@ export const FULL_MAX_EDGE = 2500;
  * a one-off backfill script to regenerate existing thumbnails. */
 export const THUMB_MAX_EDGE = 320;
 
-/** Max accepted upload size (bytes). ~60 MB default, adjustable. The whole file is buffered in
- * memory before `sharp` decodes it, so this is a memory bound as much as a policy. */
-export const MAX_UPLOAD_BYTES = 60 * 1024 * 1024;
+/**
+ * Max accepted upload size (bytes). The whole file is buffered in memory before `sharp` decodes
+ * it, so this is a memory bound as much as a policy.
+ *
+ * **Fitted to a full-resolution card scan** (#566/#567), not to a photograph. At 60 MB it was a
+ * guard against a stray upload — a phone photo of a stamp is a couple of megabytes and nothing on
+ * the ordinary path comes near either figure. A whole stockbook card scanned at 1200 dpi routinely
+ * passes 60 MB, and that file is *retained*, uncapped, because the cut is taken from the original
+ * (ADR-0033 §3/§4): a card cannot be re-scanned once it has been broken up, so refusing the scan is
+ * refusing the ingest.
+ *
+ * Deliberately **one number for every upload** rather than a larger cap for sheets. One limit is
+ * explainable and appears in one sentence of the user guide; two would need every caller, route and
+ * error message to say which one it meant, and the photo path loses nothing to a ceiling it never
+ * approaches. Whoever raises this next: the figure is about the largest scan worth accepting, and
+ * the cost is that much resident memory per concurrent upload.
+ */
+export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
 /** Accepted upload formats. Anything else is rejected before processing. */
 export const ACCEPTED_MIMES = ["image/jpeg", "image/png", "image/webp"] as const;

@@ -13,8 +13,10 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import type { Box } from "@/lib/scan-boxes";
 import type { CutReport, ScanBatchData, ScanSheetData, ScanTileData } from "@/lib/scan-sheets";
+import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import { TileIdentifyDialog } from "./tile-identify-dialog";
+import { useInvalidateLotCopies } from "./use-lot-copies-query";
 import { useInvalidateLotScans, useLotScans } from "./use-lot-scans-query";
 
 /**
@@ -65,6 +67,8 @@ export function LotScansCard({
 }: Props) {
   const { data, isLoading } = useLotScans(collectionId, lotId, open);
   const { invalidateLotScans } = useInvalidateLotScans();
+  const { invalidateLotCopies } = useInvalidateLotCopies();
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
   // Collection URLs are slug-addressed (`/c/[collectionSlug]/…`), and what this component is handed
   // is the internal id — so the slug for a link out to a copy comes from the route.
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
@@ -93,8 +97,32 @@ export function LotScansCard({
   // problem to hide: the parcel holds something nobody announced.
   const undescribed = batches.flatMap((b) => b.tiles).filter((t) => t.outsideDescription).length;
 
-  const refresh = () => {
+  /**
+   * Re-read what a write changed — **everywhere it is visible, not just on the surface that made
+   * it.** A copy write shows up in three separate query namespaces, and each one missed is a screen
+   * that keeps showing the collection as it was until a full page reload:
+   *
+   * - `lot-scans` — the tile itself moved. Always stale after a write here.
+   * - `lot-copies` — an assign hands a copy the tile's photos, so the copies list would keep showing
+   *   no thumbnail and the assign list would keep offering the copy that just took the images.
+   * - `inventory` — what the **catalogue** side says about the stamp that copy points at: the
+   *   copies-held badge and want marker on every picker row (#348/#532), the holdings line inside
+   *   the intake step (#562), and the stamp's own thumbnail, which this copy's front may have just
+   *   been promoted into (#149). Assigning a tile runs that auto-seed, so the picker opened for the
+   *   *next* stamp was showing a stamp with no photo and no copies — both untrue by then.
+   *
+   * **A tile outcome that touches a copy invalidates all three; one that does not, invalidates only
+   * the scans.** A discard, an un-discard and a note move no copy and say nothing about any stamp.
+   *
+   * `router.refresh()` is not a substitute for any of it: it re-renders the server components, and
+   * all three of these stream from client queries (#172).
+   */
+  const refresh = (touchedCopy = false) => {
     void invalidateLotScans(collectionId);
+    if (touchedCopy) {
+      void invalidateLotCopies(collectionId);
+      void invalidateInventory(collectionId);
+    }
     onChanged();
   };
 
@@ -259,9 +287,9 @@ export function LotScansCard({
             setTileId(null);
             onIdentifyTile(openTile.id);
           }}
-          onDone={() => {
+          onDone={(touchedCopy) => {
             setTileId(null);
-            refresh();
+            refresh(touchedCopy);
           }}
           onClose={() => setTileId(null)}
         />

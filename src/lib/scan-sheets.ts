@@ -114,7 +114,7 @@ export async function uploadSheet(
   const { collectionId } = await assertLotOwner(ownerId, lotId);
 
   if (input.bytes.byteLength > MAX_UPLOAD_BYTES) {
-    throw new ScanValidationError("Scan is too large (max 60 MB).");
+    throw new ScanValidationError("Scan is too large (max 200 MB).");
   }
 
   let prepared;

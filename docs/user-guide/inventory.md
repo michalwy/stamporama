@@ -962,7 +962,7 @@ space reserved for photos, giving you one large, easy target to drop the first f
 Once at least one photo is attached, the strip of photo cards returns above a normal-sized
 add-photos area.
 
-Accepted formats are **JPEG, PNG, and WebP**, up to **60 MB** each. Each photo is
+Accepted formats are **JPEG, PNG, and WebP**, up to **200 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
 
 Thumbnails everywhere in the app show the **whole** image, scaled to fit inside the thumbnail box by

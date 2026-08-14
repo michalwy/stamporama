@@ -215,10 +215,32 @@ where a bad crop or an unidentifiable piece is visible**. That is what reviewing
 to trusting the cut.
 
 What it must not do is spend a screen asking which of three answers is wanted. So it arrives already
-showing the answer its provenance makes likely — *assign* for a lot settled from an auction, whose
-copies are the lines that were bid on, and *identify* for every other tile — with the remaining two
-in the footer, one click from wherever it opened. A chooser in front of that is a screen whose entire
-content is three buttons, and a card of forty is forty of them showing nothing.
+showing one, with the remaining two in the footer, one click from wherever it opened. A chooser in
+front of that is a screen whose entire content is three buttons, and a card of forty is forty of them
+showing nothing.
+
+Which one it opens on is **derived from whether there is anything this tile can be assigned to**, not
+from where the lot came from. So a non-empty list *is* the signal: every line of a freshly settled
+auction lot, the two hand-entered copies on a stockbook lot, and nothing once they have all been
+photographed. That is right in both places a `fromAuction` flag was wrong, and the flag survives only
+to word the sentence about lines that were described.
+
+**The list asks exactly what the write asks.** `front` and `back` are singleton roles per copy, so an
+assignment works only if the copy holds *none of the roles the tile carries* — a front-only tile onto
+a copy with no front, a back-only tile (the unpaired-back case) onto a copy with no back, a paired
+tile onto a copy with neither. The rule lives in one pure module (`tile-photo-roles.ts`) that the
+refusal and the query fragment both read, because they drifted once: the list asked the weaker *"has
+any free slot"*, offered a front-only tile copies that merely lacked a back, and the write then
+refused them. **A list that offers what the write refuses is the defect** — the write was right. It
+is deliberately not `no-photos` either: a copy with a back and no front can take a front-only tile.
+
+The consequence is that the list is empty more often, and the derived mode lands on *identify* more
+often. That is the correct answer for a tile that can go onto nothing, not a reason to loosen the
+filter back.
+
+The query is keyed by **lot**, so it is one fetch per card and cache for every tile after the first —
+and the dialog **settles once and never jumps**: on the first tile it waits for the answer rather than
+opening on identify and switching under the hand of someone already reading it.
 
 ### The strip is a map of the card, so a worked tile keeps its square and its picture
 

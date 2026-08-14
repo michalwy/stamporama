@@ -61,7 +61,7 @@ export async function POST(
     return NextResponse.json({ error: "No file provided." }, { status: 400 });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: "Scan is too large (max 60 MB)." }, { status: 413 });
+    return NextResponse.json({ error: "Scan is too large (max 200 MB)." }, { status: 413 });
   }
 
   const rawSide = form.get("side");

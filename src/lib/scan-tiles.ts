@@ -5,6 +5,7 @@ import { formatItemNo } from "./item-number";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront } from "./photos";
 import { ScanAuthError, ScanValidationError, assertScanLotOwner } from "./scan-sheets";
+import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 
 /**
  * Turning a scan tile into something (#567, ADR-0033) — the second half of the scan-first intake.
@@ -133,12 +134,16 @@ export async function assignTileToCopy(
     throw new ScanValidationError("That copy is not on this lot.");
   }
 
-  // Front and back are singleton slots per owner. A copy that already holds one is not a copy
-  // waiting to be photographed, so this is refused rather than resolved by demoting the tile's
-  // crop to an extra — an image quietly filed where the copy's front is looked for is worse than
-  // a sentence saying which slot is taken.
-  const taken = new Set(item.photos.map((p) => p.role).filter(Boolean));
-  const clash = tile.photos.map((p) => p.role).filter((r) => r != null && taken.has(r));
+  // Front and back are singleton slots per owner. A copy that already holds one of the roles this
+  // tile carries is refused rather than resolved by demoting the crop to an extra — an image quietly
+  // filed where the copy's front is looked for is worse than a sentence saying which slot is taken.
+  //
+  // `tile-photo-roles.ts` owns this comparison, and the **candidate list reads the same rule** so it
+  // cannot offer what this refuses.
+  const clash = conflictingPhotoRoles(
+    photoRolesPresent(tile.photos),
+    photoRolesPresent(item.photos)
+  );
   if (clash.length > 0) {
     throw new ScanValidationError(
       `Copy ${formatItemNo(item.itemNo)} already has ${clash.length === 2 ? "front and back images" : `a ${clash[0]} image`}. Remove ${clash.length === 2 ? "them" : "it"} first, or pick another copy.`

@@ -30,7 +30,8 @@ import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 // and edited through a dialog change-set but *generated* from a plan, so their whole lifecycle
 // (render, replace, staleness, byte cleanup) lives in `offer-photo-generation.ts`. Scan-tile images
 // (#566) sit outside `PhotoOwner` for the same reason: they are *cut* from a retained card scan, so
-// their lifecycle lives in `scan-sheets.ts`. What is shared is everything below that owner seam —
+// their lifecycle lives in `scan-sheets.ts` — and its other end in `scan-tiles.ts` (#567), where a
+// crop stops being a tile's and becomes a copy's by reassigning `tileId` to `itemId`. What is shared is everything below that owner seam —
 // serving (`getPhotoForServing`) and the collection's storage total both handle all four owners,
 // and **a new owner has to be added to both** or its images 404 while its rows look perfectly fine.
 
@@ -212,7 +213,7 @@ export async function stageUpload(
     );
   }
   if (file.bytes.byteLength > MAX_UPLOAD_BYTES) {
-    throw new PhotoValidationError("Image is too large (max 60 MB).");
+    throw new PhotoValidationError("Image is too large (max 200 MB).");
   }
 
   let processed;

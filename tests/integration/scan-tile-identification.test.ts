@@ -6,6 +6,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
+import { freePhotoSlotsWhere, getLotIntakePage } from "../../src/lib/items";
+import {
+  canTakeTileRoles,
+  photoRolesPresent,
+  type TilePhotoRole,
+} from "../../src/lib/tile-photo-roles";
 import { createLot } from "../../src/lib/lots";
 import { createPurchase } from "../../src/lib/purchases";
 import {
@@ -259,6 +265,133 @@ describe("identifying scan tiles into copies (#567)", () => {
       batches[0].tiles.map((t) => t.position),
       [0, 1]
     );
+  });
+
+  it("offers only copies with a free front or back slot as assign candidates", async () => {
+    const lotId = await newLot();
+    const photo = (role: "front" | "back") => ({
+      role,
+      storageBackend: "filesystem",
+      storageKey: `test/${role}-${Math.random().toString(36).slice(2)}`,
+      mime: "image/png",
+      width: 10,
+      height: 10,
+      sizeBytes: 100,
+    });
+    const copy = async (itemNo: number, roles: ("front" | "back")[]) =>
+      prisma.item.create({
+        data: {
+          collectionId,
+          itemNo,
+          stampId,
+          conditionId,
+          lotId,
+          deliveryState: "ordered",
+          photos: { create: roles.map(photo) },
+        },
+        select: { id: true },
+      });
+
+    const bare = await copy(91_001, []);
+    const frontOnly = await copy(91_002, ["front"]);
+    const backOnly = await copy(91_003, ["back"]);
+    const complete = await copy(91_004, ["front", "back"]);
+
+    const candidates = async (roles: TilePhotoRole[]) => {
+      const { items } = await getLotIntakePage(userId, collectionId, lotId, {
+        freePhotoSlots: roles,
+        pageSize: 100,
+      });
+      return new Set(items.map((i) => i.id));
+    };
+
+    // The rule is about the slots *this tile* needs, not about having any free slot. A front-only
+    // tile cannot go onto a copy that merely lacks its back — the front is taken — and the looser
+    // question offered exactly those, then the write refused them.
+    assert.deepEqual(await candidates(["front"]), new Set([bare.id, backOnly.id]));
+    assert.deepEqual(await candidates(["back"]), new Set([bare.id, frontOnly.id]));
+    assert.deepEqual(await candidates(["front", "back"]), new Set([bare.id]));
+    assert.ok(complete.id, "a fully photographed copy is never a candidate for anything");
+
+    // Two expressions of one rule — the query fragment and the predicate the write refuses by — so
+    // the test that matters is that they agree, over every role set and every copy.
+    const rows = await prisma.item.findMany({
+      where: { lotId },
+      select: { id: true, photos: { select: { role: true } } },
+    });
+    for (const roles of [["front"], ["back"], ["front", "back"]] as TilePhotoRole[][]) {
+      const viaSql = await prisma.item.findMany({
+        where: { lotId, ...freePhotoSlotsWhere(roles) },
+        select: { id: true },
+      });
+      assert.deepEqual(
+        new Set(viaSql.map((i) => i.id)),
+        new Set(rows.filter((r) => canTakeTileRoles(roles, r.photos)).map((r) => r.id)),
+        `the query fragment and canTakeTileRoles agree for [${roles.join(",")}]`
+      );
+      assert.deepEqual(new Set(viaSql.map((i) => i.id)), await candidates(roles));
+    }
+
+    // And the distinction from `no-photos`, which is a different set: it would hide the copy whose
+    // free slot is exactly the one a tile needs.
+    const { items: noPhotos } = await getLotIntakePage(userId, collectionId, lotId, {
+      filter: "no-photos",
+      pageSize: 100,
+    });
+    assert.deepEqual(noPhotos.map((i) => i.id), [bare.id]);
+  });
+
+  it("never offers a candidate the write would refuse", async () => {
+    // The invariant behind the filter, asserted end to end rather than trusted: everything the list
+    // returns for a real tile is something `assignTileToCopy` accepts.
+    const { lotId, tileIds } = await lotWithTiles();
+    const photo = (role: "front" | "back") => ({
+      role,
+      storageBackend: "filesystem",
+      storageKey: `test/${role}-${Math.random().toString(36).slice(2)}`,
+      mime: "image/png",
+      width: 10,
+      height: 10,
+      sizeBytes: 100,
+    });
+    for (const [i, roles] of [[], ["front"], ["back"], ["front", "back"]].entries()) {
+      await prisma.item.create({
+        data: {
+          collectionId,
+          itemNo: 92_001 + i,
+          stampId,
+          conditionId,
+          lotId,
+          deliveryState: "ordered",
+          photos: { create: (roles as ("front" | "back")[]).map(photo) },
+        },
+      });
+    }
+
+    // A front-only tile, which is what an unturned card produces.
+    const tile = await prisma.scanTile.findUniqueOrThrow({
+      where: { id: tileIds[0] },
+      select: { photos: { select: { role: true } } },
+    });
+    const roles = photoRolesPresent(tile.photos);
+    assert.deepEqual(roles, ["front"]);
+
+    const { items } = await getLotIntakePage(userId, collectionId, lotId, {
+      freePhotoSlots: roles,
+      pageSize: 100,
+    });
+    assert.ok(items.length > 0, "there is something to prove");
+    // Every one of them accepts the tile. Assigning consumes it, so each candidate is checked
+    // against its own tile-shaped copy of the question rather than by assigning four times.
+    for (const candidate of items) {
+      assert.equal(
+        canTakeTileRoles(roles, candidate.photos),
+        true,
+        `copy ${candidate.itemNo} was offered, so the write must accept it`
+      );
+    }
+    // …and the first one really does go through, which is what ties the predicate to the write.
+    await assignTileToCopy(userId, tileIds[0], items[0].id);
   });
 
   it("refuses a copy that is not on this lot", async () => {
