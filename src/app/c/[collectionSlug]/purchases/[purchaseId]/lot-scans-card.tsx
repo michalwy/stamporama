@@ -557,6 +557,11 @@ function BatchSection({
   const waiting = batch.tiles.filter((t) => t.state === "unidentified").length;
   const consumed = batch.tiles.filter((t) => t.state === "consumed").length;
   const discarded = batch.tiles.filter((t) => t.state === "discarded").length;
+  // The retention sweep has taken this batch's scans (#578). The tiles are all still here — what is
+  // gone is the ability to draw the cut again, so Re-cut stops being offered rather than being
+  // offered and refused. The server refuses it too; this is only the part that keeps a collector
+  // from reaching for a button that cannot work.
+  const scansPurged = (batch.front?.purged ?? false) || (batch.back?.purged ?? false);
 
   const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet => ({
     id: sheet.id,
@@ -609,6 +614,10 @@ function BatchSection({
           {/* The moment the batch was finished with. Shown because it is also the moment its
               retained scan stopped being able to do anything (#578 is what acts on it). */}
           {batch.doneAt && waiting === 0 && ` · done ${batch.doneAt.slice(0, 10)}`}
+          {/* Said on the summary line, which is the whole of a finished batch when it is
+              collapsed: the card is still listed and its tiles are still here, and the one thing
+              that changed is that the scan itself is not. */}
+          {scansPurged && " · scan deleted"}
         </span>
         <span style={{ flex: 1 }} />
 
@@ -640,7 +649,7 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the back cut"}
           </SmallButton>
         )}
-        {expanded && batch.tiles.length > 0 && (
+        {expanded && batch.tiles.length > 0 && !scansPurged && (
           <SmallButton
             onClick={() =>
               onRecut(

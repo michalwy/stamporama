@@ -15,6 +15,8 @@ import { MAX_UPLOAD_BYTES, UnsupportedImageError } from "./photos/process";
 import { cutSheet, extractSheetRegion, prepareSheet } from "./photos/sheet";
 import { normalizeBox, pairByPosition, readingOrder, type Box } from "./scan-boxes";
 import { detectSheetBoxes } from "./scan-detect";
+import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
+import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 
 /**
  * Scan sheet ingest (#566, ADR-0033): a stockbook card is scanned whole, the scan is retained, its
@@ -28,7 +30,10 @@ import { detectSheetBoxes } from "./scan-detect";
  *
  * - **The cut is on the original.** Never `processImage` a sheet. `photos/sheet.ts` says why.
  * - **The sheet is retained.** A bad cut on a parcel already broken up cannot be undone by
- *   re-scanning, so the original stays and a batch can be re-cut from it after the fact.
+ *   re-scanning, so the original stays and a batch can be re-cut from it after the fact. A
+ *   collection that asks for it can have that retention end (#578) — see `purgeFinishedScanSheets`,
+ *   which takes the bytes and leaves the row, so everything that would have read them refuses in
+ *   words instead of failing on a missing file.
  * - **A tile is not an `Item`.** `Item.stampId` is NOT NULL and stays that way; see the ADR and the
  *   migration. #567 is what turns a tile into a copy.
  */
@@ -280,8 +285,10 @@ export async function commitCut(
       mime: true,
       width: true,
       height: true,
+      purgedAt: true,
     },
   });
+  assertSheetNotPurged(sheet);
 
   const alreadyCut = await prisma.scanTile.count({
     where:
@@ -582,8 +589,16 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
 
   const sheet = await prisma.scanSheet.findUniqueOrThrow({
     where: { id: sheetId },
-    select: { storageBackend: true, storageKey: true, mime: true, width: true, height: true },
+    select: {
+      storageBackend: true,
+      storageKey: true,
+      mime: true,
+      width: true,
+      height: true,
+      purgedAt: true,
+    },
   });
+  assertSheetNotPurged(sheet);
 
   const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
   const detected = await detectSheetBoxes(original);
@@ -682,6 +697,11 @@ async function loadTile(tileId: string) {
  * very images (#567 re-owns the `Photo` rows), and deleting the tile would take a copy's front and
  * back with it. Nothing in #566 can produce that state; the guard is written now because a guard
  * added after the state it guards is a guard that was once missing.
+ *
+ * **Refused once the scan has been swept** (#578), and this is the refusal that sweep exists to make
+ * possible: the row survives the purge precisely so this can say *the scan has been deleted* instead
+ * of the cut failing later on a file that is not there. It matters most for the batch whose tiles
+ * were all **discarded** — the one case that would otherwise still be re-cuttable after the sweep.
  */
 export async function recutBatch(
   ownerId: string,
@@ -690,6 +710,20 @@ export async function recutBatch(
 ): Promise<{ discarded: number }> {
   await assertLotOwner(ownerId, lotId);
 
+  const purged = await prisma.scanSheet.count({
+    where: { lotId, batchNo, purgedAt: { not: null } },
+  });
+  if (purged > 0) {
+    throw new ScanValidationError(PURGED_SCAN_MESSAGE);
+  }
+
+  return { discarded: await clearBatchTiles(lotId, batchNo) };
+}
+
+/** The tile side of a re-cut, without the purged-scan guard — shared with `deleteBatch`, which is
+ * still allowed on a batch whose scan has been swept: what it is deleting is the record, and a
+ * record whose bytes are gone is no harder to throw away than one whose bytes are there. */
+async function clearBatchTiles(lotId: string, batchNo: number): Promise<number> {
   const consumed = await prisma.scanTile.count({
     where: { lotId, batchNo, state: "consumed" },
   });
@@ -707,7 +741,7 @@ export async function recutBatch(
     where: { lotId, batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
-  return { discarded };
+  return discarded;
 }
 
 /**
@@ -720,7 +754,8 @@ export async function deleteBatch(
   lotId: string,
   batchNo: number
 ): Promise<void> {
-  await recutBatch(ownerId, lotId, batchNo);
+  await assertLotOwner(ownerId, lotId);
+  await clearBatchTiles(lotId, batchNo);
   const sheets = await prisma.scanSheet.findMany({
     where: { lotId, batchNo },
     select: { id: true, storageBackend: true, storageKey: true, mime: true },
@@ -816,6 +851,103 @@ async function deleteSheetVariants(
   );
 }
 
+// ── Retention (#578) ──────────────────────────────────────────────────────────────────────────
+
+/** What everything that would have read a swept scan says instead. One sentence in one place: a
+ * re-cut, a commit and a proposal all reach the same dead end, and they should not describe it
+ * three ways. */
+export const PURGED_SCAN_MESSAGE =
+  "The scan has been deleted. This batch was finished with, so its retained original was swept " +
+  "under the collection's scan retention setting.";
+
+function assertSheetNotPurged(sheet: { purgedAt: Date | null }): void {
+  if (sheet.purgedAt) throw new ScanValidationError(PURGED_SCAN_MESSAGE);
+}
+
+/** What one pass of {@link purgeFinishedScanSheets} freed. */
+export interface ScanSheetPurge {
+  /** Sheets whose bytes were deleted. Both sides of a batch are stamped together, so a two-sided
+   * batch counts as two. */
+  sheets: number;
+  /** `sizeBytes` those sheets were carrying — what the collection's storage total (#144) drops by. */
+  bytes: number;
+}
+
+/**
+ * Delete the retained originals of batches that have been **finished with** longer than the
+ * collection's scan retention period (#578). An hourly sweep started from `instrumentation.ts`
+ * `register()`, beside the closed-offer photo purge (#512) it is modelled on: idempotent,
+ * best-effort, and never anything but a delete.
+ *
+ * What makes a batch eligible is `batchDoneAt` (#567) — the moment its **last** tile left
+ * `unidentified`. From there a consumed tile refuses a re-cut, so the scan can never become anything
+ * again; and if a discard is put back or the batch is re-cut, that stamp is cleared, so the clock
+ * never counts down on a batch still being worked.
+ *
+ * **The bytes go and the row stays.** The sheet is marked `purgedAt` and its `sizeBytes` drops to 0
+ * — so the storage total moves without any reader having to learn about the flag — while the batch
+ * keeps listing what it held and a re-cut refuses with {@link PURGED_SCAN_MESSAGE} rather than
+ * failing on a file that is not there. That is the whole reason to keep the row.
+ *
+ * Both variants go, `original` and `view` alike: the derivative exists only to be drawn on in the
+ * cut editor, and a batch that can never be cut again has no use for it either.
+ *
+ * The period is resolved **per collection**, so a pass per collection rather than one query across
+ * all of them — the cutoff is different for each, and a collection that keeps for ever has no cutoff
+ * at all. On an instance where nobody has configured anything that is every collection, and this
+ * function does nothing: the default is keep for ever, because a card scan is a source (see
+ * `DEFAULT_SCAN_SHEET_TTL_MS`).
+ *
+ * `only` narrows the sweep to one lot, for the same test-isolation reason `purgeClosedOfferPhotos`
+ * takes one offer; the boot path passes nothing.
+ */
+export async function purgeFinishedScanSheets(
+  now: Date = new Date(),
+  only?: { lotId: string }
+): Promise<ScanSheetPurge> {
+  const result: ScanSheetPurge = { sheets: 0, bytes: 0 };
+
+  const collections = await prisma.collection.findMany({
+    select: { id: true, scanSheetTtlDays: true },
+  });
+
+  for (const collection of collections) {
+    const cutoff = scanSheetCutoff(now, resolveScanSheetTtlMs(collection.scanSheetTtlDays));
+    if (!cutoff) continue;
+
+    const sheets = await prisma.scanSheet.findMany({
+      where: {
+        ...(only ? { lotId: only.lotId } : {}),
+        lot: { purchase: { collectionId: collection.id } },
+        purgedAt: null,
+        batchDoneAt: { lt: cutoff },
+      },
+      select: {
+        id: true,
+        storageBackend: true,
+        storageKey: true,
+        mime: true,
+        sizeBytes: true,
+      },
+    });
+
+    for (const sheet of sheets) {
+      // The row first, exactly as the closed-offer purge writes its rows before touching storage: a
+      // failure on the way to the files leaves at worst an unreferenced object, while the reverse
+      // would leave a sheet the app still believes it can cut from.
+      await prisma.scanSheet.update({
+        where: { id: sheet.id },
+        data: { purgedAt: now, sizeBytes: 0 },
+      });
+      await deleteSheetVariants(sheet.storageBackend, sheet.storageKey, sheet.mime);
+      result.sheets += 1;
+      result.bytes += sheet.sizeBytes;
+    }
+  }
+
+  return result;
+}
+
 // ── Reading ───────────────────────────────────────────────────────────────────────────────────
 
 export interface ScanSheetData {
@@ -828,6 +960,10 @@ export interface ScanSheetData {
   /** Whether anything has been cut from this sheet yet — what decides between "review the cut" and
    * "re-cut the batch" on screen. */
   cut: boolean;
+  /** Whether the retention sweep has taken this scan's bytes (#578). The row is still here and the
+   * batch still lists its tiles; what is gone is the ability to cut it again, which is why the
+   * screen stops offering a re-cut rather than letting one fail. */
+  purged: boolean;
 }
 
 export interface ScanTileData {
@@ -915,6 +1051,7 @@ export async function listLotScans(
         viewWidth: true,
         viewHeight: true,
         batchDoneAt: true,
+        purgedAt: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "desc" },
@@ -973,6 +1110,7 @@ export async function listLotScans(
       viewWidth: s.viewWidth,
       viewHeight: s.viewHeight,
       cut: (s.side === "back" ? s._count.backTiles : s._count.frontTiles) > 0,
+      purged: s.purgedAt != null,
     };
     const batch = batchOf(s.batchNo);
     if (data.side === "front") batch.front = data;
@@ -1044,6 +1182,10 @@ export async function getSheetForServing(sheetId: string): Promise<{
   mime: string;
   width: number;
   height: number;
+  /** True once the retention sweep has taken the bytes (#578). The row still resolves — the route
+   * needs the owning collection to answer safely — so the check belongs to the caller, which turns
+   * it into a plain *not found* rather than a storage error out of the backend. */
+  purged: boolean;
 } | null> {
   const sheet = await prisma.scanSheet.findUnique({
     where: { id: sheetId },
@@ -1053,6 +1195,7 @@ export async function getSheetForServing(sheetId: string): Promise<{
       mime: true,
       width: true,
       height: true,
+      purgedAt: true,
       lot: {
         select: {
           purchase: {
@@ -1071,6 +1214,7 @@ export async function getSheetForServing(sheetId: string): Promise<{
     mime: sheet.mime,
     width: sheet.width,
     height: sheet.height,
+    purged: sheet.purgedAt != null,
   };
 }
 

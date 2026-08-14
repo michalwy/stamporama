@@ -5,6 +5,7 @@ import { normalizeLanguage } from "./languages";
 import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
+import { parseScanSheetTtlSetting } from "./scan-sheet-cleanup-rules";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -206,6 +207,38 @@ export async function setCollectionClosedOfferPhotoTtl(
   });
 }
 
+/**
+ * Set how long this collection keeps the retained card scans of a batch it has finished with (#578),
+ * or clear the setting so the collection defers to the instance again.
+ *
+ * The same shape as the closed-offer period above and the same grammar — `off` for keep for ever,
+ * `0` to sweep at the next pass, otherwise days — but its own column, because a collector may keep
+ * card scans for ever while purging offer images weekly.
+ */
+export async function setCollectionScanSheetTtl(
+  ownerId: string,
+  collectionId: string,
+  raw: string | null
+): Promise<void> {
+  const value = parseScanSheetTtlSetting(raw);
+  if (value === undefined) {
+    throw new Error(
+      'Retention must be a number of days (0 or more), or "off" to keep the scans for ever.'
+    );
+  }
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { scanSheetTtlDays: value },
+  });
+}
+
 /** The three percentages a bid recommendation is built from (#508). Every one optional, so the
  * settings form can save the field that changed rather than rewriting all three. */
 export interface BidPercentPatch {
@@ -273,6 +306,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       bidCeilingPercent: true,
       bidFallbackPercent: true,
       closedOfferPhotoTtlDays: true,
+      scanSheetTtlDays: true,
     },
   });
 }

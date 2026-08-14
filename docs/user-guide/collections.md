@@ -590,6 +590,19 @@ Whichever you pick, the line underneath states in plain words what will actually
 
 Two collections on one Stamporama are swept on their own terms, so a collection you are actively selling from and one you are keeping as a record do not have to share a number. And whatever the setting, only *generated* images go — your own uploads, the copies' scans and the whole photo plan stay, so **Regenerate** brings the images back whenever you want them.
 
+### How long finished batches keep their card scans
+
+Directly below it sits **Keep card scans of finished batches**, the same three answers about a very different kind of file.
+
+When you scan a stockbook card and cut it into tiles ([scan a card, cut it into stamps](purchases.md#scan-a-card-cut-it-into-stamps)), Stamporama keeps the scan at full size so you can draw the cut again if it came out wrong. Once every tile on the card has become a copy or been discarded, that batch can never be cut again — and the scan, which is the biggest file this app stores, has nothing left to do but sit there.
+
+This setting can have it deleted after a while. **It is off unless you switch it on**, and that is deliberate: a listing's generated images can always be made again, but a card scan cannot — the stockbook has been taken apart, and there is nothing left to scan. So Stamporama will not delete one on a timer you never asked for.
+
+If you do switch it on, the batch itself stays exactly where it is: the tiles, the copies they became, the discards and their notes are all untouched, and the batch line simply adds **scan deleted**. What you lose is the ability to re-cut that card — Stamporama says so plainly instead of failing on a file that is not there, and the **Re-cut** button stops being offered.
+
+Worth knowing before you pick a number: the mistake this protects against is a box that clipped a stamp's perforation by a few pixels, which is easy to miss while reviewing the cut and usually noticed later, looking at the copy's own photo — while the parcel is still on the desk. A period measured in weeks covers that. After it, the answer is to re-photograph that one stamp, which is cheap, because the copy's ref says which box it is in.
+
+
 ## Catalog prices
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).

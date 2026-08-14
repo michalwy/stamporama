@@ -11,6 +11,7 @@ import {
   setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
   setCollectionItemNoPad,
+  setCollectionScanSheetTtl,
   type BidPercentPatch,
 } from "@/lib/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
@@ -142,6 +143,35 @@ export async function updateCollectionClosedOfferPhotoTtlAction(
   if (!session) redirect("/sign-in");
   try {
     await setCollectionClosedOfferPhotoTtl(session.user.id, collectionId, setting);
+    return { status: "success", setting };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the retention period.",
+    };
+  }
+}
+
+export type ScanSheetTtlState =
+  | { status: "idle" }
+  | { status: "success"; setting: string | null }
+  | { status: "error"; message: string };
+
+/**
+ * Save this collection's retained-scan retention (#578) from Settings → General.
+ *
+ * The same three answers as the closed-offer period above — and the same meaning for `null`, the
+ * collection saying it has no opinion. What differs is what "no opinion" works out to: keeping a
+ * card scan for ever, because it is a source nothing could make again.
+ */
+export async function updateCollectionScanSheetTtlAction(
+  collectionId: string,
+  setting: string | null
+): Promise<ScanSheetTtlState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionScanSheetTtl(session.user.id, collectionId, setting);
     return { status: "success", setting };
   } catch (e) {
     return {

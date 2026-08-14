@@ -16,6 +16,9 @@
 //     that have been sold or withdrawn longer than the grace period. Its own timer rather than a
 //     branch of the sweep above: they answer to different TTLs, and either can be switched off
 //     without the other noticing;
+//   - the retained-scan sweep (#578) — an hourly pass deleting the card scans of batches finished
+//     with longer than the collection's own period. Ships **off**: a scan is a source, not output,
+//     so nothing is swept until a collector asks for it;
 //   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
 //     which is what makes the worklist a list that fills itself rather than one that has to be
 //     asked for;
@@ -29,6 +32,9 @@ import { formatBytes } from "@/lib/format-bytes";
 import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { purgeClosedOfferPhotos } from "@/lib/offer-photo-generation";
+import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
+import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
+import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
@@ -101,6 +107,39 @@ export async function start(): Promise<void> {
   const purgeInterval = setInterval(purge, SWEEP_INTERVAL_MS);
   purgeInitial.unref?.();
   purgeInterval.unref?.();
+
+  // The retained-scan sweep (#578). The same shape again, offset once more so a boot does not run
+  // three sweeps at once. Unlike the two above it deletes a **source**: a stockbook cannot be
+  // re-scanned once it has been broken up, which is why it does nothing at all unless a collection
+  // or this instance has asked for it, and why the sheet's row survives with its bytes gone so a
+  // re-cut refuses in words rather than failing on a missing file.
+  const sweepScans = async () => {
+    try {
+      const freed = await purgeFinishedScanSheets();
+      if (freed.sheets > 0) {
+        console.log(
+          `[scan-sheets] purged ${freed.sheets} retained scan(s) from finished batches, ` +
+            `freeing ${formatBytes(freed.bytes)}`
+        );
+      }
+    } catch (err) {
+      console.error("[scan-sheets] retention sweep failed", err);
+    }
+  };
+
+  // Said at boot like the purge above, and for a stronger reason: this is the one sweep that can
+  // delete bytes nothing could ever make again, so an operator must be able to read off the logs
+  // that it is switched off — or, if it is not, after how long.
+  console.log(
+    `[scan-sheets] retained-scan sweep, instance default: ` +
+      `${describeScanSheetTtl(instanceScanSheetTtlMs())} — ` +
+      `collections may set their own period in Settings`
+  );
+
+  const scanInitial = setTimeout(sweepScans, 90_000);
+  const scanInterval = setInterval(sweepScans, SWEEP_INTERVAL_MS);
+  scanInitial.unref?.();
+  scanInterval.unref?.();
 
   // The Allegro sold-listing sync (#467). Same shape as the sweep above: once shortly after boot,
   // then on its own interval, `unref`'d so it never holds the process up. A pass that throws is

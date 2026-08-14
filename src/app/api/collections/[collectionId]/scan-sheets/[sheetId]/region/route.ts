@@ -36,8 +36,14 @@ export async function GET(
   const { collectionId, sheetId } = await params;
   const sheet = await getSheetForServing(sheetId);
   // Authorized exactly as the variant route is: by the sheet's real owning collection + owner, with
-  // the URL's collection required to match so a scan cannot be addressed through someone else's.
-  if (!sheet || sheet.collectionId !== collectionId || sheet.ownerId !== session.user.id) {
+  // the URL's collection required to match so a scan cannot be addressed through someone else's —
+  // and a scan the retention sweep has taken (#578) is not found, since there is nothing to render.
+  if (
+    !sheet ||
+    sheet.purged ||
+    sheet.collectionId !== collectionId ||
+    sheet.ownerId !== session.user.id
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

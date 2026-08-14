@@ -29,6 +29,8 @@ import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
+import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
+import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
 import { SettingsTabs } from "./settings-tabs";
 
 export const metadata = { title: "Settings" };
@@ -113,6 +115,11 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           instanceClosedOfferPhotoTtlLabel={describeClosedOfferPhotoTtl(
             instanceClosedOfferPhotoTtlMs()
           )}
+          scanSheetTtl={collection.scanSheetTtlDays}
+          // The same server-side resolution for the retained-scan period (#578). Its instance
+          // default is *keep for ever* unless an operator says otherwise, which is exactly the
+          // sentence a collector following the instance should be reading.
+          instanceScanSheetTtlLabel={describeScanSheetTtl(instanceScanSheetTtlMs())}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}

@@ -53,6 +53,16 @@ model Collection {
   // no default can express. Null therefore defers to the environment variable and then to the
   // built-in seven days, so an operator who configured one keeps exactly what they configured.
   closedOfferPhotoTtlDays String?
+  // How long this collection keeps the retained card scans of a batch it has finished with (#578),
+  // in the *same* vocabulary as the column above — `off`/`never` for keep for ever, `0` to sweep at
+  // the next pass, otherwise days — because two retention settings on one screen where `0` means
+  // opposite things would be a trap. A separate column all the same: a collector may keep card scans
+  // for ever while purging offer images weekly, and one column could not say both.
+  //
+  // Null defers to `STAMPORAMA_SCAN_SHEET_TTL_DAYS` and then to the built-in default, which for this
+  // setting is **keep for ever** — a scan is a source, not output (#137), so the sweep ships off and
+  // is switched on by the collector who has the disk problem.
+  scanSheetTtlDays String?
   // The band a bid recommendation is stated as, in percent of the lot's fair figure (#508;
   // ADR-0029 §3, §4). Below the floor a lot is a bargain, past the ceiling it belongs to somebody
   // else. A percentage of `fair` rather than the market's own spread: at the sample sizes this
@@ -1595,6 +1605,13 @@ model ScanSheet {
    * because deriving it from the tiles afterwards is fragile and adding the column later is a
    * migration. Cleared again if a tile ever returns to `unidentified`. */
   batchDoneAt    DateTime?
+  /** When the retention sweep deleted this sheet's bytes (#578), or null while they are still
+   * there. **The row survives the purge**: a re-cut then refuses with *the scan has been deleted*
+   * and the batch still lists what it held, rather than a missing file surfacing as a read error —
+   * which is the worst way for a collector to learn about it. `sizeBytes` goes to 0 at the same
+   * moment, so the collection's storage total (#144) drops without any reader having to know this
+   * column exists. */
+  purgedAt       DateTime?
   createdAt      DateTime @default(now())
 
   lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)

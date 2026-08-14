@@ -95,6 +95,10 @@ interface SettingsTabsProps {
   /** What deferring to the instance means, already in words — the environment variable itself stays
    * server-side. */
   instanceClosedOfferPhotoTtlLabel: string;
+  /** How long this collection keeps the scans of a batch it has finished with (#578), or null while
+   * it defers to the instance — whose own answer, in words, is the second field. */
+  scanSheetTtl: string | null;
+  instanceScanSheetTtlLabel: string;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -163,6 +167,8 @@ export function SettingsTabs({
   bidFallbackPercent,
   closedOfferPhotoTtl,
   instanceClosedOfferPhotoTtlLabel,
+  scanSheetTtl,
+  instanceScanSheetTtlLabel,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -248,6 +254,8 @@ export function SettingsTabs({
           bidFallbackPercent={bidFallbackPercent}
           closedOfferPhotoTtl={closedOfferPhotoTtl}
           instanceClosedOfferPhotoTtlLabel={instanceClosedOfferPhotoTtlLabel}
+          scanSheetTtl={scanSheetTtl}
+          instanceScanSheetTtlLabel={instanceScanSheetTtlLabel}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
           appReleaseDate={appReleaseDate}

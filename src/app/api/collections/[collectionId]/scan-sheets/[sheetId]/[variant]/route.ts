@@ -42,8 +42,13 @@ export async function GET(
   const sheet = await getSheetForServing(sheetId);
   // Authorize by the sheet's real owning collection + owner, and require the URL's collection to
   // match so a scan cannot be addressed through someone else's collection id.
+  //
+  // A **purged** sheet (#578) is not found here, deliberately: its row survives so the batch can
+  // still say what it held and a re-cut can refuse in words, but there are no bytes to serve and an
+  // error out of the storage backend would be a worse way to say so.
   if (
     !sheet ||
+    sheet.purged ||
     sheet.collectionId !== collectionId ||
     sheet.ownerId !== session.user.id
   ) {

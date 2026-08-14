@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
@@ -8,14 +8,15 @@ import {
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionItemNoPadAction,
+  updateCollectionScanSheetTtlAction,
   type ResetToDemoState,
 } from "@/app/actions/collections";
 import {
-  CLOSED_OFFER_PHOTO_TTL_FOREVER,
   closedOfferPhotoTtlMs,
   describeClosedOfferPhotoTtl,
-  parseClosedOfferPhotoTtlSetting,
 } from "@/lib/offer-photo-cleanup-rules";
+import { describeScanSheetTtl, scanSheetTtlMs } from "@/lib/scan-sheet-cleanup-rules";
+import { RETENTION_FOREVER, parseRetentionSetting } from "@/lib/retention-ttl";
 import type { BidPercentPatch } from "@/lib/collections";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "@/lib/bid-recommendation";
 import { COMMON_LANGUAGES } from "@/lib/languages";
@@ -45,6 +46,10 @@ interface SettingsPanelProps {
   closedOfferPhotoTtl: string | null;
   /** What deferring means, already in words — the instance's own resolved period. */
   instanceClosedOfferPhotoTtlLabel: string;
+  /** How long a batch this collection has finished with keeps its retained card scans (#578), or
+   * null while the collection defers to the instance — whose answer, in words, is the second. */
+  scanSheetTtl: string | null;
+  instanceScanSheetTtlLabel: string;
   photoStorageBytes: number;
   appVersion: string;
   /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
@@ -88,7 +93,206 @@ function retentionModeOf(setting: string | null): RetentionMode {
   return /^(off|never)$/i.test(setting.trim()) ? "forever" : "days";
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
+/**
+ * One retention control's state, shared by both periods on this screen (#577's closed-offer images,
+ * #578's retained card scans).
+ *
+ * Three states rather than a free-text box in the environment variable's grammar: nobody should have
+ * to know that `off` is a word this app accepts, and storing only canonical values means the write
+ * path never sees free text. The day count is held as text while typing, for the same reason the
+ * percentages are.
+ *
+ * What differs between the two settings is only the sentence they state and the action they save
+ * through, so both are arguments. The **grammar is not** — it comes straight from `retention-ttl.ts`,
+ * which is the whole point of there being one.
+ */
+function useRetentionSetting(args: {
+  initial: string | null;
+  instanceLabel: string;
+  describe: (setting: string) => string;
+  save: (setting: string | null) => Promise<{ status: string; message?: string }>;
+  startTransition: (fn: () => void) => void;
+}) {
+  const { initial, instanceLabel, describe, save, startTransition } = args;
+  const [mode, setMode] = useState<RetentionMode>(retentionModeOf(initial));
+  const [days, setDays] = useState(retentionModeOf(initial) === "days" ? (initial ?? "") : "");
+  const [saved, setSaved] = useState<string | null>(initial);
+  const [error, setError] = useState<string | null>(null);
+
+  function store(setting: string | null) {
+    const previous = saved;
+    if (setting === previous) return;
+    setError(null);
+    setSaved(setting);
+    startTransition(async () => {
+      const result = await save(setting);
+      if (result.status === "error") {
+        setSaved(previous);
+        setMode(retentionModeOf(previous));
+        setDays(retentionModeOf(previous) === "days" ? (previous ?? "") : "");
+        setError(result.message ?? "Failed to save the retention period.");
+      }
+    });
+  }
+
+  function handleMode(next: RetentionMode) {
+    setMode(next);
+    setError(null);
+    if (next === "inherit") {
+      store(null);
+      return;
+    }
+    if (next === "forever") {
+      store(RETENTION_FOREVER);
+      return;
+    }
+    // Switching to a day count with nothing typed yet saves nothing — the collector is mid-answer,
+    // and writing a number they have not chosen would start a sweep they did not ask for.
+    const value = parseRetentionSetting(days);
+    if (value !== undefined && value !== null) store(value);
+  }
+
+  function commitDays() {
+    const value = parseRetentionSetting(days);
+    if (value === undefined || value === null) {
+      // Put the stored answer back rather than leaving an unsaveable one on screen: this section
+      // saves on leaving the field, so a rejected value with nothing to press would just sit there.
+      setDays(retentionModeOf(saved) === "days" ? (saved ?? "") : "");
+      setMode(retentionModeOf(saved));
+      setError("Retention must be a number of days, 0 or more.");
+      return;
+    }
+    setDays(value);
+    store(value);
+  }
+
+  // What the collection actually does, said in words for whichever of the three is chosen — the
+  // same sentence the boot log prints, from the same function, so the screen and the log cannot
+  // describe one sweep differently.
+  const sentence =
+    saved === null ? `Following this instance: ${instanceLabel}.` : `${describe(saved)}.`;
+
+  return { mode, days, setDays, error, sentence, handleMode, commitDays };
+}
+
+/** One retention control, rendered. Both periods use it, so the pair reads as one question asked
+ * twice rather than as two settings that happen to sit together — which is also what stops their
+ * wording, their layout and their three options from drifting apart. */
+function RetentionSection({
+  title,
+  description,
+  daysLabel,
+  daysHint,
+  state,
+  disabled,
+}: {
+  title: string;
+  description: ReactNode;
+  daysLabel: string;
+  daysHint: string;
+  state: ReturnType<typeof useRetentionSetting>;
+  disabled: boolean;
+}) {
+  return (
+    <section
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        padding: "1.25rem 1.5rem",
+        background: "var(--color-bg-elevated)",
+        marginBottom: "1.5rem",
+      }}
+    >
+      <p
+        style={{
+          margin: "0 0 0.25rem",
+          fontSize: "0.9375rem",
+          fontWeight: 500,
+          color: "var(--color-text-primary)",
+        }}
+      >
+        {title}
+      </p>
+      <p
+        style={{
+          margin: "0 0 0.875rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        {description}
+      </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <select
+          aria-label={title}
+          value={state.mode}
+          onChange={(e) => state.handleMode(e.target.value as RetentionMode)}
+          disabled={disabled}
+          style={{
+            padding: "0.4rem 0.625rem",
+            border: "1px solid var(--color-border-strong)",
+            borderRadius: "0.375rem",
+            fontSize: "0.875rem",
+            color: "var(--color-text-primary)",
+            background: "var(--color-bg-elevated)",
+            cursor: "pointer",
+          }}
+        >
+          <option value="inherit">Follow this instance</option>
+          <option value="days">Delete after a number of days</option>
+          <option value="forever">Keep for ever</option>
+        </select>
+
+        {state.mode === "days" && (
+          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <input
+              aria-label={daysLabel}
+              value={state.days}
+              onChange={(e) => state.setDays(e.target.value)}
+              onBlur={state.commitDays}
+              disabled={disabled}
+              inputMode="decimal"
+              style={{
+                width: "5rem",
+                padding: "0.4rem 0.625rem",
+                border: "1px solid var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                fontSize: "0.875rem",
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+              }}
+            />
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              {daysHint}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {/* The period in words, whichever of the three is chosen — the same sentence the server
+          writes to its own log, from the same function, so nothing can describe one sweep two
+          ways. */}
+      <p
+        style={{
+          margin: "0.75rem 0 0",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        {state.sentence}
+      </p>
+
+      {state.error && (
+        <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+          {state.error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -112,73 +316,23 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
     });
   }
 
-  // Closed-offer photo retention (#577). Three states rather than a free-text box in the env
-  // variable's grammar: nobody should have to know that `off` is a word this app accepts, and
-  // storing only canonical values means the write path never sees free text. The day count is held
-  // as text while typing, for the same reason the percentages below are.
-  const [retentionMode, setRetentionMode] = useState<RetentionMode>(
-    retentionModeOf(closedOfferPhotoTtl)
-  );
-  const [retentionDays, setRetentionDays] = useState(
-    retentionModeOf(closedOfferPhotoTtl) === "days" ? (closedOfferPhotoTtl ?? "") : ""
-  );
-  const [savedRetention, setSavedRetention] = useState<string | null>(closedOfferPhotoTtl);
-  const [retentionError, setRetentionError] = useState<string | null>(null);
-
-  function saveRetention(setting: string | null) {
-    const previous = savedRetention;
-    if (setting === previous) return;
-    setRetentionError(null);
-    setSavedRetention(setting);
-    startTransition(async () => {
-      const result = await updateCollectionClosedOfferPhotoTtlAction(collectionId, setting);
-      if (result.status === "error") {
-        setSavedRetention(previous);
-        setRetentionMode(retentionModeOf(previous));
-        setRetentionDays(retentionModeOf(previous) === "days" ? (previous ?? "") : "");
-        setRetentionError(result.message);
-      }
-    });
-  }
-
-  function handleRetentionMode(next: RetentionMode) {
-    setRetentionMode(next);
-    setRetentionError(null);
-    if (next === "inherit") {
-      saveRetention(null);
-      return;
-    }
-    if (next === "forever") {
-      saveRetention(CLOSED_OFFER_PHOTO_TTL_FOREVER);
-      return;
-    }
-    // Switching to a day count with nothing typed yet saves nothing — the collector is mid-answer,
-    // and writing a number they have not chosen would start a sweep they did not ask for.
-    const value = parseClosedOfferPhotoTtlSetting(retentionDays);
-    if (value !== undefined && value !== null) saveRetention(value);
-  }
-
-  function commitRetentionDays() {
-    const value = parseClosedOfferPhotoTtlSetting(retentionDays);
-    if (value === undefined || value === null) {
-      // Put the stored answer back rather than leaving an unsaveable one on screen: this section
-      // saves on leaving the field, so a rejected value with nothing to press would just sit there.
-      setRetentionDays(retentionModeOf(savedRetention) === "days" ? (savedRetention ?? "") : "");
-      setRetentionMode(retentionModeOf(savedRetention));
-      setRetentionError("Retention must be a number of days, 0 or more.");
-      return;
-    }
-    setRetentionDays(value);
-    saveRetention(value);
-  }
-
-  // What the collection actually does, said in words for whichever of the three is chosen — the
-  // same sentence the boot log prints, from the same function, so the screen and the log cannot
-  // describe one sweep differently.
-  const retentionSentence =
-    savedRetention === null
-      ? `Following this instance: ${instanceClosedOfferPhotoTtlLabel}.`
-      : `${describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs(savedRetention))}.`;
+  // The two retention periods (#577, #578). One hook, used twice: they are separate settings with
+  // separate answers, but they are the *same* question asked about two kinds of bytes, and a second
+  // copy of this state machine is how the two would come to behave differently on the same screen.
+  const offerRetention = useRetentionSetting({
+    initial: closedOfferPhotoTtl,
+    instanceLabel: instanceClosedOfferPhotoTtlLabel,
+    describe: (setting) => describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs(setting)),
+    save: (setting) => updateCollectionClosedOfferPhotoTtlAction(collectionId, setting),
+    startTransition,
+  });
+  const scanRetention = useRetentionSetting({
+    initial: scanSheetTtl,
+    instanceLabel: instanceScanSheetTtlLabel,
+    describe: (setting) => describeScanSheetTtl(scanSheetTtlMs(setting)),
+    save: (setting) => updateCollectionScanSheetTtlAction(collectionId, setting),
+    startTransition,
+  });
 
   // The three bid-recommendation percentages (#508). Held as text while typing — a number input
   // that reparses every keystroke fights the collector halfway through "125".
@@ -652,108 +806,42 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         </div>
       </section>
 
-      {/* Closed-offer photo retention (#577), directly under the storage figure because it is the
-          answer to what that figure shows: the one thing this app deletes on a schedule is a
-          closed listing's generated images, and how long they sit there is what the total is made
-          of. A collection setting rather than an instance one — a working collection and an
-          archive of something finished want different answers. */}
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <p
-          style={{
-            margin: "0 0 0.25rem",
-            fontSize: "0.9375rem",
-            fontWeight: 500,
-            color: "var(--color-text-primary)",
-          }}
-        >
-          Keep closed listings&apos; images
-        </p>
-        <p
-          style={{
-            margin: "0 0 0.875rem",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-muted)",
-          }}
-        >
-          After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
-          for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
-          plan stay, so Regenerate makes the images again whenever you want them back.
-        </p>
+      {/* Both retention periods (#577, #578), directly under the storage figure because they are
+          the answer to what that figure shows — and next to each other because they are one
+          question about two kinds of bytes. Their defaults differ, and deliberately: a generated
+          image is output that Regenerate makes again, while a card scan is a source, so the scan
+          sweep ships off and is switched on by the collector who has the disk problem. */}
+      <RetentionSection
+        title="Keep closed listings' images"
+        description={
+          <>
+            After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
+            for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
+            plan stay, so Regenerate makes the images again whenever you want them back.
+          </>
+        }
+        daysLabel="Days a closed listing keeps its generated images"
+        daysHint="days — 0 deletes them at the next sweep"
+        state={offerRetention}
+        disabled={isPending}
+      />
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-          <select
-            aria-label="Keep closed listings' images"
-            value={retentionMode}
-            onChange={(e) => handleRetentionMode(e.target.value as RetentionMode)}
-            disabled={isPending}
-            style={{
-              padding: "0.4rem 0.625rem",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.875rem",
-              color: "var(--color-text-primary)",
-              background: "var(--color-bg-elevated)",
-              cursor: "pointer",
-            }}
-          >
-            <option value="inherit">Follow this instance</option>
-            <option value="days">Delete after a number of days</option>
-            <option value="forever">Keep for ever</option>
-          </select>
-
-          {retentionMode === "days" && (
-            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input
-                aria-label="Days a closed listing keeps its generated images"
-                value={retentionDays}
-                onChange={(e) => setRetentionDays(e.target.value)}
-                onBlur={commitRetentionDays}
-                disabled={isPending}
-                inputMode="decimal"
-                style={{
-                  width: "5rem",
-                  padding: "0.4rem 0.625rem",
-                  border: "1px solid var(--color-border-strong)",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  color: "var(--color-text-primary)",
-                  background: "var(--color-bg-elevated)",
-                }}
-              />
-              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                days — 0 deletes them at the next sweep
-              </span>
-            </span>
-          )}
-        </div>
-
-        {/* The period in words, whichever of the three is chosen — the same sentence the server
-            writes to its own log, from the same function, so nothing can describe one sweep two
-            ways. */}
-        <p
-          style={{
-            margin: "0.75rem 0 0",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          {retentionSentence}
-        </p>
-
-        {retentionError && (
-          <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-            {retentionError}
-          </p>
-        )}
-      </section>
+      <RetentionSection
+        title="Keep card scans of finished batches"
+        description={
+          <>
+            When every tile cut from a scanned card has become a copy or been discarded, the card can
+            never be cut again and only its file is left. Stamporama can delete that file after a
+            while — the batch keeps its tiles and still says what the card held, but the scan itself
+            is gone for good, so re-cutting it is no longer possible. Off unless you ask for it: a
+            stockbook cannot be scanned again once it has been broken up.
+          </>
+        }
+        daysLabel="Days a finished batch keeps its card scans"
+        daysHint="days after the batch is finished with — 0 deletes at the next sweep"
+        state={scanRetention}
+        disabled={isPending}
+      />
 
       <section
         style={{
