@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useParams } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
@@ -9,20 +10,24 @@ import {
   pairTilesAction,
   recutBatchAction,
 } from "@/app/actions/scans";
+import { formatItemNo } from "@/lib/item-number";
 import type { Box } from "@/lib/scan-boxes";
 import type { CutReport, ScanBatchData, ScanSheetData, ScanTileData } from "@/lib/scan-sheets";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
+import { TileIdentifyDialog } from "./tile-identify-dialog";
 import { useInvalidateLotScans, useLotScans } from "./use-lot-scans-query";
 
 /**
- * A lot's card scans (#566, ADR-0033).
+ * A lot's card scans (#566, ADR-0033) and the tiles cut from them (#567).
  *
  * The whole ingest path in one section: upload a card, review and commit its cut, upload the back
  * and let it pair by position, drag what did not pair, and re-cut from the retained scan when the
- * cut was wrong.
+ * cut was wrong — and then work through the tiles, each of which becomes a copy, joins a copy that
+ * already exists, or is discarded with a note.
  *
- * What is deliberately **not** here is turning a tile into a copy — that is #567, and until it
- * lands a tile's end is simply "unidentified".
+ * Clicking a tile opens that question (`tile-identify-dialog.tsx`); only the *new copy* answer
+ * leaves this section, because it is the lot card's own picker → condition chain, entered from a
+ * tile instead of from the **Add stamps** button.
  */
 
 interface Props {
@@ -30,6 +35,15 @@ interface Props {
   lotId: string;
   /** Only fetched while the section is open: a card of forty tiles is forty thumbnails. */
   open: boolean;
+  /** Whether the lot itself is open. A closed lot takes no new copies, but a tile can still be
+   * assigned to one of its copies or discarded — closing froze the money, not the photographs. */
+  lotOpen: boolean;
+  /** The header's tile chip, pressed (#567): show only the tiles still waiting. The chips beside
+   * it narrow the *copies* list; this one narrows the tiles, which is the list it counts. */
+  onlyUnidentified: boolean;
+  /** Take the *new copy* answer up to the lot card, which owns the stamp picker and the condition
+   * dialog every other intake goes through. */
+  onIdentifyTile: (tileId: string) => void;
   onChanged: () => void;
 }
 
@@ -40,10 +54,24 @@ interface EditorTarget {
   frontTileCount: number | null;
 }
 
-export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
+export function LotScansCard({
+  collectionId,
+  lotId,
+  open,
+  lotOpen,
+  onlyUnidentified,
+  onIdentifyTile,
+  onChanged,
+}: Props) {
   const { data, isLoading } = useLotScans(collectionId, lotId, open);
   const { invalidateLotScans } = useInvalidateLotScans();
+  // Collection URLs are slug-addressed (`/c/[collectionSlug]/…`), and what this component is handed
+  // is the internal id — so the slug for a link out to a copy comes from the route.
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  /** Which tile's three outcomes are being asked. Held by id rather than by value so the dialog
+   * re-reads the tile after a refetch instead of showing the state it had when it was opened. */
+  const [tileId, setTileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CutReport | null>(null);
@@ -59,6 +87,11 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
   const [pending, startTransition] = useTransition();
 
   const batches = data?.batches ?? [];
+  const fromAuction = data?.fromAuction ?? false;
+  const openTile = batches.flatMap((b) => b.tiles).find((t) => t.id === tileId) ?? null;
+  // Tiles whose copy is on no line of the auction description. A signal worth surfacing, not a
+  // problem to hide: the parcel holds something nobody announced.
+  const undescribed = batches.flatMap((b) => b.tiles).filter((t) => t.outsideDescription).length;
 
   const refresh = () => {
     void invalidateLotScans(collectionId);
@@ -164,6 +197,22 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
       {error && <Banner tone="error">{error}</Banner>}
       {report && <CutReportBanner report={report} onDismiss={() => setReport(null)} />}
 
+      {/* A stamp the auction description never listed (#567). The counterpart of a line marked
+          *not delivered*: between them they say exactly how the parcel differed from what was bid
+          on, which is information the collector wants rather than a discrepancy to smooth over. */}
+      {undescribed > 0 && (
+        <Banner tone="warning">
+          {undescribed === 1
+            ? "1 tile became a stamp that is on none of this auction lot's lines."
+            : `${undescribed} tiles became stamps that are on none of this auction lot's lines.`}{" "}
+          The parcel holds more than its description said.
+        </Banner>
+      )}
+
+      {onlyUnidentified && (
+        <Banner tone="info">Showing only the tiles still waiting to be identified.</Banner>
+      )}
+
       {isLoading && <Muted>Loading scans…</Muted>}
       {!isLoading && batches.length === 0 && (
         <Muted>
@@ -173,11 +222,18 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
         </Muted>
       )}
 
-      {batches.map((batch) => (
+      {batches
+        // A batch whose tiles are all dealt with has nothing to show under the chip, and an empty
+        // bordered box saying so would be the noise the chip was pressed to get away from.
+        .filter((b) => !onlyUnidentified || b.tiles.some((t) => t.state === "unidentified"))
+        .map((batch) => (
         <BatchSection
           key={batch.batchNo}
           batch={batch}
           collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          onlyUnidentified={onlyUnidentified}
+          onOpenTile={setTileId}
           busy={uploading || pending}
           onReview={(sheet, boxes, frontTileCount) =>
             setEditor({ sheet, initialBoxes: boxes, frontTileCount })
@@ -188,6 +244,28 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
           onPair={pair}
         />
       ))}
+
+      {openTile && (
+        <TileIdentifyDialog
+          collectionId={collectionId}
+          lotId={lotId}
+          tile={openTile}
+          lotOpen={lotOpen}
+          fromAuction={fromAuction}
+          onIdentifyNew={() => {
+            // The lot card takes it from here: the picker and the condition dialog are the ones
+            // every other intake goes through, and a second pair of them would be a second set of
+            // remembered choices.
+            setTileId(null);
+            onIdentifyTile(openTile.id);
+          }}
+          onDone={() => {
+            setTileId(null);
+            refresh();
+          }}
+          onClose={() => setTileId(null)}
+        />
+      )}
 
       {editor && (
         <ScanCutEditor
@@ -218,6 +296,19 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
               <>
                 The batch&rsquo;s tiles and their images are thrown away. The scans themselves are
                 kept, so the cut can be drawn again over the same card.
+                {/* Named rather than assumed: a discarded tile is the record of something the
+                    parcel held and nothing else keeps it (#567). Re-cutting is still allowed —
+                    the card is being drawn again, discards included — but not silently. */}
+                {discardedInBatch(batches, confirm.batchNo) > 0 && (
+                  <>
+                    {" "}
+                    <strong>
+                      {discardedInBatch(batches, confirm.batchNo)} discarded tile
+                      {discardedInBatch(batches, confirm.batchNo) === 1 ? "" : "s"}
+                    </strong>{" "}
+                    and their notes go with them — the only record of what the parcel held.
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -235,11 +326,22 @@ export function LotScansCard({ collectionId, lotId, open, onChanged }: Props) {
   );
 }
 
+/** How many of a batch's tiles were discarded — what a re-cut is about to take with it. */
+function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
+  return (
+    batches.find((b) => b.batchNo === batchNo)?.tiles.filter((t) => t.state === "discarded")
+      .length ?? 0
+  );
+}
+
 // ── One batch ────────────────────────────────────────────────────────────────────────────────
 
 function BatchSection({
   batch,
   collectionId,
+  collectionSlug,
+  onlyUnidentified,
+  onOpenTile,
   busy,
   onReview,
   onUploadBack,
@@ -249,6 +351,9 @@ function BatchSection({
 }: {
   batch: ScanBatchData;
   collectionId: string;
+  collectionSlug: string;
+  onlyUnidentified: boolean;
+  onOpenTile: (tileId: string) => void;
   busy: boolean;
   onReview: (
     sheet: ScanCutEditorSheet,
@@ -264,8 +369,22 @@ function BatchSection({
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
 
-  const frontTiles = batch.tiles.filter((t) => t.frontBox != null);
-  const backOnly = batch.tiles.filter((t) => t.frontBox == null);
+  // The copies list searches internal numbers, so a copy's own number is the address that reaches
+  // it (#268) — the same route "Go to purchase" takes in the other direction.
+  const copyHref = (tile: ScanTileData): string | null =>
+    tile.state === "consumed" && tile.item
+      ? `/c/${collectionSlug}/inventory?search=${tile.item.itemNo}`
+      : null;
+
+  const shown = onlyUnidentified
+    ? batch.tiles.filter((t) => t.state === "unidentified")
+    : batch.tiles;
+  const frontTiles = shown.filter((t) => t.frontBox != null);
+  const backOnly = shown.filter((t) => t.frontBox == null);
+  // Counted off every tile, not the filtered ones: what the batch says about itself must not
+  // change because a chip is pressed.
+  const waiting = batch.tiles.filter((t) => t.state === "unidentified").length;
+  const discarded = batch.tiles.filter((t) => t.state === "discarded").length;
 
   const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet => ({
     id: sheet.id,
@@ -293,6 +412,11 @@ function BatchSection({
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           {frontTiles.length} {frontTiles.length === 1 ? "tile" : "tiles"}
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
+          {waiting > 0 && ` · ${waiting} waiting`}
+          {discarded > 0 && ` · ${discarded} discarded`}
+          {/* The moment the batch was finished with. Shown because it is also the moment its
+              retained scan stopped being able to do anything (#578 is what acts on it). */}
+          {batch.doneAt && waiting === 0 && ` · done ${batch.doneAt.slice(0, 10)}`}
         </span>
         <span style={{ flex: 1 }} />
 
@@ -357,7 +481,9 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
+              copyHref={copyHref(tile)}
               droppable={dragging != null && tile.backPhotoId == null && tile.state === "unidentified"}
+              onOpen={() => onOpenTile(tile.id)}
               onDropBack={(backTileId) => {
                 setDragging(null);
                 onPair(backTileId, tile.id);
@@ -392,20 +518,119 @@ function BatchSection({
 
 // ── Tiles ────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * One tile on the card.
+ *
+ * **The strip is a map of the card on the desk**: position *n* here is position *n* on the
+ * stockbook, and that correspondence is how a tile is matched to the piece in the tweezers. So a
+ * worked tile never disappears and never moves — it steps back, keeps its square, and keeps its
+ * picture. Narrowing to what is left is the *N tiles unidentified* chip's job, not the layout's.
+ *
+ * A **consumed** tile shows its copy's front, which is the tile's own front row under its new owner
+ * (consuming reassigns `tileId → itemId`, so no picture ever went anywhere), and clicking it goes
+ * to that copy. A tile that went well must not look more broken than one that became nothing.
+ *
+ * An **unidentified** tile opens the three-outcomes dialog; a **discarded** one opens it too, where
+ * its note is written and it can be put back.
+ */
 function TileCell({
   tile,
   collectionId,
+  copyHref,
   droppable,
+  onOpen,
   onDropBack,
 }: {
   tile: ScanTileData;
   collectionId: string;
+  /** Where this tile's copy lives, for a consumed tile. Null for every other state, and for a
+   * consumed tile whose copy has since been deleted — there is nothing to reach. */
+  copyHref: string | null;
   droppable: boolean;
+  onOpen: () => void;
   onDropBack: (backTileId: string) => void;
 }) {
   const [over, setOver] = useState(false);
+  const settled = tile.state !== "unidentified";
+  // The picture follows the photo row to whoever owns it now.
+  const photoId = tile.frontPhotoId ?? tile.item?.frontPhotoId ?? null;
+
+  const style: React.CSSProperties = {
+    display: "block",
+    padding: 0,
+    textAlign: "left",
+    font: "inherit",
+    color: "inherit",
+    textDecoration: "none",
+    cursor: "pointer",
+    border: `1px solid ${
+      over
+        ? "var(--color-action-primary)"
+        : tile.outsideDescription
+          ? "var(--color-warning-border)"
+          : "var(--color-border)"
+    }`,
+    borderRadius: "0.375rem",
+    overflow: "hidden",
+    background: droppable ? "var(--color-bg-subtle)" : "transparent",
+    // A tile that has been dealt with steps back without disappearing: it is still part of the
+    // record of the card, and a discarded one is the only record there is.
+    opacity: settled ? 0.6 : 1,
+    position: "relative",
+  };
+
+  const body = (
+    <>
+      <TileImage
+        photoId={photoId}
+        collectionId={collectionId}
+        alt={`Tile ${tile.position + 1}, front`}
+        // The one honest placeholder: the copy this tile became has been deleted, so its images
+        // went with it and there is nothing left to show. Said in words, because a broken-looking
+        // square is what every consumed tile used to look like.
+        emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
+      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.25rem",
+          padding: "0.125rem 0.25rem",
+          fontSize: "0.6875rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        <span>{tile.position + 1}</span>
+        {tile.state === "consumed" ? (
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {tile.item ? formatItemNo(tile.item.itemNo) : "copy deleted"}
+          </span>
+        ) : tile.state === "discarded" ? (
+          <span>discarded</span>
+        ) : (
+          // A tile with no back is the ordinary case, not a fault: backs are optional and a card
+          // may never be turned over at all. Marked quietly rather than warned about.
+          <Icon name={tile.backPhotoId ? "check" : "noPhoto"} size="xs" />
+        )}
+      </div>
+    </>
+  );
+
+  // A consumed tile is a link, so it can be opened in a tab beside the card being worked — the
+  // rest are buttons, because they open a dialog rather than going anywhere.
+  if (copyHref) {
+    return (
+      <a href={copyHref} title={tileTitle(tile)} style={style}>
+        {body}
+      </a>
+    );
+  }
+
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       onDragOver={(e) => {
         if (!droppable) return;
         e.preventDefault();
@@ -419,37 +644,29 @@ function TileCell({
         const id = e.dataTransfer.getData("text/x-scan-tile");
         if (id) onDropBack(id);
       }}
-      title={`Tile ${tile.position + 1}${tile.backPhotoId ? " · front and back" : " · front only"}`}
-      style={{
-        border: `1px solid ${over ? "var(--color-action-primary)" : "var(--color-border)"}`,
-        borderRadius: "0.375rem",
-        overflow: "hidden",
-        background: droppable ? "var(--color-bg-subtle)" : "transparent",
-        position: "relative",
-      }}
+      title={tileTitle(tile)}
+      style={style}
     >
-      <TileImage
-        photoId={tile.frontPhotoId}
-        collectionId={collectionId}
-        alt={`Tile ${tile.position + 1}, front`}
-      />
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0.125rem 0.25rem",
-          fontSize: "0.6875rem",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        <span>{tile.position + 1}</span>
-        {/* A tile with no back is the ordinary case, not a fault: backs are optional and a card
-            may never be turned over at all. Marked quietly rather than warned about. */}
-        <Icon name={tile.backPhotoId ? "check" : "noPhoto"} size="xs" />
-      </div>
-    </div>
+      {body}
+    </button>
   );
+}
+
+function tileTitle(tile: ScanTileData): string {
+  const head = `Tile ${tile.position + 1}`;
+  if (tile.state === "consumed") {
+    if (!tile.item) {
+      return `${head} · became a copy that has since been deleted, so its images went with it`;
+    }
+    const copy = `copy ${formatItemNo(tile.item.itemNo)}`;
+    return tile.outsideDescription
+      ? `${head} · became ${copy}, which is on none of the auction lot's lines — click to open it`
+      : `${head} · became ${copy} — click to open it`;
+  }
+  if (tile.state === "discarded") {
+    return tile.note ? `${head} · discarded: ${tile.note}` : `${head} · discarded`;
+  }
+  return `${head}${tile.backPhotoId ? " · front and back" : " · front only"} — click to identify`;
 }
 
 function BackOnlyTile({
@@ -493,10 +710,14 @@ function TileImage({
   photoId,
   collectionId,
   alt,
+  emptyLabel,
 }: {
   photoId: string | null;
   collectionId: string;
   alt: string;
+  /** Said instead of the bare icon when there is a *reason* the square is empty, rather than
+   * merely no image — a consumed tile whose copy was deleted took its pictures with it. */
+  emptyLabel?: string;
 }) {
   if (!photoId) {
     return (
@@ -505,10 +726,18 @@ function TileImage({
           aspectRatio: "1",
           display: "grid",
           placeItems: "center",
+          gap: "0.125rem",
           background: "var(--color-bg-subtle)",
+          padding: "0.25rem",
+          textAlign: "center",
         }}
       >
-        <Icon name="noPhoto" size="lg" />
+        <Icon name="noPhoto" size={emptyLabel ? "sm" : "lg"} />
+        {emptyLabel && (
+          <span style={{ fontSize: "0.625rem", color: "var(--color-text-muted)" }}>
+            {emptyLabel}
+          </span>
+        )}
       </div>
     );
   }

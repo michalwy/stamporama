@@ -185,10 +185,78 @@ between correcting a cut and drawing one again.
 - What is joined stays one region. A se-tenant pair, a block, a strip: attached, so one region, one
   tile, and — once identified (#567) — **one copy with a format** (ADR-0020), never several singles.
 
+## What #567 added
+
+Identification (#567) needed **two columns and no new table**, which is the clearest measure of
+decisions 1 and 2 having been right. A tile reaches one of three ends — a new copy, a copy already
+on the lot, or a discard — and in all three the images move by `UPDATE photo SET "itemId" = …,
+"tileId" = NULL`.
+
+- `scan_tile.itemId` (`SET NULL`) — what a `consumed` tile became. Without it a consumed tile is a
+  blank square on the card with nothing to say about itself, and "this stamp was on no line of the
+  auction description" is a question the data cannot answer. `SET NULL` because deleting a copy must
+  not delete the record that a tile was worked through; the tile stays `consumed`, since its images
+  left with the copy and there is nothing to go back to.
+- `scan_sheet.batchDoneAt` — the moment the **last** tile of a batch left `unidentified`. From then
+  the batch can never be re-cut, so its retained original has no remaining function. Nothing in #567
+  reads it; #578's retention sweep does. It is **cleared** when a discard is put back or a batch is
+  re-cut, so the sweep never counts down on a batch still being worked.
+
+Two smaller calls follow from the same place. Assigning a tile to an existing copy and discarding one
+are allowed on a **closed** lot, while creating a copy is not: closing froze the money (ADR-0009 §3),
+and a photograph is not money. And the intake dialog entered from a tile drops its photo uploader —
+front and back are singleton slots per copy, so an upload arriving beside the tile's crop would be a
+second front for the same copy.
+
+### The tile dialog opens on an outcome, not on a menu of them
+
+A tile's dialog exists for one reason the intake step cannot serve: it shows **both sides at a size
+where a bad crop or an unidentifiable piece is visible**. That is what reviewing tiles is, as opposed
+to trusting the cut.
+
+What it must not do is spend a screen asking which of three answers is wanted. So it arrives already
+showing the answer its provenance makes likely — *assign* for a lot settled from an auction, whose
+copies are the lines that were bid on, and *identify* for every other tile — with the remaining two
+in the footer, one click from wherever it opened. A chooser in front of that is a screen whose entire
+content is three buttons, and a card of forty is forty of them showing nothing.
+
+### The strip is a map of the card, so a worked tile keeps its square and its picture
+
+Position *n* in the strip is position *n* on the stockbook, and that correspondence is what lets a
+tile be matched to the piece in the tweezers. Tiles therefore never disappear or renumber as work
+proceeds — narrowing to what is left belongs to the *N tiles unidentified* chip and the per-batch
+*N waiting* count, not to the layout.
+
+A consumed tile draws **its copy's front**, which is the tile's own `Photo` row under its new owner:
+consuming reassigns one column, so the picture never went anywhere and there is nothing to restore.
+Drawing an empty placeholder there — as the first cut of this did — made the tile that went perfectly
+well look more broken than the one that became nothing, which is the states read backwards. The
+single honest placeholder is a consumed tile whose **copy was later deleted** (`itemId` is `SET
+NULL`): its images left with the copy, and the square says that in words.
+
+**Discard acts immediately and asks for nothing.** On a parcel full of junk it is the frequent
+answer, and a note form standing in front of it would make the cheap outcome the expensive one — the
+way a queue stops being worked through. The note is optional and written afterwards from the settled
+view, on the rare tile whose reason will not be remembered. This is safe precisely because the
+discard is reversible: *Put back in the queue* is in the same dialog, and an empty note is stored as
+no note rather than as an empty string.
+
+## Consequences of the second half
+
+- **A re-cut still destroys discarded tiles.** Only `consumed` refuses it, and that asymmetry is
+  deliberate: re-cutting means the card is being drawn again, discards included. But a discarded tile
+  is the only record of what a sight-unseen parcel held, so the confirmation names how many are about
+  to go rather than taking them quietly.
+- **A tile that matches no auction line is derived, never flagged.** It is recomputed from the copy's
+  stamp against the lot's `AuctionLotLine` rows, so correcting a mis-identification corrects the
+  signal too. A lot with no lines at all says nothing about any tile, rather than calling all of them
+  undescribed.
+
 ## Still open
 
 - The batch has no name of its own. A lot with six cards is *batch 1…6*, which is enough while a card
   is worked through immediately after being scanned and may not be later.
 - Nothing prunes a sheet once every tile cut from it has been consumed. Keeping it is the cautious
   call and matches "the scan is what makes a re-cut possible", but a collection that ingests by scan
-  for a year will hold a great many originals it can no longer re-cut anything into.
+  for a year will hold a great many originals it can no longer re-cut anything into. #567 records
+  *when* each batch became prunable (`batchDoneAt`); #578 is what acts on it.

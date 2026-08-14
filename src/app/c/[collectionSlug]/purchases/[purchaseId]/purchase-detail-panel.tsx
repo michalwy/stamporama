@@ -77,6 +77,7 @@ import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { IntakeHoldingsLine } from "./intake-holdings-line";
 import { LotScansCard } from "./lot-scans-card";
+import { useInvalidateLotScans } from "./use-lot-scans-query";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -1798,9 +1799,19 @@ function LotCard({
   // Optional filter narrowing the copies list to just the blockers ("unpriced"), the not-yet-sorted
   // copies ("to-sort"), or copies still needing a photo ("no-photos", #177), toggled by the matching
   // header chip (#121).
+  // `tiles` is the odd one out and deliberately so (#567): the three chips beside it narrow the
+  // *copies* list, this one narrows the scan tiles above it — which is the list it counts. It
+  // resolves to `none` for the copy query, so the rows below stay whole while the tiles are being
+  // worked through.
   const [filterMode, setFilterMode] = useState<
-    "none" | "unpriced" | "to-sort" | "no-photos"
+    "none" | "unpriced" | "to-sort" | "no-photos" | "tiles"
   >("none");
+  /** The tile whose *new copy* answer is being taken through the picker → condition chain (#567).
+   * Set alongside `dialog`, cleared when the chain finishes or is abandoned: it is what routes the
+   * submit to `identifyTileAction` instead of `intakeStampsAction`, and a stale one would file the
+   * next hand-picked stamp against a tile that is already a copy. */
+  const [intakeTileId, setIntakeTileId] = useState<string | null>(null);
+  const { invalidateLotScans } = useInvalidateLotScans();
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
@@ -1816,6 +1827,12 @@ function LotCard({
   useEffect(() => {
     if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [highlighted]);
+
+  // The tile filter retires with the chip that turns it on (#567). Derived rather than reset,
+  // because the chip is the only control for it: working the last tile through removes the chip,
+  // and a filter still in force behind it would leave the Card scans section saying "showing only
+  // the tiles still waiting" over nothing, with nothing to press to get out of it.
+  const onlyUnidentifiedTiles = filterMode === "tiles" && lot.unidentifiedTileCount > 0;
 
   const copy = useCopyEditing({
     collectionId,
@@ -1874,7 +1891,7 @@ function LotCard({
   // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
   // (#177) stays available regardless of lot status.
   const filter: LotCopyFilter =
-    filterMode === "none"
+    filterMode === "none" || filterMode === "tiles"
       ? "none"
       : filterMode === "no-photos"
         ? "no-photos"
@@ -2136,15 +2153,34 @@ function LotCard({
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
-        {/* Scan tiles still waiting to become something (#566). A plain chip, not a filter: the
-            tiles are not copies and the chips beside it narrow the copies list, so making this one
-            clickable would promise a narrowing it cannot do. */}
+        {/* Scan tiles still waiting to become something (#566/#567). It narrows like the chips
+            beside it, but over the **tiles** rather than the copies — the list it counts. That is
+            also why pressing it expands the card: the tiles live in the Card scans section, and a
+            filter over a section nobody can see is a click that appears to do nothing. */}
         {lot.unidentifiedTileCount > 0 && (
-          <Tooltip content="Scan tiles not yet identified into copies. Closing the lot is still allowed — a tile has no catalogue price and so no weight in the cost split.">
-            <span style={tintChip("warning", "").style}>
+          <Tooltip
+            content={
+              filterMode === "tiles"
+                ? "Showing only the tiles still waiting — click to show every tile"
+                : "Scan tiles not yet identified into copies — click to work through just those. Closing the lot is still allowed: a tile has no catalogue price and so no weight in the cost split."
+            }
+          >
+            <button
+              type="button"
+              onClick={() => {
+                changeFilter(filterMode === "tiles" ? "none" : "tiles");
+                if (filterMode !== "tiles" && !expanded) onToggleExpanded();
+              }}
+              style={{
+                ...tintChip("warning", "").style,
+                cursor: "pointer",
+                fontWeight: filterMode === "tiles" ? 700 : 500,
+                boxShadow: filterMode === "tiles" ? "0 0 0 1px var(--color-warning)" : undefined,
+              }}
+            >
               <Icon name="scan" size="sm" /> {lot.unidentifiedTileCount} tile
               {lot.unidentifiedTileCount === 1 ? "" : "s"} unidentified
-            </span>
+            </button>
           </Tooltip>
         )}
         {toSortCount > 0 && open && (
@@ -2293,6 +2329,13 @@ function LotCard({
             collectionId={collectionId}
             lotId={lot.id}
             open={expanded}
+            lotOpen={open}
+            onlyUnidentified={onlyUnidentifiedTiles}
+            onIdentifyTile={(tileId) => {
+              setIntakeTileId(tileId);
+              setCopyError(undefined);
+              setDialog("picker");
+            }}
             onChanged={() => router.refresh()}
           />
         </div>
@@ -2438,7 +2481,11 @@ function LotCard({
             setCopyError(undefined);
             setDialog("intake-condition");
           }}
-          onPickIssue={(picked: PickedIssue) => {
+          // A tile is one piece — one region of one card — so a whole-checklist expansion has
+          // nothing to attach its images to. Omitted rather than refused: the picker only draws
+          // the "add this whole set" buttons when it is given somewhere to send them, so entering
+          // from a tile simply never offers the answer that could not work.
+          onPickIssue={intakeTileId ? undefined : (picked: PickedIssue) => {
             setPending({
               kind: "checklist",
               checklistId: picked.checklistId,
@@ -2448,7 +2495,10 @@ function LotCard({
             setCopyError(undefined);
             setDialog("intake-condition");
           }}
-          onClose={() => setDialog("none")}
+          onClose={() => {
+            setDialog("none");
+            setIntakeTileId(null);
+          }}
         />
       )}
 
@@ -2462,6 +2512,11 @@ function LotCard({
           locations={locations}
           isPending={isPending}
           error={copyError}
+          // Identifying a tile: its crops **are** this copy's front and back, so the uploader is
+          // out of the way (a second front would collide with the copy's one front slot), and the
+          // submit goes to the tile action instead.
+          hidePhotos={intakeTileId != null}
+          submitLabel={intakeTileId ? "Identify the tile" : undefined}
           onBack={() => {
             if (!isPending) {
               setCopyError(undefined);
@@ -2473,8 +2528,18 @@ function LotCard({
             setCopyError(undefined);
             if (pending.kind === "stamp") fd.set("stampId", pending.stampId);
             else fd.set("checklistId", pending.checklistId);
+            const tileId = intakeTileId;
             onRun(
               async () => {
+                if (tileId) {
+                  const { identifyTileAction } = await import("@/app/actions/scans");
+                  const r = await identifyTileAction(tileId, fd);
+                  if (r.status === "error") setCopyError(r.message);
+                  // The tile's own section reads a separate query, so the copy invalidation the
+                  // shared runner does would leave the card showing a tile that is already a copy.
+                  else void invalidateLotScans(collectionId);
+                  return r;
+                }
                 const { intakeStampsAction } = await import("@/app/actions/purchases");
                 const r = await intakeStampsAction(lot.id, fd);
                 if (r.status === "error") setCopyError(r.message);
@@ -2483,6 +2548,7 @@ function LotCard({
               () => {
                 setDialog("none");
                 setPending(null);
+                setIntakeTileId(null);
               }
             );
           }}
@@ -3463,6 +3529,10 @@ interface IntakeConditionDialogProps {
    * dialog only captures the choice and advances to the price step (so "Continue", not
    * "Add copy"). Defaults to the copy-count label. */
   submitLabel?: string;
+  /** Identifying a **scan tile** (#567): the tile's own crops become this copy's front and back,
+   * so the uploader is left out. Not cosmetic — front and back are singleton slots per copy, and
+   * an upload arriving beside the tile's crop would be a second front for the same copy. */
+  hidePhotos?: boolean;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -3491,6 +3561,7 @@ function IntakeConditionDialog({
   isPending,
   error,
   submitLabel,
+  hidePhotos,
   onBack,
   onClose,
   onSubmit,
@@ -3559,6 +3630,8 @@ function IntakeConditionDialog({
   // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
   // onto the FormData on submit; Save waits while any staged upload is still in flight.
   const singleStamp = selection.kind === "stamp";
+  // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
+  const photos = singleStamp && !hidePhotos;
   const photoValueRef = useRef<PhotoEditorValue>({
     changeSet: { add: [], update: [], remove: [] },
     uploading: false,
@@ -3583,7 +3656,7 @@ function IntakeConditionDialog({
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
     fd.set("forTrade", String(disposition.forTrade));
-    if (singleStamp) {
+    if (photos) {
       fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
     }
     onSubmit(fd);
@@ -3758,8 +3831,9 @@ function IntakeConditionDialog({
 
           {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
               distinct copies, so shared photos would be ambiguous. Eager staged uploads; the
-              pending change-set applies to the created copy on submit. */}
-          {singleStamp && (
+              pending change-set applies to the created copy on submit. Absent entirely when the
+              copy is being identified from a scan tile (#567), whose crops it already gets. */}
+          {photos && (
             <div style={{ marginTop: "0.75rem" }}>
               <LabelWithError htmlFor="">Photos (optional)</LabelWithError>
               <PhotoEditor

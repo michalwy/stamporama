@@ -23,7 +23,7 @@ export async function GET(
 
   const { lotId } = await params;
   try {
-    return NextResponse.json({ batches: await listLotScans(session.user.id, lotId) });
+    return NextResponse.json(await listLotScans(session.user.id, lotId));
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

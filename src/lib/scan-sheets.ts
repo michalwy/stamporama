@@ -35,12 +35,21 @@ import { pairByPosition, readingOrder, type Box } from "./scan-boxes";
 export class ScanAuthError extends Error {}
 export class ScanValidationError extends Error {}
 
-/** A tile's three ends (#567 reaches the latter two; #566 only ever writes the first). */
+/** A tile's three ends. `scan-tiles.ts` is what moves a tile out of the first (#567). */
 export type ScanTileState = "unidentified" | "consumed" | "discarded";
 
 export type SheetSide = "front" | "back";
 
 // ── Authorization ─────────────────────────────────────────────────────────────────────────────
+
+/** Shared with `scan-tiles.ts` (#567), which works on the same lots through the same check rather
+ * than growing a second one that could drift from this. */
+export async function assertScanLotOwner(
+  ownerId: string,
+  lotId: string
+): Promise<{ collectionId: string; status: string }> {
+  return assertLotOwner(ownerId, lotId);
+}
 
 async function assertLotOwner(
   ownerId: string,
@@ -658,7 +667,15 @@ export async function recutBatch(
     );
   }
 
-  return { discarded: await deleteTiles({ lotId, batchNo }) };
+  const discarded = await deleteTiles({ lotId, batchNo });
+  // The batch is being drawn again, so it is no longer finished with (#567) — clearing the stamp
+  // is what keeps #578 from sweeping away the original a re-cut is about to be taken from. A batch
+  // whose tiles were all *discarded* is exactly the one that reaches here already stamped.
+  await prisma.scanSheet.updateMany({
+    where: { lotId, batchNo, batchDoneAt: { not: null } },
+    data: { batchDoneAt: null },
+  });
+  return { discarded };
 }
 
 /**
@@ -790,6 +807,18 @@ export interface ScanTileData {
   frontBox: Box | null;
   backBox: Box | null;
   note: string | null;
+  /** The copy a `consumed` tile became (#567). Null on every other tile, and also on a consumed
+   * one whose copy was deleted afterwards — the tile stays consumed either way, because its images
+   * left with the copy.
+   *
+   * `frontPhotoId` is that copy's front, which **is** the tile's old front row under its new owner:
+   * consuming a tile reassigns `tileId → itemId`, so the picture never went anywhere. The strip
+   * follows it there rather than drawing an empty square over a tile that went perfectly well. */
+  item: { id: string; itemNo: number; frontPhotoId: string | null } | null;
+  /** True when this tile's copy is for a stamp on **none** of the settled auction lot's lines
+   * (#567): the parcel holds something its description never announced. Information rather than a
+   * problem to hide — always false on a lot that came from no auction. */
+  outsideDescription: boolean;
 }
 
 export interface ScanBatchData {
@@ -797,6 +826,17 @@ export interface ScanBatchData {
   front: ScanSheetData | null;
   back: ScanSheetData | null;
   tiles: ScanTileData[];
+  /** When the last tile of this batch left `unidentified` (#567), or null while any is still
+   * waiting. Read from the batch's sheets, which is where it is stamped. */
+  doneAt: string | null;
+}
+
+export interface LotScansData {
+  batches: ScanBatchData[];
+  /** Whether this lot was transcribed from a won auction lot (ADR-0021) — which is what makes
+   * "assign this tile to a copy already on the lot" the ordinary path rather than the exception:
+   * settlement created identified copies that need photographs, not identification. */
+  fromAuction: boolean;
 }
 
 /** Every batch on a lot, newest first — the shape the lot's Scans card renders and the review
@@ -804,8 +844,17 @@ export interface ScanBatchData {
 export async function listLotScans(
   ownerId: string,
   lotId: string
-): Promise<ScanBatchData[]> {
+): Promise<LotScansData> {
   await assertLotOwner(ownerId, lotId);
+
+  // The auction lines this parcel was described by, when it came from a settled sale. Read as a
+  // set of stamp ids, because the only question asked of it is whether a copy identified from a
+  // tile appears on it at all.
+  const auctionLot = await prisma.auctionLot.findUnique({
+    where: { purchaseLotId: lotId },
+    select: { lines: { select: { stampId: true } } },
+  });
+  const describedStampIds = new Set(auctionLot?.lines.map((l) => l.stampId) ?? []);
 
   const [sheets, tiles] = await Promise.all([
     prisma.scanSheet.findMany({
@@ -818,6 +867,7 @@ export async function listLotScans(
         height: true,
         viewWidth: true,
         viewHeight: true,
+        batchDoneAt: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "desc" },
@@ -839,6 +889,15 @@ export async function listLotScans(
         backW: true,
         backH: true,
         photos: { select: { id: true, role: true } },
+        item: {
+          select: {
+            id: true,
+            itemNo: true,
+            stampId: true,
+            // The very row this tile handed over, now owned by the copy.
+            photos: { where: { role: "front" }, select: { id: true }, take: 1 },
+          },
+        },
       },
       orderBy: [{ batchNo: "desc" }, { position: "asc" }],
     }),
@@ -848,7 +907,7 @@ export async function listLotScans(
   const batchOf = (batchNo: number): ScanBatchData => {
     let b = batches.get(batchNo);
     if (!b) {
-      b = { batchNo, front: null, back: null, tiles: [] };
+      b = { batchNo, front: null, back: null, tiles: [], doneAt: null };
       batches.set(batchNo, b);
     }
     return b;
@@ -867,6 +926,8 @@ export async function listLotScans(
     const batch = batchOf(s.batchNo);
     if (data.side === "front") batch.front = data;
     else batch.back = data;
+    // Both sheets of a batch are stamped together, so either one answers for it.
+    if (s.batchDoneAt) batch.doneAt = s.batchDoneAt.toISOString();
   }
 
   for (const t of tiles) {
@@ -879,10 +940,25 @@ export async function listLotScans(
       frontBox: boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH),
       backBox: boxOrNull(t.backX, t.backY, t.backW, t.backH),
       note: t.note,
+      item: t.item
+        ? {
+            id: t.item.id,
+            itemNo: t.item.itemNo,
+            frontPhotoId: t.item.photos[0]?.id ?? null,
+          }
+        : null,
+      // Only a lot with an auction description can disagree with one. A lot with no lines at all
+      // (a hand-entered purchase) says nothing about any tile, rather than saying they are all
+      // undescribed.
+      outsideDescription:
+        describedStampIds.size > 0 && t.item != null && !describedStampIds.has(t.item.stampId),
     });
   }
 
-  return [...batches.values()].sort((a, b) => b.batchNo - a.batchNo);
+  return {
+    batches: [...batches.values()].sort((a, b) => b.batchNo - a.batchNo),
+    fromAuction: auctionLot != null,
+  };
 }
 
 function boxOrNull(

@@ -239,11 +239,68 @@ card redrawn.
 
 **Delete batch** removes the tiles *and* the scans. Re-cut is almost always what you want instead.
 
+Re-cutting is **refused once a tile has become a copy**: that copy holds the tile's very images, so
+throwing the tile away would take the copy's front and back with it. Discarded tiles have no such
+protection — the card is being drawn again, discards included — so the confirmation tells you how
+many discards and notes are about to go with them.
+
+#### Working through the tiles
+
+Click a tile. Its front and back fill the dialog, big enough to see a crop that took half a stamp or
+a piece nobody could identify — which is the whole reason for reviewing tiles rather than trusting
+the cut, since the intake step that follows never shows them.
+
+The dialog **opens on the likely answer rather than asking which one you want**, and the other two
+are always one click away in its footer. There are three:
+
+- **Identify as a new copy** — the stockbook path, and what the dialog opens on for an ordinary
+  lot. It leads into the same browse popup and condition step as
+  [Add stamps](#identifying-stamps-intake), with the same remembered choices, and the tile's images
+  move onto the copy it creates. There is no photo uploader in that step, because the pictures are
+  already in hand. A whole-set button is not offered either: a tile is one piece.
+- **Assign to a copy on this lot** — the auction path, and what the dialog opens on for a lot that
+  came from [settling an auction sale](auctions.md#settling-a-parcel-into-a-purchase). Such a lot
+  already holds identified copies, because the contents had to be described in order to bid. Those
+  copies need *photographs*, not identification, so you pick from the lot's own short list of named
+  lines — matching pictures against ten known stamps rather than identifying from scratch. Each row
+  says what that copy is still missing (*no photos*, *front only*). This stays available on a
+  **closed** lot: closing froze the money, not the photographs.
+- **Discard** — junk, damaged beyond interest, unidentifiable. One click, and it asks for nothing:
+  on a parcel full of junk this is the frequent answer, and it is safe to make it that cheap because
+  it is reversible — **Put back in the queue** is in the same dialog. The tile **keeps its image**,
+  stops counting as unidentified so it no longer nags before you close, and survives the lot
+  closing. For a stockbook bought sight-unseen these tiles are the only record of what was actually
+  inside; a discard is evidence, not a dismissal.
+
+A **note** on a discard is optional and written afterwards: click the discarded tile again and the
+same dialog has the field. Worth doing on the piece whose reason you will not remember in a month
+(*thinned*, *faked overprint*), and worth skipping on the forty that were simply junk.
+
+**Worked tiles stay where they are.** The strip is a map of the card on your desk — tile 7 on screen
+is the seventh piece on the stockbook — so nothing disappears or shuffles up as you go, which is what
+lets you keep matching a tile to the piece in your tweezers. A tile you have dealt with simply steps
+back: it keeps its picture, and the label under it says which copy it became or that it was
+discarded. Clicking a copy's tile opens that copy; clicking a discarded one opens its note.
+
+The picture on a consumed tile is the copy's own front photograph — the same image, which moved to
+the copy rather than being duplicated, so you will see it again on the copy's row below. The only
+tile drawn empty is one whose copy you later **deleted**: its images went with the copy, and the tile
+says so rather than showing a broken square.
+
+The lot header's **N tiles unidentified** chip is also a filter — press it to show only the tiles
+still waiting, and the card expands if it was collapsed. Unlike the chips beside it, this one
+narrows the *tiles*, not the copies list, because the tiles are what it counts.
+
+**A tile that matches no auction line is worth knowing about.** If a lot came from a settled sale
+and a tile turns out to be a stamp none of its lines described, the Card scans section says so. That
+is not an error to correct: together with a line marked *not delivered*, it is exactly how the app
+tells you the parcel differed from what you bid on.
+
 #### Tiles and closing a lot
 
 A tile is not a copy: it has no stamp, no catalogue price and no share of the lot's cost. The lot
 header shows **N tiles unidentified** and the close dialog repeats it, but closing is never blocked
-by tiles — the cost split is correct without them. They survive the close.
+by tiles — the cost split is correct without them. They survive the close, discarded ones included.
 
 ### Identifying stamps (intake)
 

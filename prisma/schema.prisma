@@ -1306,6 +1306,10 @@ model Item {
   offerPhotoAttachmentTiles OfferPhotoAttachmentTile[]
   /** Platforms this copy is deliberately never listed on (#506). */
   platformExclusions ItemPlatformExclusion[]
+  /** Scan tiles this copy was identified from (#567). Normally none or one; several when two
+   * tiles of the same piece — a front card and a back card cut as separate batches — were both
+   * assigned to it. */
+  scanTiles ScanTile[]
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -1575,6 +1579,13 @@ model ScanSheet {
   /** The retained original's size, counted in the collection's storage total: it is the largest
    * object the app stores and it would be dishonest for it to be the invisible one. */
   sizeBytes      Int
+  /** When the **last** tile of this batch left `unidentified` (#567) — consumed into a copy or
+   * discarded. From that moment the batch can never be re-cut (a consumed tile refuses it), so the
+   * retained original has no remaining function. Nothing reads it yet; #578's retention sweep is
+   * what will, on the closed-offer photos' TTL-after-a-terminal-state pattern (#512). Written now
+   * because deriving it from the tiles afterwards is fragile and adding the column later is a
+   * migration. Cleared again if a tile ever returns to `unidentified`. */
+  batchDoneAt    DateTime?
   createdAt      DateTime @default(now())
 
   lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
@@ -1604,9 +1615,14 @@ model ScanTile {
   /** Reading order within the batch: rows by top edge within a tolerance taken from the median box
    * height, each row left to right. Assigned at commit and stable afterwards. */
   position     Int
-  /** unidentified | consumed | discarded. Only `unidentified` is reachable in #566; the other two
-   * are #567's. */
+  /** unidentified | consumed | discarded (#567). `consumed` means the tile became a copy and
+   * handed it these very images; `discarded` means it became nothing and keeps them. */
   state        String   @default("unidentified")
+  /** The copy a `consumed` tile became (#567) — created from it, or an already-identified copy on
+   * the lot that needed photographs rather than identification. `SetNull` rather than cascade: a
+   * deleted copy must not take the record of the tile with it, and the tile stays `consumed`
+   * because its images left with the copy and there is nothing to go back to. */
+  itemId       String?
   /** Where the front came from. Null on a **back-only** tile: an unmatched back box becomes a tile
    * of its own so it can be dragged onto a front tile, which is the manual pairing path. */
   frontSheetId String?
@@ -1619,11 +1635,13 @@ model ScanTile {
   backY        Int?
   backW        Int?
   backH        Int?
-  /** #567 writes the reason a tile was discarded. Nothing sets it here. */
+  /** Why a tile was discarded (#567) — junk, damaged beyond interest, unidentifiable. For a
+   * stockbook bought sight-unseen this is the only record of what was actually inside. */
   note         String?
   createdAt    DateTime @default(now())
 
   lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  item       Item?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
   /** `Restrict`: a sheet cannot be deleted out from under the tiles cut from it. */
   frontSheet ScanSheet?  @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
   backSheet  ScanSheet?  @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
@@ -1635,6 +1653,7 @@ model ScanTile {
   @@index([lotId])
   @@index([lotId, batchNo])
   @@index([lotId, state])
+  @@index([itemId])
   @@map("scan_tile")
 }
 

@@ -478,8 +478,13 @@ async function applyPhotoChangeSetForOwner(
 /** Seed a stamp's `main` image from a copy's front photo when the stamp has none yet (#149).
  * A no-op when the copy isn't identified to a stamp, carries a non-default physical format
  * (#346), or the stamp already has any photo. Reuses `promoteCopyPhotoToStamp`, so the stamp
- * photo is an independent duplicate with its own bytes. */
-async function autoSeedStampMainFromFront(
+ * photo is an independent duplicate with its own bytes.
+ *
+ * Exported for scan-tile identification (#567), which gives a copy its front photo by reassigning
+ * a tile's `Photo` row rather than by going through a change-set — the same event, arriving by a
+ * different road, and a stamp that stayed imageless only because the picture came off a card scan
+ * would be a difference nobody could explain. */
+export async function autoSeedStampMainFromFront(
   ownerId: string,
   itemId: string,
   frontPhotoId: string

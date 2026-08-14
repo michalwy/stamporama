@@ -490,7 +490,7 @@ describe("scan sheet ingest (#566)", () => {
     const front = await uploadFront(lotId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
-    const batches = await listLotScans(userId, lotId);
+    const { batches } = await listLotScans(userId, lotId);
     assert.equal(batches.length, 1);
     assert.equal(batches[0].batchNo, 1);
     assert.equal(batches[0].back, null);

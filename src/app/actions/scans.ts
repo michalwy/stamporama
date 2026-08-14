@@ -10,6 +10,13 @@ import {
   recutBatch,
   type CutReport,
 } from "@/lib/scan-sheets";
+import {
+  assignTileToCopy,
+  discardTile,
+  identifyTileAsNewCopy,
+  noteDiscardedTile,
+  undiscardTile,
+} from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
 
 // Scan sheet ingest actions (#566, ADR-0033). JSON-shaped, like everything else under
@@ -81,6 +88,124 @@ export async function recutBatchAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to re-cut the batch. Please try again.",
+    };
+  }
+}
+
+// ── Identifying a tile (#567) ─────────────────────────────────────────────────────────────────
+
+/** A tile that became a copy answers with which one, so the screen can name it instead of saying
+ * only that something happened. */
+export type TileOutcomeActionState =
+  | { status: "success"; itemId: string; itemNo: number }
+  | { status: "error"; message: string };
+
+/**
+ * Identify a tile into a **new copy** — the stockbook path, and ordinary intake entered from a
+ * tile instead of from a stamp picker.
+ *
+ * `FormData` rather than a JSON argument because it is the very form the lot's condition dialog
+ * already submits to `intakeStampsAction`: same fields, same remembered choices, one shape.
+ * Deliberately **no** `photoChangeSet` — the tile's crops are this copy's front and back.
+ */
+export async function identifyTileAction(
+  tileId: string,
+  formData: FormData
+): Promise<TileOutcomeActionState> {
+  const session = await getSession();
+  const str = (name: string): string | null => {
+    const v = formData.get(name);
+    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  };
+  const stampId = str("stampId");
+  if (!stampId) return { status: "error", message: "Select a stamp to identify this tile as." };
+  const conditionId = str("conditionId");
+  if (!conditionId) return { status: "error", message: "A condition must be selected." };
+  try {
+    const outcome = await identifyTileAsNewCopy(session.user.id, tileId, {
+      stampId,
+      conditionId,
+      certificateStatusId: str("certificateStatusId"),
+      locationId: str("locationId"),
+      locationRef: str("locationRef"),
+      formatId: str("formatId"),
+      inCollection: formData.get("inCollection") === "true",
+      forSale: formData.get("forSale") === "true",
+      forTrade: formData.get("forTrade") === "true",
+    });
+    return { status: "success", ...outcome };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to identify the tile. Please try again.",
+    };
+  }
+}
+
+/** Give a tile's images to a copy already on the lot — the auction path, where settlement has
+ * already created identified copies that need photographs rather than identification. */
+export async function assignTileAction(
+  tileId: string,
+  itemId: string
+): Promise<TileOutcomeActionState> {
+  const session = await getSession();
+  try {
+    const outcome = await assignTileToCopy(session.user.id, tileId, itemId);
+    return { status: "success", ...outcome };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to assign the tile. Please try again.",
+    };
+  }
+}
+
+/** Record that a tile became nothing, and why. The image stays; the tile leaves the unidentified
+ * count and survives the lot closing, because it is evidence rather than a queue item. */
+export async function discardTileAction(
+  tileId: string,
+  note: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await discardTile(session.user.id, tileId, note);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to discard the tile. Please try again.",
+    };
+  }
+}
+
+/** Write or clear a discarded tile's note. Discarding itself asks for nothing — this is where the
+ * rare tile that deserves a sentence gets one, afterwards. */
+export async function noteTileAction(
+  tileId: string,
+  note: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await noteDiscardedTile(session.user.id, tileId, note);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the note. Please try again.",
+    };
+  }
+}
+
+/** Put a discarded tile back in the queue. */
+export async function undiscardTileAction(tileId: string): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await undiscardTile(session.user.id, tileId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to restore the tile. Please try again.",
     };
   }
 }

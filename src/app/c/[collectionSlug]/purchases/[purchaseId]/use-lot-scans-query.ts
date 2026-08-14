@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ScanBatchData } from "@/lib/scan-sheets";
+import type { LotScansData } from "@/lib/scan-sheets";
 
 // Scan batches on a lot (#566). Loaded only while the lot card is open and its Scans section is
 // expanded: a card of forty tiles is forty thumbnails, and a collapsed lot has nowhere to draw them.
@@ -12,7 +12,7 @@ export const lotScansKeys = {
 };
 
 export function useLotScans(collectionId: string, lotId: string, enabled = true) {
-  return useQuery<{ batches: ScanBatchData[] }>({
+  return useQuery<LotScansData>({
     queryKey: lotScansKeys.lot(collectionId, lotId),
     queryFn: async () => {
       const res = await fetch(
