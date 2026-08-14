@@ -24,6 +24,7 @@ import {
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import { getStorage, variantKey } from "../../src/lib/storage";
+import { setCollectionClosedOfferPhotoTtl } from "../../src/lib/collections";
 
 // As in the generation test: point the filesystem backend at a throwaway directory rather than the
 // repo's `.data`. `dataDir()` reads the env var on every call, so setting it before any test body
@@ -347,5 +348,82 @@ describe("closed-offer photo cleanup (#512)", () => {
 
   it("leaves the set alone — the purge only ever touches images", async () => {
     assert.equal(await prisma.offerSet.count({ where: { offerId, id: setId } }), 1);
+  });
+
+  // Retention per collection (#577). Everything above this point runs with the column unset, which
+  // is the case that matters most: an instance that sets the environment variable and touches
+  // nothing must behave exactly as it did before the column existed. These cases are what the
+  // column adds on top of that.
+  describe("resolved per collection (#577)", () => {
+    // The offer is withdrawn and holds two freshly generated images by the time these run.
+    const wellPast = () => new Date(Date.now() + 365 * DAY_MS);
+
+    after(async () => {
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, null);
+      delete process.env.STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS;
+    });
+
+    it("passes over a collection that keeps for ever, while the instance would purge at once", async () => {
+      process.env.STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS = "0";
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, "off");
+
+      const freed = await purgeClosedOfferPhotos(wellPast(), { offerId });
+      assert.deepEqual(freed, { offers: 0, photos: 0, bytes: 0 });
+      assert.equal(await prisma.photo.count({ where: { offerId, kind: "generated" } }), 2);
+    });
+
+    it("inherits the operator's variable again once the collection's answer is cleared", async () => {
+      // The instance says keep for ever; the collection has no opinion, so neither does the sweep.
+      process.env.STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS = "off";
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, null);
+      assert.equal(
+        (
+          await prisma.collection.findUniqueOrThrow({
+            where: { id: collectionId },
+            select: { closedOfferPhotoTtlDays: true },
+          })
+        ).closedOfferPhotoTtlDays,
+        null,
+        "clearing stores null — no opinion, not a default"
+      );
+
+      const freed = await purgeClosedOfferPhotos(wellPast(), { offerId });
+      assert.deepEqual(freed, { offers: 0, photos: 0, bytes: 0 });
+      assert.equal(await prisma.photo.count({ where: { offerId, kind: "generated" } }), 2);
+    });
+
+    it("refuses a period that is not in the grammar, rather than storing one nothing can read", async () => {
+      await assert.rejects(
+        () => setCollectionClosedOfferPhotoTtl(userId, collectionId, "soon"),
+        /number of days/
+      );
+      assert.equal(
+        (
+          await prisma.collection.findUniqueOrThrow({
+            where: { id: collectionId },
+            select: { closedOfferPhotoTtlDays: true },
+          })
+        ).closedOfferPhotoTtlDays,
+        null,
+        "a rejected value never reached the column"
+      );
+    });
+
+    it("sweeps on the collection's own period, over an instance that would keep for ever", async () => {
+      process.env.STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS = "off";
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, "7");
+
+      // Inside the collection's own week, nothing goes — the period is the collection's, and it is
+      // read as a period rather than as a flag.
+      assert.deepEqual(
+        await purgeClosedOfferPhotos(new Date(Date.now() + 6 * DAY_MS), { offerId }),
+        { offers: 0, photos: 0, bytes: 0 }
+      );
+
+      const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 8 * DAY_MS), { offerId });
+      assert.equal(freed.offers, 1);
+      assert.equal(freed.photos, 2);
+      assert.equal(await prisma.photo.count({ where: { offerId, kind: "generated" } }), 0);
+    });
   });
 });

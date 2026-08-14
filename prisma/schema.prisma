@@ -44,6 +44,15 @@ model Collection {
   // How many digits an internal copy number is padded to for display (#268). Purely a display
   // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
   itemNoPad    Int      @default(5)
+  // How long this collection's closed offers keep their generated listing images (#577), holding
+  // **exactly** what `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` holds — `off`/`never` for keep for
+  // ever, `0` to purge at the next sweep, otherwise days — so one parser reads both and the two
+  // sides cannot come to disagree. This is the first **nullable** setting on `Collection`, and the
+  // difference is the point: `itemNoPad` and its kind have a default that means something for every
+  // collection, while this one has to be able to say *I have no opinion, use the instance's*, which
+  // no default can express. Null therefore defers to the environment variable and then to the
+  // built-in seven days, so an operator who configured one keeps exactly what they configured.
+  closedOfferPhotoTtlDays String?
   // The band a bid recommendation is stated as, in percent of the lot's fair figure (#508;
   // ADR-0029 §3, §4). Below the floor a lot is a bargain, past the ceiling it belongs to somebody
   // else. A percentage of `fair` rather than the market's own spread: at the sample sizes this

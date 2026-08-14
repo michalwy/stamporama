@@ -24,21 +24,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * How long a closed offer keeps its generated images, in milliseconds, or `null` when the purge is
  * switched off entirely.
  *
- * Reads `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS`, the same shape as the staging-upload TTL
- * (`STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS`) with two additions the storage question needs:
+ * The grammar is the same shape as the staging-upload TTL (`STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS`)
+ * with two additions the storage question needs. **The two are easy to read backwards, so plainly:**
  *
- *  - `off` / `never` (any case) disables the sweep — an instance with room to spare keeps every
- *    image it ever rendered, which is exactly what the app did before this existed;
- *  - `0` purges at the next sweep, for an instance that is short of disk and wants a closed
- *    listing's images gone as soon as it is closed.
+ *  - `off` / `never` (any case) → `null`, which **keeps every image for ever** — an instance with
+ *    room to spare, which is exactly what the app did before this existed;
+ *  - `0` → `0`, which **purges at the next sweep** (the cutoff is `now`), for a collection that is
+ *    short of disk and wants a closed listing's images gone as soon as it is closed.
+ *
+ * Since #577 the same grammar arrives from three places rather than one — the collection's own
+ * `closedOfferPhotoTtlDays`, then the environment variable, then the built-in default — which is
+ * why this takes the string rather than reading `process.env` itself. `offer-photo-retention.ts`
+ * does the resolving, and is the only place that names the variable.
  *
  * Anything unparseable falls back to the default rather than throwing: this runs at boot in a
  * background timer, and a typo in an env var is no reason to start deleting on a schedule nobody
  * asked for — or to take the app down.
  */
-export function closedOfferPhotoTtlMs(
-  raw: string | undefined = process.env.STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS
-): number | null {
+export function closedOfferPhotoTtlMs(raw: string | undefined): number | null {
   const value = raw?.trim();
   if (!value) return DEFAULT_CLOSED_OFFER_PHOTO_TTL_DAYS * DAY_MS;
   if (/^(off|never)$/i.test(value)) return null;
@@ -64,6 +67,38 @@ export function describeClosedOfferPhotoTtl(ttlMs: number | null): string {
   const days = ttlMs / DAY_MS;
   const period = days === 1 ? "1 day" : `${Number(days.toFixed(2))} days`;
   return `generated images are deleted ${period} after an offer is sold or withdrawn`;
+}
+
+/** What a collection stores in `closedOfferPhotoTtlDays` (#577): `null` = no opinion, defer to the
+ * instance; otherwise a canonical value in the grammar above. */
+export type ClosedOfferPhotoTtlSetting = string | null;
+
+/** The canonical way to say *keep for ever* — one of the two spellings the parser accepts, picked
+ * so a stored value and a documented one read the same. */
+export const CLOSED_OFFER_PHOTO_TTL_FOREVER = "off";
+
+/**
+ * Canonicalize what the settings form is about to store (#577), or `undefined` when it is not a
+ * value this grammar has.
+ *
+ * The column holds the environment variable's own vocabulary, so nothing here maps between two
+ * languages — it only settles the spelling (`Never` → `off`, `" 7 "` → `"7"`) and refuses what
+ * `closedOfferPhotoTtlMs` would silently swallow as the default. Validation lives at this one write
+ * site precisely because the parser is forgiving: a bad value on the read path must never break a
+ * sweep, but a bad value typed into a form should be rejected while the collector is still looking
+ * at it.
+ *
+ * Blank is not an error — it is how the form says *no opinion*, and it stores `null`.
+ */
+export function parseClosedOfferPhotoTtlSetting(
+  raw: string | null | undefined
+): ClosedOfferPhotoTtlSetting | undefined {
+  const value = raw?.trim();
+  if (!value) return null;
+  if (/^(off|never)$/i.test(value)) return CLOSED_OFFER_PHOTO_TTL_FOREVER;
+  const days = Number(value);
+  if (!Number.isFinite(days) || days < 0) return undefined;
+  return String(days);
 }
 
 /**

@@ -4,6 +4,7 @@ import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
 import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
+import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -172,6 +173,39 @@ export async function getCollectionItemNoPad(
   return col.itemNoPad;
 }
 
+/**
+ * Set how long this collection's closed offers keep their generated listing images (#577), or clear
+ * the setting so the collection defers to the instance again.
+ *
+ * The stored value is the environment variable's own vocabulary — `off` for keep for ever, `0` to
+ * purge at the next sweep, otherwise days — canonicalized here so nothing but a value the parser
+ * understands ever reaches the column. `null` is not an absence of an answer to be defaulted away:
+ * it *is* the answer "use the instance's", which is what the column exists to be able to say.
+ */
+export async function setCollectionClosedOfferPhotoTtl(
+  ownerId: string,
+  collectionId: string,
+  raw: string | null
+): Promise<void> {
+  const value = parseClosedOfferPhotoTtlSetting(raw);
+  if (value === undefined) {
+    throw new Error(
+      'Retention must be a number of days (0 or more), or "off" to keep the images for ever.'
+    );
+  }
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { closedOfferPhotoTtlDays: value },
+  });
+}
+
 /** The three percentages a bid recommendation is built from (#508). Every one optional, so the
  * settings form can save the field that changed rather than rewriting all three. */
 export interface BidPercentPatch {
@@ -238,6 +272,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       bidFloorPercent: true,
       bidCeilingPercent: true,
       bidFallbackPercent: true,
+      closedOfferPhotoTtlDays: true,
     },
   });
 }

@@ -27,6 +27,8 @@ import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
+import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
+import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { SettingsTabs } from "./settings-tabs";
 
 export const metadata = { title: "Settings" };
@@ -104,6 +106,13 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           bidFloorPercent={collection.bidFloorPercent}
           bidCeilingPercent={collection.bidCeilingPercent}
           bidFallbackPercent={collection.bidFallbackPercent}
+          closedOfferPhotoTtl={collection.closedOfferPhotoTtlDays}
+          // What this collection inherits while it states nothing of its own (#577), resolved
+          // server-side: the environment variable is the operator's and never crosses to the
+          // browser, so the screen is handed the sentence rather than the setting.
+          instanceClosedOfferPhotoTtlLabel={describeClosedOfferPhotoTtl(
+            instanceClosedOfferPhotoTtlMs()
+          )}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}

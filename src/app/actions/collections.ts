@@ -8,6 +8,7 @@ import {
   getCollectionItemNoPad,
   resetCollectionToDemo,
   setCollectionBidPercents,
+  setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
   setCollectionItemNoPad,
   type BidPercentPatch,
@@ -118,6 +119,34 @@ export async function updateCollectionItemNoPadAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to save the copy-number width.",
+    };
+  }
+}
+
+export type ClosedOfferPhotoTtlState =
+  | { status: "idle" }
+  | { status: "success"; setting: string | null }
+  | { status: "error"; message: string };
+
+/**
+ * Save this collection's closed-offer photo retention (#577) from Settings → General.
+ *
+ * `null` clears the setting, which is not "unset it and take a default" but the collection saying
+ * it has no opinion and defers to the instance — the one answer no column default could express.
+ */
+export async function updateCollectionClosedOfferPhotoTtlAction(
+  collectionId: string,
+  setting: string | null
+): Promise<ClosedOfferPhotoTtlState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionClosedOfferPhotoTtl(session.user.id, collectionId, setting);
+    return { status: "success", setting };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the retention period.",
     };
   }
 }

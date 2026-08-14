@@ -11,7 +11,8 @@ import {
 } from "./storage";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { CLOSED_OFFER_STATES, isOfferState, isTerminalState } from "./offer-rules";
-import { closedOfferPhotoCutoff, closedOfferPhotoTtlMs } from "./offer-photo-cleanup-rules";
+import { closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
+import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
@@ -1340,7 +1341,13 @@ export interface ClosedOfferPhotoPurge {
  *    fresh images anyway;
  *  - an offer whose `closedAt` is null — a listing closed before the column existed is backfilled by
  *    the migration, so this only ever means "not closed";
- *  - anything at all, when the TTL is switched off.
+ *  - anything at all in a collection whose TTL is switched off.
+ *
+ * Since #577 the period is resolved **per collection** rather than once for the instance, so two
+ * collections on one instance are swept on their own terms: a collection with an archive to keep
+ * says `off` and is passed over entirely while the one beside it is swept on the operator's
+ * default. Hence a pass per collection rather than one query across all of them — the cutoff is
+ * different for each, and a collection that keeps for ever has no cutoff at all.
  *
  * `only` narrows the sweep to one offer, for the same test-isolation reason as
  * {@link claimNextOfferPhotoGeneration}; the boot path passes nothing.
@@ -1350,18 +1357,32 @@ export async function purgeClosedOfferPhotos(
   only?: { offerId: string }
 ): Promise<ClosedOfferPhotoPurge> {
   const empty: ClosedOfferPhotoPurge = { offers: 0, photos: 0, bytes: 0 };
-  const cutoff = closedOfferPhotoCutoff(now, closedOfferPhotoTtlMs());
-  if (!cutoff) return empty;
 
-  const candidates = await prisma.offer.findMany({
-    where: {
-      ...(only ? { id: only.offerId } : {}),
-      state: { in: [...CLOSED_OFFER_STATES] },
-      closedAt: { lt: cutoff },
-      photos: { some: { kind: "generated" } },
-    },
-    select: { id: true, photoGeneration: { select: { status: true } } },
+  const collections = await prisma.collection.findMany({
+    select: { id: true, closedOfferPhotoTtlDays: true },
   });
+
+  const candidates: { id: string; photoGeneration: { status: string } | null }[] = [];
+  for (const collection of collections) {
+    const cutoff = closedOfferPhotoCutoff(
+      now,
+      resolveClosedOfferPhotoTtlMs(collection.closedOfferPhotoTtlDays)
+    );
+    if (!cutoff) continue;
+    candidates.push(
+      ...(await prisma.offer.findMany({
+        where: {
+          ...(only ? { id: only.offerId } : {}),
+          collectionId: collection.id,
+          state: { in: [...CLOSED_OFFER_STATES] },
+          closedAt: { lt: cutoff },
+          photos: { some: { kind: "generated" } },
+        },
+        select: { id: true, photoGeneration: { select: { status: true } } },
+      }))
+    );
+  }
+  if (candidates.length === 0) return empty;
 
   const result = { ...empty };
   for (const offer of candidates) {

@@ -714,11 +714,11 @@ yourself](#attaching-your-own-images) are never deleted: those are originals, an
 them again.
 
 The week is a grace period, in case you want to look at, download or re-post the images shortly
-after closing the listing. It is configurable per instance — see
-`STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` in the [architecture
-overview](../architecture/overview.md#environment-variables); setting it to `off` keeps every image
-forever. Deleting the sale that sold an offer puts the listing back to **Active**, and it stops
-being a candidate for cleanup at once.
+after closing the listing. **You can change it for this collection** in **Settings → General**,
+under *Keep closed listings' images* — see [Collections](collections.md#how-long-closed-listings-keep-their-images).
+A working collection and an archive of something finished want different answers, which is why the
+period belongs to the collection rather than to the whole instance. Deleting the sale that sold an
+offer puts the listing back to **Active**, and it stops being a candidate for cleanup at once.
 
 Storage freed this way shows up in the collection's [photo storage total](collections.md).
 

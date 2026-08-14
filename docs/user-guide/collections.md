@@ -576,6 +576,20 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
 
+### How long closed listings keep their images
+
+Right below the storage figure, **Settings → General** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
+
+There are three answers:
+
+- **Follow this instance** — no opinion of your own; the collection uses whatever the person running this Stamporama configured, or a week if they configured nothing. This is how every collection starts.
+- **Delete after a number of days** — your own period. **0** means the images go at the next sweep, as soon as the listing is closed, which is the choice for a collection that is short of disk.
+- **Keep for ever** — nothing is ever swept. Sensible for an archive of finished work, if you have the room.
+
+Whichever you pick, the line underneath states in plain words what will actually happen, including what "follow this instance" currently works out to.
+
+Two collections on one Stamporama are swept on their own terms, so a collection you are actively selling from and one you are keeping as a record do not have to share a number. And whatever the setting, only *generated* images go — your own uploads, the copies' scans and the whole photo plan stay, so **Regenerate** brings the images back whenever you want them.
+
 ## Catalog prices
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).

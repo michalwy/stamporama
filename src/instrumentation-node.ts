@@ -26,10 +26,8 @@
 
 import { gcStaleUploads } from "@/lib/photos";
 import { formatBytes } from "@/lib/format-bytes";
-import {
-  closedOfferPhotoTtlMs,
-  describeClosedOfferPhotoTtl,
-} from "@/lib/offer-photo-cleanup-rules";
+import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
+import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { purgeClosedOfferPhotos } from "@/lib/offer-photo-generation";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
@@ -87,7 +85,17 @@ export async function start(): Promise<void> {
   // Said once at boot, whatever the setting is — including `off`, which is the one an operator most
   // wants confirmed. A scheduled deletion that only announces itself the first time it deletes
   // something is a scheduled deletion nobody knew was configured.
-  console.log(`[offer-photos] closed-offer purge: ${describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs())}`);
+  //
+  // Since #577 this can only honestly state the **instance default**, because a collection may set
+  // its own period and the sweep resolves one per collection. So it says exactly that, rather than
+  // printing a line per collection at boot: the collections are read on every pass and the log
+  // would go stale the moment one was added or changed, while what an operator is checking here is
+  // the answer their own environment variable gives.
+  console.log(
+    `[offer-photos] closed-offer purge, instance default: ` +
+      `${describeClosedOfferPhotoTtl(instanceClosedOfferPhotoTtlMs())} — ` +
+      `collections may set their own period in Settings`
+  );
 
   const purgeInitial = setTimeout(purge, 45_000);
   const purgeInterval = setInterval(purge, SWEEP_INTERVAL_MS);

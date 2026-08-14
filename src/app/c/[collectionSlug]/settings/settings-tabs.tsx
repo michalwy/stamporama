@@ -89,6 +89,12 @@ interface SettingsTabsProps {
   bidFloorPercent: number;
   bidCeilingPercent: number;
   bidFallbackPercent: number;
+  /** How long this collection's closed offers keep their generated images (#577), or null while it
+   * defers to the instance. Edited on the General tab, beside the storage figure it explains. */
+  closedOfferPhotoTtl: string | null;
+  /** What deferring to the instance means, already in words — the environment variable itself stays
+   * server-side. */
+  instanceClosedOfferPhotoTtlLabel: string;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -155,6 +161,8 @@ export function SettingsTabs({
   bidFloorPercent,
   bidCeilingPercent,
   bidFallbackPercent,
+  closedOfferPhotoTtl,
+  instanceClosedOfferPhotoTtlLabel,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -238,6 +246,8 @@ export function SettingsTabs({
           bidFloorPercent={bidFloorPercent}
           bidCeilingPercent={bidCeilingPercent}
           bidFallbackPercent={bidFallbackPercent}
+          closedOfferPhotoTtl={closedOfferPhotoTtl}
+          instanceClosedOfferPhotoTtlLabel={instanceClosedOfferPhotoTtlLabel}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
           appReleaseDate={appReleaseDate}
