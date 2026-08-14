@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogActions,
   LabelWithError,
+  type DialogAsideProps,
 } from "@/app/dialog-shell";
 import type {
   IssueListItem,
@@ -653,7 +654,8 @@ function DuplicateNameWarning({ matches }: { matches: DuplicateIssueMatch[] }) {
 
 // ── IssueDialog ─────────────────────────────────────────────────────────────
 
-type IssueDialogProps =
+type IssueDialogProps = DialogAsideProps &
+  (
   | {
       mode: "create";
       /** Owning collection, used for the duplicate-name lookup (#178). */
@@ -676,10 +678,11 @@ type IssueDialogProps =
       error?: string;
       onClose: () => void;
       onSubmit: (formData: FormData) => void;
-    };
+    }
+  );
 
 export function IssueDialog(props: IssueDialogProps) {
-  const { areas, collectionId, isPending, error, onClose } = props;
+  const { areas, collectionId, isPending, error, onClose, aside, asideWidth } = props;
   const isCreate = props.mode === "create";
 
   // Per-language names (#295). Fetched rather than drilled: this dialog is opened from the issues
@@ -898,6 +901,12 @@ export function IssueDialog(props: IssueDialogProps) {
       onClose={onClose}
       dismissable={!nestedDialogOpen}
       minHeight="32rem"
+      // Creating an issue is one step of identifying a piece, and the piece has to stay on screen
+      // for it (#592). Absent for every other opener, which is what the optional slot is for.
+      aside={aside}
+      asideWidth={asideWidth}
+      maxWidth={aside ? "min(96vw, 64rem)" : undefined}
+      height={aside ? "min(90vh, 52rem)" : undefined}
     >
       <form
         ref={formRef}

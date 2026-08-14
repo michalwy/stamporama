@@ -7,6 +7,18 @@ import { Icon } from "@/app/icons";
 
 // ── Shell ────────────────────────────────────────────────────────────────────
 
+/**
+ * The two `aside` props on their own (#592), so a dialog that merely **forwards** a companion
+ * column to its shell says so in one line instead of restating the contract. `StampPickerBrowser`,
+ * `IssueDialog` and `StampFormDialog` all do exactly that: the chain of dialogs identifying a scan
+ * tile has to carry the piece's picture through every one of them, and none of them has any
+ * business knowing what it is looking at.
+ */
+export interface DialogAsideProps {
+  aside?: ReactNode;
+  asideWidth?: string;
+}
+
 export interface DialogShellProps {
   title: string;
   onClose: () => void;
@@ -24,6 +36,25 @@ export interface DialogShellProps {
    * false while a surface that is *not* a layer owns the key (a popover with its own listener),
    * or to keep a backdrop click from dismissing the dialog. */
   dismissable?: boolean;
+  /**
+   * A column drawn to the **left of the dialog's own content**, under the shared header (#592).
+   *
+   * It exists because *the subject of a question can outlive the dialog asking it*: identifying a
+   * scan tile walks through the picker, sometimes a create-issue and a create-stamp dialog, and
+   * then the condition step, and the piece being identified has to be visible at every one of them.
+   * A slot here rather than a two-column body hand-rolled in each of those dialogs, for the reason
+   * the header and the footer are shared: four of them would be four layouts to keep in step, and
+   * the two that are shared across the app (`IssueDialog`, `StampFormDialog`) would each grow a
+   * private notion of what sits beside their form.
+   *
+   * It is a `ReactNode` and nothing more specific on purpose — the shell must not learn what a scan
+   * tile is, and the purchases screen keeps its viewer.
+   */
+  aside?: ReactNode;
+  /** Width of the `aside` column; ignored without one. The aside is fixed and the dialog's own
+   * content flexes, which is what lets one dialog put a picker's whole browser beside it and
+   * another a narrow form. */
+  asideWidth?: string;
   children: ReactNode;
 }
 
@@ -35,6 +66,8 @@ export function DialogShell({
   height,
   zIndexBase = 100,
   dismissable = true,
+  aside,
+  asideWidth = "24rem",
   children,
 }: DialogShellProps) {
   const headingId = useId();
@@ -142,7 +175,31 @@ export function DialogShell({
             <Icon name="close" size="lg" />
           </button>
         </div>
-        {children}
+        {aside ? (
+          // The header spans both columns and the footer stays inside the dialog's own content, so
+          // an aside changes what is *beside* the form and nothing about the form itself. Padded on
+          // its own three sides only: `DialogBody`'s left padding is the gap between the two, so a
+          // dialog reads the same whether it has an aside or not.
+          <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+            <div
+              style={{
+                width: asideWidth,
+                flexShrink: 0,
+                display: "flex",
+                minWidth: 0,
+                minHeight: 0,
+                padding: "1.5rem 0 1.5rem 1.5rem",
+              }}
+            >
+              {aside}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              {children}
+            </div>
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </>
   );

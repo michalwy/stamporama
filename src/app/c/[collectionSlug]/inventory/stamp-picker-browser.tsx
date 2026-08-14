@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { DialogShell } from "@/app/dialog-shell";
+import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import type {
@@ -119,8 +119,10 @@ export function StampPickerBrowser({
   areas,
   onPick,
   onPickIssue,
+  aside,
+  asideWidth,
   onClose,
-}: {
+}: DialogAsideProps & {
   collectionId: string;
   areas: CollectionAreaData[];
   onPick: (picked: PickedStamp) => void;
@@ -255,6 +257,11 @@ export function StampPickerBrowser({
         dismissable={!create}
         maxWidth="min(96vw, 110rem)"
         height="min(90vh, 60rem)"
+        // Which stamp a piece *is* is read off the piece, so when this picker is one step of
+        // identifying a scan tile the tile comes with it (#592) — leftmost, outside the area tree,
+        // because it is the subject of the browsing rather than one more way of narrowing it.
+        aside={aside}
+        asideWidth={asideWidth}
       >
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
           {/* The sidebar is authored for the page layout (max-height: 100vh, sticky);
@@ -308,6 +315,10 @@ export function StampPickerBrowser({
           {create.kind === "issue" && (
             <IssueDialog
               mode="create"
+              // The picture goes deeper with the chain, not only as far as this popup: an issue is
+              // created *because* of the piece on screen, and this dialog covers the one behind it.
+              aside={aside}
+              asideWidth={asideWidth}
               collectionId={collectionId}
               areas={areas}
               defaultAreaId={create.areaId ?? undefined}
@@ -330,6 +341,8 @@ export function StampPickerBrowser({
               return (
                 <StampFormDialog
                   mode="add"
+                  aside={aside}
+                  asideWidth={asideWidth}
                   collectionId={collectionId}
                   issues={[toIssueListItem(issue)]}
                   areaVendors={uniqueVendors}

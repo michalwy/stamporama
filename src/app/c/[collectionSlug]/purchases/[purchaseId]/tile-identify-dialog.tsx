@@ -18,7 +18,7 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
-import { tileSideViews, type TileSheetRef } from "@/lib/scan-tile-view";
+import { tileSideViews, type TileSheetRef, type TileSideView } from "@/lib/scan-tile-view";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
 import { TileZoomView } from "./tile-zoom-view";
 import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
@@ -92,7 +92,14 @@ interface Props {
   /** Where the copy a consumed tile became lives (#584). Null for every other state, and for a
    * consumed tile whose copy has since been deleted — there is nothing to open. */
   copyHref: string | null;
-  onIdentifyNew: () => void;
+  /**
+   * *Identify as a new copy*, carrying **the sides this dialog is already showing** (#592). The
+   * chain that follows — picker, sometimes a create-issue and a create-stamp dialog, then the
+   * condition step — keeps the piece on screen throughout, and `tileSideViews` has already answered
+   * which sides there are and which still have a retained card behind them. Handing that answer on
+   * rather than a tile id keeps it computed once, where the batch's sheets are in hand.
+   */
+  onIdentifyNew: (sides: TileSideView[]) => void;
   /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
    * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
@@ -326,7 +333,7 @@ export function TileIdentifyDialog({
           <div
             style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
           >
-            <DialogSecondaryButton onClick={onIdentifyNew} disabled={pending || !canIdentify}>
+            <DialogSecondaryButton onClick={() => onIdentifyNew(viewSides)} disabled={pending || !canIdentify}>
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
             {discard}
@@ -342,7 +349,7 @@ export function TileIdentifyDialog({
           disabled={pending || !canIdentify}
           cancelDisabled={pending}
           onCancel={onClose}
-          onAction={onIdentifyNew}
+          onAction={() => onIdentifyNew(viewSides)}
           leading={
             <>
               {discard}

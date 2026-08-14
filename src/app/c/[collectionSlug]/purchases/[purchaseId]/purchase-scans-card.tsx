@@ -24,6 +24,7 @@ import type {
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import { TileIdentifyDialog } from "./tile-identify-dialog";
+import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidateLotCopies } from "./use-lot-copies-query";
 import { useInvalidatePurchaseScans, usePurchaseScans } from "./use-purchase-scans-query";
 import { IndeterminateBar, ProgressBar } from "@/app/progress-bar";
@@ -67,8 +68,12 @@ interface Props {
    * the photographs. An order whose every lot is closed is the one that cannot identify at all. */
   canIdentify: boolean;
   /** Take the *new copy* answer up to the order panel, which owns the stamp picker and the
-   * condition dialog every other intake goes through — and, since #586, the lot question. */
-  onIdentifyTile: (tileId: string) => void;
+   * condition dialog every other intake goes through — and, since #586, the lot question.
+   *
+   * The **piece** goes up with it, not just its id (#592): the chain that follows keeps the tile's
+   * picture on screen the whole way, and which sides it has is `tileSideViews`' answer — already
+   * computed in the dialog handing this over, where the batch's sheets are in hand. */
+  onIdentifyTile: (piece: IdentifiedPiece) => void;
   onChanged: () => void;
 }
 
@@ -496,12 +501,13 @@ export function PurchaseScansCard({
               ? `/c/${collectionSlug}/inventory?search=${openTile.item.itemNo}`
               : null
           }
-          onIdentifyNew={() => {
+          onIdentifyNew={(sides) => {
             // The lot card takes it from here: the picker and the condition dialog are the ones
             // every other intake goes through, and a second pair of them would be a second set of
-            // remembered choices.
+            // remembered choices. The sides ride along so the piece stays on screen for all of it
+            // (#592) — this dialog is where they were worked out, and the only place they are free.
             setTileId(null);
-            onIdentifyTile(openTile.id);
+            onIdentifyTile({ tileId: openTile.id, sides, position: openTile.position });
           }}
           onDone={(touchedCopy) => {
             setTileId(null);

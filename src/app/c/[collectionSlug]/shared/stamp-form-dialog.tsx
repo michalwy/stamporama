@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogActions,
   LabelWithError,
+  type DialogAsideProps,
 } from "@/app/dialog-shell";
 import {
   PhotoEditor,
@@ -103,7 +104,7 @@ export interface StampFormData {
   colnectId?: string | null;
 }
 
-type StampFormDialogProps = {
+type StampFormDialogProps = DialogAsideProps & {
   collectionId: string;
   areaVendors: AreaCatalogEntry[];
   isPending: boolean;
@@ -131,7 +132,7 @@ type StampFormDialogProps = {
 );
 
 export function StampFormDialog(props: StampFormDialogProps) {
-  const { collectionId, areaVendors, isPending, error, onClose } = props;
+  const { collectionId, areaVendors, isPending, error, onClose, aside, asideWidth } = props;
   const editProps = props.mode === "edit" ? props : null;
   const addProps = props.mode === "add" ? props : null;
 
@@ -632,7 +633,13 @@ export function StampFormDialog(props: StampFormDialogProps) {
       onClose={onClose}
       dismissable={!nestedDialogOpen}
       minHeight="22rem"
-      maxWidth="52rem"
+      // Creating a stamp is the deepest point of identifying a piece, and the point the collector is
+      // furthest from where they started — so the piece comes with it (#592). Absent for every
+      // other opener of this dialog.
+      aside={aside}
+      asideWidth={asideWidth}
+      maxWidth={aside ? "min(96vw, 78rem)" : "52rem"}
+      height={aside ? "min(90vh, 52rem)" : undefined}
     >
       {/* Tab bar only when the area has catalogs to price. Photos are inline on the Details
           tab (like the copy dialog), not a separate tab. */}

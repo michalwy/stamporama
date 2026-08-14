@@ -63,6 +63,43 @@ interface Props {
   position: number;
 }
 
+/**
+ * The piece an identification chain is **about** (#592), carried through every dialog the chain
+ * opens: the stamp picker, an issue or a stamp created from inside it, and the condition step.
+ *
+ * A record rather than a tile id, and that is the decision rather than a convenience. Which sides
+ * exist and which still have a retained card behind them is `tileSideViews`' answer, computed once
+ * where the batch's sheets are in hand (`purchase-scans-card.tsx`); handing the chain an id instead
+ * would mean every dialog in it re-deriving that — including the swept-sheet case (#578), which is
+ * exactly the one a second derivation would get wrong.
+ *
+ * There is **no `stampId` fallback in it and there must not be one**: this is a picture of *the*
+ * piece in the tweezers, and a stamp's catalogue photo is a picture of *a* specimen. Standing one
+ * in beside a condition field invites reading a condition off the wrong stamp, so intake with no
+ * scan behind it carries no piece and shows nothing at all.
+ */
+export interface IdentifiedPiece {
+  tileId: string;
+  sides: TileSideView[];
+  position: number;
+}
+
+/** The piece as a dialog's `aside` (`DialogShell.aside`) — one call site's worth of wrapping, so
+ * that every dialog in the chain shows the same thing rather than its own arrangement of it. Null
+ * when the piece has no picture at all, which is what keeps the aside absent rather than empty. */
+export function IdentifiedPieceAside({
+  collectionId,
+  piece,
+}: {
+  collectionId: string;
+  piece: IdentifiedPiece;
+}) {
+  if (piece.sides.length === 0) return null;
+  return (
+    <TileZoomView collectionId={collectionId} sides={piece.sides} position={piece.position} />
+  );
+}
+
 /** The natural size of a loaded photo, in its own pixels. Measured rather than stored: it is the
  * width of the derivative actually on screen, which is what decides whether the retained scan has
  * anything more to offer — and the browser knows it exactly. */

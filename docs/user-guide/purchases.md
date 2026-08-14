@@ -405,6 +405,21 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   closing. For a stockbook bought sight-unseen these tiles are the only record of what was actually
   inside; a discard is evidence, not a dismissal.
 
+**The piece stays on screen for the whole of identifying it.** Choosing *Identify as a new copy*
+used to leave the picture behind on this dialog: the browse popup, any issue or stamp you created
+inside it, and the condition step that followed all showed nothing of the tile, so *used or mint?*
+was answered from memory — forty times per card. Now the tile comes with you. It is the **same
+viewer** you have here, beside each of those dialogs rather than above them: wheel or `+`/`−` to
+zoom, drag to move, `0` to fit, `1:1` for the scan's own pixels, and **Front / Back** where the
+batch has both — which is half of what condition is judged on, gum and hinge marks being on the
+back. Each step opens fitted to its own panel; the zoom you set is kept across a front/back flip,
+as it is here.
+
+It appears **only where there is a picture of that piece** — which means the scan-tile path and
+nothing else. Adding stamps by hand shows no picture at all, and deliberately does not fall back to
+the stamp's catalogue photo: that is a picture of *a* specimen of the stamp, not the one in your
+tweezers, and beside a condition field it would invite reading a condition off the wrong stamp.
+
 A **note** on a discard is optional and written afterwards: click the discarded tile again and the
 same dialog has the field. Worth doing on the piece whose reason you will not remember in a month
 (*thinned*, *faked overprint*), and worth skipping on the forty that were simply junk.
@@ -518,6 +533,12 @@ pre-filled for the next stamp, so sorting a parcel into the same box, condition,
 disposition is quick. When you are adding a **single stamp** you can also **attach
 photos** to that copy right here (front/back plus extra images); a whole-issue intake creates
 several distinct copies, so photos are offered only for single-stamp intake.
+
+There is **no picture of the stamp** on this step when you are adding stamps by hand, and that is on
+purpose rather than missing: the app has no photograph of the piece in your tweezers, and the
+stamp's catalogue photo is a picture of a different specimen. Identifying a
+[scan tile](#working-through-the-tiles) is the case where a picture of the actual piece exists, and
+there it stays on screen beside every question.
 
 If your collection defines [formats](inventory.md#pairs-blocks-and-other-multiples) — pairs,
 blocks, strips — a

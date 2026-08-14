@@ -80,6 +80,7 @@ import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { IntakeHoldingsLine } from "./intake-holdings-line";
 import { PurchaseScansCard } from "./purchase-scans-card";
+import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidatePurchaseScans } from "./use-purchase-scans-query";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -330,7 +331,7 @@ export function PurchaseDetailPanel({
    * the re-parenting left to be answered at identification, where it is answerable at all.
    */
   const [tileStep, setTileStep] = useState<"none" | "picker" | "condition">("none");
-  const [tileIntake, setTileIntake] = useState<{ tileId: string } | null>(null);
+  const [tileIntake, setTileIntake] = useState<IdentifiedPiece | null>(null);
   const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
   const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   function resetTileIntake() {
@@ -604,8 +605,8 @@ export function PurchaseDetailPanel({
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
-        onIdentifyTile={(tileId) => {
-          setTileIntake({ tileId });
+        onIdentifyTile={(piece) => {
+          setTileIntake(piece);
           setError(undefined);
           setTileStep("picker");
         }}
@@ -826,6 +827,11 @@ export function PurchaseDetailPanel({
         <StampPickerBrowser
           collectionId={collectionId}
           areas={areas}
+          // The piece, for the whole of the identification and not only its first dialog (#592).
+          // The picker passes it on to the issue and stamp dialogs it opens, which is the deepest
+          // point of the chain and the one the collector reaches furthest from where they started.
+          aside={<IdentifiedPieceAside collectionId={collectionId} piece={tileIntake} />}
+          asideWidth="26rem"
           onPick={(picked: PickedStamp) => {
             setTileSelection({
               kind: "stamp",
@@ -856,6 +862,10 @@ export function PurchaseDetailPanel({
           // The tile's crops **are** this copy's front and back, so the uploader is out of the way:
           // a second front would collide with the copy's one front slot.
           hidePhotos
+          // *Used or mint?* is read off the piece, and gum and hinge marks are on its back — so the
+          // piece is beside the field asking, both sides, at the size the tile dialog showed it
+          // (#592). Only here: the two other entries into this dialog have no picture of the piece.
+          piece={tileIntake}
           submitLabel="Identify the tile"
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
@@ -3590,6 +3600,20 @@ interface IntakeConditionDialogProps {
    * an upload arriving beside the tile's crop would be a second front for the same copy. */
   hidePhotos?: boolean;
   /**
+   * The piece this dialog is asking about, drawn beside the form (#592) — present only where there
+   * is a picture of **this** piece, which today is the scan-tile flow alone.
+   *
+   * Condition is *read off the piece*: the cancel decides used against mint, the gum and the hinge
+   * marks are on the back, the centring and the margins are on the front. Until #592 the picture
+   * was on the tile dialog and nowhere after it, so the collector answered from memory or went back
+   * — forty times per card.
+   *
+   * The stamp's **catalogue photo is deliberately not a fallback**. It is a picture of *a*
+   * specimen; beside a condition field it would invite reading a condition off the wrong stamp, and
+   * an intake with no scan behind it is better with nothing there.
+   */
+  piece?: IdentifiedPiece;
+  /**
    * Which lot the created copy belongs to (#586) — asked only when identifying a scan tile, since
    * every other entry into this dialog was reached *through* a lot and already knows.
    *
@@ -3639,6 +3663,7 @@ function IntakeConditionDialog({
   error,
   submitLabel,
   hidePhotos,
+  piece,
   lotChoice,
   onBack,
   onClose,
@@ -3771,8 +3796,26 @@ function IntakeConditionDialog({
           ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
           : "Add copy"));
 
+  // The picture beside the form rather than above it (#592): a thumbnail over a form this long
+  // pushes the fields it exists to serve off the screen. The form column keeps the width it was
+  // designed at, so the dialog reads identically with and without a piece — the picture is added
+  // beside it, and nothing about the questions moves.
+  const pieceAside =
+    piece && piece.sides.length > 0 ? (
+      <IdentifiedPieceAside collectionId={collectionId} piece={piece} />
+    ) : undefined;
+
   return (
-    <DialogShell title="Set condition" onClose={onClose} maxWidth="36rem">
+    <DialogShell
+      title="Set condition"
+      onClose={onClose}
+      // The same shape as the tile dialog one step back, which is where this picture was last seen:
+      // two surfaces showing the same scan at the same size is one habit rather than two.
+      maxWidth={pieceAside ? "min(96vw, 78rem)" : "36rem"}
+      height={pieceAside ? "min(90vh, 54rem)" : undefined}
+      aside={pieceAside}
+      asideWidth="min(46vw, 38rem)"
+    >
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
           <div
