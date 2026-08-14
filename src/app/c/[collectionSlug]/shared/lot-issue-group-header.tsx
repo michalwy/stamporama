@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
+import { STAMP_SECONDARY_CHIP } from "./chip-styles";
 import { IssueTitle, IssueCatalogChips, StampCountBadge } from "./issue-view";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -43,19 +44,33 @@ const CHIP: React.CSSProperties = {
  * one there is only one of. Never over the union of an issue's checklists: a stamp two sets share
  * would be counted once, for a figure answering neither.
  *
- * **Naming the gap is the point; printing all of it is not.** A thirty-stamp series missing eighteen
- * would turn the chip into a paragraph, so it prints at most {@link MISSING_SHOWN} of the collapsed
- * runs and then `+N more` — the derived lot label's own rule (#121/#172), so a collector meets one
- * convention rather than two — and the **whole** list goes in the popover, which the chip already
- * has for stating what the figure ranges over. At `5/6` the gap is still read in place, which is the
- * case that matters while sorting; at `12/30` the chip stays short and the list is one hover away.
- * The truncation is a **rendering** decision: the server sends the whole gap either way.
+ * **No catalog number is printed on the chip at all** (#572). The chip carries the figure and how
+ * far off it is — `6/6 — complete` or `12/30 · 18 missing` — and the *names* live entirely in the
+ * popover. #563 printed three of them inline with a `+N more` tail, and the truncation turned out
+ * to be the problem rather than the fix: three numbers out of eighteen are nothing the collector can
+ * act on, so the line was paying width for something it did not deliver, on a header already
+ * carrying an area, a title, catalogue numbers and a stamp count. The count stays, since `12/30`
+ * alone leaves *how many am I still short* to be worked out by subtraction.
  *
- * The **count is always printed**, since `12/30` and three numbers would otherwise leave *how many
- * am I still short* to be worked out by subtraction.
+ * **The popover draws the gap as chips**, one per missing stamp in the issue's own hand-set stamp
+ * order (#549) — the header's own catalogue vocabulary rather than a comma-joined string inside a
+ * paragraph, which is what the collector is about to go looking for on the next card. The sentence
+ * stating what the figure ranges over stays above them: a fraction whose scope is guessed at is
+ * worse than none, and the two scopes on this one line are deliberately different.
  *
- * The tooltip is where the range is stated, since a fraction whose scope is guessed at is worse than
- * none — and the two scopes on this one line are deliberately different.
+ * They are the chip **styling**, not `CatalogNumberChip`: a `Tooltip` bubble is `pointer-events:
+ * none` and unmounts when the pointer leaves the trigger, so click-to-copy (#420) and the chip's own
+ * hint could never fire inside one. A button that cannot be pressed claims an affordance it does not
+ * have; these are a read-only list, which is what the popover is for.
+ *
+ * **Hover, and why that is not `WantChip` being inconsistent.** `WantChip` opens on *click*, as a
+ * popover, and says why: behind it sit up to a dozen wants with three axes and a priority each,
+ * which flattened into a bubble was unreadable. That rule is about how rich the content is, not a
+ * house preference for click — here it is a short, read-only list of numbers, and the two chips sit
+ * on different screens. Hover is also what the work wants: a sorting pass scans many issue groups in
+ * a row, and a click per group, each leaving a popover to dismiss, is friction on the one screen
+ * where speed is the point. If this ever grows long or interactive it moves to click for
+ * `WantChip`'s reason.
  */
 function SetCompletenessLine({
   entry,
@@ -66,10 +81,11 @@ function SetCompletenessLine({
   named: boolean;
 }) {
   const complete = entry.requiredCount > 0 && entry.owned === entry.requiredCount;
-  const shown = entry.missingLabels.slice(0, MISSING_SHOWN).join(",");
-  const hidden = entry.missingLabels.length - Math.min(MISSING_SHOWN, entry.missingLabels.length);
   return (
     <Tooltip
+      // Wide enough that a row of numbers is a block of chips rather than one per line — the
+      // primitive's own escape hatch for content that is a small panel rather than a sentence.
+      maxWidth={entry.missing.length > 0 ? "22rem" : undefined}
       content={
         <>
           Counted over your whole <strong>for-sale</strong> stock — every for-sale copy in hand
@@ -82,14 +98,7 @@ function SetCompletenessLine({
               {entry.fromHere === 1 ? "was" : "were"} identified into this lot.
             </>
           )}
-          {/* The whole gap, however long — the chip prints three of these runs and this is what
-              makes truncating them cost nothing. */}
-          {hidden > 0 && (
-            <>
-              {" "}
-              Still missing: <strong>{entry.missingLabels.join(", ")}</strong>.
-            </>
-          )}
+          {entry.missing.length > 0 && <MissingStamps labels={entry.missing} />}
         </>
       }
       align="start"
@@ -110,13 +119,8 @@ function SetCompletenessLine({
           " — complete"
         ) : entry.missingCount > 0 ? (
           <>
-            {" "}— missing {entry.missingCount}
-            {shown && <>: {shown}</>}
-            {hidden > 0 && (
-              <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
-                {" "}+{hidden} more
-              </span>
-            )}
+            {" · "}
+            {entry.missingCount} missing
           </>
         ) : null}
         {entry.fromHere > 0 && (
@@ -130,9 +134,32 @@ function SetCompletenessLine({
   );
 }
 
-/** How many of the collapsed missing runs the chip prints before `+N more` — the derived lot label's
- *  own three (#121/#172), for the same reason and so the two read alike. */
-const MISSING_SHOWN = 3;
+/** The gap itself, under the sentence that says what it is a gap in — every missing stamp, in the
+ *  issue's own stamp order, drawn with the stamp rows' own secondary chip so the popover speaks the
+ *  header's catalogue vocabulary rather than a comma-joined sentence. */
+function MissingStamps({ labels }: { labels: string[] }) {
+  return (
+    <>
+      <span style={{ display: "block", marginTop: "0.4rem" }}>Still missing:</span>
+      <span
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.25rem",
+          marginTop: "0.25rem",
+        }}
+      >
+        {labels.map((label, i) => (
+          // Numbers repeat across issues and even within one checklist's own runs, so the index is
+          // what identifies a chip in a list that is only ever re-rendered whole.
+          <span key={`${label}-${i}`} style={STAMP_SECONDARY_CHIP}>
+            {label}
+          </span>
+        ))}
+      </span>
+    </>
+  );
+}
 
 /**
  * Collapsible issue-group header for a lot's copies, grouped by owning issue — the area chip,

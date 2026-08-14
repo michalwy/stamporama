@@ -5,7 +5,6 @@ import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
 import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { loadIssuePrefixMap } from "./issue-prefix";
-import { compactCatalogNumbers } from "./offer-title-template";
 
 // How close a purchase lot's issues are to a **complete for-sale set** (#563) — the I/O half.
 //
@@ -39,18 +38,20 @@ export interface ChecklistSetCompleteness {
    *  eighteen otherwise leaves *how many am I still short* to be worked out by subtraction. */
   missingCount: number;
   /**
-   * The missing stamps by catalog number, **collapsed into runs** the way a derived lot label
-   * collapses them (`Mi·PL 3-6`, `9`, `11`), in the issue's own tree order. Empty when nothing is
-   * missing.
+   * The missing stamps by catalog number — **one entry per stamp**, in the issue's own hand-set
+   * stamp order (#549). Empty when nothing is missing.
    *
-   * Formatted **server-side**, as the derived lot label already is (#172): the collapsing needs the
+   * Formatted **server-side**, as the derived lot label already is (#172): the numbering needs the
    * area tree and the per-issue prefix overrides, both of which are read here anyway.
    *
-   * Carries the **whole** gap however long it is. The chip prints three and `+N more` (#563), but
-   * that is a rendering decision the popover behind it undoes — a payload truncated to what the
-   * chip shows would leave the popover with nothing more to say.
+   * Deliberately **no longer collapsed into runs** (#572). #563 sent `Mi·PL 3-6`, `9`, `11` because
+   * the chip printed three of them inline and the runs were what it truncated; the list has since
+   * moved into the popover and is drawn as one catalog-number chip per stamp, and neither half of a
+   * run survives that — `3-6` is not a catalogue number, and a continuation entry has lost the
+   * prefix that made the first one readable. Naming each missing stamp is also what the popover is
+   * for: it is a list of things to go and look for.
    */
-  missingLabels: string[];
+  missing: string[];
 }
 
 /** Every checklist of one issue on a lot's issue-group header, in the issue's own checklist order. */
@@ -205,31 +206,15 @@ export async function getLotSetCompleteness(
         catalogLabel({ areaId, issueId, catalogNumbers: s.catalogNumbers, name: s.name }, maps)
       );
 
-    byIssue[issueId].push(describe(checklist, result, collapseMissing(missing)));
+    byIssue[issueId].push(describe(checklist, result, missing));
   }
   return byIssue;
-}
-
-/**
- * The missing numbers as **runs**: `compactCatalogNumbers` collapses `3,4,5,6` to `Mi·PL 3-6`, and
- * this is that answer as the entries it is built from rather than as the one string it joins them
- * into — which is what lets the chip print three of them and `+N more` the way the derived lot label
- * does (#121/#172), and the popover print all of them.
- *
- * Split back out of the joined form rather than reaching inside the collapsing: the two folds it
- * makes are the reason it is worth calling at all, and re-implementing the join here to avoid one
- * `split` would be a second statement of #150's rule. Its own separator is a bare comma, which no
- * catalogue number carries.
- */
-function collapseMissing(labels: string[]): string[] {
-  if (labels.length === 0) return [];
-  return compactCatalogNumbers(labels).split(",");
 }
 
 function describe(
   checklist: { id: string; name: string },
   result: { requiredCount: number; owned: number; fromHere: number; missingStampIds: string[] },
-  missingLabels: string[]
+  missing: string[]
 ): ChecklistSetCompleteness {
   return {
     checklistId: checklist.id,
@@ -238,6 +223,6 @@ function describe(
     owned: result.owned,
     fromHere: result.fromHere,
     missingCount: result.missingStampIds.length,
-    missingLabels,
+    missing,
   };
 }

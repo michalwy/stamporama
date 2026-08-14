@@ -31,6 +31,13 @@ import { Icon } from "@/app/icons";
  * draws them — one row of chips per want — which is also what stops the two surfaces describing one
  * want differently.
  *
+ * That is a rule about **how rich the content is**, not a house preference for click, which is why
+ * the for-sale completeness chip (#572, `shared/lot-issue-group-header.tsx`) draws its own list of
+ * chips in a plain hover `Tooltip` and is not an inconsistency: a short, read-only list of catalogue
+ * numbers survives a bubble, and its screen is a sorting pass scanning group after group, where a
+ * click each — and a popover each to dismiss — is friction. Anything that grows long or interactive
+ * comes back here, to click.
+ *
  * Deliberately a **popover, not a layer**: it owns its own Escape and outside-click rather than
  * joining the escape stack (#361), the call `MultiSelectFilter` and the row menu make, because it is
  * not a surface one navigates into. Portaled to `<body>` with fixed positioning so a row's `overflow`

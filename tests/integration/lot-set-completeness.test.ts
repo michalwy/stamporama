@@ -199,7 +199,7 @@ describe("lot for-sale set completeness (#563)", () => {
     assert.equal(basic.owned, 4);
     assert.equal(basic.fromHere, 3);
     assert.equal(basic.missingCount, 0);
-    assert.deepEqual(basic.missingLabels, []);
+    assert.deepEqual(basic.missing, []);
   });
 
   it("counts per checklist, never over the issue's union", async () => {
@@ -212,24 +212,24 @@ describe("lot for-sale set completeness (#563)", () => {
     assert.equal(specialized.fromHere, 1);
   });
 
-  it("names the missing stamps, collapsed the way a lot label is", async () => {
+  it("names the missing stamps", async () => {
     const [, specialized] = await complete();
     // Mi 5 is in the lot and for sale, but still in transit: bought, and not listable.
     assert.equal(specialized.missingCount, 1);
-    assert.deepEqual(specialized.missingLabels, ["Mi 5"]);
+    assert.deepEqual(specialized.missing, ["Mi 5"]);
   });
 
-  it("carries the gap as collapsed runs, so the chip can print three and the popover all", async () => {
-    // Mi 1, 2 and 4 gone from stock: two runs, not three numbers. The chip truncates *these*
-    // entries (#563), which is why the collapsing happens before the payload is built and not
-    // after — `Mi 1-2` is one thing to print, and slicing raw stamps would have split it.
+  it("names every missing stamp separately, in the issue's own stamp order", async () => {
+    // Mi 1, 2 and 4 gone from stock: three chips, not the two runs #563 collapsed them into. The
+    // popover lists stamps to go and look for (#572), and `Mi 1-2` is not one of them — nor is a
+    // run's continuation, which loses the prefix that made the first entry readable.
     await prisma.item.updateMany({
       where: { collectionId, stampId: { in: [s1, s2, s4] } },
       data: { forSale: false },
     });
     const [basic] = await complete();
     assert.equal(basic.missingCount, 3);
-    assert.deepEqual(basic.missingLabels, ["Mi 1-2", "Mi 4"]);
+    assert.deepEqual(basic.missing, ["Mi 1", "Mi 2", "Mi 4"]);
     await prisma.item.updateMany({
       where: { collectionId, stampId: { in: [s1, s2] } },
       data: { forSale: true },
@@ -248,7 +248,7 @@ describe("lot for-sale set completeness (#563)", () => {
     });
     const [, specialized] = await complete();
     assert.equal(specialized.owned, 3);
-    assert.deepEqual(specialized.missingLabels, []);
+    assert.deepEqual(specialized.missing, []);
     await prisma.item.updateMany({
       where: { collectionId, stampId: s5 },
       data: { deliveryState: "in_transit" },
@@ -262,7 +262,7 @@ describe("lot for-sale set completeness (#563)", () => {
     const [basic] = await complete();
     assert.equal(basic.owned, 3);
     assert.equal(basic.fromHere, 3);
-    assert.deepEqual(basic.missingLabels, ["Mi 4"]);
+    assert.deepEqual(basic.missing, ["Mi 4"]);
     await createItem(userId, collectionId, {
       stampId: s4,
       conditionId,
@@ -278,7 +278,7 @@ describe("lot for-sale set completeness (#563)", () => {
     });
     const [basic] = await complete();
     assert.equal(basic.owned, 3);
-    assert.deepEqual(basic.missingLabels, ["Mi 1"]);
+    assert.deepEqual(basic.missing, ["Mi 1"]);
     await prisma.item.updateMany({
       where: { collectionId, stampId: s1 },
       data: { disposedAt: null, disposalReason: null },

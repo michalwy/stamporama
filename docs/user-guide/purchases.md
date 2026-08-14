@@ -549,15 +549,18 @@ header also carries one figure per [checklist](collections.md#checklists) the is
 answer to *can I list this series as one set yet?*:
 
 - **6/6 — complete** — you hold a for-sale copy of every stamp on that checklist.
-- **4/6 — missing 2: Mi 3,7** — you do not, and those are the ones to look for on the next card.
-  The numbers are collapsed into runs the way a lot's derived label collapses them, so a gap
-  reads *Mi 3-6* rather than as four separate numbers.
+- **12/30 · 18 missing** — you do not, and eighteen is how many more you need.
 
-How many are missing is **always** printed, because *12/30* and a few numbers still leaves you
-counting. And the chip names at most **three** runs before *+N more* — the same three a lot's
-derived label shows, and for the same reason: a thirty-stamp series missing eighteen would turn
-the header into a paragraph. The **whole** list is in the hover, so a short gap is read in place
-while you sort and a long one is one hover away.
+The chip carries the figures and nothing else. **Which** stamps are missing is in the hover:
+one chip per stamp, in the order you arranged the issue's stamps in, which is the list you take
+to the next card. They are not on the chip itself, however short the gap — a header already
+carries an area, a title, catalogue numbers and a stamp count, and three numbers out of eighteen
+were never enough to act on anyway.
+
+It opens on **hover**, where the [want marker](wants.md) on a catalogue row takes a click. That is
+the content deciding, not an inconsistency: this is a short list of numbers you only read, and while
+sorting you run down group after group — a click each, and a popover each to dismiss, would slow the
+one screen where speed is the point.
 
 The fraction and the missing stamps both range over your **whole for-sale stock** — every
 for-sale copy in hand, wherever it is filed, not just the ones in this lot. That is deliberate:
