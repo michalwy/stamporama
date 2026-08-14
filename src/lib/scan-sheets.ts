@@ -843,10 +843,25 @@ export interface ScanTileData {
    * one whose copy was deleted afterwards — the tile stays consumed either way, because its images
    * left with the copy.
    *
-   * `frontPhotoId` is that copy's front, which **is** the tile's old front row under its new owner:
-   * consuming a tile reassigns `tileId → itemId`, so the picture never went anywhere. The strip
-   * follows it there rather than drawing an empty square over a tile that went perfectly well. */
-  item: { id: string; itemNo: number; frontPhotoId: string | null } | null;
+   * `frontPhotoId`/`backPhotoId` are that copy's photos, which **are** the tile's old rows under
+   * their new owner: consuming a tile reassigns `tileId → itemId`, so the pictures never went
+   * anywhere. The strip follows them there rather than drawing an empty square over a tile that went
+   * perfectly well, and the tile's own dialog shows them at full size (#584).
+   *
+   * The rest is **enough of the copy to recognise it** (#584), which is what a consumed tile's
+   * dialog exists to say now that the click no longer leaves for it. Raw catalogue numbers rather
+   * than prefix-formatted labels: the assign list one dialog over prints a copy the same way, and
+   * this read is a lot's tiles, not the area tree and per-issue prefix overrides that formatting
+   * would drag in. */
+  item: {
+    id: string;
+    itemNo: number;
+    frontPhotoId: string | null;
+    backPhotoId: string | null;
+    stampName: string | null;
+    catalogNumbers: string[];
+    conditionAbbreviation: string;
+  } | null;
   /** True when this tile's copy is for a stamp on **none** of the settled auction lot's lines
    * (#567): the parcel holds something its description never announced. Information rather than a
    * problem to hide — always false on a lot that came from no auction. */
@@ -926,8 +941,12 @@ export async function listLotScans(
             id: true,
             itemNo: true,
             stampId: true,
-            // The very row this tile handed over, now owned by the copy.
-            photos: { where: { role: "front" }, select: { id: true }, take: 1 },
+            // The very rows this tile handed over, now owned by the copy. Both sides, since the
+            // tile's own dialog shows them at full size (#584) — the strip only ever wanted the
+            // front.
+            photos: { where: { role: { in: ["front", "back"] } }, select: { id: true, role: true } },
+            condition: { select: { abbreviation: true } },
+            stamp: { select: { name: true, catalogNumbers: { select: { number: true } } } },
           },
         },
       },
@@ -976,7 +995,11 @@ export async function listLotScans(
         ? {
             id: t.item.id,
             itemNo: t.item.itemNo,
-            frontPhotoId: t.item.photos[0]?.id ?? null,
+            frontPhotoId: t.item.photos.find((p) => p.role === "front")?.id ?? null,
+            backPhotoId: t.item.photos.find((p) => p.role === "back")?.id ?? null,
+            stampName: t.item.stamp.name,
+            catalogNumbers: t.item.stamp.catalogNumbers.map((c) => c.number),
+            conditionAbbreviation: t.item.condition.abbreviation,
           }
         : null,
       // Only a lot with an auction description can disagree with one. A lot with no lines at all

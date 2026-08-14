@@ -28,9 +28,11 @@ import { useInvalidateLotScans, useLotScans } from "./use-lot-scans-query";
  * cut was wrong — and then work through the tiles, each of which becomes a copy, joins a copy that
  * already exists, or is discarded with a note.
  *
- * Clicking a tile opens that question (`tile-identify-dialog.tsx`); only the *new copy* answer
- * leaves this section, because it is the lot card's own picker → condition chain, entered from a
- * tile instead of from the **Add stamps** button.
+ * Clicking a tile opens that question (`tile-identify-dialog.tsx`) — **whatever state it is in**
+ * (#584), so nothing here navigates on a click. Two answers inside the dialog leave: *new copy*,
+ * which is the lot card's own picker → condition chain entered from a tile instead of from the
+ * **Add stamps** button, and *Open copy*, which is how a tile that has already become one is
+ * followed. Both are asked for.
  */
 
 interface Props {
@@ -305,7 +307,6 @@ export function LotScansCard({
           key={batch.batchNo}
           batch={batch}
           collectionId={collectionId}
-          collectionSlug={collectionSlug}
           onlyUnidentified={onlyUnidentified}
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
@@ -327,6 +328,15 @@ export function LotScansCard({
           tile={openTile}
           lotOpen={lotOpen}
           fromAuction={fromAuction}
+          // The copies list searches internal numbers, so a copy's own number is the address that
+          // reaches it (#268) — the same route "Go to purchase" takes in the other direction. It
+          // rides into the dialog now rather than onto the tile (#584): the tile no longer goes
+          // anywhere, and *Open copy* inside is where the address is needed.
+          copyHref={
+            openTile.state === "consumed" && openTile.item
+              ? `/c/${collectionSlug}/inventory?search=${openTile.item.itemNo}`
+              : null
+          }
           onIdentifyNew={() => {
             // The lot card takes it from here: the picker and the condition dialog are the ones
             // every other intake goes through, and a second pair of them would be a second set of
@@ -499,7 +509,6 @@ function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
 function BatchSection({
   batch,
   collectionId,
-  collectionSlug,
   onlyUnidentified,
   expanded,
   onToggleExpanded,
@@ -514,7 +523,6 @@ function BatchSection({
 }: {
   batch: ScanBatchData;
   collectionId: string;
-  collectionSlug: string;
   onlyUnidentified: boolean;
   /** Whether this batch shows its tiles, or only its summary line (#583). Derived from
    * `batchDoneAt` by the section above, which owns the rule for the whole card. */
@@ -536,13 +544,6 @@ function BatchSection({
   onPair: (backTileId: string, frontTileId: string) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
-
-  // The copies list searches internal numbers, so a copy's own number is the address that reaches
-  // it (#268) — the same route "Go to purchase" takes in the other direction.
-  const copyHref = (tile: ScanTileData): string | null =>
-    tile.state === "consumed" && tile.item
-      ? `/c/${collectionSlug}/inventory?search=${tile.item.itemNo}`
-      : null;
 
   const shown = onlyUnidentified
     ? batch.tiles.filter((t) => t.state === "unidentified")
@@ -686,7 +687,6 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
-              copyHref={copyHref(tile)}
               droppable={dragging != null && tile.backPhotoId == null && tile.state === "unidentified"}
               onOpen={() => onOpenTile(tile.id)}
               onDropBack={(backTileId) => {
@@ -732,11 +732,14 @@ function BatchSection({
  * picture. Narrowing to what is left is the *N tiles unidentified* chip's job, not the layout's.
  *
  * A **consumed** tile shows its copy's front, which is the tile's own front row under its new owner
- * (consuming reassigns `tileId → itemId`, so no picture ever went anywhere), and clicking it goes
- * to that copy. A tile that went well must not look more broken than one that became nothing.
+ * (consuming reassigns `tileId → itemId`, so no picture ever went anywhere). A tile that went well
+ * must not look more broken than one that became nothing.
  *
- * An **unidentified** tile opens the three-outcomes dialog; a **discarded** one opens it too, where
- * its note is written and it can be put back.
+ * **Every state opens the tile dialog, and none of them navigates** (#584). A consumed tile used to
+ * be an `<a>` to its copy, which made it the one tile that could not be inspected — and took the
+ * collector off the purchase screen mid-pass, which on a card of forty worked in one sitting is
+ * exactly when leaving costs most. The way to the copy is *Open copy* inside the dialog: a real
+ * link, so it still opens in a tab beside the card, but taken when it is meant.
  *
  * **The emphasis is on the tiles still waiting, and the state is *marked* rather than shaded**
  * (#582). The strip is read to answer what is *left*, so the queue is what stands out: a waiting
@@ -758,16 +761,12 @@ function BatchSection({
 function TileCell({
   tile,
   collectionId,
-  copyHref,
   droppable,
   onOpen,
   onDropBack,
 }: {
   tile: ScanTileData;
   collectionId: string;
-  /** Where this tile's copy lives, for a consumed tile. Null for every other state, and for a
-   * consumed tile whose copy has since been deleted — there is nothing to reach. */
-  copyHref: string | null;
   droppable: boolean;
   onOpen: () => void;
   onDropBack: (backTileId: string) => void;
@@ -855,16 +854,6 @@ function TileCell({
     </>
   );
 
-  // A consumed tile is a link, so it can be opened in a tab beside the card being worked — the
-  // rest are buttons, because they open a dialog rather than going anywhere.
-  if (copyHref) {
-    return (
-      <a href={copyHref} title={tileTitle(tile)} style={style}>
-        {body}
-      </a>
-    );
-  }
-
   return (
     <button
       type="button"
@@ -942,8 +931,8 @@ function tileTitle(tile: ScanTileData): string {
     }
     const copy = `copy ${formatItemNo(tile.item.itemNo)}`;
     return tile.outsideDescription
-      ? `${head} · became ${copy}, which is on none of the auction lot's lines — click to open it`
-      : `${head} · became ${copy} — click to open it`;
+      ? `${head} · became ${copy}, which is on none of the auction lot's lines`
+      : `${head} · became ${copy}`;
   }
   if (tile.state === "discarded") {
     return tile.note ? `${head} · discarded: ${tile.note}` : `${head} · discarded`;

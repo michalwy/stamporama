@@ -193,6 +193,12 @@ describe("identifying scan tiles into copies (#567)", () => {
       before[0].id,
       "the same row, under its new owner — nothing was copied and nothing was lost"
     );
+    // …and enough of the copy to recognise it (#584), since the tile's own dialog is where a
+    // consumed tile is inspected now that clicking one no longer leaves for the copy.
+    assert.equal(consumed?.item?.stampName, "Tile stamp");
+    assert.equal(consumed?.item?.conditionAbbreviation, "U");
+    assert.deepEqual(consumed?.item?.catalogNumbers, []);
+    assert.equal(consumed?.item?.backPhotoId, null, "this card was never turned over");
 
     // The copy is an ordinary intake copy: linked to the lot, not yet in the collection.
     const item = await prisma.item.findUniqueOrThrow({ where: { id: outcome.itemId } });

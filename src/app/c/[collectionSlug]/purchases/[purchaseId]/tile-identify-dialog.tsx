@@ -6,6 +6,7 @@ import {
   DialogActions,
   DialogBody,
   DialogFooter,
+  DialogLinkButton,
   DialogSecondaryButton,
   DialogShell,
 } from "@/app/dialog-shell";
@@ -51,6 +52,13 @@ import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-que
  * **Discard acts immediately**, with no note asked for. On a parcel full of junk it is the frequent
  * answer, and it is safe to make it cheap precisely because it is reversible — *Put back in the
  * queue* is right there, and the note can be written afterwards on the rare tile that earns one.
+ *
+ * **All three states open this dialog, and none of them navigates on the click itself** (#584). A
+ * consumed tile used to be an `<a>` straight to its copy, which left the tile itself impossible to
+ * inspect — which batch, which position, what it became — and threw the collector out of the
+ * purchase mid-pass, when a card of forty is being worked in one sitting and getting back is most
+ * expensive. So it settles here like a discard does, showing the copy it became, and *Open copy* is
+ * a deliberate action in the footer: leaving is a choice, never a side effect of looking at a tile.
  */
 
 interface Props {
@@ -64,6 +72,9 @@ interface Props {
    * list's explanation — that those copies are the lines that were described in order to bid.
    * It decides nothing, which was always its real job. */
   fromAuction: boolean;
+  /** Where the copy a consumed tile became lives (#584). Null for every other state, and for a
+   * consumed tile whose copy has since been deleted — there is nothing to open. */
+  copyHref: string | null;
   onIdentifyNew: () => void;
   /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
@@ -122,6 +133,7 @@ export function TileIdentifyDialog({
   tile,
   lotOpen,
   fromAuction,
+  copyHref,
   onIdentifyNew,
   onDone,
   onClose,
@@ -231,6 +243,9 @@ export function TileIdentifyDialog({
 
       {settled ? (
         <DialogFooter>
+          {/* The settled states' one way onward, each on the left where the other outcomes sit:
+              a discard goes back into the queue, and a consumed tile leads to what it became
+              (#584) — the click that used to happen by itself, now asked for. */}
           {tile.state === "discarded" && (
             <div style={{ marginRight: "auto" }}>
               <DialogSecondaryButton
@@ -239,6 +254,13 @@ export function TileIdentifyDialog({
               >
                 Put back in the queue
               </DialogSecondaryButton>
+            </div>
+          )}
+          {tile.state === "consumed" && copyHref && (
+            <div style={{ marginRight: "auto" }}>
+              <DialogLinkButton href={copyHref}>
+                <Icon name="open" size="sm" /> Open copy
+              </DialogLinkButton>
             </div>
           )}
           <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
@@ -294,15 +316,23 @@ export function TileIdentifyDialog({
 
 // ── The images ───────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The tile's two crops, at the size the whole dialog exists for.
+ *
+ * A consumed tile has no photo rows of its own — but only because consuming **reassigns** them to
+ * the copy rather than copying them, so the copy's front and back *are* this tile's, and following
+ * them there is how a consumed tile shows itself rather than an empty panel (#584). The strip
+ * already does exactly this with the thumbnail.
+ *
+ * Nothing to show is then one honest case: the copy was deleted afterwards and its images went with
+ * it.
+ */
 function TileImages({ tile, collectionId }: { tile: ScanTileData; collectionId: string }) {
   const shots = [
-    { id: tile.frontPhotoId, label: "Front" },
-    { id: tile.backPhotoId, label: "Back" },
+    { id: tile.frontPhotoId ?? tile.item?.frontPhotoId ?? null, label: "Front" },
+    { id: tile.backPhotoId ?? tile.item?.backPhotoId ?? null, label: "Back" },
   ].filter((s) => s.id != null);
-  if (shots.length === 0) {
-    // A consumed tile has handed its crops to its copy, so there is nothing left to show here.
-    return null;
-  }
+  if (shots.length === 0) return null;
   return (
     <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
       {shots.map((shot) => (
@@ -515,29 +545,32 @@ function SettledTile({
       <div
         style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
       >
-        <p style={{ margin: 0 }}>
-          {tile.item ? (
-            <>
+        {tile.item ? (
+          <>
+            <p style={{ margin: 0 }}>
               This tile became copy <strong>{formatItemNo(tile.item.itemNo)}</strong>, which now owns
-              its images.
-            </>
-          ) : (
-            // The one case that reaches this view: on the card a consumed tile is a link to its
-            // copy, so only a tile whose copy has been deleted still opens a dialog.
-            <>
-              This tile became a copy that has since been <strong>deleted</strong>, and its images
-              went with it. There is nothing to restore — the tile stays as the record that it was
-              worked through.
-            </>
-          )}
-          {tile.outsideDescription && (
-            <>
-              {" "}
-              Its stamp is on <strong>none of the auction lot&rsquo;s lines</strong> — the parcel
-              holds something its description never listed.
-            </>
-          )}
-        </p>
+              the images above.
+            </p>
+            {/* **Which** copy, not merely that there is one (#584). A number alone cannot be
+                checked against the piece in the tweezers; the stamp it was identified as can, and
+                that is what makes opening the copy a decision rather than a way of finding out. The
+                numbers are the copy's own, drawn the way the assign list one screen back draws
+                them. */}
+            <ConsumedIdentity item={tile.item} />
+          </>
+        ) : (
+          <p style={{ margin: 0 }}>
+            This tile became a copy that has since been <strong>deleted</strong>, and its images went
+            with it. There is nothing to restore — the tile stays as the record that it was worked
+            through.
+          </p>
+        )}
+        {tile.outsideDescription && (
+          <p style={{ margin: "0.5rem 0 0" }}>
+            Its stamp is on <strong>none of the auction lot&rsquo;s lines</strong> — the parcel holds
+            something its description never listed.
+          </p>
+        )}
       </div>
     );
   }
@@ -590,6 +623,21 @@ function SettledTile({
         </button>
       )}
     </div>
+  );
+}
+
+/** What the copy a tile became *is*, in one line — its numbers, its name and its condition, the
+ *  three the assign list's own rows lead with, so a tile before and after being worked through
+ *  describes its copy the same way. */
+function ConsumedIdentity({ item }: { item: NonNullable<ScanTileData["item"]> }) {
+  const numbers = item.catalogNumbers.join(" · ");
+  return (
+    <p style={{ margin: "0.375rem 0 0", color: "var(--color-text-primary)" }}>
+      {numbers && <strong>{numbers}</strong>}
+      {numbers && item.stampName ? " — " : ""}
+      {item.stampName ?? (numbers ? "" : "Unnamed stamp")}
+      <span style={{ color: "var(--color-text-muted)" }}> · {item.conditionAbbreviation}</span>
+    </p>
   );
 }
 

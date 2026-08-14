@@ -300,6 +300,12 @@ Click a tile. Its front and back fill the dialog, big enough to see a crop that 
 a piece nobody could identify — which is the whole reason for reviewing tiles rather than trusting
 the cut, since the intake step that follows never shows them.
 
+**Every tile opens the same dialog, whatever state it is in, and no tile takes you off this screen
+when you click it.** One waiting to be dealt with opens on its three answers; a discarded one opens
+on its note; one that has already become a copy opens on the copy it became. Leaving the purchase is
+always something you ask for — a card of forty is worked through in one sitting, and getting back
+means finding the purchase, the lot and the batch again.
+
 The dialog **opens on the likely answer rather than asking which one you want**, and the other two
 are always one click away in its footer. It opens on *assign* when this lot holds a copy that could
 still take **this tile's** images, and on *identify* when it does not — so a settled auction lot
@@ -331,10 +337,17 @@ A **note** on a discard is optional and written afterwards: click the discarded 
 same dialog has the field. Worth doing on the piece whose reason you will not remember in a month
 (*thinned*, *faked overprint*), and worth skipping on the forty that were simply junk.
 
+**A tile that became a copy says which one.** Click it and the dialog shows its pictures — the very
+images the copy now owns — the copy's number, the stamp it was identified as and its condition,
+which is enough to check it against the piece in your tweezers without going anywhere. **Open copy**
+in the footer takes you to it when you want it, and being a real link it opens in a new tab on
+ctrl/cmd+click, so you can look at the copy and keep the card you are working. If the copy was
+deleted later, the dialog says so: the images went with it, and the tile stays as the record that it
+was worked through.
+
 **Worked tiles stay where they are.** The strip is a map of the card on your desk — tile 7 on screen
 is the seventh piece on the stockbook — so nothing disappears or shuffles up as you go, which is what
-lets you keep matching a tile to the piece in your tweezers. Clicking a copy's tile opens that copy;
-clicking a discarded one opens its note.
+lets you keep matching a tile to the piece in your tweezers.
 
 **The tiles still waiting are the ones that stand out.** A tile nobody has dealt with wears a
 coloured edge; a tile you have finished with lets its picture step back and takes a small mark in

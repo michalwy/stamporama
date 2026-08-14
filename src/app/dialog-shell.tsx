@@ -257,6 +257,42 @@ export function DialogSecondaryButton({
   );
 }
 
+/**
+ * A footer action that **goes somewhere** — the secondary button's shape, drawn as a real `<a>`.
+ *
+ * The same rule row menus follow (#557): an entry with an address carries `href` rather than an
+ * `onClick` calling `router.push`, because a push navigates on a plain left click and on nothing
+ * else — cmd/ctrl+click opens the destination in the same tab, the middle button does nothing, and
+ * the browser's context menu has no *Open link in new tab* to offer. On a dialog that is the way
+ * *out* of a screen being worked through, that matters more than anywhere: opening the destination
+ * beside the work is the whole reason to leave (a consumed scan tile's copy, #584).
+ */
+export function DialogLinkButton({
+  href,
+  style,
+  children,
+}: {
+  href: string;
+  style?: React.CSSProperties;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      style={{
+        ...baseBtn,
+        background: "var(--color-bg-elevated)",
+        color: "var(--color-text-secondary)",
+        border: "1px solid var(--color-border-strong)",
+        textDecoration: "none",
+        ...style,
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 export function DialogDestructiveButton({
   type = "button",
   style,
