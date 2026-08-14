@@ -1,1 +1,1 @@
-Read AGENTS.md before starting any task. It contains all project rules, conventions, and working instructions.
+Read AGENTS.md before starting any task. It contains the project rules, the invariants that hold on every task, and a topic map pointing at `docs/agents/*.md` — read the topic file for the area you are about to change.

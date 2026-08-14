@@ -1,0 +1,29 @@
+# Platform & Architecture
+
+Stack, collection scoping, routing, database and migrations, RSC boundaries, deployment.
+
+- Collection-scoped access control: `collectionId` on data, owner has full access, checks live server-side.
+
+- Collection URLs: `/c/[collectionSlug]/...`; slug resolution authorizes by internal `collectionId`.
+
+- Better Auth for authentication.
+
+- Prisma with PostgreSQL (minimum **version 15** — migrations use `NULLS NOT DISTINCT`; see ADR-0006). Treat schema changes as product decisions.
+
+- Bumping the bundled `postgres:` image to a new major breaks the dev stack: the `db_data` volume keeps the old cluster and 18+ images relocated the data directory. It needs a dump/restore, never just a tag change — follow `docs/development/postgres-upgrade.md`. Production uses an external database and is unaffected.
+
+- A data migration that **renumbers a column covered by a unique index must drop that index first**. PostgreSQL checks unique *indexes* immediately — only a unique *constraint* declared `DEFERRABLE` can be deferred, and Prisma writes indexes — while the order rows are updated in is unspecified, so a renumbering that shifts values along an existing sequence transiently duplicates one and fails on whichever row it happens to reach first. It is the classic `UPDATE … SET n = n + 1` collision, and it fails *sometimes*: green on one database and red on another. Nothing in the suite can catch it either, because integration tests run `migrate deploy` against a fresh database, where the table the migration rewrites is empty. `20260814210000_scan_batch_on_purchase` has the hazard and shipped with it deliberately — the whole scan-ingest track (#566–#587) releases together, so no database ever holds the intermediate state, and every fresh deploy renumbers an empty table. Do not copy the shape from it.
+
+- SPA-like collection interaction: Next.js App Router as route/auth shell, client-side queries/mutations for rich screens.
+
+- TanStack Query for data fetching, TanStack Table for list views.
+
+- Cursor-backed infinite scrolling for large lists via shared primitives.
+
+- Keep domain logic out of UI components. Keep authorization server-side.
+
+- Explicit module boundaries under `src/`.
+
+- A **server component must not import a value from a `"use client"` module**. Under RSC those exports arrive as *client references*, not as values, and nothing warns: `Math.min(MAX_CARDS, n)` where `MAX_CARDS` came from a client file is `NaN`, which is how the ref-card sheet (#565) printed one card for every count typed — silently, and only once a `count` was in the URL, because the no-count path returned its default before ever touching the constant. A constant both halves read belongs in a **pure `src/lib/` module** neither owns (`MAX_REF_CARDS` / `parseRefCardCount` in `location-ref.ts`, moved there by #569), and the parse belongs there too so a unit test can hold it. The reverse direction — a client component importing a pure module — is fine and is the idiom.
+
+- Self-hosted deployment: CI pushes multi-arch image to `ghcr.io/michalwy/stamporama` for release tags only. `docker-compose.prod.yml` + `.env` for production. `scripts/install.sh` is the curl-able installer. Version baked via `STAMPORAMA_VERSION` build arg, shown through `getAppVersion()` in `src/lib/version.ts`; the **release instant** rides beside it as `STAMPORAMA_BUILD_DATE` (#507), read by `getAppReleaseDate()` and rendered by the shared `AppVersionLabel` on both surfaces that show a version. CI stamps it from the image's own `org.opencontainers.image.created` label so the two cannot disagree. Null is the ordinary case, not a failure — an unstamped build says nothing rather than dating itself, the same call an unset version makes in reading as `dev`. The inline day is the **UTC date sliced off the ISO string** and the localized instant lives only in the hover `Tooltip`: this renders inside a server-rendered shell, and a browser-formatted date in it would disagree with the server's for anyone west of UTC, while a bubble created on hover is never in the server's HTML at all.
