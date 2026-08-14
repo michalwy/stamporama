@@ -68,6 +68,7 @@ import {
   deliveryStateToken,
 } from "@/lib/delivery-state";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
+import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
@@ -268,6 +269,9 @@ export function PurchaseDetailPanel({
     // uploads persist server-side until the create promotes them (or the orphan-GC sweeps them
     // if the wizard is abandoned).
     photoChangeSet: string;
+    // Physical format chosen at the condition step (#573), blank meaning single. Single-stamp
+    // picks only — the step offers no format for a whole checklist, so blank is what arrives.
+    formatId: string;
     // Disposition flags chosen at the condition step (#160), carried to the final create step.
     inCollection: string;
     forSale: string;
@@ -867,6 +871,7 @@ export function PurchaseDetailPanel({
               locationId: (fd.get("locationId") as string) ?? "",
               locationRef: (fd.get("locationRef") as string) ?? "",
               photoChangeSet: (fd.get("photoChangeSet") as string) ?? "",
+              formatId: (fd.get("formatId") as string) ?? "",
               inCollection: (fd.get("inCollection") as string) ?? "false",
               forSale: (fd.get("forSale") as string) ?? "false",
               forTrade: (fd.get("forTrade") as string) ?? "false",
@@ -894,6 +899,7 @@ export function PurchaseDetailPanel({
             fd.set("certificateStatusId", wsIntake.certificateStatusId);
             fd.set("locationId", wsIntake.locationId);
             fd.set("locationRef", wsIntake.locationRef);
+            fd.set("formatId", wsIntake.formatId);
             fd.set("inCollection", wsIntake.inCollection);
             fd.set("forSale", wsIntake.forSale);
             fd.set("forTrade", wsIntake.forTrade);
@@ -3498,6 +3504,37 @@ function IntakeConditionDialog({
     const last = readLast(LS_LAST_CERT, collectionId);
     return certificateStatuses.some((c) => c.id === last) ? last : "";
   });
+  // The physical format of the piece being identified (#573) — a pair, a block, a strip — blank
+  // meaning *single*, which is a value and not a missing answer (`StampFormat`, ADR-0020).
+  //
+  // It is deliberately **not** remembered, unlike the condition, certificate, location and
+  // disposition around it, and that asymmetry is the point rather than an oversight to tidy up.
+  // Condition repeats down a stockbook page — a card is often all mint or all used — so restoring it
+  // saves hundreds of clicks. Format does not repeat: single is the default state of the world and a
+  // multiple is the exception, so a sticky format would mark every later single as a block of four
+  // until the collector noticed. That is this field's own reason for existing, inverted — and worse
+  // than what it replaces, because a format nobody chose is invisible where a missing one at least
+  // reads as *single*. The cost is one extra pick on a run of multiples; the gain is that a
+  // multiple is always something that was chosen.
+  //
+  // That guarantee is enforced **here**, and deliberately not left to the component tree. Both
+  // callers render this dialog conditionally today, so it unmounts on every return to the picker
+  // and `useState("")` would start fresh on its own — but that is a fact about how the dialog is
+  // mounted, not about formats, and someone keeping it mounted across a transition months from now
+  // would silently make the field sticky: the very behaviour this field rejected, reintroduced by a
+  // change that has nothing to do with it, and invisible to any test, since it is client state.
+  // So the reset rides on `selection`, which both callers rebuild at **every** pick — including a
+  // second pick of the same stamp, the block-of-four-then-singles run a key derived from the stamp
+  // id would sit right through.
+  const [formatId, setFormatId] = useState("");
+  const [formatSelection, setFormatSelection] = useState(selection);
+  if (formatSelection !== selection) {
+    setFormatSelection(selection);
+    setFormatId("");
+  }
+  // Fetched here rather than threaded through the purchase screen, the reason the copy dialog
+  // fetches it: it is one more dictionary and the screens that need it are not the ones that have it.
+  const { data: formats = [] } = useCollectionFormats(collectionId);
   const [locationId, setLocationId] = useState(() => {
     const last = readLast(LS_LAST_LOCATION, collectionId);
     // Only restore an assignable location that still exists (grouping-only nodes and
@@ -3595,6 +3632,7 @@ function IntakeConditionDialog({
                 conditions={conditions}
                 conditionId={conditionId}
                 certificateStatusId={certId}
+                formatId={formatId}
               />
             )}
           </div>
@@ -3636,6 +3674,35 @@ function IntakeConditionDialog({
                 ))}
               </select>
             </div>
+            {/* Format (#573): the piece in the tweezers is a pair or a block as often as it is a
+                single, and this is the moment that is known — afterwards it is one copy edit per
+                piece, from memory, after the sorting pass. Single-stamp intake only, the rule
+                photos follow and for a stronger reason: a whole-checklist intake fans out across
+                many stamps and "block of four" could not be true of all of them. Absent entirely
+                until the collection defines formats, as the inventory list's own format controls
+                are — most collections never define any. */}
+            {singleStamp && formats.length > 0 && (
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="intake-format">Format</LabelWithError>
+                <select
+                  id="intake-format"
+                  name="formatId"
+                  value={formatId}
+                  onChange={(e) => setFormatId(e.target.value)}
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                >
+                  {/* No "single" row exists in the dictionary — a copy with no format *is* the
+                      single, exactly as no certificate means none. */}
+                  <option value="">— Single —</option>
+                  {formats.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.abbreviation})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.

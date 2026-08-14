@@ -273,7 +273,24 @@ every copy created in that step. Your last choices — disposition included — 
 pre-filled for the next stamp, so sorting a parcel into the same box, condition, and
 disposition is quick. When you are adding a **single stamp** you can also **attach
 photos** to that copy right here (front/back plus extra images); a whole-issue intake creates
-several distinct copies, so photos are offered only for single-stamp intake. The copies are
+several distinct copies, so photos are offered only for single-stamp intake.
+
+If your collection defines [formats](inventory.md#pairs-blocks-and-other-multiples) — pairs,
+blocks, strips — a
+**Format** field sits beside the condition, defaulting to **Single**. A se-tenant pair or a block
+of four is one collectible rather than several, and the moment you identify it is the moment you
+know which it is; recording it here saves editing each copy afterwards, from memory, once the
+sorting pass is over. It is offered for **single-stamp** intake only, the same rule photos follow
+and for a stronger reason: a whole-set intake creates copies of many different stamps, and one
+format could not be true of all of them. Collections with no formats defined never see the field.
+
+Unlike the choices beside it, the format is **not remembered** — it starts at *Single* every time.
+That is deliberate. A stockbook card is often all mint or all used, so remembering the condition
+saves hundreds of clicks; multiples do not come in runs like that. If the format stuck, the one
+block of four you enter would quietly mark every single after it as a block too, and a format you
+never chose is much harder to spot than a missing one, which at least reads as *Single*.
+
+The copies are
 linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
 become part of your collection later, once received.) If the order is already **Arrived**
@@ -313,8 +330,9 @@ no longer hold and copies that never arrived are left out of both); what differs
 gives one number and this line splits it, because *hold* is a claim and the badge is a count.
 
 **The want marker.** The same line carries the **crosshair chip** when the stamp is on your
-[want list](wants.md), ringed once the condition and certificate you have picked would satisfy one
-of the wants — so it moves as you fill the form. Click it for the terms. The chip is on a lot's copy
+[want list](wants.md), ringed once the condition, certificate and format you have picked would
+satisfy one of the wants — all three are axes a want is matched on, so a block of four does not ring
+for a want that only ever wanted singles — and it moves as you fill the form. Click it for the terms. The chip is on a lot's copy
 rows too, and it is the same judgement the intake review below makes, so a ringed pick is one the
 review will greet you with.
 

@@ -244,6 +244,7 @@ export async function createLotWithStampsAction(
       locationId: optionalStr(formData, "locationId"),
       locationRef: optionalStr(formData, "locationRef"),
       photoChangeSet: parsePhotoChangeSet(formData),
+      formatId: optionalStr(formData, "formatId"),
       ...parseDisposition(formData),
     });
     return { status: "success", id: lotId };
@@ -357,6 +358,7 @@ export async function intakeStampsAction(
       locationId: optionalStr(formData, "locationId"),
       locationRef: optionalStr(formData, "locationRef"),
       photoChangeSet: parsePhotoChangeSet(formData),
+      formatId: optionalStr(formData, "formatId"),
       ...parseDisposition(formData),
     });
     return { status: "success" };

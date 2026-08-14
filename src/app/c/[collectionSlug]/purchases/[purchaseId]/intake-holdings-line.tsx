@@ -50,9 +50,11 @@ import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-coun
  *
  * The **want marker** rides on the same line rather than waiting for the copy rows and the
  * after-intake review, which both speak about a decision already taken. It is the row's own
- * `WantChip`, judged against the condition and certificate *currently chosen in the dialog*, so it
- * rings live as the collector fills the form and cannot disagree with the review that greets the
- * copy on arrival. Format is null: intake has no format field, so every copy it creates is a single.
+ * `WantChip`, judged against the condition, certificate *and format* currently chosen in the dialog,
+ * so it rings live as the collector fills the form and cannot disagree with the review that greets
+ * the copy on arrival. The format axis matters as much as the other two (#573): a want accepts a set
+ * per axis and a null format *is* "single", so a block of four judged as null would ring for a want
+ * that only ever wanted singles.
  *
  * Single-stamp intake only — a whole-checklist intake fans out across many stamps and has no one
  * stamp to report on, the reason photos are single-stamp only too (#148). The caller renders none.
@@ -63,6 +65,7 @@ export function IntakeHoldingsLine({
   conditions,
   conditionId,
   certificateStatusId,
+  formatId,
 }: {
   collectionId: string;
   stampId: string;
@@ -71,6 +74,8 @@ export function IntakeHoldingsLine({
   conditionId: string;
   /** Likewise the certificate; blank is *no certificate*, which is a value and not "any" (#532). */
   certificateStatusId: string;
+  /** Likewise the format (#573); blank is *single*, again a value rather than "any". */
+  formatId: string;
 }) {
   const { data, isLoading, isError } = useStampHoldings(collectionId, stampId);
 
@@ -177,7 +182,7 @@ export function IntakeHoldingsLine({
                 stampId,
                 conditionId,
                 certificateStatusId: certificateStatusId || null,
-                formatId: null,
+                formatId: formatId || null,
               }
             : undefined
         }

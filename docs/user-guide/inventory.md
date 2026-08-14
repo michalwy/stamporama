@@ -501,6 +501,10 @@ four, a strip of three, whatever your collection needs. Leave it as **Single** â
 for an ordinary single stamp; there is no "single" entry to pick, because a copy with no format
 set *is* the single. Only multiples get a chip on the list row, so the common case stays quiet.
 
+You can set the format wherever a copy is first described â€” the add and edit dialogs, and the
+identification step of [lot intake](purchases.md#identifying-stamps-intake) when you are taking in a
+single stamp.
+
 The format sits on the **copy**, not on the stamp. That matters when a stamp has variants: you
 attach the pair to whichever level of the variant tree you have actually identified, exactly as
 you would a single. A pair you have narrowed down to `309B` but no further is recorded against

@@ -302,6 +302,8 @@ export async function createLotWithStamps(
     locationId?: string | null;
     locationRef?: string | null;
     photoChangeSet?: PhotoChangeSet | null;
+    // Physical format of the copy (#573); single-stamp only, see `intakeStamps`.
+    formatId?: string | null;
     // Disposition flags chosen during intake (#160); default off when omitted.
     inCollection?: boolean;
     forSale?: boolean;
@@ -318,6 +320,7 @@ export async function createLotWithStamps(
       locationId: input.locationId,
       locationRef: input.locationRef,
       photoChangeSet: input.photoChangeSet,
+      formatId: input.formatId,
       inCollection: input.inCollection,
       forSale: input.forSale,
       forTrade: input.forTrade,
@@ -503,6 +506,9 @@ export async function attachItemsToLot(
  * holding until it is sorted. New copies enter as `ordered`, or `to_sort` when the order has
  * already arrived (they were identified during the sort pass).
  *
+ * A single-stamp intake may also name a **format** (#573) — the piece in the tweezers is a pair or
+ * a block as often as it is a single, and this is the moment it is known.
+ *
  * Returns the copies it created, not a count (#532): taking a copy in is the moment the want list
  * is consulted (ADR-0032 §7), and the review that follows has to name each copy and read its
  * condition. The count callers used to get is the array's length. */
@@ -519,6 +525,11 @@ export async function intakeStamps(
     // Only honoured for a single-stamp intake (#148); a whole-checklist intake creates several
     // distinct copies, so the client never sends photos for it.
     photoChangeSet?: PhotoChangeSet | null;
+    // The physical format of the copy (#573), null/omitted meaning *single* (`StampFormat`,
+    // ADR-0020). Honoured for a single-stamp intake only, on the photo rule's reasoning and a
+    // stronger version of it: a whole-checklist intake fans out across many stamps and one format
+    // could not be true of all of them.
+    formatId?: string | null;
     // Disposition flags chosen during intake (#160). Copies are still created not-yet-sorted
     // (ordered / to_sort); these only preset where the copy will land once sorted. Default off.
     inCollection?: boolean;
@@ -554,6 +565,17 @@ export async function intakeStamps(
       select: { id: true },
     });
     if (!cert) throw new Error("Certificate status not found in this collection.");
+  }
+
+  // The format, when one was named (#573). Null is *single* and needs no row, exactly as a null
+  // certificate is "no certificate" — so only a named one is checked against the collection.
+  const formatId = input.formatId?.trim() || null;
+  if (formatId) {
+    const format = await prisma.stampFormat.findFirst({
+      where: { id: formatId, collectionId },
+      select: { id: true },
+    });
+    if (!format) throw new Error("Format not found in this collection.");
   }
 
   // Storage location is optional at intake; when set it must be an assignable node of this
@@ -596,12 +618,20 @@ export async function intakeStamps(
   // A ref is meaningless without a location, so drop it unless a location is set (mirrors the
   // inventory copy form).
   const locationRef = locationId ? input.locationRef?.trim() || null : null;
+  const singleStamp = !!input.stampId && !input.checklistId;
+  // The format applies to the one copy a single-stamp intake makes, and to nothing a
+  // whole-checklist intake makes: those are several distinct stamps, and "block of four" cannot be
+  // true of all of them. Dropped here rather than refused, exactly as a checklist intake's photos
+  // are (#148) — the client offers neither, so a value arriving is a stale form and not a mistake
+  // worth failing the whole intake over.
+  const copyFormatId = singleStamp ? formatId : null;
   const copyData = (stampId: string, itemNo: number) => ({
     collectionId,
     itemNo,
     stampId,
     conditionId,
     certificateStatusId,
+    formatId: copyFormatId,
     locationId,
     locationRef,
     inCollection: input.inCollection ?? false,
@@ -617,7 +647,6 @@ export async function intakeStamps(
   // Internal copy numbers (#268) are reserved as one consecutive range for the whole intake, so a
   // whole-issue expansion numbers its copies in the order the stamps were resolved.
   const itemNos = await allocateItemNumbers(prisma, collectionId, stampIds.length);
-  const singleStamp = !!input.stampId && !input.checklistId;
   // `createManyAndReturn` rather than `createMany`: the want review that follows needs each copy's
   // id and number, and re-reading the lot to find "the ones just added" would be a guess.
   const created: { id: string; itemNo: number; stampId: string }[] = [];
@@ -635,16 +664,16 @@ export async function intakeStamps(
     });
     created.push(...rows);
   }
-  // Intake records no format, so every copy it makes is a single (a null `formatId` *is* "single",
-  // see `StampFormat`) — stated here rather than left implicit, since the want's format axis reads
-  // it as a value.
+  // The format the copies were written with, carried out rather than assumed: the want's format
+  // axis reads it as a value, where null *is* "single" (`StampFormat`) and never "unknown", so a
+  // block reported as null would be judged as satisfying a want for singles.
   return created.map((row) => ({
     itemId: row.id,
     itemNo: row.itemNo,
     stampId: row.stampId,
     conditionId,
     certificateStatusId,
-    formatId: null,
+    formatId: copyFormatId,
   }));
 }
 
