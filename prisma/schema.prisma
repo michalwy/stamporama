@@ -1382,6 +1382,9 @@ model Photo {
   itemId         String?
   stampId        String?
   offerId        String?
+  /** Fourth owner (#566): a scan tile, holding its front/back crop before any copy exists to hang
+   * it on. #567 moves the images onto the new copy by reassigning this column to `itemId`. */
+  tileId         String?
   kind           String   @default("original")
   role           String?
   title          String?
@@ -1402,6 +1405,7 @@ model Photo {
   item  Item?  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   stamp Stamp? @relation(fields: [stampId], references: [id], onDelete: Cascade)
   offer Offer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  tile  ScanTile? @relation(fields: [tileId], references: [id], onDelete: Cascade)
   /** The photo plan entry this image occupies, when it is part of an offer's plan (#311). */
   offerPhotoEntry OfferPhotoEntry?
   /** Manual attachments (#313) that render *from* this image. A copy's scan can be attached to
@@ -1414,6 +1418,7 @@ model Photo {
   @@index([itemId])
   @@index([stampId])
   @@index([offerId])
+  @@index([tileId])
   @@map("photo")
 }
 
@@ -1520,14 +1525,117 @@ model PurchaseLot {
   // Intake status: open (items still being identified, cost pending) | closed
   // (pool allocated to items, cost-basis frozen). See ADR-0009 §3/§5.
   status     String  @default("open")
+  // Per-lot batch sequence for scan ingest (#566). Per lot rather than per collection: a batch
+  // number is only ever read beside its lot, and a global sequence would call a lot's second card
+  // "batch 47".
+  nextScanBatchNo Int @default(1)
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   items    Item[]
   // The won auction lot this line was transcribed from, when it came from one (ADR-0021).
   auctionLot AuctionLot?
+  // Retained card scans and the tiles cut from them (#566, ADR-0033).
+  scanSheets ScanSheet[]
+  scanTiles  ScanTile[]
 
   @@index([purchaseId])
   @@map("purchase_lot")
+}
+
+// A retained scan of one stockbook card (#566, ADR-0033).
+//
+// Deliberately **not** a `Photo`. A `Photo` is two derivatives of something and the upload's own
+// bytes are discarded; a sheet is the opposite — the bytes are the point, because the cut happens
+// on the original and a stockbook cannot be re-scanned once it has been broken up. It also needs
+// an `original` variant the closed `PhotoVariant` union has no room for, and would have to be
+// excluded from every existing photo reader.
+//
+// Variants hang under `storageKey` as `<prefix>/{original,view}.<ext>`: `original` is the upload
+// untouched, `view` a FULL_MAX_EDGE-capped derivative the review editor displays, because a
+// browser cannot be handed a 30 Mpx image and the original must never be the thing on screen.
+model ScanSheet {
+  id             String   @id @default(cuid())
+  lotId          String
+  /** The cut this sheet belongs to: a front sheet, an optional back sheet, and the tiles cut
+   * from them. A per-lot sequence taken from `PurchaseLot.nextScanBatchNo`. */
+  batchNo        Int
+  /** front | back. Unconstrained in the DB, matching `Offer.state` and `PurchaseLot.status`. */
+  side           String
+  storageBackend String   @default("filesystem")
+  /** Key **prefix**, exactly as `Photo.storageKey` is. */
+  storageKey     String
+  mime           String
+  /** The original's dimensions. Every box is stored in these coordinates — this is what the editor
+   * scales by and what `sharp.extract` is handed. */
+  width          Int
+  height         Int
+  /** The `view` derivative's dimensions; the editor's display scale is `viewWidth / width`. */
+  viewWidth      Int
+  viewHeight     Int
+  /** The retained original's size, counted in the collection's storage total: it is the largest
+   * object the app stores and it would be dishonest for it to be the invisible one. */
+  sizeBytes      Int
+  createdAt      DateTime @default(now())
+
+  lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  frontTiles ScanTile[]  @relation("ScanTileFrontSheet")
+  backTiles  ScanTile[]  @relation("ScanTileBackSheet")
+
+  @@unique([lotId, batchNo, side])
+  @@index([lotId])
+  @@map("scan_sheet")
+}
+
+// One region of one cut (#566, ADR-0033) — an image of something not yet identified, sitting on a
+// purchase lot until #567 turns it into a copy or records that it became nothing.
+//
+// Why this is not an `Item`: `Item.stampId` is NOT NULL and stays that way. Every read in the app
+// assumes a copy points at a stamp, and lot closing decides it — the pool is split across copies by
+// primary-catalog price, before the parcel arrives, so a stamp-less stub copy would have no weight
+// in that split. As its own entity a tile is simply not in the split, and the lot header warns
+// "N tiles unidentified" the way the existing "N to sort" warning does.
+//
+// The boxes are retained though nothing needs them to *serve* a tile: they are what lets a re-cut
+// reopen the editor on the previous cut rather than an empty canvas.
+model ScanTile {
+  id           String   @id @default(cuid())
+  lotId        String
+  batchNo      Int
+  /** Reading order within the batch: rows by top edge within a tolerance taken from the median box
+   * height, each row left to right. Assigned at commit and stable afterwards. */
+  position     Int
+  /** unidentified | consumed | discarded. Only `unidentified` is reachable in #566; the other two
+   * are #567's. */
+  state        String   @default("unidentified")
+  /** Where the front came from. Null on a **back-only** tile: an unmatched back box becomes a tile
+   * of its own so it can be dragged onto a front tile, which is the manual pairing path. */
+  frontSheetId String?
+  frontX       Int?
+  frontY       Int?
+  frontW       Int?
+  frontH       Int?
+  backSheetId  String?
+  backX        Int?
+  backY        Int?
+  backW        Int?
+  backH        Int?
+  /** #567 writes the reason a tile was discarded. Nothing sets it here. */
+  note         String?
+  createdAt    DateTime @default(now())
+
+  lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  /** `Restrict`: a sheet cannot be deleted out from under the tiles cut from it. */
+  frontSheet ScanSheet?  @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
+  backSheet  ScanSheet?  @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
+  /** The tile's front/back crops, as `Photo` rows under the fourth owner. */
+  photos     Photo[]
+
+  // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
+  // express check constraints.
+  @@index([lotId])
+  @@index([lotId, batchNo])
+  @@index([lotId, state])
+  @@map("scan_tile")
 }
 
 // Non-inventory line of a purchase (ADR-0009 §1), e.g. a magnifier bought alongside

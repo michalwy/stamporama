@@ -170,6 +170,81 @@ worked out from its catalog price, the same split the sale itself uses. If a cop
 sale has no catalog price, its share cannot be worked out at all: it is still counted as sold, and
 the bar says so (*1 not attributable here*) rather than quietly counting it as nothing.
 
+### Card scans
+
+Instead of photographing each stamp as you identify it, you can **scan a whole stockbook card
+at once** and cut the scan into per-stamp **tiles**. Each stamp is then handled physically once
+— laid out and scanned — and everything after that happens on screen.
+
+Open a lot and use **Add card scan** in its **Card scans** section.
+
+#### Laying out the card
+
+Lay the stamps on a **black** stockbook card and scan the whole card square-on. Two things about
+the layout matter:
+
+- **Leave about one perforation tooth of gap between stamps.** Where two stamps abut teeth into
+  teeth, the seam is white paper against white paper: there is nothing there to find, so the two
+  will come out as one box and you will have to split them by hand. This is the single biggest
+  difference between a card that cuts cleanly and one that does not.
+- **Anything joined stays joined.** A se-tenant pair, a block, a strip: it is one piece, so it is
+  one box, one tile and — once identified — **one copy with a format**, never several singles.
+  That is correct, not a limitation to work around.
+
+Scan at a decent resolution: the scan is cut **before** anything is downscaled, so a card scanned
+at 600 dpi gives each stamp its own full-size image rather than a soft fragment of a shrunken
+sheet.
+
+#### Cutting the scan
+
+The scan opens in the **cut editor**, over the card itself. Draw a box around each stamp:
+
+- **Drag** on an empty part of the card to draw a box.
+- **Click** a box to select it; **shift-click** to add to the selection; drag inside it to move it,
+  or drag a corner or edge grip to resize it.
+- **Delete** (or Backspace) removes the selected boxes — a shadow, a fibre, the card's own edge.
+- **Merge** turns two or more selected boxes into the single rectangle holding them all, for a
+  stamp that ended up halved.
+- **Split ↔** and **Split ↕** cut one selected box into two: press the button, then click where
+  the seam is. The guide line turns red where the cut would leave a sliver, and such a cut is
+  refused rather than made.
+
+Each box carries the number it will be created with — rows top to bottom, each row left to right.
+**Nothing is created until you press Cut**, so the whole review is free to be wrong. Cancel and
+the scan is still stored, waiting to be cut.
+
+#### Backs
+
+To capture backs, **turn each stamp over in place** — do not lift the group or rearrange it — and
+scan the card again. Then use **Add back scan** on the batch and cut it the same way.
+
+Backs are matched to fronts **by position**, not by order: each back goes to the front sitting in
+the same spot, and the match has to agree both ways. Nothing is mirrored, because turning each
+stamp in place is what keeps the positions lined up in the first place.
+
+If the two sides do not have the same number of boxes, that is reported rather than hidden — *Front
+12, back 11*, naming which fronts found no back. It usually means a stamp fell out, two were drawn
+as one, or the wrong file was uploaded.
+
+A back that finds no front appears in an **unpaired backs** strip below the tiles. Drag it onto the
+tile it belongs to. That is also how you handle a card where you only scanned backs for some of the
+stamps, or where the layout was not reproduced.
+
+#### Re-cutting
+
+The scan itself is **kept**. If the cut was wrong — and a stockbook that has been broken up cannot
+be scanned again — press **Re-cut**: the batch's tiles are thrown away and the editor reopens over
+the same card, **with the previous boxes still on it**, so a bad cut is a box moved rather than a
+card redrawn.
+
+**Delete batch** removes the tiles *and* the scans. Re-cut is almost always what you want instead.
+
+#### Tiles and closing a lot
+
+A tile is not a copy: it has no stamp, no catalogue price and no share of the lot's cost. The lot
+header shows **N tiles unidentified** and the close dialog repeats it, but closing is never blocked
+by tiles — the cost split is correct without them. They survive the close.
+
 ### Identifying stamps (intake)
 
 A large lot is rarely sorted in one sitting — you identify stamps into it as you work through

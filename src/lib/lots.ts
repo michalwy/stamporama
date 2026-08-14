@@ -11,6 +11,7 @@ import {
   type LotCopyFilter,
 } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
+import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { isDeliveryState } from "./delivery-state";
 import type { ArrivingCopy } from "./want-rules";
 import {
@@ -106,6 +107,15 @@ export interface LotSummary {
   price: string;
   status: string;
   itemCount: number;
+  /** Scan tiles on this lot still waiting to become something (#566). What the header warns with
+   * before closing — a **warning, never a block**, matching the existing `N to sort`: a tile has no
+   * stamp, so no catalogue price, so no weight in the cost split, and closing without it is
+   * arithmetically fine. It is the collector's memory that needs the nudge, not the sum. Discarded
+   * tiles are not counted: a discarded tile is evidence, not a queue item (#567). */
+  unidentifiedTileCount: number;
+  /** Retained card scans on this lot (#566), so the card can say it has scans before any of them
+   * has been cut. */
+  scanSheetCount: number;
   /** price + share of shared cost, transaction currency (2 dp). */
   poolTx: string;
   /** poolTx at the frozen FX rate, base currency (2 dp), or null when no rate is known. */
@@ -176,7 +186,15 @@ export async function getPurchaseDetail(
           title: true,
           price: true,
           status: true,
-          _count: { select: { items: true } },
+          _count: {
+            select: {
+              items: true,
+              scanSheets: true,
+              // Counted through a filtered relation rather than by loading the tiles: a card of
+              // forty is forty rows the header has no other use for.
+              scanTiles: { where: { state: "unidentified" } },
+            },
+          },
         },
         orderBy: { id: "asc" },
       },
@@ -207,6 +225,8 @@ export async function getPurchaseDetail(
       price: l.price.toFixed(2),
       status: l.status,
       itemCount: l._count.items,
+      unidentifiedTileCount: l._count.scanTiles,
+      scanSheetCount: l._count.scanSheets,
       poolTx: pool.poolTx.toFixed(2),
       poolBase: canExpressBase ? pool.poolBase.toFixed(2) : null,
     };
@@ -334,10 +354,15 @@ export async function updateLot(
  * Restrict` would otherwise block the delete. Done in one transaction. */
 export async function deleteLot(ownerId: string, lotId: string): Promise<void> {
   const { collectionId } = await assertLotOwner(ownerId, lotId);
+  // The lot's scans and tiles cascade away with it, but their files do not (#566) — and a retained
+  // card scan is the largest object the app stores. Addresses read before the delete, files removed
+  // after it, so a delete that fails leaves the collector's scans intact.
+  const scanBytes = await collectScanStorageRefs([lotId]);
   await prisma.$transaction(async (tx) => {
     await tx.item.deleteMany({ where: { lotId, collectionId } });
     await tx.purchaseLot.delete({ where: { id: lotId } });
   });
+  await deleteScanStorageRefs(scanBytes);
 }
 
 /** Remove a copy from its lot. Copies are created by intake purely to populate the lot

@@ -6,6 +6,7 @@ import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
 import { summarizePurchaseReturn, type PurchaseReturn } from "./purchase-return";
+import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -508,6 +509,16 @@ export async function deletePurchase(
   purchaseId: string
 ): Promise<void> {
   await assertPurchaseOwner(ownerId, purchaseId);
+  // The cascade drops the `ScanSheet`/`ScanTile` rows but never the files (#566), and a retained
+  // card scan is the largest object the app stores. The addresses are read *before* the delete
+  // because afterwards there is nothing left to find them from, and the files are removed *after*
+  // it because this delete can be refused — a purchase whose lots still hold copies is blocked
+  // below, and destroying the collector's scans on the way to that error would be unforgivable.
+  const lots = await prisma.purchaseLot.findMany({
+    where: { purchaseId },
+    select: { id: true },
+  });
+  const scanBytes = await collectScanStorageRefs(lots.map((l) => l.id));
   try {
     await prisma.purchase.delete({ where: { id: purchaseId } });
   } catch (err) {
@@ -518,6 +529,7 @@ export async function deletePurchase(
     }
     throw err;
   }
+  await deleteScanStorageRefs(scanBytes);
 }
 
 /** Prisma FK-restrict violation (P2003) / required-relation guard (P2014). */

@@ -14,6 +14,13 @@ import type { Readable } from "node:stream";
 /** Which stored derivative to address. Both are written eagerly at upload time. */
 export type PhotoVariant = "full" | "thumb";
 
+/** Which stored derivative of a retained **scan sheet** to address (#566, ADR-0033). A closed
+ * union of its own rather than two more members on `PhotoVariant`: a sheet is not a photo, and
+ * `original` in particular is a promise no photo makes — the upload's own bytes, never resampled,
+ * because the cut is taken from them and a stockbook cannot be re-scanned once broken up. `view`
+ * is the `FULL_MAX_EDGE`-capped derivative the review editor displays. */
+export type SheetVariant = "original" | "view";
+
 /** Identifier of a storage binding, persisted per-photo in `storageBackend`. */
 export type StorageBackend = "filesystem" | "gcs";
 

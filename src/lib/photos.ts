@@ -28,9 +28,11 @@ import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 //
 // Offer-owned images (#311) deliberately do **not** go through `PhotoOwner`: they are not uploaded
 // and edited through a dialog change-set but *generated* from a plan, so their whole lifecycle
-// (render, replace, staleness, byte cleanup) lives in `offer-photo-generation.ts`. What is shared is
-// everything below that owner seam — serving (`getPhotoForServing`) and the collection's storage
-// total both handle all three owners.
+// (render, replace, staleness, byte cleanup) lives in `offer-photo-generation.ts`. Scan-tile images
+// (#566) sit outside `PhotoOwner` for the same reason: they are *cut* from a retained card scan, so
+// their lifecycle lives in `scan-sheets.ts`. What is shared is everything below that owner seam —
+// serving (`getPhotoForServing`) and the collection's storage total both handle all four owners,
+// and **a new owner has to be added to both** or its images 404 while its rows look perfectly fine.
 
 /** The single owner a photo belongs to. Exactly one field is set (DB CHECK enforces XOR). */
 export type PhotoOwner = { itemId: string } | { stampId: string };
@@ -168,6 +170,17 @@ async function resolveOwnerCollection(owner: PhotoOwner): Promise<string> {
 /** Delete both stored variants under a photo/upload prefix, best-effort. Never throws — byte
  * cleanup must not block a delete/GC path (orphan bytes are the failure we tolerate least, so
  * we try, but a missing file is fine). */
+/** Delete both stored variants under a photo prefix, best-effort. Exported for scan tiles (#566),
+ * whose front/back crops are ordinary `Photo` rows under a fourth owner and so are cleaned up by
+ * exactly this. */
+export async function deletePhotoVariants(
+  backend: string,
+  storageKey: string,
+  mime: string
+): Promise<void> {
+  return deleteVariants(backend, storageKey, mime);
+}
+
 async function deleteVariants(
   backend: string,
   storageKey: string,
@@ -716,16 +729,30 @@ export async function getPhotoForServing(photoId: string): Promise<{
       storageBackend: true,
       storageKey: true,
       mime: true,
-      // Polymorphic owner (#137, #311): exactly one of item/stamp/offer is set — resolve the
-      // owning collection + owner from whichever it is. Generated offer images (#311) are served
-      // through this same route, unchanged.
+      // Polymorphic owner (#137, #311, #566): exactly one of item/stamp/offer/tile is set —
+      // resolve the owning collection + owner from whichever it is. Generated offer images (#311)
+      // and scan tiles (#566) are served through this same route, unchanged.
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       offer: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      // A tile reaches its collection one hop further out — through its lot's purchase — because a
+      // tile belongs to a lot rather than to the collection directly. Flattened here so every owner
+      // answers the same two questions.
+      tile: {
+        select: {
+          lot: {
+            select: {
+              purchase: {
+                select: { collectionId: true, collection: { select: { ownerId: true } } },
+              },
+            },
+          },
+        },
+      },
     },
   });
   if (!photo) return null;
-  const owner = photo.item ?? photo.stamp ?? photo.offer;
+  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile?.lot.purchase;
   if (!owner) return null;
   return {
     collectionId: owner.collectionId,
@@ -759,17 +786,23 @@ async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
 }
 
 /** Total bytes of all committed photos in a collection (#144). Photos are polymorphic — each hangs
- * off an `Item`, a `Stamp` or an `Offer` (#311), all collection-scoped — so we sum `sizeBytes` across
- * the three owners. Generated offer images count: they occupy the volume like any other file, even
- * though they could be recreated. Staged `PhotoUpload` rows are transient (orphan-GC sweeps them) and
- * excluded. Only the `full` variant size is tracked on the row; thumbnails are not counted.
- * Owner-checked. */
+ * off an `Item`, a `Stamp`, an `Offer` (#311) or a scan tile (#566), all collection-scoped — so we
+ * sum `sizeBytes` across the four owners. Generated offer images count: they occupy the volume like
+ * any other file, even though they could be recreated. Staged `PhotoUpload` rows are transient
+ * (orphan-GC sweeps them) and excluded. Only the `full` variant size is tracked on the row;
+ * thumbnails are not counted. Owner-checked.
+ *
+ * **Retained scan sheets are counted too** (#566), and they are not photos: a card scan is kept at
+ * full resolution so a bad cut can be redone, which makes it far the largest object the app stores.
+ * A storage figure that left the biggest files out would be the one number an operator sizing a
+ * volume must not be given. The aggregate is written here rather than imported from
+ * `scan-sheets.ts`, which already imports this module. */
 export async function getCollectionPhotoStorageBytes(
   ownerId: string,
   collectionId: string
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [copyPhotos, stampPhotos, offerPhotos] = await Promise.all([
+  const [copyPhotos, stampPhotos, offerPhotos, tilePhotos, scanSheets] = await Promise.all([
     prisma.photo.aggregate({
       where: { item: { collectionId } },
       _sum: { sizeBytes: true },
@@ -782,11 +815,21 @@ export async function getCollectionPhotoStorageBytes(
       where: { offer: { collectionId } },
       _sum: { sizeBytes: true },
     }),
+    prisma.photo.aggregate({
+      where: { tile: { lot: { purchase: { collectionId } } } },
+      _sum: { sizeBytes: true },
+    }),
+    prisma.scanSheet.aggregate({
+      where: { lot: { purchase: { collectionId } } },
+      _sum: { sizeBytes: true },
+    }),
   ]);
   return (
     (copyPhotos._sum.sizeBytes ?? 0) +
     (stampPhotos._sum.sizeBytes ?? 0) +
-    (offerPhotos._sum.sizeBytes ?? 0)
+    (offerPhotos._sum.sizeBytes ?? 0) +
+    (tilePhotos._sum.sizeBytes ?? 0) +
+    (scanSheets._sum.sizeBytes ?? 0)
   );
 }
 

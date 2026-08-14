@@ -49,6 +49,7 @@ import {
   ChevronRight,
   CircleSlash,
   Coins,
+  Columns2,
   Copy,
   CopyPlus,
   CornerDownRight,
@@ -88,11 +89,13 @@ import {
   Plus,
   Printer,
   Receipt,
+  Rows2,
   Rows3,
   RotateCcw,
   RotateCw,
   Ruler,
   Scale,
+  ScanLine,
   Search,
   Settings,
   ShoppingBag,
@@ -268,6 +271,15 @@ const GLYPHS = {
   addToOffer: Tag,
   /** Starts a new offer from them. */
   newOffer: SquarePlus,
+  // Scan sheet ingest (#566). `merge` above is the other half of the pair — merging two boxes that
+  // halved one stamp is the same act as merging anything else, so it does not get a second name.
+  /** A retained card scan, and the act of adding one. */
+  scan: ScanLine,
+  /** Cut one box into a left and a right — two touching stamps taken for one, side by side. */
+  splitColumns: Columns2,
+  /** …and into a top and a bottom. */
+  splitRows: Rows2,
+
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,
   /** …and a catalogue value, downwards. */

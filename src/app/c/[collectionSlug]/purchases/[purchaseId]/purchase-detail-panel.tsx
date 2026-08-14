@@ -75,6 +75,7 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { IntakeHoldingsLine } from "./intake-holdings-line";
+import { LotScansCard } from "./lot-scans-card";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -1766,6 +1767,9 @@ function LotCard({
   setSelection,
   onRun,
 }: LotCardProps) {
+  // The lot's own row is server-rendered (`getPurchaseDetail`), so the tile counts in the header
+  // come back through a refresh rather than through the scans query (#566).
+  const router = useRouter();
   const [dialog, setDialog] = useState<
     | "none"
     | "picker"
@@ -2126,6 +2130,17 @@ function LotCard({
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
+        {/* Scan tiles still waiting to become something (#566). A plain chip, not a filter: the
+            tiles are not copies and the chips beside it narrow the copies list, so making this one
+            clickable would promise a narrowing it cannot do. */}
+        {lot.unidentifiedTileCount > 0 && (
+          <Tooltip content="Scan tiles not yet identified into copies. Closing the lot is still allowed — a tile has no catalogue price and so no weight in the cost split.">
+            <span style={tintChip("warning", "").style}>
+              <Icon name="scan" size="sm" /> {lot.unidentifiedTileCount} tile
+              {lot.unidentifiedTileCount === 1 ? "" : "s"} unidentified
+            </span>
+          </Tooltip>
+        )}
         {toSortCount > 0 && open && (
           <Tooltip
             content={
@@ -2261,6 +2276,19 @@ function LotCard({
           }}
         >
           {blockMessage}
+        </div>
+      )}
+
+      {/* Card scans (#566). Above the copies because that is the order the pass runs in: the card
+          is scanned and cut first, and a tile becomes a copy afterwards (#567). */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid var(--color-border)", padding: "0.75rem 1.25rem" }}>
+          <LotScansCard
+            collectionId={collectionId}
+            lotId={lot.id}
+            open={expanded}
+            onChanged={() => router.refresh()}
+          />
         </div>
       )}
 
@@ -2537,11 +2565,27 @@ function LotCard({
         <ConfirmDialog
           title="Close lot"
           message={
-            unsortedCount > 0
-              ? `${unsortedCount} cop${
-                  unsortedCount === 1 ? "y is" : "ies are"
-                } still unsorted (ordered / to sort / in transit). You can still close — closing runs the cost allocation and freezes each copy's cost-basis — but sorting first is recommended. Closing is blocked only if a copy lacks a primary-catalog price for its condition.`
-              : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."
+            <>
+              {unsortedCount > 0
+                ? `${unsortedCount} cop${
+                    unsortedCount === 1 ? "y is" : "ies are"
+                  } still unsorted (ordered / to sort / in transit). You can still close — closing runs the cost allocation and freezes each copy's cost-basis — but sorting first is recommended. Closing is blocked only if a copy lacks a primary-catalog price for its condition.`
+                : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."}
+              {/* A warning, never a block (#566) — the same call the unsorted count makes. A tile
+                  has no stamp, so no catalogue price, so no weight in the split: closing without it
+                  is arithmetically fine, and it is the collector's memory that needs the nudge. */}
+              {lot.unidentifiedTileCount > 0 && (
+                <>
+                  {" "}
+                  <strong>
+                    {lot.unidentifiedTileCount} scan tile
+                    {lot.unidentifiedTileCount === 1 ? " is" : "s are"} still unidentified
+                  </strong>{" "}
+                  and {lot.unidentifiedTileCount === 1 ? "takes" : "take"} no share of the cost —
+                  they survive the close, but nothing will remind you of them afterwards.
+                </>
+              )}
+            </>
           }
           actionLabel="Close lot"
           pendingLabel="Closing…"

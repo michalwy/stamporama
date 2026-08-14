@@ -107,13 +107,17 @@ export async function processImage(
 /** The source's visible dimensions. `metadata()` reports what is stored in the file, before the
  * `.rotate()` in the pipeline is applied, so a quarter-turn EXIF orientation has them the wrong way
  * round — the same normalisation the derivatives get from `.rotate()`, done by hand. A source that
- * reports no dimensions at all falls back to the `full` derivative's, which reads as "never
- * downscaled" and so leaves the collage's scaling exactly where it is today. */
-function orientedSize(
+ * reports no dimensions at all falls back to the given derivative's, which reads as "never
+ * downscaled" and so leaves the collage's scaling exactly where it is today.
+ *
+ * Exported because a scan sheet (#566) needs the same answer for a different reason: its recorded
+ * size is the coordinate space every cut box lives in, so a sheet measured unrotated would put
+ * every box on the card wrong. */
+export function orientedSize(
   meta: Metadata,
-  full: ProcessedVariant
+  fallback: { width: number; height: number }
 ): { width: number; height: number } {
-  if (!meta.width || !meta.height) return { width: full.width, height: full.height };
+  if (!meta.width || !meta.height) return { width: fallback.width, height: fallback.height };
   const quarterTurned = meta.orientation != null && meta.orientation >= 5;
   return quarterTurned
     ? { width: meta.height, height: meta.width }
