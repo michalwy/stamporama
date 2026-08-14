@@ -1,0 +1,160 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { normalizeBox } from "../../src/lib/scan-boxes";
+import {
+  MAX_SCALE,
+  ZOOM_STEP,
+  actualSizeViewport,
+  clampOffsets,
+  fitScale,
+  fitViewport,
+  isFitted,
+  panBy,
+  regionKey,
+  regionRequest,
+  toSheetPoint,
+  zoomBy,
+  zoomTo,
+} from "../../src/lib/scan-viewport";
+
+// A 600 dpi stockbook card and the `view` derivative the editor actually displays: 2500 px capped
+// from 7000, which is the threefold downscale this whole feature is about.
+const CARD = { width: 7000, height: 5000, viewWidth: 2500 };
+const SIZE = { width: 1200, height: 800 };
+
+describe("fitViewport", () => {
+  it("shows the whole card, centred", () => {
+    const v = fitViewport(CARD, SIZE);
+    assert.ok(v.scale * CARD.width <= SIZE.width);
+    assert.ok(v.scale * CARD.height <= SIZE.height);
+    // Centred on the axis with room to spare.
+    assert.ok(Math.abs(v.offsetY - (SIZE.height - CARD.height * v.scale) / 2) < 1e-9);
+    assert.ok(isFitted(v, CARD, SIZE));
+  });
+
+  it("re-fits to a resized window", () => {
+    const narrow = fitViewport(CARD, { width: 600, height: 800 });
+    const wide = fitViewport(CARD, SIZE);
+    assert.ok(wide.scale > narrow.scale);
+  });
+});
+
+describe("actualSizeViewport", () => {
+  it("is one display pixel per sheet pixel, not per view pixel", () => {
+    const v = actualSizeViewport(CARD, SIZE);
+    assert.equal(v.scale, 1);
+    // The distinction the control exists for: 1:1 of the *view* would be this much smaller.
+    assert.ok(fitScale(CARD, SIZE) < CARD.viewWidth / CARD.width);
+  });
+});
+
+describe("zoomTo", () => {
+  it("keeps the sheet pixel under the cursor under the cursor", () => {
+    const v = fitViewport(CARD, SIZE);
+    const cursor = { x: 300, y: 220 };
+    const before = toSheetPoint(v, cursor.x, cursor.y);
+    const after = toSheetPoint(zoomBy(v, 4, cursor, CARD, SIZE), cursor.x, cursor.y);
+    assert.ok(Math.abs(after.x - before.x) < 1e-6);
+    assert.ok(Math.abs(after.y - before.y) < 1e-6);
+  });
+
+  it("is reversible — zoom in and back out returns the same view", () => {
+    const v = fitViewport(CARD, SIZE);
+    const cursor = { x: 900, y: 140 };
+    const round = zoomBy(zoomBy(v, ZOOM_STEP, cursor, CARD, SIZE), 1 / ZOOM_STEP, cursor, CARD, SIZE);
+    assert.ok(Math.abs(round.scale - v.scale) < 1e-9);
+    assert.ok(Math.abs(round.offsetX - v.offsetX) < 1e-6);
+  });
+
+  it("stops at the ceiling rather than magnifying paper fibres", () => {
+    const v = zoomTo(fitViewport(CARD, SIZE), 1000, { x: 0, y: 0 }, CARD, SIZE);
+    assert.equal(v.scale, MAX_SCALE);
+  });
+
+  it("will not zoom out past half of fit, which would only make the card smaller", () => {
+    const fit = fitScale(CARD, SIZE);
+    const v = zoomTo(fitViewport(CARD, SIZE), fit / 100, { x: 0, y: 0 }, CARD, SIZE);
+    assert.ok(Math.abs(v.scale - fit / 2) < 1e-9);
+  });
+});
+
+describe("clampOffsets", () => {
+  it("centres an axis where the card is smaller than the viewport", () => {
+    const v = clampOffsets({ scale: 0.1, offsetX: -5000, offsetY: 0 }, CARD, SIZE);
+    assert.equal(v.offsetX, (SIZE.width - CARD.width * 0.1) / 2);
+  });
+
+  it("stops a zoomed card at its own edge instead of letting it leave the screen", () => {
+    const zoomed = { scale: 1, offsetX: 0, offsetY: 0 };
+    assert.equal(panBy(zoomed, 500, 0, CARD, SIZE).offsetX, 0);
+    assert.equal(
+      panBy(zoomed, -100000, 0, CARD, SIZE).offsetX,
+      SIZE.width - CARD.width
+    );
+  });
+});
+
+describe("regionRequest", () => {
+  it("asks for nothing while the view derivative still has the pixels", () => {
+    assert.equal(regionRequest(fitViewport(CARD, SIZE), CARD, SIZE), null);
+    // Exactly at the view's own scale the browser is not upscaling yet.
+    const atView = zoomTo(
+      fitViewport(CARD, SIZE),
+      CARD.viewWidth / CARD.width,
+      { x: 0, y: 0 },
+      CARD,
+      SIZE
+    );
+    assert.equal(regionRequest(atView, CARD, SIZE), null);
+  });
+
+  it("asks for the visible crop of the original past that point", () => {
+    const v = zoomTo(fitViewport(CARD, SIZE), 1, { x: 600, y: 400 }, CARD, SIZE);
+    const r = regionRequest(v, CARD, SIZE);
+    assert.ok(r);
+    // Whole sheet pixels, inside the card, and covering what is on screen.
+    for (const n of [r.box.x, r.box.y, r.box.w, r.box.h]) assert.ok(Number.isInteger(n));
+    assert.ok(r.box.x >= 0 && r.box.y >= 0);
+    assert.ok(r.box.x + r.box.w <= CARD.width);
+    assert.ok(r.box.y + r.box.h <= CARD.height);
+    const topLeft = toSheetPoint(v, 0, 0);
+    assert.ok(r.box.x <= topLeft.x && r.box.y <= topLeft.y);
+  });
+
+  it("does not render more pixels than the screen can show, nor more than the pipeline's cap", () => {
+    const v = zoomTo(fitViewport(CARD, SIZE), MAX_SCALE, { x: 600, y: 400 }, CARD, SIZE);
+    const r = regionRequest(v, CARD, SIZE, 2);
+    assert.ok(r);
+    assert.ok(r.renderWidth <= 2500);
+    assert.ok(r.renderWidth <= r.box.w);
+  });
+
+  it("a HiDPI screen at fit still asks for nothing — dpr sizes a crop, it does not call for one", () => {
+    assert.equal(regionRequest(fitViewport(CARD, SIZE), CARD, SIZE, 3), null);
+  });
+
+  it("snaps to a grid, so a small pan reuses the crop already fetched", () => {
+    const v = zoomTo(fitViewport(CARD, SIZE), 2, { x: 600, y: 400 }, CARD, SIZE);
+    const a = regionRequest(v, CARD, SIZE);
+    const b = regionRequest(panBy(v, -3, -2, CARD, SIZE), CARD, SIZE);
+    assert.ok(a && b);
+    assert.equal(regionKey(a), regionKey(b));
+  });
+});
+
+describe("zoom cannot perturb what is stored", () => {
+  it("a box drawn at any zoom is whole sheet pixels", () => {
+    // The editor's own path: two pointer positions → fractional sheet points → `normalizeBox`.
+    for (const scale of [0.13, 0.357, 1, 1.7, MAX_SCALE]) {
+      const v = zoomTo(fitViewport(CARD, SIZE), scale, { x: 517, y: 301 }, CARD, SIZE);
+      const a = toSheetPoint(v, 133.7, 201.9);
+      const b = toSheetPoint(v, 421.3, 555.1);
+      const box = normalizeBox({ x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }, CARD);
+      assert.ok(box, `expected a box at scale ${scale}`);
+      for (const n of [box.x, box.y, box.w, box.h]) {
+        assert.ok(Number.isInteger(n), `${n} is not a whole pixel at scale ${scale}`);
+      }
+      assert.ok(box.x + box.w <= CARD.width && box.y + box.h <= CARD.height);
+    }
+  });
+});

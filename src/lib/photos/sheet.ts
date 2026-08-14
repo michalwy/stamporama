@@ -141,6 +141,45 @@ export async function cutSheet(
   return crops;
 }
 
+/**
+ * One region of a sheet, at the size it will be displayed — what the editor asks for once it is
+ * zoomed past the `view` derivative's own scale (#579).
+ *
+ * `view` is capped at `FULL_MAX_EDGE` (2500 px) while a 600 dpi card is around 7000, so zooming the
+ * view alone magnifies a threefold downscale: a larger blur rather than more stamp. And the review
+ * exists to catch the quietest error there is — a box clipping a stamp's perforation by a few
+ * pixels — which at fit-to-window on a whole card is invisible. So past that point the visible
+ * region comes from the retained original. The bytes are already kept; this is what they are kept
+ * for.
+ *
+ * This is the same `extract` the cut itself uses, on the same untouched bytes through the same
+ * `.rotate()`, so a region and a crop of the same box are the same pixels. The one difference is
+ * that this one **is** resized — to the pixels the screen has and no more, since the point is what
+ * the collector can see, not what the file holds.
+ */
+export async function extractSheetRegion(
+  original: Buffer,
+  box: Box,
+  renderWidth: number
+): Promise<{ buffer: Buffer; mime: AcceptedMime; width: number; height: number }> {
+  const base = sharp(original, { failOn: "error" }).rotate();
+  const meta = await base.metadata();
+  const mime = mimeOf(meta.format);
+  if (!mime) {
+    throw new UnsupportedImageError(
+      `Unsupported or corrupt image (format: ${meta.format ?? "unknown"})`
+    );
+  }
+
+  const out = await base
+    .extract({ left: box.x, top: box.y, width: box.w, height: box.h })
+    .resize(Math.min(renderWidth, box.w), null, { withoutEnlargement: true })
+    .toFormat(formatFor(mime))
+    .toBuffer({ resolveWithObject: true });
+
+  return { buffer: out.data, mime, width: out.info.width, height: out.info.height };
+}
+
 function mimeOf(format: string | undefined): AcceptedMime | null {
   switch (format) {
     case "jpeg":

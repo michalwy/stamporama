@@ -213,6 +213,29 @@ Each box carries the number it will be created with — rows top to bottom, each
 **Nothing is created until you press Cut**, so the whole review is free to be wrong. Cancel and
 the scan is still stored, waiting to be cut.
 
+#### Looking closer
+
+The cut is worth checking at a size where you can see it, because the mistake that matters most is
+the quietest one: a box clipping a stamp's perforation by a few pixels. On a whole card at once that
+is invisible.
+
+- **Wheel** over the card zooms, towards wherever the pointer is — put it on the corner you are
+  suspicious of and turn. `+` and `−` do the same from the toolbar or the keyboard.
+- **Hold space and drag**, or drag with the **middle mouse button**, to move around while zoomed.
+- **Fit** (`0`) puts the whole card back on screen. It is where the editor starts, and where a
+  resized window returns to unless you have zoomed.
+- **1:1** shows one screen pixel per pixel of the scan itself — the size a crop is actually taken
+  at, and the honest answer to "is this box in the right place".
+
+Drawing, moving, resizing, splitting and merging all work the same at any zoom, and zooming changes
+nothing about the boxes themselves: they are stored against the scan, not against what is on screen.
+
+Past 1:1 of the display copy the editor fetches the part of the card you are looking at from the
+**full-resolution scan** — the percentage in the toolbar picks up a dot when it is showing that.
+Otherwise zooming in would only magnify the display copy, which for a high-resolution scan is a
+larger blur rather than more stamp. There is a short pause after you stop moving before the sharper
+image arrives; the card stays on screen throughout.
+
 #### Backs
 
 To capture backs, **turn each stamp over in place** — do not lift the group or rearrange it — and

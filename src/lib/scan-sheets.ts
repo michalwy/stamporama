@@ -12,7 +12,7 @@ import {
 } from "./storage";
 import { deletePhotoVariants } from "./photos";
 import { MAX_UPLOAD_BYTES, UnsupportedImageError } from "./photos/process";
-import { cutSheet, prepareSheet } from "./photos/sheet";
+import { cutSheet, extractSheetRegion, prepareSheet } from "./photos/sheet";
 import { pairByPosition, readingOrder, type Box } from "./scan-boxes";
 
 /**
@@ -978,14 +978,17 @@ export async function countUnidentifiedTiles(lotId: string): Promise<number> {
 }
 
 /** Resolve a sheet for the serving route: its owning collection + owner for the auth check, plus
- * the bytes address. Mirrors `getPhotoForServing` — a sheet is served by its own route because it
- * is not a `Photo` and its variants are not a photo's. */
+ * the bytes address and the coordinate space a region request is checked against. Mirrors
+ * `getPhotoForServing` — a sheet is served by its own route because it is not a `Photo` and its
+ * variants are not a photo's. */
 export async function getSheetForServing(sheetId: string): Promise<{
   collectionId: string;
   ownerId: string;
   storageBackend: string;
   storageKey: string;
   mime: string;
+  width: number;
+  height: number;
 } | null> {
   const sheet = await prisma.scanSheet.findUnique({
     where: { id: sheetId },
@@ -993,6 +996,8 @@ export async function getSheetForServing(sheetId: string): Promise<{
       storageBackend: true,
       storageKey: true,
       mime: true,
+      width: true,
+      height: true,
       lot: {
         select: {
           purchase: {
@@ -1009,5 +1014,39 @@ export async function getSheetForServing(sheetId: string): Promise<{
     storageBackend: sheet.storageBackend,
     storageKey: sheet.storageKey,
     mime: sheet.mime,
+    width: sheet.width,
+    height: sheet.height,
   };
+}
+
+/**
+ * Render one region of a retained scan at display size (#579) — what the cut editor asks for once
+ * it is zoomed past the `view` derivative's own scale.
+ *
+ * Nothing is stored and nothing is remembered: the region is derived from the same retained bytes
+ * the cut is taken from, through the same `.rotate()`, so a region and the crop that a box will
+ * eventually become are the same pixels. That identity is the point — it is what makes zooming a
+ * way of checking the cut rather than a second rendering of it.
+ *
+ * The box is validated against the sheet's own dimensions here rather than trusted from a URL:
+ * `sharp.extract` refuses a region outside the image, and a named refusal beats a 500.
+ */
+export async function renderSheetRegion(
+  sheet: {
+    storageBackend: string;
+    storageKey: string;
+    mime: string;
+    width: number;
+    height: number;
+  },
+  box: Box,
+  renderWidth: number
+): Promise<{ buffer: Buffer; mime: string }> {
+  assertBoxesInSheet([box], sheet);
+  if (!Number.isInteger(renderWidth) || renderWidth < 1) {
+    throw new ScanValidationError("A render width must be a positive whole number of pixels.");
+  }
+  const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
+  const region = await extractSheetRegion(original, box, renderWidth);
+  return { buffer: region.buffer, mime: region.mime };
 }

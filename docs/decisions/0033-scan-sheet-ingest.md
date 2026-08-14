@@ -263,6 +263,43 @@ view, on the rare tile whose reason will not be remembered. This is safe precise
 discard is reversible: *Put back in the queue* is in the same dialog, and an empty note is stored as
 no note rather than as an empty string.
 
+## What #579 added: the review can only be trusted if it can be looked into
+
+Decision 6 said the editor exists because a bad cut on a broken-up parcel cannot be undone. It did
+not say how a bad cut is *seen*. The likeliest one is the quietest — a box clipping a stamp's
+perforation by a few pixels — and at fit-to-window on a whole card it is invisible. #574's reference
+implementation says exactly this of its own verification: done by eye on contact sheets, "a box
+clipping perforation by a few px would not have been caught". So zoom is not comfort work; it is
+what lets the review answer the question it exists for.
+
+Two calls follow, and both are about not lying to the collector.
+
+**1:1 means one screen pixel per *sheet* pixel.** The editor displays the `view` derivative, capped
+at `FULL_MAX_EDGE` against a 600 dpi card's ~7000 px, so a control that meant one *view* pixel would
+read `1:1` while showing a threefold downscale — misreporting the very thing it is there for.
+
+**Past the view's own scale, the visible region is served from the retained original.** Zooming the
+derivative alone magnifies that downscale: a larger blur rather than more stamp. It is one `extract`
+on bytes that decision 3 already keeps, and it is what they are kept for. Below that threshold the
+view is still what is shown, because a browser cannot be handed a 30 Mpx image.
+
+The region is a **sibling route** (`/scan-sheets/[sheetId]/region`) rather than a parameter on the
+variant route. That route hands back an object that exists in storage — it takes the redirect fork a
+GCS binding needs, and its `immutable` header is true because a sheet's bytes are written once under
+a key never rewritten. A region is computed per request, so there is no URL to redirect to; folding
+it in would have meant one variant value skipping the redirect fork, which is the sort of quiet
+exception that later serves a signed URL for a crop nobody uploaded. Requests are debounced and
+snapped to a grid of sheet pixels, because each one costs a full decode of the original server-side
+and a pan would otherwise ask for a new nearly-identical crop every frame.
+
+The transform is a **view** transform and nothing else: boxes are whole sheet pixels at every zoom,
+exactly as before. The arithmetic lives in a third pure module (`src/lib/scan-viewport.ts`) that
+neither the editor nor the route owns — the client decides which crop is on screen and the server
+validates it, and a number that means different things on the two sides of that line is a crop of
+somewhere else. Its one conversion back towards the sheet is fractional by design and always passes
+through `normalizeBox`, which rounds; rounding earlier would quantise the gesture to whole sheet
+pixels — at 8× zoom, one pixel of stamp per eight of mouse — without changing what gets stored.
+
 ## Consequences of the second half
 
 - **A re-cut still destroys discarded tiles.** Only `consumed` refuses it, and that asymmetry is

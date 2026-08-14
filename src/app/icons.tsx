@@ -78,6 +78,7 @@ import {
   LockOpen,
   LogOut,
   MapPin,
+  Maximize,
   Menu,
   Merge,
   Minus,
@@ -113,6 +114,8 @@ import {
   Users,
   X,
   Zap,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from "lucide-react";
 
@@ -279,6 +282,12 @@ const GLYPHS = {
   splitColumns: Columns2,
   /** …and into a top and a bottom. */
   splitRows: Rows2,
+  // Looking closer at a scan (#579). Deliberately not `add` / `remove`: those change how many of
+  // something there are, while these change nothing at all — the whole point of a view transform.
+  zoomIn: ZoomIn,
+  zoomOut: ZoomOut,
+  /** Back to the whole thing on screen at once. */
+  zoomFit: Maximize,
 
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,

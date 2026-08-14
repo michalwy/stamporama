@@ -16,9 +16,22 @@ import {
   splitBox,
   type Box,
 } from "@/lib/scan-boxes";
+import {
+  ZOOM_STEP,
+  actualSizeViewport,
+  clampOffsets,
+  fitViewport,
+  panBy,
+  regionKey,
+  regionRequest,
+  toSheetPoint,
+  zoomBy,
+  type Viewport,
+  type ViewportSize,
+} from "@/lib/scan-viewport";
 
 /**
- * The cut review editor (#566, ADR-0033).
+ * The cut review editor (#566, ADR-0033), zoomable since #579.
  *
  * **The primitive, not a fallback.** However good detection gets (#574), it will sometimes take two
  * touching stamps for one, halve a dark one, or find a shadow along the card's edge — and a bad cut
@@ -33,8 +46,25 @@ import {
  *
  * Coordinates are the **sheet's original pixels** throughout, converted for display by one scale
  * factor. That is what `sharp.extract` is handed, it survives the browser being resized mid-cut,
- * and it means a box means the same number here and in the database. The image on screen is the
- * `view` derivative; the crops come from the original.
+ * and it means a box means the same number here and in the database.
+ *
+ * ## Zoom is what makes the review able to answer its own question
+ *
+ * The likeliest bad cut is the quietest: a box clipping a stamp's perforation by a few pixels. At
+ * fit-to-window on a whole card that is invisible, so this surface can only be trusted if it can be
+ * looked into. Hence wheel zoom **to the cursor**, panning, and a **1:1** that means one screen
+ * pixel to one *sheet* pixel — never to one view pixel, which would have the control lie about the
+ * very thing it is there for.
+ *
+ * And zooming alone would not be enough. The image on screen is the `view` derivative, capped at
+ * 2500 px against a 600 dpi card's ~7000, so magnifying it shows a larger blur rather than more
+ * stamp. Past the view's own scale the visible region is therefore fetched from the **retained
+ * original** and drawn over it (`detail` below). The view stays underneath at every zoom, so a
+ * region still in flight is a soft edge rather than a blank card.
+ *
+ * The transform is a view transform and nothing more: every box is whole sheet pixels at every
+ * zoom. The arithmetic lives in `scan-viewport.ts`, whose one conversion back towards the sheet is
+ * fractional by design and always passes through `normalizeBox`, which rounds.
  */
 
 export interface ScanCutEditorSheet {
@@ -70,7 +100,9 @@ type Mode = "select" | "split-v" | "split-h";
 type Drag =
   | { kind: "draw"; originX: number; originY: number; current: Box | null }
   | { kind: "move"; ids: string[]; startX: number; startY: number; origin: Map<string, Box> }
-  | { kind: "resize"; id: string; handle: Handle; start: Box };
+  | { kind: "resize"; id: string; handle: Handle; start: Box }
+  /** Panning, in display pixels — the one drag that is about the view rather than about a box. */
+  | { kind: "pan"; lastX: number; lastY: number };
 
 /** The eight grips. Named by the edges they move, so the maths below is the same for all of them. */
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -82,6 +114,20 @@ interface Region {
 
 let nextRegionId = 0;
 const newRegion = (box: Box): Region => ({ id: `r${nextRegionId++}`, box });
+
+/** A crop of the original currently drawn over the `view` derivative: where it sits on the sheet,
+ * and the URL it came from. Held only once it has finished loading, so what is on screen is never
+ * replaced by a half-arrived image. */
+interface Detail {
+  key: string;
+  box: Box;
+  url: string;
+}
+
+/** How long the viewport must be still before a region is fetched. Each region costs a full decode
+ * of a 30 Mpx original server-side, so a pan must not ask for one per frame — this, plus the grid
+ * `regionRequest` snaps to, is what keeps a drag across a card to a handful of fetches. */
+const REGION_DEBOUNCE_MS = 200;
 
 export function ScanCutEditor({
   collectionId,
@@ -100,30 +146,157 @@ export function ScanCutEditor({
   /** Where the split guide currently sits, in sheet pixels, while a split mode is armed. */
   const [splitAt, setSplitAt] = useState<number | null>(null);
 
-  const surfaceRef = useRef<HTMLDivElement>(null);
-  /** Display pixels per sheet pixel. Measured from the rendered element rather than taken from
-   * `viewWidth`, because the image is laid out to fit the dialog and is very often smaller than the
-   * view derivative it is drawn from. */
-  const [scale, setScale] = useState(1);
+  /** The window onto the card. Everything is drawn inside it and nothing scrolls: this surface owns
+   * the wheel, because on a card of forty the wheel is the zoom. */
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<ViewportSize>({ width: 0, height: 0 });
+  /** Display pixels per sheet pixel, and where the card's top-left sits — the single display
+   * conversion, now under the collector's hand rather than derived from the layout. */
+  const [view, setView] = useState<Viewport>({ scale: 1, offsetX: 0, offsetY: 0 });
+  /** Whether the view is still the fitted one. Tracked rather than recomputed, because the question
+   * a resize asks is about the view *before* the resize: a chosen zoom must survive the window
+   * changing, and a fitted one must follow it. Held twice — as state for the lit control, and as a
+   * ref for the resize observer, which fires outside React's render and must read the current
+   * answer rather than the one captured when it was subscribed. */
+  const [fitted, setFitted] = useState(true);
+  const fittedRef = useRef(true);
+  /** Space is the hand tool, as everywhere else that draws on an image. */
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [detail, setDetail] = useState<Detail | null>(null);
 
+  const sheetSize = useMemo(
+    () => ({ width: sheet.width, height: sheet.height }),
+    [sheet.width, sheet.height]
+  );
+  const markFitted = useCallback((value: boolean) => {
+    fittedRef.current = value;
+    setFitted(value);
+  }, []);
+
+  // Measuring and re-fitting are one step, in the observer's own callback: fit is the default and
+  // what a resize keeps while nothing has been zoomed, and a chosen zoom is only re-clamped, so
+  // widening the dialog never throws away the detail being looked at. `ResizeObserver` delivers a
+  // first observation of its own, which is where the initial fit comes from.
   useEffect(() => {
-    const el = surfaceRef.current;
+    const el = viewportRef.current;
     if (!el) return;
-    const measure = () => setScale(el.clientWidth / sheet.width);
-    measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      if (next.width === 0 || next.height === 0) return;
+      setSize(next);
+      setView((v) =>
+        fittedRef.current ? fitViewport(sheetSize, next) : clampOffsets(v, sheetSize, next)
+      );
+    });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [sheet.width]);
+  }, [sheetSize]);
 
+  const fit = useCallback(() => {
+    setView(fitViewport(sheetSize, size));
+    markFitted(true);
+  }, [markFitted, sheetSize, size]);
+
+  const actualSize = useCallback(() => {
+    setView(actualSizeViewport(sheetSize, size));
+    markFitted(false);
+  }, [markFitted, sheetSize, size]);
+
+  /** Zoom a step about a point in the viewport, defaulting to its centre — which is what a control
+   * or a keystroke means by "here" when there is no cursor to speak of. */
+  const zoomStep = useCallback(
+    (factor: number, anchor?: { x: number; y: number }) => {
+      setView((v) =>
+        zoomBy(v, factor, anchor ?? { x: size.width / 2, y: size.height / 2 }, sheetSize, size)
+      );
+      markFitted(false);
+    },
+    [markFitted, sheetSize, size]
+  );
+
+  /** A pointer's position inside the viewport, in display pixels. */
+  const toLocal = useCallback((clientX: number, clientY: number) => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }, []);
+
+  /** …and the same position as a **fractional** sheet coordinate. Fractional on purpose: every
+   * caller hands it to `normalizeBox` or `splitBox`, which round. Rounding here instead would
+   * quantise the gesture to whole sheet pixels — at 8× zoom, one pixel of stamp per eight of
+   * mouse — and would still not be the number that gets stored. */
   const toSheet = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } => {
-      const rect = surfaceRef.current?.getBoundingClientRect();
-      if (!rect || scale === 0) return { x: 0, y: 0 };
-      return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+      const local = toLocal(clientX, clientY);
+      return toSheetPoint(view, local.x, local.y);
     },
-    [scale]
+    [toLocal, view]
   );
+
+  // The wheel is bound by hand rather than through `onWheel`, because React's is passive and a
+  // passive listener cannot call `preventDefault` — the page would scroll under the zoom.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || size.width === 0) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      // Continuous rather than notched, so a trackpad's small deltas zoom smoothly and a mouse's
+      // one notch is one `ZOOM_STEP`. Line-mode deltas are converted to pixels first.
+      const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      setView((v) => zoomBy(v, Math.pow(ZOOM_STEP, -delta / 100), anchor, sheetSize, size));
+      markFitted(false);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [markFitted, sheetSize, size]);
+
+  // ── Detail from the original ───────────────────────────────────────────────────────────────
+
+  const regionSheet = useMemo(
+    () => ({ width: sheet.width, height: sheet.height, viewWidth: sheet.viewWidth }),
+    [sheet.width, sheet.height, sheet.viewWidth]
+  );
+  /** The region last asked for. A load that arrives after the view has moved on is dropped against
+   * this, so a slow fetch cannot paint a stale crop over the card. */
+  const wantedRegion = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (size.width === 0) return;
+    const request = regionRequest(view, regionSheet, size, window.devicePixelRatio || 1);
+    const key = request ? regionKey(request) : null;
+    if (key === wantedRegion.current) return;
+
+    // Everything, including *clearing* the crop, waits out the debounce — so a wheel spun past the
+    // threshold and back does not blink the detail away and fetch it again.
+    const timer = setTimeout(() => {
+      wantedRegion.current = key;
+      if (!request) {
+        // Back below the view's own scale: the derivative has every pixel the screen can show, and
+        // leaving a crop up would keep one part of the card sharper than the rest for no reason.
+        setDetail(null);
+        return;
+      }
+      const loaded = regionKey(request);
+      const { box, renderWidth } = request;
+      const url =
+        `/api/collections/${collectionId}/scan-sheets/${sheet.id}/region` +
+        `?x=${box.x}&y=${box.y}&w=${box.w}&h=${box.h}&rw=${renderWidth}`;
+      // Preloaded rather than rendered straight into an `<img>`: swapping `src` blanks the element
+      // while the next one decodes, which at 8× would flash the card away exactly when the
+      // collector is looking hardest at it. A repeat of a crop already fetched comes from the
+      // browser's cache — the route marks these immutable, since a sheet's bytes never change.
+      const image = new Image();
+      image.onload = () => {
+        if (wantedRegion.current === loaded) setDetail({ key: loaded, box, url });
+      };
+      // A region that fails to arrive is a soft failure: the `view` underneath is still a picture
+      // of the card, and the cut can still be edited over it.
+      image.src = url;
+    }, REGION_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [collectionId, regionSheet, sheet.id, size, view]);
 
   const selectedRegions = useMemo(
     () => regions.filter((r) => selected.has(r.id)),
@@ -188,6 +361,14 @@ export function ScanCutEditor({
   // ── Pointer ────────────────────────────────────────────────────────────────────────────────
 
   const onSurfacePointerDown = (e: React.PointerEvent) => {
+    // Panning comes first and works in every mode, including while a split is armed: the seam being
+    // aimed at is often the reason the card is zoomed in the first place.
+    if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+      e.preventDefault();
+      setDrag({ kind: "pan", lastX: e.clientX, lastY: e.clientY });
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (e.button !== 0) return;
     const p = toSheet(e.clientX, e.clientY);
 
@@ -221,6 +402,14 @@ export function ScanCutEditor({
   };
 
   const onSurfacePointerMove = (e: React.PointerEvent) => {
+    if (drag?.kind === "pan") {
+      const dx = e.clientX - drag.lastX;
+      const dy = e.clientY - drag.lastY;
+      setView((v) => panBy(v, dx, dy, sheetSize, size));
+      setDrag({ kind: "pan", lastX: e.clientX, lastY: e.clientY });
+      return;
+    }
+
     const p = toSheet(e.clientX, e.clientY);
 
     if (mode !== "select") {
@@ -301,11 +490,35 @@ export function ScanCutEditor({
       } else if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setSelected(new Set(regions.map((r) => r.id)));
+      } else if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        zoomStep(ZOOM_STEP);
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        zoomStep(1 / ZOOM_STEP);
+      } else if (e.key === "0") {
+        e.preventDefault();
+        fit();
+      } else if (e.key === " ") {
+        // Held, not toggled: the hand tool is a modifier on the drag that follows it.
+        e.preventDefault();
+        setSpaceHeld(true);
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpaceHeld(false);
+    };
+    // A window that loses focus mid-drag would otherwise come back still holding the hand tool.
+    const onBlur = () => setSpaceHeld(false);
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [deleteSelected, mode, regions]);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [deleteSelected, fit, mode, regions, zoomStep]);
 
   // ── Render ─────────────────────────────────────────────────────────────────────────────────
 
@@ -335,6 +548,13 @@ export function ScanCutEditor({
           onDelete={deleteSelected}
           onMerge={mergeSelected}
           onClear={() => replaceSelection([], [])}
+          zoom={view.scale}
+          fitted={fitted}
+          detailed={detail != null}
+          onZoomIn={() => zoomStep(ZOOM_STEP)}
+          onZoomOut={() => zoomStep(1 / ZOOM_STEP)}
+          onFit={fit}
+          onActualSize={actualSize}
         />
 
         {(countMismatch || error) && (
@@ -359,31 +579,46 @@ export function ScanCutEditor({
           </div>
         )}
 
+        {/* The viewport. It does not scroll — the wheel is the zoom — and the card is placed inside
+            it by the transform rather than by the layout, which is what lets one scale serve every
+            zoom the same way it served the fitted one. */}
         <div
+          ref={viewportRef}
+          onPointerDown={onSurfacePointerDown}
+          onPointerMove={onSurfacePointerMove}
+          onPointerUp={onSurfacePointerUp}
+          // Middle-button down starts the browser's own autoscroll, which `onPointerDown` is too
+          // late to stop.
+          onMouseDown={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
           style={{
             flex: 1,
             minHeight: 0,
-            overflow: "auto",
-            padding: "1rem",
+            position: "relative",
+            overflow: "hidden",
             background: "var(--color-bg-subtle)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
+            cursor:
+              drag?.kind === "pan"
+                ? "grabbing"
+                : spaceHeld
+                  ? "grab"
+                  : mode === "select"
+                    ? "crosshair"
+                    : mode === "split-v"
+                      ? "col-resize"
+                      : "row-resize",
+            userSelect: "none",
+            touchAction: "none",
           }}
         >
           <div
-            ref={surfaceRef}
-            onPointerDown={onSurfacePointerDown}
-            onPointerMove={onSurfacePointerMove}
-            onPointerUp={onSurfacePointerUp}
             style={{
-              position: "relative",
-              width: "100%",
-              maxWidth: `${sheet.viewWidth}px`,
-              aspectRatio: `${sheet.width} / ${sheet.height}`,
-              cursor: mode === "select" ? "crosshair" : "col-resize",
-              userSelect: "none",
-              touchAction: "none",
+              position: "absolute",
+              left: view.offsetX,
+              top: view.offsetY,
+              width: sheet.width * view.scale,
+              height: sheet.height * view.scale,
               boxShadow: "0 0 0 1px var(--color-border)",
             }}
           >
@@ -397,13 +632,35 @@ export function ScanCutEditor({
               style={{ display: "block", width: "100%", height: "100%", objectFit: "fill" }}
             />
 
+            {/* The visible region at full resolution, drawn over the derivative it magnifies. Kept
+                underneath the boxes and above the view, and never the only thing on screen: the
+                same pixels through the same `.rotate()` and the same `extract` the cut itself uses,
+                so it lines up with the card exactly rather than nearly. */}
+            {detail && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={detail.url}
+                alt=""
+                draggable={false}
+                style={{
+                  position: "absolute",
+                  left: detail.box.x * view.scale,
+                  top: detail.box.y * view.scale,
+                  width: detail.box.w * view.scale,
+                  height: detail.box.h * view.scale,
+                  objectFit: "fill",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
+
             {regions.map((r) => (
               <RegionRect
                 key={r.id}
                 region={r}
                 position={order.get(r.id) ?? 0}
                 selected={selected.has(r.id)}
-                scale={scale}
+                scale={view.scale}
                 interactive={mode === "select"}
                 onHandlePointerDown={onHandlePointerDown}
               />
@@ -413,10 +670,10 @@ export function ScanCutEditor({
               <div
                 style={{
                   position: "absolute",
-                  left: drawing.x * scale,
-                  top: drawing.y * scale,
-                  width: drawing.w * scale,
-                  height: drawing.h * scale,
+                  left: drawing.x * view.scale,
+                  top: drawing.y * view.scale,
+                  width: drawing.w * view.scale,
+                  height: drawing.h * view.scale,
                   border: "1px dashed var(--color-action-primary)",
                   background: "rgb(59 130 246 / 0.12)",
                   pointerEvents: "none",
@@ -425,7 +682,7 @@ export function ScanCutEditor({
             )}
 
             {mode !== "select" && soleSelected && splitAt != null && (
-              <SplitGuide box={soleSelected.box} axis={mode} at={splitAt} scale={scale} />
+              <SplitGuide box={soleSelected.box} axis={mode} at={splitAt} scale={view.scale} />
             )}
           </div>
         </div>
@@ -439,7 +696,9 @@ export function ScanCutEditor({
             color: "var(--color-text-muted)",
           }}
         >
-          Drag on the card to draw · click a box to select · shift-click to add · Delete removes
+          Drag on the card to draw · click a box to select · shift-click to add · Delete removes ·
+          wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms, <kbd>0</kbd> fits · hold space or the middle
+          button to pan
         </span>
         <DialogSecondaryButton onClick={onClose} disabled={committing}>
           Cancel
@@ -475,6 +734,13 @@ function Toolbar({
   onDelete,
   onMerge,
   onClear,
+  zoom,
+  fitted,
+  detailed,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  onActualSize,
 }: {
   count: number;
   selectedCount: number;
@@ -483,6 +749,13 @@ function Toolbar({
   onDelete: () => void;
   onMerge: () => void;
   onClear: () => void;
+  zoom: number;
+  fitted: boolean;
+  detailed: boolean;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
+  onActualSize: () => void;
 }) {
   return (
     <div
@@ -502,6 +775,39 @@ function Toolbar({
         {selectedCount > 0 ? `${selectedCount} selected` : "nothing selected"}
       </span>
       <span style={{ flex: 1 }} />
+      <ToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={onZoomOut} />
+      <span
+        style={{
+          fontSize: "0.8125rem",
+          color: detailed ? "var(--color-text-secondary)" : "var(--color-text-muted)",
+          minWidth: "3.25rem",
+          textAlign: "center",
+        }}
+        // The percentage is against the *sheet*, so it says what it is worth saying: whether what
+        // is on screen is the card's own resolution. The dot marks the region being served from the
+        // retained original rather than magnified out of the display copy.
+        title={
+          detailed
+            ? "Showing the visible region at full resolution from the retained scan"
+            : "Showing the display copy of the scan"
+        }
+      >
+        {Math.round(zoom * 100)}%{detailed ? " ·" : ""}
+      </span>
+      <ToolButton icon="zoomIn" label="+" hint="Zoom in (+)" onClick={onZoomIn} />
+      <ToolButton
+        icon="zoomFit"
+        label="Fit"
+        hint="The whole card on screen (0)"
+        active={fitted}
+        onClick={onFit}
+      />
+      <ToolButton
+        label="1:1"
+        hint="One screen pixel per pixel of the scan itself — the size a crop is actually taken at"
+        active={!fitted && Math.abs(zoom - 1) < 1e-6}
+        onClick={onActualSize}
+      />
       <ToolButton
         icon="merge"
         label="Merge"
@@ -551,7 +857,9 @@ function ToolButton({
   active,
   onClick,
 }: {
-  icon: IconName;
+  /** Optional: `1:1` is its own picture, and the vocabulary is deliberately not the place to invent
+   * a glyph for a ratio that reads perfectly well as two characters. */
+  icon?: IconName;
   label: string;
   hint: string;
   disabled?: boolean;
@@ -578,7 +886,7 @@ function ToolButton({
         opacity: disabled ? 0.5 : 1,
       }}
     >
-      <Icon name={icon} size="sm" />
+      {icon && <Icon name={icon} size="sm" />}
       {label}
     </button>
   );

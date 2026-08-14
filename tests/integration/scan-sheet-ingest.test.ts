@@ -13,9 +13,11 @@ import {
   ScanValidationError,
   commitCut,
   deleteBatch,
+  getSheetForServing,
   listLotScans,
   pairTilesManually,
   recutBatch,
+  renderSheetRegion,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
 import type { Box } from "../../src/lib/scan-boxes";
@@ -481,6 +483,34 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(served.collectionId, collectionId);
     assert.equal(served.ownerId, userId);
     assert.equal(served.storageKey, photo.storageKey);
+
+    await deleteLot(userId, lotId);
+  });
+
+  it("serves a zoomed region from the original, not from the display copy (#579)", async () => {
+    // The reason the editor can be trusted to catch a box clipping a perforation: past the `view`
+    // derivative's own scale the visible region comes from the retained original. `view` is capped
+    // at FULL_MAX_EDGE, so on this 4000 px card it holds a 600 px box at 375 px — a region that
+    // comes back at the box's full 600 could not have been taken from it.
+    const lotId = await newLot();
+    const sheet = await uploadFront(lotId);
+    const serving = await getSheetForServing(sheet.id);
+    assert.ok(serving);
+    assert.equal(serving.width, SHEET_W);
+
+    const box = FRONT_BOXES[1];
+    const region = await renderSheetRegion(serving, box, box.w);
+    const { data, info } = await sharp(region.buffer).raw().toBuffer({ resolveWithObject: true });
+    assert.equal(info.width, box.w);
+    assert.equal(info.height, box.h);
+    const at = ((info.height >> 1) * info.width + (info.width >> 1)) * info.channels;
+    assert.deepEqual([data[at], data[at + 1], data[at + 2]], GREEN);
+
+    // The same guard the cut has: a region outside the card is named rather than left to `extract`.
+    await assert.rejects(
+      () => renderSheetRegion(serving, { x: SHEET_W - 10, y: 0, w: 100, h: 100 }, 100),
+      ScanValidationError
+    );
 
     await deleteLot(userId, lotId);
   });
