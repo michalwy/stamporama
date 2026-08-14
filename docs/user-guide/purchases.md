@@ -555,6 +555,31 @@ saves hundreds of clicks; multiples do not come in runs like that. If the format
 block of four you enter would quietly mark every single after it as a block too, and a format you
 never chose is much harder to spot than a missing one, which at least reads as *Single*.
 
+#### The catalogue value, while the catalogue is still open
+
+Underneath the condition row there is one optional **Catalog value** field. Identifying a stamp is
+the one moment you already have the paper catalogue open at that very stamp, so entering the figure
+costs you a field; entering it a month later means finding the stamp again, on paper and in the app,
+from a list of hundreds. It is also what stops the `N unpriced` chip and the refusal to
+[close a lot](#closing-a-lot) from ever coming up: both exist because prices are usually entered
+long after identification.
+
+- **One field, your primary catalogue only**, on its latest edition — the line beside the input
+  names it, with the currency. The full [Set catalog value](#closing-a-lot) dialog, which prices
+  every catalogue active on the area, is still on each copy's row for when you want the rest.
+- **Optional, always.** Blank is the ordinary case, and nothing ever waits on it.
+- If a value is **already recorded** for that stamp at the condition, certificate and format you
+  have chosen, it is shown in the field and editing it replaces it — you never end up with two.
+- **The figure belongs to the condition you typed it for.** Change the condition, the certificate or
+  the format afterwards and the field re-reads for the new one — which may already have a value of
+  its own. A figure you had typed and not yet saved is not carried across, and the field says so
+  rather than just emptying itself.
+- The field waits for a condition to be chosen, since the value is recorded against the pair.
+- Collections whose area has no catalogue with an edition never see the field.
+
+The value is saved when you confirm the step. If saving it fails, nothing else happens either and
+the message says why — a figure you read off the catalogue is not dropped quietly.
+
 The copies are
 linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
@@ -874,6 +899,10 @@ plus any prices already recorded for it (across editions, conditions, and certif
 can price consistently — the target rows are marked with an arrow. Closing still only requires a
 **primary-catalog** price. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
 **Prices** tab.) Then try the close again.
+
+The way to meet this blocker least often is not to reach it: the intake step has its own
+[**Catalog value** field](#the-catalogue-value-while-the-catalogue-is-still-open), filled in while
+the paper catalogue is still open at the stamp. A copy priced there is never among the unpriced.
 
 ### Reopening for corrections
 

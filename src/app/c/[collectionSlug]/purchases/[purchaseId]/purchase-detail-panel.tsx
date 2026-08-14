@@ -79,6 +79,12 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { IntakeHoldingsLine } from "./intake-holdings-line";
+import { IntakeCatalogValueField } from "./intake-catalog-value";
+import {
+  catalogValueEntry,
+  EMPTY_INTAKE_CATALOG_VALUE,
+  type IntakeCatalogValue,
+} from "@/lib/intake-catalog-value";
 import { PurchaseScansCard } from "./purchase-scans-card";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidatePurchaseScans } from "./use-purchase-scans-query";
@@ -3757,7 +3763,31 @@ function IntakeConditionDialog({
     setPhotosUploading(value.uploading);
   }, []);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  // The catalogue value typed while the paper catalogue is still open at this stamp (#593). Held in
+  // a ref for the reason the photo change-set is: the field re-reads on every change of condition,
+  // certificate or format, and nothing in this form depends on what is currently in it. Single-stamp
+  // intake only — a whole-checklist intake fans out across many stamps, and one figure could not be
+  // the catalogue value of all of them, which is the rule photos and the format field follow.
+  const catalogValueRef = useRef<IntakeCatalogValue>(EMPTY_INTAKE_CATALOG_VALUE);
+  const handleCatalogValueChange = useCallback((value: IntakeCatalogValue) => {
+    catalogValueRef.current = value;
+  }, []);
+  /** A failed price write, reported in the dialog's own footer beside the caller's errors. */
+  const [priceError, setPriceError] = useState<string | undefined>();
+  const [savingPrice, setSavingPrice] = useState(false);
+
+  // How the chosen condition × certificate × format reads, which is what the catalogue value is
+  // recorded against. Built here because this is where the dictionaries are; worded like the
+  // quick-price dialog's own badge, so the two surfaces name the same key the same way.
+  const subjectLabel = [
+    conditions.find((c) => c.id === conditionId)?.abbreviation,
+    certificateStatuses.find((c) => c.id === certId)?.abbreviation,
+    formats.find((f) => f.id === formatId)?.abbreviation,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
@@ -3778,6 +3808,35 @@ function IntakeConditionDialog({
     if (photos) {
       fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
     }
+
+    // The catalogue value goes **before** the intake and on its own (#593). It is a fact about the
+    // *stamp* — it needs no copy to exist — so it is written here rather than folded into each of
+    // the three actions this dialog's submit reaches, two of which are server actions and the third
+    // of which does not create anything until a later step.
+    //
+    // Before, and blocking on failure, because a figure the collector read off the paper catalogue
+    // must not be dropped in silence; and safely retried, because the field prefills from what is
+    // now recorded, so a second attempt at a failed intake writes nothing a second time.
+    if (selection.kind === "stamp") {
+      const entry = catalogValueEntry(catalogValueRef.current);
+      if (entry) {
+        setSavingPrice(true);
+        setPriceError(undefined);
+        const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+        const r = await quickSetCatalogPricesAction(
+          selection.stampId,
+          conditionId,
+          certId || null,
+          [entry],
+          formatId || null
+        );
+        setSavingPrice(false);
+        if (r.status === "error") {
+          setPriceError(r.message);
+          return;
+        }
+      }
+    }
     onSubmit(fd);
   }
   const count = selection.kind === "checklist" ? selection.requiredCount : 1;
@@ -3789,7 +3848,9 @@ function IntakeConditionDialog({
     ? submitLabel
       ? "Working…"
       : "Adding…"
-    : photosUploading
+    : savingPrice
+      ? "Saving the catalog value…"
+      : photosUploading
       ? "Uploading photos…"
       : (submitLabel ??
         (selection.kind === "checklist"
@@ -3948,6 +4009,25 @@ function IntakeConditionDialog({
             )}
           </div>
 
+          {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
+              Directly under the row it is keyed on — a catalogue price belongs to a condition ×
+              certificate × format, and putting it anywhere else would leave the collector to work
+              out which of the answers above it follows. One field, the primary catalogue only: the
+              full quick-price dialog stays for the multi-vendor case, and a row of vendor inputs
+              here would bury the step. Single-stamp intake only, the rule photos and the format
+              field follow — one figure cannot be the catalogue value of a whole set's stamps. */}
+          {selection.kind === "stamp" && (
+            <IntakeCatalogValueField
+              stampId={selection.stampId}
+              conditionId={conditionId}
+              certificateStatusId={certId}
+              formatId={formatId}
+              subjectLabel={subjectLabel}
+              disabled={isPending || savingPrice}
+              onChange={handleCatalogValueChange}
+            />
+          )}
+
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.
               An in-location ref (#148) sits beside it, disabled until a location is chosen. */}
           <div style={{ marginTop: "0.75rem" }}>
@@ -4025,8 +4105,10 @@ function IntakeConditionDialog({
           actionLabel={actionLabel}
           cancelLabel="Back"
           onCancel={onBack}
-          disabled={isPending || !conditionId || photosUploading}
-          error={error}
+          disabled={isPending || !conditionId || photosUploading || savingPrice}
+          // The caller's error and this dialog's own read the same way, and only one can be
+          // standing: a failed catalogue write returns before the intake is attempted at all.
+          error={priceError ?? error}
         />
       </form>
     </DialogShell>
