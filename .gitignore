@@ -32,6 +32,11 @@ src/generated/prisma/
 docker-compose.gcs.yml
 secrets/
 
+# detection regression scans (#574) — real card scans, hundreds of MB. The expectations JSON and
+# the README beside them are committed; the images are not.
+tests/fixtures/scans/*
+!tests/fixtures/scans/README.md
+
 # logs
 *.log
 npm-debug.log*

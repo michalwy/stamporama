@@ -13,15 +13,16 @@ import {
 import { deletePhotoVariants } from "./photos";
 import { MAX_UPLOAD_BYTES, UnsupportedImageError } from "./photos/process";
 import { cutSheet, extractSheetRegion, prepareSheet } from "./photos/sheet";
-import { pairByPosition, readingOrder, type Box } from "./scan-boxes";
+import { normalizeBox, pairByPosition, readingOrder, type Box } from "./scan-boxes";
+import { detectSheetBoxes } from "./scan-detect";
 
 /**
  * Scan sheet ingest (#566, ADR-0033): a stockbook card is scanned whole, the scan is retained, its
  * regions are cut into **tiles**, and a second scan of the same card — each stamp turned over in
  * place — pairs backs onto fronts by position.
  *
- * Boxes are drawn by hand here. #574 proposes them from the image instead and hands the same
- * shapes to the same functions, which is why nothing below asks where a box came from.
+ * Boxes reach `commitCut` either drawn by hand or proposed by `proposeCut` (#574), and nothing
+ * below asks which — the proposal hands the same shapes to the same functions.
  *
  * Three rules the rest of the module is arranged around:
  *
@@ -558,6 +559,37 @@ async function readSheetOriginal(
     chunks.push(Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+// ── Proposing the cut (#574) ──────────────────────────────────────────────────────────────────
+
+/**
+ * Find the pieces on a stored scan and hand back the boxes, so the editor opens on a proposal
+ * instead of an empty card.
+ *
+ * **A proposal and nothing more.** The result goes into the same editor a hand-drawn cut is made in
+ * and through the same `commitCut` afterwards; nothing below this function knows or asks that a box
+ * came from here. Which is also why a failure is the caller's to swallow into an empty canvas
+ * rather than an error to show: the manual path is the primitive, and it is unaffected.
+ *
+ * Read from the **retained original**, like the cut itself — `scan-detect.ts` does its own
+ * downscaling and hands back boxes in the sheet's own pixels. Boxes are clamped through
+ * `normalizeBox` before they leave, because the editor and `commitCut` are both entitled to assume
+ * a box lies inside its sheet.
+ */
+export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[]> {
+  await assertSheetOwner(ownerId, sheetId);
+
+  const sheet = await prisma.scanSheet.findUniqueOrThrow({
+    where: { id: sheetId },
+    select: { storageBackend: true, storageKey: true, mime: true, width: true, height: true },
+  });
+
+  const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
+  const detected = await detectSheetBoxes(original);
+  return detected
+    .map((b) => normalizeBox(b, { width: sheet.width, height: sheet.height }))
+    .filter((b): b is Box => b != null);
 }
 
 // ── Manual pairing ────────────────────────────────────────────────────────────────────────────

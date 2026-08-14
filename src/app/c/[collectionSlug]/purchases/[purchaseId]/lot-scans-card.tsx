@@ -8,6 +8,7 @@ import {
   commitCutAction,
   deleteBatchAction,
   pairTilesAction,
+  proposeCutAction,
   recutBatchAction,
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
@@ -77,6 +78,9 @@ export function LotScansCard({
    * re-reads the tile after a refetch instead of showing the state it had when it was opened. */
   const [tileId, setTileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /** A detection pass in flight. Its own state rather than the transition's: it is the one wait in
+   * this section that happens *before* a dialog opens, so the button that started it has to say so. */
+  const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CutReport | null>(null);
   /** A pending re-cut carries the cut it is about to destroy: the tiles hold the boxes, and
@@ -126,6 +130,24 @@ export function LotScansCard({
     onChanged();
   };
 
+  /**
+   * Open the editor on a **proposal** (#574) — the boxes detection found, to be corrected rather
+   * than drawn.
+   *
+   * The proposal never blocks the editor: `proposeCutAction` answers with no boxes rather than an
+   * error, and an empty canvas is exactly what this surface did before detection existed. Drawing
+   * by hand is the primitive; this only decides how much of it is left to do.
+   */
+  const openProposed = async (sheet: ScanCutEditorSheet, frontTileCount: number | null) => {
+    setDetecting(true);
+    try {
+      const { boxes } = await proposeCutAction(sheet.id);
+      setEditor({ sheet, initialBoxes: boxes, frontTileCount });
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   /** Send a scan and open the editor on it — the two halves of "add a card" are one act to the
    * collector, and a sheet uploaded with no cut drawn is exactly what a re-cut starts from anyway. */
   const upload = async (file: File, side: "front" | "back", batchNo?: number) => {
@@ -146,15 +168,13 @@ export function LotScansCard({
         return;
       }
       refresh();
-      setEditor({
-        sheet: { ...body, side },
-        initialBoxes: [],
-        frontTileCount:
-          side === "back"
-            ? (batches.find((b) => b.batchNo === body.batchNo)?.tiles.filter((t) => t.frontBox)
-                .length ?? null)
-            : null,
-      });
+      await openProposed(
+        { ...body, side },
+        side === "back"
+          ? (batches.find((b) => b.batchNo === body.batchNo)?.tiles.filter((t) => t.frontBox)
+              .length ?? null)
+          : null
+      );
     } catch {
       setError("Failed to upload the scan.");
     } finally {
@@ -218,6 +238,7 @@ export function LotScansCard({
         <UploadButton
           label="Add card scan"
           busy={uploading}
+          busyLabel={detecting ? "Finding the stamps…" : undefined}
           onFile={(f) => void upload(f, "front")}
         />
       </header>
@@ -262,10 +283,9 @@ export function LotScansCard({
           collectionSlug={collectionSlug}
           onlyUnidentified={onlyUnidentified}
           onOpenTile={setTileId}
-          busy={uploading || pending}
-          onReview={(sheet, boxes, frontTileCount) =>
-            setEditor({ sheet, initialBoxes: boxes, frontTileCount })
-          }
+          busy={uploading || pending || detecting}
+          detecting={detecting}
+          onReview={(sheet, frontTileCount) => void openProposed(sheet, frontTileCount)}
           onUploadBack={(f) => void upload(f, "back", batch.batchNo)}
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
@@ -371,6 +391,7 @@ function BatchSection({
   onlyUnidentified,
   onOpenTile,
   busy,
+  detecting,
   onReview,
   onUploadBack,
   onRecut,
@@ -383,11 +404,12 @@ function BatchSection({
   onlyUnidentified: boolean;
   onOpenTile: (tileId: string) => void;
   busy: boolean;
-  onReview: (
-    sheet: ScanCutEditorSheet,
-    boxes: Box[],
-    frontTileCount: number | null
-  ) => void;
+  /** Whether the wait the buttons are in is a detection pass, so they can say which wait it is. */
+  detecting: boolean;
+  /** Open the editor on this sheet, proposing its cut first (#574). Only ever called for a sheet
+   * nothing has been cut from — a re-cut reopens on the previous boxes through `onRecut` instead,
+   * because the cut that is being corrected beats a fresh proposal of it. */
+  onReview: (sheet: ScanCutEditorSheet, frontTileCount: number | null) => void;
   onUploadBack: (file: File) => void;
   /** Handed the editor target to reopen once the tiles are gone — the previous cut, read off the
    * tiles while they still exist. Null when there is no front scan to reopen on. */
@@ -450,21 +472,27 @@ function BatchSection({
 
         {batch.front && !batch.front.cut && (
           <SmallButton
-            onClick={() => onReview(editorSheet(batch.front!), [], null)}
+            onClick={() => onReview(editorSheet(batch.front!), null)}
             disabled={busy}
           >
-            Review the front cut
+            {detecting ? "Finding the stamps…" : "Review the front cut"}
           </SmallButton>
         )}
         {batch.front?.cut && !batch.back && (
-          <UploadButton label="Add back scan" small busy={busy} onFile={onUploadBack} />
+          <UploadButton
+            label="Add back scan"
+            small
+            busy={busy}
+            busyLabel={detecting ? "Finding the stamps…" : undefined}
+            onFile={onUploadBack}
+          />
         )}
         {batch.back && !batch.back.cut && (
           <SmallButton
-            onClick={() => onReview(editorSheet(batch.back!), [], frontTiles.length)}
+            onClick={() => onReview(editorSheet(batch.back!), frontTiles.length)}
             disabled={busy}
           >
-            Review the back cut
+            {detecting ? "Finding the stamps…" : "Review the back cut"}
           </SmallButton>
         )}
         {batch.tiles.length > 0 && (
@@ -493,7 +521,10 @@ function BatchSection({
       </div>
 
       {batch.tiles.length === 0 && batch.front && !batch.front.cut && (
-        <Muted>The scan is stored. Draw the boxes to cut it into tiles.</Muted>
+        <Muted>
+          The scan is stored. Review the proposed boxes — correcting them, and drawing any the
+          detection missed — to cut it into tiles.
+        </Muted>
       )}
 
       {frontTiles.length > 0 && (
@@ -843,11 +874,15 @@ function CutReportBanner({
 function UploadButton({
   label,
   busy,
+  busyLabel,
   small,
   onFile,
 }: {
   label: string;
   busy: boolean;
+  /** What the wait is, when it is not the upload — a card scan goes straight from being sent to
+   * being searched for stamps, and one label for both would name the wrong half of it. */
+  busyLabel?: string;
   small?: boolean;
   onFile: (file: File) => void;
 }) {
@@ -855,7 +890,7 @@ function UploadButton({
   return (
     <>
       <SmallButton onClick={() => inputRef.current?.click()} disabled={busy} large={!small}>
-        <Icon name="scan" size="sm" /> {busy ? "Uploading…" : label}
+        <Icon name="scan" size="sm" /> {busy ? (busyLabel ?? "Uploading…") : label}
       </SmallButton>
       <input
         ref={inputRef}

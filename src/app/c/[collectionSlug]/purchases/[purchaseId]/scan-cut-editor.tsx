@@ -37,7 +37,8 @@ import {
  * touching stamps for one, halve a dark one, or find a shadow along the card's edge — and a bad cut
  * on a parcel already broken up cannot be undone by re-scanning. So the graphical repair exists
  * first and unconditionally; detection quality decides how often it is reached, never whether it
- * exists. In this issue it is also where every box comes from, drawn by hand.
+ * exists. Since #574 the boxes usually arrive proposed, and this surface cannot tell: a proposed
+ * box and a drawn one are the same four numbers, moved, split, merged and deleted the same way.
  *
  * It works in **rectangles** — not because stamps are rectangular, which triangles and diamonds are
  * not, but because a crop is. Nothing here paints a mask or edits an outline.
@@ -81,8 +82,9 @@ export interface ScanCutEditorSheet {
 interface Props {
   collectionId: string;
   sheet: ScanCutEditorSheet;
-  /** A previous cut's boxes, when re-cutting. Empty on a first pass — an empty canvas is the
-   * ordinary case here, and #574 is what fills it. */
+  /** The boxes to open on: a proposal from detection (#574), or a previous cut's boxes when
+   * re-cutting. Empty is still an ordinary case — a scan detection could not read, or a card it
+   * found nothing on, opens on an empty canvas and is drawn by hand. */
   initialBoxes: Box[];
   /** How many front tiles the batch already holds, shown while cutting a back so the two counts
    * can be compared *before* committing rather than only in the report afterwards. */

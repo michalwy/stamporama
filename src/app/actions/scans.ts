@@ -7,6 +7,7 @@ import {
   commitCut,
   deleteBatch,
   pairTilesManually,
+  proposeCut,
   recutBatch,
   type CutReport,
 } from "@/lib/scan-sheets";
@@ -54,6 +55,25 @@ export async function commitCutAction(
       status: "error",
       message: e instanceof Error ? e.message : "Failed to cut the scan. Please try again.",
     };
+  }
+}
+
+/**
+ * Propose the cut for a scan that has not been cut yet (#574): the boxes the editor opens on
+ * instead of an empty card.
+ *
+ * **It cannot fail loudly.** A scan detection could not read, or found nothing on, still opens the
+ * editor — on an empty canvas, exactly as before this existed. Drawing the boxes by hand is the
+ * primitive and stays a guaranteed path; a proposal is a saving on it, so a failure here costs the
+ * collector the saving and nothing else. An error banner over a card that can still be cut would be
+ * telling them about a problem they have no move to make about.
+ */
+export async function proposeCutAction(sheetId: string): Promise<{ boxes: Box[] }> {
+  const session = await getSession();
+  try {
+    return { boxes: await proposeCut(session.user.id, sheetId) };
+  } catch {
+    return { boxes: [] };
   }
 }
 

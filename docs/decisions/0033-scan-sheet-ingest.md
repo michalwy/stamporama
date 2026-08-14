@@ -311,6 +311,67 @@ pixels — at 8× zoom, one pixel of stamp per eight of mouse — without changi
   signal too. A lot with no lines at all says nothing about any tile, rather than calling all of them
   undescribed.
 
+## What #574 added: the boxes arrive proposed, and one constant did not transfer
+
+Decision 7 said everything downstream is indifferent to where a box came from. #574 is the test of
+that claim, and it passed: detection is one function (`src/lib/scan-detect.ts`) and one call
+(`proposeCut`) that hands `Box[]` to the editor. `commitCut`, the pairing, the tiles and #567 are
+unchanged, and the editor cannot tell a proposed box from a drawn one.
+
+**Detection proposes; it never decides.** `proposeCutAction` answers with *no boxes* rather than an
+error, so a scan it could not read opens the editor on an empty card — which is precisely the
+surface #566 shipped. The manual path is not a fallback that detection might one day retire; it is
+the primitive detection stands on, and its guarantee is unconditional.
+
+### The algorithm, and the constant that had to move
+
+The method is a port of a Python/SciPy implementation validated over ~1,450 photos: estimate the
+background **per image from the border ring**, keeping several dark colour clusters on purpose;
+threshold on **L∞ distance from the nearest cluster**, never on brightness; close, fill holes, open,
+fill holes; erode with an L1 diamond to separate pieces touching along a line, label 4-connected,
+and give the eroded pixels back to each bounding box. No fill-ratio, no aspect-ratio, no maximum
+area, and no filter for reference slips.
+
+Four of its constants were expected to need refitting for a card of dozens rather than a photo of
+1–8 stamps, and did: the working resolution (900 → 2600 px), the erosion radius, the minimum area
+(now stated in **mm² of card**, from the scan's own density) and the reading-order tolerance — the
+last of which already lived in `scan-boxes.ts` from #566, taken from the median.
+
+**A fifth had to move for a reason the issue did not anticipate, and it is the interesting one.**
+The threshold floor went from 28 to 52, because a **1200 dpi flatbed resolves the stockbook card
+itself** — the ridges its rows are creased along, its weave, its loose fibres — where a phone
+photograph of a few stamps did not. At 28 a crease running under a row of stamps was foreground; it
+joined their bottom edges, the row became a closed ring, and the hole fill then took the gaps
+*between* the stamps as interior. A row of six came out as one box. That is not the perforation
+limit and no erosion undid it: eroding hard enough to break the crease broke single stamps first.
+
+The lesson generalises past this constant: **the reference corpus differed from a stockbook card in
+its subject and in its instrument**, and only the second was invisible in the spec.
+
+The whole-frame escape (`mean(mask) > 0.90` → one box) was dropped as the issue asked, and
+`2026-08-14-0005.jpg` is the evidence: a souvenir sheet filling a card reads 81% coverage and
+returns one correct box, while on a dense card the escape's failure would have been the entire card
+as a single tile.
+
+### Measured, not asserted
+
+Eight real 1200 dpi cards, 120 physical pieces, held in a **gitignored** `tests/fixtures/scans/`
+with a committed expectations file beside them; the harness skips entirely when the folder is
+absent. **2 pieces of 120 need a hand — 1.7%**, against the reference's ~1.6% of stamps. Both
+misses are the documented limits rather than tuning failures: one pair of definitives whose
+perforations interlock came out as one box, and one stamp-plus-coupon came out as two.
+
+Two things about that figure are stated rather than glossed. A count is a **lower bound** — two
+errors that cancel read as zero — so placement was checked by rendering the boxes over every card
+and looking at them; what that in turn cannot catch is a box clipping perforation by a few pixels,
+which is exactly what #579's zoom exists for. And the set has **named gaps**, recorded in the
+expectations file and printed by every run: stamps laid deliberately touching, a card with uneven
+lighting, a non-rectangular stamp, and a front/back pair.
+
+The physical rule follows from all of this and is in the user guide: **leave about one perforation
+tooth of gap between stamps when laying out the card.** It is the one input to detection quality
+that is entirely in the collector's hands.
+
 ## Still open
 
 - The batch has no name of its own. A lot with six cards is *batch 1…6*, which is enough while a card

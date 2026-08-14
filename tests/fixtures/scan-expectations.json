@@ -1,0 +1,45 @@
+{
+  "_readme": "Expected detection results for the card scans in tests/fixtures/scans/ (gitignored). `pieces` counts PHYSICAL PIECES, not stamps: a pair, a block or a se-tenant strip is one piece, because perforation joins them and detection cannot separate them without cutting teeth. `note` says which case each card covers, so a partial set states its gaps instead of implying coverage. `allow` is a NAMED shortfall: how many boxes this card is measured to come out by, with `allowReason` saying which documented limit it is. It is never a widened tolerance — a card with no `allow` must come out exactly.",
+  "2026-08-14-0002.jpg": {
+    "pieces": 9,
+    "note": "Large mint stamps, widely spaced, four rows. The easy baseline."
+  },
+  "2026-08-14-0003.jpg": {
+    "pieces": 28,
+    "note": "Dense: 9+9+6+4, almost all the same blue definitive. The density case the reference corpus never had.",
+    "allow": 1,
+    "allowReason": "One pair in row 2 abuts teeth into teeth and comes out as a single box: the interlocking-perforation limit, arriving on a card that was not laid out to test it. One Split in the editor. Detection is measured at 27 here."
+  },
+  "2026-08-14-0004.jpg": {
+    "pieces": 22,
+    "note": "Mixed sizes. Row 1 holds a joined horizontal PAIR that must come out as one piece, not two."
+  },
+  "2026-08-14-0005.jpg": {
+    "pieces": 1,
+    "note": "A single souvenir sheet filling most of the card. Tests that dropping the whole-frame escape is right: there is still a black margin, so coverage must not read as 'the stamp fills the frame'."
+  },
+  "2026-08-14-0006.jpg": {
+    "pieces": 11,
+    "note": "Three stamps on cut envelope paper — where the PAPER is the piece, not the stamp on it — plus six loose. Two of the eleven are white reference slips: a leftover of an older habit of laying a slip on the card before scanning, which current scans no longer do. There is deliberately no filter for them, so detection is expected to find them and the collector discards them during identification."
+  },
+  "2026-08-14-0007.jpg": {
+    "pieces": 7,
+    "note": "Two souvenir sheets and five small stamps: the widest size spread here, which is what the reading-order tolerance must survive."
+  },
+  "2026-08-14-0008.jpg": {
+    "pieces": 29,
+    "note": "The densest card, five rows of five to six."
+  },
+  "2026-08-14-0009.jpg": {
+    "pieces": 13,
+    "note": "Twenty stamps in thirteen pieces: five pairs and a block of four. The joined-stays-one rule, and several pieces carry sheet margins and printer's marks that are part of the piece.",
+    "allow": 1,
+    "allowReason": "The stamp with an attached coupon comes out as two boxes: the gutter between them is a real perforated separation, so nothing distinguishes it from two pieces. One Merge in the editor. Detection is measured at 14 here."
+  },
+  "_gaps": [
+    "Separate stamps laid deliberately touching, teeth interlocking. Expected to fail — the seam is white paper against white paper and no threshold finds it. 0003 holds one such pair by accident, which is where its `allow` comes from.",
+    "A card with uneven lighting or a shadow across it. This is what the multi-cluster background estimate exists for, and the one part of the estimator no card here exercises.",
+    "A non-rectangular stamp — a triangle or a diamond. Not covered, and the reason there is deliberately no fill-ratio filter.",
+    "A front and back pair of one card, each stamp turned in place. The positional pairing has no scan of its own here."
+  ]
+}

@@ -180,13 +180,16 @@ Open a lot and use **Add card scan** in its **Card scans** section.
 
 #### Laying out the card
 
-Lay the stamps on a **black** stockbook card and scan the whole card square-on. Two things about
-the layout matter:
+Lay the stamps on a **black** stockbook card and scan the whole card square-on. The app finds the
+pieces on the card by separating them from that black background, so the layout is what decides how
+much correcting is left to do. Two things about it matter:
 
 - **Leave about one perforation tooth of gap between stamps.** Where two stamps abut teeth into
   teeth, the seam is white paper against white paper: there is nothing there to find, so the two
   will come out as one box and you will have to split them by hand. This is the single biggest
-  difference between a card that cuts cleanly and one that does not.
+  difference between a card that cuts cleanly and one that does not, and no amount of tuning can
+  cross it — it is the one thing the detection cannot be made to see. A tooth of gap is enough; the
+  stamps do not have to be spread out.
 - **Anything joined stays joined.** A se-tenant pair, a block, a strip: it is one piece, so it is
   one box, one tile and — once identified — **one copy with a format**, never several singles.
   That is correct, not a limitation to work around.
@@ -195,9 +198,29 @@ Scan at a decent resolution: the scan is cut **before** anything is downscaled, 
 at 600 dpi gives each stamp its own full-size image rather than a soft fragment of a shrunken
 sheet.
 
+The card itself can stay as it is — a black card with the creases and weave of one that has been
+used is what the detection was fitted on. What it does need is an **even** black: a shadow falling
+across one half of the card, or a lamp on one side of it, is the case most likely to confuse it.
+
 #### Cutting the scan
 
-The scan opens in the **cut editor**, over the card itself. Draw a box around each stamp:
+The scan opens in the **cut editor**, over the card itself, with **the stamps already boxed**. That
+proposal is where a cut starts, not where it ends: look down the card, correct what is wrong, and
+draw anything that was missed. On a card laid out with a tooth of gap between the stamps that is
+usually a box or two.
+
+Two mistakes are worth looking for by name, because they are the ones the detection makes:
+
+- **Two stamps in one box** — they were touching. Select the box and **Split** it.
+- **One stamp in two boxes** — usually a stamp with an attached coupon or label, where the gap
+  between the two halves is a real perforated separation. Select both and **Merge** them.
+
+A slip of paper laid on the card, or the corner of an envelope a stamp is still on, is boxed like
+anything else. That is deliberate: the piece of paper *is* the piece, and if it is not one, deleting
+its box costs a click, whereas a stamp quietly dropped from a card that has already been broken up
+is one nothing on screen would tell you about.
+
+Every edit below works the same whether the box was proposed or drawn by hand:
 
 - **Drag** on an empty part of the card to draw a box.
 - **Click** a box to select it; **shift-click** to add to the selection; drag inside it to move it,
@@ -212,6 +235,10 @@ The scan opens in the **cut editor**, over the card itself. Draw a box around ea
 Each box carries the number it will be created with — rows top to bottom, each row left to right.
 **Nothing is created until you press Cut**, so the whole review is free to be wrong. Cancel and
 the scan is still stored, waiting to be cut.
+
+**Clear all** empties the card if the proposal is more trouble than it is worth, and a scan the
+detection could not read simply opens on an empty card — drawing every box by hand is always
+available, and always works the same way.
 
 #### Looking closer
 

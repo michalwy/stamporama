@@ -10,12 +10,14 @@ import { deleteLot } from "../../src/lib/lots";
 import { getCollectionPhotoStorageBytes, getPhotoForServing } from "../../src/lib/photos";
 import { FULL_MAX_EDGE } from "../../src/lib/photos/process";
 import {
+  ScanAuthError,
   ScanValidationError,
   commitCut,
   deleteBatch,
   getSheetForServing,
   listLotScans,
   pairTilesManually,
+  proposeCut,
   recutBatch,
   renderSheetRegion,
   uploadSheet,
@@ -628,6 +630,54 @@ describe("scan sheet ingest (#566)", () => {
     const second = await uploadFront(lotId);
     assert.equal(first.batchNo, 1);
     assert.equal(second.batchNo, 2, "a second card is a second batch, not a replacement");
+
+    await deleteLot(userId, lotId);
+  });
+
+  // ── The proposal (#574) ──────────────────────────────────────────────────────────────────────
+  //
+  // This tests the **wiring**, not the constants: that `proposeCut` authorizes, reads the retained
+  // original rather than the view, and hands back boxes in the sheet's own pixels, in reading
+  // order, clamped inside it. Whether detection finds the right pieces on a real card is measured
+  // against real scans in `tests/unit/scan-detect.test.ts` — three rectangles on a generated black
+  // field say nothing about that, and fitting anything to them is what #574 forbids.
+
+  it("proposes the cut on a stored scan, in the sheet's own pixels and in reading order", async () => {
+    const lotId = await newLot();
+    const sheet = await uploadFront(lotId);
+
+    const proposed = await proposeCut(userId, sheet.id);
+
+    assert.equal(proposed.length, FRONT_BOXES.length);
+    proposed.forEach((box, i) => {
+      const drawn = FRONT_BOXES[i];
+      // Reading order, and each proposal holds the piece it is for — with a margin, because the
+      // mask stops at the last pixel that differs from the card and a crop flush to it clips
+      // perforation.
+      assert.ok(
+        box.x <= drawn.x &&
+          box.y <= drawn.y &&
+          box.x + box.w >= drawn.x + drawn.w &&
+          box.y + box.h >= drawn.y + drawn.h,
+        `box ${i} ${JSON.stringify(box)} does not contain ${JSON.stringify(drawn)}`
+      );
+      // In the original's coordinate space, not the view's: the view is capped at FULL_MAX_EDGE and
+      // a box measured there would put every crop on the card wrong.
+      assert.ok(box.x + box.w <= SHEET_W && box.y + box.h <= SHEET_H);
+    });
+
+    // What the editor then does with them is the ordinary path — the commit cannot tell.
+    const report = await commitCut(userId, sheet.id, proposed);
+    assert.equal(report.created, FRONT_BOXES.length);
+
+    await deleteLot(userId, lotId);
+  });
+
+  it("refuses to propose a cut on someone else's scan", async () => {
+    const lotId = await newLot();
+    const sheet = await uploadFront(lotId);
+
+    await assert.rejects(() => proposeCut("someone-else", sheet.id), ScanAuthError);
 
     await deleteLot(userId, lotId);
   });
