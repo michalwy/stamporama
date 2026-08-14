@@ -114,7 +114,8 @@ describe("retained-scan retention (#578)", () => {
     try {
       await getStorage(sheet.storageBackend).get(
         sheetVariantKey(sheet.storageKey, "original", sheet.mime),
-        sheet.mime
+        sheet.mime,
+        "delivery"
       );
       return true;
     } catch {

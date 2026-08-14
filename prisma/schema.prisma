@@ -1753,6 +1753,49 @@ model ScanUpload {
   @@map("scan_upload")
 }
 
+// One locally held copy of a **remote** storage object (#591), and the `used` a least-recently-used
+// cache needs somewhere to record.
+//
+// Emphatically not `ScanUpload`'s neighbour in kind, however alike two tables of local bytes look:
+// a chunk (#590) was never remote and has an explicit lifecycle, while every row here is a copy of
+// something that still exists in the bucket and can be thrown away at any moment without losing
+// anything. Nothing may merge the two on the strength of both being local bytes.
+//
+// **A table rather than filesystem metadata**, because there is no filesystem metadata to use:
+// `atime` is off on most modern mounts (`relatime`, `noatime`) and `mtime` records writing, not
+// use. A row touched per access is affordable precisely because only *work* populates the cache
+// and never delivery (see `StorageAccess`), so accesses are few and large — it would not be if
+// every thumbnail served counted. It also means the cache **survives a restart**, without which
+// the first detection after a deploy fetches back the 200 MB this exists to stop.
+//
+// **The row and the file may drift, and neither trusts the other.** A row whose file is gone is a
+// *miss*, not an error; a file with no row is garbage the eviction pass collects. A cache that
+// throws when its own bookkeeping is stale is worse than no cache, because every caller then has
+// to handle a failure that has nothing to do with what it asked for.
+//
+// `key` is the backend-agnostic storage key, which is already collection-scoped (ADR-0011) — so
+// *clear this collection's entries* is a delete by prefix and the cache needs no partitioning to
+// be clearable per collection, while its cap stays one number for the instance.
+model StorageCacheEntry {
+  /** Which binding the original lives on. Part of the identity because the same key names a
+   * different object on a different backend, and because the cache is only ever in front of a
+   * remote one — a filesystem object is already local and is never copied here. */
+  backend    String
+  key        String
+  /** The local copy's size on disk, as `stat` reported it after writing. What the cap is counted
+   * against, and what an eviction pass frees. */
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+  /** The LRU's ordering. Bumped by every work read that hits, and set by the write that
+   * populated. */
+  lastUsedAt DateTime @default(now())
+
+  @@id([backend, key])
+  @@index([lastUsedAt])
+  @@index([key])
+  @@map("storage_cache_entry")
+}
+
 // Non-inventory line of a purchase (ADR-0009 §1), e.g. a magnifier bought alongside
 // the stamps: a label and a price, with no lifecycle and no items. It absorbs its
 // fair share of the shared cost so it does not inflate the stamps. Separate table

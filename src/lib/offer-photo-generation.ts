@@ -8,6 +8,7 @@ import {
   permanentPrefix,
   variantKey,
   type PhotoVariant,
+  type StorageAccess,
 } from "./storage";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { CLOSED_OFFER_STATES, isOfferState, isTerminalState } from "./offer-rules";
@@ -1129,7 +1130,9 @@ async function readOfferUploadSet(
         photoId: image.photoId,
         fileName: image.fileName,
         mime: photo.mime,
-        bytes: await readFullBytes(photo),
+        // `delivery` (#591): this is the ZIP the collector downloads, not something the server is
+        // about to work on.
+        bytes: await readFullBytes(photo, "delivery"),
       };
     })
   );
@@ -1272,15 +1275,25 @@ export async function requeueStalledOfferPhotoGenerations(only?: { offerId: stri
 // ── Bytes ────────────────────────────────────────────────────────────────────
 
 /** Read a stored photo's `full` bytes into memory — a collage tile has to be decoded as a whole, and
- * an archived image has to be handed over whole. */
-async function readFullBytes(photo: {
-  storageBackend: string;
-  storageKey: string;
-  mime: string;
-}): Promise<Buffer> {
+ * an archived image has to be handed over whole.
+ *
+ * `access` is the caller's to answer (#591) and this function is why the flag is an argument rather
+ * than a property of the key: the *same photo* is read here to compose a collage, which is work the
+ * server is about to repeat on the next regeneration, and to fill the ZIP a browser downloads,
+ * which is delivery. One cached copy is worth having; the other would be a photo nobody will ask
+ * the server about again taking a slot from the sources of the offer being tuned. */
+async function readFullBytes(
+  photo: {
+    storageBackend: string;
+    storageKey: string;
+    mime: string;
+  },
+  access: StorageAccess
+): Promise<Buffer> {
   const object = await getStorage(photo.storageBackend).get(
     variantKey(photo.storageKey, "full", photo.mime),
-    photo.mime
+    photo.mime,
+    access
   );
   const chunks: Buffer[] = [];
   for await (const chunk of object.stream) {
@@ -1464,7 +1477,9 @@ async function tileSource(
     throw new Error(`Planned tile references unknown photo ${photoId}.`);
   }
   return {
-    buffer: await readFullBytes(source),
+    // `work` (#591): a tile's bytes are decoded and composed here, and the same sources are read
+    // again on every regeneration while the collector tunes the collage.
+    buffer: await readFullBytes(source, "work"),
     labels,
     // Null on anything uploaded before the originals were recorded; the renderer reads that as
     // "never downscaled", which is what it assumed of every scan until then.
@@ -1516,8 +1531,20 @@ async function renderTiles(
   const prefix = permanentPrefix(inputs.collectionId, photoId);
   const storage = getActiveStorage();
   try {
-    await storage.put(variantKey(prefix, "full", COLLAGE_MIME), rendered.buffer, COLLAGE_MIME);
-    await storage.put(variantKey(prefix, "thumb", COLLAGE_MIME), thumb.buffer, COLLAGE_MIME);
+    // `delivery` on both (#591): a rendered image is output, read only to be shown or uploaded to
+    // a marketplace, and it is already in memory here if anything wanted it now.
+    await storage.put(
+      variantKey(prefix, "full", COLLAGE_MIME),
+      rendered.buffer,
+      COLLAGE_MIME,
+      "delivery"
+    );
+    await storage.put(
+      variantKey(prefix, "thumb", COLLAGE_MIME),
+      thumb.buffer,
+      COLLAGE_MIME,
+      "delivery"
+    );
   } catch (err) {
     await deleteVariants(storage.backend, prefix, COLLAGE_MIME);
     throw err;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { SettingsPanel } from "./settings-panel";
 import { CatalogPanel } from "../catalog/catalog-panel";
 import { AreasPanel } from "../areas/areas-panel";
@@ -101,6 +102,9 @@ interface SettingsTabsProps {
   instanceScanSheetTtlLabel: string;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
+  /** The local cache of remote storage objects (#591), shown beside the storage figure but never
+   * added to it: one is the collector's data, the other is reclaimable scratch. */
+  storageCache: StorageCacheStatus;
   appVersion: string;
   /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
   appReleaseDate: string | null;
@@ -171,6 +175,7 @@ export function SettingsTabs({
   instanceScanSheetTtlLabel,
   duplicateCatalogMode,
   photoStorageBytes,
+  storageCache,
   appVersion,
   appReleaseDate,
 }: SettingsTabsProps) {
@@ -257,6 +262,7 @@ export function SettingsTabs({
           scanSheetTtl={scanSheetTtl}
           instanceScanSheetTtlLabel={instanceScanSheetTtlLabel}
           photoStorageBytes={photoStorageBytes}
+          storageCache={storageCache}
           appVersion={appVersion}
           appReleaseDate={appReleaseDate}
         />

@@ -1,16 +1,28 @@
 import { FilesystemStorage } from "./filesystem";
 import { GcsStorage } from "./gcs";
+import { withCache } from "./cache";
+import { cacheMaxBytes, describeCacheMax } from "./cache-rules";
 import type { PhotoVariant, SheetVariant, Storage, StorageBackend } from "./types";
 
 export type {
   PhotoVariant,
   SheetVariant,
   Storage,
+  StorageAccess,
   StorageBackend,
   StorageObject,
   ResolveResult,
 } from "./types";
 export { dataDir, toWebStream } from "./filesystem";
+export {
+  clearStorageCacheForCollection,
+  collectionStorageCacheBytes,
+  storageCacheUsage,
+  sweepStorageCache,
+  type StorageCacheSweep,
+  type StorageCacheUsage,
+} from "./cache";
+export { describeCacheMax } from "./cache-rules";
 
 const filesystem = new FilesystemStorage();
 
@@ -23,10 +35,21 @@ const filesystem = new FilesystemStorage();
 // carrying its own auth client and keep-alive HTTP agents whose live sockets keep the old
 // instance reachable. Over a dev session those accumulate and the heap climbs until OOM.
 // In production this is just a per-process singleton, unchanged.
-const globalForStorage = globalThis as unknown as { gcs?: GcsStorage };
-function gcsBinding(): GcsStorage {
+//
+// What is handed out is the binding **wrapped in the local cache** (#591): a remote backend is
+// where the app fetches back what it wrote seconds ago, and the cache is not something callers may
+// learn about, so it goes on here rather than at any call site. The filesystem binding is never
+// wrapped — `withCache` returns it unchanged — because those bytes are already local.
+const globalForStorage = globalThis as unknown as {
+  gcs?: GcsStorage;
+  gcsCached?: Storage;
+};
+function gcsBinding(): Storage {
   if (!globalForStorage.gcs) globalForStorage.gcs = new GcsStorage();
-  return globalForStorage.gcs;
+  if (!globalForStorage.gcsCached) {
+    globalForStorage.gcsCached = withCache(globalForStorage.gcs);
+  }
+  return globalForStorage.gcsCached;
 }
 
 /** All known storage bindings, keyed by the identifier persisted in `storageBackend`. GCS is
@@ -58,6 +81,16 @@ export function getStorage(backend: string): Storage {
 export async function logStorageStartup(): Promise<void> {
   const storage = getActiveStorage();
   console.log(`[storage] active write backend: ${storage.describe()}`);
+  // Said once at boot whatever the answer is, the same way the retention sweeps state their
+  // instance default (#577): the cap is the number that decides whether an operator has anything
+  // to do about disk, and it is theirs to set. On the filesystem backend the cache is a no-op, so
+  // the line says that instead of quoting a cap nothing will ever use.
+  console.log(
+    storage.backend === "filesystem"
+      ? "[storage-cache] not used: the filesystem backend's bytes are already local"
+      : `[storage-cache] local cache of remote objects, cap: ${describeCacheMax(cacheMaxBytes())} ` +
+          `— instance-wide, set with STAMPORAMA_STORAGE_CACHE_MAX_MB`
+  );
   try {
     await storage.healthCheck();
     console.log(`[storage] health check passed (${storage.backend})`);

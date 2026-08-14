@@ -31,11 +31,14 @@ async function migrateOne(photo: {
   const src = getStorage("filesystem");
   const dst = getStorage("gcs");
 
-  // Copy both derivatives to GCS under the identical key.
+  // Copy both derivatives to GCS under the identical key. `delivery` on both halves (#591): a
+  // migration is a byte copy, and nothing is about to operate on these — filling the cache with
+  // every photo in the collection as they went past would evict the working set to hold a backlog
+  // nobody asked for.
   for (const variant of VARIANTS) {
     const key = variantKey(photo.storageKey, variant, photo.mime);
-    const object = await src.get(key, photo.mime);
-    await dst.put(key, object.stream, photo.mime);
+    const object = await src.get(key, photo.mime, "delivery");
+    await dst.put(key, object.stream, photo.mime, "delivery");
   }
 
   // Flip the column only after both variants are safely on GCS.

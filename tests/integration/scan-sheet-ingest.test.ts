@@ -97,7 +97,8 @@ async function centreColour(photo: {
 }): Promise<[number, number, number]> {
   const object = await getStorage(photo.storageBackend).get(
     variantKey(photo.storageKey, "full", photo.mime),
-    photo.mime
+    photo.mime,
+    "delivery"
   );
   const chunks: Buffer[] = [];
   for await (const chunk of object.stream) chunks.push(Buffer.from(chunk));
@@ -118,7 +119,7 @@ async function photoBytesExist(photo: {
   const storage = getStorage(photo.storageBackend);
   try {
     for (const v of ["full", "thumb"] as const) {
-      await storage.get(variantKey(photo.storageKey, v, photo.mime), photo.mime);
+      await storage.get(variantKey(photo.storageKey, v, photo.mime), photo.mime, "delivery");
     }
     return true;
   } catch {
@@ -134,7 +135,7 @@ async function sheetBytesExist(sheet: {
   const storage = getStorage(sheet.storageBackend);
   try {
     for (const v of ["original", "view"] as const) {
-      await storage.get(sheetVariantKey(sheet.storageKey, v, sheet.mime), sheet.mime);
+      await storage.get(sheetVariantKey(sheet.storageKey, v, sheet.mime), sheet.mime, "delivery");
     }
     return true;
   } catch {

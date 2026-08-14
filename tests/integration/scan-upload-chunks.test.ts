@@ -154,7 +154,8 @@ describe("chunked card scan upload (#590)", () => {
     assert.equal(row.sizeBytes, bytes.byteLength);
     const object = await getStorage(row.storageBackend).get(
       sheetVariantKey(row.storageKey, "original", row.mime),
-      row.mime
+      row.mime,
+      "delivery"
     );
     const stored: Buffer[] = [];
     for await (const part of object.stream) stored.push(Buffer.from(part));

@@ -576,6 +576,17 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
 
+### Local cache
+
+If the person running this Stamporama stores photos in the cloud rather than on the server's own disk, a second line appears beside the figure above: **Local cache**.
+
+It is the copies Stamporama keeps on the server's disk so it does not have to fetch the same files back from cloud storage over and over while it works — the card scan it has just received and is about to cut, the copy scans it composes into a listing image every time you press Regenerate. Files on their way to your browser are never cached; only files the *server* is working on.
+
+Two things about it are worth knowing, and the line says both:
+
+- **It is not your data, and it is not part of the figure above.** Everything in the cache also exists in cloud storage. Emptying it costs nothing but a little time the next time those files are needed, which is why there is a plain **Clear this collection's copies** button and no confirmation.
+- **It is instance-wide.** The cache is shared by every collection on this Stamporama, and its size limit is set by whoever runs it, so the figure is shown as *used of limit* for the whole instance, with your collection's share of it named beside. It looks after itself: once it reaches the limit, the least recently used copies are dropped automatically.
+
 ### How long closed listings keep their images
 
 Right below the storage figure, **Settings → General** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.

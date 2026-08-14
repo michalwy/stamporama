@@ -21,6 +21,11 @@
 //   - the retained-scan sweep (#578) — an hourly pass deleting the card scans of batches finished
 //     with longer than the collection's own period. Ships **off**: a scan is a source, not output,
 //     so nothing is swept until a collector asks for it;
+//   - the storage cache sweep (#591) — an hourly pass over the local cache of remote objects. The
+//     cap itself is kept on every populating write, not here: an hourly-only pass would leave disk
+//     bounded by how much was written in an hour, which for card scans is the whole problem. This
+//     pass exists for the drift the design allows — a row whose file has gone, a file no row
+//     claims — and it is a no-op on the filesystem backend, where there is no cache at all;
 //   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
 //     which is what makes the worklist a list that fills itself rather than one that has to be
 //     asked for;
@@ -39,7 +44,7 @@ import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
 import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
-import { logStorageStartup } from "@/lib/storage";
+import { logStorageStartup, sweepStorageCache } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 
@@ -158,6 +163,28 @@ export async function start(): Promise<void> {
   const scanInterval = setInterval(sweepScans, SWEEP_INTERVAL_MS);
   scanInitial.unref?.();
   scanInterval.unref?.();
+
+  // The storage cache sweep (#591). Offset again so a boot does not run four passes at once. It
+  // deletes nothing of the collector's: every object it touches is a copy of something that still
+  // exists on the remote backend, which is what makes emptying the cache safe by construction and
+  // this the one sweep that never needs a retention period to authorise it.
+  const sweepCache = async () => {
+    try {
+      const freed = await sweepStorageCache();
+      if (freed.files > 0) {
+        console.log(
+          `[storage-cache] swept ${freed.files} cached object(s), freeing ${formatBytes(freed.bytes)}`
+        );
+      }
+    } catch (err) {
+      console.error("[storage-cache] sweep failed", err);
+    }
+  };
+
+  const cacheInitial = setTimeout(sweepCache, 120_000);
+  const cacheInterval = setInterval(sweepCache, SWEEP_INTERVAL_MS);
+  cacheInitial.unref?.();
+  cacheInterval.unref?.();
 
   // The Allegro sold-listing sync (#467). Same shape as the sweep above: once shortly after boot,
   // then on its own interval, `unref`'d so it never holds the process up. A pass that throws is

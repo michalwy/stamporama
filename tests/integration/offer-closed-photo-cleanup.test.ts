@@ -59,7 +59,7 @@ async function bytesExist(photo: {
   const storage = getStorage(photo.storageBackend);
   try {
     for (const variant of ["full", "thumb"] as const) {
-      await storage.get(variantKey(photo.storageKey, variant, photo.mime), photo.mime);
+      await storage.get(variantKey(photo.storageKey, variant, photo.mime), photo.mime, "delivery");
     }
     return true;
   } catch {

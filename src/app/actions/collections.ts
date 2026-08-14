@@ -14,6 +14,7 @@ import {
   setCollectionScanSheetTtl,
   type BidPercentPatch,
 } from "@/lib/collections";
+import { clearCollectionStorageCache } from "@/lib/storage-cache";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
 export type CreateCollectionState =
@@ -209,4 +210,33 @@ export async function getCollectionItemNoPadAction(collectionId: string): Promis
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return getCollectionItemNoPad(session.user.id, collectionId);
+}
+
+export type ClearStorageCacheState =
+  | { status: "idle" }
+  | { status: "success"; bytes: number; files: number }
+  | { status: "error"; message: string };
+
+/**
+ * Empty this collection's share of the local storage cache (#591) from Settings → General.
+ *
+ * No confirmation dialog, unlike everything else on this screen that deletes: every object in the
+ * cache is a copy of one that still exists on the remote backend, so the worst this can cost is the
+ * next read fetching bytes again. It is offered at all because an operator who needs the disk back
+ * now should not have to wait for eviction to arrive at it.
+ */
+export async function clearCollectionStorageCacheAction(
+  collectionId: string
+): Promise<ClearStorageCacheState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    const freed = await clearCollectionStorageCache(session.user.id, collectionId);
+    return { status: "success", bytes: freed.bytes, files: freed.files };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to clear the cache.",
+    };
+  }
 }

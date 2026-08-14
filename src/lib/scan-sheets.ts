@@ -185,8 +185,23 @@ export async function uploadSheet(
   const mime = prepared.mime;
 
   try {
-    await storage.put(sheetVariantKey(prefix, "original", mime), prepared.openOriginal(), mime);
-    await storage.put(sheetVariantKey(prefix, "view", mime), prepared.view.buffer, mime);
+    // The one write in the app that is unambiguously **work** (#591): the retained original is
+    // written and the very next thing that happens is detection reading it back to propose the
+    // cut, then the cut itself reading it again. On a remote backend that was 200 MB up and 200 MB
+    // straight back down, seconds apart. The `view` is the editor's picture and goes up
+    // `delivery` — it is served to a browser and never operated on.
+    await storage.put(
+      sheetVariantKey(prefix, "original", mime),
+      prepared.openOriginal(),
+      mime,
+      "work"
+    );
+    await storage.put(
+      sheetVariantKey(prefix, "view", mime),
+      prepared.view.buffer,
+      mime,
+      "delivery"
+    );
   } catch (err) {
     await deleteSheetVariants(storage.backend, prefix, mime);
     throw err;
@@ -614,8 +629,10 @@ async function writeCropBytes(
     for (const r of rows) {
       const prefix = permanentPrefix(collectionId, r.photoId);
       const mime = r.crop.full.mime;
-      await storage.put(variantKey(prefix, "full", mime), r.crop.full.buffer, mime);
-      await storage.put(variantKey(prefix, "thumb", mime), r.crop.thumb.buffer, mime);
+      // `delivery` (#591): a cut tile is a copy photo like any other — shown, never read back by
+      // the server.
+      await storage.put(variantKey(prefix, "full", mime), r.crop.full.buffer, mime, "delivery");
+      await storage.put(variantKey(prefix, "thumb", mime), r.crop.thumb.buffer, mime, "delivery");
       written.push({ backend: storage.backend, prefix, mime });
     }
   } catch (err) {
@@ -660,7 +677,14 @@ async function readSheetOriginal(
   storageKey: string,
   mime: string
 ): Promise<Buffer> {
-  const object = await getStorage(backend).get(sheetVariantKey(storageKey, "original", mime), mime);
+  // `work` (#591): every caller of this is an operation over the card — proposing the cut, or
+  // taking it. It is also the read the cache's write-through half is aimed at, so on a remote
+  // backend this normally never leaves the machine.
+  const object = await getStorage(backend).get(
+    sheetVariantKey(storageKey, "original", mime),
+    mime,
+    "work"
+  );
   const chunks: Buffer[] = [];
   for await (const chunk of object.stream) {
     chunks.push(Buffer.from(chunk));

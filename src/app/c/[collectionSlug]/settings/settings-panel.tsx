@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { ConfirmDialog } from "@/app/dialog-shell";
+import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import {
+  clearCollectionStorageCacheAction,
   resetToDemoDataAction,
   updateCollectionBidPercentsAction,
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionItemNoPadAction,
   updateCollectionScanSheetTtlAction,
+  type ClearStorageCacheState,
   type ResetToDemoState,
 } from "@/app/actions/collections";
 import {
@@ -26,6 +28,7 @@ import {
   formatItemNo,
 } from "@/lib/item-number";
 import { formatBytes } from "@/lib/format-bytes";
+import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
 
 interface SettingsPanelProps {
@@ -51,6 +54,9 @@ interface SettingsPanelProps {
   scanSheetTtl: string | null;
   instanceScanSheetTtlLabel: string;
   photoStorageBytes: number;
+  /** The local cache of remote storage objects (#591) — instance-wide, with this collection's
+   * share broken out. Inactive on the filesystem backend, where the bytes are already local. */
+  storageCache: StorageCacheStatus;
   appVersion: string;
   /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
   appReleaseDate: string | null;
@@ -292,7 +298,132 @@ function RetentionSection({
   );
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
+/**
+ * The local storage cache (#591), on a line of its own directly under the storage figure.
+ *
+ * **Not added to that figure**, deliberately. They answer different questions and one of them is
+ * reclaimable: above is how much of the collector's data is being held, here is how much disk this
+ * instance is using as scratch. Summed, they would tell an operator that deleting scans is the way
+ * to recover space the cache gives back on its own.
+ *
+ * **Said to be instance-wide**, in the same voice #577's *instance default* uses for facts that are
+ * not the collection's own: the cache holds objects from every collection and its cap is the
+ * operator's, so it cannot honestly be divided. What *can* be divided is the breakdown, so this
+ * collection's share is stated beside the whole — and clearing is per collection for the same
+ * reason it is possible at all: keys are collection-scoped.
+ *
+ * Shown only when there is one. On the filesystem backend the cache is a no-op — the bytes are
+ * already local — and a line reporting 0 B of a cap that will never be used would be an invitation
+ * to go looking for something that is not there.
+ */
+function StorageCacheSection({
+  collectionId,
+  status,
+  disabled,
+}: {
+  collectionId: string;
+  status: StorageCacheStatus;
+  disabled: boolean;
+}) {
+  const [state, setState] = useState<ClearStorageCacheState>({ status: "idle" });
+  const [cleared, setCleared] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  if (!status.active) return null;
+
+  const used = cleared ? Math.max(0, status.bytes - status.collectionBytes) : status.bytes;
+  const share = cleared ? 0 : status.collectionBytes;
+
+  function clear() {
+    startTransition(async () => {
+      const result = await clearCollectionStorageCacheAction(collectionId);
+      setState(result);
+      if (result.status === "success") setCleared(true);
+    });
+  }
+
+  return (
+    <section
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        padding: "1.25rem 1.5rem",
+        background: "var(--color-bg-elevated)",
+        marginBottom: "1.5rem",
+      }}
+    >
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}
+      >
+        <div>
+          <p
+            style={{
+              margin: "0 0 0.25rem",
+              fontSize: "0.9375rem",
+              fontWeight: 500,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            Local cache
+          </p>
+          <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Copies this instance keeps on its own disk so it does not fetch scans and photos back
+            from remote storage while it works — cutting a card, composing a listing image. It is
+            shared by every collection on this instance and is not part of the figure above:
+            nothing here is your data, and emptying it only means the next run fetches again.
+          </p>
+        </div>
+        <span
+          style={{
+            fontSize: "0.9375rem",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {formatBytes(used)} of {formatBytes(status.maxBytes)}
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "1rem",
+          marginTop: "0.875rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+          Instance-wide, against a cap this instance&apos;s operator sets. {formatBytes(share)} of
+          it comes from this collection.
+        </p>
+        <DialogSecondaryButton
+          onClick={clear}
+          disabled={disabled || isPending || share === 0}
+          style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+        >
+          {isPending ? "Clearing…" : "Clear this collection's copies"}
+        </DialogSecondaryButton>
+      </div>
+
+      {state.status === "error" && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+          {state.message}
+        </p>
+      )}
+      {state.status === "success" && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-success)" }}>
+          Cleared {state.files} cached file{state.files === 1 ? "" : "s"}, freeing{" "}
+          {formatBytes(state.bytes)}.
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache, appVersion, appReleaseDate }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -805,6 +936,12 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
           </span>
         </div>
       </section>
+
+      <StorageCacheSection
+        collectionId={collectionId}
+        status={storageCache}
+        disabled={isPending}
+      />
 
       {/* Both retention periods (#577, #578), directly under the storage figure because they are
           the answer to what that figure shows — and next to each other because they are one

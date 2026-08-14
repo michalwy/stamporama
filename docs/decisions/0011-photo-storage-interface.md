@@ -174,6 +174,60 @@ the `Storage` seam worth having in the first place.
 
 The mechanism, its retry rule and its sweep are in `docs/agents/storage-and-jobs.md`.
 
+### 9. A remote backend is fronted by a size-bounded local cache (#591)
+
+With GCS selected, the app fetched back bytes it had written seconds earlier. A card scan is
+assembled, written to the bucket, and the very next thing that happens is detection reading it to
+propose the cut — 200 MB up and 200 MB down within seconds — and an offer's collages read the same
+copy scans again on every regeneration. Nothing there is a correctness problem; it is bandwidth,
+latency and per-operation cost paid repeatedly for bytes that were on the machine a moment earlier.
+
+**The cache goes inside the interface**, wrapping a binding rather than sitting beside one, because
+this ADR's whole point is that callers never learn where the bytes are. `getStorage` and
+`getActiveStorage` hand out the wrapped binding; nothing above them changed.
+
+**A size cap, not a TTL.** The objects are immutable under their key — a photo variant, a sheet's
+`original` and `view` are written once and never modified — so staleness, the job a TTL exists to
+do, does not arise and there is nothing to invalidate. What is left to protect is disk, which a TTL
+cannot bound (twenty cards at 200 MB inside one hour is 4 GB whatever the TTL says) and a cap bounds
+by construction. Least-recently-used then happens to keep exactly the right objects, the access
+pattern being *written a moment ago* or *read a moment ago*.
+
+**It serves work, not delivery**, and that line decides every call site rather than being judged one
+at a time. A read that feeds an operation populates; a read delivering bytes to a client does not.
+The serving route is the case to watch — it runs once per thumbnail per list view, so populating
+from it would evict the handful of large objects the cache exists for — and seam 2's redirect is the
+same answer reached from the other side: the app never sees those bytes, and nothing server-side
+wanted them. It is expressed as a **required argument** on `put` and `get` (`StorageAccess`), not a
+default and not a property of the key: a new call site has to answer it, every answer is greppable,
+and one function (`readFullBytes`) legitimately gives both answers over the same photo depending on
+whether it is composing a collage or filling a ZIP.
+
+**A no-op on the filesystem backend.** Those bytes are already local, so a cache there would be a
+second copy of every object on the same disk — doubling the storage figure the collector reads. The
+default deployment must not pay for a problem it does not have, which is the same instinct that made
+the GCS client lazy in decision 7.
+
+**Global cache, per-collection clearing.** One cap for the instance (`STAMPORAMA_STORAGE_CACHE_MAX_MB`,
+default 2048 MB), because the resource is a single disk: a per-collection cap makes the total
+*N* × cap, and partitioning a fixed one reserves space for a collection nobody is touching. Clearing
+is still per collection and needs no partitioning to be, since keys are already collection-scoped
+(decision 3) — it is a delete by prefix.
+
+**The index is a table** (`storage_cache_entry`), so the cache survives a restart; anything else
+throws away the 200 MB the next detection immediately re-fetches. A row per access is affordable
+precisely because only work populates, so accesses are few and large. **Row and file are allowed to
+drift**: a row whose file is gone is a miss, a file with no row is garbage the sweep collects, and
+no cache failure is ever allowed to reach a caller.
+
+**This is not #590's chunk staging**, and the two must not be merged by anyone who sees local copies
+of bytes twice. A chunk was never remote — it is written once, read once and deleted, never reaches
+a backend at all, and its lifecycle is explicit — so it has nothing to invalidate, evict or keep
+warm. Every object here is a copy of something that still exists remotely and can be discarded at
+any moment, which is what makes a cap, an LRU and delete-through meaningful.
+
+The mechanism, its cap and its sweep are in `docs/agents/storage-and-jobs.md`.
+
 ## Consequences
 
 - Self-hosted deployments must mount a writable volume at `STAMPORAMA_DATA_DIR`

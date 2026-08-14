@@ -84,7 +84,10 @@ export async function GET(
   if (download !== null) {
     let object;
     try {
-      object = await storage.get(key, photo.mime);
+      // `delivery` (#591), and this route is the case the rule was written for: it runs once per
+      // thumbnail per list view, so populating the cache from here would evict the handful of large
+      // objects it exists for and fill it with pictures nobody will ask the server about again.
+      object = await storage.get(key, photo.mime, "delivery");
     } catch {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

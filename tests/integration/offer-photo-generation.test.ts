@@ -65,7 +65,7 @@ async function bytesExist(photo: {
   const storage = getStorage(photo.storageBackend);
   try {
     for (const variant of ["full", "thumb"] as const) {
-      await storage.get(variantKey(photo.storageKey, variant, photo.mime), photo.mime);
+      await storage.get(variantKey(photo.storageKey, variant, photo.mime), photo.mime, "delivery");
     }
     return true;
   } catch {
@@ -503,7 +503,8 @@ describe("offer photo generation (#311)", () => {
     });
     const stored = await getStorage(photo.storageBackend).get(
       variantKey(photo.storageKey, "full", photo.mime),
-      photo.mime
+      photo.mime,
+      "delivery"
     );
     const chunks: Buffer[] = [];
     for await (const chunk of stored.stream) chunks.push(Buffer.from(chunk));

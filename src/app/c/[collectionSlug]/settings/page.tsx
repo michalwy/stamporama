@@ -26,6 +26,7 @@ import { getCarriers } from "@/lib/carriers";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
+import { getStorageCacheStatus } from "@/lib/storage-cache";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
@@ -70,6 +71,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     platformContacts,
     assistantTokens,
     photoStorageBytes,
+    storageCache,
     titleLanguages,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
@@ -93,6 +95,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
+    getStorageCacheStatus(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
   ]);
 
@@ -144,6 +147,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
+          // Beside the figure above and never added to it (#591): the storage figure is how much of
+          // the collector's data is held, this is how much disk the instance is using as scratch.
+          storageCache={storageCache}
           appVersion={getAppVersionLabel()}
           appReleaseDate={getAppReleaseDate()}
         />

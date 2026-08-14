@@ -41,14 +41,39 @@ export type ResolveResult =
   | { kind: "stream"; object: StorageObject }
   | { kind: "redirect"; url: string };
 
+/**
+ * What the bytes crossing this call are *for* (#591). The local cache in front of a remote
+ * backend populates on `work` and never on `delivery`, and this is the argument that decides it.
+ *
+ * - `work` — the **server** wants the bytes in order to do something: cut a sheet, detect its
+ *   regions, compose a collage, derive a thumbnail. These reads are few, large, and expensive to
+ *   repeat, which is exactly what a cache is for.
+ * - `delivery` — the bytes are on their way to a client. The photo-serving route runs once per
+ *   thumbnail per list view; caching those would evict the handful of large objects the cache
+ *   exists for and replace them with pictures nobody will ask the server about again.
+ *
+ * It is a **required argument rather than a default** so a new call site has to answer it, and so
+ * every answer is greppable. It is not a property of the key: `readFullBytes` in
+ * `offer-photo-generation.ts` is called both to compose a collage and to build the ZIP a browser
+ * downloads, over the same photo.
+ */
+export type StorageAccess = "work" | "delivery";
+
 /** A storage binding. Two implementations: filesystem and GCS (#138); reads dispatch per-photo
- * so both coexist, and either can be the active write backend. */
+ * so both coexist, and either can be the active write backend. Either may be wrapped by the
+ * local cache (#591), which is why `backend` is the *inner* binding's identifier — that is the
+ * value persisted in `storageBackend`, and a cache is not somewhere bytes live. */
 export interface Storage {
   readonly backend: StorageBackend;
   /** Write bytes at `key`, creating any intermediate structure. Overwrites if present. */
-  put(key: string, input: StorageInput, mime: string): Promise<void>;
+  put(
+    key: string,
+    input: StorageInput,
+    mime: string,
+    access: StorageAccess
+  ): Promise<void>;
   /** Open the bytes at `key` for reading. Throws if absent. */
-  get(key: string, mime: string): Promise<StorageObject>;
+  get(key: string, mime: string, access: StorageAccess): Promise<StorageObject>;
   /** Delete the bytes at `key`. Best-effort: absent keys are a no-op, not an error. */
   delete(key: string): Promise<void>;
   /** Move bytes from one key to another within this backend (staging → permanent). On

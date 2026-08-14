@@ -232,15 +232,20 @@ export async function stageUpload(
   const storage = getActiveStorage();
 
   try {
+    // `delivery` on both (#591): a copy photo is written and thereafter only ever shown. Nothing
+    // server-side reads one back, so a cached copy would sit in the cap's way without ever being
+    // hit.
     await storage.put(
       variantKey(prefix, "full", mime),
       processed.full.buffer,
-      mime
+      mime,
+      "delivery"
     );
     await storage.put(
       variantKey(prefix, "thumb", mime),
       processed.thumb.buffer,
-      mime
+      mime,
+      "delivery"
     );
   } catch (err) {
     await deleteVariants(storage.backend, prefix, mime);
@@ -620,11 +625,19 @@ async function duplicatePhotoOntoStamp(
   const srcStorage = getStorage(source.storageBackend);
   const dstStorage = getActiveStorage();
   for (const v of ["full", "thumb"] as PhotoVariant[]) {
+    // `delivery` (#591): promoting a copy photo to its stamp is a byte copy between keys, not an
+    // operation over the image — nothing here decodes it.
     const obj = await srcStorage.get(
       variantKey(source.storageKey, v, source.mime),
-      source.mime
+      source.mime,
+      "delivery"
     );
-    await dstStorage.put(variantKey(toPrefix, v, source.mime), obj.stream, source.mime);
+    await dstStorage.put(
+      variantKey(toPrefix, v, source.mime),
+      obj.stream,
+      source.mime,
+      "delivery"
+    );
   }
 
   const stampPhotos = await prisma.photo.findMany({
