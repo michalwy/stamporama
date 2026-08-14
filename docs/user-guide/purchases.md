@@ -176,7 +176,17 @@ Instead of photographing each stamp as you identify it, you can **scan a whole s
 at once** and cut the scan into per-stamp **tiles**. Each stamp is then handled physically once
 — laid out and scanned — and everything after that happens on screen.
 
-Open a lot and use **Add card scan** in its **Card scans** section.
+Open an order and use **Add card scan** in its **Card scans** section, above the lots.
+
+**A card belongs to the whole order, not to one of its lots.** That is what the section sits at the
+order level for. A stockbook you bought as one lot is scanned onto one or two cards and reads exactly
+as you would expect; but twenty single stamps won at one auction become twenty lots on one purchase,
+and they still arrive in one envelope and still go onto one or two cards. So the batch numbers run
+across the parcel — *Batch 1, 2, 3*, once each — and a tile from any card can become a copy on any of
+the order's lots. Which lot a stamp belongs to is a question you answer when you identify it, which
+is the first moment you can.
+
+You can also give a card a **name** — see below.
 
 #### Laying out the card
 
@@ -201,6 +211,20 @@ sheet.
 The card itself can stay as it is — a black card with the creases and weave of one that has been
 used is what the detection was fitted on. What it does need is an **even** black: a shadow falling
 across one half of the card, or a lamp on one side of it, is the case most likely to confuse it.
+
+#### Naming a card
+
+Beside **Add card scan** there is an optional **name**: type one and it rides with the card you are
+adding. You can also name a card at any time afterwards — click the name (or *Name this card*) on the
+batch's own line — which is usually when you want to, since a card often turns out to need naming
+only once a parcel has been left half worked for a week and the thumbnails are the only clue.
+
+The **number stays**, and it stays first: it is assigned rather than chosen, and it is what makes a
+batch findable. The name sits beside it — *Batch 3 · Klaser Polska 1* — so two cards you both called
+*Polska* are still tellable apart. Clearing the field un-names the card.
+
+The name shows wherever the batch is named, including the one line a worked-through batch collapses
+to, which is where it earns its keep.
 
 #### Cutting the scan
 
@@ -289,6 +313,10 @@ card redrawn.
 
 **Delete batch** removes the tiles *and* the scans. Re-cut is almost always what you want instead.
 
+Deleting one of the order's **lots** leaves the cards alone: they belong to the parcel, and the other
+lots still have pieces on them. A tile that had already become a copy on that lot keeps its square
+and says the copy was deleted. Deleting the whole **order** is what takes the scans.
+
 Re-cutting is **refused once a tile has become a copy**: that copy holds the tile's very images, so
 throwing the tile away would take the copy's front and back with it. Discarded tiles have no such
 protection — the card is being drawn again, discards included — so the confirmation tells you how
@@ -323,28 +351,34 @@ magnification rather than starting again from Fit.
 when you click it.** One waiting to be dealt with opens on its three answers; a discarded one opens
 on its note; one that has already become a copy opens on the copy it became. Leaving the purchase is
 always something you ask for — a card of forty is worked through in one sitting, and getting back
-means finding the purchase, the lot and the batch again.
+means finding the purchase and the batch again.
 
 The dialog **opens on the likely answer rather than asking which one you want**, and the other two
-are always one click away in its footer. It opens on *assign* when this lot holds a copy that could
-still take **this tile's** images, and on *identify* when it does not — so a settled auction lot
-starts on its list of lines, the same lot starts on identify once they are all photographed, and a
-stockbook lot with a couple of hand-entered copies offers them. There are three answers:
+are always one click away in its footer. It opens on *assign* when the order holds a copy that could
+still take **this tile's** images, and on *identify* when it does not — so a settled auction order
+starts on its list of lines, the same order starts on identify once they are all photographed, and a
+stockbook order with a couple of hand-entered copies offers them. There are three answers:
 
 - **Identify as a new copy** — the stockbook path. It leads into the same browse popup and condition
   step as [Add stamps](#identifying-stamps-intake), with the same remembered choices, and the tile's
   images move onto the copy it creates. There is no photo uploader in that step, because the pictures
   are already in hand. A whole-set button is not offered either: a tile is one piece.
-- **Assign to a copy on this lot** — the auction path. A lot settled from an
+
+  If the order has more than one open lot, that step also asks **which lot** the copy belongs to —
+  the question a card cannot answer, because one card routinely holds pieces from several. Your last
+  answer leads, since a card, or a run of them, is usually worked through before you start the next.
+  With a single lot nothing is asked at all.
+- **Assign to a copy on this order** — the auction path. An order settled from an
   [auction sale](auctions.md#settling-a-parcel-into-a-purchase) already holds identified copies,
   because the contents had to be described in order to bid. Those copies need *photographs*, not
-  identification, so you pick from the lot's own short list — matching pictures against ten known
-  stamps rather than identifying from scratch. Only copies that can actually take **this** tile are
-  listed: a tile with a front goes onto a copy that has no front, and one with both sides onto a copy
-  with neither. If a copy you know is on the lot is missing from the list, it already has the side
-  this tile carries — the line above the list says which that is, and each row says what the copy
-  already holds. This stays available on a **closed** lot: closing froze the money, not the
-  photographs.
+  identification, so you pick from the order's own short list — matching pictures against known
+  stamps rather than identifying from scratch — and the list spans **every lot won**, which is the
+  point: they all came out of the same envelope and went onto the same card. Only copies that can
+  actually take **this** tile are listed: a tile with a front goes onto a copy that has no front, and
+  one with both sides onto a copy with neither. If a copy you know is on the order is missing from the
+  list, it already has the side this tile carries — the line above the list says which that is, and
+  each row says what the copy already holds. This stays available for a copy on a **closed** lot:
+  closing froze the money, not the photographs. Nothing is asked about lots here; the copy has one.
 - **Discard** — junk, damaged beyond interest, unidentifiable. One click, and it asks for nothing:
   on a parcel full of junk this is the frequent answer, and it is safe to make it that cheap because
   it is reversible — **Put back in the queue** is in the same dialog. The tile **keeps its image**,
@@ -410,29 +444,31 @@ desk is in that order too — moving the unfinished ones to the top would break 
 numbering is for. Revealed batches come back **in place**, among the live ones, not gathered at the
 end.
 
-The **N tiles unidentified** chip in the lot header does the same hiding for its own reason, so
-while it is pressed the count is not offered — one question should not have two controls that can
-disagree.
+The **N tiles unidentified** chip on the section's own header does the same hiding for its own
+reason, so while it is pressed the count is not offered — one question should not have two controls
+that can disagree.
 
 The picture on a consumed tile is the copy's own front photograph — the same image, which moved to
 the copy rather than being duplicated, so you will see it again on the copy's row below. The only
 tile drawn empty is one whose copy you later **deleted**: its images went with the copy, and the tile
 says so rather than showing a broken square.
 
-The lot header's **N tiles unidentified** chip is also a filter — press it to show only the tiles
-still waiting, and the card expands if it was collapsed. Unlike the chips beside it, this one
-narrows the *tiles*, not the copies list, because the tiles are what it counts.
+The **N tiles unidentified** chip on the Card scans header is also a filter — press it to show only
+the tiles still waiting, and the section opens if it was collapsed. It counts the whole **order's**
+tiles, because that is what a card holds: pieces belonging to any of its lots.
 
-**A tile that matches no auction line is worth knowing about.** If a lot came from a settled sale
+**A tile that matches no auction line is worth knowing about.** If an order came from a settled sale
 and a tile turns out to be a stamp none of its lines described, the Card scans section says so. That
 is not an error to correct: together with a line marked *not delivered*, it is exactly how the app
 tells you the parcel differed from what you bid on.
 
 #### Tiles and closing a lot
 
-A tile is not a copy: it has no stamp, no catalogue price and no share of the lot's cost. The lot
-header shows **N tiles unidentified** and the close dialog repeats it, but closing is never blocked
-by tiles — the cost split is correct without them. They survive the close, discarded ones included.
+A tile is not a copy: it has no stamp, no catalogue price and no share of any lot's cost. The Card
+scans header shows **N tiles unidentified** for the order and the close dialog repeats it, but
+closing is never blocked by tiles — the cost split is correct without them. The dialog mentions them
+because any of those tiles could still become a copy on the lot you are about to close. They survive
+the close, discarded ones included.
 
 ### Identifying stamps (intake)
 

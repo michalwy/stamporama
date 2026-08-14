@@ -14,6 +14,15 @@ export const LS_LAST_LOCATION = "stamporama:intake:locationId";
 // Disposition stored as a comma-joined list of the active flag keys.
 export const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
 
+// The lot a scan tile was last identified into (#586), remembered **per purchase** rather than per
+// collection like everything above. A card scanned into an order can hold pieces belonging to a
+// dozen of its lots, so the lot is asked at identification — and it earns its memory for the same
+// reason the condition does: a card, or a run of them, is worked through before the next is
+// started, so the answer is stable across a long stretch of tiles. Per purchase because a lot id
+// means nothing on the next parcel: remembered per collection it would restore an id the write then
+// refuses. Suffixed by the caller as `<collectionId>:<purchaseId>`.
+export const LS_LAST_SCAN_LOT = "stamporama:intake:scanLotId";
+
 // The last subtype chosen when adding or editing a child stamp (#342), remembered per collection so
 // a run of plate flaws or colour varieties is entered once and repeated. Its own `stamp` namespace
 // rather than `intake`: this is a property of the catalog entry, not of a copy being taken in, and

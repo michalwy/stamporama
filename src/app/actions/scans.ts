@@ -9,6 +9,7 @@ import {
   pairTilesManually,
   proposeCut,
   recutBatch,
+  setBatchLabel,
   type CutReport,
 } from "@/lib/scan-sheets";
 import {
@@ -97,12 +98,12 @@ export async function pairTilesAction(
 /** Throw away a batch's tiles, keeping its scans, so the cut can be drawn again. Refused once a
  * tile has become a copy — see `recutBatch`. */
 export async function recutBatchAction(
-  lotId: string,
+  purchaseId: string,
   batchNo: number
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await recutBatch(session.user.id, lotId, batchNo);
+    await recutBatch(session.user.id, purchaseId, batchNo);
     return { status: "success" };
   } catch (e) {
     return {
@@ -124,9 +125,10 @@ export type TileOutcomeActionState =
  * Identify a tile into a **new copy** — the stockbook path, and ordinary intake entered from a
  * tile instead of from a stamp picker.
  *
- * `FormData` rather than a JSON argument because it is the very form the lot's condition dialog
- * already submits to `intakeStampsAction`: same fields, same remembered choices, one shape.
- * Deliberately **no** `photoChangeSet` — the tile's crops are this copy's front and back.
+ * `FormData` rather than a JSON argument because it is the very form the condition dialog already
+ * submits to `intakeStampsAction`: same fields, same remembered choices, one shape — `lotId`
+ * included, which since #586 is one more remembered intake answer rather than something the sheet
+ * carried. Deliberately **no** `photoChangeSet` — the tile's crops are this copy's front and back.
  */
 export async function identifyTileAction(
   tileId: string,
@@ -143,6 +145,9 @@ export async function identifyTileAction(
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
   try {
     const outcome = await identifyTileAsNewCopy(session.user.id, tileId, {
+      // Which lot the created copy belongs to (#586). Absent is a complete answer on a purchase
+      // with one lot, which is the stockbook case and must keep asking nothing.
+      lotId: str("lotId"),
       stampId,
       conditionId,
       certificateStatusId: str("certificateStatusId"),
@@ -162,7 +167,7 @@ export async function identifyTileAction(
   }
 }
 
-/** Give a tile's images to a copy already on the lot — the auction path, where settlement has
+/** Give a tile's images to a copy already on the order — the auction path, where settlement has
  * already created identified copies that need photographs rather than identification. */
 export async function assignTileAction(
   tileId: string,
@@ -232,17 +237,41 @@ export async function undiscardTileAction(tileId: string): Promise<ScanActionSta
 
 /** Delete a batch outright: its tiles and its retained scans. */
 export async function deleteBatchAction(
-  lotId: string,
+  purchaseId: string,
   batchNo: number
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await deleteBatch(session.user.id, lotId, batchNo);
+    await deleteBatch(session.user.id, purchaseId, batchNo);
     return { status: "success" };
   } catch (e) {
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete the batch. Please try again.",
+    };
+  }
+}
+
+/**
+ * Name a card, or clear its name (#587).
+ *
+ * Its own action rather than a field on some other write, because the point of it is that it can be
+ * done **afterwards** — a card often turns out to need naming only once a parcel has been left half
+ * worked for a week and the strip of thumbnails is the only thing telling one from another.
+ */
+export async function setBatchLabelAction(
+  purchaseId: string,
+  batchNo: number,
+  label: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await setBatchLabel(session.user.id, purchaseId, batchNo, label);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to name the card. Please try again.",
     };
   }
 }

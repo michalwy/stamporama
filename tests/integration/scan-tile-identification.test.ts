@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
-import { freePhotoSlotsWhere, getLotIntakePage } from "../../src/lib/items";
+import { freePhotoSlotsWhere, getPurchaseIntakePage } from "../../src/lib/items";
 import {
   canTakeTileRoles,
   photoRolesPresent,
@@ -17,7 +17,7 @@ import { createPurchase } from "../../src/lib/purchases";
 import {
   ScanValidationError,
   commitCut,
-  listLotScans,
+  listPurchaseScans,
   recutBatch,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
@@ -43,7 +43,11 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     the first test where a real identification is what makes it refuse;
 //
 // plus the batch stamp #578 will read, the discard that survives as evidence, and a tile whose
-// stamp is on none of a settled auction lot's lines.
+// stamp is on none of a settled auction sale's lines.
+//
+// Since #586 a tile belongs to the **order**, which is what the assign candidates are drawn from
+// and what makes *which lot* a question identification has to answer — silently on a purchase with
+// one lot, by being told on a purchase with several, and never by guessing.
 
 describe("identifying scan tiles into copies (#567)", () => {
   let userId: string;
@@ -86,29 +90,34 @@ describe("identifying scan tiles into copies (#567)", () => {
       .toBuffer();
   }
 
-  async function newLot(): Promise<string> {
+  /** A parcel with one lot on it — the stockbook case, which must keep asking nothing. */
+  async function newOrder(): Promise<{ purchaseId: string; lotId: string }> {
     const purchase = await createPurchase(userId, collectionId, {
       currency: "EUR",
       purchasedAt: "2026-02-01",
     });
-    return createLot(userId, purchase.id, 100);
+    return { purchaseId: purchase.id, lotId: await createLot(userId, purchase.id, 100) };
   }
 
-  /** A lot with one cut batch of two tiles, in reading order. */
-  async function lotWithTiles(): Promise<{ lotId: string; tileIds: string[] }> {
-    const lotId = await newLot();
-    const sheet = await uploadSheet(userId, lotId, {
+  /** An order with one cut batch of two tiles, in reading order. */
+  async function orderWithTiles(): Promise<{
+    purchaseId: string;
+    lotId: string;
+    tileIds: string[];
+  }> {
+    const { purchaseId, lotId } = await newOrder();
+    const sheet = await uploadSheet(userId, purchaseId, {
       bytes: await card(),
       mime: "image/png",
       side: "front",
     });
     await commitCut(userId, sheet.id, BOXES);
     const tiles = await prisma.scanTile.findMany({
-      where: { lotId },
+      where: { purchaseId },
       orderBy: { position: "asc" },
       select: { id: true },
     });
-    return { lotId, tileIds: tiles.map((t) => t.id) };
+    return { purchaseId, lotId, tileIds: tiles.map((t) => t.id) };
   }
 
   before(async () => {
@@ -155,7 +164,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   });
 
   it("moves the tile's own photo rows onto the copy it creates, without copying bytes", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, lotId, tileIds } = await orderWithTiles();
     const before = await prisma.photo.findMany({
       where: { tileId: tileIds[0] },
       select: { id: true, storageKey: true },
@@ -185,7 +194,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // …and the card's strip can still draw the tile, because the read points it at the photo's new
     // owner. A consumed tile used to render an empty square while a discarded one kept its image —
     // the tile that went well looking more broken than the one that became nothing.
-    const { batches } = await listLotScans(userId, lotId);
+    const { batches } = await listPurchaseScans(userId, purchaseId);
     const consumed = batches[0].tiles.find((t) => t.id === tileIds[0]);
     assert.equal(consumed?.frontPhotoId, null, "the tile itself no longer owns a photo");
     assert.equal(
@@ -209,18 +218,18 @@ describe("identifying scan tiles into copies (#567)", () => {
   });
 
   it("refuses a re-cut once a tile has become a copy — for real, this time", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
 
     // #566 wrote this guard before the state that triggers it existed. Here it is a genuine
     // identification that arms it, and what it protects is a copy's front image: re-cutting
     // deletes the tiles, and the copy's `Photo` row would go with the tile that no longer owns it.
-    await assert.rejects(() => recutBatch(userId, lotId, 1), ScanValidationError);
-    assert.equal(await prisma.scanTile.count({ where: { lotId } }), 2);
+    await assert.rejects(() => recutBatch(userId, purchaseId, 1), ScanValidationError);
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 2);
   });
 
   it("gives a tile's images to a copy that already exists, and refuses an occupied slot", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { lotId, tileIds } = await orderWithTiles();
     // The auction path: a copy identified at settlement, wanting photographs rather than a stamp.
     const settledCopy = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
 
@@ -254,11 +263,11 @@ describe("identifying scan tiles into copies (#567)", () => {
   });
 
   it("has nothing to show only when the copy itself was deleted", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     const outcome = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
     await prisma.item.delete({ where: { id: outcome.itemId } });
 
-    const { batches } = await listLotScans(userId, lotId);
+    const { batches } = await listPurchaseScans(userId, purchaseId);
     const orphan = batches[0].tiles.find((t) => t.id === tileIds[0]);
     // `SetNull`, so the tile survives the copy — and stays `consumed`, because its images left with
     // the copy and there is nothing to go back to. This is the one square the card draws empty, and
@@ -274,7 +283,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   });
 
   it("offers only copies with a free front or back slot as assign candidates", async () => {
-    const lotId = await newLot();
+    const { purchaseId, lotId } = await newOrder();
     const photo = (role: "front" | "back") => ({
       role,
       storageBackend: "filesystem",
@@ -303,8 +312,11 @@ describe("identifying scan tiles into copies (#567)", () => {
     const backOnly = await copy(91_003, ["back"]);
     const complete = await copy(91_004, ["front", "back"]);
 
+    // Read at the **order** level since #586: a card holds pieces of every lot in the parcel, so
+    // narrowing the candidates to one lot's copies is what made most of a settlement unreachable
+    // from the tile in front of the collector.
     const candidates = async (roles: TilePhotoRole[]) => {
-      const { items } = await getLotIntakePage(userId, collectionId, lotId, {
+      const { items } = await getPurchaseIntakePage(userId, collectionId, purchaseId, {
         freePhotoSlots: roles,
         pageSize: 100,
       });
@@ -340,7 +352,7 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // And the distinction from `no-photos`, which is a different set: it would hide the copy whose
     // free slot is exactly the one a tile needs.
-    const { items: noPhotos } = await getLotIntakePage(userId, collectionId, lotId, {
+    const { items: noPhotos } = await getPurchaseIntakePage(userId, collectionId, purchaseId, {
       filter: "no-photos",
       pageSize: 100,
     });
@@ -350,7 +362,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   it("never offers a candidate the write would refuse", async () => {
     // The invariant behind the filter, asserted end to end rather than trusted: everything the list
     // returns for a real tile is something `assignTileToCopy` accepts.
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, lotId, tileIds } = await orderWithTiles();
     const photo = (role: "front" | "back") => ({
       role,
       storageBackend: "filesystem",
@@ -382,7 +394,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     const roles = photoRolesPresent(tile.photos);
     assert.deepEqual(roles, ["front"]);
 
-    const { items } = await getLotIntakePage(userId, collectionId, lotId, {
+    const { items } = await getPurchaseIntakePage(userId, collectionId, purchaseId, {
       freePhotoSlots: roles,
       pageSize: 100,
     });
@@ -400,28 +412,90 @@ describe("identifying scan tiles into copies (#567)", () => {
     await assignTileToCopy(userId, tileIds[0], items[0].id);
   });
 
-  it("refuses a copy that is not on this lot", async () => {
-    const { tileIds } = await lotWithTiles();
-    const elsewhere = await newLot();
+  it("takes a copy on any lot of the order, and refuses one from another order", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+
+    // The settlement case, and the whole reason for #586: a second lot on the *same* parcel, whose
+    // copy is on the same card. The old same-lot rule refused exactly this.
+    const sibling = await createLot(userId, purchaseId, 40);
+    const onSibling = await prisma.item.create({
+      data: {
+        collectionId,
+        itemNo: 90_003,
+        stampId,
+        conditionId,
+        lotId: sibling,
+        deliveryState: "ordered",
+      },
+      select: { id: true },
+    });
+    const outcome = await assignTileToCopy(userId, tileIds[0], onSibling.id);
+    assert.equal(outcome.itemId, onSibling.id);
+
+    // A different parcel is still a refusal: the copy never came out of this envelope.
+    const elsewhere = await newOrder();
     const stranger = await prisma.item.create({
       data: {
         collectionId,
         itemNo: 90_002,
         stampId,
         conditionId,
-        lotId: elsewhere,
+        lotId: elsewhere.lotId,
         deliveryState: "ordered",
       },
       select: { id: true },
     });
     await assert.rejects(
-      () => assignTileToCopy(userId, tileIds[0], stranger.id),
+      () => assignTileToCopy(userId, tileIds[1], stranger.id),
+      ScanValidationError
+    );
+  });
+
+  it("asks for a lot only when the order has more than one", async () => {
+    // One lot answers it silently — the stockbook case, which had no such question before the
+    // re-parenting and must not gain one.
+    const single = await orderWithTiles();
+    const copy = await identifyTileAsNewCopy(userId, single.tileIds[0], { stampId, conditionId });
+    const item = await prisma.item.findUniqueOrThrow({ where: { id: copy.itemId } });
+    assert.equal(item.lotId, single.lotId);
+
+    // A second lot makes it unanswerable from the card, so it is refused rather than guessed: a
+    // guess here files a stamp against the wrong money, which is why a default lot on the batch
+    // was rejected too.
+    const second = await createLot(userId, single.purchaseId, 40);
+    await assert.rejects(
+      () => identifyTileAsNewCopy(userId, single.tileIds[1], { stampId, conditionId }),
+      ScanValidationError
+    );
+
+    // Told which, it lands there.
+    const onSecond = await identifyTileAsNewCopy(userId, single.tileIds[1], {
+      lotId: second,
+      stampId,
+      conditionId,
+    });
+    assert.equal(
+      (await prisma.item.findUniqueOrThrow({ where: { id: onSecond.itemId } })).lotId,
+      second
+    );
+  });
+
+  it("refuses a lot from another order, which is what a stale remembered answer looks like", async () => {
+    const { tileIds } = await orderWithTiles();
+    const elsewhere = await newOrder();
+    await assert.rejects(
+      () =>
+        identifyTileAsNewCopy(userId, tileIds[0], {
+          lotId: elsewhere.lotId,
+          stampId,
+          conditionId,
+        }),
       ScanValidationError
     );
   });
 
   it("discards a tile in one click, keeping its image and dropping it from the unidentified count", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     // What the screen sends: no note at all. Discard is the frequent answer on a parcel full of
     // junk, so it asks for nothing — safe because it is reversible and the note can follow.
     await discardTile(userId, tileIds[0], "");
@@ -437,7 +511,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // The image stays: a discarded tile is evidence of what the parcel held, not a queue item.
     assert.equal(await prisma.photo.count({ where: { tileId: tileIds[0] } }), 1);
     assert.equal(
-      await prisma.scanTile.count({ where: { lotId, state: "unidentified" } }),
+      await prisma.scanTile.count({ where: { purchaseId, state: "unidentified" } }),
       1,
       "a discarded tile stops counting as unidentified"
     );
@@ -457,25 +531,25 @@ describe("identifying scan tiles into copies (#567)", () => {
   });
 
   it("stamps the batch when its last tile leaves the queue, and unstamps it if one comes back", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
 
-    const midway = await prisma.scanSheet.findFirstOrThrow({ where: { lotId } });
+    const midway = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
     assert.equal(midway.batchDoneAt, null, "one tile is still waiting");
 
     await discardTile(userId, tileIds[1], "junk");
-    const done = await prisma.scanSheet.findFirstOrThrow({ where: { lotId } });
+    const done = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
     assert.ok(done.batchDoneAt, "the batch is finished with, and the retained scan can do nothing");
 
     // Nothing here reads the stamp — #578's retention sweep will — but a tile coming back means
     // the batch is being worked again, so the sweep must not still be counting down on it.
     await undiscardTile(userId, tileIds[1]);
-    const reopened = await prisma.scanSheet.findFirstOrThrow({ where: { lotId } });
+    const reopened = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
     assert.equal(reopened.batchDoneAt, null);
   });
 
   it("refuses to work a tile twice", async () => {
-    const { tileIds } = await lotWithTiles();
+    const { tileIds } = await orderWithTiles();
     await discardTile(userId, tileIds[0], null);
     await assert.rejects(
       () => identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId }),
@@ -488,8 +562,8 @@ describe("identifying scan tiles into copies (#567)", () => {
     );
   });
 
-  it("surfaces a tile whose stamp is on none of a settled auction lot's lines", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+  it("surfaces a tile whose stamp is on none of the settled sale's lines", async () => {
+    const { purchaseId, lotId, tileIds } = await orderWithTiles();
     const seller = await prisma.contact.create({
       data: { collectionId, name: "Seller", seller: true },
       select: { id: true },
@@ -505,6 +579,10 @@ describe("identifying scan tiles into copies (#567)", () => {
         platformId: platform.id,
         name: "Spring sale",
         currency: "EUR",
+        // The settlement link (#28), which since #586 is what answers `fromAuction`: the card
+        // belongs to the parcel, so what it is read against is the whole sale's description rather
+        // than one won lot's.
+        purchaseId,
       },
       select: { id: true },
     });
@@ -523,7 +601,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId: describedStampId, conditionId });
     await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
 
-    const { batches, fromAuction } = await listLotScans(userId, lotId);
+    const { batches, fromAuction } = await listPurchaseScans(userId, purchaseId);
     assert.equal(fromAuction, true);
     const tiles = batches[0].tiles;
     assert.equal(tiles.find((t) => t.id === tileIds[0])?.outsideDescription, false);
@@ -535,10 +613,10 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.ok(tiles.find((t) => t.id === tileIds[0])?.item?.itemNo);
   });
 
-  it("says nothing about a lot that came from no auction", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+  it("says nothing about an order that came from no auction", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
-    const { batches, fromAuction } = await listLotScans(userId, lotId);
+    const { batches, fromAuction } = await listPurchaseScans(userId, purchaseId);
     assert.equal(fromAuction, false);
     // No description exists, so no tile can disagree with one — the absence of lines must not read
     // as "every stamp here was undescribed".

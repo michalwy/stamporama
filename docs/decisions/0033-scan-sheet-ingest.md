@@ -24,7 +24,7 @@ none of the rest was, and because the manual editor it feeds is the primitive, n
 
 ## Decisions
 
-### 1. A tile is its own entity; `Item` is not it
+### 1. A tile is its own entity, owned by the **purchase**; `Item` is not it
 
 `Item.stampId` is `NOT NULL` and stays that way, so an unidentified stub copy cannot be an `Item`.
 
@@ -41,9 +41,38 @@ in the split at all — no exclusion to write and none to forget — and the lot
 `N to sort` warning behaves: the arithmetic is fine without them, it is the collector's memory that
 needs the nudge.
 
-`ScanTile` therefore belongs to a `PurchaseLot` and carries where it came from, its position in
-reading order, its batch, and its state (`unidentified` / `consumed` / `discarded`). Only the first
-is reachable here; the other two are #567's.
+`ScanTile` therefore carries where it came from, its position in reading order, its batch, and its
+state (`unidentified` / `consumed` / `discarded`). Only the first is reachable here; the other two
+are #567's.
+
+**It hangs off the `Purchase`, not off one of its lots** — corrected by #586, and the original call
+was wrong. A lot fits a stockbook, which is one priced line. It breaks on the other ordinary case:
+twenty single stamps won at one auction settle into twenty lots on one purchase (ADR-0009), arrive
+as one parcel, and are scanned on one or two cards. Per lot a tile could become a copy on no line
+but the one its sheet was uploaded under, so the card could not be worked through at all — and the
+**batch number stopped meaning anything**, *batch 1* existing twenty times over in one purchase
+while a card scanned "into lot 7" was invisible from the other nineteen.
+
+The deeper reason is not a workaround. At a settlement the collector **does not know which lot a
+stamp belongs to until they have identified it**, so asking for the lot at scanning time asks the
+question before it can be answered. Moving up therefore improves the flow rather than merely
+unblocking it: the *assign to an existing copy* list becomes every copy on the **purchase** still
+needing photographs, which is precisely the set one is matching a scanned stamp against when twenty
+lines arrived in one envelope.
+
+A copy still belongs to a lot, so **identification asks which** (`scan-tiles.ts`): silently when the
+purchase has one, otherwise put to the collector and **remembered**, the way the other intake
+answers are (`add-copy-defaults.ts`) — a card, or a run of them, is worked through before the next
+is started. *Assign to an existing copy* asks nothing; the copy already has its lot. A **default lot
+on the batch** was considered and rejected: a purchase of many small lots puts a dozen on one card,
+so a pointer from the card to a lot would be false rather than merely unhelpful. What a card
+genuinely wants is a **name** — see #587 below.
+
+Ownership moving is a change to the **cascades**, not only to a column. Deleting a lot no longer
+takes sheets or tiles with it: the parcel they were cut from is still here, and so is every other
+line the same card holds pieces of. A tile that had already become a copy on that lot keeps its
+record and its `itemId` goes null through #567's `SetNull` — the case the strip already draws in
+words as *copy deleted*. Deleting the **purchase** is what takes the scans and their bytes.
 
 ### 2. The tile's images **are** `Photo` rows, under a fourth owner
 
@@ -152,10 +181,15 @@ and are corrected exactly as hand-drawn ones are. The geometry lives in one pure
 
 | Table | What it holds |
 | --- | --- |
-| `scan_sheet` | A retained card scan: lot, `batchNo`, `side`, storage key + mime, original and `view` dimensions, size. Unique on `(lotId, batchNo, side)`. |
-| `scan_tile` | One region of one cut: lot, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
+| `scan_sheet` | A retained card scan: purchase, `batchNo`, an optional `label` (#587), `side`, storage key + mime, original and `view` dimensions, size. Unique on `(purchaseId, batchNo, side)`. |
+| `scan_tile` | One region of one cut: purchase, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
 | `photo.tileId` | Fourth owner. CHECK widened to `num_nonnulls(itemId, stampId, offerId, tileId) = 1`; partial unique `(tileId, role)`. |
-| `purchase_lot.nextScanBatchNo` | Per-lot batch sequence. Per lot, not per collection: a batch number is only ever read beside its lot. |
+| `purchase.nextScanBatchNo` | Per-**purchase** batch sequence (#586). Not per collection, which would call a parcel's second card "batch 47", and not per lot, where the number named nothing. |
+
+Both owner columns started as `lotId` and were moved by #586, existing rows migrating through their
+lot's purchase. The migration **renumbers**: numbers were unique per lot, so two lots of one order
+could both hold a batch 1 and the new unique would collide. Sheets and tiles are renumbered from one
+map, since a tile finds its sheets through `(purchase, batchNo)` and nothing else.
 
 The boxes are kept though nothing needs them to *serve* a tile — they are what lets a re-cut reopen
 the editor on the previous cut instead of an empty canvas, which on a card of forty is the difference
@@ -418,8 +452,25 @@ then the close look is over anyway.
 
 ## Still open
 
-- The batch has no name of its own. A lot with six cards is *batch 1…6*, which is enough while a card
-  is worked through immediately after being scanned and may not be later.
+- ~~The batch has no name of its own.~~ **Settled by #587**, alongside the re-parenting above and in
+  the same commit, both rewriting `scan_sheet`.
+
+  An optional short `label`, editable **at upload and afterwards** — the second half being the one
+  that matters, since a card often turns out to need naming only once a parcel has been left half
+  worked for a week and the strip of thumbnails is the only thing telling one card from another. It
+  is drawn beside the number wherever a batch is named, including #583's collapsed line, which is
+  the whole of a finished batch and therefore exactly the case the name exists for.
+
+  **The number stays primary.** It is assigned rather than chosen and it is what makes a batch
+  findable, so the name is a gloss on it and never a replacement: two cards both called *Polska* must
+  still be tellable apart. The rule lives in the pure `scan-batch-label.ts` because both halves read
+  it — the write enforces the ceiling and the input states it — and a `server-only` module cannot be
+  where a client component gets a constant from.
+
+  It is a column on `scan_sheet`, written to **both** sheets of a batch exactly as `batchDoneAt` is,
+  rather than a `scan_batch` table: a batch is already "the rows sharing a purchase and a batch
+  number", and a third entity holding one nullable string would be a second place for a batch to
+  exist. Writing both sides is also what stops re-scanning a named card's front leaving it nameless.
 - ~~Nothing prunes a sheet once every tile cut from it has been consumed.~~ **Settled by #578**, and
   not in the direction the question implied. The pruning exists — `purgeFinishedScanSheets` reads
   `batchDoneAt` (#567), takes a finished batch's scans after the collection's retention period, and

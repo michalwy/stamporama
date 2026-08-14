@@ -14,7 +14,7 @@ import {
   ScanValidationError,
   commitCut,
   deleteBatch,
-  listLotScans,
+  listPurchaseScans,
   proposeCut,
   purgeFinishedScanSheets,
   recutBatch,
@@ -79,25 +79,30 @@ describe("retained-scan retention (#578)", () => {
       .toBuffer();
   }
 
-  /** A lot with one cut batch of two tiles, in reading order. */
-  async function lotWithTiles(): Promise<{ lotId: string; sheetId: string; tileIds: string[] }> {
+  /** An order with one cut batch of two tiles, in reading order. Since #586 the card belongs to
+   * the purchase, so the sweep is scoped to one too. */
+  async function orderWithTiles(): Promise<{
+    purchaseId: string;
+    sheetId: string;
+    tileIds: string[];
+  }> {
     const purchase = await createPurchase(userId, collectionId, {
       currency: "EUR",
       purchasedAt: "2026-02-01",
     });
-    const lotId = await createLot(userId, purchase.id, 100);
-    const sheet = await uploadSheet(userId, lotId, {
+    await createLot(userId, purchase.id, 100);
+    const sheet = await uploadSheet(userId, purchase.id, {
       bytes: await card(),
       mime: "image/png",
       side: "front",
     });
     await commitCut(userId, sheet.id, BOXES);
     const tiles = await prisma.scanTile.findMany({
-      where: { lotId },
+      where: { purchaseId: purchase.id },
       orderBy: { position: "asc" },
       select: { id: true },
     });
-    return { lotId, sheetId: sheet.id, tileIds: tiles.map((t) => t.id) };
+    return { purchaseId: purchase.id, sheetId: sheet.id, tileIds: tiles.map((t) => t.id) };
   }
 
   /** Does the storage backend still hold this sheet's retained original? */
@@ -117,10 +122,23 @@ describe("retained-scan retention (#578)", () => {
     }
   }
 
+  /**
+   * The instant a sweep is run at.
+   *
+   * A second **ahead**, not `new Date()`, because a zero-day period puts the cutoff exactly at the
+   * pass's own clock and `batchDoneAt` is stamped a moment earlier in the same test — at a coarse
+   * timer resolution the two land on the same millisecond and the strict `<` reads a just-finished
+   * batch as not yet due, which is a flake rather than a fault. Choosing the instant is what the
+   * parameter is for; the sweep's rule is unchanged.
+   */
+  function aMomentFromNow(): Date {
+    return new Date(Date.now() + 1000);
+  }
+
   /** Wind a batch's stamp back, so a sweep run "now" sees it as finished with days ago. */
-  async function finishedDaysAgo(lotId: string, days: number): Promise<void> {
+  async function finishedDaysAgo(purchaseId: string, days: number): Promise<void> {
     await prisma.scanSheet.updateMany({
-      where: { lotId, batchDoneAt: { not: null } },
+      where: { purchaseId, batchDoneAt: { not: null } },
       data: { batchDoneAt: new Date(Date.now() - days * DAY_MS) },
     });
   }
@@ -163,18 +181,18 @@ describe("retained-scan retention (#578)", () => {
   });
 
   it("does nothing at all while nobody has asked for it — the sweep ships off", async () => {
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, null);
     for (const id of tileIds) await discardTile(userId, id);
-    await finishedDaysAgo(lotId, 400);
+    await finishedDaysAgo(purchaseId, 400);
 
-    const freed = await purgeFinishedScanSheets(new Date(), { lotId });
+    const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 0, "a card scan is a source; nothing is swept unless it is asked for");
     assert.equal(await originalExists(sheetId), true);
   });
 
   it("keeps a batch that still has a tile waiting, however old the lot is", async () => {
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     // One tile settled, one still waiting: the batch is not finished with, so it is never stamped
     // and there is no clock to run down.
@@ -184,39 +202,39 @@ describe("retained-scan retention (#578)", () => {
       null
     );
 
-    const freed = await purgeFinishedScanSheets(new Date(), { lotId });
+    const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 0);
     assert.equal(await originalExists(sheetId), true);
   });
 
   it("keeps a finished batch inside the period and sweeps it after", async () => {
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "30");
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
     await discardTile(userId, tileIds[1]);
 
-    await finishedDaysAgo(lotId, 5);
-    assert.equal((await purgeFinishedScanSheets(new Date(), { lotId })).sheets, 0);
+    await finishedDaysAgo(purchaseId, 5);
+    assert.equal((await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId })).sheets, 0);
     assert.equal(await originalExists(sheetId), true);
 
-    await finishedDaysAgo(lotId, 45);
-    const freed = await purgeFinishedScanSheets(new Date(), { lotId });
+    await finishedDaysAgo(purchaseId, 45);
+    const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 1);
     assert.ok(freed.bytes > 0, "the sweep reports what it freed, for the boot log to state");
     assert.equal(await originalExists(sheetId), false);
   });
 
   it("keeps the row, and the batch still lists what the card held", async () => {
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
-    await purgeFinishedScanSheets(new Date(), { lotId });
+    await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
 
     const sheet = await prisma.scanSheet.findUniqueOrThrow({ where: { id: sheetId } });
     assert.ok(sheet.purgedAt, "the row survives the purge, saying it was purged");
     assert.equal(sheet.sizeBytes, 0, "and stops counting bytes it no longer holds");
 
-    const { batches } = await listLotScans(userId, lotId);
+    const { batches } = await listPurchaseScans(userId, purchaseId);
     assert.equal(batches[0].tiles.length, 2, "the record of what the card held is untouched");
     assert.equal(batches[0].front?.purged, true);
   });
@@ -224,18 +242,18 @@ describe("retained-scan retention (#578)", () => {
   it("refuses a re-cut with the scan being gone, rather than failing on a missing file", async () => {
     // The all-discarded batch is the case that matters: consumed tiles refuse a re-cut on their own,
     // so this is the only batch that would otherwise still be re-cuttable after the sweep.
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
-    await purgeFinishedScanSheets(new Date(), { lotId });
+    await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
 
     await assert.rejects(
-      () => recutBatch(userId, lotId, 1),
+      () => recutBatch(userId, purchaseId, 1),
       (err: unknown) =>
         err instanceof ScanValidationError && /scan has been deleted/i.test(err.message)
     );
     // The tiles are still there afterwards — a refused re-cut destroys nothing.
-    assert.equal(await prisma.scanTile.count({ where: { lotId } }), 2);
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 2);
 
     // Everything else that would have read the bytes says the same thing rather than throwing a
     // storage error, and detection swallows it into "no boxes" exactly as it does any other failure.
@@ -247,48 +265,48 @@ describe("retained-scan retention (#578)", () => {
   });
 
   it("still lets the batch be deleted — what is left is a record, not a scan", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
-    await purgeFinishedScanSheets(new Date(), { lotId });
+    await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
 
-    await deleteBatch(userId, lotId, 1);
-    assert.equal(await prisma.scanSheet.count({ where: { lotId } }), 0);
-    assert.equal(await prisma.scanTile.count({ where: { lotId } }), 0);
+    await deleteBatch(userId, purchaseId, 1);
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), 0);
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 0);
   });
 
   it("stops counting down when a discard is put back", async () => {
-    const { lotId, sheetId, tileIds } = await lotWithTiles();
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
     await undiscardTile(userId, tileIds[0]);
 
-    const freed = await purgeFinishedScanSheets(new Date(), { lotId });
+    const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 0, "the batch is being worked again; the clock was cleared");
     assert.equal(await originalExists(sheetId), true);
 
     // And a re-cut is available again, since nothing was swept.
-    await recutBatch(userId, lotId, 1);
+    await recutBatch(userId, purchaseId, 1);
   });
 
   it("drops the collection's storage total by what it freed", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
 
     const before = await getCollectionPhotoStorageBytes(userId, collectionId);
-    const freed = await purgeFinishedScanSheets(new Date(), { lotId });
+    const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     const after = await getCollectionPhotoStorageBytes(userId, collectionId);
     assert.ok(freed.bytes > 0);
     assert.equal(after, before - freed.bytes, "retained originals are the largest thing stored");
   });
 
   it("is idempotent — a second pass finds nothing left to sweep", async () => {
-    const { lotId, tileIds } = await lotWithTiles();
+    const { purchaseId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
 
-    assert.equal((await purgeFinishedScanSheets(new Date(), { lotId })).sheets, 1);
-    assert.equal((await purgeFinishedScanSheets(new Date(), { lotId })).sheets, 0);
+    assert.equal((await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId })).sheets, 1);
+    assert.equal((await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId })).sheets, 0);
   });
 });

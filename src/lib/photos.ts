@@ -741,24 +741,20 @@ export async function getPhotoForServing(photoId: string): Promise<{
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       offer: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
-      // A tile reaches its collection one hop further out — through its lot's purchase — because a
-      // tile belongs to a lot rather than to the collection directly. Flattened here so every owner
-      // answers the same two questions.
+      // A tile reaches its collection one hop further out — through its purchase — because a tile
+      // belongs to the parcel it was scanned from (#586) rather than to the collection directly.
+      // Flattened here so every owner answers the same two questions.
       tile: {
         select: {
-          lot: {
-            select: {
-              purchase: {
-                select: { collectionId: true, collection: { select: { ownerId: true } } },
-              },
-            },
+          purchase: {
+            select: { collectionId: true, collection: { select: { ownerId: true } } },
           },
         },
       },
     },
   });
   if (!photo) return null;
-  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile?.lot.purchase;
+  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile?.purchase;
   if (!owner) return null;
   return {
     collectionId: owner.collectionId,
@@ -822,11 +818,11 @@ export async function getCollectionPhotoStorageBytes(
       _sum: { sizeBytes: true },
     }),
     prisma.photo.aggregate({
-      where: { tile: { lot: { purchase: { collectionId } } } },
+      where: { tile: { purchase: { collectionId } } },
       _sum: { sizeBytes: true },
     }),
     prisma.scanSheet.aggregate({
-      where: { lot: { purchase: { collectionId } } },
+      where: { purchase: { collectionId } },
       _sum: { sizeBytes: true },
     }),
   ]);

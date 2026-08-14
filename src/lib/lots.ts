@@ -11,7 +11,6 @@ import {
   type LotCopyFilter,
 } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
-import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { isDeliveryState } from "./delivery-state";
 import type { ArrivingCopy } from "./want-rules";
 import {
@@ -107,15 +106,6 @@ export interface LotSummary {
   price: string;
   status: string;
   itemCount: number;
-  /** Scan tiles on this lot still waiting to become something (#566). What the header warns with
-   * before closing — a **warning, never a block**, matching the existing `N to sort`: a tile has no
-   * stamp, so no catalogue price, so no weight in the cost split, and closing without it is
-   * arithmetically fine. It is the collector's memory that needs the nudge, not the sum. Discarded
-   * tiles are not counted: a discarded tile is evidence, not a queue item (#567). */
-  unidentifiedTileCount: number;
-  /** Retained card scans on this lot (#566), so the card can say it has scans before any of them
-   * has been cut. */
-  scanSheetCount: number;
   /** price + share of shared cost, transaction currency (2 dp). */
   poolTx: string;
   /** poolTx at the frozen FX rate, base currency (2 dp), or null when no rate is known. */
@@ -141,6 +131,16 @@ export interface PurchaseDetail {
    * link is worth carrying because the bidding record is where the lots' figures came from, and it
    * survives this purchase being deleted. */
   auctionSale: { id: string; name: string } | null;
+  /** Scan tiles on this **order** still waiting to become something (#566, re-parented by #586).
+   * What the order header counts and what a lot close warns about — a **warning, never a block**,
+   * matching the existing `N to sort`: a tile has no stamp, so no catalogue price, so no weight in
+   * any lot's cost split, and closing without it is arithmetically fine. It is the collector's
+   * memory that needs the nudge, not the sum. Discarded tiles are not counted: a discarded tile is
+   * evidence, not a queue item (#567). */
+  unidentifiedTileCount: number;
+  /** Retained card scans on this order (#566), so the section can say it has scans before any of
+   * them has been cut. */
+  scanSheetCount: number;
 }
 
 function dateToIso(d: Date): string {
@@ -180,21 +180,22 @@ export async function getPurchaseDetail(
       platform: { select: { name: true } },
       // The auction settlement this purchase was transcribed from (#28), when it came from one.
       auctionSale: { select: { id: true, name: true } },
+      // The card scans and what is still waiting on them (#586). Counted through filtered
+      // relations rather than by loading the tiles: a carton is fifty cards, and the header has no
+      // other use for the rows.
+      _count: {
+        select: {
+          scanSheets: true,
+          scanTiles: { where: { state: "unidentified" } },
+        },
+      },
       lots: {
         select: {
           id: true,
           title: true,
           price: true,
           status: true,
-          _count: {
-            select: {
-              items: true,
-              scanSheets: true,
-              // Counted through a filtered relation rather than by loading the tiles: a card of
-              // forty is forty rows the header has no other use for.
-              scanTiles: { where: { state: "unidentified" } },
-            },
-          },
+          _count: { select: { items: true } },
         },
         orderBy: { id: "asc" },
       },
@@ -225,8 +226,6 @@ export async function getPurchaseDetail(
       price: l.price.toFixed(2),
       status: l.status,
       itemCount: l._count.items,
-      unidentifiedTileCount: l._count.scanTiles,
-      scanSheetCount: l._count.scanSheets,
       poolTx: pool.poolTx.toFixed(2),
       poolBase: canExpressBase ? pool.poolBase.toFixed(2) : null,
     };
@@ -253,6 +252,8 @@ export async function getPurchaseDetail(
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
     auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
+    unidentifiedTileCount: row._count.scanTiles,
+    scanSheetCount: row._count.scanSheets,
   };
 }
 
@@ -357,15 +358,15 @@ export async function updateLot(
  * Restrict` would otherwise block the delete. Done in one transaction. */
 export async function deleteLot(ownerId: string, lotId: string): Promise<void> {
   const { collectionId } = await assertLotOwner(ownerId, lotId);
-  // The lot's scans and tiles cascade away with it, but their files do not (#566) — and a retained
-  // card scan is the largest object the app stores. Addresses read before the delete, files removed
-  // after it, so a delete that fails leaves the collector's scans intact.
-  const scanBytes = await collectScanStorageRefs([lotId]);
+  // **Nothing scan-shaped is touched** (#586). Card scans and their tiles belong to the *purchase*
+  // now, and a lot line being removed is not the card being thrown away — the parcel it was cut
+  // from is still here, and so is every other lot the same card holds pieces of. A tile that had
+  // already become a copy on this lot keeps its record and its `itemId` goes null through #567's
+  // `SetNull`, which is the case the strip already draws in words as *copy deleted*.
   await prisma.$transaction(async (tx) => {
     await tx.item.deleteMany({ where: { lotId, collectionId } });
     await tx.purchaseLot.delete({ where: { id: lotId } });
   });
-  await deleteScanStorageRefs(scanBytes);
 }
 
 /** Remove a copy from its lot. Copies are created by intake purely to populate the lot

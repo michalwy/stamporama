@@ -1516,6 +1516,11 @@ model Purchase {
   shippingCost Decimal? @db.Decimal(10, 2)
   // Physical delivery status of the shipment: preparing | in_transit | arrived.
   status       String   @default("preparing")
+  // Per-purchase batch sequence for scan ingest (#566, re-parented by #586). Per **purchase**
+  // rather than per lot: a batch number names the physical card on the desk, and one card of a
+  // settled auction routinely holds pieces belonging to a dozen of the purchase's lots. Per lot it
+  // existed twenty times over in one parcel and named nothing.
+  nextScanBatchNo Int @default(1)
   createdAt    DateTime @default(now())
 
   collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -1523,6 +1528,9 @@ model Purchase {
   platform   Contact?          @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   lots       PurchaseLot[]
   expenses   PurchaseExpense[]
+  // Retained card scans and the tiles cut from them (#566/#586, ADR-0033).
+  scanSheets ScanSheet[]
+  scanTiles  ScanTile[]
   // The auction settlement this purchase was transcribed from, when it came from one (ADR-0021).
   auctionSale AuctionSale?
 
@@ -1548,18 +1556,11 @@ model PurchaseLot {
   // Intake status: open (items still being identified, cost pending) | closed
   // (pool allocated to items, cost-basis frozen). See ADR-0009 §3/§5.
   status     String  @default("open")
-  // Per-lot batch sequence for scan ingest (#566). Per lot rather than per collection: a batch
-  // number is only ever read beside its lot, and a global sequence would call a lot's second card
-  // "batch 47".
-  nextScanBatchNo Int @default(1)
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   items    Item[]
   // The won auction lot this line was transcribed from, when it came from one (ADR-0021).
   auctionLot AuctionLot?
-  // Retained card scans and the tiles cut from them (#566, ADR-0033).
-  scanSheets ScanSheet[]
-  scanTiles  ScanTile[]
 
   @@index([purchaseId])
   @@map("purchase_lot")
@@ -1578,10 +1579,19 @@ model PurchaseLot {
 // browser cannot be handed a 30 Mpx image and the original must never be the thing on screen.
 model ScanSheet {
   id             String   @id @default(cuid())
-  lotId          String
+  /** The **purchase**, not one of its lots (#586). A card is scanned once and holds pieces
+   * belonging to any number of the parcel's lots; which lot a piece belongs to is not answerable
+   * until it has been identified, which is #567's step and not this one. */
+  purchaseId     String
   /** The cut this sheet belongs to: a front sheet, an optional back sheet, and the tiles cut
-   * from them. A per-lot sequence taken from `PurchaseLot.nextScanBatchNo`. */
+   * from them. A per-purchase sequence taken from `Purchase.nextScanBatchNo`. */
   batchNo        Int
+  /** An optional short name for the card (#587) — *Klaser Polska 1*, *Zestawy 3–5*. The number
+   * stays primary: it is assigned rather than chosen and it is what makes a batch findable, so
+   * this is a gloss on it and never a replacement. Written to **both** sheets of a batch, exactly
+   * as `batchDoneAt` is, so either side answers for the batch and neither can be the one that got
+   * replaced. */
+  label          String?
   /** front | back. Unconstrained in the DB, matching `Offer.state` and `PurchaseLot.status`. */
   side           String
   storageBackend String   @default("filesystem")
@@ -1614,17 +1624,17 @@ model ScanSheet {
   purgedAt       DateTime?
   createdAt      DateTime @default(now())
 
-  lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  frontTiles ScanTile[]  @relation("ScanTileFrontSheet")
-  backTiles  ScanTile[]  @relation("ScanTileBackSheet")
+  purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  frontTiles ScanTile[] @relation("ScanTileFrontSheet")
+  backTiles  ScanTile[] @relation("ScanTileBackSheet")
 
-  @@unique([lotId, batchNo, side])
-  @@index([lotId])
+  @@unique([purchaseId, batchNo, side])
+  @@index([purchaseId])
   @@map("scan_sheet")
 }
 
 // One region of one cut (#566, ADR-0033) — an image of something not yet identified, sitting on a
-// purchase lot until #567 turns it into a copy or records that it became nothing.
+// purchase until #567 turns it into a copy on one of its lots or records that it became nothing.
 //
 // Why this is not an `Item`: `Item.stampId` is NOT NULL and stays that way. Every read in the app
 // assumes a copy points at a stamp, and lot closing decides it — the pool is split across copies by
@@ -1636,7 +1646,10 @@ model ScanSheet {
 // reopen the editor on the previous cut rather than an empty canvas.
 model ScanTile {
   id           String   @id @default(cuid())
-  lotId        String
+  /** The **purchase** (#586). A tile is an unidentified image, and which lot it belongs to is
+   * exactly the question identification answers — `itemId` below is where that answer lands, via
+   * the copy's own lot. */
+  purchaseId   String
   batchNo      Int
   /** Reading order within the batch: rows by top edge within a tolerance taken from the median box
    * height, each row left to right. Assigned at commit and stable afterwards. */
@@ -1666,19 +1679,19 @@ model ScanTile {
   note         String?
   createdAt    DateTime @default(now())
 
-  lot        PurchaseLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  item       Item?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item       Item?      @relation(fields: [itemId], references: [id], onDelete: SetNull)
   /** `Restrict`: a sheet cannot be deleted out from under the tiles cut from it. */
-  frontSheet ScanSheet?  @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
-  backSheet  ScanSheet?  @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
+  frontSheet ScanSheet? @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
+  backSheet  ScanSheet? @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
   /** The tile's front/back crops, as `Photo` rows under the fourth owner. */
   photos     Photo[]
 
   // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
   // express check constraints.
-  @@index([lotId])
-  @@index([lotId, batchNo])
-  @@index([lotId, state])
+  @@index([purchaseId])
+  @@index([purchaseId, batchNo])
+  @@index([purchaseId, state])
   @@index([itemId])
   @@map("scan_tile")
 }

@@ -10,18 +10,31 @@ import {
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
+  setBatchLabelAction,
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
 import type { Box } from "@/lib/scan-boxes";
-import type { CutReport, ScanBatchData, ScanSheetData, ScanTileData } from "@/lib/scan-sheets";
+import { MAX_BATCH_LABEL_LENGTH } from "@/lib/scan-batch-label";
+import type {
+  CutReport,
+  ScanBatchData,
+  ScanSheetData,
+  ScanTileData,
+} from "@/lib/scan-sheets";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import { TileIdentifyDialog } from "./tile-identify-dialog";
 import { useInvalidateLotCopies } from "./use-lot-copies-query";
-import { useInvalidateLotScans, useLotScans } from "./use-lot-scans-query";
+import { useInvalidatePurchaseScans, usePurchaseScans } from "./use-purchase-scans-query";
 
 /**
- * A lot's card scans (#566, ADR-0033) and the tiles cut from them (#567).
+ * An order's card scans (#566, ADR-0033) and the tiles cut from them (#567).
+ *
+ * **The card belongs to the parcel, not to one of its lines** (#586). Twenty single stamps won at
+ * one auction settle into twenty lots on one purchase, arrive in one envelope and are scanned on
+ * one or two cards — so a section per lot could neither hold the card nor number it, *batch 1*
+ * existing twenty times over in one order. It lives here beside the order's other views of its
+ * copies, and a purchase with one lot reads exactly as it did.
  *
  * The whole ingest path in one section: upload a card, review and commit its cut, upload the back
  * and let it pair by position, drag what did not pair, and re-cut from the retained scan when the
@@ -37,17 +50,18 @@ import { useInvalidateLotScans, useLotScans } from "./use-lot-scans-query";
 
 interface Props {
   collectionId: string;
-  lotId: string;
-  /** Only fetched while the section is open: a card of forty tiles is forty thumbnails. */
-  open: boolean;
-  /** Whether the lot itself is open. A closed lot takes no new copies, but a tile can still be
-   * assigned to one of its copies or discarded — closing froze the money, not the photographs. */
-  lotOpen: boolean;
-  /** The header's tile chip, pressed (#567): show only the tiles still waiting. The chips beside
-   * it narrow the *copies* list; this one narrows the tiles, which is the list it counts. */
-  onlyUnidentified: boolean;
-  /** Take the *new copy* answer up to the lot card, which owns the stamp picker and the condition
-   * dialog every other intake goes through. */
+  purchaseId: string;
+  /** Scan tiles on this order still waiting to become something, and how many cards it holds —
+   * server-rendered with the order (`getPurchaseDetail`), so the header can say what is inside
+   * before the section is opened and the batches are fetched. */
+  unidentifiedTileCount: number;
+  scanSheetCount: number;
+  /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies, but
+   * a tile can still be assigned to one of its copies or discarded — closing froze the money, not
+   * the photographs. An order whose every lot is closed is the one that cannot identify at all. */
+  canIdentify: boolean;
+  /** Take the *new copy* answer up to the order panel, which owns the stamp picker and the
+   * condition dialog every other intake goes through — and, since #586, the lot question. */
   onIdentifyTile: (tileId: string) => void;
   onChanged: () => void;
 }
@@ -59,17 +73,26 @@ interface EditorTarget {
   frontTileCount: number | null;
 }
 
-export function LotScansCard({
+export function PurchaseScansCard({
   collectionId,
-  lotId,
-  open,
-  lotOpen,
-  onlyUnidentified,
+  purchaseId,
+  unidentifiedTileCount,
+  scanSheetCount,
+  canIdentify,
   onIdentifyTile,
   onChanged,
 }: Props) {
-  const { data, isLoading } = useLotScans(collectionId, lotId, open);
-  const { invalidateLotScans } = useInvalidateLotScans();
+  /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
+   * cards, so the section rests as one line naming what is inside. */
+  const [open, setOpen] = useState(false);
+  /** The tile chip, pressed (#567): show only the tiles still waiting. It retires with what it
+   * counts — derived rather than reset, because the chip is its only control, and working the last
+   * tile through would otherwise leave the section saying "showing only the tiles still waiting"
+   * over nothing, with nothing to press to get out of it. */
+  const [onlyWaiting, setOnlyWaiting] = useState(false);
+  const onlyUnidentified = onlyWaiting && unidentifiedTileCount > 0;
+  const { data, isLoading } = usePurchaseScans(collectionId, purchaseId, open);
+  const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   const { invalidateLotCopies } = useInvalidateLotCopies();
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   // Collection URLs are slug-addressed (`/c/[collectionSlug]/…`), and what this component is handed
@@ -80,6 +103,9 @@ export function LotScansCard({
    * re-reads the tile after a refetch instead of showing the state it had when it was opened. */
   const [tileId, setTileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /** The name to give the **next** card added (#587). Held here rather than remembered anywhere:
+   * a name belongs to one card, and the last one typed is the wrong default for the next. */
+  const [newLabel, setNewLabel] = useState("");
   /** A detection pass in flight. Its own state rather than the transition's: it is the one wait in
    * this section that happens *before* a dialog opens, so the button that started it has to say so. */
   const [detecting, setDetecting] = useState(false);
@@ -117,7 +143,7 @@ export function LotScansCard({
    * it.** A copy write shows up in three separate query namespaces, and each one missed is a screen
    * that keeps showing the collection as it was until a full page reload:
    *
-   * - `lot-scans` — the tile itself moved. Always stale after a write here.
+   * - `purchase-scans` — the tile itself moved. Always stale after a write here.
    * - `lot-copies` — an assign hands a copy the tile's photos, so the copies list would keep showing
    *   no thumbnail and the assign list would keep offering the copy that just took the images.
    * - `inventory` — what the **catalogue** side says about the stamp that copy points at: the
@@ -133,7 +159,7 @@ export function LotScansCard({
    * all three of these stream from client queries (#172).
    */
   const refresh = (touchedCopy = false) => {
-    void invalidateLotScans(collectionId);
+    void invalidatePurchaseScans(collectionId);
     if (touchedCopy) {
       void invalidateLotCopies(collectionId);
       void invalidateInventory(collectionId);
@@ -169,8 +195,12 @@ export function LotScansCard({
       form.set("file", file);
       form.set("side", side);
       if (batchNo != null) form.set("batchNo", String(batchNo));
+      // The name typed beside the button rides with the card it names (#587), and is cleared
+      // afterwards: it is a name for *this* card, not a setting, and carrying it to the next one
+      // is how three cards end up all called "Klaser Polska 1".
+      if (side === "front" && newLabel.trim()) form.set("label", newLabel.trim());
       const res = await fetch(
-        `/api/collections/${collectionId}/purchases/lots/${lotId}/scan-sheets`,
+        `/api/collections/${collectionId}/purchases/${purchaseId}/scan-sheets`,
         { method: "POST", body: form }
       );
       const body = await res.json();
@@ -178,6 +208,7 @@ export function LotScansCard({
         setError(body.error ?? "Failed to upload the scan.");
         return;
       }
+      if (side === "front") setNewLabel("");
       refresh();
       await openProposed(
         { ...body, side },
@@ -217,6 +248,17 @@ export function LotScansCard({
     });
   };
 
+  /** Name a card, or clear its name (#587) — the half that matters, since a card often turns out
+   * to need naming only once the parcel has been left half-worked for a week. */
+  const rename = (batchNo: number, label: string) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await setBatchLabelAction(purchaseId, batchNo, label);
+      if (result.status === "error") setError(result.message);
+      else refresh();
+    });
+  };
+
   const runConfirmed = () => {
     if (!confirm) return;
     const target = confirm;
@@ -225,8 +267,8 @@ export function LotScansCard({
     startTransition(async () => {
       const result =
         target.kind === "recut"
-          ? await recutBatchAction(lotId, target.batchNo)
-          : await deleteBatchAction(lotId, target.batchNo);
+          ? await recutBatchAction(purchaseId, target.batchNo)
+          : await deleteBatchAction(purchaseId, target.batchNo);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -238,14 +280,91 @@ export function LotScansCard({
     });
   };
 
-  if (!open) return null;
-
   return (
-    <section style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-        <Icon name="scan" size="lg" />
-        <strong style={{ fontSize: "0.9375rem" }}>Card scans</strong>
+    <section
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        background: "var(--color-bg-elevated)",
+        padding: open ? "0.75rem 1.25rem 1rem" : "0.625rem 1.25rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: open ? "0.75rem" : 0,
+      }}
+    >
+      {/* **One header row.** The name and the caret on the left, what is inside in the middle, and
+          the way to add a card on the right — the controls belong beside the heading rather than on
+          a line of their own, which on a collapsed section is a band of nothing. */}
+      <header style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            background: "none",
+            border: "none",
+            padding: 0,
+            font: "inherit",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <Icon name={open ? "collapse" : "expand"} size="sm" />
+          <Icon name="scan" size="sm" />
+          <strong style={{ fontSize: "0.9375rem" }}>Card scans</strong>
+        </button>
+        {scanSheetCount > 0 && (
+          <span style={CHIP}>
+            {scanSheetCount} {scanSheetCount === 1 ? "scan" : "scans"}
+          </span>
+        )}
+        {/* Scan tiles still waiting to become something (#566/#567), on the **order** rather than on
+            a lot: a card holds pieces of any number of lots, so this is a fact about the parcel.
+            Pressing it opens the section, because a filter over something nobody can see is a click
+            that appears to do nothing. Closing a lot while they wait is still allowed — a tile has
+            no catalogue price and so no weight in any cost split — which is what the close dialog
+            says. */}
+        {unidentifiedTileCount > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setOnlyWaiting((v) => !v);
+              if (!onlyUnidentified) setOpen(true);
+            }}
+            title={
+              onlyUnidentified
+                ? "Showing only the tiles still waiting — click to show every tile"
+                : "Scan tiles not yet identified into copies — click to work through just those"
+            }
+            style={{
+              ...WARNING_CHIP,
+              cursor: "pointer",
+              fontWeight: onlyUnidentified ? 700 : 500,
+              boxShadow: onlyUnidentified ? "0 0 0 1px var(--color-warning)" : undefined,
+            }}
+          >
+            <Icon name="scan" size="sm" /> {unidentifiedTileCount} tile
+            {unidentifiedTileCount === 1 ? "" : "s"} unidentified
+          </button>
+        )}
         <span style={{ flex: 1 }} />
+        {/* A name for the card being added (#587), optional and never in the way: leave it blank
+            and the flow is the single click it was. It sits beside the button rather than behind a
+            dialog because a step in front of *Add card scan* would make the frequent path pay for
+            the rare one — and because the name is almost always known at the scanner and almost
+            never worth a second screen. */}
+        <input
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          maxLength={MAX_BATCH_LABEL_LENGTH}
+          placeholder="Name this card (optional)"
+          aria-label="Name for the card being added"
+          disabled={uploading}
+          style={LABEL_INPUT_STYLE}
+        />
         <UploadButton
           label="Add card scan"
           busy={uploading}
@@ -254,6 +373,8 @@ export function LotScansCard({
         />
       </header>
 
+      {!open ? null : (
+        <>
       {error && <Banner tone="error">{error}</Banner>}
       {report && <CutReportBanner report={report} onDismiss={() => setReport(null)} />}
 
@@ -321,6 +442,7 @@ export function LotScansCard({
           onUploadBack={(f) => void upload(f, "back", batch.batchNo)}
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
+          onRename={(label) => rename(batch.batchNo, label)}
           onPair={pair}
         />
       ))}
@@ -328,13 +450,13 @@ export function LotScansCard({
       {openTile && (
         <TileIdentifyDialog
           collectionId={collectionId}
-          lotId={lotId}
+          purchaseId={purchaseId}
           tile={openTile}
           // `ScanSheetData` already answers both questions the deep look asks — which scan, and
           // whether the retention sweep has taken it (#578) — so the dialog is handed the sheets
           // rather than a second read of them.
           sheets={{ front: openBatch?.front ?? null, back: openBatch?.back ?? null }}
-          lotOpen={lotOpen}
+          canIdentify={canIdentify}
           fromAuction={fromAuction}
           // The copies list searches internal numbers, so a copy's own number is the address that
           // reaches it (#268) — the same route "Go to purchase" takes in the other direction. It
@@ -414,6 +536,8 @@ export function LotScansCard({
           onConfirm={runConfirmed}
           onClose={() => setConfirm(null)}
         />
+      )}
+        </>
       )}
     </section>
   );
@@ -527,6 +651,7 @@ function BatchSection({
   onUploadBack,
   onRecut,
   onDelete,
+  onRename,
   onPair,
 }: {
   batch: ScanBatchData;
@@ -549,9 +674,15 @@ function BatchSection({
    * tiles while they still exist. Null when there is no front scan to reopen on. */
   onRecut: (reopen: EditorTarget | null) => void;
   onDelete: () => void;
+  /** Name this card, or clear its name (#587). */
+  onRename: (label: string) => void;
   onPair: (backTileId: string, frontTileId: string) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
+  /** Whether the name is being typed. Off by default: the name is read far more often than it is
+   * written, and a text box standing where a name should be reads as a form rather than as a card
+   * that is called something. */
+  const [naming, setNaming] = useState(false);
 
   const shown = onlyUnidentified
     ? batch.tiles.filter((t) => t.state === "unidentified")
@@ -612,6 +743,22 @@ function BatchSection({
           <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </button>
         <strong style={{ fontSize: "0.8125rem" }}>Batch {batch.batchNo}</strong>
+        {/* The card's own name, beside the number and never instead of it (#587): the number is
+            assigned rather than chosen and is what makes a batch findable, so two cards both
+            called "Polska" stay tellable apart. It sits on this line deliberately — for a
+            collapsed batch this line is the whole of the batch (#583), which is exactly the case
+            the name exists for. */}
+        <BatchName
+          label={batch.label}
+          naming={naming}
+          busy={busy}
+          onStart={() => setNaming(true)}
+          onCancel={() => setNaming(false)}
+          onSave={(value) => {
+            setNaming(false);
+            if (value !== (batch.label ?? "")) onRename(value);
+          }}
+        />
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           {held} {held === 1 ? "tile" : "tiles"}
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
@@ -737,6 +884,135 @@ function BatchSection({
     </div>
   );
 }
+
+/**
+ * A card's name, on the batch's own header line (#587).
+ *
+ * **Read first, written second.** A name is looked at every time the section is opened and typed
+ * once, so the resting state is the name itself — or, when there is none, a quiet *Name this card*
+ * that says the affordance exists without turning every batch header into a form. Clicking either
+ * one opens the input in place.
+ *
+ * Escape abandons and Enter commits, which is what an inline edit of one short field owes: a name
+ * given by mistake should cost one key to undo, not a second visit to clear it. Blur commits too —
+ * clicking away from a field with a name typed into it and losing the name is the interaction
+ * everyone has been burned by.
+ *
+ * Clearing it is simply saving an empty field, so *un-naming* needs no control of its own; the
+ * write stores blank as no name rather than as an empty string.
+ */
+function BatchName({
+  label,
+  naming,
+  busy,
+  onStart,
+  onCancel,
+  onSave,
+}: {
+  label: string | null;
+  naming: boolean;
+  busy: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+  onSave: (label: string) => void;
+}) {
+  const [draft, setDraft] = useState(label ?? "");
+  // Re-seeded whenever the stored name moves under it — a rename that landed, or the batch being
+  // re-read — so the box never opens on a value the card no longer has.
+  const [seed, setSeed] = useState(label);
+  if (seed !== label) {
+    setSeed(label);
+    setDraft(label ?? "");
+  }
+
+  if (naming) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        maxLength={MAX_BATCH_LABEL_LENGTH}
+        placeholder="Name this card"
+        aria-label="Name for this card"
+        disabled={busy}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSave(draft.trim());
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(label ?? "");
+            onCancel();
+          }
+        }}
+        onBlur={() => onSave(draft.trim())}
+        style={LABEL_INPUT_STYLE}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={busy}
+      title={label ? "Rename this card" : "Give this card a name"}
+      style={{
+        background: "none",
+        border: "none",
+        padding: "0 0.125rem",
+        font: "inherit",
+        fontSize: "0.8125rem",
+        fontStyle: label ? undefined : "italic",
+        color: label ? "var(--color-text-primary)" : "var(--color-text-muted)",
+        cursor: busy ? "default" : "pointer",
+        maxWidth: "16rem",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label ?? "Name this card"}
+    </button>
+  );
+}
+
+/** The order screen's chip, restated here rather than imported: `purchase-detail-panel.tsx` is a
+ * client page module and this is a component it renders, so a constant travelling that way would be
+ * an import cycle for eight declarations. */
+const CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-page)",
+  whiteSpace: "nowrap",
+};
+
+/** The same chip in the app's *this needs you* hue — what every count-and-filter chip on the order
+ * header wears. */
+const WARNING_CHIP: React.CSSProperties = {
+  ...CHIP,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning-border, var(--color-border))",
+  background: "var(--color-warning-soft, var(--color-bg-page))",
+};
+
+const LABEL_INPUT_STYLE: React.CSSProperties = {
+  width: "12rem",
+  padding: "0.25rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-page)",
+  color: "var(--color-text-primary)",
+  font: "inherit",
+  fontSize: "0.8125rem",
+};
 
 // ── Tiles ────────────────────────────────────────────────────────────────────────────────────
 

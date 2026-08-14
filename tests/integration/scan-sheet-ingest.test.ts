@@ -7,6 +7,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
 import { deleteLot } from "../../src/lib/lots";
+import { deletePurchase } from "../../src/lib/purchases";
 import { getCollectionPhotoStorageBytes, getPhotoForServing } from "../../src/lib/photos";
 import { FULL_MAX_EDGE } from "../../src/lib/photos/process";
 import {
@@ -15,7 +16,8 @@ import {
   commitCut,
   deleteBatch,
   getSheetForServing,
-  listLotScans,
+  listPurchaseScans,
+  setBatchLabel,
   pairTilesManually,
   proposeCut,
   recutBatch,
@@ -42,6 +44,9 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     sides reported rather than forced;
 //   - an unmatched back becomes a back-only tile that can be dragged onto a front by hand;
 //   - re-cutting is refused once a tile has become a copy;
+//   - a card belongs to the **order** (#586), so deleting one of its lots leaves it standing while
+//     deleting the purchase takes it, and batch numbers are unique across the whole parcel;
+//   - a batch can be named, re-named and un-named (#587);
 //   - nothing leaks bytes.
 //
 // The images here are synthetic on purpose and that is not the thing #574 forbids: nothing below
@@ -144,7 +149,7 @@ const BLUE: [number, number, number] = [30, 30, 220];
 describe("scan sheet ingest (#566)", () => {
   let userId: string;
   let collectionId: string;
-  let purchaseId: string;
+  let nextPurchaseNo = 1;
 
   // A card deliberately wider than FULL_MAX_EDGE, so "the cut happens before the pipeline" is
   // something the assertions can actually tell apart from the opposite ordering.
@@ -180,16 +185,6 @@ describe("scan sheet ingest (#566)", () => {
       },
     });
     collectionId = col.id;
-    purchaseId = (
-      await prisma.purchase.create({
-        data: {
-          collectionId,
-          purchaseNo: 1,
-          purchasedAt: new Date("2026-08-01"),
-          currency: "EUR",
-        },
-      })
-    ).id;
   });
 
   after(async () => {
@@ -200,24 +195,33 @@ describe("scan sheet ingest (#566)", () => {
     await rm(DATA_DIR, { recursive: true, force: true });
   });
 
-  async function newLot(): Promise<string> {
-    return (
-      await prisma.purchaseLot.create({ data: { purchaseId, price: 100 } })
-    ).id;
+  /** A parcel of its own per test, since a card now belongs to the **order** (#586) — one lot on
+   * it, which is the stockbook case and the one the older assertions were written against. */
+  async function newOrder(): Promise<string> {
+    const purchase = await prisma.purchase.create({
+      data: {
+        collectionId,
+        purchaseNo: nextPurchaseNo++,
+        purchasedAt: new Date("2026-08-01"),
+        currency: "EUR",
+        lots: { create: { price: 100 } },
+      },
+    });
+    return purchase.id;
   }
 
-  async function uploadFront(lotId: string) {
+  async function uploadFront(purchaseId: string) {
     const bytes = await card(
       SHEET_W,
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    return uploadSheet(userId, lotId, { bytes, mime: "image/png", side: "front" });
+    return uploadSheet(userId, purchaseId, { bytes, mime: "image/png", side: "front" });
   }
 
   it("retains the scan at full size and derives a view for the editor", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
 
     assert.equal(sheet.width, SHEET_W);
     assert.equal(sheet.height, SHEET_H);
@@ -230,12 +234,12 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(row.side, "front");
     assert.ok(await sheetBytesExist(row));
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("cuts on the original, so a tile is its box's own size and holds its box's pixels", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     const report = await commitCut(userId, sheet.id, FRONT_BOXES);
 
     assert.equal(report.created, 3);
@@ -243,7 +247,7 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(report.backCount, 0);
 
     const tiles = await prisma.scanTile.findMany({
-      where: { lotId },
+      where: { purchaseId },
       orderBy: { position: "asc" },
       include: { photos: true },
     });
@@ -269,19 +273,19 @@ describe("scan sheet ingest (#566)", () => {
       assert.deepEqual(await centreColour(front), COLOURS[i]);
     }
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("refuses a second cut of the same scan, and a box outside it", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
     await assert.rejects(
       () => commitCut(userId, sheet.id, FRONT_BOXES),
       ScanValidationError
     );
 
-    const other = await newLot();
+    const other = await newOrder();
     const fresh = await uploadFront(other);
     await assert.rejects(
       () => commitCut(userId, fresh.id, [{ x: SHEET_W - 100, y: 0, w: 400, h: 400 }]),
@@ -289,13 +293,13 @@ describe("scan sheet ingest (#566)", () => {
     );
     await assert.rejects(() => commitCut(userId, fresh.id, []), ScanValidationError);
 
-    await deleteLot(userId, lotId);
-    await deleteLot(userId, other);
+    await deletePurchase(userId, purchaseId);
+    await deletePurchase(userId, other);
   });
 
   it("pairs a back scan by position, not by index, and does not mirror it", async () => {
-    const lotId = await newLot();
-    const front = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
     // The card turned over stamp by stamp **in place**: same layout, and the back of the leftmost
@@ -306,7 +310,7 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    const back = await uploadSheet(userId, lotId, {
+    const back = await uploadSheet(userId, purchaseId, {
       bytes: backBytes,
       mime: "image/png",
       side: "back",
@@ -320,7 +324,7 @@ describe("scan sheet ingest (#566)", () => {
     assert.deepEqual(report.frontWithoutBack, []);
 
     const tiles = await prisma.scanTile.findMany({
-      where: { lotId },
+      where: { purchaseId },
       orderBy: { position: "asc" },
       include: { photos: true },
     });
@@ -334,12 +338,12 @@ describe("scan sheet ingest (#566)", () => {
       assert.equal(tile.backSheetId, back.id);
     }
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("reports a count mismatch instead of forcing a pairing", async () => {
-    const lotId = await newLot();
-    const front = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
     // A back scan of the first stamp only — the sparse case — plus one region in a spot no front
@@ -349,7 +353,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: FRONT_BOXES[0], colour: RED },
       { box: strayBox, colour: GREEN },
     ]);
-    const back = await uploadSheet(userId, lotId, {
+    const back = await uploadSheet(userId, purchaseId, {
       bytes: backBytes,
       mime: "image/png",
       side: "back",
@@ -366,19 +370,19 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(report.created, 1, "the unmatched back becomes a back-only tile");
 
     const backOnly = await prisma.scanTile.findFirstOrThrow({
-      where: { lotId, frontSheetId: null },
+      where: { purchaseId, frontSheetId: null },
       include: { photos: true },
     });
     assert.equal(backOnly.position, 3, "appended, so no existing tile's position shifts");
     assert.equal(backOnly.photos.length, 1);
     assert.equal(backOnly.photos[0].role, "back");
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("pairs a leftover back onto a front tile by hand", async () => {
-    const lotId = await newLot();
-    const front = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
     // A sparse back scan: the leftmost stamp turned over in place, plus one region low on the card
@@ -389,7 +393,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: FRONT_BOXES[0], colour: RED },
       { box: strayBox, colour: GREEN },
     ]);
-    const back = await uploadSheet(userId, lotId, {
+    const back = await uploadSheet(userId, purchaseId, {
       bytes: backBytes,
       mime: "image/png",
       side: "back",
@@ -397,7 +401,7 @@ describe("scan sheet ingest (#566)", () => {
     });
     await commitCut(userId, back.id, [FRONT_BOXES[0], strayBox]);
 
-    const tiles = await prisma.scanTile.findMany({ where: { lotId }, orderBy: { position: "asc" } });
+    const tiles = await prisma.scanTile.findMany({ where: { purchaseId }, orderBy: { position: "asc" } });
     const paired = tiles.find((t) => t.position === 0)!;
     const target = tiles.find((t) => t.position === 1)!;
     const backOnly = tiles.filter((t) => t.frontSheetId == null);
@@ -425,22 +429,22 @@ describe("scan sheet ingest (#566)", () => {
       ScanValidationError
     );
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("re-cuts from the retained scan: tiles go, the sheet stays", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
 
-    const photos = await prisma.photo.findMany({ where: { tile: { lotId } } });
+    const photos = await prisma.photo.findMany({ where: { tile: { purchaseId } } });
     assert.equal(photos.length, 3);
 
-    const { discarded } = await recutBatch(userId, lotId, 1);
+    const { discarded } = await recutBatch(userId, purchaseId, 1);
     assert.equal(discarded, 3);
 
-    assert.equal(await prisma.scanTile.count({ where: { lotId } }), 0);
-    assert.equal(await prisma.photo.count({ where: { tile: { lotId } } }), 0);
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 0);
+    assert.equal(await prisma.photo.count({ where: { tile: { purchaseId } } }), 0);
     for (const p of photos) assert.equal(await photoBytesExist(p), false);
 
     // The scan itself survives — that is the whole point — and can be cut again, differently.
@@ -449,25 +453,25 @@ describe("scan sheet ingest (#566)", () => {
     const again = await commitCut(userId, sheet.id, [FRONT_BOXES[0], FRONT_BOXES[2]]);
     assert.equal(again.created, 2);
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("refuses to re-cut past a tile that has become a copy", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
 
     // #567 is what sets this; forced here so the guard it exists for is tested before it can fire
     // in anger, since by then a copy's images would be what is at stake.
-    const tile = await prisma.scanTile.findFirstOrThrow({ where: { lotId } });
+    const tile = await prisma.scanTile.findFirstOrThrow({ where: { purchaseId } });
     await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "consumed" } });
 
-    await assert.rejects(() => recutBatch(userId, lotId, 1), ScanValidationError);
-    await assert.rejects(() => deleteBatch(userId, lotId, 1), ScanValidationError);
-    assert.equal(await prisma.scanTile.count({ where: { lotId } }), 3);
+    await assert.rejects(() => recutBatch(userId, purchaseId, 1), ScanValidationError);
+    await assert.rejects(() => deleteBatch(userId, purchaseId, 1), ScanValidationError);
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 3);
 
     await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "unidentified" } });
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("serves a tile's crop through the photo route", async () => {
@@ -475,18 +479,18 @@ describe("scan sheet ingest (#566)", () => {
     // rows look perfectly correct and every thumbnail 404s — which is exactly how this shipped
     // broken the first time. Asserting the resolution, not the bytes: the route above it is the
     // same one the other three owners already use.
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
 
-    const photo = await prisma.photo.findFirstOrThrow({ where: { tile: { lotId } } });
+    const photo = await prisma.photo.findFirstOrThrow({ where: { tile: { purchaseId } } });
     const served = await getPhotoForServing(photo.id);
     assert.ok(served, "a tile's photo resolves an owner");
     assert.equal(served.collectionId, collectionId);
     assert.equal(served.ownerId, userId);
     assert.equal(served.storageKey, photo.storageKey);
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("serves a zoomed region from the original, not from the display copy (#579)", async () => {
@@ -494,8 +498,8 @@ describe("scan sheet ingest (#566)", () => {
     // derivative's own scale the visible region comes from the retained original. `view` is capped
     // at FULL_MAX_EDGE, so on this 4000 px card it holds a 600 px box at 375 px — a region that
     // comes back at the box's full 600 could not have been taken from it.
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     const serving = await getSheetForServing(sheet.id);
     assert.ok(serving);
     assert.equal(serving.width, SHEET_W);
@@ -514,17 +518,18 @@ describe("scan sheet ingest (#566)", () => {
       ScanValidationError
     );
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
-  it("lists a lot's batches with their sheets, tiles and boxes", async () => {
-    const lotId = await newLot();
-    const front = await uploadFront(lotId);
+  it("lists an order's batches with their sheets, tiles, boxes and names", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
-    const { batches } = await listLotScans(userId, lotId);
+    const { batches } = await listPurchaseScans(userId, purchaseId);
     assert.equal(batches.length, 1);
     assert.equal(batches[0].batchNo, 1);
+    assert.equal(batches[0].label, null, "an unnamed card is null, not an empty string");
     assert.equal(batches[0].back, null);
     assert.equal(batches[0].front?.cut, true);
     assert.equal(batches[0].front?.width, SHEET_W);
@@ -533,13 +538,107 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(batches[0].tiles[0].backBox, null);
     assert.ok(batches[0].tiles[0].frontPhotoId);
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
+  });
+
+  // ── The batch's name (#587) ─────────────────────────────────────────────────────────────────
+
+  it("names a card at upload, again afterwards, and un-names it", async () => {
+    const purchaseId = await newOrder();
+
+    // At upload, which is where the name is usually known — at the scanner.
+    const bytes = await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: RED }]);
+    const front = await uploadSheet(userId, purchaseId, {
+      bytes,
+      mime: "image/png",
+      side: "front",
+      label: "  Klaser Polska 1  ",
+    });
+    assert.equal(front.label, "Klaser Polska 1", "trimmed on the way in");
+
+    // A back joins a batch that is already named rather than arriving nameless beside it, so
+    // either sheet answers for the batch exactly as `batchDoneAt` does.
+    const back = await uploadSheet(userId, purchaseId, {
+      bytes,
+      mime: "image/png",
+      side: "back",
+      batchNo: front.batchNo,
+    });
+    assert.equal(back.label, "Klaser Polska 1");
+
+    // Afterwards is the half that matters: a card often turns out to need naming only once the
+    // parcel has been left half-worked.
+    await setBatchLabel(userId, purchaseId, front.batchNo, "Zestawy 3–5");
+    let listed = await listPurchaseScans(userId, purchaseId);
+    assert.equal(listed.batches[0].label, "Zestawy 3–5");
+    assert.equal(
+      await prisma.scanSheet.count({ where: { purchaseId, label: "Zestawy 3–5" } }),
+      2,
+      "written to both sides, so replacing one scan cannot leave a named card nameless"
+    );
+
+    // Blank un-names it rather than storing an empty string, which would read as a name nobody
+    // can see.
+    await setBatchLabel(userId, purchaseId, front.batchNo, "   ");
+    listed = await listPurchaseScans(userId, purchaseId);
+    assert.equal(listed.batches[0].label, null);
+
+    // The number is what a batch is found by, so it stays put through all of it.
+    assert.equal(listed.batches[0].batchNo, front.batchNo);
+
+    await assert.rejects(
+      () => setBatchLabel(userId, purchaseId, front.batchNo, "x".repeat(200)),
+      ScanValidationError
+    );
+    await assert.rejects(
+      () => setBatchLabel(userId, purchaseId, 99, "nothing there"),
+      ScanValidationError
+    );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  // ── The card belongs to the order (#586) ────────────────────────────────────────────────────
+
+  it("numbers batches across the whole order, not per lot", async () => {
+    const purchaseId = await newOrder();
+    // A second lot on the same parcel — the settlement case, twenty won lots in one envelope.
+    await prisma.purchaseLot.create({ data: { purchaseId, price: 50 } });
+
+    const first = await uploadFront(purchaseId);
+    const second = await uploadFront(purchaseId);
+    assert.equal(first.batchNo, 1);
+    assert.equal(
+      second.batchNo,
+      2,
+      "a second card is a second batch however many lots the parcel holds — per lot, *batch 1* " +
+        "existed twenty times over and named nothing"
+    );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("keeps the card when one of the order's lots is deleted", async () => {
+    const purchaseId = await newOrder();
+    const doomed = await prisma.purchaseLot.create({ data: { purchaseId, price: 50 } });
+    const sheet = await uploadFront(purchaseId);
+    await commitCut(userId, sheet.id, FRONT_BOXES);
+
+    // Ownership moved (#586), so this cascade had to move with it: a lot line being removed is not
+    // the card being thrown away, and the other lots on the parcel still have pieces on it.
+    await deleteLot(userId, doomed.id);
+
+    const row = await prisma.scanSheet.findUniqueOrThrow({ where: { id: sheet.id } });
+    assert.ok(await sheetBytesExist(row), "the scan survives its neighbour lot");
+    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 3);
+
+    await deletePurchase(userId, purchaseId);
   });
 
   it("counts retained scans and tiles in the collection's storage total", async () => {
     const before = await getCollectionPhotoStorageBytes(userId, collectionId);
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     const afterUpload = await getCollectionPhotoStorageBytes(userId, collectionId);
     const row = await prisma.scanSheet.findUniqueOrThrow({ where: { id: sheet.id } });
     // The retained original is the largest object the app stores; a total that left it out would
@@ -550,48 +649,49 @@ describe("scan sheet ingest (#566)", () => {
     const afterCut = await getCollectionPhotoStorageBytes(userId, collectionId);
     assert.ok(afterCut > afterUpload, "the tiles' own bytes count too");
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
     assert.equal(await getCollectionPhotoStorageBytes(userId, collectionId), before);
   });
 
-  it("deleting the batch, and deleting the lot, leave no bytes behind", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+  it("deleting the batch, and deleting the order, leave no bytes behind", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
 
     const sheetRow = await prisma.scanSheet.findUniqueOrThrow({ where: { id: sheet.id } });
-    const photos = await prisma.photo.findMany({ where: { tile: { lotId } } });
+    const photos = await prisma.photo.findMany({ where: { tile: { purchaseId } } });
 
-    await deleteBatch(userId, lotId, 1);
-    assert.equal(await prisma.scanSheet.count({ where: { lotId } }), 0);
+    await deleteBatch(userId, purchaseId, 1);
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), 0);
     assert.equal(await sheetBytesExist(sheetRow), false);
     for (const p of photos) assert.equal(await photoBytesExist(p), false);
 
-    // And again through the lot, which is the path that has to survive a cascade.
-    const second = await uploadFront(lotId);
+    // And again through the purchase, which since #586 is the path that has to survive a cascade —
+    // deleting a lot no longer reaches the scans at all.
+    const second = await uploadFront(purchaseId);
     await commitCut(userId, second.id, FRONT_BOXES);
     const secondRow = await prisma.scanSheet.findUniqueOrThrow({ where: { id: second.id } });
-    const secondPhotos = await prisma.photo.findMany({ where: { tile: { lotId } } });
+    const secondPhotos = await prisma.photo.findMany({ where: { tile: { purchaseId } } });
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
     assert.equal(await sheetBytesExist(secondRow), false);
     for (const p of secondPhotos) assert.equal(await photoBytesExist(p), false);
   });
 
   it("replaces an uncut scan but refuses to replace a cut one", async () => {
-    const lotId = await newLot();
-    const first = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const first = await uploadFront(purchaseId);
     const firstRow = await prisma.scanSheet.findUniqueOrThrow({ where: { id: first.id } });
 
     // Nothing has been cut yet, so the wrong file can simply be uploaded again.
-    const second = await uploadSheet(userId, lotId, {
+    const second = await uploadSheet(userId, purchaseId, {
       bytes: await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: BLUE }]),
       mime: "image/png",
       side: "front",
       batchNo: first.batchNo,
     });
     assert.notEqual(second.id, first.id);
-    assert.equal(await prisma.scanSheet.count({ where: { lotId, batchNo: 1 } }), 1);
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId, batchNo: 1 } }), 1);
     assert.equal(await sheetBytesExist(firstRow), false, "the replaced scan's bytes go with it");
 
     // Once it has been cut, the tiles' boxes were drawn over *these* pixels, so replacing it would
@@ -600,7 +700,7 @@ describe("scan sheet ingest (#566)", () => {
     const replacement = await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: RED }]);
     await assert.rejects(
       () =>
-        uploadSheet(userId, lotId, {
+        uploadSheet(userId, purchaseId, {
           bytes: replacement,
           mime: "image/png",
           side: "front",
@@ -609,15 +709,15 @@ describe("scan sheet ingest (#566)", () => {
       ScanValidationError
     );
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("refuses a back scan with no front, and gives each front scan its own batch", async () => {
-    const lotId = await newLot();
+    const purchaseId = await newOrder();
     const orphanBack = await card(400, 400, []);
     await assert.rejects(
       () =>
-        uploadSheet(userId, lotId, {
+        uploadSheet(userId, purchaseId, {
           bytes: orphanBack,
           mime: "image/png",
           side: "back",
@@ -626,12 +726,12 @@ describe("scan sheet ingest (#566)", () => {
       ScanValidationError
     );
 
-    const first = await uploadFront(lotId);
-    const second = await uploadFront(lotId);
+    const first = await uploadFront(purchaseId);
+    const second = await uploadFront(purchaseId);
     assert.equal(first.batchNo, 1);
     assert.equal(second.batchNo, 2, "a second card is a second batch, not a replacement");
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   // ── The proposal (#574) ──────────────────────────────────────────────────────────────────────
@@ -643,8 +743,8 @@ describe("scan sheet ingest (#566)", () => {
   // field say nothing about that, and fitting anything to them is what #574 forbids.
 
   it("proposes the cut on a stored scan, in the sheet's own pixels and in reading order", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
 
     const proposed = await proposeCut(userId, sheet.id);
 
@@ -670,15 +770,15 @@ describe("scan sheet ingest (#566)", () => {
     const report = await commitCut(userId, sheet.id, proposed);
     assert.equal(report.created, FRONT_BOXES.length);
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 
   it("refuses to propose a cut on someone else's scan", async () => {
-    const lotId = await newLot();
-    const sheet = await uploadFront(lotId);
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
 
     await assert.rejects(() => proposeCut("someone-else", sheet.id), ScanAuthError);
 
-    await deleteLot(userId, lotId);
+    await deletePurchase(userId, purchaseId);
   });
 });

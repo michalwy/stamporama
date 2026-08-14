@@ -4,13 +4,13 @@ import type { Prisma } from "@/generated/prisma/client";
 import { formatItemNo } from "./item-number";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront } from "./photos";
-import { ScanAuthError, ScanValidationError, assertScanLotOwner } from "./scan-sheets";
+import { ScanAuthError, ScanValidationError, assertScanPurchaseOwner } from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 
 /**
  * Turning a scan tile into something (#567, ADR-0033) — the second half of the scan-first intake.
  *
- * #566 leaves a lot holding tiles: images of stamps nobody has identified yet. Each one has
+ * #566 leaves an order holding tiles: images of stamps nobody has identified yet. Each one has
  * exactly **three ends**, and this module is all three of them.
  *
  * - **A new copy** — the stockbook path. The stamp is identified from the catalogue and the tile's
@@ -19,10 +19,10 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  *   (#121), the internal copy number (#268), the format (#573) and the dispositions (#160) are
  *   that function's, and a second implementation of them here would be a second set to keep right.
  *
- * - **An existing copy on the lot** — the auction path. A purchase settled from a won auction lot
- *   already holds identified copies, because the contents were described in order to bid; those
- *   copies need **photographs, not identification**, and picking from ten named lines is less desk
- *   work than identifying from scratch. Settlement is deliberately not changed to produce tiles
+ * - **An existing copy on the order** — the auction path. A purchase settled from a won auction
+ *   sale already holds identified copies, because the contents were described in order to bid;
+ *   those copies need **photographs, not identification**, and picking from named lines is less
+ *   desk work than identifying from scratch. Settlement is deliberately not changed to produce tiles
  *   instead (see the issue): a tile has no stamp, so it can be counted against no want (ADR-0032),
  *   carries no catalogue price, so lot closing before arrival would be blocked, and the order's
  *   own catalogue-value bar would read zero until delivery.
@@ -40,6 +40,11 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  * - **The batch is stamped when its last tile leaves `unidentified`.** From that moment it can
  *   never be re-cut, so its retained original has no remaining function. Nothing here reads the
  *   stamp; #578's retention sweep does.
+ *
+ * Since #586 a tile belongs to the **purchase**, so this module carries the one question that move
+ * left behind: **a copy still belongs to a lot**, and it is identification — not scanning — that
+ * can answer which. `assignTileToCopy` asks nothing, the copy having a lot already; only
+ * `identifyTileAsNewCopy` needs one, and a purchase with a single lot answers it without asking.
  */
 
 /** What a tile became, for the caller to say so on screen. */
@@ -62,11 +67,21 @@ export interface TileOutcome {
  * back; a second front arriving from an upload would collide with the partial unique on
  * `(itemId, role)`, and the collector reaching for a file picker at the exact moment a photograph
  * of the stamp is already on screen is not a flow worth building a merge for.
+ *
+ * **Which lot** is the one thing #586 left to be asked here. A copy takes its cost basis from a
+ * lot, and a card of a settled auction holds pieces belonging to a dozen of them, so the lot cannot
+ * come from the sheet any more. `lotId` is therefore the caller's to supply — and optional, because
+ * a purchase with **one** lot answers it on its own: the stockbook case must not grow a question it
+ * never had. Several with none named is a refusal rather than a guess, since guessing here files a
+ * stamp against the wrong money.
  */
 export async function identifyTileAsNewCopy(
   ownerId: string,
   tileId: string,
   input: {
+    /** The lot the created copy belongs to. Omitted when the purchase has exactly one, which is
+     * then used silently. */
+    lotId?: string | null;
     stampId: string;
     conditionId: string;
     certificateStatusId?: string | null;
@@ -80,8 +95,9 @@ export async function identifyTileAsNewCopy(
 ): Promise<TileOutcome> {
   const tile = await loadUnidentifiedTile(ownerId, tileId);
   if (!input.stampId) throw new ScanValidationError("Pick a stamp to identify this tile as.");
+  const lotId = await resolveTileLot(tile.purchaseId, input.lotId);
 
-  const copies = await intakeStamps(ownerId, tile.lotId, {
+  const copies = await intakeStamps(ownerId, lotId, {
     stampId: input.stampId,
     conditionId: input.conditionId,
     certificateStatusId: input.certificateStatusId,
@@ -103,20 +119,60 @@ export async function identifyTileAsNewCopy(
   return { itemId: copy.itemId, itemNo: copy.itemNo };
 }
 
+/**
+ * The lot a tile's new copy goes onto (#586).
+ *
+ * Three answers, and the middle one is the whole reason this is a function rather than a required
+ * argument: a purchase with **one** lot is the stockbook case, which had no such question before
+ * this move and must not gain one. Several lots and no answer is a refusal — a default lot on the
+ * batch was considered and rejected because a parcel of many small lots puts a dozen of them on one
+ * card, and a pointer from the card to a lot would then be *false* rather than merely unhelpful.
+ *
+ * A named lot is checked against the tile's own purchase, so a stale remembered answer — the
+ * previous parcel's lot, still in the browser — is refused rather than filing a stamp against
+ * another order's money.
+ */
+async function resolveTileLot(
+  purchaseId: string,
+  lotId: string | null | undefined
+): Promise<string> {
+  if (lotId) {
+    const lot = await prisma.purchaseLot.findFirst({
+      where: { id: lotId, purchaseId },
+      select: { id: true },
+    });
+    if (!lot) throw new ScanValidationError("That lot is not on this order.");
+    return lot.id;
+  }
+  const lots = await prisma.purchaseLot.findMany({
+    where: { purchaseId },
+    select: { id: true },
+    take: 2,
+  });
+  if (lots.length === 0) {
+    throw new ScanValidationError("This order has no lots yet. Add one to identify tiles into.");
+  }
+  if (lots.length > 1) {
+    throw new ScanValidationError("Choose which lot this copy belongs to.");
+  }
+  return lots[0].id;
+}
+
 // ── Assigning a tile to a copy that already exists ────────────────────────────────────────────
 
 /**
- * Give the tile's images to a copy **already on this lot** — the auction path.
+ * Give the tile's images to a copy **already on this order** — the auction path.
  *
  * Allowed on a **closed** lot, unlike creating a copy. Closing freezes the money (ADR-0009 §3),
  * and a photograph is not money: it changes no catalogue price, no weight and no cost basis. What
  * a closed lot refuses is a *new* copy, because that would change the set the pool was split
  * across — and that refusal is `intakeStamps`', where it belongs.
  *
- * The target must be on the same lot. Not a technical restriction but the point of the path: the
- * short list of named lines is what makes matching pictures to descriptions less work than
- * identifying from scratch, and a picker over the whole collection would be the stamp picker again
- * with worse defaults.
+ * The target must be on the same **purchase** (#586), which is the improvement rather than the
+ * concession: at a settlement the copies that need photographs are every line of every won lot,
+ * arriving in one envelope and scanned on one card, and the old same-lot rule made most of them
+ * unreachable from the tile in front of the collector. This path asks nothing about lots because
+ * the copy already has one — it is only *creating* a copy that has to name one.
  */
 export async function assignTileToCopy(
   ownerId: string,
@@ -127,11 +183,16 @@ export async function assignTileToCopy(
 
   const item = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { id: true, itemNo: true, lotId: true, photos: { select: { role: true } } },
+    select: {
+      id: true,
+      itemNo: true,
+      lot: { select: { purchaseId: true } },
+      photos: { select: { role: true } },
+    },
   });
   if (!item) throw new ScanAuthError("Copy not found or access denied.");
-  if (item.lotId !== tile.lotId) {
-    throw new ScanValidationError("That copy is not on this lot.");
+  if (item.lot?.purchaseId !== tile.purchaseId) {
+    throw new ScanValidationError("That copy is not on this order.");
   }
 
   // Front and back are singleton slots per owner. A copy that already holds one of the roles this
@@ -180,7 +241,7 @@ export async function discardTile(
     where: { id: tile.id },
     data: { state: "discarded", note: note?.trim() || null },
   });
-  await stampBatchIfFinished(tile.lotId, tile.batchNo);
+  await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
 }
 
 /**
@@ -223,7 +284,7 @@ export async function undiscardTile(ownerId: string, tileId: string): Promise<vo
   // The batch has something waiting again, so it is no longer finished with. Clearing this is what
   // keeps #578 from sweeping the original out from under a batch still being worked.
   await prisma.scanSheet.updateMany({
-    where: { lotId: tile.lotId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
+    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
 }
@@ -239,10 +300,10 @@ async function consumeTile(tileId: string, itemId: string): Promise<void> {
     return tx.scanTile.update({
       where: { id: tileId },
       data: { state: "consumed", itemId },
-      select: { lotId: true, batchNo: true },
+      select: { purchaseId: true, batchNo: true },
     });
   });
-  await stampBatchIfFinished(tile.lotId, tile.batchNo);
+  await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
 }
 
 /**
@@ -298,13 +359,13 @@ async function seedStampImage(ownerId: string, itemId: string): Promise<void> {
  * Written on the batch's **sheets** because that is what the sweep will delete, and only where it
  * is not already set, so a batch finished with twice keeps the first moment.
  */
-async function stampBatchIfFinished(lotId: string, batchNo: number): Promise<void> {
+async function stampBatchIfFinished(purchaseId: string, batchNo: number): Promise<void> {
   const waiting = await prisma.scanTile.count({
-    where: { lotId, batchNo, state: "unidentified" },
+    where: { purchaseId, batchNo, state: "unidentified" },
   });
   if (waiting > 0) return;
   await prisma.scanSheet.updateMany({
-    where: { lotId, batchNo, batchDoneAt: null },
+    where: { purchaseId, batchNo, batchDoneAt: null },
     data: { batchDoneAt: new Date() },
   });
 }
@@ -316,14 +377,14 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
     where: { id: tileId },
     select: {
       id: true,
-      lotId: true,
+      purchaseId: true,
       batchNo: true,
       state: true,
       photos: { select: { id: true, role: true } },
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
-  await assertScanLotOwner(ownerId, tile.lotId);
+  await assertScanPurchaseOwner(ownerId, tile.purchaseId);
   return tile;
 }
 

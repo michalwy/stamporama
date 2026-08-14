@@ -79,8 +79,8 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { IntakeHoldingsLine } from "./intake-holdings-line";
-import { LotScansCard } from "./lot-scans-card";
-import { useInvalidateLotScans } from "./use-lot-scans-query";
+import { PurchaseScansCard } from "./purchase-scans-card";
+import { useInvalidatePurchaseScans } from "./use-purchase-scans-query";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -101,6 +101,7 @@ import {
   LS_LAST_CERT,
   LS_LAST_LOCATION,
   LS_LAST_DISPOSITION,
+  LS_LAST_SCAN_LOT,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import {
   StampPickerBrowser,
@@ -317,6 +318,27 @@ export function PurchaseDetailPanel({
   // to sort" must not silently become "all 900".
   const [selection, setSelection] = useState<CopySelection>(EMPTY_SELECTION);
   const clearSelection = useCallback(() => setSelection(EMPTY_SELECTION), []);
+
+  /**
+   * Identifying a scan tile into a **new copy** (#567), which since #586 is the order's job rather
+   * than a lot card's — the card the tile came from belongs to the parcel, so the chain that turns
+   * one of its tiles into a copy has to start here.
+   *
+   * It is the same picker → condition chain every other intake goes through, deliberately: a second
+   * pair of those dialogs would be a second set of remembered choices. What rides with it is the
+   * tile and, once the condition step asks it, **which lot** the copy belongs to — the one question
+   * the re-parenting left to be answered at identification, where it is answerable at all.
+   */
+  const [tileStep, setTileStep] = useState<"none" | "picker" | "condition">("none");
+  const [tileIntake, setTileIntake] = useState<{ tileId: string } | null>(null);
+  const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
+  const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
+  function resetTileIntake() {
+    setTileStep("none");
+    setTileIntake(null);
+    setTileSelection(null);
+    setError(undefined);
+  }
 
   function run(
     fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
@@ -568,6 +590,28 @@ export function PurchaseDetailPanel({
           the order's copies has realized (#559) — one bar over the one set of copies */}
       <HoldingsSummaryBar total={purchaseHoldings} ret={purchaseReturn} />
 
+      {/* Card scans (#566, moved here by #586). **Above the lots**, because that is the order the
+          pass runs in and the level the card exists at: a parcel arrives, its cards are scanned and
+          cut, and only then does each piece become a copy on one of the lines below. A stockbook
+          purchase has one lot and reads exactly as it did; a settled auction gains what a section
+          per lot could not express.
+
+          It is a section of the order rather than of the screen's copy views, so the by-lot / by-issue
+          toggle below leaves it alone — how the copies are grouped is a question about copies. */}
+      <PurchaseScansCard
+        collectionId={collectionId}
+        purchaseId={purchase.id}
+        unidentifiedTileCount={purchase.unidentifiedTileCount}
+        scanSheetCount={purchase.scanSheetCount}
+        canIdentify={purchase.lots.some((l) => l.status === "open")}
+        onIdentifyTile={(tileId) => {
+          setTileIntake({ tileId });
+          setError(undefined);
+          setTileStep("picker");
+        }}
+        onChanged={() => router.refresh()}
+      />
+
       {/* Lots */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -746,6 +790,7 @@ export function PurchaseDetailPanel({
               conditions={conditions}
               certificateStatuses={certificateStatuses}
               isPending={isPending}
+              unidentifiedTileCount={purchase.unidentifiedTileCount}
               groupByIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
@@ -773,6 +818,84 @@ export function PurchaseDetailPanel({
           selection={selection}
           setSelection={setSelection}
           run={run}
+        />
+      )}
+
+      {/* Identifying a tile: pick the stamp (#567) */}
+      {tileStep === "picker" && tileIntake && (
+        <StampPickerBrowser
+          collectionId={collectionId}
+          areas={areas}
+          onPick={(picked: PickedStamp) => {
+            setTileSelection({
+              kind: "stamp",
+              stampId: picked.stampId,
+              label: pickedStampText(picked),
+            });
+            setError(undefined);
+            setTileStep("condition");
+          }}
+          // A tile is one piece — one region of one card — so a whole-checklist expansion has
+          // nothing to attach its images to. Omitted rather than refused: the picker only draws the
+          // "add this whole set" buttons when it is given somewhere to send them, so entering from
+          // a tile simply never offers the answer that could not work.
+          onClose={resetTileIntake}
+        />
+      )}
+
+      {/* …then its condition, its lot, and everything else intake asks */}
+      {tileStep === "condition" && tileIntake && tileSelection && (
+        <IntakeConditionDialog
+          selection={tileSelection}
+          collectionId={collectionId}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          locations={locations}
+          isPending={isPending}
+          error={error}
+          // The tile's crops **are** this copy's front and back, so the uploader is out of the way:
+          // a second front would collide with the copy's one front slot.
+          hidePhotos
+          submitLabel="Identify the tile"
+          // The one question #586 left to identification. Only the order's **open** lots, since a
+          // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
+          // refusal.
+          lotChoice={{
+            purchaseId: purchase.id,
+            lots: purchase.lots
+              .map((l, i) => ({
+                id: l.id,
+                label: l.title ?? `Lot ${i + 1}`,
+                status: l.status,
+              }))
+              .filter((l) => l.status === "open"),
+          }}
+          onBack={() => {
+            if (!isPending) {
+              setError(undefined);
+              setTileStep("picker");
+            }
+          }}
+          onClose={resetTileIntake}
+          onSubmit={(fd) => {
+            setError(undefined);
+            if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
+            const tileId = tileIntake.tileId;
+            run(
+              async () => {
+                const { identifyTileAction } = await import("@/app/actions/scans");
+                const r = await identifyTileAction(tileId, fd);
+                if (r.status === "error") setError(r.message);
+                // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
+                // so both namespaces are re-read: the shared runner invalidates the copies, and this
+                // adds the scans, without which the strip keeps showing a tile that is already a
+                // copy. (`purchase-scans-card.tsx` states the rule the other outcomes follow.)
+                else void invalidatePurchaseScans(collectionId);
+                return r;
+              },
+              () => resetTileIntake()
+            );
+          }}
         />
       )}
 
@@ -976,6 +1099,11 @@ interface LotCardProps {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   isPending: boolean;
+  /** Scan tiles still waiting on the **order** (#586). The close dialog's nudge, which the tiles
+   * moving up to the purchase did not retire: a tile still has no catalogue price and so no weight
+   * in this lot's cost split, and it is still the collector's memory that needs the reminder — it
+   * is only the scope of "which tiles" that widened from the lot to the parcel they came in. */
+  unidentifiedTileCount: number;
   /** Group this lot's copies by issue (the order-level "By issue" toggle, #121). */
   groupByIssue: boolean;
   /** Copy sort order (order-level control, #157): the field and direction to sort this lot's
@@ -1783,6 +1911,7 @@ function LotCard({
   conditions,
   certificateStatuses,
   isPending,
+  unidentifiedTileCount,
   groupByIssue,
   sortKey,
   sortDir,
@@ -1790,9 +1919,6 @@ function LotCard({
   setSelection,
   onRun,
 }: LotCardProps) {
-  // The lot's own row is server-rendered (`getPurchaseDetail`), so the tile counts in the header
-  // come back through a refresh rather than through the scans query (#566).
-  const router = useRouter();
   const [dialog, setDialog] = useState<
     | "none"
     | "picker"
@@ -1815,19 +1941,9 @@ function LotCard({
   // Optional filter narrowing the copies list to just the blockers ("unpriced"), the not-yet-sorted
   // copies ("to-sort"), or copies still needing a photo ("no-photos", #177), toggled by the matching
   // header chip (#121).
-  // `tiles` is the odd one out and deliberately so (#567): the three chips beside it narrow the
-  // *copies* list, this one narrows the scan tiles above it — which is the list it counts. It
-  // resolves to `none` for the copy query, so the rows below stay whole while the tiles are being
-  // worked through.
   const [filterMode, setFilterMode] = useState<
-    "none" | "unpriced" | "to-sort" | "no-photos" | "tiles"
+    "none" | "unpriced" | "to-sort" | "no-photos"
   >("none");
-  /** The tile whose *new copy* answer is being taken through the picker → condition chain (#567).
-   * Set alongside `dialog`, cleared when the chain finishes or is abandoned: it is what routes the
-   * submit to `identifyTileAction` instead of `intakeStampsAction`, and a stale one would file the
-   * next hand-picked stamp against a tile that is already a copy. */
-  const [intakeTileId, setIntakeTileId] = useState<string | null>(null);
-  const { invalidateLotScans } = useInvalidateLotScans();
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
@@ -1843,12 +1959,6 @@ function LotCard({
   useEffect(() => {
     if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [highlighted]);
-
-  // The tile filter retires with the chip that turns it on (#567). Derived rather than reset,
-  // because the chip is the only control for it: working the last tile through removes the chip,
-  // and a filter still in force behind it would leave the Card scans section saying "showing only
-  // the tiles still waiting" over nothing, with nothing to press to get out of it.
-  const onlyUnidentifiedTiles = filterMode === "tiles" && lot.unidentifiedTileCount > 0;
 
   const copy = useCopyEditing({
     collectionId,
@@ -1907,7 +2017,7 @@ function LotCard({
   // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
   // (#177) stays available regardless of lot status.
   const filter: LotCopyFilter =
-    filterMode === "none" || filterMode === "tiles"
+    filterMode === "none"
       ? "none"
       : filterMode === "no-photos"
         ? "no-photos"
@@ -2169,36 +2279,6 @@ function LotCard({
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
-        {/* Scan tiles still waiting to become something (#566/#567). It narrows like the chips
-            beside it, but over the **tiles** rather than the copies — the list it counts. That is
-            also why pressing it expands the card: the tiles live in the Card scans section, and a
-            filter over a section nobody can see is a click that appears to do nothing. */}
-        {lot.unidentifiedTileCount > 0 && (
-          <Tooltip
-            content={
-              filterMode === "tiles"
-                ? "Showing only the tiles still waiting — click to show every tile"
-                : "Scan tiles not yet identified into copies — click to work through just those. Closing the lot is still allowed: a tile has no catalogue price and so no weight in the cost split."
-            }
-          >
-            <button
-              type="button"
-              onClick={() => {
-                changeFilter(filterMode === "tiles" ? "none" : "tiles");
-                if (filterMode !== "tiles" && !expanded) onToggleExpanded();
-              }}
-              style={{
-                ...tintChip("warning", "").style,
-                cursor: "pointer",
-                fontWeight: filterMode === "tiles" ? 700 : 500,
-                boxShadow: filterMode === "tiles" ? "0 0 0 1px var(--color-warning)" : undefined,
-              }}
-            >
-              <Icon name="scan" size="sm" /> {lot.unidentifiedTileCount} tile
-              {lot.unidentifiedTileCount === 1 ? "" : "s"} unidentified
-            </button>
-          </Tooltip>
-        )}
         {toSortCount > 0 && open && (
           <Tooltip
             content={
@@ -2334,26 +2414,6 @@ function LotCard({
           }}
         >
           {blockMessage}
-        </div>
-      )}
-
-      {/* Card scans (#566). Above the copies because that is the order the pass runs in: the card
-          is scanned and cut first, and a tile becomes a copy afterwards (#567). */}
-      {expanded && (
-        <div style={{ borderTop: "1px solid var(--color-border)", padding: "0.75rem 1.25rem" }}>
-          <LotScansCard
-            collectionId={collectionId}
-            lotId={lot.id}
-            open={expanded}
-            lotOpen={open}
-            onlyUnidentified={onlyUnidentifiedTiles}
-            onIdentifyTile={(tileId) => {
-              setIntakeTileId(tileId);
-              setCopyError(undefined);
-              setDialog("picker");
-            }}
-            onChanged={() => router.refresh()}
-          />
         </div>
       )}
 
@@ -2497,11 +2557,7 @@ function LotCard({
             setCopyError(undefined);
             setDialog("intake-condition");
           }}
-          // A tile is one piece — one region of one card — so a whole-checklist expansion has
-          // nothing to attach its images to. Omitted rather than refused: the picker only draws
-          // the "add this whole set" buttons when it is given somewhere to send them, so entering
-          // from a tile simply never offers the answer that could not work.
-          onPickIssue={intakeTileId ? undefined : (picked: PickedIssue) => {
+          onPickIssue={(picked: PickedIssue) => {
             setPending({
               kind: "checklist",
               checklistId: picked.checklistId,
@@ -2511,10 +2567,7 @@ function LotCard({
             setCopyError(undefined);
             setDialog("intake-condition");
           }}
-          onClose={() => {
-            setDialog("none");
-            setIntakeTileId(null);
-          }}
+          onClose={() => setDialog("none")}
         />
       )}
 
@@ -2528,11 +2581,6 @@ function LotCard({
           locations={locations}
           isPending={isPending}
           error={copyError}
-          // Identifying a tile: its crops **are** this copy's front and back, so the uploader is
-          // out of the way (a second front would collide with the copy's one front slot), and the
-          // submit goes to the tile action instead.
-          hidePhotos={intakeTileId != null}
-          submitLabel={intakeTileId ? "Identify the tile" : undefined}
           onBack={() => {
             if (!isPending) {
               setCopyError(undefined);
@@ -2544,20 +2592,8 @@ function LotCard({
             setCopyError(undefined);
             if (pending.kind === "stamp") fd.set("stampId", pending.stampId);
             else fd.set("checklistId", pending.checklistId);
-            const tileId = intakeTileId;
             onRun(
               async () => {
-                if (tileId) {
-                  const { identifyTileAction } = await import("@/app/actions/scans");
-                  const r = await identifyTileAction(tileId, fd);
-                  if (r.status === "error") setCopyError(r.message);
-                  // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
-                  // so both namespaces are re-read: the shared runner below invalidates the copies,
-                  // and this adds the scans, without which the strip keeps showing a tile that is
-                  // already a copy. (`lot-scans-card.tsx` states the rule the other outcomes follow.)
-                  else void invalidateLotScans(collectionId);
-                  return r;
-                }
                 const { intakeStampsAction } = await import("@/app/actions/purchases");
                 const r = await intakeStampsAction(lot.id, fd);
                 if (r.status === "error") setCopyError(r.message);
@@ -2566,7 +2602,6 @@ function LotCard({
               () => {
                 setDialog("none");
                 setPending(null);
-                setIntakeTileId(null);
               }
             );
           }}
@@ -2663,16 +2698,19 @@ function LotCard({
                 : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."}
               {/* A warning, never a block (#566) — the same call the unsorted count makes. A tile
                   has no stamp, so no catalogue price, so no weight in the split: closing without it
-                  is arithmetically fine, and it is the collector's memory that needs the nudge. */}
-              {lot.unidentifiedTileCount > 0 && (
+                  is arithmetically fine, and it is the collector's memory that needs the nudge.
+                  Counted over the **order** since #586, because that is where a card lives now:
+                  any of those tiles could still become a copy on this lot, which is exactly why
+                  closing it while they wait is worth mentioning. */}
+              {unidentifiedTileCount > 0 && (
                 <>
                   {" "}
                   <strong>
-                    {lot.unidentifiedTileCount} scan tile
-                    {lot.unidentifiedTileCount === 1 ? " is" : "s are"} still unidentified
+                    {unidentifiedTileCount} scan tile
+                    {unidentifiedTileCount === 1 ? " is" : "s are"} still unidentified
                   </strong>{" "}
-                  and {lot.unidentifiedTileCount === 1 ? "takes" : "take"} no share of the cost —
-                  they survive the close, but nothing will remind you of them afterwards.
+                  on this order and {unidentifiedTileCount === 1 ? "takes" : "take"} no share of the
+                  cost — they survive the close, but nothing will remind you of them afterwards.
                 </>
               )}
             </>
@@ -3551,6 +3589,27 @@ interface IntakeConditionDialogProps {
    * so the uploader is left out. Not cosmetic — front and back are singleton slots per copy, and
    * an upload arriving beside the tile's crop would be a second front for the same copy. */
   hidePhotos?: boolean;
+  /**
+   * Which lot the created copy belongs to (#586) — asked only when identifying a scan tile, since
+   * every other entry into this dialog was reached *through* a lot and already knows.
+   *
+   * A copy takes its cost basis from a lot, and a card of a settled auction holds pieces belonging
+   * to a dozen of them, so the answer cannot come from the scan. It is asked **here**, beside the
+   * condition and the location, because this is the step that asks everything else about the copy —
+   * and it is remembered here for the same reason those are: a card, or a run of them, is worked
+   * through before the next is started, so the answer is stable across a long stretch of tiles.
+   *
+   * With **one** open lot nothing is asked: that is the stockbook case, which had no such question
+   * before the re-parenting and must not gain one.
+   */
+  lotChoice?: {
+    /** Scopes the remembered answer. A lot id means nothing on the next parcel, so remembering it
+     * per collection — as the condition and location are — would restore an id that is refused. */
+    purchaseId: string;
+    /** The order's **open** lots, in the order the cards are drawn in. A closed lot takes no new
+     * copy at all, so offering it would be offering a refusal. */
+    lots: { id: string; label: string; status: string }[];
+  };
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -3580,6 +3639,7 @@ function IntakeConditionDialog({
   error,
   submitLabel,
   hidePhotos,
+  lotChoice,
   onBack,
   onClose,
   onSubmit,
@@ -3641,6 +3701,18 @@ function IntakeConditionDialog({
       forTrade: active.has("forTrade"),
     };
   });
+  // The lot a tile's copy goes onto (#586), pre-filled with the last one answered for this order.
+  // A single open lot is used without being drawn at all — see `lotChoice`. A remembered lot that
+  // has since been closed or deleted falls back to the first one offered, which is the same call
+  // the condition and location above make about an id that no longer exists.
+  const lotOptions = lotChoice?.lots ?? [];
+  const [lotId, setLotId] = useState(() => {
+    if (!lotChoice || lotOptions.length === 0) return "";
+    const last = readLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`);
+    return lotOptions.some((l) => l.id === last) ? last : lotOptions[0].id;
+  });
+  const asksForLot = lotChoice != null && lotOptions.length > 1;
+
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
@@ -3670,7 +3742,11 @@ function IntakeConditionDialog({
       collectionId,
       DISPOSITION_FLAGS.filter((d) => disposition[d.key]).map((d) => d.key).join(",")
     );
+    if (lotChoice && lotId) {
+      writeLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`, lotId);
+    }
     const fd = new FormData(e.currentTarget);
+    if (lotChoice && lotId) fd.set("lotId", lotId);
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
     fd.set("forTrade", String(disposition.forTrade));
@@ -3727,6 +3803,39 @@ function IntakeConditionDialog({
               />
             )}
           </div>
+
+          {/* Which lot the copy belongs to (#586) — drawn only when the order has more than one
+              open, and **above** the condition because it is the question about *this* order that
+              the rest of the form is answered under. It is not a `name`d field: the submit writes
+              it explicitly alongside remembering it, so the two cannot fall out of step. */}
+          {asksForLot && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <LabelWithError htmlFor="intake-lot">Lot</LabelWithError>
+              <select
+                id="intake-lot"
+                value={lotId}
+                onChange={(e) => setLotId(e.target.value)}
+                disabled={isPending}
+                style={INPUT_STYLE}
+              >
+                {lotOptions.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+              <p
+                style={{
+                  margin: "0.25rem 0 0",
+                  fontSize: "0.75rem",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                One card can hold pieces from several lots, so this is asked per copy — and the last
+                answer leads, since a card is usually worked through before the next is started.
+              </p>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <div style={{ flex: 1 }}>

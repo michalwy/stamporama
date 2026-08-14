@@ -161,15 +161,19 @@ export function useLotCopiesInfinite(
 }
 
 /** Infinite (cursor) list of a whole purchase's copies (across all lots), for the order-level
- * intake view with "By lot" grouping off — one globally-ordered flat/by-issue stream (#172). */
+ * intake view with "By lot" grouping off — one globally-ordered flat/by-issue stream (#172) — and,
+ * since #586, for a scan tile's assign list, whose candidates are the order's copies rather than
+ * one lot's. `staleTime` carries the same reasoning it does on the per-lot read above. */
 export function usePurchaseCopiesInfinite(
   collectionId: string,
   purchaseId: string,
   params: LotCopiesParams,
-  enabled = true
+  enabled = true,
+  staleTime = 0
 ) {
   return useInfiniteQuery<LotCopiesPage>({
     queryKey: lotCopiesKeys.purchaseList(collectionId, purchaseId, params),
+    staleTime,
     queryFn: async ({ pageParam }) => {
       const sp = buildCopyParams(params, pageParam as string | undefined);
       const res = await fetch(

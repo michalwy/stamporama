@@ -21,7 +21,7 @@ import type { ScanTileData } from "@/lib/scan-sheets";
 import { tileSideViews, type TileSheetRef } from "@/lib/scan-tile-view";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
 import { TileZoomView } from "./tile-zoom-view";
-import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
+import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
  * One tile, and the three ends it can reach (#567).
@@ -36,21 +36,27 @@ import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-que
  * file only decides what is *asked* about the tile.
  *
  * So the dialog **opens on an outcome, never on a menu of them**, and which one is *derived from
- * whether there is anything **this tile** can be assigned to* — not from where the lot came from.
+ * whether there is anything **this tile** can be assigned to* — not from where the order came from.
  * The candidate list is copies holding none of the roles the tile carries, so a non-empty one means
- * assigning is genuinely available: every line on a freshly settled auction lot, the handful of
- * hand-entered copies on a stockbook lot, and nothing at all once they have been photographed. That
- * is right in both places the `fromAuction` flag was wrong — an auction lot whose lines are already
- * photographed goes straight to identify, and a stockbook lot with two hand-entered copies offers
- * them. The list is empty more often than a looser one would be, and lands on identify more often
- * as a result; that is the correct answer, not a reason to loosen it.
+ * assigning is genuinely available: every line of a freshly settled auction sale, the handful of
+ * hand-entered copies on a stockbook order, and nothing at all once they have been photographed.
+ * That is right in both places the `fromAuction` flag was wrong — an auction order whose lines are
+ * already photographed goes straight to identify, and a stockbook order with two hand-entered
+ * copies offers them. The list is empty more often than a looser one would be, and lands on
+ * identify more often as a result; that is the correct answer, not a reason to loosen it.
+ *
+ * Since #586 the list is the whole **order's** copies rather than one lot's, which is the point of
+ * that move rather than a side effect: at a settlement the copies waiting for photographs are every
+ * line of every won lot, they arrive in one envelope, and they are scanned on one card. Assigning
+ * therefore asks nothing about lots — the copy already has one. Only *identify as a new copy* does,
+ * and that question is asked one screen on, where every other intake answer is.
  *
  * The other two answers sit in the footer, one click from wherever it opened. A chooser standing in
  * front of them would be a screen whose whole content is three buttons, and a card of forty would
  * mean forty of them showing nothing.
  *
- * The candidate query is keyed by the lot **and the slots asked for**, so a card of like tiles — the
- * ordinary case — is one fetch, served from cache for every tile after the first. The dialog
+ * The candidate query is keyed by the order **and the slots asked for**, so a card of like tiles —
+ * the ordinary case — is one fetch, served from cache for every tile after the first. The dialog
  * therefore **settles once and never jumps**: on the first tile it waits for the answer rather than
  * opening on identify and switching under the collector's hand when the list arrives.
  *
@@ -68,16 +74,18 @@ import { useLotCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-que
 
 interface Props {
   collectionId: string;
-  lotId: string;
+  purchaseId: string;
   tile: ScanTileData;
   /** The batch's two scans, for the deeper look past the tile photo's own resolution (#585). A
    * missing or swept sheet (#578) is not an error here — it is the absence of a second source, and
    * the tile's photo carries the pass on its own. */
   sheets: { front: TileSheetRef | null; back: TileSheetRef | null };
-  /** Whether the lot is still open. A closed lot takes no new copies (its pool has been split
-   * across the copies it had), but a photograph is not money — assigning and discarding stay. */
-  lotOpen: boolean;
-  /** Whether this lot was transcribed from a won auction lot. Used **only to word** the assign
+  /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies (its
+   * pool has been split across the copies it had), but a photograph is not money — assigning and
+   * discarding stay. Which lot the new copy goes onto is asked at the condition step, so all this
+   * decides is whether creating one is possible at all. */
+  canIdentify: boolean;
+  /** Whether this order was settled from a won auction sale. Used **only to word** the assign
    * list's explanation — that those copies are the lines that were described in order to bid.
    * It decides nothing, which was always its real job. */
   fromAuction: boolean;
@@ -113,7 +121,7 @@ type Mode = "identify" | "assign";
 const ASSIGN_LIST_STALE_MS = 30 * 1000;
 
 /**
- * The copies a tile could be assigned to: this lot's, holding **none of the roles this tile
+ * The copies a tile could be assigned to: this **order's**, holding **none of the roles this tile
  * carries**.
  *
  * Derived from the tile rather than restated, and it is the same question `assignTileToCopy` asks
@@ -138,10 +146,10 @@ function assignParams(tile: ScanTileData): LotCopiesParams {
 
 export function TileIdentifyDialog({
   collectionId,
-  lotId,
+  purchaseId,
   tile,
   sheets,
-  lotOpen,
+  canIdentify,
   fromAuction,
   copyHref,
   onIdentifyNew,
@@ -166,9 +174,9 @@ export function TileIdentifyDialog({
   // screen's default of 0 the cached answer is stale the instant it arrives, so every tile of a card
   // would re-ask and wait on it.
   const roles = tilePhotoRoles(tile);
-  const copies = useLotCopiesInfinite(
+  const copies = usePurchaseCopiesInfinite(
     collectionId,
-    lotId,
+    purchaseId,
     assignParams(tile),
     !settled,
     ASSIGN_LIST_STALE_MS
@@ -270,7 +278,7 @@ export function TileIdentifyDialog({
               onPick={(itemId) => run(() => assignTileAction(tile.id, itemId), true)}
             />
           ) : (
-            <IdentifyIntro lotOpen={lotOpen} />
+            <IdentifyIntro canIdentify={canIdentify} />
           )}
 
           {error && (
@@ -318,7 +326,7 @@ export function TileIdentifyDialog({
           <div
             style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
           >
-            <DialogSecondaryButton onClick={onIdentifyNew} disabled={pending || !lotOpen}>
+            <DialogSecondaryButton onClick={onIdentifyNew} disabled={pending || !canIdentify}>
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
             {discard}
@@ -331,7 +339,7 @@ export function TileIdentifyDialog({
         <DialogActions
           actionLabel="Identify as a new copy"
           cancelLabel="Cancel"
-          disabled={pending || !lotOpen}
+          disabled={pending || !canIdentify}
           cancelDisabled={pending}
           onCancel={onClose}
           onAction={onIdentifyNew}
@@ -343,7 +351,7 @@ export function TileIdentifyDialog({
                   it the button is always here and always opens an empty list. */}
               {candidates.length > 0 && (
                 <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
-                  <Icon name="link" size="sm" /> Assign to a copy on this lot
+                  <Icon name="link" size="sm" /> Assign to a copy on this order
                 </DialogSecondaryButton>
               )}
             </>
@@ -358,18 +366,18 @@ export function TileIdentifyDialog({
 
 /** What the dialog says when it opens on *identify*: one line, because the images above it are the
  * thing being read and the action is in the footer. */
-function IdentifyIntro({ lotOpen }: { lotOpen: boolean }) {
+function IdentifyIntro({ canIdentify }: { canIdentify: boolean }) {
   return (
     <p
       style={{
         margin: 0,
         fontSize: "0.8125rem",
-        color: lotOpen ? "var(--color-text-secondary)" : "var(--color-error)",
+        color: canIdentify ? "var(--color-text-secondary)" : "var(--color-error)",
       }}
     >
-      {lotOpen
-        ? "Identify the piece from the catalogue — condition, certificate and location follow, and these images move onto the copy it creates."
-        : "This lot is closed, so it takes no new copies. Reopen it to identify this tile, or assign the images to a copy it already holds."}
+      {canIdentify
+        ? "Identify the piece from the catalogue — the lot it belongs to, condition, certificate and location follow, and these images move onto the copy it creates."
+        : "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify this tile, or assign the images to a copy the order already holds."}
     </p>
   );
 }
@@ -402,16 +410,16 @@ function AssignList({
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         {fromAuction
-          ? "This lot came from an auction sale, so its copies are the lines that were described in order to bid. Pick the one this tile shows."
+          ? "This order was settled from an auction sale, so its copies are the lines that were described in order to bid — across every lot won. Pick the one this tile shows."
           : "Pick the copy this tile shows. Its images move onto that copy."}
       </p>
-      {/* Why a copy the collector knows is on this lot may not be here — and it is about *this*
+      {/* Why a copy the collector knows is on this order may not be here — and it is about *this*
           tile, not about free slots in general. Said up front, because the alternative is
           concluding the list is broken and going looking for a bug. */}
       <Muted>{listScope(roles)}</Muted>
       {copies.length === 0 && (
         <Muted>
-          No copy on this lot can take it. Identify the tile as a new copy instead.
+          No copy on this order can take it. Identify the tile as a new copy instead.
         </Muted>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>

@@ -514,11 +514,10 @@ export async function deletePurchase(
   // because afterwards there is nothing left to find them from, and the files are removed *after*
   // it because this delete can be refused — a purchase whose lots still hold copies is blocked
   // below, and destroying the collector's scans on the way to that error would be unforgivable.
-  const lots = await prisma.purchaseLot.findMany({
-    where: { purchaseId },
-    select: { id: true },
-  });
-  const scanBytes = await collectScanStorageRefs(lots.map((l) => l.id));
+  //
+  // Read off the purchase itself since #586: the scans hang here rather than on the lots, which is
+  // also why deleting a lot no longer reaches for them at all.
+  const scanBytes = await collectScanStorageRefs([purchaseId]);
   try {
     await prisma.purchase.delete({ where: { id: purchaseId } });
   } catch (err) {
