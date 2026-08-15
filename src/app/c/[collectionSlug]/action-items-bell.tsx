@@ -299,114 +299,174 @@ function Group({
   now: Date;
   onNavigate: () => void;
 }) {
+  // A collapsed group opens **in place** (#581) rather than only through its screen: the rows are
+  // already here, and being told six things are waiting without being able to see which is a summary
+  // that has to be left to find out anything. Local state, so it resets with the panel — a group
+  // opened yesterday is not still open the next time the bell is clicked.
+  const [expanded, setExpanded] = useState(false);
+  const showItems = !group.collapsed || expanded;
   const rest = group.count - group.items.length;
   const tint = `var(--color-${SEVERITY_TOKEN[group.severity]})`;
-  return (
-    <section>
-      <div
+
+  const heading = (
+    <>
+      <h3
         style={{
-          display: "flex",
-          alignItems: "baseline",
-          gap: "0.5rem",
-          padding: "0.25rem 0.5rem",
+          margin: 0,
+          fontSize: "0.6875rem",
+          fontWeight: 700,
+          // The heading carries the grade, not the rows: a list of names is read, and tinting
+          // every line of it would make the panel harder to read rather than easier to triage.
+          color: tint,
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
         }}
       >
-        <h3
+        {group.title}
+      </h3>
+      <span
+        style={{
+          fontSize: "0.6875rem",
+          fontWeight: 600,
+          color: tint,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {group.count}
+      </span>
+    </>
+  );
+
+  return (
+    <section>
+      {group.collapsed ? (
+        // The whole summary is one row: the toggle takes the width so it is hit wherever the eye
+        // lands, and the link to the group's own screen sits at its end — the panel is a doorway,
+        // and a group too big to list is exactly the one whose screen is worth going to.
+        <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.25rem 0.5rem",
+              border: "none",
+              borderRadius: "0.375rem",
+              background: "transparent",
+              textAlign: "left",
+              cursor: "pointer",
+              color: tint,
+            }}
+          >
+            <Icon name={expanded ? "collapse" : "expand"} size="xs" />
+            {heading}
+          </button>
+          <Link
+            href={`${base}/${group.href}`}
+            onClick={onNavigate}
+            style={{
+              padding: "0.25rem 0.5rem",
+              fontSize: "0.6875rem",
+              fontWeight: 600,
+              color: "var(--color-accent)",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            See all →
+          </Link>
+        </div>
+      ) : (
+        <div
           style={{
-            margin: 0,
-            fontSize: "0.6875rem",
-            fontWeight: 700,
-            // The heading carries the grade, not the rows: a list of names is read, and tinting
-            // every line of it would make the panel harder to read rather than easier to triage.
-            color: tint,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            display: "flex",
+            alignItems: "baseline",
+            gap: "0.5rem",
+            padding: "0.25rem 0.5rem",
           }}
         >
-          {group.title}
-        </h3>
-        <span
-          style={{
-            fontSize: "0.6875rem",
-            fontWeight: 600,
-            color: tint,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {group.count}
-        </span>
-      </div>
+          {heading}
+        </div>
+      )}
 
       {/* A rule down the group's left edge in the same tint. Colour is never the only signal — the
           panel is already ordered worst-first — but it is what makes the split visible at a glance
           when a critical group and an informational one are on screen together. */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.125rem",
-          borderLeft: `2px solid ${tint}`,
-          paddingLeft: "0.375rem",
-          marginLeft: "0.125rem",
-        }}
-      >
-        {group.items.map((item) => (
-          <Link
-            key={item.key}
-            href={`${base}/${item.href}`}
-            onClick={onNavigate}
-            style={{
-              display: "block",
-              padding: "0.4rem 0.5rem",
-              borderRadius: "0.375rem",
-              textDecoration: "none",
-              color: "var(--color-text-primary)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--color-bg-row-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            <span
+      {showItems && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.125rem",
+            borderLeft: `2px solid ${tint}`,
+            paddingLeft: "0.375rem",
+            marginLeft: "0.125rem",
+          }}
+        >
+          {group.items.map((item) => (
+            <Link
+              key={item.key}
+              href={`${base}/${item.href}`}
+              onClick={onNavigate}
               style={{
                 display: "block",
-                fontSize: "0.8125rem",
-                fontWeight: 500,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                padding: "0.4rem 0.5rem",
+                borderRadius: "0.375rem",
+                textDecoration: "none",
+                color: "var(--color-text-primary)",
               }}
-              // The one place the app still uses a native `title` (#291): it repeats a string that
-              // is already on screen but ellipsized, which is the browser's own overflow
-              // affordance rather than a hint.
-              title={item.label}
-            >
-              {item.label}
-            </span>
-            <span
-              style={{
-                display: "block",
-                fontSize: "0.75rem",
-                color: "var(--color-text-muted)",
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--color-bg-row-hover)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
               }}
             >
-              {item.detail}
-              {item.at && (
-                <>
-                  {item.detail ? " · " : null}
-                  <span title={formatInstant(item.at)}>{formatRelative(item.at, now)}</span>
-                </>
-              )}
-            </span>
-          </Link>
-        ))}
-      </div>
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                // The one place the app still uses a native `title` (#291): it repeats a string that
+                // is already on screen but ellipsized, which is the browser's own overflow
+                // affordance rather than a hint.
+                title={item.label}
+              >
+                {item.label}
+              </span>
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "0.75rem",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                {item.detail}
+                {item.at && (
+                  <>
+                    {item.detail ? " · " : null}
+                    <span title={formatInstant(item.at)}>{formatRelative(item.at, now)}</span>
+                  </>
+                )}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Only once the group has more than it showed: "see all 3" beside three visible rows is a
-          link back to what is already on screen. */}
-      {rest > 0 && (
+          link back to what is already on screen. A collapsed group carries the link in its summary
+          row instead, so it is reachable without opening the group first. */}
+      {showItems && !group.collapsed && rest > 0 && (
         <Link
           href={`${base}/${group.href}`}
           onClick={onNavigate}

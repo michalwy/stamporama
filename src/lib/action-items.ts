@@ -109,7 +109,19 @@ export interface ActionItemGroup {
   /** Collection-relative link to the screen filtered to *exactly* this group's set, so "see all"
    * lands on the same rows the panel was showing the top of. */
   href: string;
+  /**
+   * Shown as a **summary line** rather than a list of rows (#581), because the group is bigger than
+   * a panel can usefully list.
+   *
+   * Decided here, off {@link COLLAPSE_THRESHOLD}, rather than in the panel: it is the same kind of
+   * statement about the group as its severity, and one rule stated once cannot be applied two ways.
+   * The rows are still sent — the panel opens a collapsed group in place — so nothing is read twice.
+   */
+  collapsed: boolean;
 }
+
+/** Everything a provider decides about a group. {@link getActionItems} adds the rest. */
+type LoadedGroup = Omit<ActionItemGroup, "collapsed">;
 
 export interface ActionItemsResult {
   /**
@@ -131,6 +143,22 @@ export interface ActionItemsResult {
 /** How many rows a group shows before it defers to its "see all" link. */
 const DEFAULT_LIMIT = 5;
 
+/**
+ * Above this many rows a group is reported **collapsed** (#581).
+ *
+ * Some groups are long-lived by design — an Allegro order is not recorded until the buyer pays, and
+ * an ended auction waits on the same money — so their rows sit in the panel for days, listed in
+ * full, crowding out everything else. Past a handful of rows the list has stopped being a list of
+ * things to do and become a quantity, and a quantity reads better as one line.
+ *
+ * A **size** rule rather than a per-group flag: any group this big is a backlog whatever it is
+ * about, and a threshold cannot go stale the way a hand-maintained list of "the noisy ones" does.
+ * It deliberately applies to critical groups too — the panel still leads with them, still counts
+ * them on the badge and still tints them red, and one line saying *six* possible double sales is
+ * not a quieter statement than six lines saying it once each.
+ */
+export const COLLAPSE_THRESHOLD = 5;
+
 interface ProviderContext {
   ownerId: string;
   collectionId: string;
@@ -140,7 +168,7 @@ interface ProviderContext {
 interface ActionItemProvider {
   /** Groups this provider can emit, in the order it emits them. Empty ones are dropped by
    * {@link getActionItems}, so a provider always returns its full set. */
-  load(ctx: ProviderContext): Promise<ActionItemGroup[]>;
+  load(ctx: ProviderContext): Promise<LoadedGroup[]>;
 }
 
 /** What a lot is called when the collector never titled it — the same fallback chain the lot list
@@ -491,6 +519,7 @@ export async function getActionItems(
   )
     .flat()
     .filter((g) => g.count > 0)
+    .map((g) => ({ ...g, collapsed: g.count > COLLAPSE_THRESHOLD }))
     // Stable, so provider order still separates two groups of equal weight.
     .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
 

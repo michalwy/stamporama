@@ -1,7 +1,12 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { getActionItems, SEVERITY_ORDER, type ActionItemGroupId } from "../../src/lib/action-items";
+import {
+  COLLAPSE_THRESHOLD,
+  getActionItems,
+  SEVERITY_ORDER,
+  type ActionItemGroupId,
+} from "../../src/lib/action-items";
 import { createItem } from "../../src/lib/items";
 import {
   addOfferSet,
@@ -40,7 +45,10 @@ describe("action items notification centre (#367)", () => {
 
   /** The groups by id, so an assertion names the source rather than a position. */
   async function groups(): Promise<
-    Record<string, { count: number; items: { key: string }[]; href: string; severity: string }>
+    Record<
+      string,
+      { count: number; items: { key: string }[]; href: string; severity: string; collapsed: boolean }
+    >
   > {
     const result = await getActionItems(userId, collectionId);
     // The badge is the rows under it, added up — an offer flagged twice is two things to deal with.
@@ -329,5 +337,44 @@ describe("action items notification centre (#367)", () => {
     const closing = result.groups.find((g) => g.id === "auction-closing");
     assert.ok(closing?.items[0].href.includes(`?lot=${closing.items[0].key}`), "a lot is marked on its sale");
     assert.ok(closing?.items[0].at, "a closing time rides along for the client to format");
+  });
+
+  it("collapses a group once it is bigger than the panel can usefully list (#581)", async () => {
+    const before = await groups();
+    assert.equal(
+      before["auction-closing" satisfies ActionItemGroupId].collapsed,
+      false,
+      "a group of one is a list, not a quantity"
+    );
+
+    // Past the threshold, whatever the group is about: at this size the rows have stopped being a
+    // list of things to do and become a number, and the panel says the number.
+    for (let i = 0; i < COLLAPSE_THRESHOLD; i++) {
+      await createAuctionLot(userId, collectionId, {
+        auctionSaleId,
+        lotNo: `c${i}`,
+        url: null,
+        title: `Closing tonight ${i}`,
+        endsAt: inHours(6),
+        startingPrice: null,
+        currentBid: null,
+        myBid: null,
+        maxBid: null,
+        notes: null,
+      });
+    }
+
+    const after = await groups();
+    const closing = after["auction-closing" satisfies ActionItemGroupId];
+    assert.equal(closing.count, COLLAPSE_THRESHOLD + 1);
+    assert.equal(closing.collapsed, true);
+    // The rows still ride along — a collapsed group opens in place, so the summary is not a
+    // second read waiting to happen.
+    assert.ok(closing.items.length > 0, "a collapsed group still carries its head");
+    assert.equal(
+      after["auction-outcome" satisfies ActionItemGroupId],
+      undefined,
+      "nothing else moved"
+    );
   });
 });

@@ -121,6 +121,15 @@ A group shows the few most pressing rows and, when there are more, a **N more �
 filtered to exactly that group's set — the same rows, in the same order, with everything the screen
 shows about them. A group with nothing in it is not drawn at all.
 
+**A group with more than five things in it is folded up** into a single line: its name, its count and
+a **See all →** to its own screen. Some of these lists are long-lived by design — an Allegro order is
+not recorded until the buyer has paid, and an ended auction is waiting on the same money — so left
+listed in full they sat in the panel for days and pushed everything else out of sight. Past a handful
+of rows the list has stopped telling you what to do and started telling you *how much* there is,
+which is one line's worth. Click the folded line to open it where it is and see the top rows as
+usual; it folds back up the next time you open the panel. The count on the bell is unchanged — a
+folded group is still counted in full, and still coloured by what it is worth.
+
 The count on the bell is the number of rows underneath it. A listing flagged for both reasons is
 listed twice, because it carries two problems that need two different answers.
 
