@@ -39,6 +39,7 @@ import {
   useCopyGroupsInfinite,
   useLocationGroupsInfinite,
   useIssueGroupsInfinite,
+  useIssueGroupCompleteness,
   useHoldingsValuation,
   useItemYears,
   useInvalidateInventory,
@@ -504,6 +505,18 @@ export function InventoryListPanel({
   const allIssueGroups = useMemo(
     () => issueGroupsQuery.data?.pages.flatMap((p) => p.groups) ?? [],
     [issueGroupsQuery.data]
+  );
+  // The issues on screen, asked for in one go (#594). The issue-less group is left out: it is a
+  // bucket of copies, not a set that can be complete.
+  const issueGroupIds = useMemo(
+    () => allIssueGroups.map((g) => g.issueId).filter((id): id is string => id !== null),
+    [allIssueGroups]
+  );
+  const { data: issueGroupCompleteness } = useIssueGroupCompleteness(
+    collectionId,
+    filters,
+    issueGroupIds,
+    groupIssues
   );
 
   // Which group rows are open (#538). One state for all three groupings — exactly one is ever on
@@ -1670,6 +1683,7 @@ export function InventoryListPanel({
                 expansion={groupExpansion}
                 selection={copySelection}
                 rowActions={rowActions}
+                completeness={issueGroupCompleteness}
               />
             </div>
           )}

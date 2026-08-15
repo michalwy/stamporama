@@ -59,6 +59,10 @@ import {
   NO_ISSUE,
   type SortableIssueGroup,
 } from "./issue-groups";
+import {
+  computeConditionCompleteness,
+  type ConditionCompletenessCount,
+} from "./checklist-completeness-rules";
 import { buildLocationPath } from "./location-path";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
@@ -2067,6 +2071,143 @@ export async function listItemIssueGroups(
     })),
     nextCursor,
   };
+}
+
+/** One condition's figure on an issue group header (#594) — the dictionary labels beside the two
+ *  counts, so the chip can be drawn without a second lookup per row. */
+export interface IssueGroupConditionCompleteness {
+  conditionId: string;
+  name: string;
+  abbreviation: string;
+  /** Stamps of the checklist held in this condition, of the copies the list is showing. */
+  owned: number;
+  /** How many times over the whole checklist can be assembled from them. */
+  completeSets: number;
+}
+
+/** One checklist of one issue group, as its header states it. */
+export interface IssueGroupChecklistCompleteness {
+  checklistId: string;
+  /** Printed only where the issue carries more than one (ADR-0031, #563's rule). */
+  name: string;
+  /** Stamps on the checklist — the denominator of every `owned` below. */
+  requiredCount: number;
+  /** Over every condition at once: *have I got the series at all*. */
+  owned: number;
+  completeSets: number;
+  /** The conditions something is actually held in, in dictionary order. */
+  conditions: IssueGroupConditionCompleteness[];
+}
+
+/** Every checklist of every issue asked about, keyed by issue id. An issue with no checklist
+ *  answers with an empty array rather than being absent, so the header cannot mistake "this series
+ *  is no set" for "not loaded yet". */
+export type IssueGroupCompleteness = Record<string, IssueGroupChecklistCompleteness[]>;
+
+/**
+ * How complete each checklist of the issue groups on screen is, per condition (#594).
+ *
+ * **Counted over the copies the list is showing** — the same `where` the group rows themselves are
+ * built from, narrowed to the checklist's stamps. A group header describes the rows under it, so a
+ * figure taken over a wider set would contradict them: a list filtered to one location would report
+ * a series as complete out of copies filed three rooms away. That is the deliberate opposite of
+ * #563's lot header, whose fraction ranges over the whole for-sale stock precisely because it is
+ * about acting on stock that is *not* on screen. The consequence to know is that the fraction moves
+ * with the filters, which is why the chip's hover says what it ranged over.
+ *
+ * **Batched over the issues, never per row**, on `getLotSetCompleteness`' reasoning: the groups are
+ * offset-paged fifty at a time, so the whole screen's answer is a fixed handful of queries however
+ * many copies scroll past. This is what #133 meant by keeping the expensive breakdown off the base
+ * list query — the grid is still one issue's question, asked on its own page.
+ *
+ * Membership is the **checklist's**, not the grouping's: a stamp on this issue's checklist whose
+ * *first* issue is another one is counted here while its copies sit in that other group (#172's
+ * pair again). A completeness figure is about the set, and a set does not stop being incomplete
+ * because one of its stamps is filed under a neighbouring series.
+ */
+export async function listIssueGroupCompleteness(
+  ownerId: string,
+  collectionId: string,
+  issueIds: string[],
+  filters: ItemListFiltersPaginated = {}
+): Promise<IssueGroupCompleteness> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const ids = [...new Set(issueIds)];
+  if (ids.length === 0) return {};
+
+  const checklists = await prisma.checklist.findMany({
+    where: { collectionId, issueId: { in: ids } },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true, issueId: true, name: true, stamps: { select: { stampId: true } } },
+  });
+  const byIssue: IssueGroupCompleteness = Object.fromEntries(ids.map((id) => [id, []]));
+  if (checklists.length === 0) return byIssue;
+
+  // One `groupBy` for every checklist on screen, however many issues they span — the overlap
+  // between a basic set and its specialized counterpart must not be counted twice.
+  const stampIds = [...new Set(checklists.flatMap((c) => c.stamps.map((s) => s.stampId)))];
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+
+  const [rows, conditions] = await Promise.all([
+    stampIds.length === 0
+      ? []
+      : prisma.item.groupBy({
+          by: ["stampId", "conditionId"],
+          // AND-ed rather than spread: the filter `where` already carries an `AND` list and an
+          // `OR` of its own, and a stray key would silently replace one of them.
+          where: { AND: [where, { stampId: { in: stampIds } }] },
+          _count: { _all: true },
+        }),
+    prisma.stampCondition.findMany({
+      where: { collectionId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, abbreviation: true },
+    }),
+  ]);
+
+  const counts: ConditionCompletenessCount[] = rows.map((r) => ({
+    stampId: r.stampId,
+    conditionId: r.conditionId,
+    count: r._count._all,
+  }));
+  const conditionIds = conditions.map((c) => c.id);
+  const conditionById = new Map(conditions.map((c) => [c.id, c]));
+
+  for (const checklist of checklists) {
+    // A checklist reached through `issueId in ids` always has one; the guard is for the type.
+    if (!checklist.issueId) continue;
+    const result = computeConditionCompleteness(
+      checklist.stamps.map((s) => s.stampId),
+      counts,
+      conditionIds
+    );
+    byIssue[checklist.issueId].push({
+      checklistId: checklist.id,
+      name: checklist.name,
+      requiredCount: result.requiredCount,
+      owned: result.any.owned,
+      completeSets: result.any.completeSets,
+      conditions: result.conditions.flatMap((c) => {
+        const dictionary = c.conditionId ? conditionById.get(c.conditionId) : undefined;
+        return dictionary
+          ? [{
+              conditionId: dictionary.id,
+              name: dictionary.name,
+              abbreviation: dictionary.abbreviation,
+              owned: c.owned,
+              completeSets: c.completeSets,
+            }]
+          : [];
+      }),
+    });
+  }
+  return byIssue;
 }
 
 /** The `where` addressing exactly one group's members. Only the axes that joined the key are

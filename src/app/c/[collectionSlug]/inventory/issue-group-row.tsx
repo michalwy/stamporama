@@ -2,7 +2,10 @@
 
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { IssueGroupRow as IssueGroupRowData } from "@/lib/items";
+import type {
+  IssueGroupChecklistCompleteness,
+  IssueGroupRow as IssueGroupRowData,
+} from "@/lib/items";
 import { NO_ISSUE } from "@/lib/issue-groups";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
@@ -31,6 +34,102 @@ const MUTED: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+const COMPLETENESS_CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  fontVariantNumeric: "tabular-nums",
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-page)",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+/**
+ * *How much of this series you have, condition by condition* (#594), on the group header of the
+ * Copies list grouped by issue.
+ *
+ * **One chip per condition, spelled out rather than folded into a hover.** #563's lot header states
+ * a single fraction and puts the detail in a popover, and the difference is what the two screens are
+ * for: a sorting pass asks *can I list this set*, one question with one answer, while a collector
+ * browsing their own inventory by series is asking which conditions the set is thin in — a question
+ * whose answer *is* the breakdown, and one that is asked of every row on screen at once. A hover per
+ * row is the wrong shape for something read by scanning down a list.
+ *
+ * The chips are **sparse**: only the conditions the checklist is actually held in get one, the
+ * format axis's own rule (#133). A dictionary of eight conditions against a series held in two
+ * would otherwise put six zeros on every row, and a zero here is not the information the row exists
+ * to carry — the missing conditions are the white space.
+ *
+ * A **complete** condition is tinted `success` and says so, #563's chip again: the whole point of
+ * scanning the list is finding the sets that are finished.
+ *
+ * The figures are counted over **the copies this list is showing**, filters and all, which is the
+ * decision that separates this from every other completeness reading in the app and is why the
+ * hover states it outright. A group header describes the rows under it: a list narrowed to one
+ * klaser must not report a series as complete out of copies filed elsewhere. The consequence is
+ * that the fraction moves as the filters do, so the sentence naming its scope is not optional.
+ *
+ * **Complete sets** — how many times over the whole checklist can be assembled — stay in the hover.
+ * They are the grid's second figure (#519) and the one that says whether a duplicate is a spare,
+ * but they are a second number per condition, and a chip line carrying two of each is a line nobody
+ * reads.
+ */
+function ChecklistCompletenessChips({
+  entry,
+  named,
+}: {
+  entry: IssueGroupChecklistCompleteness;
+  /** Print the checklist's name — true only where the issue carries more than one (ADR-0031). */
+  named: boolean;
+}) {
+  return (
+    <>
+      {named && (
+        <span style={{ ...MUTED, fontSize: "0.75rem" }}>{entry.name}</span>
+      )}
+      {entry.conditions.map((c) => {
+        const complete = c.owned === entry.requiredCount;
+        return (
+          <Tooltip
+            key={c.conditionId}
+            content={
+              <>
+                <strong>
+                  {c.owned}/{entry.requiredCount}
+                </strong>{" "}
+                of <strong>{entry.name}</strong> held in {c.name} ({c.abbreviation})
+                {c.completeSets > 0 && (
+                  <>
+                    {" — "}
+                    <strong>{c.completeSets}</strong> complete set
+                    {c.completeSets === 1 ? "" : "s"}
+                  </>
+                )}
+                .{" "}
+                Counted over <strong>the copies this list is showing</strong>: every filter in force
+                applies, so narrowing the list narrows this figure too.
+              </>
+            }
+          >
+            <span
+              style={{
+                ...COMPLETENESS_CHIP,
+                borderColor: complete ? "var(--color-success)" : undefined,
+                color: complete ? "var(--color-success)" : "var(--color-text-secondary)",
+              }}
+            >
+              {c.abbreviation || c.name} {c.owned}/{entry.requiredCount}
+            </span>
+          </Tooltip>
+        );
+      })}
+    </>
+  );
+}
+
 /**
  * One issue group on the Copies list (#424): a series collapsed to a single row over the copies
  * held of it.
@@ -53,6 +152,7 @@ export function IssueGroupRow({
   onToggle,
   selection,
   rowActions,
+  completeness,
 }: {
   collectionId: string;
   group: IssueGroupRowData;
@@ -70,6 +170,9 @@ export function IssueGroupRow({
   /** The member rows' own `⋮` menu (#125/#516) — the very actions the ungrouped list offers.
    * Grouping is a way of *reading* the stock, not a mode with fewer things one may do to a copy. */
   rowActions?: CopyRowActions;
+  /** This issue's checklists and how complete each is per condition (#594) — absent while the read
+   *  is still in flight, and on the issue-less group, which is no set. */
+  completeness?: IssueGroupChecklistCompleteness[];
 }) {
   const memberFilters = issueGroupMemberFilters(group, baseFilters);
   const {
@@ -94,6 +197,11 @@ export function IssueGroupRow({
   });
 
   const named = group.issueId !== null;
+  // A checklist with nothing held of it says nothing on a header: the chips *are* the statement, so
+  // an empty checklist and an untouched one both fall away rather than printing `0/0`.
+  const sets = (completeness ?? []).filter(
+    (c) => c.requiredCount > 0 && c.conditions.length > 0
+  );
 
   return (
     <CopyGroupShell
@@ -107,6 +215,7 @@ export function IssueGroupRow({
         label: "Select every copy of this issue that can be listed — for sale and in hand",
       }}
       header={
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           <Tooltip
             content={`${group.count} cop${group.count === 1 ? "y" : "ies"} of this issue, of the ones this list is showing`}
@@ -130,6 +239,23 @@ export function IssueGroupRow({
           {!named && (
             <span style={MUTED}>— these copies&rsquo; stamps do not belong to an issue</span>
           )}
+        </div>
+        {sets.length > 0 && (
+          // A line of its own rather than a tail on the title: the title is a name and these are
+          // figures about it, and the row wraps at a width where a series name and eight chips
+          // would break in the middle of the sentence.
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}
+          >
+            {sets.map((entry) => (
+              <ChecklistCompletenessChips
+                key={entry.checklistId}
+                entry={entry}
+                named={sets.length > 1}
+              />
+            ))}
+          </div>
+        )}
         </div>
       }
     >

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeChecklistCompleteness,
+  computeConditionCompleteness,
   computeForSaleSetCompleteness,
   type CompletenessCount,
   type CompletenessDisposition,
@@ -284,5 +285,66 @@ describe("computeForSaleSetCompleteness", () => {
     assert.equal(r.owned, 1);
     assert.equal(r.fromHere, 1);
     assert.deepEqual(r.missingStampIds, ["b"]);
+  });
+});
+
+describe("computeConditionCompleteness (#594)", () => {
+  const counts = [
+    { stampId: "a", conditionId: MNH, count: 2 },
+    { stampId: "a", conditionId: USED, count: 1 },
+    { stampId: "b", conditionId: USED, count: 3 },
+    // A copy of a stamp on no checklist must not open a column, nor be counted.
+    { stampId: "z", conditionId: "cond-cto", count: 5 },
+  ];
+
+  it("counts owned and complete sets per condition", () => {
+    const r = computeConditionCompleteness(["a", "b"], counts, CONDITIONS);
+    assert.equal(r.requiredCount, 2);
+    assert.deepEqual(r.conditions, [
+      { conditionId: MNH, owned: 1, completeSets: 0 },
+      { conditionId: USED, owned: 2, completeSets: 1 },
+    ]);
+  });
+
+  it("rolls every condition up into `any`", () => {
+    const r = computeConditionCompleteness(["a", "b"], counts, CONDITIONS);
+    assert.deepEqual(r.any, { conditionId: null, owned: 2, completeSets: 3 });
+  });
+
+  it("gives a cell only to the conditions something is held in", () => {
+    const r = computeConditionCompleteness(
+      ["a"],
+      [{ stampId: "a", conditionId: MNH, count: 1 }],
+      CONDITIONS
+    );
+    assert.deepEqual(
+      r.conditions.map((c) => c.conditionId),
+      [MNH]
+    );
+  });
+
+  it("keeps the caller's dictionary order", () => {
+    const r = computeConditionCompleteness(["a"], counts, [USED, MNH]);
+    assert.deepEqual(
+      r.conditions.map((c) => c.conditionId),
+      [USED, MNH]
+    );
+  });
+
+  it("counts a stamp listed twice on one checklist once", () => {
+    const r = computeConditionCompleteness(
+      ["a", "a"],
+      [{ stampId: "a", conditionId: MNH, count: 1 }],
+      CONDITIONS
+    );
+    assert.equal(r.requiredCount, 1);
+    assert.equal(r.conditions[0].owned, 1);
+  });
+
+  it("an empty checklist is 0/0 with no conditions, never complete", () => {
+    const r = computeConditionCompleteness([], counts, CONDITIONS);
+    assert.equal(r.requiredCount, 0);
+    assert.deepEqual(r.conditions, []);
+    assert.deepEqual(r.any, { conditionId: null, owned: 0, completeSets: 0 });
   });
 });

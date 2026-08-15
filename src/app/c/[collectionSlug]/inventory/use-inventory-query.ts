@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CopyGroupRow,
+  IssueGroupCompleteness,
   LocationGroupRow,
   IssueGroupRow,
   ItemListItem,
@@ -151,6 +152,11 @@ export const inventoryKeys = {
   ) => ["inventory", collectionId, "locationGroups", filters, by] as const,
   issueGroups: (collectionId: string, filters: InventoryItemFilters) =>
     ["inventory", collectionId, "issueGroups", filters] as const,
+  issueGroupCompleteness: (
+    collectionId: string,
+    filters: InventoryItemFilters,
+    issueIds: string[]
+  ) => ["inventory", collectionId, "issueGroupCompleteness", filters, issueIds] as const,
   years: (collectionId: string, filters: InventoryYearFacetFilters) =>
     ["inventory", collectionId, "years", filters] as const,
 };
@@ -295,6 +301,41 @@ export function useIssueGroupsInfinite(
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled,
+  });
+}
+
+/**
+ * Per-checklist, per-condition completeness for the issue groups on screen (#594), keyed by issue
+ * id.
+ *
+ * A second query rather than a field on the groups page: the figure is only drawn in this one
+ * grouping, and it is read **whole for the groups loaded so far** rather than per row — the server
+ * answers the whole screen in a handful of queries, which is what lets a completeness figure sit on
+ * a list at all (#133's reason for keeping the full grid on the issue's own page still stands).
+ * Scrolling on a page of groups therefore re-asks for the longer list; the alternative, one request
+ * per group row, is the shape that reasoning rules out.
+ *
+ * It takes the list's own filters, because the figures are counted over the copies the list is
+ * showing. `NO_ISSUE` is not among the ids: the copies belonging to no series are no set.
+ */
+export function useIssueGroupCompleteness(
+  collectionId: string,
+  filters: InventoryItemFilters,
+  issueIds: string[],
+  enabled = true
+) {
+  return useQuery<IssueGroupCompleteness>({
+    queryKey: inventoryKeys.issueGroupCompleteness(collectionId, filters, issueIds),
+    queryFn: async () => {
+      const params = itemFilterParams(filters);
+      params.set("issueIds", issueIds.join(","));
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/issue-groups/completeness?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch issue group completeness");
+      return res.json();
+    },
+    enabled: enabled && issueIds.length > 0,
   });
 }
 

@@ -908,6 +908,27 @@ A stamp can belong to more than one issue. A copy is counted under **one** of th
 its stamp was added to — so the counts add up to the list exactly rather than reporting one copy
 under two series.
 
+### How complete each set is
+
+Under the issue's name, the group header says how far its [checklists](collections.md) have got,
+**condition by condition** — `MNH 3/5`, `U 5/5`, one chip per condition you hold something of. A
+condition you own the whole set in is tinted green. Conditions you hold none of get no chip at all:
+the ones on the line are the ones there is something to say about.
+
+Hover a chip for the full sentence — which checklist it is talking about, the condition spelled out,
+and **how many complete sets** you could assemble from those copies (the figure that says whether a
+duplicate is a spare or the only one you have).
+
+These figures are counted over **the copies this list is showing**. Every filter in force applies, so
+a list narrowed to one klaser tells you how complete the set is *in that klaser* — not how complete
+it is across the collection. That is deliberate: a header describes the rows underneath it. Clear the
+filters to read the whole collection's answer, or open the issue's own page for the full
+[completeness grid](detail-pages.md#completeness), which breaks the same question down by disposition and format
+as well.
+
+An issue whose checklists you hold nothing of shows no chips, and so does the **no issue** row: a
+bucket of copies is not a set that can be complete.
+
 ## Seeing what a stamp is worth
 
 Every copy row's **⋮** menu has a **Show valuation** action. It opens the read-only **Valuation**

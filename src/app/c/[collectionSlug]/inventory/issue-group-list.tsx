@@ -2,7 +2,10 @@
 
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { IssueGroupRow as IssueGroupRowData } from "@/lib/items";
+import type {
+  IssueGroupCompleteness,
+  IssueGroupRow as IssueGroupRowData,
+} from "@/lib/items";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { IssueGroupRow } from "./issue-group-row";
 import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
@@ -27,6 +30,7 @@ export function IssueGroupList({
   expansion,
   selection,
   rowActions,
+  completeness,
 }: {
   collectionId: string;
   groups: IssueGroupRowData[];
@@ -43,6 +47,9 @@ export function IssueGroupList({
   /** The member rows' own `⋮` menu (#125/#516), threaded down to every group's copies: a
    * grouping decides what a row is listed *under*, never what may be done to it. */
   rowActions?: CopyRowActions;
+  /** Per-checklist, per-condition completeness keyed by issue id (#594) — read for the whole page
+   * of groups at once, absent while it is still loading. */
+  completeness?: IssueGroupCompleteness;
 }) {
   return (
     <>
@@ -60,6 +67,7 @@ export function IssueGroupList({
           onToggle={() => expansion.toggle(group.key)}
           selection={selection}
           rowActions={rowActions}
+          completeness={group.issueId ? completeness?.[group.issueId] : undefined}
         />
       ))}
       <InfiniteScrollSentinel
