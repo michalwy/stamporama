@@ -21,6 +21,16 @@ import type {
   ScanSheetData,
   ScanTileData,
 } from "@/lib/scan-sheets";
+import { tileSideViews } from "@/lib/scan-tile-view";
+import {
+  batchBoxState,
+  isSelectableTile,
+  pruneSelection,
+  selectedInOrder,
+  toggleBatch,
+  toggleTile,
+  type TileBoxState,
+} from "@/lib/scan-tile-selection";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import { TileIdentifyDialog } from "./tile-identify-dialog";
@@ -48,6 +58,13 @@ import {
  * cut was wrong — and then work through the tiles, each of which becomes a copy, joins a copy that
  * already exists, or is discarded with a note.
  *
+ * Several tiles can also be **ticked and identified in one pass** (#596), which is what a card
+ * holding a run of one definitive comes to. The selection is a layer *over* the strip and never a
+ * change to it: the box is a small control in a tile's free corner, the rest of the square still
+ * opens the dialog, and a settled tile — which can take no identification — has no box at all. The
+ * model is `scan-tile-selection.ts`, which says why this is a set of ids rather than #571's
+ * containers.
+ *
  * Clicking a tile opens that question (`tile-identify-dialog.tsx`) — **whatever state it is in**
  * (#584), so nothing here navigates on a click. Two answers inside the dialog leave: *new copy*,
  * which is the lot card's own picker → condition chain entered from a tile instead of from the
@@ -72,13 +89,17 @@ interface Props {
    *
    * The **piece** goes up with it, not just its id (#592): the chain that follows keeps the tile's
    * picture on screen the whole way, and which sides it has is `tileSideViews`' answer — already
-   * computed in the dialog handing this over, where the batch's sheets are in hand. */
-  onIdentifyTile: (piece: IdentifiedPiece) => void;
+   * computed where the batch's sheets are in hand.
+   *
+   * **A list of pieces** since #596: several tiles ticked on the strip are answered in one pass, and
+   * one tile is a list of one. The pieces travel in card order, which is the order the copies are
+   * created and numbered in. */
+  onIdentifyTiles: (pieces: IdentifiedPiece[]) => void;
   /** *Same as the last* (#595): the same handover as `onIdentifyTile`, for the tile that is to be
    * identified as the previous one of this sitting was. Null until one has been — the panel above
    * owns that record, because it owns the step that answers it. `summary` is what the action names,
    * built there for the same reason: the condition and format dictionaries are up there. */
-  repeatLast: { summary: string; onRepeatTile: (piece: IdentifiedPiece) => void } | null;
+  repeatLast: { summary: string; onRepeatTile: (pieces: IdentifiedPiece[]) => void } | null;
   onChanged: () => void;
 }
 
@@ -95,7 +116,7 @@ export function PurchaseScansCard({
   unidentifiedTileCount,
   scanSheetCount,
   canIdentify,
-  onIdentifyTile,
+  onIdentifyTiles,
   repeatLast,
   onChanged,
 }: Props) {
@@ -162,6 +183,21 @@ export function PurchaseScansCard({
   const [showDone, setShowDone] = useState(false);
 
   /**
+   * The tiles ticked to be identified as one stamp (#596) — a plain set of ids, and see
+   * `scan-tile-selection.ts` for why it is not #571's containers: a batch's tiles are all loaded, so
+   * the count is exact here and the write is handed the very ids that were ticked.
+   *
+   * **Pruned against what is on screen** on every render rather than cleaned up by each write:
+   * a ticked tile can be consumed, discarded or re-cut away from the dialog beside it, and a bar
+   * counting squares that are no longer there would be offering to identify nothing.
+   */
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const allTiles = batches.flatMap((b) => b.tiles);
+  const live = pruneSelection(selected, allTiles);
+  if (live.size !== selected.size) setSelected(live);
+  const selectedTiles = selectedInOrder(live, allTiles);
+
+  /**
    * Re-read what a write changed — **everywhere it is visible, not just on the surface that made
    * it.** A copy write shows up in three separate query namespaces, and each one missed is a screen
    * that keeps showing the collection as it was until a full page reload:
@@ -188,6 +224,26 @@ export function PurchaseScansCard({
       void invalidateInventory(collectionId);
     }
     onChanged();
+  };
+
+  /**
+   * Hand the ticked tiles to the order panel as **pieces** (#596), the same handover one tile makes
+   * (#592) with a list where there was one.
+   *
+   * `tileSideViews` is answered here, for every one of them, because this is where the batch a tile
+   * came from is in hand — including whether its scan has been swept (#578), which is exactly what a
+   * second derivation further down the chain would get wrong.
+   */
+  const identifySelected = () => {
+    const pieces = selectedTiles.map((tile) => {
+      const batch = batches.find((b) => b.tiles.some((t) => t.id === tile.id));
+      return {
+        tileId: tile.id,
+        sides: tileSideViews(tile, { front: batch?.front ?? null, back: batch?.back ?? null }),
+        position: tile.position,
+      };
+    });
+    if (pieces.length > 0) onIdentifyTiles(pieces);
   };
 
   /**
@@ -459,6 +515,21 @@ export function PurchaseScansCard({
         <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone((v) => !v)} />
       )}
 
+      {/* **One bar for the whole card, above the batches** (#596), the copy list's own arrangement
+          (#571) and for the same reason: a run of one definitive can cross two cards of a parcel,
+          and a bar per batch would make the collector answer once per card for one decision.
+          It says how many copies it is about to create before anything is created, as every other
+          bulk action on this screen does. */}
+      {selectedTiles.length > 0 && (
+        <TileSelectionBar
+          count={selectedTiles.length}
+          canIdentify={canIdentify}
+          busy={uploading || pending || detecting}
+          onIdentify={identifySelected}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
+
       {batches
         // A batch whose tiles are all dealt with has nothing to show under the chip, and an empty
         // bordered box saying so would be the noise the chip was pressed to get away from.
@@ -476,6 +547,9 @@ export function PurchaseScansCard({
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
+          selected={live}
+          onToggleTile={(id) => setSelected((s) => toggleTile(s, id))}
+          onToggleBatchSelection={() => setSelected((s) => toggleBatch(s, batch.tiles))}
           busy={uploading || pending || detecting}
           detecting={detecting}
           onReview={(sheet, frontTileCount) => void openProposed(sheet, frontTileCount)}
@@ -512,8 +586,9 @@ export function PurchaseScansCard({
             // every other intake goes through, and a second pair of them would be a second set of
             // remembered choices. The sides ride along so the piece stays on screen for all of it
             // (#592) — this dialog is where they were worked out, and the only place they are free.
+            // A list of one (#596): this tile, whatever happens to be ticked on the strip behind it.
             setTileId(null);
-            onIdentifyTile({ tileId: openTile.id, sides, position: openTile.position });
+            onIdentifyTiles([{ tileId: openTile.id, sides, position: openTile.position }]);
           }}
           // The same handover, minus the picker (#595) — the panel drops this tile straight onto
           // the condition step with the last one's answers in the fields.
@@ -522,11 +597,9 @@ export function PurchaseScansCard({
               summary: repeatLast.summary,
               onRepeat: (sides) => {
                 setTileId(null);
-                repeatLast.onRepeatTile({
-                  tileId: openTile.id,
-                  sides,
-                  position: openTile.position,
-                });
+                repeatLast.onRepeatTile([
+                  { tileId: openTile.id, sides, position: openTile.position },
+                ]);
               },
             }
           }
@@ -701,6 +774,9 @@ function BatchSection({
   expanded,
   onToggleExpanded,
   onOpenTile,
+  selected,
+  onToggleTile,
+  onToggleBatchSelection,
   busy,
   detecting,
   onReview,
@@ -718,6 +794,12 @@ function BatchSection({
   expanded: boolean;
   onToggleExpanded: () => void;
   onOpenTile: (tileId: string) => void;
+  /** The tiles ticked to be identified together (#596) — the whole card's, since one selection
+   * spans the batches. */
+  selected: ReadonlySet<string>;
+  onToggleTile: (tileId: string) => void;
+  /** Tick every tile of this batch that is still waiting, or untick them all. */
+  onToggleBatchSelection: () => void;
   busy: boolean;
   /** Whether the wait the buttons are in is a detection pass, so they can say which wait it is. */
   detecting: boolean;
@@ -798,6 +880,18 @@ function BatchSection({
         >
           <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </button>
+        {/* Tick the whole card (#596), the copy list's group box one level down: it ticks what is
+            beneath it and shows a dash while only part of it is. Only over tiles still waiting —
+            a settled tile can take no identification, which is also why a batch with nothing left
+            waiting has no box at all rather than a box that does nothing. */}
+        {expanded && waiting > 0 && (
+          <TickBox
+            state={batchBoxState(selected, batch.tiles)}
+            label={`Select the ${waiting} tile${waiting === 1 ? "" : "s"} still waiting in batch ${batch.batchNo}`}
+            disabled={busy}
+            onToggle={onToggleBatchSelection}
+          />
+        )}
         <strong style={{ fontSize: "0.8125rem" }}>Batch {batch.batchNo}</strong>
         {/* The card's own name, beside the number and never instead of it (#587): the number is
             assigned rather than chosen and is what makes a batch findable, so two cards both
@@ -908,6 +1002,8 @@ function BatchSection({
               tile={tile}
               collectionId={collectionId}
               droppable={dragging != null && tile.backPhotoId == null && tile.state === "unidentified"}
+              selected={selected.has(tile.id)}
+              onToggleSelected={() => onToggleTile(tile.id)}
               onOpen={() => onOpenTile(tile.id)}
               onDropBack={(backTileId) => {
                 setDragging(null);
@@ -1111,17 +1207,24 @@ function TileCell({
   tile,
   collectionId,
   droppable,
+  selected,
+  onToggleSelected,
   onOpen,
   onDropBack,
 }: {
   tile: ScanTileData;
   collectionId: string;
   droppable: boolean;
+  /** Ticked to be identified with the others (#596). */
+  selected: boolean;
+  onToggleSelected: () => void;
   onOpen: () => void;
   onDropBack: (backTileId: string) => void;
 }) {
   const [over, setOver] = useState(false);
   const settled = tile.state !== "unidentified";
+  /** Whether this tile can be ticked at all — a settled one has already reached an end. */
+  const selectable = isSelectableTile(tile);
   // The picture follows the photo row to whoever owns it now.
   const photoId = tile.frontPhotoId ?? tile.item?.frontPhotoId ?? null;
 
@@ -1146,7 +1249,14 @@ function TileCell({
     }`,
     // The drop target needs its own signal now that waiting tiles are accent-edged already —
     // and a droppable tile is by definition one of them, so a halo rather than a fourth colour.
-    boxShadow: over ? "0 0 0 3px var(--color-accent-soft)" : undefined,
+    // A **ticked** tile (#596) wears the solid version of that halo: the tick in the corner is what
+    // says which square is in, and the ring is what makes a run of them legible across the strip at
+    // a glance, which is the whole point of ticking them together.
+    boxShadow: over
+      ? "0 0 0 3px var(--color-accent-soft)"
+      : selected
+        ? "0 0 0 3px var(--color-accent)"
+        : undefined,
     borderRadius: "0.375rem",
     overflow: "hidden",
     background: droppable ? "var(--color-bg-subtle)" : "transparent",
@@ -1204,27 +1314,181 @@ function TileCell({
   );
 
   return (
+    // The square and its tick box are **siblings**, not one inside the other (#596): the cell has
+    // been one button since #584 and a control nested in a button is neither valid nor clickable
+    // without fighting it. So the box sits over the corner and the rest of the square keeps meaning
+    // exactly what it meant — click it and the tile's dialog opens, in every state.
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={onOpen}
+        onDragOver={(e) => {
+          if (!droppable) return;
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          if (!droppable) return;
+          e.preventDefault();
+          setOver(false);
+          const id = e.dataTransfer.getData("text/x-scan-tile");
+          if (id) onDropBack(id);
+        }}
+        title={tileTitle(tile)}
+        style={style}
+      >
+        {body}
+      </button>
+      {/* Only where identifying is still possible. A settled tile has reached an end, so a box on
+          it would be an offer the write refuses — and the top-right corner is free precisely
+          because the top-left is where a settled tile says which end it reached (#582). */}
+      {selectable && (
+        <TickBox
+          state={selected ? "on" : "off"}
+          label={`Identify tile ${tile.position + 1} together with the others`}
+          onToggle={onToggleSelected}
+          style={{ position: "absolute", top: "0.15rem", right: "0.15rem" }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The tick box the tile strip's selection is made of (#596) — on a tile, and on a batch header for
+ * everything still waiting under it.
+ *
+ * Drawn rather than `<input type="checkbox">` for the one reason a native box could not manage: the
+ * batch's third state. *Partial* is a fact the collector needs on a card being worked through in
+ * runs, and `indeterminate` is a DOM property with no attribute, so a native box would need an
+ * effect to set it and would still be styled by the platform rather than by this app's tokens.
+ *
+ * The mark is the strip's own device — an opaque corner badge with a hairline ring, `photo-thumb`'s
+ * reserved-slot marker (#582) — so it reads the same over a black card margin as over a bright
+ * stamp, which is exactly the property a tick sitting on a scan needs.
+ */
+function TickBox({
+  state,
+  label,
+  disabled,
+  onToggle,
+  style,
+}: {
+  state: TileBoxState;
+  label: string;
+  disabled?: boolean;
+  onToggle: () => void;
+  style?: React.CSSProperties;
+}) {
+  const on = state === "on";
+  return (
     <button
       type="button"
-      onClick={onOpen}
-      onDragOver={(e) => {
-        if (!droppable) return;
-        e.preventDefault();
-        setOver(true);
+      role="checkbox"
+      aria-checked={state === "partial" ? "mixed" : on}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(e) => {
+        // The tile's own square is a button that opens its dialog (#584), and this sits on top of
+        // it: without stopping here, ticking a tile would also open it.
+        e.stopPropagation();
+        onToggle();
       }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        if (!droppable) return;
-        e.preventDefault();
-        setOver(false);
-        const id = e.dataTransfer.getData("text/x-scan-tile");
-        if (id) onDropBack(id);
+      style={{
+        width: "1.05rem",
+        height: "1.05rem",
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+        borderRadius: "0.25rem",
+        border: "none",
+        background: on ? "var(--color-accent)" : "var(--color-bg-elevated)",
+        color: on ? "#fff" : "var(--color-accent)",
+        boxShadow: on
+          ? "0 0 0 1px rgba(0,0,0,0.25)"
+          : "0 0 0 1px var(--color-border-strong)",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+        ...style,
       }}
-      title={tileTitle(tile)}
-      style={style}
     >
-      {body}
+      {state === "on" ? (
+        <Icon name="check" size="xs" />
+      ) : state === "partial" ? (
+        // The dash every level of #571's selection shows while only part of it is in.
+        <span
+          style={{
+            width: "0.5rem",
+            height: "2px",
+            borderRadius: "1px",
+            background: "var(--color-accent)",
+          }}
+        />
+      ) : null}
     </button>
+  );
+}
+
+/**
+ * What the ticked tiles are about to become (#596).
+ *
+ * **The count is stated before anything is created**, as every other bulk action on this screen
+ * does — the step that follows creates one copy per tile, and a collector who ticked a run across
+ * two batches should not have to count the ring-marked squares to know how many that is.
+ *
+ * It offers exactly one thing to do with the selection and no menu of them: identifying them
+ * together is the whole reason ticking exists. Discarding a run in one press was not asked for, and
+ * a discard is already one click on the tile itself.
+ */
+function TileSelectionBar({
+  count,
+  canIdentify,
+  busy,
+  onIdentify,
+  onClear,
+}: {
+  count: number;
+  canIdentify: boolean;
+  busy: boolean;
+  onIdentify: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.625rem",
+        flexWrap: "wrap",
+        padding: "0.5rem 0.75rem",
+        borderRadius: "0.5rem",
+        border: "1px solid var(--color-accent)",
+        background: "var(--color-accent-soft)",
+        fontSize: "0.8125rem",
+      }}
+    >
+      <strong>
+        {count} {count === 1 ? "tile" : "tiles"} selected
+      </strong>
+      <span style={{ color: "var(--color-text-secondary)" }}>
+        {/* What the collector is asserting, said plainly: the app takes their word for it and
+            neither checks it nor goes looking for duplicates of its own. */}
+        Identifying them together answers the step once and creates {count}{" "}
+        {count === 1 ? "copy" : "copies"} — one per tile, each with its own pictures.
+      </span>
+      <span style={{ flex: 1 }} />
+      <SmallButton onClick={onClear} disabled={busy}>
+        Clear
+      </SmallButton>
+      <SmallButton onClick={onIdentify} disabled={busy || !canIdentify}>
+        <Icon name="scan" size="sm" /> Identify {count} {count === 1 ? "tile" : "tiles"} as one
+        stamp
+      </SmallButton>
+    </div>
   );
 }
 

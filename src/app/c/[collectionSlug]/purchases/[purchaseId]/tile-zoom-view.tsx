@@ -84,19 +84,160 @@ export interface IdentifiedPiece {
   position: number;
 }
 
-/** The piece as a dialog's `aside` (`DialogShell.aside`) — one call site's worth of wrapping, so
+/**
+ * The pieces as a dialog's `aside` (`DialogShell.aside`) — one call site's worth of wrapping, so
  * that every dialog in the chain shows the same thing rather than its own arrangement of it. Null
- * when the piece has no picture at all, which is what keeps the aside absent rather than empty. */
+ * when there is no picture at all, which is what keeps the aside absent rather than empty.
+ *
+ * **One piece is the viewer; several are all of them, small** (#596). With a run of tiles ticked
+ * there is no single piece the step is about, and answering "show the first one" would be the app
+ * picking one photograph to stand for fifteen pieces of paper. Ticking them was the collector
+ * *asserting* they are the same stamp in the same condition, and seeing them side by side is how a
+ * mistake in that assertion is caught — before it becomes fifteen copies rather than after. The app
+ * never checks the assertion itself and never offers to find duplicates: telling two shades or two
+ * perforations apart is the work being done here.
+ *
+ * Any one of them can still be looked at properly — clicking a thumbnail opens #585's viewer on it,
+ * with the way back to the grid — because the doubt a grid raises is answered by a loupe, and there
+ * is already one.
+ */
 export function IdentifiedPieceAside({
   collectionId,
-  piece,
+  pieces,
 }: {
   collectionId: string;
-  piece: IdentifiedPiece;
+  pieces: IdentifiedPiece[];
 }) {
-  if (piece.sides.length === 0) return null;
+  const shown = pieces.filter((p) => p.sides.length > 0);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = shown.find((p) => p.tileId === openId) ?? null;
+
+  if (shown.length === 0) return null;
+  if (shown.length === 1) {
+    return (
+      <TileZoomView
+        collectionId={collectionId}
+        sides={shown[0].sides}
+        position={shown[0].position}
+      />
+    );
+  }
+  if (opened) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
+        <button
+          type="button"
+          onClick={() => setOpenId(null)}
+          style={{
+            alignSelf: "flex-start",
+            marginBottom: "0.5rem",
+            padding: "0.25rem 0.5rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border-strong)",
+            background: "var(--color-bg-elevated)",
+            color: "var(--color-text-secondary)",
+            font: "inherit",
+            fontSize: "0.8125rem",
+            cursor: "pointer",
+          }}
+        >
+          ← All {shown.length} pieces
+        </button>
+        <TileZoomView
+          // Remounted per piece, so the viewer opens fitted to the tile that was clicked rather than
+          // carrying the previous one's zoom onto a differently sized crop.
+          key={opened.tileId}
+          collectionId={collectionId}
+          sides={opened.sides}
+          position={opened.position}
+        />
+      </div>
+    );
+  }
+  return <IdentifiedPieceGrid collectionId={collectionId} pieces={shown} onOpen={setOpenId} />;
+}
+
+/**
+ * Every ticked piece at once (#596).
+ *
+ * The **front** of each, at the size that lets a run be compared rather than merely counted, in the
+ * order the card is laid out in and labelled with the tile's own position — the strip is a map of
+ * the card on the desk, and the panel beside the form has to be readable against it.
+ */
+function IdentifiedPieceGrid({
+  collectionId,
+  pieces,
+  onOpen,
+}: {
+  collectionId: string;
+  pieces: IdentifiedPiece[];
+  onOpen: (tileId: string) => void;
+}) {
   return (
-    <TileZoomView collectionId={collectionId} sides={piece.sides} position={piece.position} />
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
+      <p
+        style={{
+          margin: "0 0 0.625rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        <strong>{pieces.length} pieces</strong>, being identified as one stamp. Check them against
+        each other before you confirm — click one to look at it closely.
+      </p>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(7.5rem, 1fr))",
+          gap: "0.5rem",
+          alignContent: "start",
+        }}
+      >
+        {pieces.map((piece) => {
+          const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
+          return (
+            <button
+              key={piece.tileId}
+              type="button"
+              onClick={() => onOpen(piece.tileId)}
+              title={`Tile ${piece.position + 1} — click to look at it closely`}
+              style={{
+                display: "block",
+                padding: "0.25rem",
+                border: "1px solid var(--color-border)",
+                borderRadius: "0.375rem",
+                background: "var(--color-bg-page)",
+                font: "inherit",
+                color: "var(--color-text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              {/* The **thumb**, which is the strip's own derivative and so usually already in
+                  cache: a grid of fifteen full crops of a 1200 dpi card would be tens of megabytes
+                  fetched to be drawn two inches wide. At 320 px against a ~7.5 rem cell it is
+                  oversampled either way, and the piece that raises a doubt is one click from the
+                  full-resolution viewer. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/collections/${collectionId}/photos/${front.photoId}/thumb`}
+                alt={`Tile ${piece.position + 1}, ${front.label.toLowerCase()}`}
+                draggable={false}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  aspectRatio: "1",
+                  objectFit: "contain",
+                }}
+              />
+              <span style={{ fontSize: "0.6875rem" }}>{piece.position + 1}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

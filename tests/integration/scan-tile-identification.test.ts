@@ -25,6 +25,7 @@ import {
   assignTileToCopy,
   discardTile,
   identifyTileAsNewCopy,
+  identifyTilesAsNewCopies,
   noteDiscardedTile,
   undiscardTile,
 } from "../../src/lib/scan-tiles";
@@ -215,6 +216,81 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(item.stampId, stampId);
     assert.equal(item.deliveryState, "ordered");
     assert.equal(item.inCollection, false);
+  });
+
+  it("identifies several tiles as one stamp, and every copy keeps its own pictures (#596)", async () => {
+    const { purchaseId, lotId, tileIds } = await orderWithTiles();
+    // The photo row each tile owns *before* the pass, so the pairing can be checked afterwards
+    // rather than merely the count of rows that moved.
+    const frontBefore = new Map<string, string>();
+    for (const tileId of tileIds) {
+      const photo = await prisma.photo.findFirstOrThrow({
+        where: { tileId, role: "front" },
+        select: { id: true },
+      });
+      frontBefore.set(tileId, photo.id);
+    }
+
+    const outcomes = await identifyTilesAsNewCopies(userId, tileIds, { stampId, conditionId });
+    assert.equal(outcomes.length, 2, "one copy per tile, and not one copy for the run");
+
+    // **The thing a naive implementation gets wrong.** These are two photographs of two pieces of
+    // paper: tile *i*'s own crop is on copy *i*, and no copy points at another tile's picture.
+    for (const [i, tileId] of tileIds.entries()) {
+      const photos = await prisma.photo.findMany({
+        where: { itemId: outcomes[i].itemId },
+        select: { id: true },
+      });
+      assert.deepEqual(
+        photos.map((p) => p.id),
+        [frontBefore.get(tileId)],
+        `copy ${i} carries tile ${i}'s own photo row`
+      );
+      const tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileId } });
+      assert.equal(tile.state, "consumed");
+      assert.equal(tile.itemId, outcomes[i].itemId);
+    }
+
+    // One intake, so the internal numbers are one consecutive range in card order — the copies read
+    // in the same order as the strip they came from.
+    assert.equal(outcomes[1].itemNo, outcomes[0].itemNo + 1);
+
+    // Ordinary intake copies of the one stamp, on the one lot.
+    const items = await prisma.item.findMany({
+      where: { id: { in: outcomes.map((o) => o.itemId) } },
+      select: { lotId: true, stampId: true, conditionId: true, deliveryState: true },
+    });
+    assert.equal(items.length, 2);
+    assert.ok(items.every((it) => it.lotId === lotId && it.stampId === stampId));
+    assert.ok(items.every((it) => it.conditionId === conditionId));
+
+    // The batch's last tile left the queue, so #578's retention sweep has its stamp.
+    const sheets = await prisma.scanSheet.findMany({ where: { purchaseId }, select: { batchDoneAt: true } });
+    assert.ok(sheets.every((s) => s.batchDoneAt != null));
+  });
+
+  it("refuses the whole pass before creating anything when one tile cannot be worked (#596)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    await discardTile(userId, tileIds[1]);
+    const copiesBefore = await prisma.item.count({ where: { lot: { purchaseId } } });
+
+    // A stale strip in a second tab costs a sentence, never a half-done identification: the tiles
+    // are all checked before a copy exists, so the tile that *could* have been worked is untouched.
+    await assert.rejects(
+      () => identifyTilesAsNewCopies(userId, tileIds, { stampId, conditionId }),
+      ScanValidationError
+    );
+    assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), copiesBefore);
+    const first = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(first.state, "unidentified");
+
+    // The same tile named twice would give the second copy no images at all — the first having
+    // taken them — so it is refused rather than resolved.
+    await assert.rejects(
+      () => identifyTilesAsNewCopies(userId, [tileIds[0], tileIds[0]], { stampId, conditionId }),
+      ScanValidationError
+    );
+    assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), copiesBefore);
   });
 
   it("refuses a re-cut once a tile has become a copy — for real, this time", async () => {

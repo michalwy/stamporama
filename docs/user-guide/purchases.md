@@ -405,10 +405,44 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   closing. For a stockbook bought sight-unseen these tiles are the only record of what was actually
   inside; a discard is evidence, not a dismissal.
 
-**Duplicates: *Same as the last*.** Once you have identified one tile in this sitting, the dialog
+**Duplicates you can see on the card: tick them and identify them together.** Fifteen of a
+definitive is an ordinary find in a stockbook, and walking each one through the browse popup and the
+condition step is fifteen passes over a decision you took once. Every tile still waiting has a small
+**tick box in its top-right corner**; tick the ones that are the same stamp in the same condition and
+a bar appears above the batches saying how many are selected. The batch header has a box of its own
+that ticks every tile still waiting on that card, showing a dash while only some of them are.
+
+Ticking changes nothing about clicking: the rest of the square still opens the tile's dialog, and a
+tile you have already dealt with has no box, having reached its end.
+
+**Identify N tiles as one stamp** takes you through the same two steps as one tile — pick the stamp,
+then answer the condition step once — and creates **one copy per tile**. Everything the step asks
+applies to all of them: one stamp, one condition, one certificate, one format, one lot, one location,
+one disposition. The count is stated before anything is created: on the bar, in the summary box at
+the top of the condition step, and on the confirm button.
+
+**Each copy keeps its own picture.** These are fifteen photographs of fifteen pieces of paper, not
+fifteen copies of one image — each tile's own crops go onto its own copy, exactly as they do when you
+identify one at a time. The copies are numbered in the order the pieces are laid out on the card.
+
+**Ticking tiles is you saying they are the same.** The app takes your word for it: it does not check
+the assertion and it does not offer to find duplicates for you, because telling two shades or two
+perforations apart is the work you are doing here, not something to guess from a thumbnail. What it
+does do is put **all of the pieces on screen beside the form**, small, for the whole of the
+identification — which is how you catch a stamp that does not belong in the run *before* it becomes
+fifteen copies rather than after. Click any one of them to look at it at full resolution in the usual
+viewer, and use the *← All N pieces* button to come back.
+
+If one of the tiles turns out to have been dealt with meanwhile — in another tab, or from its own
+dialog — the whole pass is refused and **nothing is created**, so you can untick it and go again.
+
+**Duplicates you meet as you go: *Same as the last*.** Once you have identified one tile in this sitting, the dialog
 offers to identify the next one the same way — and it **names what it will repeat**, so the button
 reads *Same as the last: Mi·PL 200, MNH* rather than asking you to remember. Duplicates on a card sit
 next to each other, and working a batch in order means meeting them in a run.
+
+It is the companion of ticking, not a lesser version of it: tick the tiles when you can see the run
+on the strip before you start, and repeat when you only discover the duplicate on reaching it.
 
 It is the *stamp* that this saves you. Everything else the condition step asks — condition,
 certificate, location and its ref, disposition, the lot — already comes back on its own from the last

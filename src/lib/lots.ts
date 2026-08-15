@@ -510,6 +510,11 @@ export async function attachItemsToLot(
  * A single-stamp intake may also name a **format** (#573) — the piece in the tweezers is a pair or
  * a block as often as it is a single, and this is the moment it is known.
  *
+ * It may also ask for **several copies of that one stamp** (`copies`, #596), which is what a card
+ * holding a run of one definitive comes to: one answer, N pieces. It is the same intake and not a
+ * loop over it, so the copies take one consecutive range of internal numbers
+ * (`allocateItemNumbers`) in the order the pieces were laid out.
+ *
  * Returns the copies it created, not a count (#532): taking a copy in is the moment the want list
  * is consulted (ADR-0032 §7), and the review that follows has to name each copy and read its
  * condition. The count callers used to get is the array's length. */
@@ -519,6 +524,16 @@ export async function intakeStamps(
   input: {
     stampId?: string | null;
     checklistId?: string | null;
+    /**
+     * How many copies of `stampId` to create (#596), defaulting to one. Single-stamp intake only —
+     * a whole-checklist intake already fans out across its stamps, and multiplying that would give
+     * one number two meanings.
+     *
+     * It exists for the scan-tile pass, where the collector ticks N tiles of the same stamp and
+     * answers once. Each created copy is handed **its own tile's** images afterwards, so this is N
+     * pieces of paper rather than N records of one.
+     */
+    copies?: number;
     conditionId: string;
     certificateStatusId?: string | null;
     locationId?: string | null;
@@ -611,7 +626,12 @@ export async function intakeStamps(
       select: { id: true },
     });
     if (!stamp) throw new Error("Stamp not found in this collection.");
-    stampIds = [input.stampId];
+    // Several copies of the one stamp (#596), which is what a card holding a run of one definitive
+    // asks for. The list is the stamp repeated rather than a count carried separately, so
+    // everything below — the number range, the `createMany`, the copies handed back to the want
+    // review — keeps working on one list without learning a second shape.
+    const count = Math.max(1, Math.floor(input.copies ?? 1));
+    stampIds = Array.from({ length: count }, () => input.stampId as string);
   } else {
     throw new Error("Nothing selected to add.");
   }
@@ -651,7 +671,10 @@ export async function intakeStamps(
   // `createManyAndReturn` rather than `createMany`: the want review that follows needs each copy's
   // id and number, and re-reading the lot to find "the ones just added" would be a guess.
   const created: { id: string; itemNo: number; stampId: string }[] = [];
-  if (singleStamp && input.photoChangeSet) {
+  // …and only when it is the *one* copy: a run of copies of one stamp (#596) is the scan-tile pass,
+  // where every copy takes its own tile's crops afterwards and one shared change-set would be the
+  // very thing that flow must not do.
+  if (singleStamp && stampIds.length === 1 && input.photoChangeSet) {
     const item = await prisma.item.create({
       data: copyData(stampIds[0], itemNos[0]),
       select: { id: true, itemNo: true, stampId: true },

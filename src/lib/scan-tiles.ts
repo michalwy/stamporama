@@ -74,31 +74,93 @@ export interface TileOutcome {
  * a purchase with **one** lot answers it on its own: the stockbook case must not grow a question it
  * never had. Several with none named is a refusal rather than a guess, since guessing here files a
  * stamp against the wrong money.
+ *
+ * Since #596 the same answer can be given for **several** tiles at once, so what this asks for lives
+ * in `TileIdentification` and both entries take it: one tile is the many-tile pass with one tile in
+ * it, not a second copy of these rules.
  */
+export interface TileIdentification {
+  /** The lot the created copies belong to. Omitted when the purchase has exactly one, which is
+   * then used silently. */
+  lotId?: string | null;
+  stampId: string;
+  conditionId: string;
+  certificateStatusId?: string | null;
+  locationId?: string | null;
+  locationRef?: string | null;
+  formatId?: string | null;
+  inCollection?: boolean;
+  forSale?: boolean;
+  forTrade?: boolean;
+}
+
 export async function identifyTileAsNewCopy(
   ownerId: string,
   tileId: string,
-  input: {
-    /** The lot the created copy belongs to. Omitted when the purchase has exactly one, which is
-     * then used silently. */
-    lotId?: string | null;
-    stampId: string;
-    conditionId: string;
-    certificateStatusId?: string | null;
-    locationId?: string | null;
-    locationRef?: string | null;
-    formatId?: string | null;
-    inCollection?: boolean;
-    forSale?: boolean;
-    forTrade?: boolean;
-  }
+  input: TileIdentification
 ): Promise<TileOutcome> {
-  const tile = await loadUnidentifiedTile(ownerId, tileId);
-  if (!input.stampId) throw new ScanValidationError("Pick a stamp to identify this tile as.");
-  const lotId = await resolveTileLot(tile.purchaseId, input.lotId);
+  // One tile is the pass below with one tile in it (#596), not a second implementation of it: the
+  // ordinary case must keep behaving identically, and it does so by *being* the same call.
+  const [outcome] = await identifyTilesAsNewCopies(ownerId, [tileId], input);
+  return outcome;
+}
+
+/**
+ * Identify **several tiles as the same stamp in one pass** (#596) — one answer, one copy per tile.
+ *
+ * A card commonly holds a run of the same stamp in the same condition, and walking each piece
+ * through the picker and the condition step is that many passes over a decision taken once. Ticking
+ * the tiles is the collector *asserting* they are the same; nothing here verifies that assertion,
+ * and nothing anywhere offers to find duplicates on its own — telling two shades or two
+ * perforations apart is the work being done, not something to guess from a thumbnail.
+ *
+ * **Every copy gets its own tile's pictures.** These are N photographs of N pieces of paper: the
+ * copies are paired with the tiles in order and each pairing runs the same `tileId → itemId`
+ * reassignment the single-tile path does. N copies pointing at one tile's photo would be worse than
+ * no photos at all, because nothing on screen would say so.
+ *
+ * **The whole pass is refused before anything is created, or it runs.** Every tile is loaded and
+ * checked first — still waiting, and all on the one purchase — so a stale strip in a second tab
+ * costs a sentence rather than a half-done identification with no way to tell which half. After
+ * that the copies exist, and the per-tile reassignments are ordinary writes on rows created a
+ * moment ago.
+ *
+ * The internal numbers come out as one consecutive range because `intakeStamps` is asked for the
+ * copies **once** (`copies: N`) rather than called in a loop, which is also what makes the arrived
+ * order rule, the format and the dispositions stay that function's.
+ */
+export async function identifyTilesAsNewCopies(
+  ownerId: string,
+  tileIds: string[],
+  input: TileIdentification
+): Promise<TileOutcome[]> {
+  if (tileIds.length === 0) throw new ScanValidationError("Pick at least one tile to identify.");
+  if (!input.stampId) {
+    throw new ScanValidationError(
+      tileIds.length === 1
+        ? "Pick a stamp to identify this tile as."
+        : "Pick a stamp to identify these tiles as."
+    );
+  }
+
+  // Loaded and checked in full before a copy exists. The duplicate guard is here rather than left
+  // to the loop below because the same tile named twice would otherwise create two copies and give
+  // the second one no images — the images having moved to the first.
+  const unique = [...new Set(tileIds)];
+  if (unique.length !== tileIds.length) {
+    throw new ScanValidationError("The same tile was named twice.");
+  }
+  const tiles = [];
+  for (const tileId of unique) tiles.push(await loadUnidentifiedTile(ownerId, tileId));
+  const purchaseId = tiles[0].purchaseId;
+  if (tiles.some((t) => t.purchaseId !== purchaseId)) {
+    throw new ScanValidationError("Those tiles are not all on this order.");
+  }
+  const lotId = await resolveTileLot(purchaseId, input.lotId);
 
   const copies = await intakeStamps(ownerId, lotId, {
     stampId: input.stampId,
+    copies: tiles.length,
     conditionId: input.conditionId,
     certificateStatusId: input.certificateStatusId,
     locationId: input.locationId,
@@ -108,15 +170,24 @@ export async function identifyTileAsNewCopy(
     forSale: input.forSale,
     forTrade: input.forTrade,
   });
-  const copy = copies[0];
-  if (!copy) throw new ScanValidationError("The copy could not be created.");
+  if (copies.length !== tiles.length) {
+    throw new ScanValidationError("The copies could not be created.");
+  }
 
-  // No role clash is possible: the copy was created a moment ago and this path refuses a photo
-  // change-set, so both slots are free. That is why the check lives on the assign path, which is
-  // the one that can meet an occupied slot.
-  await consumeTile(tile.id, copy.itemId);
-  await seedStampImage(ownerId, copy.itemId);
-  return { itemId: copy.itemId, itemNo: copy.itemNo };
+  // One tile, one copy, in the order the pieces are laid out on the card — which is the order their
+  // internal numbers were allocated in, so the strip and the copy list read the same way round.
+  //
+  // No role clash is possible on any of them: the copies were created a moment ago and this path
+  // refuses a photo change-set, so both slots are free. That is why the check lives on the assign
+  // path, which is the one that can meet an occupied slot.
+  const outcomes: TileOutcome[] = [];
+  for (const [i, tile] of tiles.entries()) {
+    const copy = copies[i];
+    await consumeTile(tile.id, copy.itemId);
+    await seedStampImage(ownerId, copy.itemId);
+    outcomes.push({ itemId: copy.itemId, itemNo: copy.itemNo });
+  }
+  return outcomes;
 }
 
 /**

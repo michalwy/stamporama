@@ -15,7 +15,7 @@ import {
 import {
   assignTileToCopy,
   discardTile,
-  identifyTileAsNewCopy,
+  identifyTilesAsNewCopies,
   noteDiscardedTile,
   undiscardTile,
 } from "@/lib/scan-tiles";
@@ -122,30 +122,55 @@ export type TileOutcomeActionState =
   | { status: "error"; message: string };
 
 /**
- * Identify a tile into a **new copy** — the stockbook path, and ordinary intake entered from a
- * tile instead of from a stamp picker.
+ * The same, for a pass over several tiles (#596): one copy per tile, in the order the pieces are
+ * laid out on the card.
+ *
+ * `outcomes` and deliberately **not** `copies`: the purchase screen's shared `run` reads a `copies`
+ * field as the want review's `ArrivingCopy[]` (#532), and a differently-shaped list under that name
+ * would be handed to it silently. Tile intake raises no want review today, and this is not the
+ * change that should start one by accident.
+ */
+export type TilesOutcomeActionState =
+  | { status: "success"; outcomes: { itemId: string; itemNo: number }[] }
+  | { status: "error"; message: string };
+
+/**
+ * Identify one or several tiles into **new copies** — the stockbook path, and ordinary intake
+ * entered from a tile instead of from a stamp picker.
  *
  * `FormData` rather than a JSON argument because it is the very form the condition dialog already
  * submits to `intakeStampsAction`: same fields, same remembered choices, one shape — `lotId`
  * included, which since #586 is one more remembered intake answer rather than something the sheet
- * carried. Deliberately **no** `photoChangeSet` — the tile's crops are this copy's front and back.
+ * carried. Deliberately **no** `photoChangeSet` — a tile's crops are its own copy's front and back.
+ *
+ * **A list of tiles, not one** (#596): ticking several on the strip asserts they are the same stamp
+ * in the same condition, so the step is answered once and each tile becomes its own copy with its
+ * own images. One tile is a list of one, so there is a single door rather than two that could drift.
  */
-export async function identifyTileAction(
-  tileId: string,
+export async function identifyTilesAction(
+  tileIds: string[],
   formData: FormData
-): Promise<TileOutcomeActionState> {
+): Promise<TilesOutcomeActionState> {
   const session = await getSession();
   const str = (name: string): string | null => {
     const v = formData.get(name);
     return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
   };
   const stampId = str("stampId");
-  if (!stampId) return { status: "error", message: "Select a stamp to identify this tile as." };
+  if (!stampId) {
+    return {
+      status: "error",
+      message:
+        tileIds.length === 1
+          ? "Select a stamp to identify this tile as."
+          : "Select a stamp to identify these tiles as.",
+    };
+  }
   const conditionId = str("conditionId");
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
   try {
-    const outcome = await identifyTileAsNewCopy(session.user.id, tileId, {
-      // Which lot the created copy belongs to (#586). Absent is a complete answer on a purchase
+    const copies = await identifyTilesAsNewCopies(session.user.id, tileIds, {
+      // Which lot the created copies belong to (#586). Absent is a complete answer on a purchase
       // with one lot, which is the stockbook case and must keep asking nothing.
       lotId: str("lotId"),
       stampId,
@@ -158,11 +183,16 @@ export async function identifyTileAction(
       forSale: formData.get("forSale") === "true",
       forTrade: formData.get("forTrade") === "true",
     });
-    return { status: "success", ...outcome };
+    return { status: "success", outcomes: copies };
   } catch (e) {
     return {
       status: "error",
-      message: e instanceof Error ? e.message : "Failed to identify the tile. Please try again.",
+      message:
+        e instanceof Error
+          ? e.message
+          : tileIds.length === 1
+            ? "Failed to identify the tile. Please try again."
+            : "Failed to identify the tiles. Please try again.",
     };
   }
 }

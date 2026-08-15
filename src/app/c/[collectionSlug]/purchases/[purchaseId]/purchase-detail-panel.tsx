@@ -380,7 +380,14 @@ export function PurchaseDetailPanel({
    * the re-parenting left to be answered at identification, where it is answerable at all.
    */
   const [tileStep, setTileStep] = useState<"none" | "picker" | "condition">("none");
-  const [tileIntake, setTileIntake] = useState<IdentifiedPiece | null>(null);
+  /**
+   * The pieces this identification is about — one, or a whole run ticked on the strip (#596).
+   *
+   * A **list** rather than a piece, all the way down the chain, because with several ticked there is
+   * no single piece the step is about and picking the first to stand for the rest is exactly the
+   * mistake the aside exists to prevent. One tile is a list of one, so there is one path and not two.
+   */
+  const [tileIntake, setTileIntake] = useState<IdentifiedPiece[]>([]);
   const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
   /** The pick in one catalogue number, kept beside the selection because `PendingSelection` carries
    * only the long form and the repeat action has a button's width to say it in. */
@@ -405,7 +412,7 @@ export function PurchaseDetailPanel({
   const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   function resetTileIntake() {
     setTileStep("none");
-    setTileIntake(null);
+    setTileIntake([]);
     setTileSelection(null);
     setTileShortLabel("");
     setTileRepeat(null);
@@ -691,8 +698,8 @@ export function PurchaseDetailPanel({
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
-        onIdentifyTile={(piece) => {
-          setTileIntake(piece);
+        onIdentifyTiles={(pieces) => {
+          setTileIntake(pieces);
           setTileRepeat(null);
           setError(undefined);
           setTileStep("picker");
@@ -703,8 +710,8 @@ export function PurchaseDetailPanel({
         repeatLast={
           lastTileIdentify && {
             summary: repeatSummary,
-            onRepeatTile: (piece) => {
-              setTileIntake(piece);
+            onRepeatTile: (pieces) => {
+              setTileIntake(pieces);
               setTileSelection({
                 kind: "stamp",
                 stampId: lastTileIdentify.stampId,
@@ -930,14 +937,16 @@ export function PurchaseDetailPanel({
       )}
 
       {/* Identifying a tile: pick the stamp (#567) */}
-      {tileStep === "picker" && tileIntake && (
+      {tileStep === "picker" && tileIntake.length > 0 && (
         <StampPickerBrowser
           collectionId={collectionId}
           areas={areas}
           // The piece, for the whole of the identification and not only its first dialog (#592).
           // The picker passes it on to the issue and stamp dialogs it opens, which is the deepest
           // point of the chain and the one the collector reaches furthest from where they started.
-          aside={<IdentifiedPieceAside collectionId={collectionId} piece={tileIntake} />}
+          // With a run ticked (#596) it is all of them, small — one stamp is being picked for every
+          // piece on screen, and this is where a wrong assertion is still free to be corrected.
+          aside={<IdentifiedPieceAside collectionId={collectionId} pieces={tileIntake} />}
           asideWidth="26rem"
           onPick={(picked: PickedStamp) => {
             setTileSelection({
@@ -960,7 +969,7 @@ export function PurchaseDetailPanel({
       )}
 
       {/* …then its condition, its lot, and everything else intake asks */}
-      {tileStep === "condition" && tileIntake && tileSelection && (
+      {tileStep === "condition" && tileIntake.length > 0 && tileSelection && (
         <IntakeConditionDialog
           selection={tileSelection}
           collectionId={collectionId}
@@ -975,8 +984,17 @@ export function PurchaseDetailPanel({
           // *Used or mint?* is read off the piece, and gum and hinge marks are on its back — so the
           // piece is beside the field asking, both sides, at the size the tile dialog showed it
           // (#592). Only here: the two other entries into this dialog have no picture of the piece.
-          piece={tileIntake}
-          submitLabel="Identify the tile"
+          // Several pieces (#596) are all shown, which is where the collector's assertion that they
+          // are one stamp in one condition gets its last look before it becomes N copies.
+          pieces={tileIntake}
+          // What is about to exist, said before anything is created — the rule every bulk action on
+          // this screen follows.
+          copyCount={tileIntake.length}
+          submitLabel={
+            tileIntake.length === 1
+              ? "Identify the tile"
+              : `Identify ${tileIntake.length} tiles`
+          }
           // *Same as the last* (#595) arrives here with the previous tile's answers rather than
           // through the picker. Null on every other route in, which is what keeps this an action and
           // not a default.
@@ -1009,7 +1027,10 @@ export function PurchaseDetailPanel({
           onSubmit={(fd) => {
             setError(undefined);
             if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
-            const tileId = tileIntake.tileId;
+            // Every ticked tile, in card order — the order the copies are created and numbered in
+            // (#596). Each one is handed its own tile's images by the write; nothing here is shared
+            // between them but the answers on this form.
+            const tileIds = tileIntake.map((p) => p.tileId);
             // What the *next* tile can be identified as in one press (#595). Read off the submitted
             // form rather than mirrored from the dialog's state: this is the same set of answers the
             // write itself is given, so the two cannot describe different intakes. Recorded only on
@@ -1021,8 +1042,8 @@ export function PurchaseDetailPanel({
             const shortLabel = tileShortLabel;
             run(
               async () => {
-                const { identifyTileAction } = await import("@/app/actions/scans");
-                const r = await identifyTileAction(tileId, fd);
+                const { identifyTilesAction } = await import("@/app/actions/scans");
+                const r = await identifyTilesAction(tileIds, fd);
                 if (r.status === "error") setError(r.message);
                 // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
                 // so both namespaces are re-read: the shared runner invalidates the copies, and this
@@ -3733,7 +3754,7 @@ interface IntakeConditionDialogProps {
    * an upload arriving beside the tile's crop would be a second front for the same copy. */
   hidePhotos?: boolean;
   /**
-   * The piece this dialog is asking about, drawn beside the form (#592) — present only where there
+   * The pieces this dialog is asking about, drawn beside the form (#592) — present only where there
    * is a picture of **this** piece, which today is the scan-tile flow alone.
    *
    * Condition is *read off the piece*: the cancel decides used against mint, the gum and the hinge
@@ -3744,8 +3765,18 @@ interface IntakeConditionDialogProps {
    * The stamp's **catalogue photo is deliberately not a fallback**. It is a picture of *a*
    * specimen; beside a condition field it would invite reading a condition off the wrong stamp, and
    * an intake with no scan behind it is better with nothing there.
+   *
+   * **Several** pieces (#596) are all drawn, small, rather than one of them standing for the rest —
+   * ticking them was the collector asserting they are one stamp in one condition, and this is the
+   * last place a mistake in that assertion costs a click instead of N copies.
    */
-  piece?: IdentifiedPiece;
+  pieces?: IdentifiedPiece[];
+  /**
+   * How many copies this submit is about to create (#596), when that is more than the selection
+   * itself says — a run of tiles identified as one stamp. Stated in the summary box and on the
+   * confirm button, before anything exists, as every other bulk action on this screen states it.
+   */
+  copyCount?: number;
   /**
    * The previous tile's answers, filled into every field this dialog holds (#595) — present only on
    * *Same as the last*, which is why the fields below still read the remembered collection-wide
@@ -3820,7 +3851,8 @@ function IntakeConditionDialog({
   error,
   submitLabel,
   hidePhotos,
-  piece,
+  pieces,
+  copyCount,
   prefill,
   lotChoice,
   onBack,
@@ -4028,8 +4060,8 @@ function IntakeConditionDialog({
   // designed at, so the dialog reads identically with and without a piece — the picture is added
   // beside it, and nothing about the questions moves.
   const pieceAside =
-    piece && piece.sides.length > 0 ? (
-      <IdentifiedPieceAside collectionId={collectionId} piece={piece} />
+    pieces && pieces.some((p) => p.sides.length > 0) ? (
+      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} />
     ) : undefined;
 
   return (
@@ -4057,6 +4089,16 @@ function IntakeConditionDialog({
             }}
           >
             {summary}
+            {/* What is about to exist, before anything is created (#596). It sits inside the box
+                that names the pick because it is a fact about *this* answer — one stamp, one
+                condition, one certificate, one format, one lot, and this many pieces of paper.
+                Silent for the ordinary single tile, which needs no count to read as one copy. */}
+            {copyCount != null && copyCount > 1 && (
+              <div style={{ marginTop: "0.25rem", color: "var(--color-text-primary)" }}>
+                <strong>{copyCount} copies</strong> will be created — one per tile, each keeping its
+                own pictures.
+              </div>
+            )}
             {/* What the collection already holds of this stamp, and what it is still after (#562)
                 — inside the box that already names the pick, so the line reads as a fact about it
                 rather than as a second heading. Single-stamp intake only: a whole-checklist intake
