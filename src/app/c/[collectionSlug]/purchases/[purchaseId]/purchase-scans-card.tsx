@@ -15,7 +15,11 @@ import {
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
 import type { Box } from "@/lib/scan-boxes";
-import { MAX_BATCH_LABEL_LENGTH } from "@/lib/scan-batch-label";
+import {
+  MAX_BATCH_LABEL_LENGTH,
+  batchLabelFromFileName,
+  normalizeBatchLabel,
+} from "@/lib/scan-batch-label";
 import type {
   CutReport,
   ScanBatchData,
@@ -333,7 +337,16 @@ export function PurchaseScansCard({
         // The name typed beside the button rides with the card it names (#587), and is cleared
         // afterwards: it is a name for *this* card, not a setting, and carrying it to the next one
         // is how three cards end up all called "Klaser Polska 1".
-        label: side === "front" && newLabel.trim() ? newLabel.trim() : null,
+        //
+        // Left blank, the card takes the file's own name (#603) — the naming the collector already
+        // did at the scanner. It is a default and not a rewrite: it is read here, at the upload,
+        // rather than typed into the field beforehand, because this button uploads the moment a
+        // file is chosen and there is no moment in between for a prefill to be seen or corrected.
+        // The name is editable on the batch from then on, which is where a wrong one is fixed.
+        label:
+          side === "front"
+            ? (normalizeBatchLabel(newLabel) ?? batchLabelFromFileName(file.name))
+            : null,
         onProgress: setProgress,
       });
       if (side === "front") setNewLabel("");
@@ -509,7 +522,10 @@ export function PurchaseScansCard({
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
           maxLength={MAX_BATCH_LABEL_LENGTH}
-          placeholder="Name this card (optional)"
+          // The placeholder names the fallback rather than saying "optional": left blank the card
+          // is not nameless any more (#603), and a field whose blank state does something has to
+          // say what.
+          placeholder="Name this card (file name if blank)"
           aria-label="Name for the card being added"
           disabled={uploading}
           style={LABEL_INPUT_STYLE}

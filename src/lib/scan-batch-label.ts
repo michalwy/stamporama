@@ -23,6 +23,30 @@ export function normalizeBatchLabel(label: string | null | undefined): string | 
   return trimmed ? trimmed : null;
 }
 
+/**
+ * The name a scan defaults to: the uploaded file's own, without its extension (#603).
+ *
+ * The collector already named the card once — at the scanner, choosing where to save it — and
+ * *Klaser Polska 1.jpg* is the same gloss they would otherwise type again beside the button. So the
+ * blank field falls back to it rather than leaving the batch nameless, which is the state #587's
+ * whole point is that a strip of thumbnails cannot be read out of a week later.
+ *
+ * **A derived name is never refused and never mangled.** `isBatchLabelTooLong` refuses what the
+ * collector typed, because shortening their wording is worse than saying no; here there is no
+ * wording to preserve and no question to put — a scanner's long file name must not be the reason an
+ * upload fails — so an over-long one yields **null** and the card is simply unnamed, exactly as it
+ * was before this defaulted anything. Naming it afterwards is the rename #587 already carries.
+ *
+ * Only the extension goes: a name is left otherwise as it was found, underscores and all. Tidying
+ * it would be guessing at wording the collector chose, and a name that came back different from the
+ * file on disk is no longer the same name.
+ */
+export function batchLabelFromFileName(fileName: string): string | null {
+  const base = fileName.replace(/\.[^./\\]+$/, "");
+  const label = normalizeBatchLabel(base);
+  return isBatchLabelTooLong(label) ? null : label;
+}
+
 /** Whether a typed name is short enough to store. Asked by the write; the input's `maxLength`
  * makes it unreachable from the screen, which is why this is a refusal rather than a truncation —
  * silently shortening a name the collector chose is worse than saying it is too long. */

@@ -237,7 +237,10 @@ Cancel by leaving the page; a scan that never finished arriving is cleaned up on
 #### Naming a card
 
 Beside **Add card scan** there is an optional **name**: type one and it rides with the card you are
-adding. You can also name a card at any time afterwards — click the name (or *Name this card*) on the
+adding. Leave it blank and the card takes **the name of the file you upload**, without its extension
+— *Klaser Polska 1.jpg* becomes *Klaser Polska 1* — since that is usually the naming you already did
+at the scanner. (A file name too long to fit leaves the card unnamed rather than failing the upload.)
+You can also name a card at any time afterwards — click the name (or *Name this card*) on the
 batch's own line — which is usually when you want to, since a card often turns out to need naming
 only once a parcel has been left half worked for a week and the thumbnails are the only clue.
 
