@@ -4117,7 +4117,3 @@ function IntakeConditionDialog({
     </DialogShell>
   );
 }
-
-/** Quick inline catalog-price editor: one amount field that writes to the stamp's primary
- * catalog (latest edition) for the copy's condition × certificate (#121). Loads the target
- * catalog / currency / existing amount on open so the user knows exactly where it lands. */
