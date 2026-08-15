@@ -20,6 +20,17 @@ describe("scan tile selection (#596)", () => {
     assert.equal(isSelectableTile(tile("t1")), true);
     assert.equal(isSelectableTile(tile("t2", "consumed")), false);
     assert.equal(isSelectableTile(tile("t3", "discarded")), false);
+    // A parked tile (#597) is still to be identified — and the sitting it is settled in is exactly
+    // the one where several turn out to be the same variant, so it must be tickable.
+    assert.equal(isSelectableTile(tile("t4", "parked")), true);
+  });
+
+  it("ticks a run of parked tiles together, which is what the return sitting is (#597)", () => {
+    const batch = [tile("p1", "parked"), tile("p2", "parked"), tile("t3", "discarded")];
+    assert.deepEqual(ids(toggleBatch(new Set(), batch)), ["p1", "p2"]);
+    assert.equal(batchBoxState(new Set(["p1", "p2"]), batch), "on");
+    // And a parked tile survives pruning, unlike one that has reached an end.
+    assert.deepEqual(ids(pruneSelection(new Set(["p1", "t3"]), batch)), ["p1"]);
   });
 
   it("ticks and unticks one tile", () => {

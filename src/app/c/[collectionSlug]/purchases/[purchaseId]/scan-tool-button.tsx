@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon, type IconName } from "@/app/icons";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 /**
  * One control in a scan surface's toolbar — zoom, fit, 1:1, merge, split, which side is showing.
@@ -27,12 +28,15 @@ export function ScanToolButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={hint}
-      style={{
+    // The shared hover control, never the browser's `title`: a hint on a toolbar is read while the
+    // hand is already moving, and the native one arrives late, cannot be styled and is invisible on
+    // anything without a pointer.
+    <Tooltip content={hint}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        style={{
         display: "inline-flex",
         alignItems: "center",
         gap: "0.375rem",
@@ -45,9 +49,10 @@ export function ScanToolButton({
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.5 : 1,
       }}
-    >
-      {icon && <Icon name={icon} size="sm" />}
-      {label}
-    </button>
+      >
+        {icon && <Icon name={icon} size="sm" />}
+        {label}
+      </button>
+    </Tooltip>
   );
 }

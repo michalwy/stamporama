@@ -968,7 +968,8 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         description={
           <>
             When every tile cut from a scanned card has become a copy or been discarded, the card can
-            never be cut again and only its file is left. Stamporama can delete that file after a
+            never be cut again and only its file is left. A card with a piece set aside to check on it
+            is never counted as finished, so its scan stays until that piece is settled. Stamporama can delete that file after a
             while — the batch keeps its tiles and still says what the card held, but the scan itself
             is gone for good, so re-cutting it is no longer possible. Off unless you ask for it: a
             stockbook cannot be scanned again once it has been broken up.

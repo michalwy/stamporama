@@ -5,8 +5,10 @@
  * The sweep exists because a card scan is the largest object this app stores — 50–200 MB at
  * scanning resolution, a dozen or more per stockbook — and because a batch reaches a point where it
  * can never be cut into anything again. #567 stamps that moment on the batch's sheets
- * (`ScanSheet.batchDoneAt`): the last tile has left `unidentified`, a consumed tile refuses a
- * re-cut, and from there the retained original's only remaining role is archival.
+ * (`ScanSheet.batchDoneAt`): the last tile has reached an end, a consumed tile refuses a re-cut, and
+ * from there the retained original's only remaining role is archival. **A tile parked to be checked
+ * (#597) keeps the batch out of this**, since the piece it stands for is still to be identified and
+ * the scan is exactly what the collector is coming back to it for.
  *
  * What goes is the **bytes and not the row**. The sheet survives, marked purged, so a re-cut refuses
  * with *the scan has been deleted* and the batch still lists what it held — rather than a missing

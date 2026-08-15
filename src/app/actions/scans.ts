@@ -16,8 +16,9 @@ import {
   assignTileToCopy,
   discardTile,
   identifyTilesAsNewCopies,
-  noteDiscardedTile,
-  undiscardTile,
+  noteTile,
+  parkTile,
+  returnTileToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
 
@@ -233,15 +234,38 @@ export async function discardTileAction(
   }
 }
 
-/** Write or clear a discarded tile's note. Discarding itself asks for nothing — this is where the
- * rare tile that deserves a sentence gets one, afterwards. */
+/**
+ * Set a tile aside as still to be identified (#597) — the piece a picture cannot settle.
+ *
+ * Acts immediately and takes whatever note there is, exactly as a discard does: what it costs to
+ * park has to stay smaller than what parking saves, or the interruption it exists to prevent simply
+ * moves into this button. The note is written or changed afterwards through `noteTileAction`.
+ */
+export async function parkTileAction(
+  tileId: string,
+  note: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await parkTile(session.user.id, tileId, note);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to park the tile. Please try again.",
+    };
+  }
+}
+
+/** Write or clear a discarded or parked tile's note. Neither outcome stops to ask for one — this is
+ * where the tile that deserves a sentence gets it: what the parcel held, or what to check. */
 export async function noteTileAction(
   tileId: string,
   note: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await noteDiscardedTile(session.user.id, tileId, note);
+    await noteTile(session.user.id, tileId, note);
     return { status: "success" };
   } catch (e) {
     return {
@@ -251,11 +275,12 @@ export async function noteTileAction(
   }
 }
 
-/** Put a discarded tile back in the queue. */
-export async function undiscardTileAction(tileId: string): Promise<ScanActionState> {
+/** Put a discarded or parked tile back in the queue — a mis-clicked discard undone, or a parked
+ * piece whose answer is now known. */
+export async function returnTileToQueueAction(tileId: string): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await undiscardTile(session.user.id, tileId);
+    await returnTileToQueue(session.user.id, tileId);
     return { status: "success" };
   } catch (e) {
     return {

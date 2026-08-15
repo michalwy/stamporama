@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
 import { Icon } from "@/app/icons";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   commitCutAction,
@@ -58,6 +59,12 @@ import {
  * cut was wrong — and then work through the tiles, each of which becomes a copy, joins a copy that
  * already exists, or is discarded with a note.
  *
+ * A tile can also be **set aside to check** (#597), which is not one of those ends: the piece is
+ * still to be identified and only leaves the queue until the collector has the colour key or the
+ * lamp. So the header carries a second chip — *N to check* — and it is the same control as the
+ * *unidentified* one: this section is where those pieces gather, because the strip is a map of the
+ * card and a list of them anywhere else would be pictures with nothing saying which card to pull.
+ *
  * Several tiles can also be **ticked and identified in one pass** (#596), which is what a card
  * holding a run of one definitive comes to. The selection is a layer *over* the strip and never a
  * change to it: the box is a small control in a tile's free corner, the rest of the square still
@@ -79,6 +86,11 @@ interface Props {
    * server-rendered with the order (`getPurchaseDetail`), so the header can say what is inside
    * before the section is opened and the batches are fetched. */
   unidentifiedTileCount: number;
+  /** Tiles on this order that are **parked** (#597) — set aside because the piece cannot be told
+   * apart from its picture. Server-rendered beside the waiting count and drawn as its own chip,
+   * because the two are different kinds of outstanding: one is work for now, the other is work for
+   * the sitting with the colour key on the desk. */
+  parkedTileCount: number;
   scanSheetCount: number;
   /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies, but
    * a tile can still be assigned to one of its copies or discarded — closing froze the money, not
@@ -103,6 +115,20 @@ interface Props {
   onChanged: () => void;
 }
 
+/**
+ * What the strip is narrowed to (#567, second value added by #597).
+ *
+ * Both chips answer the same question — *which tiles do I want to see* — so they are one value and
+ * not two toggles: pressing one releases the other, and no combination can narrow the strip to
+ * nothing. `all` is the resting state and what a chip retires to when it stops counting anything.
+ */
+type TileFilter = "all" | "waiting" | "parked";
+
+function matchesTileFilter(tile: ScanTileData, filter: TileFilter): boolean {
+  if (filter === "all") return true;
+  return filter === "waiting" ? tile.state === "unidentified" : tile.state === "parked";
+}
+
 /** The editor's subject: a sheet, the boxes to open on, and the batch it belongs to. */
 interface EditorTarget {
   sheet: ScanCutEditorSheet;
@@ -114,6 +140,7 @@ export function PurchaseScansCard({
   collectionId,
   purchaseId,
   unidentifiedTileCount,
+  parkedTileCount,
   scanSheetCount,
   canIdentify,
   onIdentifyTiles,
@@ -123,12 +150,28 @@ export function PurchaseScansCard({
   /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
    * cards, so the section rests as one line naming what is inside. */
   const [open, setOpen] = useState(false);
-  /** The tile chip, pressed (#567): show only the tiles still waiting. It retires with what it
-   * counts — derived rather than reset, because the chip is its only control, and working the last
-   * tile through would otherwise leave the section saying "showing only the tiles still waiting"
-   * over nothing, with nothing to press to get out of it. */
-  const [onlyWaiting, setOnlyWaiting] = useState(false);
-  const onlyUnidentified = onlyWaiting && unidentifiedTileCount > 0;
+  /**
+   * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #597
+   * there are **two of them**: the tiles still waiting, and the tiles parked for the trip to the
+   * colour key. One state rather than two booleans, because they are two answers to one question and
+   * two independent toggles could be pressed into a filter that shows nothing.
+   *
+   * **This is where the parked pieces gather** (#597). No new section: the strip is a map of the
+   * card, the parked pieces sit in each parcel's own tray in that order, and a *to check* list that
+   * left the strip would be a list of pictures with nothing saying which card to pull. The chip
+   * narrows the strips that already exist, which is exactly what the *unidentified* chip does.
+   *
+   * A chip retires with what it counts — derived rather than reset, because the chip is its own only
+   * control, and working the last tile through would otherwise leave the section narrowed to nothing
+   * with nothing to press to get out of it.
+   */
+  const [filterChoice, setFilterChoice] = useState<TileFilter>("all");
+  const filter: TileFilter =
+    (filterChoice === "waiting" && unidentifiedTileCount === 0) ||
+    (filterChoice === "parked" && parkedTileCount === 0)
+      ? "all"
+      : filterChoice;
+  const filtered = filter !== "all";
   const { data, isLoading } = usePurchaseScans(collectionId, purchaseId, open);
   const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   const { invalidateLotCopies } = useInvalidateLotCopies();
@@ -413,27 +456,45 @@ export function PurchaseScansCard({
             no catalogue price and so no weight in any cost split — which is what the close dialog
             says. */}
         {unidentifiedTileCount > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setOnlyWaiting((v) => !v);
-              if (!onlyUnidentified) setOpen(true);
-            }}
-            title={
-              onlyUnidentified
+          <FilterChip
+            on={filter === "waiting"}
+            hint={
+              filter === "waiting"
                 ? "Showing only the tiles still waiting — click to show every tile"
                 : "Scan tiles not yet identified into copies — click to work through just those"
             }
-            style={{
-              ...WARNING_CHIP,
-              cursor: "pointer",
-              fontWeight: onlyUnidentified ? 700 : 500,
-              boxShadow: onlyUnidentified ? "0 0 0 1px var(--color-warning)" : undefined,
+            onClick={() => {
+              setFilterChoice((f) => (f === "waiting" ? "all" : "waiting"));
+              // Pressing a filter opens the section: a filter over something nobody can see is a
+              // click that appears to do nothing. Releasing one leaves it as it was.
+              if (filter !== "waiting") setOpen(true);
             }}
           >
             <Icon name="scan" size="sm" /> {unidentifiedTileCount} tile
             {unidentifiedTileCount === 1 ? "" : "s"} unidentified
-          </button>
+          </FilterChip>
+        )}
+        {/* **The parked pieces, gathered** (#597). Its own chip beside the waiting one rather than
+            a number folded into it: both are outstanding work, but only one of them can be done at
+            this desk, and a collector who has just sat down with the colour key wants exactly this
+            set and no other. Same chip, same filter behaviour, different question. */}
+        {parkedTileCount > 0 && (
+          <FilterChip
+            on={filter === "parked"}
+            hint={
+              filter === "parked"
+                ? "Showing only the tiles parked to be checked — click to show every tile"
+                : "Tiles set aside because the piece cannot be told apart from its picture — click to work through just those"
+            }
+            onClick={() => {
+              setFilterChoice((f) => (f === "parked" ? "all" : "parked"));
+              // Pressing a filter opens the section: a filter over something nobody can see is a
+              // click that appears to do nothing. Releasing one leaves it as it was.
+              if (filter !== "parked") setOpen(true);
+            }}
+          >
+            <Icon name="pause" size="sm" /> {parkedTileCount} to check
+          </FilterChip>
         )}
         <span style={{ flex: 1 }} />
         {/* A name for the card being added (#587), optional and never in the way: leave it blank
@@ -486,8 +547,17 @@ export function PurchaseScansCard({
         </Banner>
       )}
 
-      {onlyUnidentified && (
+      {filter === "waiting" && (
         <Banner tone="info">Showing only the tiles still waiting to be identified.</Banner>
+      )}
+      {/* Worth a sentence rather than only a pressed chip: this is the list the collector came back
+          for, and what it is *for* — one trip to the colour key instead of thirty — is the reason
+          each of these pieces was left. The note each one carries is inside its own dialog. */}
+      {filter === "parked" && (
+        <Banner tone="info">
+          Showing only the tiles parked to be checked. Each one carries the note you left about what
+          to look for — click it to read it, then identify it here as any other tile.
+        </Banner>
       )}
 
       {isLoading && <Muted>Loading scans…</Muted>}
@@ -504,14 +574,15 @@ export function PurchaseScansCard({
           hidden there is no header left to hang it on, and a control that disappears along with
           what it reveals is a section that has quietly lost its only door.
 
-          Suppressed under the *only unidentified* chip, which already hides the same batches for
-          its own reason and says so in the banner above — two controls answering one question, one
-          of them contradicting the other, is worse than the wall of headers.
+          Suppressed under either narrowing chip (#597 added the second), each of which already
+          hides the same batches for its own reason and says so in the banner above — two controls
+          answering one question, one of them contradicting the other, is worse than the wall of
+          headers.
 
           Not persisted, for the reason the collapse rule is not: which batches are worth looking
           at is a fact about the work. Reaching for the record of a card you finished last week is
           a deliberate act, and it should start from the same place every time. */}
-      {doneCount > 0 && !onlyUnidentified && (
+      {doneCount > 0 && !filtered && (
         <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone((v) => !v)} />
       )}
 
@@ -531,9 +602,9 @@ export function PurchaseScansCard({
       )}
 
       {batches
-        // A batch whose tiles are all dealt with has nothing to show under the chip, and an empty
+        // A batch with nothing matching the chip has nothing to show under it, and an empty
         // bordered box saying so would be the noise the chip was pressed to get away from.
-        .filter((b) => !onlyUnidentified || b.tiles.some((t) => t.state === "unidentified"))
+        .filter((b) => !filtered || b.tiles.some((t) => matchesTileFilter(t, filter)))
         // Worked-through batches are set aside until asked for — and come back **in place** when
         // they are, never gathered at the end: batch order is card order, and the pile on the desk
         // is in the same order.
@@ -543,7 +614,7 @@ export function PurchaseScansCard({
           key={batch.batchNo}
           batch={batch}
           collectionId={collectionId}
-          onlyUnidentified={onlyUnidentified}
+          filter={filter}
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
@@ -607,6 +678,10 @@ export function PurchaseScansCard({
             setTileId(null);
             refresh(touchedCopy);
           }}
+          // Parking and its note (#597) leave the dialog where it is: the tile is held by id, so it
+          // re-reads itself from the refetch and comes back parked, with the note box already in
+          // front of the collector who has the doubt in mind this second.
+          onChanged={(touchedCopy) => refresh(touchedCopy)}
           onClose={() => setTileId(null)}
         />
       )}
@@ -770,7 +845,7 @@ function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
 function BatchSection({
   batch,
   collectionId,
-  onlyUnidentified,
+  filter,
   expanded,
   onToggleExpanded,
   onOpenTile,
@@ -788,7 +863,8 @@ function BatchSection({
 }: {
   batch: ScanBatchData;
   collectionId: string;
-  onlyUnidentified: boolean;
+  /** What the whole card is narrowed to, applied to this batch's tiles. */
+  filter: TileFilter;
   /** Whether this batch shows its tiles, or only its summary line (#583). Derived from
    * `batchDoneAt` by the section above, which owns the rule for the whole card. */
   expanded: boolean;
@@ -822,9 +898,7 @@ function BatchSection({
    * that is called something. */
   const [naming, setNaming] = useState(false);
 
-  const shown = onlyUnidentified
-    ? batch.tiles.filter((t) => t.state === "unidentified")
-    : batch.tiles;
+  const shown = batch.tiles.filter((t) => matchesTileFilter(t, filter));
   const frontTiles = shown.filter((t) => t.frontBox != null);
   const backOnly = shown.filter((t) => t.frontBox == null);
   // Counted off every tile, not the filtered ones: what the batch says about itself must not
@@ -832,8 +906,14 @@ function BatchSection({
   // whole of it, so it has to say how many tiles the card held and what became of them.
   const held = batch.tiles.filter((t) => t.frontBox != null).length;
   const waiting = batch.tiles.filter((t) => t.state === "unidentified").length;
+  // **Counted apart from the waiting ones** (#597) — *12 waiting · 3 to check*. Both are still to
+  // be identified, so a batch with either is not finished with; what differs is that only the first
+  // can be done at this desk, and a single number would send the collector looking for work they
+  // cannot do.
+  const parked = batch.tiles.filter((t) => t.state === "parked").length;
   const consumed = batch.tiles.filter((t) => t.state === "consumed").length;
   const discarded = batch.tiles.filter((t) => t.state === "discarded").length;
+  const selectableCount = batch.tiles.filter(isSelectableTile).length;
   // The retention sweep has taken this batch's scans (#578). The tiles are all still here — what is
   // gone is the ability to draw the cut again, so Re-cut stops being offered rather than being
   // offered and refused. The server refuses it too; this is only the part that keeps a collector
@@ -884,10 +964,13 @@ function BatchSection({
             beneath it and shows a dash while only part of it is. Only over tiles still waiting —
             a settled tile can take no identification, which is also why a batch with nothing left
             waiting has no box at all rather than a box that does nothing. */}
-        {expanded && waiting > 0 && (
+        {/* Over every tile that can still be identified, parked ones included (#597) — the batch
+            box has to tick exactly what the tile boxes beneath it offer, or it would claim to be
+            *on* while a square with a box of its own sat unticked. */}
+        {expanded && selectableCount > 0 && (
           <TickBox
             state={batchBoxState(selected, batch.tiles)}
-            label={`Select the ${waiting} tile${waiting === 1 ? "" : "s"} still waiting in batch ${batch.batchNo}`}
+            label={`Select the ${selectableCount} tile${selectableCount === 1 ? "" : "s"} still to be identified in batch ${batch.batchNo}`}
             disabled={busy}
             onToggle={onToggleBatchSelection}
           />
@@ -914,11 +997,14 @@ function BatchSection({
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
           {/* What is left leads, as it does everywhere else on this screen. */}
           {waiting > 0 && ` · ${waiting} waiting`}
+          {parked > 0 && ` · ${parked} to check`}
           {consumed > 0 && ` · ${consumed} ${consumed === 1 ? "copy" : "copies"}`}
           {discarded > 0 && ` · ${discarded} discarded`}
           {/* The moment the batch was finished with. Shown because it is also the moment its
-              retained scan stopped being able to do anything (#578 is what acts on it). */}
-          {batch.doneAt && waiting === 0 && ` · done ${batch.doneAt.slice(0, 10)}`}
+              retained scan stopped being able to do anything (#578 is what acts on it). A batch
+              with a parked tile never reaches it (#597), which is the guarantee that the picture
+              the collector is coming back for is still there. */}
+          {batch.doneAt && waiting === 0 && parked === 0 && ` · done ${batch.doneAt.slice(0, 10)}`}
           {/* Said on the summary line, which is the whole of a finished batch when it is
               collapsed: the card is still listed and its tiles are still here, and the one thing
               that changed is that the scan itself is not. */}
@@ -1001,7 +1087,10 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
-              droppable={dragging != null && tile.backPhotoId == null && tile.state === "unidentified"}
+              // A parked tile takes a dragged back like any other outstanding one (#597) — and is
+              // one of the likeliest to want it, the doubt that parked it often being something the
+              // other side settles.
+              droppable={dragging != null && tile.backPhotoId == null && isSelectableTile(tile)}
               selected={selected.has(tile.id)}
               onToggleSelected={() => onToggleTile(tile.id)}
               onOpen={() => onOpenTile(tile.id)}
@@ -1104,28 +1193,69 @@ function BatchName({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onStart}
-      disabled={busy}
-      title={label ? "Rename this card" : "Give this card a name"}
-      style={{
-        background: "none",
-        border: "none",
-        padding: "0 0.125rem",
-        font: "inherit",
-        fontSize: "0.8125rem",
-        fontStyle: label ? undefined : "italic",
-        color: label ? "var(--color-text-primary)" : "var(--color-text-muted)",
-        cursor: busy ? "default" : "pointer",
-        maxWidth: "16rem",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label ?? "Name this card"}
-    </button>
+    <Tooltip content={label ? "Rename this card" : "Give this card a name"}>
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={busy}
+        style={{
+          background: "none",
+          border: "none",
+          padding: "0 0.125rem",
+          font: "inherit",
+          fontSize: "0.8125rem",
+          fontStyle: label ? undefined : "italic",
+          color: label ? "var(--color-text-primary)" : "var(--color-text-muted)",
+          cursor: busy ? "default" : "pointer",
+          maxWidth: "16rem",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label ?? "Name this card"}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * A count on the section header that is also a filter (#567, and a second one since #597).
+ *
+ * One component for both, because they are one control in two instances: same hue — the app's
+ * *this needs you* — same pressed treatment, same rule that pressing it opens the section, since a
+ * filter over something nobody can see is a click that appears to do nothing.
+ */
+function FilterChip({
+  on,
+  hint,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  /** The hover hint, in the shared `Tooltip` — never the browser's `title`, which cannot be styled,
+   * cannot be read on a touch device and appears a second and a half after the pointer stops.
+   * Named `hint` for that reason: `title` would read as the attribute it deliberately is not. */
+  hint: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip content={hint}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={on}
+        style={{
+          ...WARNING_CHIP,
+          cursor: "pointer",
+          fontWeight: on ? 700 : 500,
+          boxShadow: on ? "0 0 0 1px var(--color-warning)" : undefined,
+        }}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1194,6 +1324,10 @@ const LABEL_INPUT_STYLE: React.CSSProperties = {
  * the scans themselves vary in brightness far more than the fade does: a pale stamp on a dark card
  * already read as handled.
  *
+ * A tile **set aside to check** (#597) sits between the two: it wears its own mark and its own
+ * coloured edge, but its picture does not recede, because it is outstanding work and not a piece
+ * that has been finished with.
+ *
  * A fade also cannot say **which** end a tile reached, and the two are not degrees of one thing —
  * one piece became a copy, the other deliberately became nothing. So each carries a corner badge,
  * `photo-thumb.tsx`'s own device for exactly this problem: an opaque mark with a hairline ring,
@@ -1222,7 +1356,11 @@ function TileCell({
   onDropBack: (backTileId: string) => void;
 }) {
   const [over, setOver] = useState(false);
-  const settled = tile.state !== "unidentified";
+  /** Reached an end: became a copy, or deliberately became nothing. A **parked** tile is not one of
+   * them (#597) — it is a waiting tile that cannot be settled today, so its picture does not recede
+   * and its square keeps every affordance a waiting one has. */
+  const settled = tile.state === "consumed" || tile.state === "discarded";
+  const parked = tile.state === "parked";
   /** Whether this tile can be ticked at all — a settled one has already reached an end. */
   const selectable = isSelectableTile(tile);
   // The picture follows the photo row to whoever owns it now.
@@ -1240,12 +1378,17 @@ function TileCell({
     // A tile still waiting takes the accent edge; a settled one drops back to the plain border,
     // and the warning edge of a copy nobody described (#567) outranks both, being the one thing
     // here that is news rather than state.
+    // A **parked** tile (#597) keeps a coloured edge because it is still outstanding, but not the
+    // accent one: the accent means *this needs you now*, and the whole point of parking is that this
+    // piece does not, until the lamp is on the desk.
     border: `2px solid ${
       tile.outsideDescription
         ? "var(--color-warning-border)"
         : settled
           ? "var(--color-border)"
-          : "var(--color-accent)"
+          : parked
+            ? "var(--color-warning-border)"
+            : "var(--color-accent)"
     }`,
     // The drop target needs its own signal now that waiting tiles are accent-edged already —
     // and a droppable tile is by definition one of them, so a halo rather than a fourth colour.
@@ -1285,7 +1428,7 @@ function TileCell({
           emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
         />
       </div>
-      {settled && <TileStateBadge state={tile.state} />}
+      {(settled || parked) && <TileStateBadge state={tile.state} />}
       <div
         style={{
           display: "flex",
@@ -1304,6 +1447,11 @@ function TileCell({
           </span>
         ) : tile.state === "discarded" ? (
           <span>discarded</span>
+        ) : parked ? (
+          // In words as well as in the corner mark, for the same reason a discard says so: the
+          // badge is what is legible at a glance across a strip of forty, and the label is what is
+          // legible when the collector stops on one square.
+          <span>to check</span>
         ) : (
           // A tile with no back is the ordinary case, not a fault: backs are optional and a card
           // may never be turned over at all. Marked quietly rather than warned about.
@@ -1319,27 +1467,31 @@ function TileCell({
     // without fighting it. So the box sits over the corner and the rest of the square keeps meaning
     // exactly what it meant — click it and the tile's dialog opens, in every state.
     <div style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={onOpen}
-        onDragOver={(e) => {
-          if (!droppable) return;
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          if (!droppable) return;
-          e.preventDefault();
-          setOver(false);
-          const id = e.dataTransfer.getData("text/x-scan-tile");
-          if (id) onDropBack(id);
-        }}
-        title={tileTitle(tile)}
-        style={style}
-      >
-        {body}
-      </button>
+      {/* The square's own hint — what the tile is and what became of it, and for a parked one the
+          note saying what to check. `display: block` on the wrapper because the cell is a grid
+          item: an `inline-flex` span between them would let the picture shrink to its content. */}
+      <Tooltip content={tileTitle(tile)} style={{ display: "block" }}>
+        <button
+          type="button"
+          onClick={onOpen}
+          onDragOver={(e) => {
+            if (!droppable) return;
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            if (!droppable) return;
+            e.preventDefault();
+            setOver(false);
+            const id = e.dataTransfer.getData("text/x-scan-tile");
+            if (id) onDropBack(id);
+          }}
+          style={style}
+        >
+          {body}
+        </button>
+      </Tooltip>
       {/* Only where identifying is still possible. A settled tile has reached an end, so a box on
           it would be an offer the write refuses — and the top-right corner is free precisely
           because the top-left is where a settled tile says which end it reached (#582). */}
@@ -1383,53 +1535,56 @@ function TickBox({
 }) {
   const on = state === "on";
   return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={state === "partial" ? "mixed" : on}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={(e) => {
-        // The tile's own square is a button that opens its dialog (#584), and this sits on top of
-        // it: without stopping here, ticking a tile would also open it.
-        e.stopPropagation();
-        onToggle();
-      }}
-      style={{
-        width: "1.05rem",
-        height: "1.05rem",
-        flexShrink: 0,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 0,
-        borderRadius: "0.25rem",
-        border: "none",
-        background: on ? "var(--color-accent)" : "var(--color-bg-elevated)",
-        color: on ? "#fff" : "var(--color-accent)",
-        boxShadow: on
-          ? "0 0 0 1px rgba(0,0,0,0.25)"
-          : "0 0 0 1px var(--color-border-strong)",
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-        ...style,
-      }}
-    >
-      {state === "on" ? (
-        <Icon name="check" size="xs" />
-      ) : state === "partial" ? (
-        // The dash every level of #571's selection shows while only part of it is in.
-        <span
-          style={{
-            width: "0.5rem",
-            height: "2px",
-            borderRadius: "1px",
-            background: "var(--color-accent)",
-          }}
-        />
-      ) : null}
-    </button>
+    // The wrapper carries the positioning the caller asked for (the tile corner is absolute), not
+    // the button: a tooltip measures its trigger, and an absolutely-positioned child would leave it
+    // measuring an empty span somewhere else in the flow.
+    <Tooltip content={label} style={style}>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={state === "partial" ? "mixed" : on}
+        aria-label={label}
+        disabled={disabled}
+        onClick={(e) => {
+          // The tile's own square is a button that opens its dialog (#584), and this sits on top of
+          // it: without stopping here, ticking a tile would also open it.
+          e.stopPropagation();
+          onToggle();
+        }}
+        style={{
+          width: "1.05rem",
+          height: "1.05rem",
+          flexShrink: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          borderRadius: "0.25rem",
+          border: "none",
+          background: on ? "var(--color-accent)" : "var(--color-bg-elevated)",
+          color: on ? "#fff" : "var(--color-accent)",
+          boxShadow: on
+            ? "0 0 0 1px rgba(0,0,0,0.25)"
+            : "0 0 0 1px var(--color-border-strong)",
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        {state === "on" ? (
+          <Icon name="check" size="xs" />
+        ) : state === "partial" ? (
+          // The dash every level of #571's selection shows while only part of it is in.
+          <span
+            style={{
+              width: "0.5rem",
+              height: "2px",
+              borderRadius: "1px",
+              background: "var(--color-accent)",
+            }}
+          />
+        ) : null}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1509,8 +1664,30 @@ function TileSelectionBar({
  * "became copy #00042" does not also need "check".
  */
 function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
-  if (state !== "consumed" && state !== "discarded") return null;
-  const consumed = state === "consumed";
+  // The third mark (#597) is **parked**, and it is drawn like the other two rather than as a
+  // variation of either: filled, so it reads as something that was decided, in the *this is waiting
+  // on you* hue rather than the accent, with `pause` — the app's own glyph for something set going
+  // again later. A discard's outlined `excluded` and a copy's accent `check` stay exactly as they
+  // were; three marks that differ in glyph, fill and hue at once are three that survive 15 px.
+  const badge =
+    state === "consumed"
+      ? { icon: "check" as const, background: "var(--color-accent)", color: "#fff", ring: "0 0 0 1px rgba(0,0,0,0.25)" }
+      : state === "discarded"
+        ? {
+            icon: "excluded" as const,
+            background: "var(--color-bg-elevated)",
+            color: "var(--color-text-muted)",
+            ring: "0 0 0 1px var(--color-border-strong)",
+          }
+        : state === "parked"
+          ? {
+              icon: "pause" as const,
+              background: "var(--color-warning)",
+              color: "#fff",
+              ring: "0 0 0 1px rgba(0,0,0,0.25)",
+            }
+          : null;
+  if (!badge) return null;
   return (
     <span
       aria-hidden="true"
@@ -1524,14 +1701,12 @@ function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "0.25rem",
-        background: consumed ? "var(--color-accent)" : "var(--color-bg-elevated)",
-        color: consumed ? "#fff" : "var(--color-text-muted)",
-        boxShadow: consumed
-          ? "0 0 0 1px rgba(0,0,0,0.25)"
-          : "0 0 0 1px var(--color-border-strong)",
+        background: badge.background,
+        color: badge.color,
+        boxShadow: badge.ring,
       }}
     >
-      <Icon name={consumed ? "check" : "excluded"} size="xs" />
+      <Icon name={badge.icon} size="xs" />
     </span>
   );
 }
@@ -1549,6 +1724,13 @@ function tileTitle(tile: ScanTileData): string {
   }
   if (tile.state === "discarded") {
     return tile.note ? `${head} · discarded: ${tile.note}` : `${head} · discarded`;
+  }
+  // The note is the whole reason the tile was parked with one, so the hover says it before the
+  // dialog is opened — on a strip of thirty parked pieces that is what tells them apart.
+  if (tile.state === "parked") {
+    return tile.note
+      ? `${head} · to check: ${tile.note} — click to identify it or put it back`
+      : `${head} · set aside to check — click to identify it or put it back`;
   }
   return `${head}${tile.backPhotoId ? " · front and back" : " · front only"} — click to identify`;
 }

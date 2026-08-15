@@ -51,8 +51,26 @@ import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 export class ScanAuthError extends Error {}
 export class ScanValidationError extends Error {}
 
-/** A tile's three ends. `scan-tiles.ts` is what moves a tile out of the first (#567). */
-export type ScanTileState = "unidentified" | "consumed" | "discarded";
+/**
+ * Where a tile can be. `scan-tiles.ts` is what moves it (#567).
+ *
+ * Two of them are **ends** — `consumed` became a copy, `discarded` deliberately became nothing —
+ * and two are **outstanding**: `unidentified` is waiting to be worked, and `parked` (#597) is
+ * waiting on something that is not at the desk. A parked piece is still to be identified, so it
+ * keeps every door a waiting one has; what it does not keep is a place in the sweep, since being
+ * re-offered a piece that cannot be settled now is the interruption parking exists to stop.
+ */
+export type ScanTileState = "unidentified" | "consumed" | "discarded" | "parked";
+
+/** The states a tile can still be worked from — what the identify, assign, discard, park and
+ * pairing paths all accept, and what keeps a batch from being finished with. One list, because a
+ * second reading of "still outstanding" is how the strip and the retention sweep come to disagree
+ * about whether a card is done. */
+export const OPEN_TILE_STATES = ["unidentified", "parked"] as const satisfies ScanTileState[];
+
+export function isOpenTileState(state: string): boolean {
+  return (OPEN_TILE_STATES as readonly string[]).includes(state);
+}
 
 export type SheetSide = "front" | "back";
 
@@ -766,7 +784,10 @@ export async function pairTilesManually(
   if (frontTile.backSheetId != null) {
     throw new ScanValidationError("That tile already has a back image.");
   }
-  if (frontTile.state !== "unidentified") {
+  // A **parked** tile takes a back like any other waiting one (#597), and is one of the tiles most
+  // likely to want it: the doubt that parked it is often a watermark or a cancel that the other
+  // side settles.
+  if (!isOpenTileState(frontTile.state)) {
     throw new ScanValidationError("That tile has already been dealt with.");
   }
 
@@ -1313,6 +1334,15 @@ function boxOrNull(
  * item (#567). */
 export async function countUnidentifiedTiles(purchaseId: string): Promise<number> {
   return prisma.scanTile.count({ where: { purchaseId, state: "unidentified" } });
+}
+
+/** How many tiles on an order are **parked** (#597) — set aside because the piece cannot be told
+ * apart on screen, and waiting for the colour key, the UV lamp or the reference album. Counted
+ * apart from the waiting ones on purpose: both are outstanding work, but only one of them is work
+ * that can be done now, and folding them together would put the parked pieces back into the sweep
+ * they were parked to leave. */
+export async function countParkedTiles(purchaseId: string): Promise<number> {
+  return prisma.scanTile.count({ where: { purchaseId, state: "parked" } });
 }
 
 /** Resolve a sheet for the serving route: its owning collection + owner for the auth check, plus

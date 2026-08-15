@@ -12,11 +12,12 @@ import {
   photoRolesPresent,
   type TilePhotoRole,
 } from "../../src/lib/tile-photo-roles";
-import { createLot } from "../../src/lib/lots";
+import { createLot, getPurchaseDetail } from "../../src/lib/lots";
 import { createPurchase } from "../../src/lib/purchases";
 import {
   ScanValidationError,
   commitCut,
+  countParkedTiles,
   listPurchaseScans,
   recutBatch,
   uploadSheet,
@@ -26,8 +27,9 @@ import {
   discardTile,
   identifyTileAsNewCopy,
   identifyTilesAsNewCopies,
-  noteDiscardedTile,
-  undiscardTile,
+  noteTile,
+  parkTile,
+  returnTileToQueue,
 } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
 
@@ -581,7 +583,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(tile.note, null, "an empty note is no note, not an empty string");
 
     // The note is written afterwards, from the settled view, on the tile that earns one.
-    await noteDiscardedTile(userId, tileIds[0], "  thinned, not worth keeping  ");
+    await noteTile(userId, tileIds[0], "  thinned, not worth keeping  ");
     tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(tile.note, "thinned, not worth keeping");
     // The image stays: a discarded tile is evidence of what the parcel held, not a queue item.
@@ -594,16 +596,96 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // And it can be put back, because a mis-click on a card of forty should not need a re-cut —
     // which is exactly what makes the one-click discard safe.
-    await undiscardTile(userId, tileIds[0]);
+    await returnTileToQueue(userId, tileIds[0]);
     const back = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(back.state, "unidentified");
     assert.equal(back.note, null);
 
     // A note belongs to a discard. A tile back in the queue has nothing to carry one about.
     await assert.rejects(
-      () => noteDiscardedTile(userId, tileIds[0], "late thought"),
+      () => noteTile(userId, tileIds[0], "late thought"),
       ScanValidationError
     );
+  });
+
+  it("parks a tile with the doubt written on it, and identifies it when the answer is known (#597)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    // Parking is one press with nothing asked for, exactly as a discard is: the screen sends a
+    // blank note and the sentence follows while the doubt is fresh.
+    await parkTile(userId, tileIds[0], "");
+    let tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(tile.state, "parked");
+    assert.equal(tile.note, null, "an empty note is no note");
+
+    await noteTile(userId, tileIds[0], "  watermark? dark or light blue  ");
+    tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(tile.note, "watermark? dark or light blue");
+
+    // It leaves the sweep — which is the interruption parking exists to stop — without leaving the
+    // work: it is counted apart, not counted out.
+    assert.equal(
+      await prisma.scanTile.count({ where: { purchaseId, state: "unidentified" } }),
+      1,
+      "a parked tile stops being re-offered as waiting"
+    );
+    assert.equal(await countParkedTiles(purchaseId), 1);
+    assert.equal(
+      (await getPurchaseDetail(userId, purchaseId))?.parkedTileCount,
+      1,
+      "and the order header can say so"
+    );
+
+    // The image never went anywhere, and the tile is identified straight from `parked` — the return
+    // sitting is exactly when several settle at once, so there is no un-parking step in front of it.
+    assert.equal(await prisma.photo.count({ where: { tileId: tileIds[0] } }), 1);
+    const copy = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    const consumed = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(consumed.state, "consumed");
+    assert.equal(consumed.itemId, copy.itemId);
+    assert.equal(
+      await prisma.photo.count({ where: { itemId: copy.itemId } }),
+      1,
+      "the parked tile's own picture is what the copy got"
+    );
+  });
+
+  it("puts a parked tile back, and refuses a note once it is in the queue again (#597)", async () => {
+    const { tileIds } = await orderWithTiles();
+    await parkTile(userId, tileIds[0], "check perf against Mi 200");
+    await returnTileToQueue(userId, tileIds[0]);
+    const back = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(back.state, "unidentified");
+    assert.equal(back.note, null, "the doubt was spent when the answer arrived");
+    await assert.rejects(
+      () => noteTile(userId, tileIds[0], "late thought"),
+      ScanValidationError
+    );
+  });
+
+  it("keeps the parked doubt as the record when the piece turns out to be nothing (#597)", async () => {
+    // Discarding sends a blank note, and the sentence already on the tile is a fair account of why
+    // it went — clearing it here would throw away the only thing written about the piece.
+    const { tileIds } = await orderWithTiles();
+    await parkTile(userId, tileIds[0], "watermark?");
+    await discardTile(userId, tileIds[0], "");
+    const gone = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(gone.state, "discarded");
+    assert.equal(gone.note, "watermark?");
+  });
+
+  it("does not let a parked tile finish a batch (#597)", async () => {
+    // The whole reason parking is a state rather than a note: #578 sweeps a finished batch's scan,
+    // and the parked piece is the one the collector is coming back to that scan for.
+    const { purchaseId, tileIds } = await orderWithTiles();
+    await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    await parkTile(userId, tileIds[1], "two shades of blue");
+
+    let sheet = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
+    assert.equal(sheet.batchDoneAt, null, "a parked tile is still to be identified");
+
+    await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
+    sheet = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
+    assert.ok(sheet.batchDoneAt, "settled, and the batch is finished with as usual");
   });
 
   it("stamps the batch when its last tile leaves the queue, and unstamps it if one comes back", async () => {
@@ -619,7 +701,7 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // Nothing here reads the stamp — #578's retention sweep will — but a tile coming back means
     // the batch is being worked again, so the sweep must not still be counting down on it.
-    await undiscardTile(userId, tileIds[1]);
+    await returnTileToQueue(userId, tileIds[1]);
     const reopened = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
     assert.equal(reopened.batchDoneAt, null);
   });

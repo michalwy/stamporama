@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { TileSideView } from "@/lib/scan-tile-view";
 import {
   ZOOM_STEP,
@@ -199,11 +200,14 @@ function IdentifiedPieceGrid({
         {pieces.map((piece) => {
           const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
           return (
-            <button
+            <Tooltip
               key={piece.tileId}
+              content={`Tile ${piece.position + 1} — click to look at it closely`}
+              style={{ display: "block" }}
+            >
+            <button
               type="button"
               onClick={() => onOpen(piece.tileId)}
-              title={`Tile ${piece.position + 1} — click to look at it closely`}
               style={{
                 display: "block",
                 padding: "0.25rem",
@@ -234,6 +238,7 @@ function IdentifiedPieceGrid({
               />
               <span style={{ fontSize: "0.6875rem" }}>{piece.position + 1}</span>
             </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -429,6 +434,16 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
           ))}
         <span style={{ flex: 1 }} />
         <ScanToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={() => zoomStep(1 / ZOOM_STEP)} />
+        {/* The percentage is against the **scan**, exactly as in the cut editor. The dot marks the
+            visible part being served from the retained card rather than magnified out of the
+            tile's own photo. */}
+        <Tooltip
+          content={
+            detail
+              ? "Showing this part at full resolution from the retained card scan"
+              : "Showing the tile's own image"
+          }
+        >
         <span
           style={{
             fontSize: "0.8125rem",
@@ -437,18 +452,11 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
             textAlign: "center",
             fontVariantNumeric: "tabular-nums",
           }}
-          // The percentage is against the **scan**, exactly as in the cut editor. The dot marks the
-          // visible part being served from the retained card rather than magnified out of the
-          // tile's own photo.
-          title={
-            detail
-              ? "Showing this part at full resolution from the retained card scan"
-              : "Showing the tile's own image"
-          }
         >
           {ready ? `${Math.round(view.scale * 100)}%` : "—"}
           {detail ? " ·" : ""}
         </span>
+        </Tooltip>
         <ScanToolButton icon="zoomIn" label="+" hint="Zoom in (+)" onClick={() => zoomStep(ZOOM_STEP)} />
         <ScanToolButton
           icon="zoomFit"

@@ -13,7 +13,8 @@ import {
   assignTileAction,
   discardTileAction,
   noteTileAction,
-  undiscardTileAction,
+  parkTileAction,
+  returnTileToQueueAction,
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
@@ -24,7 +25,7 @@ import { TileZoomView } from "./tile-zoom-view";
 import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
- * One tile, and the three ends it can reach (#567).
+ * One tile, and what can become of it (#567) — three ends, and since #597 one waiting room.
  *
  * **The tile is the dialog** (#585), not a thumbnail above the controls: a picture large enough to
  * be zoomed and panned, with the outcome beside it. That is the dialog's entire reason for
@@ -64,7 +65,15 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
  * answer, and it is safe to make it cheap precisely because it is reversible — *Put back in the
  * queue* is right there, and the note can be written afterwards on the rare tile that earns one.
  *
- * **All three states open this dialog, and none of them navigates on the click itself** (#584). A
+ * **Set aside to check** (#597) sits beside it and says the opposite — a discard became nothing, a
+ * parked piece is still going to become a copy — so a parked tile keeps every outcome this dialog
+ * offers a waiting one, and what it gains is a note saying what to look for and a way back. It is
+ * the one action here that **asks a question first**, and the reason is that its note is the
+ * ordinary case rather than the rare one: the field opens in the footer where the button was, under
+ * the cursor that just pressed it. Enter sets the tile aside, Escape abandons the question and not
+ * the tile, and an empty field is a complete answer.
+ *
+ * **Every state opens this dialog, and none of them navigates on the click itself** (#584). A
  * consumed tile used to be an `<a>` straight to its copy, which left the tile itself impossible to
  * inspect — which batch, which position, what it became — and threw the collector out of the
  * purchase mid-pass, when a card of forty is being worked in one sitting and getting back is most
@@ -119,6 +128,15 @@ interface Props {
    * learn that nothing about it moved.
    */
   onDone: (touchedCopy: boolean) => void;
+  /**
+   * A write landed and the dialog **stays open** (#597) — editing the note on a tile that is already
+   * parked.
+   *
+   * That note is not an outcome: the tile is still to be identified and this dialog is still where
+   * it would be, so closing on a saved sentence would put the collector back where they started for
+   * nothing. Parking itself does close, its question having been answered at the button.
+   */
+  onChanged: (touchedCopy: boolean) => void;
   onClose: () => void;
 }
 
@@ -174,12 +192,23 @@ export function TileIdentifyDialog({
   onIdentifyNew,
   repeatLast,
   onDone,
+  onChanged,
   onClose,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const settled = tile.state !== "unidentified";
+  /** Reached an end. A **parked** tile (#597) has not: it is a waiting tile whose answer is not at
+   * this desk, so this dialog stays the working surface it is for a waiting one — identify, assign,
+   * discard — with the note and the way back added. */
+  const settled = tile.state === "consumed" || tile.state === "discarded";
+  const parked = tile.state === "parked";
+
+  /** Whether *Set aside to check* has been pressed and is asking what to check (#597) — the note
+   * being the ordinary case, not the exception, so it is asked for at the button rather than left
+   * to be found afterwards on a surface the collector would have to cross the screen to reach. */
+  const [parking, setParking] = useState(false);
+  const [parkNote, setParkNote] = useState("");
 
   /** The sides there are to look at, and which of them still have a retained scan behind them.
    * Decided in a pure module, so a swept batch (#578) is a case a unit test reaches rather than one
@@ -223,15 +252,18 @@ export function TileIdentifyDialog({
   }
 
   /** `touchedCopy` rides with each call rather than being inferred afterwards: the action itself is
-   *  the only thing that knows whether a copy changed hands. */
+   *  the only thing that knows whether a copy changed hands. `keepOpen` is the parking path (#597),
+   *  where the write is not the end of what the collector is doing with this tile. */
   const run = (
     fn: () => Promise<{ status: string; message?: string }>,
-    touchedCopy: boolean
+    touchedCopy: boolean,
+    keepOpen = false
   ) => {
     setError(null);
     startTransition(async () => {
       const result = await fn();
       if (result.status === "error") setError(result.message ?? "That did not work.");
+      else if (keepOpen) onChanged(touchedCopy);
       else onDone(touchedCopy);
     });
   };
@@ -243,6 +275,99 @@ export function TileIdentifyDialog({
       disabled={pending}
     >
       <Icon name="delete" size="sm" /> {pending ? "Working…" : "Discard"}
+    </DialogSecondaryButton>
+  );
+
+  /**
+   * *Set aside to check* (#597) — the piece whose variant a picture cannot settle.
+   *
+   * Beside *Discard*, and it is the one outcome here that is **two presses rather than one**,
+   * because a parked piece nearly always comes with a doubt to name: *watermark?*, *dark or light
+   * blue?*, *check perf against Mi 200*. That sentence is the whole value of the state — it is what
+   * the collector reads when they come back with the lamp instead of deriving the doubt again from
+   * the picture that could not settle it — so the field opens **where the button was**, under the
+   * cursor that just pressed it, and not somewhere else on a screen this wide.
+   *
+   * A discard is the opposite bargain and keeps its one press: it is the frequent answer on a parcel
+   * of junk and its note is the rare one, so it acts and the note is written afterwards. Here the
+   * note is the ordinary case, so it is asked for — but never *required*: Enter on an empty field
+   * parks the tile, because *something is off here* is a complete thought.
+   *
+   * The prompt **replaces the other actions** while it is open rather than sitting among them. It is
+   * a question with two answers, and leaving *Discard* next to a focused field would put the one
+   * irreversible-ish outcome one stray click from a piece being set aside.
+   */
+  const park = !parked ? (
+    <DialogSecondaryButton onClick={() => setParking(true)} disabled={pending}>
+      <Icon name="pause" size="sm" /> Set aside to check
+    </DialogSecondaryButton>
+  ) : null;
+
+  const commitPark = () => run(() => parkTileAction(tile.id, parkNote), false);
+
+  const parkPrompt = (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+      <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+        What to check?
+        <input
+          autoFocus
+          value={parkNote}
+          onChange={(e) => setParkNote(e.target.value)}
+          disabled={pending}
+          placeholder="watermark? · dark or light blue? · perf vs Mi 200"
+          // Enter sets it aside and Escape abandons the whole thing: the collector's hands are on
+          // the keyboard the moment this opens, and a note this short should never need the mouse
+          // to be picked up again.
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitPark();
+            } else if (e.key === "Escape") {
+              // Reaches here because the dialog steps out of the escape layer while this is open
+              // (see `dismissable` below) — otherwise the shared document-level listener would have
+              // closed the whole dialog before this ran.
+              e.preventDefault();
+              setParking(false);
+              setParkNote("");
+            }
+          }}
+          style={{
+            marginLeft: "0.5rem",
+            width: "22rem",
+            padding: "0.3125rem 0.5rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border-strong)",
+            background: "var(--color-bg-page)",
+            color: "var(--color-text-primary)",
+            font: "inherit",
+            fontSize: "0.8125rem",
+          }}
+        />
+      </label>
+      <DialogSecondaryButton onClick={commitPark} disabled={pending}>
+        <Icon name="pause" size="sm" /> {pending ? "Working…" : "Set aside"}
+      </DialogSecondaryButton>
+      <DialogSecondaryButton
+        onClick={() => {
+          setParking(false);
+          setParkNote("");
+        }}
+        disabled={pending}
+      >
+        Cancel
+      </DialogSecondaryButton>
+    </div>
+  );
+
+  /** The way back out of both waiting-room states — a mis-clicked discard, or a parked piece whose
+   * answer is now known. On a parked tile it is the *ordinary* end of the wait rather than an undo,
+   * which is why it says what it says rather than *Un-park*. */
+  const putBack = (
+    <DialogSecondaryButton
+      onClick={() => run(() => returnTileToQueueAction(tile.id), false)}
+      disabled={pending}
+    >
+      <Icon name="restore" size="sm" /> Put back in the queue
     </DialogSecondaryButton>
   );
 
@@ -268,6 +393,13 @@ export function TileIdentifyDialog({
       // editor: the two surfaces that show a scan large are the two that are worth a whole screen.
       maxWidth="min(96vw, 82rem)"
       height="90vh"
+      // While the *what to check* field is open, Escape belongs to **it** (#597): abandoning the
+      // note is not abandoning the tile, and a collector three words into a doubt who presses
+      // Escape means "not like that", not "close everything". The shared layer stack listens on the
+      // document in the capture phase, so a handler on the input cannot stop it — stepping this
+      // dialog out of the stack is the documented way to hand the key over. It also stops a stray
+      // backdrop click from taking the sentence with it.
+      dismissable={!parking}
     >
       {/* The picture takes the room and the outcome sits beside it in a column of its own, which
           scrolls on its own so a lot's whole copy list can never push the tile off screen. */}
@@ -293,6 +425,17 @@ export function TileIdentifyDialog({
             flexDirection: "column",
           }}
         >
+          {/* A parked tile's note sits **above** the outcomes, not instead of them (#597): it is
+              what the collector wrote to themselves about this piece, so it is the first thing to
+              read on coming back — and the identification it was waiting for is right underneath,
+              which is the whole point of the tile staying workable while parked. */}
+          {parked && (
+            <ParkedNote
+              note={tile.note}
+              disabled={pending}
+              onSave={(n) => run(() => noteTileAction(tile.id, n), false, true)}
+            />
+          )}
           {settled ? (
             <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
           ) : mode === null ? (
@@ -328,16 +471,7 @@ export function TileIdentifyDialog({
           {/* The settled states' one way onward, each on the left where the other outcomes sit:
               a discard goes back into the queue, and a consumed tile leads to what it became
               (#584) — the click that used to happen by itself, now asked for. */}
-          {tile.state === "discarded" && (
-            <div style={{ marginRight: "auto" }}>
-              <DialogSecondaryButton
-                onClick={() => run(() => undiscardTileAction(tile.id), false)}
-                disabled={pending}
-              >
-                Put back in the queue
-              </DialogSecondaryButton>
-            </div>
-          )}
+          {tile.state === "discarded" && <div style={{ marginRight: "auto" }}>{putBack}</div>}
           {tile.state === "consumed" && copyHref && (
             <div style={{ marginRight: "auto" }}>
               <DialogLinkButton href={copyHref}>
@@ -347,6 +481,11 @@ export function TileIdentifyDialog({
           )}
           <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
         </DialogFooter>
+      ) : parking ? (
+        // The whole footer while the question is open (#597): it is a question, and a question with
+        // the other outcomes still standing beside it is a row of buttons one stray click from
+        // discarding the piece that was about to be set aside.
+        <DialogFooter>{parkPrompt}</DialogFooter>
       ) : mode === null ? (
         // Nothing to offer until the mode is known — offering an action that might be the wrong one
         // is what waiting is for.
@@ -360,10 +499,14 @@ export function TileIdentifyDialog({
           <div
             style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
           >
-            <DialogSecondaryButton onClick={() => onIdentifyNew(viewSides)} disabled={pending || !canIdentify}>
+            <DialogSecondaryButton
+              onClick={() => onIdentifyNew(viewSides)}
+              disabled={pending || !canIdentify}
+            >
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
             {repeat}
+            {parked ? putBack : park}
             {discard}
           </div>
           <DialogSecondaryButton onClick={onClose} disabled={pending}>
@@ -381,6 +524,7 @@ export function TileIdentifyDialog({
           leading={
             <>
               {repeat}
+              {parked ? putBack : park}
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose
                   identify over assign, so this is one expression rather than a second rule. Without
@@ -560,6 +704,131 @@ function CopyRow({
   );
 }
 
+// ── A tile parked to be checked (#597) ───────────────────────────────────────────────────────
+
+/**
+ * What the collector wrote about a parked piece, and where they change it.
+ *
+ * **The note is the point of the state.** *Watermark?* — *dark or light blue?* — *check perf against
+ * Mi 200*: written while the doubt is fresh, read months later by someone who would otherwise have
+ * to derive the doubt again from the very picture that could not settle it. So it leads this panel
+ * rather than sitting under the outcomes, and it is a field rather than a line of text, because the
+ * doubt narrows as it is worked on.
+ *
+ * **Optional, and it stays optional.** *Something is off here* is a complete thought — the same
+ * call the discard note makes, and for the same reason: parking has to stay cheaper than the
+ * interruption it prevents.
+ */
+function ParkedNote({
+  note,
+  disabled,
+  onSave,
+}: {
+  note: string | null;
+  disabled: boolean;
+  onSave: (note: string) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.5rem",
+        marginBottom: "0.875rem",
+        padding: "0.625rem 0.75rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-warning-border)",
+        background: "var(--color-warning-soft)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+        <strong>Set aside to check.</strong> It is still to be identified — it is only out of the
+        queue until you have the answer. Identify it below when you do, or put it back.
+      </p>
+      <TileNote
+        label="What to check (optional)"
+        placeholder="e.g. watermark? · dark or light blue? · check perf against Mi 200"
+        note={note}
+        disabled={disabled}
+        onSave={onSave}
+      />
+    </div>
+  );
+}
+
+/**
+ * The note field both waiting-room states carry — a discard's *what the parcel held*, a parked
+ * tile's *what to check*. One component, because they are one control: a small textarea that only
+ * offers to save once what is in it differs from what is stored, so a tile whose note has not been
+ * touched shows no button to press.
+ */
+function TileNote({
+  label,
+  placeholder,
+  note,
+  disabled,
+  onSave,
+}: {
+  label: string;
+  placeholder: string;
+  note: string | null;
+  disabled: boolean;
+  onSave: (note: string) => void;
+}) {
+  const [draft, setDraft] = useState(note ?? "");
+  // Re-seeded when the stored note moves underneath — a save that landed, or the tile being
+  // re-read — so the box never sits on a value the tile no longer has.
+  const [seed, setSeed] = useState(note);
+  if (seed !== note) {
+    setSeed(note);
+    setDraft(note ?? "");
+  }
+  const dirty = draft.trim() !== (note ?? "");
+
+  return (
+    <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+      {label}
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        disabled={disabled}
+        rows={2}
+        placeholder={placeholder}
+        style={{
+          marginTop: "0.25rem",
+          width: "100%",
+          padding: "0.375rem 0.5rem",
+          borderRadius: "0.375rem",
+          border: "1px solid var(--color-border-strong)",
+          background: "var(--color-bg-page)",
+          color: "var(--color-text-primary)",
+          fontSize: "0.8125rem",
+          resize: "vertical",
+        }}
+      />
+      {dirty && (
+        <button
+          type="button"
+          onClick={() => onSave(draft)}
+          disabled={disabled}
+          style={{
+            marginTop: "0.375rem",
+            padding: "0.25rem 0.625rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border-strong)",
+            background: "var(--color-bg-elevated)",
+            color: "var(--color-text-secondary)",
+            fontSize: "0.8125rem",
+            cursor: disabled ? "not-allowed" : "pointer",
+          }}
+        >
+          {disabled ? "Saving…" : "Save the note"}
+        </button>
+      )}
+    </label>
+  );
+}
+
 // ── A tile that is already done with ─────────────────────────────────────────────────────────
 
 /** Where a discard's note is written, since discarding itself never stopped to ask for one. Also
@@ -573,9 +842,6 @@ function SettledTile({
   disabled: boolean;
   onSaveNote: (note: string) => void;
 }) {
-  const [note, setNote] = useState(tile.note ?? "");
-  const dirty = note.trim() !== (tile.note ?? "");
-
   if (tile.state === "consumed") {
     return (
       <div
@@ -618,46 +884,13 @@ function SettledTile({
         unidentified. It survives the lot closing: for a card bought sight-unseen these tiles are
         the only record of what was actually inside.
       </p>
-      <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-        Note (optional)
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          disabled={disabled}
-          rows={2}
-          placeholder="e.g. thinned, heavy crease, faked overprint"
-          style={{
-            marginTop: "0.25rem",
-            width: "100%",
-            padding: "0.375rem 0.5rem",
-            borderRadius: "0.375rem",
-            border: "1px solid var(--color-border-strong)",
-            background: "var(--color-bg-page)",
-            color: "var(--color-text-primary)",
-            fontSize: "0.8125rem",
-            resize: "vertical",
-          }}
-        />
-      </label>
-      {dirty && (
-        <button
-          type="button"
-          onClick={() => onSaveNote(note)}
-          disabled={disabled}
-          style={{
-            alignSelf: "flex-start",
-            padding: "0.25rem 0.625rem",
-            borderRadius: "0.375rem",
-            border: "1px solid var(--color-border-strong)",
-            background: "var(--color-bg-elevated)",
-            color: "var(--color-text-secondary)",
-            fontSize: "0.8125rem",
-            cursor: disabled ? "not-allowed" : "pointer",
-          }}
-        >
-          {disabled ? "Saving…" : "Save the note"}
-        </button>
-      )}
+      <TileNote
+        label="Note (optional)"
+        placeholder="e.g. thinned, heavy crease, faked overprint"
+        note={tile.note}
+        disabled={disabled}
+        onSave={onSaveNote}
+      />
     </div>
   );
 }

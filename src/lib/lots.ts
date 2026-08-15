@@ -138,6 +138,12 @@ export interface PurchaseDetail {
    * memory that needs the nudge, not the sum. Discarded tiles are not counted: a discarded tile is
    * evidence, not a queue item (#567). */
   unidentifiedTileCount: number;
+  /** Scan tiles on this order that are **parked** (#597) — still to be identified, but waiting on
+   * something that is not at the desk: a watermark, two shades of one blue, a paper difference.
+   * Counted apart from the waiting ones because both are outstanding work and only one of them is
+   * work that can be done now; folding them together would put the parked pieces back into the
+   * sweep they were parked to leave. */
+  parkedTileCount: number;
   /** Retained card scans on this order (#566), so the section can say it has scans before any of
    * them has been cut. */
   scanSheetCount: number;
@@ -183,12 +189,7 @@ export async function getPurchaseDetail(
       // The card scans and what is still waiting on them (#586). Counted through filtered
       // relations rather than by loading the tiles: a carton is fifty cards, and the header has no
       // other use for the rows.
-      _count: {
-        select: {
-          scanSheets: true,
-          scanTiles: { where: { state: "unidentified" } },
-        },
-      },
+      _count: { select: { scanSheets: true } },
       lots: {
         select: {
           id: true,
@@ -203,6 +204,17 @@ export async function getPurchaseDetail(
     },
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
+
+  // The two outstanding tile states in one pass (#597), rather than two filtered relation counts:
+  // Prisma's `_count` cannot carry the same relation twice under two `where`s, and the header wants
+  // them apart — *N unidentified* is the sweep, *N to check* is the trip to the colour key.
+  const tileStates = await prisma.scanTile.groupBy({
+    by: ["state"],
+    where: { purchaseId, state: { in: ["unidentified", "parked"] } },
+    _count: { _all: true },
+  });
+  const tilesInState = (state: string) =>
+    tileStates.find((g) => g.state === state)?._count._all ?? 0;
 
   const fxRateToBase = row.fxRateToBase != null ? Number(row.fxRateToBase) : null;
   // The pool can be expressed in the base currency either when a rate is frozen, or when
@@ -252,7 +264,8 @@ export async function getPurchaseDetail(
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
     auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
-    unidentifiedTileCount: row._count.scanTiles,
+    unidentifiedTileCount: tilesInState("unidentified"),
+    parkedTileCount: tilesInState("parked"),
     scanSheetCount: row._count.scanSheets,
   };
 }

@@ -401,6 +401,19 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   list, it already has the side this tile carries — the line above the list says which that is, and
   each row says what the copy already holds. This stays available for a copy on a **closed** lot:
   closing froze the money, not the photographs. Nothing is asked about lots here; the copy has one.
+- **Set aside to check** — the piece you cannot tell apart from its picture: a watermark, two shades
+  of the same blue, a paper difference. Press it and a field opens **right where the button was**,
+  asking what to check: type *watermark?*, *dark or light blue?*, *check perf against Mi 200* and
+  press **Enter**. That sentence is the point — in a month you would otherwise be deriving the doubt
+  again from the very picture that could not settle it — which is why you are asked for it while it
+  is fresh, rather than left to find a box for it afterwards. It is still optional: Enter on an empty
+  field sets the tile aside anyway, because *something is off here* is a complete thought. **Escape**
+  backs out of the question without touching the tile. The tile is then **still to be identified** —
+  it has not become anything and it has not gone away — it has only left the queue until you have
+  the answer, so working through the rest of the card stops offering you the one piece you cannot
+  finish at this desk. When you know the answer, identify it as usual from the same dialog (the note
+  is at the top of it, and you can change it there); or **Put back in the queue** if it turns out
+  there was nothing to check.
 - **Discard** — junk, damaged beyond interest, unidentifiable. One click, and it asks for nothing:
   on a parcel full of junk this is the frequent answer, and it is safe to make it that cheap because
   it is reversible — **Put back in the queue** is in the same dialog. The tile **keeps its image**,
@@ -498,10 +511,44 @@ lets you keep matching a tile to the piece in your tweezers.
 **The tiles still waiting are the ones that stand out.** A tile nobody has dealt with wears a
 coloured edge; a tile you have finished with lets its picture step back and takes a small mark in
 its top corner saying what became of it — a **tick** for one that became a copy, a **crossed circle**
-for one you discarded. The mark sits over the scan rather than being a shade of it, so it reads the
-same on a pale stamp as on a dark one, and the two ends never look like more and less of the same
-thing: one piece became something, the other deliberately became nothing. The label underneath still
-gives the copy number, which is what you read when you want the detail rather than the glance.
+for one you discarded, a **pause mark** for one you set aside to check. The mark sits over the scan
+rather than being a shade of it, so it reads the same on a pale stamp as on a dark one, and the ends
+never look like more and less of the same thing: one piece became something, one deliberately became
+nothing, and one is still to be identified. A tile set aside keeps its picture at full strength and
+its own coloured edge, because it is still work — only not work for right now. The label underneath
+still gives the copy number, which is what you read when you want the detail rather than the glance.
+
+#### Pieces you cannot identify from the picture
+
+Some variants are not settled on a screen at all. A watermark needs the tray or the lamp, two shades
+of one blue need the colour key, a paper difference needs the reference album. Settling one the
+moment it turns up means getting up from the desk once per stamp — which costs far more than the
+identification it serves.
+
+So **set it aside to check** and carry on. The value is not the mark on the tile; it is that the set
+aside pieces **collect**: ten cards of one parcel at three doubtful pieces each is thirty, and thirty
+is a sitting. You make the trip to the colour key once.
+
+They gather on the order itself. The Card scans header grows a second chip beside *N tiles
+unidentified* — **N to check** — and pressing it narrows the strips to exactly those pieces, across
+every card of the parcel, each one still in its own card's strip and its own position on it, which is
+what tells you which card to pull out of the tray. Each batch's summary line counts them apart too:
+*12 waiting · 3 to check*. Both are work you still have; only one of them is work you can do now.
+
+Sitting down with the lamp, click any of them: the note you left is the first thing in the dialog,
+and the identification is right underneath it — a set-aside tile is identified exactly like any
+other, with no un-parking step in front of it. It also still has its **tick box**, which is the point:
+five pieces that turn out to be the same variant are settled in one pass, and the sitting where you
+finally tell them apart is precisely the sitting where that happens.
+
+**A card with a piece set aside on it is not finished with**, and the app treats it that way
+throughout: the batch stays in the live list rather than being put away, it is never marked done, and
+if you have switched on the scan-retention setting below, its card scan is **not** swept — which
+matters more than it sounds, since that scan is exactly what you came back to the piece for.
+
+The close dialog names them too. A tile you set aside has deliberately left the *unidentified* count,
+so nothing nags about it — and the moment before you freeze a lot's money is the one place it has to
+be put in front of you again.
 
 #### Batches you have finished with
 
@@ -529,7 +576,7 @@ offered, because there is no longer a card to draw on.
 Which batches are open is worked out from the work itself, not remembered as a setting: **a batch
 with tiles still waiting shows, and opens, by itself**, the same way a lot you add while the screen
 is open opens by itself. Put a discarded tile back in the queue and its batch has something waiting
-again, so it comes back to the list on its own. Finish the last tile on a card and it goes the other
+again, so it comes back to the list on its own; a batch with a piece set aside to check never left. Finish the last tile on a card and it goes the other
 way — the strip leaves the list and the count above it goes up by one.
 
 **Batches are never reordered.** Batch order is the order the cards came in, and the pile on your
@@ -537,9 +584,9 @@ desk is in that order too — moving the unfinished ones to the top would break 
 numbering is for. Revealed batches come back **in place**, among the live ones, not gathered at the
 end.
 
-The **N tiles unidentified** chip on the section's own header does the same hiding for its own
-reason, so while it is pressed the count is not offered — one question should not have two controls
-that can disagree.
+Either chip on the section's own header — **N tiles unidentified** or **N to check** — does the same
+hiding for its own reason, so while one is pressed the count is not offered: one question should not
+have two controls that can disagree.
 
 The picture on a consumed tile is the copy's own front photograph — the same image, which moved to
 the copy rather than being duplicated, so you will see it again on the copy's row below. The only
@@ -558,7 +605,8 @@ tells you the parcel differed from what you bid on.
 #### Tiles and closing a lot
 
 A tile is not a copy: it has no stamp, no catalogue price and no share of any lot's cost. The Card
-scans header shows **N tiles unidentified** for the order and the close dialog repeats it, but
+scans header shows **N tiles unidentified** for the order and the close dialog repeats it — along
+with how many pieces you have set aside to check, which nothing else nags you about — but
 closing is never blocked by tiles — the cost split is correct without them. The dialog mentions them
 because any of those tiles could still become a copy on the lot you are about to close. They survive
 the close, discarded ones included.

@@ -4,7 +4,13 @@ import type { Prisma } from "@/generated/prisma/client";
 import { formatItemNo } from "./item-number";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront } from "./photos";
-import { ScanAuthError, ScanValidationError, assertScanPurchaseOwner } from "./scan-sheets";
+import {
+  OPEN_TILE_STATES,
+  ScanAuthError,
+  ScanValidationError,
+  assertScanPurchaseOwner,
+  isOpenTileState,
+} from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 
 /**
@@ -32,14 +38,20 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  *   close, and survives the close. For a stockbook bought sight-unseen it is the only record of
  *   what was actually inside: **a discarded tile is evidence, not a queue item.**
  *
+ * #597 adds a fourth destination that is not an end at all — **parked**: a piece still to be
+ * identified, set aside because the answer is not at the desk (a watermark, two shades of one blue,
+ * a paper difference). It keeps every door a waiting tile has, because it *is* a waiting tile; what
+ * it leaves is the sweep, so working through a card stops re-offering the one piece that cannot be
+ * settled now. See {@link parkTile}.
+ *
  * Two rules run through all three:
  *
  * - **Images move, they are never copied.** A tile's crops are `Photo` rows under the fourth owner
  *   (ADR-0033 §2), so handing them to a copy is `tileId → itemId` on the same row. No second row,
  *   no second bytes, and nothing for a cleanup to disagree about later.
- * - **The batch is stamped when its last tile leaves `unidentified`.** From that moment it can
- *   never be re-cut, so its retained original has no remaining function. Nothing here reads the
- *   stamp; #578's retention sweep does.
+ * - **The batch is stamped when its last outstanding tile reaches an end** — `unidentified` and,
+ *   since #597, `parked`. From that moment it can never be re-cut, so its retained original has no
+ *   remaining function. Nothing here reads the stamp; #578's retention sweep does.
  *
  * Since #586 a tile belongs to the **purchase**, so this module carries the one question that move
  * left behind: **a copy still belongs to a lot**, and it is identification — not scanning — that
@@ -151,7 +163,7 @@ export async function identifyTilesAsNewCopies(
     throw new ScanValidationError("The same tile was named twice.");
   }
   const tiles = [];
-  for (const tileId of unique) tiles.push(await loadUnidentifiedTile(ownerId, tileId));
+  for (const tileId of unique) tiles.push(await loadOpenTile(ownerId, tileId));
   const purchaseId = tiles[0].purchaseId;
   if (tiles.some((t) => t.purchaseId !== purchaseId)) {
     throw new ScanValidationError("Those tiles are not all on this order.");
@@ -250,7 +262,7 @@ export async function assignTileToCopy(
   tileId: string,
   itemId: string
 ): Promise<TileOutcome> {
-  const tile = await loadUnidentifiedTile(ownerId, tileId);
+  const tile = await loadOpenTile(ownerId, tileId);
 
   const item = await prisma.item.findUnique({
     where: { id: itemId },
@@ -307,31 +319,96 @@ export async function discardTile(
   tileId: string,
   note?: string | null
 ): Promise<void> {
-  const tile = await loadUnidentifiedTile(ownerId, tileId);
+  const tile = await loadOpenTile(ownerId, tileId);
   await prisma.scanTile.update({
     where: { id: tile.id },
-    data: { state: "discarded", note: note?.trim() || null },
+    data: {
+      state: "discarded",
+      // A blank note leaves whatever is already there, which matters for exactly one tile: a
+      // **parked** one (#597), whose note says what the doubt was. Discarding it is the answer to
+      // that doubt turning out to be "nothing worth keeping", so *dark or light blue?* is a fair
+      // record of why it went — and the screen sends a blank note on every discard, so clearing it
+      // here would silently throw away the only sentence the collector wrote about the piece.
+      note: note?.trim() || tile.note,
+    },
   });
   await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
 }
 
+// ── Parking (#597) ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Write (or clear) a discarded tile's note.
+ * Set a tile aside as **still to be identified** — the piece that cannot be told apart from its
+ * picture.
  *
- * Discarding takes **one click** and asks for nothing, because on a parcel full of junk it is the
- * frequent answer and a note form in front of it would make the cheap outcome the expensive one.
- * That is only safe because the note is reachable afterwards — here — and because the discard
- * itself can be undone. What a note is *for* is the sight-unseen stockbook: months later, "thinned"
- * against a picture is the difference between a record and a blank.
+ * Some variants are not settled on screen at all: a watermark, two shades of the same blue, a paper
+ * difference. Settling one means leaving the desk for the colour key, the UV lamp or the reference
+ * album, and doing that the moment each such piece turns up pays for the trip once per stamp. **The
+ * value is not the flag; it is that the parked pieces collect**, so the trip is made once for
+ * thirty of them — the same batching the whole scan-first pass is built on.
+ *
+ * So it is **neither of the two states it sits between**. Not `discarded`: that piece deliberately
+ * became nothing and leaves the queue for good, while this one is still going to become a copy. Not
+ * plain `unidentified` either, or working through the card would keep offering it, which is
+ * precisely the interruption being avoided. It therefore keeps every door a waiting tile has —
+ * {@link identifyTilesAsNewCopies} and {@link assignTileToCopy} take it, the strip's tick box
+ * offers it, a back can still be paired onto it — and only leaves the *sweep*.
+ *
+ * **The note is the point, and it is optional.** *Watermark?* — *dark or light blue?* — *check perf
+ * against Mi 200*: written while the doubt is fresh, read when the collector comes back and would
+ * otherwise have to derive the doubt again from the picture that could not answer it. Optional for
+ * the discard note's own reason: *something is off here* is a complete thought. The two differ in
+ * **when** the sentence is asked for, and that difference is a fact about which case is ordinary: a
+ * discard's note is the rare one, so it acts first and the note follows; a parked tile's is the
+ * usual one, so the screen asks at the button and passes whatever was typed — blank included —
+ * straight into this one write. {@link noteTile} is where it is changed afterwards.
+ *
+ * A parked tile can never finish a batch, which {@link stampBatchIfFinished} enforces by counting
+ * it as outstanding: were it not, #578 would sweep the card's retained scan after thirty days and
+ * the collector would come back to the doubtful piece to find the picture they came back for is
+ * gone.
  */
-export async function noteDiscardedTile(
+export async function parkTile(
+  ownerId: string,
+  tileId: string,
+  note?: string | null
+): Promise<void> {
+  const tile = await loadOpenTile(ownerId, tileId);
+  if (tile.state === "parked") {
+    // Not an error worth a sentence — the note is what a second park would be saying, and that has
+    // its own door.
+    if (note != null) await noteTile(ownerId, tileId, note);
+    return;
+  }
+  await prisma.scanTile.update({
+    where: { id: tile.id },
+    data: { state: "parked", note: note?.trim() || null },
+  });
+  // No `stampBatchIfFinished`: a parked tile is outstanding, so it cannot be what finishes a batch.
+  // Stated rather than left to the count, because this is the write the guarantee is about.
+}
+
+/**
+ * Write (or clear) a tile's note.
+ *
+ * Two states carry one, for the same reason and in the same shape. A **discard** takes one click
+ * and asks for nothing, because on a parcel full of junk it is the frequent answer and a note form
+ * in front of it would make the cheap outcome the expensive one; the note is reachable afterwards —
+ * here — on the tile that earns one. **Parking** (#597) is the same bargain: the doubt is written
+ * while it is fresh, but never demanded.
+ *
+ * What a note is *for* differs by state and is worth keeping straight: a discard's says what the
+ * parcel held (*thinned*), for the sight-unseen stockbook where the tiles are the only record; a
+ * parked one's says what to check (*watermark?*), for the collector returning to it with the lamp.
+ */
+export async function noteTile(
   ownerId: string,
   tileId: string,
   note: string | null
 ): Promise<void> {
   const tile = await loadTileForOwner(ownerId, tileId);
-  if (tile.state !== "discarded") {
-    throw new ScanValidationError("Only a discarded tile carries a note.");
+  if (tile.state !== "discarded" && tile.state !== "parked") {
+    throw new ScanValidationError("Only a discarded or parked tile carries a note.");
   }
   await prisma.scanTile.update({
     where: { id: tile.id },
@@ -339,21 +416,31 @@ export async function noteDiscardedTile(
   });
 }
 
-/** Put a discarded tile back in the queue. The mirror of a discard and nothing more: its images
- * never left, so there is nothing to restore, and a mis-clicked discard on a card of forty should
- * not need a re-cut to undo. A **consumed** tile has no such door — its images belong to a copy
- * now, and the way back is to delete that copy. */
-export async function undiscardTile(ownerId: string, tileId: string): Promise<void> {
+/**
+ * Put a discarded or a parked tile back in the queue.
+ *
+ * One door for both, because it is one move: the tile returns to `unidentified` and its note goes
+ * with the state that carried it. For a **discard** it is the undo that makes the one-click discard
+ * safe — its images never left, so there is nothing to restore, and a mis-click on a card of forty
+ * should not need a re-cut. For a **parked** tile (#597) it is the *ordinary* end of the wait: the
+ * answer is known, so the piece rejoins the queue and the doubt it was carrying is spent.
+ *
+ * A **consumed** tile has no such door — its images belong to a copy now, and the way back is to
+ * delete that copy.
+ */
+export async function returnTileToQueue(ownerId: string, tileId: string): Promise<void> {
   const tile = await loadTileForOwner(ownerId, tileId);
-  if (tile.state !== "discarded") {
-    throw new ScanValidationError("Only a discarded tile can be put back.");
+  if (tile.state !== "discarded" && tile.state !== "parked") {
+    throw new ScanValidationError("Only a discarded or parked tile can be put back.");
   }
   await prisma.scanTile.update({
     where: { id: tile.id },
     data: { state: "unidentified", note: null },
   });
   // The batch has something waiting again, so it is no longer finished with. Clearing this is what
-  // keeps #578 from sweeping the original out from under a batch still being worked.
+  // keeps #578 from sweeping the original out from under a batch still being worked. A parked tile
+  // never let it be stamped in the first place, so this is a no-op on that path and the guard on
+  // `batchDoneAt: { not: null }` says so.
   await prisma.scanSheet.updateMany({
     where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
@@ -431,8 +518,12 @@ async function seedStampImage(ownerId: string, itemId: string): Promise<void> {
  * is not already set, so a batch finished with twice keeps the first moment.
  */
 async function stampBatchIfFinished(purchaseId: string, batchNo: number): Promise<void> {
+  // **A batch with a parked tile is not finished with** (#597). That tile is still going to become
+  // a copy, and the retention sweep taking the card's scan would remove the very picture the
+  // collector is coming back to it for — so both outstanding states count here, and the list is
+  // `scan-sheets.ts`' one rather than a second reading of what "still waiting" means.
   const waiting = await prisma.scanTile.count({
-    where: { purchaseId, batchNo, state: "unidentified" },
+    where: { purchaseId, batchNo, state: { in: [...OPEN_TILE_STATES] } },
   });
   if (waiting > 0) return;
   await prisma.scanSheet.updateMany({
@@ -451,6 +542,7 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
       purchaseId: true,
       batchNo: true,
       state: true,
+      note: true,
       photos: { select: { id: true, role: true } },
     },
   });
@@ -459,12 +551,19 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
   return tile;
 }
 
-/** A tile can only be worked on while it is still waiting. Consumed twice would give two copies
+/**
+ * A tile can only be worked on while it is still outstanding. Consumed twice would give two copies
  * the same images — except that the second move would find none, so the second copy would simply
- * get nothing and nobody would be told. */
-async function loadUnidentifiedTile(ownerId: string, tileId: string) {
+ * get nothing and nobody would be told.
+ *
+ * **Parked counts as outstanding** (#597), and that is the whole point of the state: the return
+ * sitting is exactly when several settle at once — five parked pieces that turn out to be the same
+ * variant are identified in one pass — so every path that works a waiting tile takes a parked one
+ * unchanged. Only the two real ends are refused.
+ */
+async function loadOpenTile(ownerId: string, tileId: string) {
   const tile = await loadTileForOwner(ownerId, tileId);
-  if (tile.state !== "unidentified") {
+  if (!isOpenTileState(tile.state)) {
     throw new ScanValidationError(
       tile.state === "consumed"
         ? "That tile has already become a copy."

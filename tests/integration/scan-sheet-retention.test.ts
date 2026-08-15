@@ -20,7 +20,12 @@ import {
   recutBatch,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
-import { discardTile, identifyTileAsNewCopy, undiscardTile } from "../../src/lib/scan-tiles";
+import {
+  discardTile,
+  identifyTileAsNewCopy,
+  parkTile,
+  returnTileToQueue,
+} from "../../src/lib/scan-tiles";
 import { getStorage, sheetVariantKey } from "../../src/lib/storage";
 import type { Box } from "../../src/lib/scan-boxes";
 
@@ -280,7 +285,7 @@ describe("retained-scan retention (#578)", () => {
     const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
-    await undiscardTile(userId, tileIds[0]);
+    await returnTileToQueue(userId, tileIds[0]);
 
     const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 0, "the batch is being worked again; the clock was cleared");
@@ -288,6 +293,28 @@ describe("retained-scan retention (#578)", () => {
 
     // And a re-cut is available again, since nothing was swept.
     await recutBatch(userId, purchaseId, 1);
+  });
+
+  it("never sweeps a batch with a tile parked on it (#597)", async () => {
+    // The failure this guards against is the quiet one: the collector parks the doubtful piece,
+    // comes back a month later with the colour key, and finds the card scan gone — which is
+    // precisely the picture they came back for. So a parked tile keeps the batch unfinished, at a
+    // TTL of zero and with every other tile settled.
+    const { purchaseId, sheetId, tileIds } = await orderWithTiles();
+    await setCollectionScanSheetTtl(userId, collectionId, "0");
+    await discardTile(userId, tileIds[0]);
+    await parkTile(userId, tileIds[1], "watermark?");
+
+    const untouched = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
+    assert.equal(untouched.sheets, 0, "one piece is still to be identified, so nothing is finished");
+    assert.equal(await originalExists(sheetId), true);
+    const sheet = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
+    assert.equal(sheet.batchDoneAt, null);
+
+    // Settle it, and the batch finishes normally — the guarantee is about *while* it is parked.
+    await discardTile(userId, tileIds[1]);
+    const swept = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
+    assert.equal(swept.sheets, 1);
   });
 
   it("drops the collection's storage total by what it freed", async () => {

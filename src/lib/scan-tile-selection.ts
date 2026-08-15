@@ -19,21 +19,29 @@
  * rather than one per batch — a run of one definitive can cross two cards of the same parcel, and a
  * selection per batch would make the collector answer twice for one decision.
  *
- * **Only a tile still waiting can be ticked.** A consumed tile has already become a copy and a
- * discarded one deliberately became nothing; neither can take an identification, so neither gets a
- * box. That is what keeps the tri-state box on a batch honest — it is *on* when every tile that
- * could be identified is, not when the batch is somehow entirely selected.
+ * **Only a tile that can still be identified can be ticked.** A consumed tile has already become a
+ * copy and a discarded one deliberately became nothing; neither can take an identification, so
+ * neither gets a box. That is what keeps the tri-state box on a batch honest — it is *on* when every
+ * tile that could be identified is, not when the batch is somehow entirely selected.
+ *
+ * **A parked tile (#597) is one of them**, and this is where that state earns its keep rather than
+ * merely being tolerated: the return sitting — colour key on the desk, lamp on — is exactly when
+ * several settle at once, and five parked pieces that turn out to be the same variant should be one
+ * pass and not five. Leaving them out would have made the state a way of *removing* work from the
+ * screen instead of deferring it.
  */
 
-/** A tile as the selection sees it: its id, and whether it is still waiting to become something. */
+/** A tile as the selection sees it: its id, and what state it is in. */
 export interface SelectableTile {
   id: string;
   state: string;
 }
 
-/** Can this tile be identified at all? The only tiles that get a checkbox. */
+/** Can this tile be identified at all? The only tiles that get a checkbox — the two outstanding
+ * states, waiting and parked. Stated here rather than imported from `scan-sheets.ts`, which is a
+ * `server-only` module and cannot be what a client component reads a constant from. */
 export function isSelectableTile(tile: SelectableTile): boolean {
-  return tile.state === "unidentified";
+  return tile.state === "unidentified" || tile.state === "parked";
 }
 
 export type TileBoxState = "on" | "off" | "partial";
@@ -47,7 +55,7 @@ export function toggleTile(selected: ReadonlySet<string>, tileId: string): Set<s
 
 /**
  * The state of the box standing for a batch: **on** when every tile of it that could be identified
- * is ticked, **partial** while only some are, **off** otherwise. A batch with nothing left waiting
+ * is ticked, **partial** while only some are, **off** otherwise. A batch with nothing left to identify
  * is `off` and draws no box at all — there is nothing under it to tick.
  */
 export function batchBoxState(

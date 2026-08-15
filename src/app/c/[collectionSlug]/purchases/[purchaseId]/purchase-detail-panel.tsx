@@ -696,6 +696,7 @@ export function PurchaseDetailPanel({
         collectionId={collectionId}
         purchaseId={purchase.id}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
+        parkedTileCount={purchase.parkedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={(pieces) => {
@@ -906,6 +907,7 @@ export function PurchaseDetailPanel({
               certificateStatuses={certificateStatuses}
               isPending={isPending}
               unidentifiedTileCount={purchase.unidentifiedTileCount}
+              parkedTileCount={purchase.parkedTileCount}
               groupByIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
@@ -1268,6 +1270,11 @@ interface LotCardProps {
    * in this lot's cost split, and it is still the collector's memory that needs the reminder — it
    * is only the scope of "which tiles" that widened from the lot to the parcel they came in. */
   unidentifiedTileCount: number;
+  /** Scan tiles **parked** on the order (#597) — still to be identified, waiting on a check that
+   * cannot be made at the desk. Named in the close dialog beside the waiting ones for exactly the
+   * same reason: either could still become a copy on the lot being closed, and a parked one is the
+   * likelier of the two to be forgotten, having deliberately left the queue. */
+  parkedTileCount: number;
   /** Group this lot's copies by issue (the order-level "By issue" toggle, #121). */
   groupByIssue: boolean;
   /** Copy sort order (order-level control, #157): the field and direction to sort this lot's
@@ -2076,6 +2083,7 @@ function LotCard({
   certificateStatuses,
   isPending,
   unidentifiedTileCount,
+  parkedTileCount,
   groupByIssue,
   sortKey,
   sortDir,
@@ -2875,6 +2883,20 @@ function LotCard({
                   </strong>{" "}
                   on this order and {unidentifiedTileCount === 1 ? "takes" : "take"} no share of the
                   cost — they survive the close, but nothing will remind you of them afterwards.
+                </>
+              )}
+              {/* The parked ones are named separately (#597): they are outstanding in the same way
+                  and none of the arithmetic changes, but they have deliberately left the queue, so
+                  the chip that would otherwise nag about them is silent — which makes this the one
+                  place they are put back in front of the collector before the money is frozen. */}
+              {parkedTileCount > 0 && (
+                <>
+                  {" "}
+                  <strong>
+                    {parkedTileCount} tile{parkedTileCount === 1 ? " is" : "s are"} parked to be
+                    checked
+                  </strong>{" "}
+                  and could still become {parkedTileCount === 1 ? "a copy" : "copies"} on this lot.
                 </>
               )}
             </>

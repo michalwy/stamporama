@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DialogFooter,
   DialogPrimaryButton,
@@ -731,6 +732,16 @@ function Toolbar({
       </span>
       <span style={{ flex: 1 }} />
       <ScanToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={onZoomOut} />
+      {/* The percentage is against the *sheet*, so it says what it is worth saying: whether what is
+          on screen is the card's own resolution. The dot marks the region being served from the
+          retained original rather than magnified out of the display copy. */}
+      <Tooltip
+        content={
+          detailed
+            ? "Showing the visible region at full resolution from the retained scan"
+            : "Showing the display copy of the scan"
+        }
+      >
       <span
         style={{
           fontSize: "0.8125rem",
@@ -738,17 +749,10 @@ function Toolbar({
           minWidth: "3.25rem",
           textAlign: "center",
         }}
-        // The percentage is against the *sheet*, so it says what it is worth saying: whether what
-        // is on screen is the card's own resolution. The dot marks the region being served from the
-        // retained original rather than magnified out of the display copy.
-        title={
-          detailed
-            ? "Showing the visible region at full resolution from the retained scan"
-            : "Showing the display copy of the scan"
-        }
       >
         {Math.round(zoom * 100)}%{detailed ? " ·" : ""}
       </span>
+      </Tooltip>
       <ScanToolButton icon="zoomIn" label="+" hint="Zoom in (+)" onClick={onZoomIn} />
       <ScanToolButton
         icon="zoomFit"
