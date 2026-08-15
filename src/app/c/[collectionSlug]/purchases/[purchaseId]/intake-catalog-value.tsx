@@ -66,6 +66,7 @@ export function IntakeCatalogValueField({
    * being recorded against and for the notice when a change strands one. Built by the dialog, which
    * is where the dictionaries are. */
   subjectLabel,
+  columns,
   disabled,
   onChange,
 }: {
@@ -74,6 +75,11 @@ export function IntakeCatalogValueField({
   certificateStatusId: string;
   formatId: string;
   subjectLabel: string;
+  /** How many equal columns the condition row above is drawn in — two, or three once the collection
+   * defines formats (#573). The input takes exactly one of them, so it lines up with the Condition
+   * control it is keyed on; the caption takes the rest. Passed in rather than guessed, since the
+   * row's shape is the dialog's own decision. */
+  columns: number;
   disabled: boolean;
   onChange: (value: IntakeCatalogValue) => void;
 }) {
@@ -164,7 +170,18 @@ export function IntakeCatalogValueField({
   return (
     <div style={{ marginTop: "0.75rem" }}>
       <LabelWithError htmlFor="intake-catalog-value">Catalog value (optional)</LabelWithError>
-      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+      {/* The same tracks as the condition row above, so the input sits **exactly** under the
+          Condition control it is keyed on rather than near it. A grid rather than that row's flex:
+          equal `1fr` tracks with the same gap give the same widths, and the caption can then span
+          the remaining columns instead of being a third sibling competing for space. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${columns}, 1fr)`,
+          gap: "0.75rem",
+          alignItems: "center",
+        }}
+      >
         <NumericInput
           id="intake-catalog-value"
           value={amount}
@@ -177,8 +194,8 @@ export function IntakeCatalogValueField({
           disabled={disabled || loading || !conditionId}
           placeholder="0.00"
           style={{
-            width: "8rem",
-            flexShrink: 0,
+            width: "100%",
+            minWidth: 0,
             textAlign: "right",
             padding: "0.5rem 0.625rem",
             border: "1px solid var(--color-border-strong)",
@@ -189,7 +206,14 @@ export function IntakeCatalogValueField({
             boxSizing: "border-box",
           }}
         />
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", minWidth: 0 }}>
+        <span
+          style={{
+            gridColumn: "2 / -1",
+            fontSize: "0.75rem",
+            color: "var(--color-text-muted)",
+            minWidth: 0,
+          }}
+        >
           {target.catalogLabel} {target.editionYear} · {target.currency}
           {conditionId ? (
             <>

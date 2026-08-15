@@ -4023,6 +4023,9 @@ function IntakeConditionDialog({
               certificateStatusId={certId}
               formatId={formatId}
               subjectLabel={subjectLabel}
+              // The condition row above is two controls, or three once the collection defines
+              // formats — the same count the row itself is built from, so the two cannot drift.
+              columns={singleStamp && formats.length > 0 ? 3 : 2}
               disabled={isPending || savingPrice}
               onChange={handleCatalogValueChange}
             />
