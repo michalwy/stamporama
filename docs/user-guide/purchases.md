@@ -20,7 +20,10 @@ On the purchases screen a purchase is just its **header**:
 - a **delivery status** (*Preparing*, *In transit*, or *Arrived*).
 
 Every amount field — shipping, lot prices, expense prices — accepts either a comma or a period as
-the decimal separator, so `12,50` and `12.50` are both fine.
+the decimal separator, so `12,50` and `12.50` are both fine. You can also type a small sum instead
+of a number — `1+2`, `12,50*3`, `(4,20+1,80)/2` — and it is worked out for you when you leave the
+field. If the sum doesn't make sense, the text stays as you typed it and the field is rejected like
+any other bad amount.
 
 The order's line items are managed separately, during **lot intake**:
 

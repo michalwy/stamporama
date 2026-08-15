@@ -37,7 +37,8 @@ Click **Record sale** and fill in:
   first time you sell (or list) on a platform that has no currency yet, you pick one inline and it
   is saved to the platform.
 Every amount field accepts either a comma or a period as the decimal separator — type `12,50` or
-`12.50`, whichever your keyboard gives you.
+`12.50`, whichever your keyboard gives you. It also takes a small sum: type `12,50+7,50` or
+`(4,20+1,80)/2` and the field replaces it with the result as soon as you leave it.
 
 - **Buyer handling** and **Commission** — the amounts you know at sale time: the postage/handling
   the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**).
