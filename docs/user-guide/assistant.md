@@ -373,9 +373,9 @@ search box above the table, which suggests your listings as you type, is left ex
 draws it: what is being typed into is not a list being worked through, and a panel rebuilt on every
 keystroke is no place for an answer.
 
-Links appear **only** for listings your collection has an offer for. On everybody else's auctions —
-the ones you are bidding on — nothing is drawn and nothing changes, and the toolbar icon still means
-what it always did there: [capture the lot](#capturing-an-allegro-lot) for your watchlist.
+Links appear **only** for listings your collection has an offer for. On an auction somebody else is
+selling, this particular answer is not drawn — but if you are already bidding on it, the card below
+is.
 
 How the listing is recognised: by Allegro's own offer number. If you have [connected the Allegro
 API](allegro.md), the sync already knows which of your listings is which offer, and the answer is
@@ -383,6 +383,30 @@ exact. Otherwise it is found in the **listing URL** stored on the offer — whic
 when you post through the Assistant, and which you can paste in by hand on the offer's screen. An
 offer with neither is not recognised, and the fix is to put the listing's address on it — a row of
 the assortment list with no **Offer #…** link beside it is exactly that offer telling you so.
+
+## Auctions you are already bidding on
+
+Open an Allegro auction you are tracking and the Assistant shows a card in the same bottom-right
+corner naming the lot it is here: **Lot #12**, whether it is still **Open** or how it ended, and the
+parcel it sits in. Clicking it opens the lot's sale in a new tab with that lot in view, so you can
+check your ceiling, what you have already placed and what the lot is described as holding — without
+losing your place on the auction with the clock running.
+
+It is the answer that decides what to do next. A listing already on the watchlist wants the toolbar
+icon only to [refresh its bid](#capturing-an-allegro-lot); one with no card is a new lot, and the
+same click captures it. On an auction that closed, the card says **Won** or **Lost**, which is worth
+knowing when a seller relists a piece you have seen before.
+
+Nothing is drawn on an auction you have never bid on — which is nearly all of them.
+
+How the auction is recognised: by Allegro's own offer number, exactly as a capture recognises one it
+has seen before. A lot captured through the Assistant carries that number and the listing's address,
+so it is always found. A lot you added by hand is found too, as long as you typed either the offer
+number into the lot's **number** field or the listing's address into its **URL** — a lot with
+neither is not recognised, and no card appears.
+
+If a listing is somehow both — your own offer *and* a lot you are tracking — both cards are shown,
+one above the other.
 
 ## Keeping it up to date
 

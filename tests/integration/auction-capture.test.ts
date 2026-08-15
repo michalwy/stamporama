@@ -4,6 +4,7 @@ import { prisma } from "../../src/lib/db";
 import {
   AuctionActionBlockedError,
   captureAuctionLot,
+  findLotsForListings,
   findOpenAuctionSale,
   listAuctionLots,
 } from "../../src/lib/auctions";
@@ -14,9 +15,12 @@ import { setAllegroPlatform } from "../../src/lib/allegro";
 // which contact its seller is, which parcel the lot lands in, and whether a listing already tracked
 // becomes a second lot or a refreshed bid.
 
+// The fixture is shared with the lookup suite below (#575), which reads back exactly what these
+// captures wrote — the same collection is the point of it.
+let userId: string;
+let collectionId: string;
+
 describe("auction lot capture (#355)", () => {
-  let userId: string;
-  let collectionId: string;
   let platformId: string;
 
   const hourFromNow = () => new Date(Date.now() + 60 * 60 * 1000);
@@ -279,5 +283,60 @@ describe("auction lot capture (#355)", () => {
         ),
       (e: unknown) => e instanceof AuctionActionBlockedError && e.reason === "no-seller"
     );
+  });
+});
+
+// ── The link back from the listing to the lot (#575) ─────────────────────────
+//
+// The Assistant standing on an auction page asks the instance whether it is already tracked. It is
+// the capture's own matching rule asked as a **read**, so what is worth a real database here is that
+// the two agree: a listing the capture would refresh is one this reports, by whichever of the two
+// fields the lot happens to carry, and a listing the capture would treat as new reports nothing.
+//
+// It runs against the collection the suite above has already filled, which is exactly the mixture
+// worth asking: captured lots, one added by hand carrying only the number, and a house sale whose
+// `Lot 42` must never be read as an offer number.
+
+describe("finding the lots behind marketplace listings (#575)", () => {
+  it("names the lot tracking a captured listing, and where to read it", async () => {
+    const [match] = await findLotsForListings(userId, collectionId, ["18795065609"]);
+    assert.ok(match, "the listing the suite captured is tracked");
+    assert.equal(match.platformOfferId, "18795065609");
+    assert.equal(match.title, "Fi 348-357, Wyzwolenie 10 miast");
+    assert.equal(match.saleName, "Philkam_znaczki · Allegro");
+    // Still being bid on: `pending` is the derived outcome of an open lot (ADR-0021 §4).
+    assert.equal(match.outcome, "pending");
+    assert.ok(match.auctionLotNo > 0);
+    // A lot has no page of its own, so the address is its sale's, focused on it (#431).
+    assert.match(match.path, /\/auctions\/sales\/[^/]+\?lot=/);
+  });
+
+  it("recognises a lot that carries only the offer number, as the capture does", async () => {
+    const [match] = await findLotsForListings(userId, collectionId, ["18795044444"]);
+    assert.ok(match);
+    assert.equal(match.matchedBy, "lot-no");
+    assert.equal(match.title, "typed in by hand");
+  });
+
+  it("answers many listings in one call, and says nothing about the ones it never bid on", async () => {
+    const matches = await findLotsForListings(userId, collectionId, [
+      "18795065609",
+      "18795099999",
+      "17000000001",
+    ]);
+    assert.deepEqual(
+      matches.map((m) => m.platformOfferId).sort(),
+      ["18795065609", "18795099999"]
+    );
+  });
+
+  it("does not mistake one offer id for part of another", async () => {
+    // The capture's own rule: "8795065609" sits inside the tracked "18795065609", and a bare
+    // `contains` would send the collector to a different auction's lot.
+    assert.deepEqual(await findLotsForListings(userId, collectionId, ["8795065609"]), []);
+  });
+
+  it("never reads a house sale's lot number as an offer number", async () => {
+    assert.deepEqual(await findLotsForListings(userId, collectionId, ["42"]), []);
   });
 });

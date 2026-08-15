@@ -4,6 +4,7 @@ import type { CapturedLot, CaptureRefusal } from "../platform/capture";
 import type { BackfillProposal, MatchResult } from "./decisions";
 import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
+import type { LotMarkerTarget } from "./lot-marker";
 import type { SearchAnswer } from "./search";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
@@ -99,6 +100,20 @@ export interface OfferLookupRequest {
 }
 export type OfferLookupResponse =
   | { ok: true; matches: Record<string, OfferMarkerTarget> }
+  | { ok: false; error: string };
+
+// content script (on a marketplace page) → background service worker: "am I already tracking this
+// listing as an auction lot?" (#575). The same trip as the offer lookup above, through the worker
+// for the same reasons, and a separate question rather than a second field on that answer: the two
+// are asked of different halves of the collection — the shop and the watchlist — and a page that
+// turns out to be neither must be able to hear both misses without either standing in for the other.
+export interface LotLookupRequest {
+  type: "lot-lookup";
+  /** The marketplace's own listing ids, read from the addresses by the page's own module. */
+  platformOfferIds: string[];
+}
+export type LotLookupResponse =
+  | { ok: true; matches: Record<string, LotMarkerTarget> }
   | { ok: false; error: string };
 
 // search window → background service worker: "what does the collection hold matching this text?"
@@ -279,6 +294,7 @@ export type BackgroundMessage =
   | SearchRequest
   | CaptureSaveRequest
   | OfferLookupRequest
+  | LotLookupRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

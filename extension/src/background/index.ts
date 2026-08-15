@@ -9,6 +9,7 @@ import type {
   DetectedNotice,
   MatchedNotice,
   MatchResponse,
+  LotLookupResponse,
   OfferLookupResponse,
   OpenMatchResponse,
   OverwriteNumberResponse,
@@ -19,6 +20,7 @@ import { callConfirm, callMatch, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
 import { callSearch } from "./search-client";
 import { callOfferLookup } from "./offer-lookup-client";
+import { callLotLookup } from "./lot-lookup-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
 import {
@@ -165,6 +167,18 @@ async function lookupOffers(platformOfferIds: string[]): Promise<OfferLookupResp
   return callOfferLookup(profile, platformOfferIds);
 }
 
+/**
+ * Answer a marketplace page's "am I already tracking this listing as a lot?" (#575).
+ *
+ * No active profile is an **empty answer** rather than an error, exactly as the offer lookup's is:
+ * an extension installed but not yet connected must leave every page it runs on as it found it.
+ */
+async function lookupLots(platformOfferIds: string[]): Promise<LotLookupResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) return { ok: true, matches: {} };
+  return callLotLookup(profile, platformOfferIds);
+}
+
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
   // Fire-and-forget page report from a content script: show what's there, then refine the badge
   // into "work to do" once the dry-run comes back. No response expected.
@@ -236,6 +250,20 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         } satisfies OfferLookupResponse)
+      );
+    return true;
+  }
+
+  // "Am I already bidding on this?" (#575), asked by an auction page as it loads — the buying-side
+  // twin of the lookup above, answered here for the same reason.
+  if (msg?.type === "lot-lookup") {
+    lookupLots(msg.platformOfferIds)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies LotLookupResponse)
       );
     return true;
   }

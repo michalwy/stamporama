@@ -89,6 +89,11 @@ listing again refreshes its bid rather than making a second lot.
 It needs one setting first — **Settings → Allegro**, naming which of your platforms *is* Allegro —
 and it never reads the lot's contents: what a lot holds is still entered here, on the lot itself.
 
+Going the other way, an auction you are already tracking shows a card in the corner of the Allegro
+page [naming its lot](assistant.md#auctions-you-are-already-bidding-on) and linking back to it — so
+you can see your ceiling before you bid, and tell at a glance whether the icon would capture a new
+lot or only refresh this one's price.
+
 ## The lots screen
 
 Each lot carries two numbers, and they mean different things. `#3` in muted type is **the

@@ -24,7 +24,7 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { collidingLotIds, type AtRiskLine } from "./auction-duplicates";
-import { offerUrlMatchClauses } from "./platform-offer-url";
+import { offerUrlMatchClauses, urlNamesPlatformOffer } from "./platform-offer-url";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
@@ -2122,6 +2122,142 @@ export async function captureAuctionLot(
     platformName: platform.name,
     previousBid: null,
   };
+}
+
+/** One tracked lot, named for a marketplace listing the Assistant is standing on (#575). */
+export interface AuctionLotListingMatch {
+  /** The marketplace's own offer id this answers for — the key the caller asked under. */
+  platformOfferId: string;
+  lotId: string;
+  /** The lot's own short number (#432) — what the chip leads with, as the offer marker leads with
+   *  `offerNo`, and what the quick-jump box takes after `lot` (#431). */
+  auctionLotNo: number;
+  title: string;
+  /** The parcel the lot sits in: on a marketplace that is the seller's open sale (#352), which is
+   *  what tells one watched auction from another when several are up from the same shop. */
+  saleName: string;
+  /** How the bidding went, derived (ADR-0021 §4) — `pending` while it is still open. A listing may
+   *  be re-read long after it closed, and "this is the lot you lost" is a different answer from
+   *  "this is the lot you are bidding on". */
+  outcome: AuctionLotOutcome;
+  /** Where the lot is on the instance, **relative**: the sale's screen, focused on the lot (#431's
+   *  own address for one), since a lot has no page of its own. */
+  path: string;
+  matchedBy: "lot-no" | "url";
+}
+
+/** How many listings one lookup answers for. A listing page asks about itself, so this is a ceiling
+ *  on a caller that asks about a list, not a figure any page here reaches. */
+export const AUCTION_LOT_LISTING_LOOKUP_LIMIT = 200;
+
+/**
+ * The collection's own **auction lots** for a batch of marketplace listings, keyed on the
+ * marketplace's offer ids (#575). Unmatched ids are absent rather than present as nulls.
+ *
+ * This is the buying-side counterpart of `findOffersForListings` (#466), and it asks the same
+ * question of the same ids — but of the watchlist rather than the shop, because on Allegro the two
+ * are the same URL and the same markup and only the collection can tell a listing it is *selling*
+ * from one it is *bidding on*.
+ *
+ * The rule is `findCapturedLot`'s, unchanged and for its reasons: the id is looked for in `lotNo`,
+ * where a capture writes the marketplace's number — exact, and scoped to sales on the collection's
+ * Allegro platform, since `lotNo` is a shared field and a house sale's `Lot 42` is another
+ * vocabulary — and in the `url`, at the address's own boundaries. Both, because a lot added by hand
+ * carries whichever of the two the collector happened to type.
+ *
+ * It is resolved **in memory** (`urlNamesPlatformOffer`) over the collection's addressed lots rather
+ * than as an `OR` per id, exactly as the offer-side lookup is: a batch of ids would otherwise be a
+ * handful of `LIKE` arms each, while the addresses are two small columns read once.
+ *
+ * An unset Allegro platform costs only the `lotNo` half: a lot whose stored address names the
+ * listing is still the lot this listing is, and a lookup that answered nothing until a Settings tab
+ * was filled in would look broken rather than empty — the same call the offer side makes.
+ */
+export async function findLotsForListings(
+  ownerId: string,
+  collectionId: string,
+  platformOfferIds: string[]
+): Promise<AuctionLotListingMatch[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const ids = [...new Set(platformOfferIds.filter((id) => /^\d+$/.test(id)))].slice(
+    0,
+    AUCTION_LOT_LISTING_LOOKUP_LIMIT
+  );
+  if (ids.length === 0) return [];
+
+  const [collection, platform, candidates] = await Promise.all([
+    prisma.collection.findUnique({ where: { id: collectionId }, select: { slug: true } }),
+    getModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE),
+    // Newest first, as `findCapturedLot` reads them: a relisted piece bid on twice leaves an older
+    // lot behind, and the current auction is the one the collector is standing on.
+    prisma.auctionLot.findMany({
+      where: {
+        auctionSale: { collectionId },
+        OR: [{ url: { not: null } }, { lotNo: { not: null } }],
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        auctionLotNo: true,
+        lotNo: true,
+        url: true,
+        title: true,
+        status: true,
+        myBid: true,
+        finalPrice: true,
+        wonTie: true,
+        _count: { select: { lines: true } },
+        auctionSale: { select: { id: true, name: true, platformId: true } },
+      },
+    }),
+  ]);
+  if (!collection) return [];
+
+  type Candidate = (typeof candidates)[number];
+  const resolved = new Map<string, { lot: Candidate; matchedBy: AuctionLotListingMatch["matchedBy"] }>();
+  for (const id of ids) {
+    for (const lot of candidates) {
+      if (platform && lot.lotNo === id && lot.auctionSale.platformId === platform.id) {
+        resolved.set(id, { lot, matchedBy: "lot-no" });
+        break;
+      }
+      if (urlNamesPlatformOffer(lot.url, id)) {
+        resolved.set(id, { lot, matchedBy: "url" });
+        break;
+      }
+    }
+  }
+  if (resolved.size === 0) return [];
+
+  // Derived names for the matched lots the collector never titled, one valuation pass for the batch
+  // — the labeller the offer-side lookup builds only when some offer needs it (#466).
+  const matched = [...new Set([...resolved.values()].map((entry) => entry.lot))];
+  const derived = await lotTitlesFor(collectionId, matched);
+
+  const matches: AuctionLotListingMatch[] = [];
+  for (const [platformOfferId, { lot, matchedBy }] of resolved) {
+    matches.push({
+      platformOfferId,
+      lotId: lot.id,
+      auctionLotNo: lot.auctionLotNo,
+      title:
+        auctionLotName({
+          title: lot.title,
+          derivedTitle: derived.get(lot.id) ?? null,
+          lotNo: lot.lotNo,
+        }) ?? "Untitled lot",
+      saleName: lot.auctionSale.name,
+      outcome: lotOutcome({
+        status: lot.status as AuctionLotStatus,
+        myBid: money(lot.myBid),
+        finalPrice: money(lot.finalPrice),
+        wonTie: lot.wonTie,
+      }),
+      path: `/c/${encodeURIComponent(collection.slug)}/auctions/sales/${lot.auctionSale.id}?lot=${lot.id}`,
+      matchedBy,
+    });
+  }
+  return matches;
 }
 
 /**

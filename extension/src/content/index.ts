@@ -15,6 +15,7 @@ import {
   renderOfferMarker,
   type OfferMarkerTarget,
 } from "../core/offer-marker";
+import { renderLotMarker, type LotMarkerTarget } from "../core/lot-marker";
 import { getProfileStore } from "../core/profile";
 import { markIconUrl as iconUrl } from "../core/mark";
 import type {
@@ -29,6 +30,8 @@ import type {
   FillRequest,
   FillResponse,
   ListedHereNotice,
+  LotLookupRequest,
+  LotLookupResponse,
   ListingSubmittedNotice,
   OfferLookupRequest,
   OfferLookupResponse,
@@ -38,7 +41,8 @@ import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
 //   • declaratively (manifest `content_scripts`) on Colnect — so the toolbar badge can show how many
 //     items the page holds before the popup is ever opened — and on Allegro's offer pages and the
-//     seller's own assortment list, for the links back to the offers those listings are here (#466);
+//     seller's own assortment list, for the links back to the offers those listings are here (#466)
+//     and to the auction lots they are being bid on as (#575);
 //   • injected on demand by the popup (chrome.scripting) — which also covers tabs that were already
 //     open when the extension was installed or reloaded, where the declarative script never ran.
 //
@@ -275,6 +279,27 @@ async function lookupOffers(platformOfferIds: string[]): Promise<void> {
   for (const id of unknown) knownOffers.set(id, res.matches[id] ?? null);
 }
 
+/**
+ * The same question of the watchlist: "is this listing a lot I am already bidding on?" (#575).
+ *
+ * Remembered for the life of the page for the offer lookup's reason, and a miss is remembered too:
+ * this is asked on every auction the collector opens, and nearly all of them are auctions nobody
+ * here has ever bid on.
+ */
+const knownLots = new Map<string, LotMarkerTarget | null>();
+
+async function lookupLots(platformOfferIds: string[]): Promise<void> {
+  const unknown = platformOfferIds.filter((id) => !knownLots.has(id));
+  if (unknown.length === 0) return;
+
+  const res = (await chrome.runtime.sendMessage({
+    type: "lot-lookup",
+    platformOfferIds: unknown,
+  } satisfies LotLookupRequest)) as LotLookupResponse;
+  if (!res?.ok) return;
+  for (const id of unknown) knownLots.set(id, res.matches[id] ?? null);
+}
+
 /** The listing id an anchor points at, through whichever module handles that address — so the shell
  *  never names Allegro, and an anchor pointing anywhere else answers null. */
 function anchorListingId(anchor: HTMLAnchorElement): string | null {
@@ -318,11 +343,17 @@ async function markOwnListings(): Promise<void> {
   if (pageListingId) ids.push(pageListingId);
   if (ids.length === 0) return;
 
-  await lookupOffers(ids);
+  // Both questions at once, and independently: a listing is one of ours to sell, one of ours to bid
+  // on, or — nearly always — neither, and no answer here stands in for another. Only the page's own
+  // listing is asked about as a lot: a list of auctions on a marketplace is somebody else's, where
+  // the offer side has the collector's own assortment table to answer for.
+  await Promise.all([lookupOffers(ids), pageListingId ? lookupLots([pageListingId]) : null]);
 
   if (pageListingId) {
     const match = knownOffers.get(pageListingId);
     if (match) renderOfferMarker(document, match, iconUrl);
+    const lot = knownLots.get(pageListingId);
+    if (lot) renderLotMarker(document, lot, iconUrl);
   }
   // A listing that matched nothing is recorded as answered all the same — that is what stops a table
   // of somebody else's offers being re-tested on every re-render for ever.

@@ -23,6 +23,8 @@
 //
 // Pure DOM work: no `chrome.*`, so it is unit-tested against `linkedom` like the platform modules.
 
+import { CHIP_STYLE, markerStack, pruneMarkerStack, STACK_ATTR } from "./marker-shell";
+
 /** Marks the chip, so a re-run replaces it instead of stacking a second one on the page. */
 const MARKER_ATTR = "data-stamporama-offer";
 
@@ -53,6 +55,7 @@ export interface OfferMarkerTarget {
  *  whose listing stops matching. */
 export function removeOfferMarker(doc: Document): void {
   for (const existing of Array.from(doc.querySelectorAll(`[${MARKER_ATTR}]`))) existing.remove();
+  pruneMarkerStack(doc);
 }
 
 /**
@@ -60,17 +63,19 @@ export function removeOfferMarker(doc: Document): void {
  *
  * Styling is inline and starts from `all: initial`: this element lives inside somebody else's
  * stylesheet, and a chip that inherits Allegro's own `font-size` or `color` reads as part of their
- * page — which is the one thing it must never look like. Returns null when there is no body to
- * attach to, a document being parsed being a normal thing to be handed.
+ * page — which is the one thing it must never look like. It hangs in the shared corner stack rather
+ * than positioning itself, because the same listing may also be an auction lot (#575) and two chips
+ * claiming one corner would cover each other. Returns null when there is no body to attach to, a
+ * document being parsed being a normal thing to be handed.
  */
 export function renderOfferMarker(
   doc: Document,
   target: OfferMarkerTarget,
   iconUrl: string | null
 ): HTMLAnchorElement | null {
-  const body = doc.body;
-  if (!body) return null;
   removeOfferMarker(doc);
+  const stack = markerStack(doc);
+  if (!stack) return null;
 
   const a = doc.createElement("a");
   a.setAttribute(MARKER_ATTR, "");
@@ -80,30 +85,7 @@ export function renderOfferMarker(
   // back to, and navigating it away to answer "which offer is this?" loses their place.
   a.target = "_blank";
   a.rel = "noreferrer noopener";
-  a.style.cssText = [
-    "all: initial",
-    "position: fixed",
-    "right: 16px",
-    "bottom: 16px",
-    // Above Allegro's own sticky buy-box and cookie bar, below nothing that matters: this is the
-    // collector's own overlay on a page they are only reading.
-    "z-index: 2147483000",
-    "display: flex",
-    "align-items: center",
-    "gap: 8px",
-    "max-width: 320px",
-    "padding: 8px 12px",
-    "border-radius: 8px",
-    "border: 1px solid rgba(0, 0, 0, 0.12)",
-    "background: #ffffff",
-    "box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18)",
-    "font-family: system-ui, sans-serif",
-    "font-size: 13px",
-    "line-height: 1.35",
-    "color: #111827",
-    "text-decoration: none",
-    "cursor: pointer",
-  ].join("; ");
+  a.style.cssText = CHIP_STYLE;
 
   if (iconUrl) {
     const img = doc.createElement("img");
@@ -132,7 +114,7 @@ export function renderOfferMarker(
   text.appendChild(head);
   text.appendChild(name);
   a.appendChild(text);
-  body.appendChild(a);
+  stack.appendChild(a);
   return a;
 }
 
@@ -178,15 +160,18 @@ export function anchorIsListRow(anchor: Element): boolean {
   return anchor.closest("tr") !== null;
 }
 
-/** True for markup this module drew — the chip, an inline link, or anything inside one.
+/** True for markup the Assistant drew — the corner stack and anything in it (a chip of either kind),
+ *  an inline link, or anything inside one.
  *
  *  The caller watches the page for changes so its links survive a redraw, and its own writing is a
  *  change like any other. Without this the first link drawn schedules the scan that draws the next,
- *  and a page the site is also rebuilding never settles. */
+ *  and a page the site is also rebuilding never settles. The stack counts as ours in its own right:
+ *  it is created and pruned by the chips, so a page whose answers are all misses would otherwise
+ *  schedule a scan for the container appearing and another for it going away. */
 export function isAssistantNode(node: Node): boolean {
   const element =
     node.nodeType === 1 ? (node as Element) : (node.parentElement as Element | null) ?? null;
-  return element?.closest(`[${MARKER_ATTR}], [${LINK_ATTR}]`) != null;
+  return element?.closest(`[${MARKER_ATTR}], [${LINK_ATTR}], [${STACK_ATTR}]`) != null;
 }
 
 /** True when this anchor has not been answered for *this* listing yet — either never, or for the
