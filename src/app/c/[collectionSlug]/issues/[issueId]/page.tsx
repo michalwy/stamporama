@@ -6,6 +6,8 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getIssueListItem, listIssueMembers } from "@/lib/issues";
 import { getIssueCompleteness } from "@/lib/checklist-completeness";
+import { formatEntityNo } from "@/lib/quick-jump";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { IssueDetailPanel } from "./issue-detail-panel";
 
 interface IssueDetailPageProps {
@@ -49,6 +51,14 @@ export default async function IssueDetailPage({ params }: IssueDetailPageProps) 
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="issue"
+        id={issue.id}
+        href={`/c/${collectionSlug}/issues/${issue.id}`}
+        label={`Issue ${formatEntityNo(issue.issueNo)}`}
+        sublabel={[issue.year, issue.name].filter(Boolean).join(", ") || undefined}
+      />
       <IssueDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}

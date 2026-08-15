@@ -8,6 +8,7 @@ import { getOfferDetail, getOfferIssueIds } from "@/lib/offers";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { OfferDetailPanel } from "./offer-detail-panel";
 import { OfferListNav } from "./offer-list-nav";
 import { offerListHref, parseOfferListContext } from "../list-context";
@@ -92,6 +93,17 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
           />
         )}
       </div>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="offer"
+        id={offer.id}
+        // The canonical screen, not the `/o/<slug>/<no>` short address the quick jump uses: that
+        // one exists so a marketplace note and a jump are one journey, and coming back to a screen
+        // one was just on is neither.
+        href={`/c/${collectionSlug}/offers/${offer.id}`}
+        label={offer.name ?? offer.label}
+        sublabel={offer.platformName}
+      />
       <OfferDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}

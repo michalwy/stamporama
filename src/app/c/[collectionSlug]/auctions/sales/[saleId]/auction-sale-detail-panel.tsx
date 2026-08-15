@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import {
   useAuctionSaleDetail,
   useInvalidateAuctions,
@@ -187,6 +188,17 @@ export function AuctionSaleDetailPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* Recorded from the panel rather than from the page (#599), because this is the one detail
+          screen whose record is fetched in the browser: the page knows only the id, and an entry
+          carrying an id and no name is a row nobody can read. */}
+      <RecordRecentVisit
+        collectionId={collectionId}
+        kind="auctionSale"
+        id={saleId}
+        href={`/c/${collectionSlug}/auctions/sales/${saleId}`}
+        label={sale.name}
+        sublabel={sale.sellerName || sale.platformName}
+      />
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link
           href={`/c/${collectionSlug}/auctions/sales`}

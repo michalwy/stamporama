@@ -23,6 +23,23 @@ number is fine (`p #7`) — that is how the number reads on screen, so pasting i
 Press **Ctrl+K** (**⌘K** on a Mac) from anywhere in the collection to put the cursor in the box.
 **Escape** gives the keyboard back to the page.
 
+## Recently visited
+
+Clicking into the box — or pressing **⌘K** — also drops a **Recent** panel under it, listing the
+records you were last on: copies, stamps, issues, offers, purchases, sales and auction sales, most
+recent first. Pick one to go back to it.
+
+- **↓** and **↑** walk the list, **Enter** opens the highlighted row, **Escape** closes the panel.
+- Typing **narrows** the list by name, while what you typed is still read as a jump — so `o 42`
+  jumps to offer `#42` on Enter, and at the same time shows the recent records whose names contain
+  `o 42`.
+- The list keeps the last **12** records, one entry per record however often you return to it.
+- **Clear** empties it.
+
+The list lives **in this browser**, per collection, alongside your other view preferences — it is a
+note of where you have been, not part of the collection, so it is not shared between browsers and
+never leaves your machine.
+
 ## What it is not
 
 It is a **jump**, not a search. It answers *"take me to the thing I am holding the number of"*, and

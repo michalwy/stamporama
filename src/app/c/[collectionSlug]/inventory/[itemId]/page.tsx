@@ -8,6 +8,7 @@ import { getLocations } from "@/lib/locations";
 import { getItemListItem, listItemsPaginated } from "@/lib/items";
 import { getItemSaleRecord } from "@/lib/sales";
 import { formatItemNo } from "@/lib/item-number";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { CopyDetailPanel } from "./copy-detail-panel";
 
 interface CopyDetailPageProps {
@@ -57,6 +58,14 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="item"
+        id={item.id}
+        href={`/c/${collectionSlug}/inventory/${item.id}`}
+        label={`Copy ${formatItemNo(item.itemNo)}`}
+        sublabel={item.stampName ?? undefined}
+      />
       <CopyDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}

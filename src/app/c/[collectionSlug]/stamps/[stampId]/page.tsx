@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getStampListItem, getStampRelatives } from "@/lib/stamps";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { StampDetailPanel } from "./stamp-detail-panel";
 
 interface StampDetailPageProps {
@@ -55,6 +56,16 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="stamp"
+        id={stamp.id}
+        href={`/c/${collectionSlug}/stamps/${stamp.id}`}
+        // Named the way the page's own title names it: the stamp's name, and its first catalog
+        // number when it has none.
+        label={stamp.name ?? stamp.catalogNumbers[0]?.number ?? "Untitled stamp"}
+        sublabel={stamp.issuedYear ? String(stamp.issuedYear) : undefined}
+      />
       <StampDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}

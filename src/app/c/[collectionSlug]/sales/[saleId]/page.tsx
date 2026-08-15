@@ -9,6 +9,8 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { getCarriers } from "@/lib/carriers";
+import { formatEntityNo } from "@/lib/quick-jump";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { SaleDetailPanel } from "./sale-detail-panel";
 
 interface SaleDetailPageProps {
@@ -69,6 +71,14 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
       >
         ← Back to sales
       </Link>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="sale"
+        id={sale.id}
+        href={`/c/${collectionSlug}/sales/${sale.id}`}
+        label={`Sale ${formatEntityNo(sale.saleNo)}`}
+        sublabel={sale.buyerName ?? sale.platformName}
+      />
       <SaleDetailPanel
         collectionId={collection.id}
         sale={sale}

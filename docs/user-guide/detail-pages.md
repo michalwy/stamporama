@@ -55,6 +55,13 @@ clicking the row.
 The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 `/c/[slug]/issues/[issueId]`, so a page can be bookmarked or kept open in a second tab.
 
+## Getting back to one
+
+Every one of these pages — and the offer, purchase, sale and auction sale screens with them — is
+remembered as you visit it. Click into the sidebar's **Jump to…** box (or press **⌘K**) and the
+records you were last on are listed under it; see
+[Recently visited](quick-jump.md#recently-visited).
+
 ## The copy page
 
 *Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers. Only

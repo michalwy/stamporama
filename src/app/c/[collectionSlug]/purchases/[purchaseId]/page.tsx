@@ -10,6 +10,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
+import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
 
 interface PurchaseDetailPageProps {
@@ -77,6 +78,16 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
       >
         ← Back to purchases
       </Link>
+      <RecordRecentVisit
+        collectionId={collection.id}
+        kind="purchase"
+        id={purchase.id}
+        href={`/c/${collectionSlug}/purchases/${purchase.id}`}
+        // Who it was bought from is what a purchase is remembered by; the date tells two orders
+        // from the same dealer apart.
+        label={purchase.contactName ?? purchase.platformName ?? "Purchase"}
+        sublabel={purchase.purchasedAt}
+      />
       <PurchaseDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
