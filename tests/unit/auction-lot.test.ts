@@ -234,9 +234,55 @@ describe("summarizeAuctionSale", () => {
   });
 
   it("charges shipping once across the parcel, and the premium per lot", () => {
-    // Two ceilings of 100 → 200, plus one shipping of 15. A ceiling carries no premium.
-    const s = summarizeAuctionSale([lot({ maxBid: "100" }), lot({ maxBid: "100" })], FEES);
-    assert.equal(s.ceilingTotal, "215.00");
+    // Two ceilings of 200 → 400, plus one shipping of 15. A ceiling carries no premium.
+    const s = summarizeAuctionSale([lot({ maxBid: "200" }), lot({ maxBid: "200" })], FEES);
+    assert.equal(s.ceilingTotal, "415.00");
+  });
+
+  // Outpriced lots (#600) — the price has run past the ceiling, so nothing can come of the lot
+  // until the ceiling is raised, and neither exposure figure should count it.
+
+  it("leaves a lot the price has passed the ceiling out of both totals", () => {
+    // Standing at 100, all-in 121, against a ceiling of 110 and no bid placed. Shipping still
+    // lands, as it does whenever the parcel holds something payable.
+    const s = summarizeAuctionSale([lot({ myBid: null, currentBid: "100", maxBid: "110" })], FEES);
+    assert.equal(s.committedTotal, "15.00");
+    assert.equal(s.ceilingTotal, "15.00");
+    assert.equal(s.outpricedCount, 1);
+    // Excluded from the totals, not from the parcel: it is still a lot that could be re-bid.
+    assert.equal(s.payableCount, 1);
+    assert.equal(s.uncappedCount, 0);
+  });
+
+  it("measures the price against the ceiling all-in, as the over-ceiling chip does", () => {
+    // 100 is under a ceiling of 110 on its face; with the premium it costs 121, which is not. The
+    // 90 placed is behind the price, so nothing here can still be won.
+    const s = summarizeAuctionSale([lot({ myBid: "90", currentBid: "100", maxBid: "110" })], FEES);
+    assert.equal(s.outpricedCount, 1);
+    assert.equal(s.committedTotal, "15.00");
+  });
+
+  it("keeps a lot whose own bid still leads, even past the ceiling", () => {
+    // Placed 200 against a ceiling of 110 and a price of 100: the lot can still be won at 200, so
+    // that money is on the hook whatever the valuation says (`myBidOverCeiling`).
+    const s = summarizeAuctionSale([lot({ myBid: "200", currentBid: "100", maxBid: "110" })], FEES);
+    assert.equal(s.outpricedCount, 0);
+    assert.equal(s.committedTotal, "256.00");
+    assert.equal(s.ceilingTotal, "256.00");
+  });
+
+  it("keeps a lot with no ceiling recorded, whatever it stands at", () => {
+    // Nothing has been passed: there is no ceiling to pass.
+    const s = summarizeAuctionSale([lot({ myBid: "100", currentBid: "500", maxBid: null })], FEES);
+    assert.equal(s.outpricedCount, 0);
+    assert.equal(s.committedTotal, "136.00");
+  });
+
+  it("never calls a won lot outpriced", () => {
+    // The lot is settled at 100 all-in 121; the ceiling of 110 it went past has nothing left to say.
+    const s = summarizeAuctionSale([wonLot({ finalPrice: "100", maxBid: "110" })], FEES);
+    assert.equal(s.outpricedCount, 0);
+    assert.equal(s.committedTotal, "136.00");
   });
 
   it("is all zeroes for an empty sale", () => {

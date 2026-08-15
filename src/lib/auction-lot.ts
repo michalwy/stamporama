@@ -442,7 +442,7 @@ export interface AuctionLotSummaryRow {
   /** The live bid while the lot is open. */
   currentBid?: Amount;
   /** The collector's own ceiling — an **all-in** valuation (ADR-0021 §6), not a hammer price. Read
-   * only by {@link AuctionSaleSummary.ceilingTotal}. */
+   * by {@link AuctionSaleSummary.ceilingTotal}, and against `currentBid` by {@link isOutpriced}. */
   maxBid?: Amount;
   /** What the lot fetched once it closed. Preferred over `currentBid` when present: it is the
    * settled figure, and the last observed bid is only ever an approximation of it. */
@@ -504,6 +504,11 @@ export interface AuctionSaleSummary {
   /** Payable lots carrying neither a bid nor a ceiling — they contribute to neither total, so like
    * {@link unbidCount} the screens say so rather than presenting a figure that looks complete. */
   uncappedCount: number;
+  /** Open lots left out of the two exposure totals by {@link isOutpriced} (#600) — the price has
+   * run past the ceiling and past the collector's bid, so nothing can come of them until the
+   * ceiling is raised. Counted for the same reason every other gap here is: the totals are lower
+   * than the lot list is long, and a figure that quietly omits rows reads as complete. */
+  outpricedCount: number;
   /** Catalogue value across the payable lots. */
   catalogTotal: string;
   /** `catalogTotal − allInTotal`. Null when nothing in the parcel carries both a bid and a
@@ -519,6 +524,31 @@ function isPayable(outcome: AuctionLotOutcome): boolean {
 /** The figure a lot is costed at: the settled price when it closed, else the last observed bid. */
 function lotBid(lot: AuctionLotSummaryRow): number | null {
   return num(lot.finalPrice) ?? num(lot.currentBid);
+}
+
+/**
+ * Whether an open lot has run **out of the collector's reach at the ceiling they recorded** (#600),
+ * and so is worth nothing to the exposure totals.
+ *
+ * Two conditions, and the figure is wrong without either.
+ *
+ * The price has to be past the ceiling **all-in**, not raw: a ceiling is an all-in valuation
+ * (ADR-0021 §6) while `currentBid` is a hammer price, so the bare `currentBid > maxBid` comparison
+ * keeps counting a lot for as long as the premium alone is what carries it over — the very lot the
+ * row is already chipping as `over-ceiling`. This is deliberately the same comparison
+ * {@link lotHasSignal} makes for that signal, so the chip and the total cannot disagree.
+ *
+ * And the collector has to be **behind**. A bid placed above the ceiling still wins the lot at what
+ * was placed — that is the `myBidOverCeiling` case {@link AuctionSaleSummary.ceilingTotal} exists to
+ * keep honest — so money is genuinely on the hook there whatever the valuation says. What cannot
+ * happen is winning a lot whose price has passed both the ceiling *and* the bid: that needs a new,
+ * higher bid first, which is a decision the collector has not made yet.
+ */
+function isOutpriced(lot: AuctionLotSummaryRow, fees: AuctionFees): boolean {
+  if (bidStanding(lot.myBid, lot.currentBid) === "leading") return false;
+  const cost = allIn(lot.currentBid, fees);
+  const cap = num(lot.maxBid);
+  return cost !== null && cap !== null && Number(cost) > cap;
 }
 
 /**
@@ -544,6 +574,7 @@ export function summarizeAuctionSale(
   let committedTotal = 0;
   let ceilingTotal = 0;
   let uncappedCount = 0;
+  let outpricedCount = 0;
   let catalogTotal = 0;
   // Headroom compares like with like: only lots carrying both a bid and a catalogue value.
   let comparableCount = 0;
@@ -590,6 +621,14 @@ export function summarizeAuctionSale(
       continue;
     }
 
+    // An open lot the price has already left behind (#600) costs nothing either way: it can only be
+    // won by raising the ceiling, and until that happens neither figure has anything to say about
+    // it. It stays payable and stays on the list — this is a total it drops out of, not a lot.
+    if (isOutpriced(lot, perLotFees)) {
+      outpricedCount++;
+      continue;
+    }
+
     // An open lot: costed at the proxy maximum lodged with the platform, never at what it stands
     // at. The ceiling enters `ceilingTotal` as it stands — it is an all-in valuation already.
     const placed = num(lot.myBid);
@@ -624,6 +663,7 @@ export function summarizeAuctionSale(
     committedTotal: money(committedTotal),
     ceilingTotal: money(ceilingTotal),
     uncappedCount,
+    outpricedCount,
     catalogTotal: money(catalogTotal),
     headroom: comparableCount > 0 ? money(catalogTotal - allInTotal) : null,
   };

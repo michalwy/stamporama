@@ -341,14 +341,14 @@ export function AuctionSaleDetailPanel({
         <Field
           label="Committed"
           value={`${summary.committedTotal} ${sale.currency}`}
-          hint="What you owe if every bid you have placed wins at your own maximum — the settled price on the lots already won, plus shipping once. A lot you have not bid on costs nothing here."
+          hint="What you owe if every bid you have placed wins at your own maximum — the settled price on the lots already won, plus shipping once. A lot you have not bid on, or one whose price has already passed your ceiling, costs nothing here."
           strong
           base={inBase(summary.committedTotal)}
         />
         <Field
           label="At ceiling"
           value={`${summary.ceilingTotal} ${sale.currency}`}
-          hint="The same, if every open lot is bid up to its ceiling. A ceiling is already an all-in figure, so it is counted as it stands; where your placed bid is higher, that is what counts."
+          hint="The same, if every open lot is bid up to its ceiling. A ceiling is already an all-in figure, so it is counted as it stands; where your placed bid is higher, that is what counts. A lot the price has already carried past your ceiling is left out — it needs a new ceiling before it can cost you anything."
           base={inBase(summary.ceilingTotal)}
         />
         {/* What the parcel is worth against what it costs (#353). Unlike a lot row's headroom this
@@ -390,6 +390,18 @@ export function AuctionSaleDetailPanel({
           {summary.uncappedCount} lot{summary.uncappedCount === 1 ? " has" : "s have"} neither a bid
           nor a ceiling, so neither <strong>Committed</strong> nor <strong>At ceiling</strong> counts
           {summary.uncappedCount === 1 ? " it" : " them"}.
+        </p>
+      )}
+
+      {/* The other way out of those two totals (#600), and unlike the one above it is not a gap:
+          the lot is correctly costed at nothing, since the price has passed the ceiling. Stated in
+          the muted tone for exactly that reason — there is nothing here to fix. */}
+      {summary.outpricedCount > 0 && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+          {summary.outpricedCount} lot{summary.outpricedCount === 1 ? " has" : "s have"} gone past
+          {summary.outpricedCount === 1 ? " its" : " their"} ceiling, so neither{" "}
+          <strong>Committed</strong> nor <strong>At ceiling</strong> counts
+          {summary.outpricedCount === 1 ? " it" : " them"} — raise the ceiling to bid again.
         </p>
       )}
 

@@ -390,10 +390,19 @@ counts as it stands — the premium is never added to it a second time. Where th
 *higher* than the ceiling, that bid is what counts: it is money committed whatever your valuation
 of the lot says.
 
-The note beside them says how many lots were counted, and calls out the two things that would make
-the totals read lower than the truth: lots carrying **neither a bid nor a ceiling**, which cannot be
-costed at all, and lots in a currency with **no rate** into yours, which are left out rather than
-added as though the two currencies were one.
+A lot the bidding has already carried **past your ceiling** — the one the row chips as *over
+ceiling* — drops out of both figures. Nothing can come of it as things stand: winning it would take
+a new, higher ceiling, and that is a decision you have not made. Counting it would quietly bill you
+for every lot you have ever been outbid on. The lot itself stays on the list, ready to be re-bid;
+it is the totals it leaves, and the note beside them says how many. The comparison is made
+**all-in**, like everything measured against a ceiling, so a lot whose price is under your ceiling
+but whose premium takes it over is out too. If your own placed bid is still ahead of the price, the
+lot stays counted even above the ceiling — it can still be won, at what you placed.
+
+The note beside them says how many lots were counted, then the lots already past their ceiling, and
+it calls out the two things that would make the totals read lower than the truth: lots carrying
+**neither a bid nor a ceiling**, which cannot be costed at all, and lots in a currency with **no
+rate** into yours, which are left out rather than added as though the two currencies were one.
 
 The same pair sits on a sale's own screen, beside its all-in total, for one parcel.
 
@@ -475,7 +484,8 @@ the whole watchlist: **committed** — what this parcel costs if every bid you p
 your maximum, the won lots at what they fetched, shipping once — and **at ceiling**, the same if you
 carry every open lot in it up to your ceiling. The all-in total says what the parcel costs at
 today's prices; these two say what it can cost. Lots carrying neither a bid nor a ceiling are named
-under the card, because nothing can cost them.
+under the card, because nothing can cost them — and so are the lots the price has already carried
+past their ceiling, which leave both totals until you raise the ceiling on them.
 
 A sale's own screen shows its terms and its lots, and is where you:
 

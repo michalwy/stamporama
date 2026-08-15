@@ -14,7 +14,9 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //
 // A ceiling is an **all-in** valuation already (ADR-0021 §6), so it is counted as it stands — the
 // premium is never run over it a second time. Where a bid was placed past the ceiling, that bid is
-// what counts: it is money committed whatever the valuation says.
+// what counts: it is money committed whatever the valuation says. Where the *price* has gone past
+// both the ceiling and that bid, the lot leaves both totals (#600) and is named in the note beside
+// them: it can only be won by raising the ceiling, which has not been decided yet.
 //
 // Always in the **base currency**, unlike every other auction figure, which stays in the currency
 // the bidding happens in (#498): a watchlist spans platforms, and a sum across two currencies is
@@ -125,14 +127,25 @@ function Figure({
 export function AuctionExposureBar({ exposure }: { exposure: AuctionLotExposure | undefined }) {
   if (!exposure) return <ExposureBarSkeleton />;
 
-  const notes: string[] = [
-    `${exposure.payableCount} lot${exposure.payableCount === 1 ? "" : "s"} counted`,
+  // Each note is either a plain reading of the set or one of the reasons a lot fell out of it.
+  // Only the latter are tinted: a gap that makes the figures read low is worth the eye, while the
+  // count of what was covered is just the caption.
+  const notes: { text: string; warn: boolean }[] = [
+    {
+      text: `${exposure.payableCount} lot${exposure.payableCount === 1 ? "" : "s"} counted`,
+      warn: false,
+    },
   ];
+  if (exposure.outpricedCount > 0) {
+    // Not a gap in the data (#600) — these lots genuinely cost nothing at the ceiling recorded on
+    // them, so the note is stated plainly rather than as a warning.
+    notes.push({ text: `${exposure.outpricedCount} already past your ceiling`, warn: false });
+  }
   if (exposure.uncappedCount > 0) {
-    notes.push(`${exposure.uncappedCount} with neither a bid nor a ceiling`);
+    notes.push({ text: `${exposure.uncappedCount} with neither a bid nor a ceiling`, warn: true });
   }
   if (exposure.unconvertibleCount > 0) {
-    notes.push(`${exposure.unconvertibleCount} in a currency with no rate`);
+    notes.push({ text: `${exposure.unconvertibleCount} in a currency with no rate`, warn: true });
   }
 
   return (
@@ -142,25 +155,22 @@ export function AuctionExposureBar({ exposure }: { exposure: AuctionLotExposure 
         amount={exposure.committedTotal}
         currency={exposure.baseCurrency}
         amountStyle={AMOUNT_STYLE}
-        hint="What these lots cost if every bid you have placed wins at your own maximum — plus what the ones already won fetched, and each parcel's shipping once. A lot you have not bid on costs nothing here."
+        hint="What these lots cost if every bid you have placed wins at your own maximum — plus what the ones already won fetched, and each parcel's shipping once. A lot you have not bid on, or one whose price has already passed your ceiling, costs nothing here."
       />
       <Figure
         label="At ceiling"
         amount={exposure.ceilingTotal}
         currency={exposure.baseCurrency}
         amountStyle={CEILING_AMOUNT_STYLE}
-        hint="The same, if every open lot is bid up to its ceiling. A ceiling is already an all-in figure, so it is counted as it stands; where your placed bid is higher, that is what counts."
+        hint="The same, if every open lot is bid up to its ceiling. A ceiling is already an all-in figure, so it is counted as it stands; where your placed bid is higher, that is what counts. A lot the price has already carried past your ceiling is left out — it needs a new ceiling before it can cost you anything."
       />
-      <span
-        style={{
-          ...NOTE_STYLE,
-          color:
-            exposure.uncappedCount > 0 || exposure.unconvertibleCount > 0
-              ? "var(--color-warning)"
-              : NOTE_STYLE.color,
-        }}
-      >
-        {notes.join(" · ")}
+      <span style={NOTE_STYLE}>
+        {notes.map((note, i) => (
+          <span key={note.text} style={note.warn ? { color: "var(--color-warning)" } : undefined}>
+            {i > 0 ? " · " : ""}
+            {note.text}
+          </span>
+        ))}
       </span>
     </div>
   );

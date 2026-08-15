@@ -921,6 +921,10 @@ export interface AuctionLotExposure {
   payableCount: number;
   /** Payable lots carrying neither a bid nor a ceiling, so costed at nothing. */
   uncappedCount: number;
+  /** Open lots the price has already carried past both the ceiling and the collector's bid (#600),
+   * so left out of both totals until the ceiling is raised. See
+   * {@link AuctionSaleSummary.outpricedCount}. */
+  outpricedCount: number;
   /** Payable lots in a sale whose currency has no rate into the base one, so left out of the totals
    * altogether (#208's best-effort rule) rather than added as if the two currencies were one. */
   unconvertibleCount: number;
@@ -931,6 +935,9 @@ const EXPOSURE_LOT_SELECT = {
   auctionSaleId: true,
   status: true,
   myBid: true,
+  // Read for one question only: whether the price has already run past the ceiling (#600). It is an
+  // observation and never a figure either total is built from.
+  currentBid: true,
   maxBid: true,
   finalPrice: true,
   wonTie: true,
@@ -964,6 +971,7 @@ export async function auctionLotExposure(
     ceilingTotal: "0.00",
     payableCount: 0,
     uncappedCount: 0,
+    outpricedCount: 0,
     unconvertibleCount: 0,
   };
 
@@ -995,6 +1003,7 @@ export async function auctionLotExposure(
   let ceiling = 0;
   let payableCount = 0;
   let uncappedCount = 0;
+  let outpricedCount = 0;
   let unconvertibleCount = 0;
 
   for (const [saleId, lots] of grouped) {
@@ -1004,6 +1013,7 @@ export async function auctionLotExposure(
       lots.map((lot) => ({
         status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
         myBid: money(lot.myBid),
+        currentBid: money(lot.currentBid),
         maxBid: money(lot.maxBid),
         finalPrice: money(lot.finalPrice),
         wonTie: lot.wonTie,
@@ -1023,6 +1033,7 @@ export async function auctionLotExposure(
     }
     payableCount += summary.payableCount;
     uncappedCount += summary.uncappedCount;
+    outpricedCount += summary.outpricedCount;
     committed += Number(summary.committedTotal) * rate;
     ceiling += Number(summary.ceilingTotal) * rate;
   }
@@ -1033,6 +1044,7 @@ export async function auctionLotExposure(
     ceilingTotal: ceiling.toFixed(2),
     payableCount,
     uncappedCount,
+    outpricedCount,
     unconvertibleCount,
   };
 }
