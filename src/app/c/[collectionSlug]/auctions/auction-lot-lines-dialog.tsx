@@ -8,6 +8,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { PriceDetailsDialog } from "@/app/c/[collectionSlug]/shared/price-details-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotLineDialog } from "./auction-lot-line-dialog";
@@ -123,6 +124,9 @@ export function AuctionLotLinesDialog({
   /** The line whose missing catalogue value is being filled in. */
   const [pricing, setPricing] = useState<AuctionLotLineItem | null>(null);
   const [priceError, setPriceError] = useState<string | undefined>();
+  /** Which line's stamp the Valuation dialog is open on (#601) — one dialog for the whole list,
+   * since a hook cannot be called per row. */
+  const [valuationStampId, setValuationStampId] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useAuctionLotComposition(collectionId, lot.id);
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -230,8 +234,18 @@ export function AuctionLotLinesDialog({
                 : null;
               const labels = orderedCatalogLabels(line.catalogNumbers, vendorMap, primaryVendorId);
               const actions: RowAction[] = [
+                // Read-only and ungated, so it is offered on a settled lot too (#601): what the
+                // market paid for this stamp is the question a ceiling is decided against, and it
+                // does not stop being answerable once the parcel is bought.
+                {
+                  key: "valuation",
+                  label: "Show valuation",
+                  icon: "prices",
+                  onSelect: () => setValuationStampId(line.stampId),
+                },
                 {
                   key: "edit",
+                  separatorBefore: true,
                   label: "Edit line",
                   icon: "edit",
                   disabled: !editable,
@@ -475,6 +489,20 @@ export function AuctionLotLinesDialog({
             });
           }}
         />,
+          document.body
+        )}
+
+      {/* The Valuation dialog (#114) for a line's stamp — what the market has paid, the catalogue
+          and what this collection paid, read while a ceiling is being decided (#601). Portaled for
+          the same reason the two dialogs above are: this panel is transform-centred, so it would
+          otherwise be the containing block for the nested dialog's `position: fixed`. */}
+      {valuationStampId &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <PriceDetailsDialog
+            target={{ kind: "stamp", stampId: valuationStampId }}
+            onClose={() => setValuationStampId(null)}
+          />,
           document.body
         )}
     </DialogShell>

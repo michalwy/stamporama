@@ -188,6 +188,7 @@ export function AuctionLotLineRow({
   isLast,
   readOnly = false,
   onSetPrice,
+  onShowValuation,
   onEdit,
   onDelete,
 }: {
@@ -197,12 +198,16 @@ export function AuctionLotLineRow({
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
-  /** Hides the row's ⋮ menu. Set on a settled lot, whose composition is history (#28), and in the
-   * parcel-wide flat view, where the line's own card — and so the edit form — is not on screen.
-   * It does **not** suppress the price slot: `onSetPrice` decides that, because quick-adding a
-   * catalogue value opens a dialog and works from anywhere. */
+  /** Hides the row's **editing** ⋮ entries. Set on a settled lot, whose composition is history
+   * (#28), and in the parcel-wide flat view, where the line's own card — and so the edit form —
+   * is not on screen. It does **not** suppress the price slot: `onSetPrice` decides that, because
+   * quick-adding a catalogue value opens a dialog and works from anywhere. For the same reason it
+   * does not suppress *Show valuation* (#601) — that window is read-only. */
   readOnly?: boolean;
   onSetPrice?: () => void;
+  /** Opens the Valuation dialog (#114) for the line's stamp — what the market has paid, what the
+   * catalogue asks and what this collection paid, while a bid ceiling is being decided (#601). */
+  onShowValuation?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
@@ -218,18 +223,41 @@ export function AuctionLotLineRow({
   const dateStr = formatIssuedDate(line.issuedDay, line.issuedMonth, line.issuedYear);
   const hasIssue = !!(line.issueName || line.issueYear);
 
+  // *Show valuation* survives `readOnly` on the same argument the price slot does: it opens a
+  // read-only window and needs nothing on screen but the stamp (#601).
   const actions: RowAction[] = [
-    { key: "edit", label: "Edit line", icon: "edit", onSelect: () => onEdit?.() },
-    {
-      key: "delete",
-      label: "Remove from lot",
-      icon: "remove",
-      danger: true,
-      separatorBefore: true,
-      onSelect: () => onDelete?.(),
-    },
+    ...(onShowValuation
+      ? [
+          {
+            key: "valuation",
+            label: "Show valuation",
+            icon: "prices",
+            onSelect: () => onShowValuation(),
+          } satisfies RowAction,
+        ]
+      : []),
+    ...(readOnly
+      ? []
+      : [
+          {
+            key: "edit",
+            label: "Edit line",
+            icon: "edit",
+            separatorBefore: !!onShowValuation,
+            onSelect: () => onEdit?.(),
+          } satisfies RowAction,
+          {
+            key: "delete",
+            label: "Remove from lot",
+            icon: "remove",
+            danger: true,
+            separatorBefore: true,
+            onSelect: () => onDelete?.(),
+          } satisfies RowAction,
+        ]),
   ];
-  const menu = readOnly ? null : <RowActionsMenu actions={actions} ariaLabel="Line actions" />;
+  const menu =
+    actions.length === 0 ? null : <RowActionsMenu actions={actions} ariaLabel="Line actions" />;
 
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>

@@ -637,6 +637,19 @@ the ECB table, which is what makes the two directions exact opposites: a price o
 in EUR reads as 1500, not 1498.44. (Older data, cached before this, could drift by around a tenth of
 a percent; it is replaced the first time a rate is looked up.)
 
+### Checking what a stamp is worth, from the line
+
+A line's **⋮** menu has **Show valuation**, which opens the same read-only
+[Valuation](collections.md#the-valuation-dialog) window every other list in the app opens:
+what closed auction lots have actually paid for that stamp, what your catalogues ask for it, and
+what this collection paid for the copies it holds — all on the conditions × certificates grid, so
+you can read the line's own condition off it.
+
+It is there for the moment before a bid: the catalogue figure on the line answers *what does the
+book say*, and this answers *what does it actually go for*. Close it and you are back on the lot,
+nothing changed — it is read-only, and it is offered on a **settled** lot's lines too, where
+everything else in the menu is not.
+
 ### Headroom
 
 The footer of the editor, and the row labelled **headroom** in the worth half of the grid, is the

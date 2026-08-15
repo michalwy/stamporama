@@ -6,6 +6,7 @@ import type { IssueHeader } from "@/lib/issues";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { PriceDetailsDialog } from "@/app/c/[collectionSlug]/shared/price-details-dialog";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -79,6 +80,9 @@ interface LineCtx {
   vendorMapFor: AreaVendorMaps["vendorMapFor"];
   areaNameById: Map<string, string>;
   onSetPrice: (line: AuctionLotLineItem) => void;
+  /** Opens the Valuation dialog for the line's stamp (#601). One dialog for the screen, remembering
+   * which line opened it — a hook cannot be called per row. */
+  onShowValuation: (line: AuctionLotLineItem) => void;
   onEditLine: (line: AuctionLotLineItem) => void;
   onDeleteLine: (line: AuctionLotLineItem) => void;
 }
@@ -159,6 +163,7 @@ function LineRows({
             isLast={i === lines.length - 1}
             readOnly={readOnly}
             onSetPrice={canPrice ? () => ctx.onSetPrice(line) : undefined}
+            onShowValuation={() => ctx.onShowValuation(line)}
             onEdit={() => ctx.onEditLine(line)}
             onDelete={() => ctx.onDeleteLine(line)}
           />
@@ -605,6 +610,8 @@ export function AuctionLotCardsView({
   const [formError, setFormError] = useState<string | undefined>();
   const [pricing, setPricing] = useState<AuctionLotLineItem | null>(null);
   const [priceError, setPriceError] = useState<string | undefined>();
+  /** Which line's stamp the Valuation dialog is open on (#601). */
+  const [valuationStampId, setValuationStampId] = useState<string | null>(null);
   const [linePending, startLineTransition] = useTransition();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -635,6 +642,7 @@ export function AuctionLotCardsView({
       setPriceError(undefined);
       setPricing(line);
     },
+    onShowValuation: (line) => setValuationStampId(line.stampId),
     onEditLine: (line) => {
       setFormError(undefined);
       setDraft({ lotId: line.auctionLotId, value: { line } });
@@ -887,6 +895,16 @@ export function AuctionLotCardsView({
               }
             });
           }}
+        />
+      )}
+
+      {/* What the market has paid for this stamp, what the catalogue asks and what this collection
+          paid — the read-only window every other list reaches (#114), opened here while a ceiling
+          is being decided (#601). */}
+      {valuationStampId && (
+        <PriceDetailsDialog
+          target={{ kind: "stamp", stampId: valuationStampId }}
+          onClose={() => setValuationStampId(null)}
         />
       )}
     </div>
