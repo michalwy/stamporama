@@ -134,6 +134,16 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** The label in front of a group of toolbar controls ("Group by", "Sort copies") — the same shape
+ *  the offer and auction-sale toolbars use, which is what lets the three read as one control row. */
+const TOOLBAR_LABEL: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
   padding: "0.5rem 0.625rem",
@@ -733,12 +743,103 @@ export function PurchaseDetailPanel({
         onChanged={() => router.refresh()}
       />
 
-      {/* Lots */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* Lots — heading, grouping, sorting and the two ways in, on **one** row (#588). The three
+          controls are read together ("show me the lots, grouped like this, sorted like that") and
+          three stacked lines pushed the first lot card a screenful down on a long order. Wraps
+          rather than compressing: a narrow window drops the trailing groups to a second line
+          instead of squeezing the select. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "1.25rem",
+          flexWrap: "wrap",
+        }}
+      >
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           Lots
         </h3>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+
+        {/* Order-level grouping: by lot and/or by issue; both off = flat list. Only lot-level
+            management (add stamps, close, price…) lives in the by-lot view (#121). */}
+        {purchase.lots.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Group by</span>
+            {(
+              [
+                { on: byLot, set: setByLot, label: "Lot" },
+                { on: byIssue, set: setByIssue, label: "Issue" },
+              ] as const
+            ).map(({ on, set, label }) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={on}
+                onClick={() => set(!on)}
+                style={{
+                  ...CHIP,
+                  cursor: "pointer",
+                  fontWeight: on ? 600 : 500,
+                  color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                  borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                  background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                }}
+              >
+                {on && <Icon name="check" size="xs" />} {label}
+              </button>
+            ))}
+            {!byLot && !byIssue && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Flat list</span>
+            )}
+          </div>
+        )}
+
+        {/* Sort order for the copies inside each lot (also the flat / by-issue copy views) (#157).
+            Sorts the stamps within a lot, not the lot cards themselves. */}
+        {purchase.lots.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Sort copies</span>
+            <select
+              aria-label="Sort copies by"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+              style={{ ...CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
+            >
+              <option value="added">Order added</option>
+              <option value="year">Year</option>
+              <option value="catalog">Catalog no.</option>
+              <option value="price">Price</option>
+              <option value="name">Name</option>
+            </select>
+            <Tooltip content={sortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}>
+              <button
+                type="button"
+                onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+                style={{ ...CHIP, cursor: "pointer", fontWeight: 600 }}
+              >
+                {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+              </button>
+            </Tooltip>
+          </div>
+        )}
+
+        {/* Lot cards start collapsed (#382), so the order screen needs the same way out of that
+            baseline the offers and auction-sale screens have — hence here, on the toolbar that
+            already governs how the lots read. */}
+        {purchase.lots.length > 0 && byLot && (
+          <button
+            type="button"
+            onClick={lotExpansion.toggleAll}
+            style={{ ...CHIP, cursor: "pointer" }}
+          >
+            {lotExpansion.allExpanded ? "Collapse all" : "Expand all"}
+          </button>
+        )}
+
+        {/* The two ways to make a lot, kept at the right edge: they act on the list below rather
+            than on how it is drawn, which is what every other control on this row does. */}
+        <div style={{ display: "flex", gap: "0.5rem", marginLeft: "auto" }}>
           <Tooltip content="Create an empty priced lot, then identify copies into it">
             <button
               type="button"
@@ -782,86 +883,6 @@ export function PurchaseDetailPanel({
           </Tooltip>
         </div>
       </div>
-
-      {/* Order-level grouping: by lot and/or by issue; both off = flat list. Only lot-level
-          management (add stamps, close, price…) lives in the by-lot view (#121). */}
-      {purchase.lots.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Group by
-          </span>
-          {(
-            [
-              { on: byLot, set: setByLot, label: "Lot" },
-              { on: byIssue, set: setByIssue, label: "Issue" },
-            ] as const
-          ).map(({ on, set, label }) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={on}
-              onClick={() => set(!on)}
-              style={{
-                ...CHIP,
-                cursor: "pointer",
-                fontWeight: on ? 600 : 500,
-                color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-                borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-                background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-              }}
-            >
-              {on && <Icon name="check" size="xs" />} {label}
-            </button>
-          ))}
-          {!byLot && !byIssue && (
-            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Flat list</span>
-          )}
-        </div>
-      )}
-
-      {/* Sort order for the copies inside each lot (also the flat / by-issue copy views) (#157).
-          Sorts the stamps within a lot, not the lot cards themselves. */}
-      {purchase.lots.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Sort copies
-          </span>
-          <select
-            aria-label="Sort copies by"
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            style={{ ...CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
-          >
-            <option value="added">Order added</option>
-            <option value="year">Year</option>
-            <option value="catalog">Catalog no.</option>
-            <option value="price">Price</option>
-            <option value="name">Name</option>
-          </select>
-          <Tooltip content={sortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}>
-            <button
-              type="button"
-              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
-              aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
-              style={{ ...CHIP, cursor: "pointer", fontWeight: 600 }}
-            >
-              {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
-            </button>
-          </Tooltip>
-          {/* Lot cards start collapsed (#382), so the order screen needs the same way out of that
-              baseline the offers and auction-sale screens have — hence here, at the right edge of
-              the toolbar that already governs how the lots read. */}
-          {byLot && (
-            <button
-              type="button"
-              onClick={lotExpansion.toggleAll}
-              style={{ ...CHIP, cursor: "pointer", marginLeft: "auto" }}
-            >
-              {lotExpansion.allExpanded ? "Collapse all" : "Expand all"}
-            </button>
-          )}
-        </div>
-      )}
 
       {error && (
         <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>

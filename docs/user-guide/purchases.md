@@ -800,7 +800,11 @@ estimate are figured over the whole lot on the server. There is no cap: a "stock
 thousands of positions shows every copy, and ticking a whole lot or a whole issue group means
 **every copy the list is showing** — resolved on the server, not just the rows you have loaded.
 
-**Grouping the copies view.** Above the lots, a **Group by** control has two toggles —
+**The lots toolbar.** One row above the lots carries everything about how they are shown and how
+new ones are made: the **Lots** heading, **Group by**, **Sort copies**, **Expand all**, and — at the
+right-hand end — **Add lot** and **Add lot with stamps**.
+
+**Grouping the copies view.** On that row, a **Group by** control has two toggles —
 **Lot** and **Issue** — that shape how the whole order's copies are shown:
 
 - **Lot + Issue** (the default) — each lot is a card, its copies grouped by issue inside.
