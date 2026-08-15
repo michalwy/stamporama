@@ -750,8 +750,11 @@ describe("auction tracking (#351/#352)", () => {
         title: `Exposure ${lotNo}`,
         endsAt: hourFromNow(),
         startingPrice: null,
-        // What the lot stands at is an observation and must not reach either total.
-        currentBid: "500.00",
+        // What the lot stands at is an observation and must not reach either total *as a figure*.
+        // It is kept well under the ceiling here so that it does not decide membership either —
+        // a price past the ceiling drops the lot out of both totals (#600), which is exercised
+        // on its own below.
+        currentBid: "50.00",
         myBid: over.myBid ?? null,
         maxBid: over.maxBid ?? null,
         notes: null,
@@ -763,13 +766,31 @@ describe("auction tracking (#351/#352)", () => {
 
     const open = await inSale();
     assert.equal(open.baseCurrency, "EUR");
-    // 100 + 20% + 1 = 121, plus one shipping of 15. The 500 standing bid is nowhere in it.
+    // 100 + 20% + 1 = 121, plus one shipping of 15. The standing bid is nowhere in it.
     assert.equal(open.committedTotal, "136.00");
     // The ceiling as it stands (300) + shipping — never allIn(300).
     assert.equal(open.ceilingTotal, "315.00");
     assert.equal(open.payableCount, 2);
     assert.equal(open.uncappedCount, 1, "the lot with neither figure is named, not costed");
     assert.equal(open.unconvertibleCount, 0);
+
+    // The price runs past the ceiling (#600): 500 all-in is 601 against a ceiling of 300, and the
+    // 100 placed is behind it, so the lot can only be won by raising the ceiling. It leaves both
+    // totals — shipping is all that is left of them — while staying on the list and in
+    // `payableCount`, and the note's own count says so.
+    await setAuctionLotBid(userId, placed, "500.00");
+    const outpriced = await inSale();
+    assert.equal(outpriced.committedTotal, "15.00");
+    assert.equal(outpriced.ceilingTotal, "15.00");
+    assert.equal(outpriced.outpricedCount, 1);
+    assert.equal(outpriced.payableCount, 2);
+    assert.equal(outpriced.uncappedCount, 1);
+    // Back within reach, and the lot is costed again exactly as before.
+    await setAuctionLotBid(userId, placed, "50.00");
+    const back = await inSale();
+    assert.equal(back.committedTotal, "136.00");
+    assert.equal(back.ceilingTotal, "315.00");
+    assert.equal(back.outpricedCount, 0);
 
     // A won lot is costed at what it fetched, in both figures.
     await recordAuctionLotTransition(userId, placed, {
