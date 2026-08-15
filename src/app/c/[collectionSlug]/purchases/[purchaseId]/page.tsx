@@ -80,6 +80,9 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
       <PurchaseDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
+        // What this collection scans at (#598) — the scale the ruler and the perforation gauge in
+        // the tile viewer convert with. One integer, loaded with the collection it belongs to.
+        scanDpi={collection.scanDpi}
         purchase={purchase}
         issueHeaderById={issueHeaderById}
         areas={areas}

@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
+import {
+  formatGaugeAt,
+  formatMillimetres,
+  isPlausibleGauge,
+  measureDistance,
+  parseScanDpi,
+  parseToothCount,
+  perforationGauge,
+  type ScanPoint,
+} from "@/lib/scan-measure";
 import {
   ZOOM_STEP,
   actualSizeViewport,
@@ -10,6 +21,7 @@ import {
   clampScale,
   fitViewport,
   panBy,
+  toSheetPoint,
   zoomBy,
   type Viewport,
   type ViewportSize,
@@ -53,6 +65,20 @@ import { useSheetRegion } from "./use-sheet-region";
  * When the sheet's bytes have been swept (#578) there is no deeper source, and the tile photo alone
  * is what is shown. Which sides exist and which of them still have a scan behind them is decided in
  * `scan-tile-view.ts`, away from the DOM, so the swept case is a unit test rather than a cron job.
+ *
+ * ## Measuring (#598)
+ *
+ * The same viewport is also the ruler and the perforation gauge, and it is the same reuse again:
+ * everything a measurement needs is already here. A mark is placed in **scan pixels**
+ * (`toSheetPoint`), never in screen pixels, so the reading is taken on the card's own grid whatever
+ * the browser happens to be drawing — a downscaled photo, or the retained original where
+ * `useSheetRegion` has escalated to it. The zoom then affects only how precisely a mark can be
+ * *placed*, which is why the bar says so below `1:1` rather than quietly returning a worse number.
+ *
+ * The **scale is stated and never inferred** (`scan-measure.ts`), and its field sits in the bar
+ * beside the result: prefilled from the collection, corrected here for this sitting, and never
+ * written back — see `docs/agents/purchases-and-intake.md` for why that asymmetry is the point.
+ * Nothing a measurement produces is stored anywhere.
  */
 
 interface Props {
@@ -62,6 +88,11 @@ interface Props {
   /** For the alt text, which is the only place a tile's position is named on this side of the
    * dialog. */
   position: number;
+  /** What this collection scans at (#598) — the measuring bar's prefill, and the only scale in the
+   * app. Passed down rather than fetched here: it is one integer the page already loaded, and a
+   * viewer that read it for itself would be a second source for the one number that must not have
+   * two. */
+  scanDpi: number;
 }
 
 /**
@@ -105,9 +136,12 @@ export interface IdentifiedPiece {
 export function IdentifiedPieceAside({
   collectionId,
   pieces,
+  scanDpi,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
+  /** The collection's stated scan resolution (#598), carried to whichever viewer this resolves to. */
+  scanDpi: number;
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -120,6 +154,7 @@ export function IdentifiedPieceAside({
         collectionId={collectionId}
         sides={shown[0].sides}
         position={shown[0].position}
+        scanDpi={scanDpi}
       />
     );
   }
@@ -151,6 +186,7 @@ export function IdentifiedPieceAside({
           collectionId={collectionId}
           sides={opened.sides}
           position={opened.position}
+          scanDpi={scanDpi}
         />
       </div>
     );
@@ -246,6 +282,80 @@ function IdentifiedPieceGrid({
   );
 }
 
+/** Which measuring tool is down, if any (#598). Two, because they are two questions: a distance is
+ * a distance, and a perforation is that distance divided into teeth. The gauge is arithmetic over
+ * the ruler rather than a second measurement, which is also how a physical odontometer works — so
+ * nothing new has to be learned to read one. */
+type MeasureTool = "off" | "ruler" | "perforation";
+
+/**
+ * What the measuring bar says right now (#598) — the figure, or the reason there is not one.
+ *
+ * A plain function of its inputs so the wording is in one place and the rules it encodes are read
+ * together. Two of them are the ones the issue turns on:
+ *
+ * - **No figure without a scale.** An unparseable resolution produces a sentence asking for one,
+ *   never a reading against a fallback. A number taken at a scale nobody stated is exactly the
+ *   thing that gets written down as a variant's defining feature and is wrong.
+ * - **A figure never appears without the scale it was taken at.** Both `text` values below come
+ *   from `formatMillimetresAt` / `formatGaugeAt`, which cannot render one without the other.
+ *
+ * A gauge outside what perforations actually occupy is reported as a mistake rather than quoted: at
+ * that point the marks or the tooth count are wrong, and "47.32" said confidently is worse than
+ * saying so.
+ */
+function describeReading(args: {
+  tool: MeasureTool;
+  marks: { a: ScanPoint; b: ScanPoint } | null;
+  dpi: number | null;
+  teeth: number | null;
+}): { text: string; muted: boolean; detail?: string } {
+  const { tool, marks, dpi, teeth } = args;
+  if (tool === "off") return { text: "", muted: true };
+  if (dpi === null) {
+    return {
+      text: "State the resolution you scan at — a measurement is only as good as it.",
+      muted: true,
+    };
+  }
+  if (!marks) {
+    return {
+      text:
+        tool === "ruler"
+          ? "Drag across the tile to measure it."
+          : "Drag from the first hole of a run to the last.",
+      muted: true,
+    };
+  }
+  const { px, mm } = measureDistance(marks.a, marks.b, dpi);
+  if (px <= 0) {
+    return { text: "One mark placed — drag to the second.", muted: true };
+  }
+  if (tool === "ruler") {
+    return {
+      text: `${formatMillimetres(mm)} mm at ${dpi} dpi`,
+      muted: false,
+      detail: `${Math.round(px)} scan px`,
+    };
+  }
+  if (teeth === null) {
+    return { text: "How many teeth lie between the two marks?", muted: true };
+  }
+  const gauge = perforationGauge(mm, teeth);
+  if (gauge === null || !isPlausibleGauge(gauge)) {
+    return {
+      text: "That is not a perforation — check the marks and the tooth count.",
+      muted: true,
+      detail: `${formatMillimetres(mm)} mm, ${teeth} teeth`,
+    };
+  }
+  return {
+    text: `Perf ${formatGaugeAt(gauge, dpi)}`,
+    muted: false,
+    detail: `${formatMillimetres(mm)} mm over ${teeth} teeth`,
+  };
+}
+
 /** The natural size of a loaded photo, in its own pixels. Measured rather than stored: it is the
  * width of the derivative actually on screen, which is what decides whether the retained scan has
  * anything more to offer — and the browser knows it exactly. */
@@ -254,7 +364,7 @@ interface Natural {
   height: number;
 }
 
-export function TileZoomView({ collectionId, sides, position }: Props) {
+export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) {
   const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
@@ -275,6 +385,19 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
   const pictureWidth = current?.box?.w ?? measured?.width ?? 0;
   const pictureHeight = current?.box?.h ?? measured?.height ?? 0;
   const ready = pictureWidth > 0 && pictureHeight > 0 && size.width > 0;
+
+  /**
+   * Whether this side can be measured at all (#598) — **only with a box**.
+   *
+   * With one, the picture's size is stated in the card's own scan pixels, so a mark converts to
+   * millimetres against the stated resolution and the answer is right whatever derivative happens
+   * to be drawn. Without one the fallback above is the *photo's* size, and a photo has been through
+   * `FULL_MAX_EDGE`: it may be the scan, or it may be a downscale of it by an unknown factor, and
+   * nothing on this side can tell which. Measuring there would silently take a reading at a
+   * resolution the app merely assumed, which is the one thing this tool must never do — so the
+   * controls are absent rather than approximate.
+   */
+  const canMeasure = Boolean(current?.box);
 
   const markFitted = useCallback((value: boolean) => {
     fittedRef.current = value;
@@ -372,16 +495,128 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [fit, zoomStep]);
 
+  // ── Measuring (#598) ────────────────────────────────────────────────────────────────────────
+
+  /** Off, or one of the two tools. Off is the resting state and stays it: the viewer's plain drag
+   * is the hand, and a surface that started out measuring would make every look-at-a-stamp begin
+   * by putting a tool down. */
+  const [chosenTool, setChosenTool] = useState<MeasureTool>("off");
+  /** …and what is actually down. Derived rather than corrected after the fact: a side with no box
+   * cannot be measured at all, and forcing the choice back to `off` from an effect would let one
+   * render happen with a tool down over a side that has no scan geometry. */
+  const tool: MeasureTool = canMeasure ? chosenTool : "off";
+  const measuring = tool !== "off";
+
+  /** The two marks, in the picture's own **scan** pixels — the coordinate space every number here
+   * is taken in, and the reason a reading does not change when the zoom does. */
+  const [marks, setMarks] = useState<{ a: ScanPoint; b: ScanPoint } | null>(null);
+
+  /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
+   * scanned at 600 measured once is a fact about that card, not a new assumption for every later
+   * measurement. Changing what the collection assumes is a Settings act. */
+  const [dpiText, setDpiText] = useState(String(scanDpi));
+  const dpi = parseScanDpi(dpiText);
+
+  /** How many teeth lie **between the marks**. Asked for rather than counted: a detector over a
+   * periodic edge would fail into plausible numbers, which in a measuring tool is the worst kind of
+   * failure, and counting a dozen teeth by eye was never the expensive part — leaving the screen
+   * was (#598). */
+  const [teethText, setTeethText] = useState("10");
+  const teeth = parseToothCount(teethText);
+
+  /** Space is the hand tool while a measuring tool is down, exactly as in the cut editor — one
+   * habit across both scan surfaces rather than two. */
+  const [spaceHeld, setSpaceHeld] = useState(false);
+
+  /** Show a side. A mark belongs to the side it was placed on — the front and the back are
+   * different pieces of card, so carrying a line across the flip would draw a measurement of
+   * somewhere else over a picture of somewhere else. The zoom is kept, deliberately (#585); only
+   * the marks are not. */
+  const showSide = useCallback((side: TileSideView["side"]) => {
+    setSideKey(side);
+    setMarks(null);
+  }, []);
+
+  useEffect(() => {
+    if (!measuring) return;
+    const down = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpaceHeld(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpaceHeld(false);
+    };
+    const blur = () => setSpaceHeld(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, [measuring]);
+
+  // Escape clears the line, and then puts the tool down — before it reaches the dialog. The layer
+  // is pushed when the tool comes out, which is after the dialog registered its own, so this is the
+  // topmost layer exactly while there is something here to dismiss (`escape-stack.ts`). A collector
+  // three marks into a perforation run who presses Escape means "not like that", not "close
+  // everything", which is the same judgement #597 made for the note.
+  useEscapeLayer(() => {
+    if (marks) {
+      setMarks(null);
+      return;
+    }
+    setChosenTool("off");
+  }, measuring);
+
+  /** A viewport point as a mark, clamped to the picture: a drag that leaves the tile would
+   * otherwise measure to a point of card that is not on it. */
+  const markAt = useCallback(
+    (clientX: number, clientY: number): ScanPoint | null => {
+      const el = viewportRef.current;
+      if (!el || !ready) return null;
+      const rect = el.getBoundingClientRect();
+      const p = toSheetPoint(view, clientX - rect.left, clientY - rect.top);
+      return {
+        x: Math.min(Math.max(p.x, 0), pictureWidth),
+        y: Math.min(Math.max(p.y, 0), pictureHeight),
+      };
+    },
+    [pictureHeight, pictureWidth, ready, view]
+  );
+
   const pan = useRef<{ x: number; y: number } | null>(null);
+  const marking = useRef(false);
+  /** Whether the plain drag is the hand. It is, unless a measuring tool is down and space is not
+   * held — the cut editor's rule, for the same reason: panning has to keep working in every mode,
+   * because the thing being marked is usually not the thing currently on screen. */
+  const handDrag = !measuring || spaceHeld;
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !ready) return;
-    // The whole surface pans: there is nothing to draw or select on a tile, so the plain drag is
-    // free to be the hand tool rather than a modifier on one.
+    if (!ready) return;
+    if (e.button === 0 && !handDrag) {
+      const at = markAt(e.clientX, e.clientY);
+      if (!at) return;
+      // Both ends start together: a click that never becomes a drag leaves a zero-length line,
+      // which reads as "one mark placed" rather than as a measurement of nothing.
+      setMarks({ a: at, b: at });
+      marking.current = true;
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
+    if (e.button !== 0 && e.button !== 1) return;
+    // The whole surface pans while no tool is down: there is nothing else to do to a tile, so the
+    // plain drag is free to be the hand rather than a modifier on one.
     pan.current = { x: e.clientX, y: e.clientY };
     setPanning(true);
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (marking.current) {
+      const at = markAt(e.clientX, e.clientY);
+      if (at) setMarks((m) => (m ? { a: m.a, b: at } : m));
+      return;
+    }
     const last = pan.current;
     if (!last || !ready) return;
     const picture = { width: pictureWidth, height: pictureHeight };
@@ -390,6 +625,7 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
   };
   const endPan = () => {
     pan.current = null;
+    marking.current = false;
     setPanning(false);
   };
 
@@ -408,6 +644,12 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
   if (!current) return null;
 
   const atActualSize = ready && Math.abs(view.scale - 1) < 1e-6;
+
+  /** The reading, or the reason there is not one yet. Recomputed on every render rather than held
+   * in state: it is a function of the marks, the scale and the tooth count, and a cached copy of it
+   * is a copy that can be stale — which for a number quoted as a measurement is not a bug worth
+   * risking to save an arithmetic. */
+  const reading = describeReading({ tool, marks, dpi, teeth });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -429,9 +671,36 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
               label={s.label}
               hint={`Show the ${s.label.toLowerCase()} of this tile — the zoom and the position are kept`}
               active={s.side === current.side}
-              onClick={() => setSideKey(s.side)}
+              onClick={() => showSide(s.side)}
             />
           ))}
+        {/* The two measuring tools (#598), on the same toolbar as the zoom because they are the
+            same act: looking closely at one thing. Absent — not disabled — on a side with no box,
+            since there is then no scan geometry to measure against and a greyed control would be
+            promising something this side cannot do. */}
+        {canMeasure && (
+          <>
+            <ScanToolButton
+              icon="measure"
+              label="Ruler"
+              hint="Measure between two points of the scan, in millimetres"
+              active={tool === "ruler"}
+              onClick={() => {
+                setChosenTool((t) => (t === "ruler" ? "off" : "ruler"));
+                setMarks(null);
+              }}
+            />
+            <ScanToolButton
+              label="Perforation"
+              hint="Mark the first and last hole of a run and say how many teeth lie between them"
+              active={tool === "perforation"}
+              onClick={() => {
+                setChosenTool((t) => (t === "perforation" ? "off" : "perforation"));
+                setMarks(null);
+              }}
+            />
+          </>
+        )}
         <span style={{ flex: 1 }} />
         <ScanToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={() => zoomStep(1 / ZOOM_STEP)} />
         {/* The percentage is against the **scan**, exactly as in the cut editor. The dot marks the
@@ -479,6 +748,11 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
         onPointerMove={onPointerMove}
         onPointerUp={endPan}
         onPointerCancel={endPan}
+        // Middle-button down starts the browser's own autoscroll, which `onPointerDown` is too
+        // late to stop — the same guard the cut editor needs for the same reason.
+        onMouseDown={(e) => {
+          if (e.button === 1) e.preventDefault();
+        }}
         style={{
           flex: 1,
           minHeight: "20rem",
@@ -487,7 +761,7 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
           borderRadius: "0.375rem",
           border: "1px solid var(--color-border)",
           background: "var(--color-bg-subtle)",
-          cursor: panning ? "grabbing" : "grab",
+          cursor: panning ? "grabbing" : handDrag ? "grab" : "crosshair",
           userSelect: "none",
           touchAction: "none",
         }}
@@ -539,8 +813,159 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
               }}
             />
           )}
+
+          {/* The line, drawn in the same transformed layer as the picture, so it stays over the
+              pixels it was placed on through every zoom and pan without a single coordinate being
+              recomputed. Marks are held in scan pixels and scaled here — never the other way
+              round, which would make the reading a function of the zoom. */}
+          {measuring && marks && ready && (
+            <svg
+              width={pictureWidth * view.scale}
+              height={pictureHeight * view.scale}
+              style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
+            >
+              {/* Twice, dark under light: a scan is white paper in some places and printing ink in
+                  others, and one stroke colour is invisible over one of them. */}
+              <line
+                x1={marks.a.x * view.scale}
+                y1={marks.a.y * view.scale}
+                x2={marks.b.x * view.scale}
+                y2={marks.b.y * view.scale}
+                stroke="rgba(0,0,0,0.65)"
+                strokeWidth={3}
+              />
+              <line
+                x1={marks.a.x * view.scale}
+                y1={marks.a.y * view.scale}
+                x2={marks.b.x * view.scale}
+                y2={marks.b.y * view.scale}
+                stroke="#fff"
+                strokeWidth={1}
+              />
+              {[marks.a, marks.b].map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x * view.scale}
+                  cy={p.y * view.scale}
+                  r={4}
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth={1.5}
+                  // A ring rather than a dot: the thing being aimed at is the centre of a
+                  // perforation hole, and a filled marker covers exactly what is being aimed at.
+                  paintOrder="stroke"
+                />
+              ))}
+            </svg>
+          )}
+
+          {/* The reading at the end of the line, where the hand already is — so a run is adjusted
+              while watching the figure move rather than by dragging, glancing down at the bar, and
+              dragging again. It stays after the drag for the same reason it appeared: the figure
+              belongs to the line, and the bar keeps it too along with the scale and the fields. Only
+              a real figure gets one; the prompts ("drag from the first hole…") are the bar's job and
+              would be a label following the pointer to say nothing. */}
+          {measuring && marks && ready && !reading.muted && (
+            <span
+              style={{
+                position: "absolute",
+                left: marks.b.x * view.scale,
+                top: marks.b.y * view.scale,
+                // Above the second mark and clear of the pointer, which is on the thing being
+                // aimed at — the one part of the picture a label must not cover.
+                transform: "translate(-50%, calc(-100% - 0.75rem))",
+                padding: "0.125rem 0.375rem",
+                borderRadius: "0.25rem",
+                // Its own colours rather than the surface tokens: this sits on a scan, which is
+                // white paper in some places and printed ink in others, and it has to be legible
+                // over both in either theme.
+                background: "rgba(17, 17, 17, 0.85)",
+                color: "#fff",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+                pointerEvents: "none",
+              }}
+            >
+              {reading.text}
+            </span>
+          )}
         </div>
       </div>
+
+      {/* The measuring bar (#598) — the reading, and beside it the scale it was taken at.
+          Deliberately together and deliberately here rather than at upload: a value set weeks
+          earlier is inherited by someone who cannot see it, while one beside the result is on view
+          exactly when it acts (#573). */}
+      {measuring && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+            margin: "0.5rem 0 0",
+            padding: "0.5rem 0.75rem",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.375rem",
+            background: "var(--color-bg-elevated)",
+            fontSize: "0.8125rem",
+          }}
+        >
+          <span
+            style={{
+              color: reading.muted ? "var(--color-text-muted)" : "var(--color-text-primary)",
+              fontWeight: reading.muted ? 400 : 600,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {reading.text}
+          </span>
+          {reading.detail && (
+            <span style={{ color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}>
+              {reading.detail}
+            </span>
+          )}
+
+          <span style={{ flex: 1 }} />
+
+          {tool === "perforation" && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <input
+                value={teethText}
+                onChange={(e) => setTeethText(e.target.value)}
+                inputMode="numeric"
+                aria-label="Teeth between the marks"
+                style={{ ...MEASURE_FIELD, width: "3rem" }}
+              />
+              <span style={{ color: "var(--color-text-muted)" }}>teeth between the marks</span>
+            </label>
+          )}
+
+          <Tooltip content="What this card was scanned at. Correcting it here holds for this sitting only — the collection keeps its own setting, in Settings → General.">
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <input
+                value={dpiText}
+                onChange={(e) => setDpiText(e.target.value)}
+                inputMode="numeric"
+                aria-label="Scan resolution in dots per inch"
+                style={{
+                  ...MEASURE_FIELD,
+                  width: "4rem",
+                  borderColor:
+                    dpi === null ? "var(--color-error-border)" : "var(--color-border-strong)",
+                }}
+              />
+              <span style={{ color: "var(--color-text-muted)" }}>dpi</span>
+            </label>
+          </Tooltip>
+
+          {marks && (
+            <ScanToolButton label="Clear" hint="Take the marks off (Esc)" onClick={() => setMarks(null)} />
+          )}
+        </div>
+      )}
 
       <p
         style={{
@@ -549,9 +974,36 @@ export function TileZoomView({ collectionId, sides, position }: Props) {
           color: "var(--color-text-muted)",
         }}
       >
-        Drag to move · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms · <kbd>0</kbd> fits
-        {sides.length > 1 ? " · the zoom is kept when you switch sides" : ""}
+        {measuring ? (
+          <>
+            Drag to mark · hold <kbd>space</kbd> or the middle button to move · <kbd>Esc</kbd> clears
+            {/* Said only when it is true, and it is the accuracy warning rather than a tip: the
+                reading is taken on the scan's own pixels either way, but below 1:1 a mark is placed
+                to within more than one of them, and a gauge separates 11½ from 12 by under 4%. */}
+            {ready && view.scale < 1 && (
+              <> · zoom to <kbd>1:1</kbd> or closer to place the marks accurately</>
+            )}
+          </>
+        ) : (
+          <>
+            Drag to move · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms · <kbd>0</kbd> fits
+            {sides.length > 1 ? " · the zoom is kept when you switch sides" : ""}
+          </>
+        )}
       </p>
     </div>
   );
 }
+
+/** The two number fields in the measuring bar, which are one control wearing two labels. */
+const MEASURE_FIELD: React.CSSProperties = {
+  padding: "0.25rem 0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontFamily: "inherit",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-page)",
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
+};

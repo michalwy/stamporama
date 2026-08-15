@@ -587,6 +587,25 @@ Two things about it are worth knowing, and the line says both:
 - **It is not your data, and it is not part of the figure above.** Everything in the cache also exists in cloud storage. Emptying it costs nothing but a little time the next time those files are needed, which is why there is a plain **Clear this collection's copies** button and no confirmation.
 - **It is instance-wide.** The cache is shared by every collection on this Stamporama, and its size limit is set by whoever runs it, so the figure is shown as *used of limit* for the whole instance, with your collection's share of it named beside. It looks after itself: once it reaches the limit, the least recently used copies are dropped automatically.
 
+### What you scan your cards at
+
+**Settings → General → Scanner resolution** is the one number the ruler and the perforation gauge in
+the [tile viewer](purchases.md#measuring-on-the-scan) convert with — the resolution your flatbed is
+set to when you scan a stockbook card. It starts at **1200 dpi** and, on the scanner you always use,
+you can leave it alone.
+
+Nothing else uses it. No scan is resampled and no file is opened to see what resolution it claims,
+which is deliberate: an image's stated resolution is frequently left over from an earlier edit and
+simply wrong, and perforation 11½ and 12 differ by less than 4%. A measurement taken at the wrong
+scale is not obviously wrong — it looks exactly like a right one — so Stamporama would rather be told
+than guess. Every reading it gives you is printed with the resolution it was taken at, for the same
+reason.
+
+If a single old card came off a different scanner, you can correct the figure in the measuring bar
+itself, beside the reading. That correction lasts as long as you are looking at that card and does
+**not** change this setting: one card measured at 600 dpi should not redefine what every later
+measurement assumes. Changing it for good is this field, here.
+
 ### How long closed listings keep their images
 
 Right below the storage figure, **Settings → General** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.

@@ -44,6 +44,21 @@ model Collection {
   // How many digits an internal copy number is padded to for display (#268). Purely a display
   // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
   itemNoPad    Int      @default(5)
+  // The resolution this collection's cards are scanned at (#598), in dots per inch — the scale a
+  // measurement taken on a scan is converted with. **Stated, never inferred**: no EXIF is read
+  // anywhere, because #574's source corpus claimed a resolution its images did not have, and a
+  // gauge is an absolute claim where philately separates perf 11½ from perf 12 (under 4%).
+  //
+  // A prefilled default rather than a fact about a file: one scanner profile is used almost always,
+  // so the field is right without being touched. It is edited **in the measuring tool**, where it
+  // is on view beside the result it produced — and a change made there holds for that sitting only.
+  // Writing this column is a Settings act, so one old scan measured once cannot silently redefine
+  // what every later measurement assumes.
+  //
+  // Not nullable: unlike the retention periods below, there is no instance-wide scanner and nothing
+  // for *I have no opinion* to defer to. 1200 dpi is what this app's own reference scans were made
+  // at and what a flatbed set up for stamps is usually left on.
+  scanDpi      Int      @default(1200)
   // How long this collection's closed offers keep their generated listing images (#577), holding
   // **exactly** what `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` holds — `off`/`never` for keep for
   // ever, `0` to purge at the next sweep, otherwise days — so one parser reads both and the two

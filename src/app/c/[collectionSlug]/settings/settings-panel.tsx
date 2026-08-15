@@ -9,6 +9,7 @@ import {
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionItemNoPadAction,
+  updateCollectionScanDpiAction,
   updateCollectionScanSheetTtlAction,
   type ClearStorageCacheState,
   type ResetToDemoState,
@@ -27,6 +28,12 @@ import {
   MIN_ITEM_NO_PAD,
   formatItemNo,
 } from "@/lib/item-number";
+import {
+  DEFAULT_SCAN_DPI,
+  MAX_SCAN_DPI,
+  MIN_SCAN_DPI,
+  parseScanDpi,
+} from "@/lib/scan-measure";
 import { formatBytes } from "@/lib/format-bytes";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
@@ -39,6 +46,9 @@ interface SettingsPanelProps {
   defaultLanguage: string;
   /** How many digits an internal copy number is padded to for display (#268). */
   itemNoPad: number;
+  /** The resolution this collection's cards are scanned at (#598) — what a measurement taken on a
+   * scan is converted with. */
+  scanDpi: number;
   /** The band a bid recommendation is stated as, in percent of a lot's fair figure (#508). */
   bidFloorPercent: number;
   bidCeilingPercent: number;
@@ -423,7 +433,7 @@ function StorageCacheSection({
   );
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache, appVersion, appReleaseDate }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, scanDpi, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache, appVersion, appReleaseDate }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -444,6 +454,38 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         setPad(previous);
         setPadError(result.message);
       }
+    });
+  }
+
+  // The scale every measurement on a scan is converted with (#598). Held as text while typing, for
+  // the same reason the percentages below are: a number input reparsed on every keystroke fights a
+  // collector halfway through "1200".
+  const [dpiText, setDpiText] = useState(String(scanDpi));
+  const [savedDpi, setSavedDpi] = useState(scanDpi);
+  const [dpiError, setDpiError] = useState<string | null>(null);
+
+  function commitScanDpi() {
+    const value = parseScanDpi(dpiText);
+    if (value === null) {
+      // Put the stored figure back rather than leave an unsaveable one on screen: this section
+      // saves on leaving the field, so a rejected value with nothing to press would just sit there.
+      setDpiText(String(savedDpi));
+      setDpiError(
+        `Scan resolution must be a whole number between ${MIN_SCAN_DPI} and ${MAX_SCAN_DPI} dpi.`
+      );
+      return;
+    }
+    setDpiText(String(value));
+    setDpiError(null);
+    if (value === savedDpi) return;
+    startTransition(async () => {
+      const result = await updateCollectionScanDpiAction(collectionId, value);
+      if (result.status === "error") {
+        setDpiText(String(savedDpi));
+        setDpiError(result.message);
+        return;
+      }
+      setSavedDpi(value);
     });
   }
 
@@ -738,6 +780,83 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
               </option>
             ))}
           </select>
+        </div>
+      </section>
+
+      {/* The scale a measurement on a scan is converted with (#598). Here rather than at upload
+          because most tiles are never measured — asking everyone, every time, for something almost
+          nobody needs — and because it is a fact about the scanner, which changes once and then not
+          again. The measuring tool prefills from it and can correct it for one sitting; only this
+          field rewrites what every later measurement assumes. */}
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Scanner resolution
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              What you scan your cards at. The ruler and the perforation gauge convert with it, and
+              nothing else uses it — no scan is resampled and no file is read for a resolution of its
+              own, because a scan&apos;s stated resolution can be left over from an earlier edit and
+              a gauge is too fine a measurement to take on a guess. Default {DEFAULT_SCAN_DPI} dpi.
+              You can correct it for a single card inside the measuring tool without changing this.
+            </p>
+            {dpiError && (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                {dpiError}
+              </p>
+            )}
+          </div>
+          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+            <input
+              aria-label="Scanner resolution in dots per inch"
+              value={dpiText}
+              onChange={(e) => setDpiText(e.target.value)}
+              onBlur={commitScanDpi}
+              disabled={isPending}
+              inputMode="numeric"
+              style={{
+                width: "5rem",
+                padding: "0.4rem 0.625rem",
+                border: "1px solid var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                fontSize: "0.875rem",
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+                textAlign: "right",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            />
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>dpi</span>
+          </span>
         </div>
       </section>
 

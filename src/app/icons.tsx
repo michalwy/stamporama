@@ -288,6 +288,11 @@ const GLYPHS = {
   zoomOut: ZoomOut,
   /** Back to the whole thing on screen at once. */
   zoomFit: Maximize,
+  /** Measuring on a scan (#598) — the ruler. The perforation gauge beside it deliberately has no
+   * glyph: there is no picture of a gauge that reads faster than the word, and `1:1` above is the
+   * same judgement. `range` shares this glyph and means something else entirely (a declared range
+   * re-derived) — the map is meanings to pictures, not the other way round. */
+  measure: Ruler,
 
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,

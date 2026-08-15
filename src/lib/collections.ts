@@ -6,6 +6,7 @@ import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number"
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
 import { parseScanSheetTtlSetting } from "./scan-sheet-cleanup-rules";
+import { MAX_SCAN_DPI, MIN_SCAN_DPI } from "./scan-measure";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -239,6 +240,38 @@ export async function setCollectionScanSheetTtl(
   });
 }
 
+/**
+ * Set the resolution this collection's cards are scanned at (#598) — the scale every measurement
+ * taken on a scan is converted with.
+ *
+ * **Only Settings reaches this.** The measuring tool has the same field beside its result and a
+ * change made there holds for that sitting alone, deliberately: measuring one old card scanned at
+ * 600 must not redefine what every later measurement of a 1200 dpi card assumes. Changing what the
+ * collection assumes is a separate, deliberate act, which is this function.
+ */
+export async function setCollectionScanDpi(
+  ownerId: string,
+  collectionId: string,
+  dpi: number
+): Promise<void> {
+  if (!Number.isInteger(dpi) || dpi < MIN_SCAN_DPI || dpi > MAX_SCAN_DPI) {
+    throw new Error(
+      `Scan resolution must be a whole number between ${MIN_SCAN_DPI} and ${MAX_SCAN_DPI} dpi.`
+    );
+  }
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { scanDpi: dpi },
+  });
+}
+
 /** The three percentages a bid recommendation is built from (#508). Every one optional, so the
  * settings form can save the field that changed rather than rewriting all three. */
 export interface BidPercentPatch {
@@ -307,6 +340,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       bidFallbackPercent: true,
       closedOfferPhotoTtlDays: true,
       scanSheetTtlDays: true,
+      scanDpi: true,
     },
   });
 }

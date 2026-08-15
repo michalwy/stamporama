@@ -11,6 +11,7 @@ import {
   setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
   setCollectionItemNoPad,
+  setCollectionScanDpi,
   setCollectionScanSheetTtl,
   type BidPercentPatch,
 } from "@/lib/collections";
@@ -178,6 +179,35 @@ export async function updateCollectionScanSheetTtlAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to save the retention period.",
+    };
+  }
+}
+
+export type ScanDpiState =
+  | { status: "idle" }
+  | { status: "success"; dpi: number }
+  | { status: "error"; message: string };
+
+/**
+ * Save the resolution this collection's cards are scanned at (#598) from Settings → General.
+ *
+ * The measuring tool has the same field, and it deliberately does **not** call this: a scale
+ * corrected for one old card is a correction about that card, while this is the collection saying
+ * what it scans at from now on. Two acts, two places, and only one of them writes.
+ */
+export async function updateCollectionScanDpiAction(
+  collectionId: string,
+  dpi: number
+): Promise<ScanDpiState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionScanDpi(session.user.id, collectionId, dpi);
+    return { status: "success", dpi };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the scan resolution.",
     };
   }
 }

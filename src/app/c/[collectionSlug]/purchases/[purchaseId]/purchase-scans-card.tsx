@@ -113,6 +113,8 @@ interface Props {
    * built there for the same reason: the condition and format dictionaries are up there. */
   repeatLast: { summary: string; onRepeatTile: (pieces: IdentifiedPiece[]) => void } | null;
   onChanged: () => void;
+  /** The collection's stated scan resolution (#598) — the tile dialog's viewer measures with it. */
+  scanDpi: number;
 }
 
 /**
@@ -138,6 +140,7 @@ interface EditorTarget {
 
 export function PurchaseScansCard({
   collectionId,
+  scanDpi,
   purchaseId,
   unidentifiedTileCount,
   parkedTileCount,
@@ -635,6 +638,7 @@ export function PurchaseScansCard({
       {openTile && (
         <TileIdentifyDialog
           collectionId={collectionId}
+          scanDpi={scanDpi}
           purchaseId={purchaseId}
           tile={openTile}
           // `ScanSheetData` already answers both questions the deep look asks — which scan, and

@@ -83,6 +83,9 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
 
 interface Props {
   collectionId: string;
+  /** What this collection scans at (#598) — the scale the viewer's ruler and perforation gauge
+   * convert with, prefilled into the measuring bar and correctable there for this sitting. */
+  scanDpi: number;
   purchaseId: string;
   tile: ScanTileData;
   /** The batch's two scans, for the deeper look past the tile photo's own resolution (#585). A
@@ -183,6 +186,7 @@ function assignParams(tile: ScanTileData): LotCopiesParams {
 
 export function TileIdentifyDialog({
   collectionId,
+  scanDpi,
   purchaseId,
   tile,
   sheets,
@@ -413,7 +417,12 @@ export function TileIdentifyDialog({
         }}
       >
         {viewSides.length > 0 && (
-          <TileZoomView collectionId={collectionId} sides={viewSides} position={tile.position} />
+          <TileZoomView
+            collectionId={collectionId}
+            sides={viewSides}
+            position={tile.position}
+            scanDpi={scanDpi}
+          />
         )}
 
         <div

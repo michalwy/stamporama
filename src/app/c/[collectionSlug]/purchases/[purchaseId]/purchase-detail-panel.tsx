@@ -193,6 +193,9 @@ function tintChip(token: string, label: string): { style: React.CSSProperties; l
 interface PurchaseDetailPanelProps {
   collectionId: string;
   collectionSlug: string;
+  /** The resolution this collection's cards are scanned at (#598), carried down to the tile viewer
+   * where the ruler and the perforation gauge live. */
+  scanDpi: number;
   purchase: PurchaseDetail;
   issueHeaderById: Record<string, IssueHeader>;
   areas: CollectionAreaData[];
@@ -247,6 +250,7 @@ function tileAnswersFrom(fd: FormData): Omit<TileIdentification, "stampId" | "la
 export function PurchaseDetailPanel({
   collectionId,
   collectionSlug,
+  scanDpi,
   purchase,
   issueHeaderById,
   areas,
@@ -694,6 +698,7 @@ export function PurchaseDetailPanel({
           toggle below leaves it alone — how the copies are grouped is a question about copies. */}
       <PurchaseScansCard
         collectionId={collectionId}
+        scanDpi={scanDpi}
         purchaseId={purchase.id}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
@@ -899,6 +904,7 @@ export function PurchaseDetailPanel({
               onToggleExpanded={() => lotExpansion.toggle(lot.id)}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
+              scanDpi={scanDpi}
               currency={purchase.currency}
               baseCurrency={purchase.baseCurrency}
               areas={areas}
@@ -948,7 +954,13 @@ export function PurchaseDetailPanel({
           // point of the chain and the one the collector reaches furthest from where they started.
           // With a run ticked (#596) it is all of them, small — one stamp is being picked for every
           // piece on screen, and this is where a wrong assertion is still free to be corrected.
-          aside={<IdentifiedPieceAside collectionId={collectionId} pieces={tileIntake} />}
+          aside={
+            <IdentifiedPieceAside
+              collectionId={collectionId}
+              pieces={tileIntake}
+              scanDpi={scanDpi}
+            />
+          }
           asideWidth="26rem"
           onPick={(picked: PickedStamp) => {
             setTileSelection({
@@ -975,6 +987,7 @@ export function PurchaseDetailPanel({
         <IntakeConditionDialog
           selection={tileSelection}
           collectionId={collectionId}
+          scanDpi={scanDpi}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -1158,6 +1171,7 @@ export function PurchaseDetailPanel({
         <IntakeConditionDialog
           selection={wsSelection}
           collectionId={collectionId}
+          scanDpi={scanDpi}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -1258,6 +1272,10 @@ interface LotCardProps {
   onToggleExpanded: () => void;
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
+  /** The collection's stated scan resolution (#598), on its way to the tile viewer's measuring
+   * tools through the condition dialog this card opens. */
+  scanDpi: number;
+  
   currency: string;
   baseCurrency: string;
   areas: CollectionAreaData[];
@@ -2066,6 +2084,7 @@ function IssueGroupSection({
 }
 
 function LotCard({
+  scanDpi,
   index,
   lot,
   justAdded,
@@ -2748,6 +2767,7 @@ function LotCard({
         <IntakeConditionDialog
           selection={pending}
           collectionId={collectionId}
+          scanDpi={scanDpi}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -3793,6 +3813,8 @@ interface IntakeConditionDialogProps {
    * last place a mistake in that assertion costs a click instead of N copies.
    */
   pieces?: IdentifiedPiece[];
+  /** The collection's stated scan resolution (#598), for the measuring tools inside that viewer. */
+  scanDpi: number;
   /**
    * How many copies this submit is about to create (#596), when that is more than the selection
    * itself says — a run of tiles identified as one stamp. Stated in the summary box and on the
@@ -3874,6 +3896,7 @@ function IntakeConditionDialog({
   submitLabel,
   hidePhotos,
   pieces,
+  scanDpi,
   copyCount,
   prefill,
   lotChoice,
@@ -4083,7 +4106,7 @@ function IntakeConditionDialog({
   // beside it, and nothing about the questions moves.
   const pieceAside =
     pieces && pieces.some((p) => p.sides.length > 0) ? (
-      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} />
+      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
     ) : undefined;
 
   return (

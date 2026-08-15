@@ -123,6 +123,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           // default is *keep for ever* unless an operator says otherwise, which is exactly the
           // sentence a collector following the instance should be reading.
           instanceScanSheetTtlLabel={describeScanSheetTtl(instanceScanSheetTtlMs())}
+          // The scale a measurement on a scan is converted with (#598). Nothing to resolve
+          // server-side: it is the collection's own answer and there is no instance-wide scanner.
+          scanDpi={collection.scanDpi}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}

@@ -369,6 +369,52 @@ what you see; by then the card has been worked through and the close look is ove
 comparison, so flipping sides leaves you looking at the same part of the stamp at the same
 magnification rather than starting again from Fit.
 
+#### Measuring on the scan
+
+Many variants differ by a measurement — the perforation, the size of the design, the gap between two
+elements — and the scan already holds it. Two tools in the same toolbar read it out, so a
+perforation question is settled on screen instead of with an odontometer.
+
+**Ruler** — drag from one point to another and read the distance in millimetres.
+
+**Perforation** — drag from the **first hole of a run to the last**, then say how many **teeth lie
+between the two marks**, and read the gauge. That is how a physical odontometer works: perforation is
+quoted as teeth per 2 cm. You are told **both figures** — the nearest catalogue step (11¼, 11½, 11¾…)
+and the measurement it came from. The step is what a catalogue prints and what you will compare
+against; the raw figure is what tells you whether the piece sits comfortably on that step or
+awkwardly between two, which is usually the interesting case. Counting the teeth is left to you
+deliberately: a machine that got it slightly wrong would hand you a number that looks perfectly
+reasonable, and counting a dozen teeth by eye was never the slow part.
+
+While a tool is down, **drag places the marks** and holding <kbd>space</kbd> — or the middle mouse
+button — moves the picture instead. The reading appears **at the end of the line as you drag**, so a
+run is adjusted while watching the figure rather than by dragging, looking down at the bar and
+dragging again; it stays there when you let go, and the bar underneath keeps it too, along with the
+resolution and the tooth count. <kbd>Esc</kbd> takes the marks off, and again puts the tool away.
+Marks belong to the side they were placed on, so flipping front to back clears them; the zoom is
+kept as always.
+
+**Say what you scan at — the app never guesses.** Every reading is shown with the resolution it was
+taken at (*11½ (11.63) at 1200 dpi*), and the field it came from sits right beside it. It is filled
+in from **Settings → General → Scanner resolution**, so on the scanner you always use it is already
+right. A scan's file can claim a resolution it does not actually have — usually left over from an
+earlier edit — so nothing is read out of it: perf 11½ and perf 12 are less than 4% apart, and a
+number taken at the wrong scale looks exactly as convincing as a right one.
+
+If one particular card came off a different scanner, **change the figure in the bar** and the reading
+updates. That change lasts for as long as you are looking; it does **not** become the collection's
+setting, so measuring one old card at 600 dpi cannot quietly change what every later measurement
+assumes. Changing that for good is a Settings act.
+
+**Zoom in before you mark.** The reading is taken on the scan's own pixels however far out you are,
+but below **1:1** you are placing the marks to within more than one of those pixels — the toolbar
+line says so while that is the case.
+
+**Nothing is written down.** A measurement is a reading you take and use; it is not saved on the
+copy or the stamp. What you concluded from it belongs on the stamp you identify the piece as, or in
+the note of a piece you set aside. A tile with no cut box behind it — nothing in the ordinary scan
+flow — has no tools at all, because there is then no way to know what its pixels measure.
+
 **Every tile opens the same dialog, whatever state it is in, and no tile takes you off this screen
 when you click it.** One waiting to be dealt with opens on its three answers; a discarded one opens
 on its note; one that has already become a copy opens on the copy it became. Leaving the purchase is

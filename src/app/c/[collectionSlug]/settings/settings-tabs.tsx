@@ -100,6 +100,8 @@ interface SettingsTabsProps {
    * it defers to the instance — whose own answer, in words, is the second field. */
   scanSheetTtl: string | null;
   instanceScanSheetTtlLabel: string;
+  /** The resolution this collection's cards are scanned at (#598). */
+  scanDpi: number;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   /** The local cache of remote storage objects (#591), shown beside the storage figure but never
@@ -173,6 +175,7 @@ export function SettingsTabs({
   instanceClosedOfferPhotoTtlLabel,
   scanSheetTtl,
   instanceScanSheetTtlLabel,
+  scanDpi,
   duplicateCatalogMode,
   photoStorageBytes,
   storageCache,
@@ -261,6 +264,7 @@ export function SettingsTabs({
           instanceClosedOfferPhotoTtlLabel={instanceClosedOfferPhotoTtlLabel}
           scanSheetTtl={scanSheetTtl}
           instanceScanSheetTtlLabel={instanceScanSheetTtlLabel}
+          scanDpi={scanDpi}
           photoStorageBytes={photoStorageBytes}
           storageCache={storageCache}
           appVersion={appVersion}
