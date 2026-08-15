@@ -1,7 +1,7 @@
 // Completeness of a checklist read off the copies actually held (#519, the disposition × condition
-// half of #133; #531 made the subject a checklist rather than an issue). Pure: the caller supplies
-// the checklist's stamps and one count per (stamp × condition × disposition), and gets back the
-// grid the detail screen draws.
+// half of #133; #531 made the subject a checklist rather than an issue; #133's format axis
+// completes it). Pure: the caller supplies the checklist's stamps and one count per
+// (stamp × condition × disposition × format), and gets back the grid the detail screen draws.
 //
 // Two figures, and they answer different questions. **Owned** is how many of the checklist's
 // stamps are held at all — the progress bar. **Complete sets** is the *minimum* count across every
@@ -31,6 +31,8 @@ export const COMPLETENESS_DISPOSITION_LABEL: Record<CompletenessDisposition, str
 export interface CompletenessCount {
   stampId: string;
   conditionId: string;
+  /** ADR-0020: `null` **is** a value here — it means single, and no dictionary row exists for it. */
+  formatId: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -47,12 +49,26 @@ export interface CompletenessRow {
   completeSets: number;
 }
 
+/** One format's grid — the same cells, counted over copies of that format alone. */
+export interface ChecklistFormatCompleteness {
+  /** `null` is a single (ADR-0020), and it is a format like any other here. */
+  formatId: string | null;
+  rows: CompletenessRow[];
+}
+
 export interface ChecklistCompletenessGrid {
   /** How many stamps the checklist carries — the denominator of every `owned` figure. */
   requiredCount: number;
-  /** Every (disposition × condition) cell, plus the `conditionId: null` roll-up per disposition.
-   *  Cells with nothing owned are kept: an empty column is what says the condition is untouched. */
+  /** Every (disposition × condition) cell **across all formats**, plus the `conditionId: null`
+   *  roll-up per disposition. Cells with nothing owned are kept: an empty column is what says the
+   *  condition is untouched. */
   rows: CompletenessRow[];
+  /** The same grid per format, and **only for the formats actually held** (#133). Format is sparse
+   *  where condition is not — a collection holds singles for nearly everything and blocks for a
+   *  handful — so an empty grid per dictionary row would be a wall of zeros nobody asked for, and
+   *  a checklist held in singles alone yields exactly one entry, which the card then draws as the
+   *  plain grid it always was. Single first, then the caller's dictionary order. */
+  formats: ChecklistFormatCompleteness[];
 }
 
 /**
@@ -132,21 +148,13 @@ function matches(c: CompletenessCount, disposition: CompletenessDisposition): bo
   }
 }
 
-/**
- * The completeness grid for one checklist.
- *
- * `checklistStampIds` is the checklist's membership — the same set the list row's badge counts, so
- * the page and the row cannot disagree. An empty checklist has nothing to be complete against:
- * every cell is zero rather than "complete", because a set of nothing is not an achievement.
- */
-export function computeChecklistCompleteness(
-  checklistStampIds: string[],
+/** Every cell of one grid, over the counts the caller has already narrowed to a format (or not). */
+function gridRows(
+  required: string[],
   counts: CompletenessCount[],
   conditionIds: string[]
-): ChecklistCompletenessGrid {
-  const required = [...new Set(checklistStampIds)];
+): CompletenessRow[] {
   const rows: CompletenessRow[] = [];
-
   for (const disposition of COMPLETENESS_DISPOSITIONS) {
     for (const conditionId of [null, ...conditionIds]) {
       const perStamp = new Map<string, number>();
@@ -170,6 +178,56 @@ export function computeChecklistCompleteness(
       });
     }
   }
+  return rows;
+}
 
-  return { requiredCount: required.length, rows };
+/**
+ * The completeness grid for one checklist.
+ *
+ * `checklistStampIds` is the checklist's membership — the same set the list row's badge counts, so
+ * the page and the row cannot disagree. An empty checklist has nothing to be complete against:
+ * every cell is zero rather than "complete", because a set of nothing is not an achievement.
+ *
+ * **Format is a third axis, and a multiple is never decomposed** (ADR-0020, #133). A block of four
+ * does not count toward a set of singles, exactly as a used copy does not count toward a mint set —
+ * so a per-format grid counts copies of that format and nothing else. `rows` stays the roll-up
+ * across every format, which is the honest answer to "have I got the series at all": it is the same
+ * mixing the `conditionId: null` column already does down the condition axis, and it is not a claim
+ * that a pair is two singles.
+ *
+ * `formatIds` is only the dictionary's **order**; which formats appear is decided by what the
+ * checklist's copies are actually held in.
+ */
+export function computeChecklistCompleteness(
+  checklistStampIds: string[],
+  counts: CompletenessCount[],
+  conditionIds: string[],
+  formatIds: string[] = []
+): ChecklistCompletenessGrid {
+  const required = [...new Set(checklistStampIds)];
+  const requiredSet = new Set(required);
+
+  // Presence is judged over this checklist's own stamps: a block held for a neighbouring
+  // specialized set is no reason to open a Blocks column on the basic one.
+  const held = new Set<string | null>();
+  for (const c of counts) {
+    if (c.count > 0 && requiredSet.has(c.stampId)) held.add(c.formatId);
+  }
+  const presentFormats: (string | null)[] = [
+    ...(held.has(null) ? [null] : []),
+    ...formatIds.filter((id) => held.has(id)),
+  ];
+
+  return {
+    requiredCount: required.length,
+    rows: gridRows(required, counts, conditionIds),
+    formats: presentFormats.map((formatId) => ({
+      formatId,
+      rows: gridRows(
+        required,
+        counts.filter((c) => c.formatId === formatId),
+        conditionIds
+      ),
+    })),
+  };
 }

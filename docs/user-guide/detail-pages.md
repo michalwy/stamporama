@@ -151,6 +151,14 @@ however many duplicates of the others you hold — which is the point of the fig
 Sold, disposed-of and never-usably-delivered copies are not counted, matching the copies-held badge
 on the catalog lists.
 
+**Formats** are tabs above the grid — *Any format*, *Single*, and one per
+[format](inventory.md#pairs-blocks-and-other-multiples) you hold copies of. They appear only once the checklist is held in
+more than one format, so a set you own singles of shows the plain grid it always did. Picking a
+format asks the sharper question — *do I have the whole series in blocks of four?* — and a
+**multiple never counts toward a set of singles**, exactly as a used copy never counts toward a
+mint set. *Any format* is the roll-up: it says whether you hold the series at all, in whatever
+shape.
+
 There is **one card per [checklist](collections.md#checklists)** the issue carries, each titled
 after it — an issue collected basic and specialized shows both, side by side. An issue with no
 checklist at all has no set to be complete against, so it has no Completeness card either; add a

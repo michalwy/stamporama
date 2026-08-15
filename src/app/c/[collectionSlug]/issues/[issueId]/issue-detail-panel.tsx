@@ -266,6 +266,7 @@ export function IssueDetailPanel({
                 <ChecklistCompletenessGrid
                   checklist={checklist}
                   conditions={completeness.conditions}
+                  formats={completeness.formats}
                 />
                 <AddMissingToWantList
                   collectionId={collectionId}
@@ -320,14 +321,27 @@ function ChecklistValue({ checklist }: { checklist: IssueChecklistTotals }) {
   );
 }
 
-/** One checklist's disposition × condition grid — #519's card, once per set the issue carries. */
+/** The roll-up tab: every format at once, which is what the card showed before #133's format axis. */
+const ANY_FORMAT = "any";
+
+/**
+ * One checklist's disposition × condition grid — #519's card, once per set the issue carries.
+ *
+ * Format is the third axis (#133) and it is **tabs, not more columns**, the choice the catalog
+ * price grid already made: the table is disposition × condition, and a third dimension inline is
+ * unreadable. Only the formats the checklist is actually held in get a tab, so a collection that
+ * owns singles and nothing else — nearly all of them — sees the card it always saw.
+ */
 function ChecklistCompletenessGrid({
   checklist,
   conditions,
+  formats,
 }: {
   checklist: ChecklistCompleteness;
   conditions: { id: string; name: string; abbreviation: string }[];
+  formats: { id: string; name: string; abbreviation: string }[];
 }) {
+  const [activeFormat, setActiveFormat] = useState<string>(ANY_FORMAT);
   if (checklist.requiredCount === 0) {
     return (
       <EmptyNote>
@@ -335,8 +349,69 @@ function ChecklistCompletenessGrid({
       </EmptyNote>
     );
   }
+  const formatName = (id: string | null) =>
+    id === null ? "Single" : (formats.find((f) => f.id === id)?.name ?? "Format");
+  const formatAbbr = (id: string | null) =>
+    id === null ? "Single" : (formats.find((f) => f.id === id)?.abbreviation ?? "?");
+  // A single format held is no choice to offer: its grid and the roll-up are the same numbers.
+  const tabs =
+    checklist.formats.length > 1
+      ? [{ key: ANY_FORMAT, label: "Any format", title: "Every format together" }, ...checklist.formats.map((f) => ({
+          key: f.formatId ?? "",
+          label: formatAbbr(f.formatId),
+          title:
+            f.formatId === null
+              ? "Single stamps only — a multiple is not one of them"
+              : formatName(f.formatId),
+        }))]
+      : [];
+  const active =
+    tabs.length === 0 || activeFormat === ANY_FORMAT
+      ? null
+      : (checklist.formats.find((f) => (f.formatId ?? "") === activeFormat) ?? null);
+  const rows = active ? active.rows : checklist.rows;
   return (
     <>
+      {tabs.length > 0 && (
+        <div
+          role="tablist"
+          aria-label="Format"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.25rem",
+            borderBottom: "1px solid var(--color-border)",
+            paddingBottom: "0.5rem",
+            marginBottom: "0.5rem",
+          }}
+        >
+          {tabs.map((tab) => {
+            const isActive = tab.key === activeFormat;
+            return (
+              <Tooltip key={tab.key || "single"} content={tab.title}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveFormat(tab.key)}
+                  style={{
+                    padding: "0.25rem 0.625rem",
+                    fontSize: "0.8125rem",
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                    background: isActive ? "var(--color-bg-page)" : "transparent",
+                    border: `1px solid ${isActive ? "var(--color-border-strong)" : "transparent"}`,
+                    borderRadius: "0.375rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+      )}
       <div style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", minWidth: "24rem" }}>
           <thead>
@@ -359,7 +434,7 @@ function ChecklistCompletenessGrid({
                   {COMPLETENESS_DISPOSITION_LABEL[disposition]}
                 </td>
                 {[null, ...conditions.map((c) => c.id)].map((conditionId) => {
-                  const row = checklist.rows.find(
+                  const row = rows.find(
                     (r) => r.disposition === disposition && r.conditionId === conditionId
                   );
                   if (!row) return <td key={conditionId ?? "any"} style={CELL} />;
@@ -406,6 +481,11 @@ function ChecklistCompletenessGrid({
         Stamps of this checklist held, and after ×, how many complete sets those copies make — the
         thinnest one decides. Dispositions overlap: a copy can be in the collection and for sale at
         once. Sold, disposed and undelivered copies are not counted.
+        {active
+          ? ` Counting ${formatName(active.formatId).toLowerCase()} copies only — a multiple never counts toward a set of singles.`
+          : tabs.length > 0
+            ? " Every format together; pick one above to ask whether the set is complete in it."
+            : ""}
       </div>
     </>
   );

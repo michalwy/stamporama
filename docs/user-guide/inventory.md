@@ -514,7 +514,8 @@ the tree, and you do not lose the fact that the variant is still open.
 **A multiple is never split into singles.** A block of four is one copy, one row, one line in your
 holdings — not four. Completeness works the same way it does for condition: just as a used copy
 does not count toward a complete mint set, a block does not count toward a set of singles. You ask
-separately whether you have the series in singles, in pairs, or in blocks.
+separately whether you have the series in singles, in pairs, or in blocks — the format tabs on an
+issue's [Completeness card](detail-pages.md#completeness) are where that question is answered.
 
 **Se-tenant and gutter combinations are different.** When the catalog gives the combination its own
 number — Michel `S`, `W`, `K`, `Zd` — it is a distinct catalog entry, so record it as its own stamp

@@ -10,7 +10,9 @@ import {
 // The I/O half of #519's completeness card, per checklist since #531: one `groupBy` over every
 // stamp on the issue's checklists, split back out into one pure grid each. Deliberately **not** on
 // the issues list — this is one issue's question, and the list keeps #54's lightweight indicator
-// (the reasoning #133 wrote down).
+// (the reasoning #133 wrote down). The format axis rides on the same `groupBy` — one more `by`
+// column, no second query — because a format breakdown is a regrouping of the copies already read,
+// never a different set of them.
 
 /** One checklist's grid, named so the card can label it. */
 export interface ChecklistCompleteness extends ChecklistCompletenessGrid {
@@ -18,10 +20,13 @@ export interface ChecklistCompleteness extends ChecklistCompletenessGrid {
   name: string;
 }
 
-/** Every checklist of one issue, plus the condition dictionary they are laid out against. */
+/** Every checklist of one issue, plus the dictionaries they are laid out against. */
 export interface IssueCompleteness {
   checklists: ChecklistCompleteness[];
   conditions: { id: string; name: string; abbreviation: string }[];
+  /** The multiples only — a single has no row (ADR-0020) and the card names it itself. Sent whole
+   *  so the card can label a format grid; which ones it draws is the grid's own sparse answer. */
+  formats: { id: string; name: string; abbreviation: string }[];
 }
 
 /**
@@ -42,13 +47,18 @@ export async function getIssueCompleteness(
     throw new Error("Collection not found or access denied.");
   }
 
-  const [checklists, conditions] = await Promise.all([
+  const [checklists, conditions, formats] = await Promise.all([
     prisma.checklist.findMany({
       where: { collectionId, issueId },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, stamps: { select: { stampId: true } } },
     }),
     prisma.stampCondition.findMany({
+      where: { collectionId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, abbreviation: true },
+    }),
+    prisma.stampFormat.findMany({
       where: { collectionId },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, abbreviation: true },
@@ -62,7 +72,7 @@ export async function getIssueCompleteness(
     stampIds.length === 0
       ? []
       : await prisma.item.groupBy({
-          by: ["stampId", "conditionId", "inCollection", "forSale", "forTrade"],
+          by: ["stampId", "conditionId", "formatId", "inCollection", "forSale", "forTrade"],
           where: {
             collectionId,
             stampId: { in: stampIds },
@@ -76,12 +86,14 @@ export async function getIssueCompleteness(
   const counts: CompletenessCount[] = rows.map((r) => ({
     stampId: r.stampId,
     conditionId: r.conditionId,
+    formatId: r.formatId,
     inCollection: r.inCollection,
     forSale: r.forSale,
     forTrade: r.forTrade,
     count: r._count._all,
   }));
   const conditionIds = conditions.map((c) => c.id);
+  const formatIds = formats.map((f) => f.id);
 
   return {
     checklists: checklists.map((c) => ({
@@ -90,9 +102,11 @@ export async function getIssueCompleteness(
       ...computeChecklistCompleteness(
         c.stamps.map((s) => s.stampId),
         counts,
-        conditionIds
+        conditionIds,
+        formatIds
       ),
     })),
     conditions,
+    formats,
   };
 }
