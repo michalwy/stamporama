@@ -653,10 +653,11 @@ Expand an issue and a member stamp that has **no price for the condition the lis
 
 ### The Valuation dialog
 
-Each stamp, issue and **copy** row's **⋮** actions menu has a **Show valuation** action that opens the **Valuation** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. From a row on the **Copies** list it opens for the stamp that copy is of, read-only: close it and you are back on the list where you were. The data is loaded on demand when you open the dialog. It has four kinds of section, each in the same collapsible box and each on the same grid — **conditions as rows, certificate statuses as columns**:
+Each stamp, issue and **copy** row's **⋮** actions menu has a **Show valuation** action that opens the **Valuation** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. From a row on the **Copies** list it opens for the stamp that copy is of, read-only: close it and you are back on the list where you were. An **auction lot's composition lines** offer it too, so a stamp's record can be checked while a bid ceiling is being decided — see [Auction tracking](auctions.md#checking-what-a-stamp-is-worth-from-the-line). The data is loaded on demand when you open the dialog. It has five kinds of section, each in the same collapsible box and each on the same grid — **conditions as rows, certificate statuses as columns**:
 
 - **Market value** (open by default, first) — what these have actually fetched at auction, rather than what a catalog lists them at. Same grid as the sections below it, so a median and a list price can be read against each other cell for cell. See [Market value](#market-value) below.
-- **What I paid** (open by default, second) — what the copies of this stamp you **still hold** cost you, in the collection currency. Each cell is the **average** cost of the copies at that condition and certificate status; hover it for the range, the counts, and when the most recent of them was bought. Copies are counted three ways under the figure, and the difference matters:
+- **Estimated value** (open by default, second) — what a stamp with **no** recorded result is likely worth: its catalog value times the realization ratio the app has learned from the results you *have* recorded. An estimate, never a measurement, and labelled as one. See [Estimated value](#estimated-value) below.
+- **What I paid** (open by default, third) — what the copies of this stamp you **still hold** cost you, in the collection currency. Each cell is the **average** cost of the copies at that condition and certificate status; hover it for the range, the counts, and when the most recent of them was bought. Copies are counted three ways under the figure, and the difference matters:
   - **priced** — the copies whose cost is settled. These are the only ones the average is over.
   - **pending** — copies sitting in a purchase lot that is still **open**, so their share of what the order cost has not been worked out yet (see [Closing a lot](purchases.md#closing-a-lot)). They are never averaged in at a guess, and never at zero. Close the lot and they become priced.
   - **no cost** — copies with nothing recorded: added by hand, or dropped from a closed lot.
@@ -717,7 +718,7 @@ Set totals do not expand: a set's evidence is every lot of every member, which i
 
 ### What this deliberately does not do
 
-- **A cell with no results is empty**, showing the same **—** an unpriced catalog cell shows. Nothing is estimated from a neighbouring condition or from a similar stamp. An empty cell means nothing has been recorded, which is not the same as the stamp being worth nothing.
+- **A cell with no results is empty**, showing the same **—** an unpriced catalog cell shows. Nothing is estimated *into this figure* from a neighbouring condition or from a similar stamp. An empty cell means nothing has been recorded, which is not the same as the stamp being worth nothing — and it is what the [Estimated value](#estimated-value) section below answers, separately and labelled as an estimate.
 - **Won, lost and merely observed lots all count.** A price someone else paid is as real as one you paid, and a lot added purely to watch what it fetched is a first-class way of building this up.
 
 A stamp — or a set — with no results at all shows a short note saying where the figures would come from, rather than an empty section.
@@ -726,7 +727,34 @@ A stamp — or a set — with no results at all shows a short note saying where 
 
 Wherever the [holdings summary bar](inventory.md) appears, a **Market value** line sits between catalog value and purchase cost. Each copy you still hold is valued at the median for its own condition, certificate and format, in the collection currency.
 
-Its coverage is always stated: *"from 14 of 112 copies · 98 with no auction results"*. This matters more than the figure. Market value only exists where lots have been recorded, so on most collections it covers a small slice — and a total built from a slice must never read as what the collection is worth. Copies whose key has no results contribute nothing at all; no catalog-derived stand-in is used. Copies you no longer hold are excluded, exactly as they are from the other two figures.
+Its coverage is always stated: *"from 14 of 112 copies · 98 with no auction results"*. This matters more than the figure. Market value only exists where lots have been recorded, so on most collections it covers a small slice — and a total built from a slice must never read as what the collection is worth. Copies whose key has no results contribute nothing at all; no catalog-derived stand-in is used, and the [Estimated value](#estimated-value) section never feeds this line. Copies you no longer hold are excluded, exactly as they are from the other two figures.
+
+## Estimated value
+
+Most stamps have never come up at an auction you recorded, so [Market value](#market-value) has nothing to say about them. **Estimated value** answers the question anyway, and says out loud that it is answering it differently: it is the stamp's **catalog value times the realization ratio** the app has learned from the results you *have* recorded — the same arithmetic behind the [bid recommendation](auctions.md#what-a-lot-is-worth-bidding) on the auction lots screen, which is why the two screens now agree instead of appearing to contradict each other.
+
+It is the second section of the [Valuation dialog](#the-valuation-dialog), directly under Market value. Read-only, worked out when you open the dialog, stored nowhere. Neither of the dialog's toggles touches it: a ratio is a plain fraction with no catalog edition attached.
+
+Every figure is prefixed **≈** and set in muted italics — the mark this app uses everywhere for *inferred, not recorded*.
+
+### Where each row's number comes from
+
+Beside each condition, the row states the **bucket** the ratio was learned from, the percentage and how many results stand behind it — *"Polska Ludowa, MNH, 1946–1950 · 41% · n = 6"*. That is deliberate and it is the point of the section: the ratio is learned per condition (see [the ladder](auctions.md#where-each-lines-figure-comes-from)), so two rows of the same grid can be extrapolated from two different samples, and a number without its bucket is unarguable.
+
+**Click a figure** and the lots the *bucket* was learned from open under the table, newest first, each a link to the lot: which stamp, at what condition, on what date, and what fraction of catalog it fetched. These are other stamps' lots — that is what a bucket is.
+
+When nothing has been learned yet, the row falls back to the **percentage of catalog value** set in the collection's bid settings, and says so in amber: *"No recorded results · policy, not evidence"*. That is the case where knowing which you are looking at matters most.
+
+### What it will not do
+
+- **A cell that has a measured median is left empty here.** The measurement is one section up; printing an estimate of the same cell beside it would invite reading the difference between the two as a signal, and it is not one.
+- **A cell with no catalog value is empty.** There is nothing to multiply.
+- **No confidence badge and no colour.** Confidence scores the results recorded for that exact key, and an estimated cell has none by definition — a badge would make the estimate look measured. The bucket and its count are this figure's evidence, and they are already on the row.
+- **It never reaches a total.** The holdings summary bar's Market value line, the collection value and the checklist set totals stay measurement-only. A ratio resolves for very nearly every stamp, so letting it into a total would turn *what these have fetched* into *catalog value times a constant* for most of the collection while still carrying the measured figure's name.
+
+### For a checklist
+
+Opened from an issue row, the same grid totals the set, with its own **coverage** count under each figure. The two coverage counts are complementary: a stamp with a measured median at a key is counted by Market value and not here, so *"7 of 40"* above and *"5 of 40"* below means twelve of the forty have any figure at all. A set total does not expand, and where its members were extrapolated from different buckets the row says how many rather than naming one of them.
 
 ## URL structure
 

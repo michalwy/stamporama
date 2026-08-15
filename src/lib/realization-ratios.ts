@@ -41,10 +41,15 @@ import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classifica
 
 const RATIO_LOT_SELECT = {
   id: true,
+  // Named, dated and linkable — a bucket expanded into the lots it was learned from (#602) has to
+  // reach them, and these are the same fields `market-values.ts` shows its own evidence with.
+  auctionLotNo: true,
+  lotNo: true,
+  title: true,
   endsAt: true,
   finalPrice: true,
   fxRateToBase: true,
-  auctionSale: { select: { currency: true } },
+  auctionSale: { select: { id: true, name: true, currency: true } },
   lines: {
     orderBy: { id: "asc" },
     select: {
@@ -54,8 +59,10 @@ const RATIO_LOT_SELECT = {
       certificateStatusId: true,
       formatId: true,
       quantity: true,
+      condition: { select: { abbreviation: true } },
       stamp: {
         select: {
+          name: true,
           issuedYear: true,
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           variants: { select: VARIANT_FLAG_SELECT },
@@ -95,6 +102,37 @@ export interface RealizationRatioResolver {
   /** Observations behind every answer, for a caller that wants to say how much was recorded at
    * all. Deduplication is per bucket, so this is the raw count. */
   observationCount: number;
+  /**
+   * The lots a resolved bucket was learned from, newest first — the drill-down behind an estimated
+   * figure (#602).
+   *
+   * Deliberately **not** part of {@link RealizationRatio}: the lot rows are only wanted by the one
+   * surface that expands a figure, while `resolve` runs per line for a whole page of lots (#511)
+   * and has no use for them. Empty at `fallback`, which is a policy percentage and has no evidence
+   * by definition.
+   */
+  describeLots(resolved: ResolvedRatio): RatioEvidenceLot[];
+}
+
+/** One lot behind a bucket's median, in the shape the market-value evidence list already uses. */
+export interface RatioEvidenceLot {
+  lotId: string;
+  /** Ours, per collection (#432). */
+  auctionLotNo: number;
+  /** The house's own number, when it was typed in. */
+  lotNo: string | null;
+  lotTitle: string | null;
+  saleId: string;
+  saleName: string;
+  endsAt: Date;
+  /** The stamp this ratio was read off, and at what condition — a bucket is other stamps' evidence
+   * by construction, so saying which ones is most of what makes it arguable. */
+  stampName: string | null;
+  conditionAbbreviation: string;
+  /** What this observation contributed, unitless. */
+  ratio: number;
+  /** Carved out of a mixed lot's pro-rata split rather than taken whole (ADR-0022 §3). */
+  split: boolean;
 }
 
 /**
@@ -186,6 +224,7 @@ export async function loadRealizationRatios(
     if (!line) continue;
     observations.push({
       lotId: point.lotId,
+      lineId: point.lineId,
       split: point.split,
       ratio: point.amount / catalogueValue,
       areaId: primaryAreaIdOf(line.stamp.stampAreaLinks),
@@ -194,8 +233,33 @@ export async function loadRealizationRatios(
     });
   }
 
+  const lotById = new Map(lots.map((lot) => [lot.id, lot]));
+
   return {
     observationCount: observations.length,
+    describeLots(resolved) {
+      return resolved.observations
+        .map<RatioEvidenceLot | null>((observation) => {
+          const lot = lotById.get(observation.lotId);
+          const line = lineRows.get(observation.lineId);
+          if (!lot || !line) return null;
+          return {
+            lotId: lot.id,
+            auctionLotNo: lot.auctionLotNo,
+            lotNo: lot.lotNo,
+            lotTitle: lot.title,
+            saleId: lot.auctionSale.id,
+            saleName: lot.auctionSale.name,
+            endsAt: lot.endsAt,
+            stampName: line.stamp.name,
+            conditionAbbreviation: line.condition.abbreviation,
+            ratio: observation.ratio,
+            split: observation.split,
+          };
+        })
+        .filter((lot): lot is RatioEvidenceLot => lot !== null)
+        .sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime());
+    },
     resolve(subject) {
       const resolved = resolveRealizationRatio(subject, observations, fallbackPercent);
       return {
@@ -213,6 +277,7 @@ export async function loadRealizationRatios(
 function emptyResolver(fallbackPercent: number): RealizationRatioResolver {
   return {
     observationCount: 0,
+    describeLots: () => [],
     resolve(subject) {
       const resolved = resolveRealizationRatio(subject, [], fallbackPercent);
       return { ...resolved, bucketLabel: ratioBucketLabel(resolved, { areaName: null, conditionName: null }) };

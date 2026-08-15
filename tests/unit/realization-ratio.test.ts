@@ -18,6 +18,7 @@ let seq = 0;
 function obs(overrides: Partial<RatioObservation> = {}): RatioObservation {
   return {
     lotId: `lot-${++seq}`,
+    lineId: `line-${seq}`,
     split: false,
     ratio: 0.5,
     areaId: "poland",
@@ -109,6 +110,7 @@ describe("resolveRealizationRatio — the ladder", () => {
       ratio: 1,
       level: "fallback",
       n: 0,
+      observations: [],
       fromYear: null,
       toYear: null,
     });
@@ -277,6 +279,7 @@ describe("ratioBucketLabel", () => {
       ratio: 0.55,
       level: "area-condition-period" as const,
       n: 6,
+      observations: [],
       fromYear: 1945,
       toYear: 1949,
     };
@@ -284,7 +287,7 @@ describe("ratioBucketLabel", () => {
   });
 
   it("drops the axes a broader bucket did not use", () => {
-    const base = { ratio: 0.55, n: 6, fromYear: null, toYear: null };
+    const base = { ratio: 0.55, n: 6, observations: [], fromYear: null, toYear: null };
     assert.equal(ratioBucketLabel({ ...base, level: "area-condition" }, names), "Polska Ludowa, MNH");
     assert.equal(ratioBucketLabel({ ...base, level: "area" }, names), "Polska Ludowa");
     assert.equal(ratioBucketLabel({ ...base, level: "collection" }, names), "All recorded results");
@@ -296,6 +299,7 @@ describe("ratioBucketLabel", () => {
       ratio: 0.55,
       level: "area-condition" as const,
       n: 6,
+      observations: [],
       fromYear: null,
       toYear: null,
     };

@@ -58,6 +58,9 @@ export const RATIO_PERIOD_RADIUS = 2;
 export interface RatioObservation {
   /** The lot the datapoint came from — what split-derived ratios are deduplicated by. */
   lotId: string;
+  /** The composition line it was read off, so a caller expanding a bucket can name the stamp the
+   * ratio was learned from (#602). Opaque here: the pure ladder never looks at it. */
+  lineId: string;
   /** The figure was carved out of a mixed lot's pro-rata split rather than taken whole
    * (ADR-0022 §3), which is exactly when the dedup applies. */
   split: boolean;
@@ -98,6 +101,11 @@ export interface ResolvedRatio {
   level: RatioBucketLevel;
   /** Observations behind the median, **after** the split-lot dedup. Zero at `fallback`. */
   n: number;
+  /** Those observations themselves, in the order they were read — what a caller expands the figure
+   * into (#602). The bucket, not the key, is an estimated cell's evidence: there is nothing else,
+   * since a cell that has datapoints of its own is a *measurement* and never estimated. Empty at
+   * `fallback`, where the figure is policy rather than evidence and there is nothing to show. */
+  observations: RatioObservation[];
   /** The window the period bucket used, inclusive; null at every other level. */
   fromYear: number | null;
   toYear: number | null;
@@ -117,15 +125,15 @@ function medianOf(values: number[]): number {
  * — it is one piece of evidence about each of them, and dropping it from all but the first would
  * make a bucket's sample depend on the order the lots happened to be read in.
  */
-function ratiosOf(observations: RatioObservation[]): number[] {
-  const out: number[] = [];
+function ratiosOf(observations: RatioObservation[]): RatioObservation[] {
+  const out: RatioObservation[] = [];
   const seenLots = new Set<string>();
   for (const observation of observations) {
     if (observation.split) {
       if (seenLots.has(observation.lotId)) continue;
       seenLots.add(observation.lotId);
     }
-    out.push(observation.ratio);
+    out.push(observation);
   }
   return out;
 }
@@ -179,18 +187,26 @@ export function resolveRealizationRatio(
 
   for (const rung of ladder) {
     if (rung.observations === null) continue;
-    const ratios = ratiosOf(rung.observations);
-    if (ratios.length < MIN_RATIO_SAMPLE) continue;
+    const counted = ratiosOf(rung.observations);
+    if (counted.length < MIN_RATIO_SAMPLE) continue;
     return {
-      ratio: medianOf(ratios),
+      ratio: medianOf(counted.map((o) => o.ratio)),
       level: rung.level,
-      n: ratios.length,
+      n: counted.length,
+      observations: counted,
       fromYear: rung.level === "area-condition-period" ? fromYear : null,
       toYear: rung.level === "area-condition-period" ? toYear : null,
     };
   }
 
-  return { ratio: fallbackPercent / 100, level: "fallback", n: 0, fromYear: null, toYear: null };
+  return {
+    ratio: fallbackPercent / 100,
+    level: "fallback",
+    n: 0,
+    observations: [],
+    fromYear: null,
+    toYear: null,
+  };
 }
 
 /** The names a bucket is stated with. Resolved by the domain layer, since only it knows what an

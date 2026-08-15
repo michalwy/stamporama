@@ -31,6 +31,8 @@ import {
 } from "@/lib/photos";
 import { getStampMarketValueByStamp } from "@/lib/market-values";
 import type { StampMarketValue } from "@/lib/market-values";
+import { getStampEstimatedValue } from "@/lib/estimated-values";
+import type { StampEstimatedValue } from "@/lib/estimated-values";
 import { getStampPurchaseCosts } from "@/lib/purchase-costs";
 import type { StampPurchaseCosts } from "@/lib/purchase-costs";
 import type {
@@ -454,6 +456,17 @@ export async function getStampPriceDetailsAction(
 export async function getStampMarketValueAction(stampId: string): Promise<StampMarketValue[]> {
   const session = await getSession();
   return getStampMarketValueByStamp(session.user.id, stampId);
+}
+
+/** What this stamp is **likely** worth where nothing has been recorded for it: catalogue value ×
+ * the learned realization ratio (#602; #520). An extrapolation, never a measurement — a key the
+ * market has actually measured is left to the Market value section and absent here. Read on demand
+ * beside the two figures above it; nothing is stored (ADR-0022 §7). */
+export async function getStampEstimatedValueAction(
+  stampId: string
+): Promise<StampEstimatedValue> {
+  const session = await getSession();
+  return getStampEstimatedValue(session.user.id, stampId);
 }
 
 /** What the collector has paid for this stamp, per `condition × certificate × format` key over the

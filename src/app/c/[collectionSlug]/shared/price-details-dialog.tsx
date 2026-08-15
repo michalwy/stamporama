@@ -31,6 +31,13 @@ import {
   useStampPurchaseCosts,
   purchaseCostCertCells,
 } from "./purchase-cost-section";
+import {
+  StampEstimatedValueSection,
+  ChecklistEstimatedValueSection,
+  useStampEstimatedValue,
+  useChecklistEstimatedValue,
+  estimatedValueCertCells,
+} from "./estimated-value-sections";
 
 /** What the dialog describes: a single stamp, or one checklist's stamps (#531 — an issue may carry
  *  several goals, so "the set" is named by a checklist rather than by the publication). */
@@ -184,6 +191,7 @@ function StampSections({
   currencyMode: CurrencyMode;
 }) {
   const market = useStampMarketValue(stampId);
+  const estimate = useStampEstimatedValue(stampId);
   const purchases = useStampPurchaseCosts(stampId);
   const editions = data.editions.filter((e) => scope === "all" || e.isNewest);
 
@@ -196,6 +204,7 @@ function StampSections({
     data.averageCells,
     ...data.editions.map((e) => e.cells),
     marketCertCells(market.data, undefined),
+    estimatedValueCertCells(estimate.data),
     purchaseCostCertCells(purchases.data),
   ]);
 
@@ -206,6 +215,7 @@ function StampSections({
     return (
       <>
         <StampMarketValueSection query={market} certificates={certColumns} />
+        <StampEstimatedValueSection query={estimate} certificates={certColumns} />
         <StampPurchaseCostSection query={purchases} certificates={certColumns} />
         <Empty>No catalog prices recorded.</Empty>
       </>
@@ -215,6 +225,9 @@ function StampSections({
   return (
     <>
       <StampMarketValueSection query={market} certificates={certColumns} />
+      {/* Directly under Market value: it answers the question that section leaves open for a key
+          with no results, and it must never be read as part of the answer above it (#602). */}
+      <StampEstimatedValueSection query={estimate} certificates={certColumns} />
       <StampPurchaseCostSection query={purchases} certificates={certColumns} />
 
       <CollapsibleSection title="Average across all catalogs" defaultOpen>
@@ -286,6 +299,7 @@ function ChecklistSections({
   currencyMode: CurrencyMode;
 }) {
   const market = useChecklistMarketValue(collectionId, checklistId);
+  const estimate = useChecklistEstimatedValue(collectionId, checklistId);
   const catalogs = scope === "all" ? data.catalogsAll : data.catalogsLatest;
 
   // Shared certificate columns across the market grid, the average and every catalog table (both
@@ -295,12 +309,14 @@ function ChecklistSections({
     ...data.catalogsLatest.map((c) => c.cells),
     ...data.catalogsAll.map((c) => c.cells),
     marketCertCells(undefined, market.data),
+    estimatedValueCertCells(estimate.data),
   ]);
 
   if (data.averageCells.length === 0 && catalogs.length === 0) {
     return (
       <>
         <ChecklistMarketValueSection query={market} certificates={certColumns} />
+        <ChecklistEstimatedValueSection query={estimate} certificates={certColumns} />
         <Empty>No catalog prices recorded for the stamps on “{data.checklistName}”.</Empty>
       </>
     );
@@ -309,6 +325,7 @@ function ChecklistSections({
   return (
     <>
       <ChecklistMarketValueSection query={market} certificates={certColumns} />
+      <ChecklistEstimatedValueSection query={estimate} certificates={certColumns} />
 
       <CollapsibleSection title="Average across all catalogs" defaultOpen>
         {data.averageCells.length === 0 ? (

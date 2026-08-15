@@ -33,6 +33,8 @@ import type {
 } from "@/lib/issues";
 import { getChecklistMarketValue } from "@/lib/market-values";
 import type { ChecklistMarketValue } from "@/lib/market-values";
+import { getChecklistEstimatedValue } from "@/lib/estimated-values";
+import type { ChecklistEstimatedValue } from "@/lib/estimated-values";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { parseTranslationValues } from "@/lib/translations";
 import { STAMP_TRANSLATION_FIELDS } from "@/lib/stamps";
@@ -60,6 +62,18 @@ export async function getChecklistMarketValueAction(
 ): Promise<ChecklistMarketValue> {
   const session = await getSession();
   return getChecklistMarketValue(session.user.id, collectionId, checklistId);
+}
+
+/** What the set is **likely** worth where its members have no recorded result: each member's
+ * catalogue value × the learned realization ratio, summed per key (#602). An extrapolation, with
+ * its own coverage count — a member with a measured median at a key is counted by the Market value
+ * total instead, never by both. */
+export async function getChecklistEstimatedValueAction(
+  collectionId: string,
+  checklistId: string
+): Promise<ChecklistEstimatedValue> {
+  const session = await getSession();
+  return getChecklistEstimatedValue(session.user.id, collectionId, checklistId);
 }
 
 /** Coverage suggestions for an issue: vendors whose members extend the declared range. */

@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Resolves the design question in #24; feeds bid recommendations (#25).
+Accepted. Resolves the design question in #24; feeds bid recommendations (#25). §6 revised in place
+by #602 — the explicitly-labelled estimate it left open has been added, as a section of its own.
 
 ## Context
 
@@ -126,9 +127,45 @@ supply it by hand elsewhere (#430 configures a percentage of catalogue value per
 condition).
 
 A key with no datapoints shows **no market value**. No estimate is synthesized from comparable
-keys' ratios: a fabricated figure that looks like the measured one beside it would be the one
-mistake this feature cannot afford, and the option remains open as a later, explicitly-labelled
-addition if coverage proves too thin.
+keys' ratios *into that figure*: a fabricated number wearing the measured one's name would be the
+one mistake this feature cannot afford.
+
+**Revised by #602: the escape hatch this section left open has been taken.** The original text
+closed with "the option remains open as a later, explicitly-labelled addition if coverage proves
+too thin", and coverage did. ADR-0029 §2 learns a realization ratio from recorded results and §1
+anchors a bid recommendation on `catalogue × ratio` for a line with no evidence of its own — so the
+lots screen was already recommending 35.50 PLN for a stamp whose Valuation dialog said *"No auction
+results recorded for this stamp yet"* and nothing more. Both statements were true and they answered
+different questions; nothing on screen said so, and the dialog read as a flat contradiction of a
+figure the app had just used.
+
+What still holds is everything about the **Market value figure itself**: it is measured or it is
+absent, it never absorbs a ratio learned elsewhere, and no ratio-derived figure enters the holdings
+summary bar, the collection value or a checklist's market total. A ratio resolves for very nearly
+every cell of every stamp (bucket 4 needs three ratios in the whole collection), so feeding it into
+a total would turn *what these have actually fetched* into *catalogue value times a constant* for
+most of the collection while still wearing the measured figure's name.
+
+What changed is only the conclusion that the app should therefore show **nothing at all**. The
+estimate is a **section of its own** in the Valuation dialog — *Estimated value*, under Market value
+and above What I paid — where a collector is asking about one stamp and can read a label. Three
+rules keep it from being mistaken for a measurement:
+
+- **A cell with a measured median is not estimated.** Where Market value has a figure, the estimate
+  section leaves that cell empty rather than restating it — a measurement and an extrapolation of
+  the same cell side by side invite reading the gap between them as a signal, and it is not one.
+- **No confidence badge and no confidence colour** (§5). Confidence scores the datapoints *for this
+  key*, of which an estimated cell has none by definition. The estimate's evidence is the ratio's
+  bucket and its `n`, stated on the row — which is also why the estimate is a grid of its own
+  rather than a column in Market value's: the ladder buckets on condition, so each row resolves a
+  different bucket, and in a merged grid there is nowhere to put its name but a hover.
+- **A cell with no catalogue value is empty**, exactly as an unpriced catalogue cell is. There is
+  nothing to multiply.
+
+The fallback rung (ADR-0029 §2, #508's `bidFallbackPercent`) still renders, labelled as policy
+rather than evidence: that is precisely the case where the collector most needs to be told which it
+is. Clicking an estimated figure expands the lots the **ratio's bucket** was learned from — other
+stamps' lots by construction, which is what a bucket is.
 
 ### 7. Computed on demand, nothing stored
 

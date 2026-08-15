@@ -48,11 +48,20 @@ export function MatrixTable<C extends CellAxes>({
   cells,
   certificates,
   renderCell,
+  renderRowAside,
+  labelWidth,
 }: {
   cells: C[];
   /** Full certificate column set (shared across tables), so columns stay aligned. */
   certificates: CertColumn[];
   renderCell: (cell: C | undefined) => ReactNode;
+  /** What a **row** — as opposed to a cell — has to say for itself, drawn after the condition's
+   * name in the label column (#602). The estimated-value section states the ratio bucket and its
+   * `n` here, because the ladder buckets on condition (ADR-0029 §2) and the bucket's name is the
+   * whole justification for the row's figures; in a cell there is nowhere to put it but a hover. */
+  renderRowAside?: (conditionId: string) => ReactNode;
+  /** Width of the condition column. Wider where a row carries an aside as well as a name. */
+  labelWidth?: string;
 }) {
   const conditions = new Map<string, { id: string; abbreviation: string; name: string; sort: number }>();
   const byKey = new Map<string, C>();
@@ -70,7 +79,7 @@ export function MatrixTable<C extends CellAxes>({
   return (
     <table style={{ ...tableStyle, tableLayout: "fixed" }}>
       <colgroup>
-        <col style={{ width: "16rem" }} />
+        <col style={{ width: labelWidth ?? "16rem" }} />
         {certificates.map((cert) => (
           <col key={cert.key} />
         ))}
@@ -93,6 +102,11 @@ export function MatrixTable<C extends CellAxes>({
               <span style={{ color: "var(--color-text-muted)", marginLeft: "0.4rem" }}>
                 {cond.name}
               </span>
+              {/* Its own line, and allowed to wrap: the name above it is clipped with an ellipsis,
+                  which would swallow whatever the row had to say for itself. */}
+              {renderRowAside && (
+                <div style={{ whiteSpace: "normal" }}>{renderRowAside(cond.id)}</div>
+              )}
             </td>
             {certificates.map((cert) => (
               <td key={cert.key} style={numTdStyle}>
@@ -150,10 +164,16 @@ export function FormatTables<C extends FormatAxis & CellAxes>({
   values,
   certificates,
   renderCell,
+  renderRowAside,
+  labelWidth,
 }: {
   values: C[];
   certificates: CertColumn[];
   renderCell: (cell: C | undefined) => ReactNode;
+  /** Passed straight through to every format's {@link MatrixTable} — a row's aside is a fact about
+   * the condition, which does not change from one format table to the next. */
+  renderRowAside?: (conditionId: string) => ReactNode;
+  labelWidth?: string;
 }) {
   const groups = new Map<
     string,
@@ -182,7 +202,13 @@ export function FormatTables<C extends FormatAxis & CellAxes>({
               {group.label ?? "Single"}
             </div>
           )}
-          <MatrixTable cells={group.cells} certificates={certificates} renderCell={renderCell} />
+          <MatrixTable
+            cells={group.cells}
+            certificates={certificates}
+            renderCell={renderCell}
+            renderRowAside={renderRowAside}
+            labelWidth={labelWidth}
+          />
         </div>
       ))}
     </>
