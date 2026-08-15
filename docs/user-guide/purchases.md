@@ -405,6 +405,28 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   closing. For a stockbook bought sight-unseen these tiles are the only record of what was actually
   inside; a discard is evidence, not a dismissal.
 
+**Duplicates: *Same as the last*.** Once you have identified one tile in this sitting, the dialog
+offers to identify the next one the same way — and it **names what it will repeat**, so the button
+reads *Same as the last: Mi·PL 200, MNH* rather than asking you to remember. Duplicates on a card sit
+next to each other, and working a batch in order means meeting them in a run.
+
+It is the *stamp* that this saves you. Everything else the condition step asks — condition,
+certificate, location and its ref, disposition, the lot — already comes back on its own from the last
+copy you took in; the stamp deliberately does not, because the next tile is normally a different one.
+So the whole of "the same again" is *and the same stamp*, and it is worth a button rather than a walk
+through the browse popup.
+
+It **fills the step and stops at the ordinary confirm**. Nothing is created by the press itself: you
+see what is about to be made, with the picture of this tile beside it, and press **Identify the tile**
+as usual — a consumed tile has no undo short of deleting the copy it became. What it fills is the
+**previous tile's** answers rather than your usual defaults, which is the point: the two differ
+exactly when you have changed something for this card. **Back** takes you to the browse popup and
+drops the repeat, so the stamp you pick instead arrives at your ordinary defaults.
+
+The **catalogue value** field is the one thing it does not fill, and does not need to: that figure is
+a fact about the stamp, so the field already shows what you recorded for this stamp in this condition
+the first time round.
+
 **The piece stays on screen for the whole of identifying it.** Choosing *Identify as a new copy*
 used to leave the picture behind on this dialog: the browse popup, any issue or stamp you created
 inside it, and the condition step that followed all showed nothing of the tile, so *used or mint?*

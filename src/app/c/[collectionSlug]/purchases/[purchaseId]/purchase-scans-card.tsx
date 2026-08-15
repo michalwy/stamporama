@@ -74,6 +74,11 @@ interface Props {
    * picture on screen the whole way, and which sides it has is `tileSideViews`' answer — already
    * computed in the dialog handing this over, where the batch's sheets are in hand. */
   onIdentifyTile: (piece: IdentifiedPiece) => void;
+  /** *Same as the last* (#595): the same handover as `onIdentifyTile`, for the tile that is to be
+   * identified as the previous one of this sitting was. Null until one has been — the panel above
+   * owns that record, because it owns the step that answers it. `summary` is what the action names,
+   * built there for the same reason: the condition and format dictionaries are up there. */
+  repeatLast: { summary: string; onRepeatTile: (piece: IdentifiedPiece) => void } | null;
   onChanged: () => void;
 }
 
@@ -91,6 +96,7 @@ export function PurchaseScansCard({
   scanSheetCount,
   canIdentify,
   onIdentifyTile,
+  repeatLast,
   onChanged,
 }: Props) {
   /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
@@ -509,6 +515,21 @@ export function PurchaseScansCard({
             setTileId(null);
             onIdentifyTile({ tileId: openTile.id, sides, position: openTile.position });
           }}
+          // The same handover, minus the picker (#595) — the panel drops this tile straight onto
+          // the condition step with the last one's answers in the fields.
+          repeatLast={
+            repeatLast && {
+              summary: repeatLast.summary,
+              onRepeat: (sides) => {
+                setTileId(null);
+                repeatLast.onRepeatTile({
+                  tileId: openTile.id,
+                  sides,
+                  position: openTile.position,
+                });
+              },
+            }
+          }
           onDone={(touchedCopy) => {
             setTileId(null);
             refresh(touchedCopy);

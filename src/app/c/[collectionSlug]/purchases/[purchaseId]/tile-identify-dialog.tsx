@@ -101,6 +101,18 @@ interface Props {
    */
   onIdentifyNew: (sides: TileSideView[]) => void;
   /**
+   * *Same as the last* (#595): identify this tile the way the previous one of this sitting was
+   * identified. Null until something has been, so the action is never offered with nothing to
+   * repeat — and it carries `summary`, the stamp and condition it will apply, because a button that
+   * does not name what it repeats is a blind one.
+   *
+   * It **skips the picker and stops at the condition step's ordinary confirm**, which is the whole
+   * of its saving: the stamp is the one answer the intake step does not remember, and everything
+   * around it already comes back on its own. One extra press buys sight of what is about to be
+   * created, and a consumed tile has no undo short of deleting the copy.
+   */
+  repeatLast?: { summary: string; onRepeat: (sides: TileSideView[]) => void } | null;
+  /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
    * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
    * touches no copy at all, so invalidating them would be re-fetching a lot's whole copy list to
@@ -160,6 +172,7 @@ export function TileIdentifyDialog({
   fromAuction,
   copyHref,
   onIdentifyNew,
+  repeatLast,
   onDone,
   onClose,
 }: Props) {
@@ -232,6 +245,20 @@ export function TileIdentifyDialog({
       <Icon name="delete" size="sm" /> {pending ? "Working…" : "Discard"}
     </DialogSecondaryButton>
   );
+
+  /** *Same as the last* (#595), beside *Identify as a new copy* in both footers, because it is that
+   * answer with its first question already answered — and offered under the same `canIdentify`, since
+   * an order whose every lot is closed takes no new copy however it is asked for. It names the stamp
+   * and the condition it will apply: this is the one control on the screen that acts on a decision
+   * taken minutes ago, so what it will do has to be readable before it is pressed. */
+  const repeat = repeatLast ? (
+    <DialogSecondaryButton
+      onClick={() => repeatLast.onRepeat(viewSides)}
+      disabled={pending || !canIdentify}
+    >
+      <Icon name="duplicate" size="sm" /> Same as the last: {repeatLast.summary}
+    </DialogSecondaryButton>
+  ) : null;
 
   return (
     <DialogShell
@@ -336,6 +363,7 @@ export function TileIdentifyDialog({
             <DialogSecondaryButton onClick={() => onIdentifyNew(viewSides)} disabled={pending || !canIdentify}>
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
+            {repeat}
             {discard}
           </div>
           <DialogSecondaryButton onClick={onClose} disabled={pending}>
@@ -352,6 +380,7 @@ export function TileIdentifyDialog({
           onAction={() => onIdentifyNew(viewSides)}
           leading={
             <>
+              {repeat}
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose
                   identify over assign, so this is one expression rather than a second rule. Without

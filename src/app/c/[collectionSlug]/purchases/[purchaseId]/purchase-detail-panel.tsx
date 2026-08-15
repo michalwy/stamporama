@@ -201,6 +201,49 @@ interface PurchaseDetailPanelProps {
   certificateStatuses: CertificateStatusData[];
 }
 
+/**
+ * Everything one tile was identified as (#595) — the whole of the condition step's answers, plus the
+ * stamp that got there.
+ *
+ * The catalogue value is deliberately **not** here. It is a fact about a stamp that is already
+ * recorded, so the field prefills itself from what was written for this stamp × condition ×
+ * certificate × format (#593); carrying a figure across would be typing the same price twice.
+ */
+interface TileIdentification {
+  stampId: string;
+  /** The pick as the condition step's summary box words it. */
+  label: string;
+  /** The pick in one catalogue number, for an action that has to fit on a button. */
+  shortLabel: string;
+  conditionId: string;
+  certificateStatusId: string;
+  formatId: string;
+  locationId: string;
+  locationRef: string;
+  disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
+  lotId: string;
+}
+
+/** The condition step's answers as the intake write is given them (#595). One field is absent from
+ * the form when the collection defines no formats and another when it has no locations, so every
+ * read falls back to the empty string — the same "not chosen" the fields themselves start at. */
+function tileAnswersFrom(fd: FormData): Omit<TileIdentification, "stampId" | "label" | "shortLabel"> {
+  const text = (key: string) => String(fd.get(key) ?? "");
+  return {
+    conditionId: text("conditionId"),
+    certificateStatusId: text("certificateStatusId"),
+    formatId: text("formatId"),
+    locationId: text("locationId"),
+    locationRef: text("locationRef"),
+    disposition: {
+      inCollection: text("inCollection") === "true",
+      forSale: text("forSale") === "true",
+      forTrade: text("forTrade") === "true",
+    },
+    lotId: text("lotId"),
+  };
+}
+
 export function PurchaseDetailPanel({
   collectionId,
   collectionSlug,
@@ -339,13 +382,50 @@ export function PurchaseDetailPanel({
   const [tileStep, setTileStep] = useState<"none" | "picker" | "condition">("none");
   const [tileIntake, setTileIntake] = useState<IdentifiedPiece | null>(null);
   const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
+  /** The pick in one catalogue number, kept beside the selection because `PendingSelection` carries
+   * only the long form and the repeat action has a button's width to say it in. */
+  const [tileShortLabel, setTileShortLabel] = useState("");
+  /**
+   * How the **previous tile of this sitting** was identified (#595), so the next one can be
+   * identified the same way in one press. Component state, never storage: "this sitting" is exactly
+   * the life of this screen, and a record surviving a reload would offer to repeat a decision from
+   * another day.
+   *
+   * It is kept at all because **nothing recoverable holds it**. The remembered add-copy defaults
+   * (`add-copy-defaults.ts`) are collection-wide and any other add-copy overwrites them, and they
+   * carry no stamp, no format and no ref — which are precisely the three the previous tile's answers
+   * add. The two sets differ exactly when it matters: after the collector has changed something for
+   * this card.
+   */
+  const [lastTileIdentify, setLastTileIdentify] = useState<TileIdentification | null>(null);
+  /** The previous tile's answers, in the fields of the condition step, for the tile being repeated
+   * onto. Non-null only on the repeat path — the ordinary picker → condition chain must keep
+   * arriving at the remembered defaults and nothing else. */
+  const [tileRepeat, setTileRepeat] = useState<TileIdentification | null>(null);
   const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   function resetTileIntake() {
     setTileStep("none");
     setTileIntake(null);
     setTileSelection(null);
+    setTileShortLabel("");
+    setTileRepeat(null);
     setError(undefined);
   }
+  // The dictionaries the repeat action's own wording needs. Conditions arrive as a prop; formats
+  // are the one this screen does not have, fetched the way the condition step itself fetches them.
+  const { data: collectionFormats = [] } = useCollectionFormats(collectionId);
+  /** What *Same as the last* says it will do: the stamp, the condition, and the format when the
+   * piece was not a single. Named rather than implied — everything else this action fills is a
+   * field the collector would have found pre-filled anyway. */
+  const repeatSummary = lastTileIdentify
+    ? [
+        lastTileIdentify.shortLabel,
+        conditions.find((c) => c.id === lastTileIdentify.conditionId)?.abbreviation,
+        collectionFormats.find((f) => f.id === lastTileIdentify.formatId)?.abbreviation,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
   function run(
     fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
@@ -613,9 +693,30 @@ export function PurchaseDetailPanel({
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTile={(piece) => {
           setTileIntake(piece);
+          setTileRepeat(null);
           setError(undefined);
           setTileStep("picker");
         }}
+        // *Same as the last* (#595): the picker is skipped, because its answer is the record, and
+        // the chain resumes at the step that would have followed it — with the fields filled and
+        // the ordinary confirm still to press.
+        repeatLast={
+          lastTileIdentify && {
+            summary: repeatSummary,
+            onRepeatTile: (piece) => {
+              setTileIntake(piece);
+              setTileSelection({
+                kind: "stamp",
+                stampId: lastTileIdentify.stampId,
+                label: lastTileIdentify.label,
+              });
+              setTileShortLabel(lastTileIdentify.shortLabel);
+              setTileRepeat(lastTileIdentify);
+              setError(undefined);
+              setTileStep("condition");
+            },
+          }
+        }
         onChanged={() => router.refresh()}
       />
 
@@ -844,6 +945,9 @@ export function PurchaseDetailPanel({
               stampId: picked.stampId,
               label: pickedStampText(picked),
             });
+            // The primary vendor's number leads `catalogLabels`, so the first of them is the one the
+            // collector thinks in; a stamp with no number at all falls back to its name (#595).
+            setTileShortLabel(picked.catalogLabels[0] ?? picked.name ?? "(unnamed stamp)");
             setError(undefined);
             setTileStep("condition");
           }}
@@ -873,6 +977,10 @@ export function PurchaseDetailPanel({
           // (#592). Only here: the two other entries into this dialog have no picture of the piece.
           piece={tileIntake}
           submitLabel="Identify the tile"
+          // *Same as the last* (#595) arrives here with the previous tile's answers rather than
+          // through the picker. Null on every other route in, which is what keeps this an action and
+          // not a default.
+          prefill={tileRepeat ?? undefined}
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.
@@ -889,6 +997,11 @@ export function PurchaseDetailPanel({
           onBack={() => {
             if (!isPending) {
               setError(undefined);
+              // Backing out of a repeat retires it (#595). *Back* from here is the collector saying
+              // this tile is **not** the same as the last, so the stamp they pick next must arrive
+              // at the ordinary remembered defaults — a format left standing from the previous tile
+              // would be exactly the inherited value #573 refused.
+              setTileRepeat(null);
               setTileStep("picker");
             }
           }}
@@ -897,6 +1010,15 @@ export function PurchaseDetailPanel({
             setError(undefined);
             if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
             const tileId = tileIntake.tileId;
+            // What the *next* tile can be identified as in one press (#595). Read off the submitted
+            // form rather than mirrored from the dialog's state: this is the same set of answers the
+            // write itself is given, so the two cannot describe different intakes. Recorded only on
+            // success, in `run`'s completion — an intake the server refused is not a decision that
+            // was taken.
+            const answers = tileAnswersFrom(fd);
+            const stampId = tileSelection.kind === "stamp" ? tileSelection.stampId : "";
+            const label = tileSelection.label;
+            const shortLabel = tileShortLabel;
             run(
               async () => {
                 const { identifyTileAction } = await import("@/app/actions/scans");
@@ -909,7 +1031,12 @@ export function PurchaseDetailPanel({
                 else void invalidatePurchaseScans(collectionId);
                 return r;
               },
-              () => resetTileIntake()
+              () => {
+                if (stampId) {
+                  setLastTileIdentify({ stampId, label, shortLabel, ...answers });
+                }
+                resetTileIntake();
+              }
             );
           }}
         />
@@ -3620,6 +3747,30 @@ interface IntakeConditionDialogProps {
    */
   piece?: IdentifiedPiece;
   /**
+   * The previous tile's answers, filled into every field this dialog holds (#595) — present only on
+   * *Same as the last*, which is why the fields below still read the remembered collection-wide
+   * defaults on every other route in.
+   *
+   * It leads those defaults wherever both have something to say, because the two differ exactly when
+   * it matters: after the collector has changed something for this card. And it fills the three the
+   * defaults have nothing to say about at all — the stamp (chosen one step back, so it arrives as
+   * the `selection`), the format and the in-location ref.
+   *
+   * The **format** being among them is not a reversal of #573. That decision is about what happens
+   * behind the collector's back: a value usually right may be remembered, one usually wrong must not
+   * be, because a wrong value nobody chose is invisible. Here the collector pressed a button that
+   * named the format it would apply, so nothing is inherited — it was asked for.
+   */
+  prefill?: {
+    conditionId: string;
+    certificateStatusId: string;
+    formatId: string;
+    locationId: string;
+    locationRef: string;
+    disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
+    lotId: string;
+  };
+  /**
    * Which lot the created copy belongs to (#586) — asked only when identifying a scan tile, since
    * every other entry into this dialog was reached *through* a lot and already knows.
    *
@@ -3670,18 +3821,26 @@ function IntakeConditionDialog({
   submitLabel,
   hidePhotos,
   piece,
+  prefill,
   lotChoice,
   onBack,
   onClose,
   onSubmit,
 }: IntakeConditionDialogProps) {
-  // Preselect the last-used values, ignoring any that no longer exist in this collection.
+  // Preselect the last-used values, ignoring any that no longer exist in this collection. A repeat
+  // (#595) leads them with the previous tile's own answers — validated the same way, since a
+  // condition deleted mid-sitting is the same missing id whichever of the two named it.
+  //
+  // Each field asks whether there *is* a prefill, never whether it has something in it: a previous
+  // tile with no certificate is an answer, and reading an empty one as "nothing to say" would let
+  // the remembered default put a certificate on a copy the collector asked to be the same as one
+  // without.
   const [conditionId, setConditionId] = useState(() => {
-    const last = readLast(LS_LAST_CONDITION, collectionId);
+    const last = prefill ? prefill.conditionId : readLast(LS_LAST_CONDITION, collectionId);
     return conditions.some((c) => c.id === last) ? last : "";
   });
   const [certId, setCertId] = useState(() => {
-    const last = readLast(LS_LAST_CERT, collectionId);
+    const last = prefill ? prefill.certificateStatusId : readLast(LS_LAST_CERT, collectionId);
     return certificateStatuses.some((c) => c.id === last) ? last : "";
   });
   // The physical format of the piece being identified (#573) — a pair, a block, a strip — blank
@@ -3706,7 +3865,11 @@ function IntakeConditionDialog({
   // So the reset rides on `selection`, which both callers rebuild at **every** pick — including a
   // second pick of the same stamp, the block-of-four-then-singles run a key derived from the stamp
   // id would sit right through.
-  const [formatId, setFormatId] = useState("");
+  //
+  // A repeat (#595) is the one thing that fills it, and it is not an exception to any of that: the
+  // collector pressed a button naming the format, which is a format that was chosen. The reset below
+  // still holds — a different pick clears it, including the pick that follows a repeat.
+  const [formatId, setFormatId] = useState(prefill?.formatId ?? "");
   const [formatSelection, setFormatSelection] = useState(selection);
   if (formatSelection !== selection) {
     setFormatSelection(selection);
@@ -3716,7 +3879,7 @@ function IntakeConditionDialog({
   // fetches it: it is one more dictionary and the screens that need it are not the ones that have it.
   const { data: formats = [] } = useCollectionFormats(collectionId);
   const [locationId, setLocationId] = useState(() => {
-    const last = readLast(LS_LAST_LOCATION, collectionId);
+    const last = prefill ? prefill.locationId : readLast(LS_LAST_LOCATION, collectionId);
     // Only restore an assignable location that still exists (grouping-only nodes and
     // deleted ones fall back to none).
     return locations.some((l) => l.id === last && l.assignable) ? last : "";
@@ -3725,6 +3888,7 @@ function IntakeConditionDialog({
   // carried into the created copies on submit. Remembered per collection like the other
   // choices, to speed up bulk intake.
   const [disposition, setDisposition] = useState(() => {
+    if (prefill) return prefill.disposition;
     const active = new Set(readLast(LS_LAST_DISPOSITION, collectionId).split(",").filter(Boolean));
     return {
       inCollection: active.has("inCollection"),
@@ -3739,7 +3903,9 @@ function IntakeConditionDialog({
   const lotOptions = lotChoice?.lots ?? [];
   const [lotId, setLotId] = useState(() => {
     if (!lotChoice || lotOptions.length === 0) return "";
-    const last = readLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`);
+    const last = prefill
+      ? prefill.lotId
+      : readLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`);
     return lotOptions.some((l) => l.id === last) ? last : lotOptions[0].id;
   });
   const asksForLot = lotChoice != null && lotOptions.length > 1;
@@ -4060,6 +4226,11 @@ function IntakeConditionDialog({
                     name="locationRef"
                     type="text"
                     placeholder="Ref, e.g. A234"
+                    // The one field here that is never remembered between intakes, and is filled by
+                    // a repeat all the same (#595): two duplicates worked through in a run go into
+                    // the same place in the same box, and the collector asked for the same again.
+                    // Uncontrolled, so this is the value the field opens with and nothing more.
+                    defaultValue={prefill?.locationRef}
                     disabled={isPending || !locationId}
                     {...NO_AUTOFILL}
                     style={INPUT_STYLE}
