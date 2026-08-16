@@ -81,6 +81,33 @@ export async function GET(
   // come from the server. That means streaming the bytes ourselves even on a redirecting backend:
   // a download is a rare, deliberate click, so paying for the proxy hop is the cheaper trade.
   const download = request.nextUrl.searchParams.get("download");
+  // `?inline=1` asks for the **bytes from this origin** rather than the fastest route to them
+  // (#614). The redirecting backend hands an `<img>` a signed URL on another origin, which is
+  // exactly what it is for — but it also taints any canvas the image is drawn into, and the tooth
+  // count reads pixels out of one. So the measuring tool asks for the proxied copy.
+  //
+  // The same trade as the download branch below, and for the same reason: this runs once when a
+  // perforation run is measured, not once per thumbnail in a list, so paying for the proxy hop is
+  // the cheaper side. It is deliberately **not** what the tile's own `<img>` uses — routing every
+  // picture through the app is the cost the redirect exists to avoid.
+  const inline = request.nextUrl.searchParams.get("inline");
+  if (download === null && inline !== null) {
+    let object;
+    try {
+      object = await storage.get(key, photo.mime, "delivery");
+    } catch {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return new Response(toWebStream(object.stream), {
+      status: 200,
+      headers: {
+        "Content-Type": object.mime,
+        "Content-Length": String(object.sizeBytes),
+        "Cache-Control": "private, max-age=31536000, immutable",
+      },
+    });
+  }
+
   if (download !== null) {
     let object;
     try {

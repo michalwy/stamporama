@@ -380,14 +380,24 @@ perforation question is settled on screen instead of with an odontometer.
 
 **Ruler** — drag from one point to another and read the distance in millimetres.
 
-**Perforation** — drag from the **first hole of a run to the last**, then say how many **teeth lie
-between the two marks**, and read the gauge. That is how a physical odontometer works: perforation is
-quoted as teeth per 2 cm. You are told **both figures** — the nearest catalogue step (11¼, 11½, 11¾…)
-and the measurement it came from. The step is what a catalogue prints and what you will compare
-against; the raw figure is what tells you whether the piece sits comfortably on that step or
-awkwardly between two, which is usually the interesting case. Counting the teeth is left to you
-deliberately: a machine that got it slightly wrong would hand you a number that looks perfectly
-reasonable, and counting a dozen teeth by eye was never the slow part.
+**Perforation** — drag from the **first hole of a run to the last** and read the gauge. That is how a
+physical odontometer works: perforation is quoted as teeth per 2 cm. You are told **both figures** —
+the nearest catalogue step (11¼, 11½, 11¾…) and the measurement it came from. The step is what a
+catalogue prints and what you will compare against; the raw figure is what tells you whether the
+piece sits comfortably on that step or awkwardly between two, which is usually the interesting case.
+
+**The teeth between your marks are counted for you.** When you let go of the drag, Stamporama reads
+the edge you marked and fills the count, and the field goes blue with a small **counted** tag beside
+it. It is a reading, not a fact: **look at it against the picture**, and if it is wrong just type
+over it — the tag disappears and your number is used.
+
+When it cannot count them it says which of the three things went wrong, next to the field, rather
+than filling in a guess: *too short to count* (mark a longer run), *couldn&apos;t find a perforation
+here* (the marks are not on an edge, or it is too ragged to read), or *couldn&apos;t read the
+picture* (the image could not be fetched). In every one of those the number is yours to type, which is
+how it worked before it could count at all.
+
+Redrawing the line counts again, so a run that read badly is re-read by dragging it once more.
 
 While a tool is down, **drag places the marks** and holding <kbd>space</kbd> — or the middle mouse
 button — moves the picture instead. The reading appears **at the end of the line as you drag**, so a

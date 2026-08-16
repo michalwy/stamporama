@@ -22,6 +22,7 @@ import {
   perforationGauge,
   type ScanPoint,
 } from "@/lib/scan-measure";
+import { countTeethBetweenMarks, type Pixels } from "@/lib/scan-perf-count";
 import {
   ZOOM_STEP,
   actualSizeViewport,
@@ -87,6 +88,11 @@ import { useSheetRegion } from "./use-sheet-region";
  * beside the result: prefilled from the collection, corrected here for this sitting, and never
  * written back — see `docs/agents/purchases-and-intake.md` for why that asymmetry is the point.
  * Nothing a measurement produces is stored anywhere.
+ *
+ * The **tooth count is read off the edge** when a perforation drag is released (#614,
+ * `scan-perf-count.ts`), into a field that stays hand-editable and says when the figure is one this
+ * app put there. See {@link TileZoomView}'s `teethSource` for why filling it is safe where
+ * inferring the *scale* would not be.
  */
 
 interface Props {
@@ -446,6 +452,37 @@ function describeReading(args: {
   };
 }
 
+/**
+ * Where the tooth count in the field came from (#614), and — when it came from nowhere — what
+ * stopped it.
+ *
+ * Every failure is named. An attempt that gives up quietly is indistinguishable from a feature that
+ * is not wired up, which is worse than either: the collector has no way to tell *mark a longer run*
+ * from *this is not a perforation* from *something is broken*, and so learns to ignore the tool.
+ */
+type TeethSource =
+  /** Typed by hand — the resting state, and what typing over a count returns to. */
+  | "typed"
+  /** Read off the edge between the marks. */
+  | "counted"
+  /** The picture is being fetched and decoded — one fetch per tile side, so this is brief, but a
+   * count that takes a moment must not look like one that did nothing. */
+  | "counting"
+  /** The run is too short to carry a countable number of cycles. */
+  | "short"
+  /** Read, but carrying no period worth a number — not a perforation, or too ragged to be one. */
+  | "weak"
+  /** The pixels could not be got at all: the photo is not loaded, or the canvas will not be read. */
+  | "no-picture";
+
+/** What the bar says for each, beside the field. Absent for the two that need no sentence. */
+const TEETH_SOURCE_NOTE: Partial<Record<TeethSource, string>> = {
+  counting: "counting…",
+  short: "too short to count — mark a longer run, or type it",
+  weak: "couldn't find a perforation here — check the marks, or type it",
+  "no-picture": "couldn't read the picture — type it",
+};
+
 /** The natural size of a loaded photo, in its own pixels. Measured rather than stored: it is the
  * width of the derivative actually on screen, which is what decides whether the retained scan has
  * anything more to offer — and the browser knows it exactly. */
@@ -614,11 +651,21 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
   const [dpiText, setDpiText] = useState(String(scanDpi));
   const dpi = parseScanDpi(dpiText);
 
-  /** How many teeth lie **between the marks**. Asked for rather than counted: a detector over a
-   * periodic edge would fail into plausible numbers, which in a measuring tool is the worst kind of
-   * failure, and counting a dozen teeth by eye was never the expensive part — leaving the screen
-   * was (#598). */
+  /**
+   * How many teeth lie **between the marks** — the field, and where the figure in it came from.
+   *
+   * #598 asked for it and counted nothing, on the grounds that a detector's failures would be
+   * *plausible numbers*. #614 counts it anyway, and what answers that objection is not a better
+   * detector but **where the number lands**: in a field already under the collector's eye, next to
+   * a gauge recomputed live, marked as counted rather than typed, and a keystroke from being
+   * corrected. A wrong 13 beside a picture of twelve teeth is visible; a wrong gauge inside a
+   * catalogue note is not.
+   *
+   * The field stays the authority. Counting fills it, typing takes it back, and nothing downstream
+   * knows or cares which happened.
+   */
   const [teethText, setTeethText] = useState("10");
+  const [teethSource, setTeethSource] = useState<TeethSource>("typed");
   const teeth = parseToothCount(teethText);
 
   /** Space is the hand tool while a measuring tool is down, exactly as in the cut editor — one
@@ -682,8 +729,155 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
     [pictureHeight, pictureWidth, ready, view]
   );
 
+  /**
+   * Count the teeth between two marks off the picture itself (#614), and fill the field.
+   *
+   * **The pixels come from the tile's own photo, and that is safe here for a reason that does not
+   * generalise.** For an ordinary single stamp the photo *is* the scan; for an oversized tile it is
+   * a downscale by a factor nothing states. A count is a *frequency* and survives that — an unknown
+   * scale factor cannot change how many teeth lie between two marks — while the millimetres are an
+   * *absolute* and do not, which is why the length keeps coming from the marks in scan pixels
+   * against the stated resolution (#598) and never from here. Two numbers, two sources, on purpose.
+   *
+   * Nothing is drawn from this and the marks are never moved: a count that nudged the line would
+   * also move the length it is dividing, which is the one thing the collector placed by hand.
+   */
+  /** The decoded picture the count reads, kept per photo so pressing **Count** again — or measuring
+   * a second run on the same side — does not fetch and decode it a second time. */
+  const bitmapRef = useRef<{ photoId: string; bitmap: ImageBitmap } | null>(null);
+  useEffect(() => {
+    return () => {
+      bitmapRef.current?.bitmap.close();
+      bitmapRef.current = null;
+    };
+  }, []);
+
+  const photoId = current?.photoId ?? null;
+
+  /**
+   * The picture's pixels, **fetched from this origin** rather than taken off the `<img>` on screen.
+   *
+   * That indirection is the whole of #614's one real deployment problem. On the redirecting storage
+   * backend the photo route answers with a 302 to a signed URL on the storage provider's origin —
+   * which is exactly what it is for, and which also means the `<img>` holds a cross-origin picture
+   * and **taints any canvas it is drawn into**. `getImageData` then throws, on every count, on
+   * every tile, and only on deployments using that backend. So the count asks the route for the
+   * proxied copy (`?inline=1`) and decodes that. One fetch per tile side, cached here, against a
+   * response the browser will serve from its own cache anyway.
+   */
+  const loadPixels = useCallback(async (): Promise<ImageBitmap | null> => {
+    if (!photoId) return null;
+    const held = bitmapRef.current;
+    if (held?.photoId === photoId) return held.bitmap;
+    try {
+      const res = await fetch(
+        `/api/collections/${collectionId}/photos/${photoId}/full?inline=1`,
+        { credentials: "same-origin" }
+      );
+      if (!res.ok) return null;
+      const bitmap = await createImageBitmap(await res.blob());
+      bitmapRef.current?.bitmap.close();
+      bitmapRef.current = { photoId, bitmap };
+      return bitmap;
+    } catch {
+      return null;
+    }
+  }, [collectionId, photoId]);
+
+  /**
+   * Count the teeth between two marks off the picture itself (#614), and fill the field.
+   *
+   * **The pixels come from the tile's own photo, and that is safe here for a reason that does not
+   * generalise.** For an ordinary single stamp the photo *is* the scan; for an oversized tile it is
+   * a downscale by a factor nothing states. A count is a *frequency* and survives that — an unknown
+   * scale factor cannot change how many teeth lie between two marks — while the millimetres are an
+   * *absolute* and do not, which is why the length keeps coming from the marks in scan pixels
+   * against the stated resolution (#598) and never from here. Two numbers, two sources, on purpose.
+   * It is also why the retained original is not fetched for this: it would buy precision the count
+   * does not spend.
+   *
+   * Nothing is drawn from this and the marks are never moved: a count that nudged the line would
+   * also move the length it is dividing, which is the one thing the collector placed by hand.
+   */
+  const countTeeth = useCallback(
+    async (m: { a: ScanPoint; b: ScanPoint }) => {
+      if (pictureWidth <= 0) {
+        setTeethSource("no-picture");
+        return;
+      }
+      setTeethSource("counting");
+      const picture = await loadPixels();
+      if (!picture || !picture.width) {
+        setTeethSource("no-picture");
+        return;
+      }
+
+      // Scan pixels → this photo's own pixels. One ratio: the crop is the same rectangle either
+      // way, so the photo is the picture at some scale and never a different framing of it.
+      const ratio = picture.width / pictureWidth;
+      const a = { x: m.a.x * ratio, y: m.a.y * ratio };
+      const b = { x: m.b.x * ratio, y: m.b.y * ratio };
+
+      // Only the strip the marks cross, grown by enough for the perpendicular offsets to have
+      // somewhere to sit. Decoding the whole photo to read one line would cost megabytes per drag.
+      const pad = 16;
+      const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - pad));
+      const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - pad));
+      const x1 = Math.min(picture.width, Math.ceil(Math.max(a.x, b.x) + pad));
+      const y1 = Math.min(picture.height, Math.ceil(Math.max(a.y, b.y) + pad));
+      const w = x1 - x0;
+      const h = y1 - y0;
+      if (w < 2 || h < 2) {
+        setTeethSource("short");
+        return;
+      }
+
+      let pixels: Pixels;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          setTeethSource("no-picture");
+          return;
+        }
+        ctx.drawImage(picture, x0, y0, w, h, 0, 0, w, h);
+        pixels = ctx.getImageData(0, 0, w, h);
+      } catch {
+        // Said rather than swallowed: silence here is indistinguishable from the feature not being
+        // wired up at all, which is exactly the confusion that made every one of these worth
+        // stating.
+        setTeethSource("no-picture");
+        return;
+      }
+
+      const found = countTeethBetweenMarks({
+        image: pixels,
+        a: { x: a.x - x0, y: a.y - y0 },
+        b: { x: b.x - x0, y: b.y - y0 },
+        // The stated scale bounds the candidates to counts a perforation could actually be — the
+        // scale earning its keep a second time. Null when none has been stated, which widens the
+        // search rather than stopping it.
+        runLengthMm: dpi === null ? null : measureDistance(m.a, m.b, dpi).mm,
+      });
+
+      if (!found.ok) {
+        setTeethSource(found.reason);
+        return;
+      }
+      setTeethText(String(found.teeth));
+      setTeethSource("counted");
+    },
+    [dpi, loadPixels, pictureWidth]
+  );
+
   const pan = useRef<{ x: number; y: number } | null>(null);
   const marking = useRef(false);
+  /** The line as the pointer left it. A ref beside the state because the count runs on pointer-up
+   * and wants the mark the drag actually finished on, not the one the last render happened to
+   * have. */
+  const markedRef = useRef<{ a: ScanPoint; b: ScanPoint } | null>(null);
   /** Whether the plain drag is the hand. It is, unless a measuring tool is down and space is not
    * held — the cut editor's rule, for the same reason: panning has to keep working in every mode,
    * because the thing being marked is usually not the thing currently on screen. */
@@ -697,6 +891,7 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
       // Both ends start together: a click that never becomes a drag leaves a zero-length line,
       // which reads as "one mark placed" rather than as a measurement of nothing.
       setMarks({ a: at, b: at });
+      markedRef.current = { a: at, b: at };
       marking.current = true;
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       return;
@@ -711,7 +906,11 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
   const onPointerMove = (e: React.PointerEvent) => {
     if (marking.current) {
       const at = markAt(e.clientX, e.clientY);
-      if (at) setMarks((m) => (m ? { a: m.a, b: at } : m));
+      if (at) {
+        setMarks((m) => (m ? { a: m.a, b: at } : m));
+        const started = markedRef.current;
+        if (started) markedRef.current = { a: started.a, b: at };
+      }
       return;
     }
     const last = pan.current;
@@ -722,8 +921,14 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
   };
   const endPan = () => {
     pan.current = null;
-    marking.current = false;
     setPanning(false);
+    const wasMarking = marking.current;
+    marking.current = false;
+    // The count runs when the line is finished, not while it is being dragged: reading the pixels
+    // on every pointer move would recount a run the collector is still stretching, and the number
+    // under their hand would flicker through every count on the way to the one they meant.
+    const line = markedRef.current;
+    if (wasMarking && tool === "perforation" && line) void countTeeth(line);
   };
 
   const detail = useSheetRegion({
@@ -789,7 +994,7 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
             />
             <ScanToolButton
               label="Perforation"
-              hint="Mark the first and last hole of a run and say how many teeth lie between them"
+              hint="Mark the first and last hole of a run — the teeth between them are counted for you, and you can correct the count"
               active={tool === "perforation"}
               onClick={() => {
                 setChosenTool((t) => (t === "perforation" ? "off" : "perforation"));
@@ -885,6 +1090,9 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
             src={`/api/collections/${collectionId}/photos/${current.photoId}/full`}
             alt={`Tile ${position + 1}, ${current.label.toLowerCase()}`}
             draggable={false}
+            // No `crossOrigin`: the route is same-origin, so the canvas the tooth count reads from
+            // is untainted as it stands, and asking for CORS mode on a same-origin authenticated
+            // route would only give the request a second cache entry and one more way to fail.
             onLoad={(e) => {
               const img = e.currentTarget;
               setNatural((n) =>
@@ -1037,12 +1245,49 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
             <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
               <input
                 value={teethText}
-                onChange={(e) => setTeethText(e.target.value)}
+                onChange={(e) => {
+                  setTeethText(e.target.value);
+                  // Typing takes the count back, and the *counted* mark with it. The field is the
+                  // authority; #614 only fills it (see {@link TeethSource}).
+                  setTeethSource("typed");
+                }}
                 inputMode="numeric"
                 aria-label="Teeth between the marks"
-                style={{ ...MEASURE_FIELD, width: "3rem" }}
+                style={{
+                  ...MEASURE_FIELD,
+                  width: "3rem",
+                  // Lit while the figure is one this app put there, so a wrong count reads as
+                  // something to check rather than as something the collector typed and forgot.
+                  borderColor:
+                    teethSource === "counted"
+                      ? "var(--color-action-primary)"
+                      : "var(--color-border-strong)",
+                }}
               />
               <span style={{ color: "var(--color-text-muted)" }}>teeth between the marks</span>
+              {teethSource === "counted" && (
+                <Tooltip content="Counted off the edge between your marks. Check it against the picture — it is a reading, not a fact, and typing over it takes it back.">
+                  <span
+                    style={{
+                      padding: "0.0625rem 0.3125rem",
+                      borderRadius: "0.25rem",
+                      border: "1px solid var(--color-action-primary)",
+                      color: "var(--color-action-primary)",
+                      fontSize: "0.6875rem",
+                    }}
+                  >
+                    counted
+                  </span>
+                </Tooltip>
+              )}
+              {/* Said, rather than filled with a guess: a run too short or too ragged to carry a
+                  period is exactly the case a plausible number would be worst in — and which of
+                  those it was is a different instruction, so it is a different sentence. */}
+              {TEETH_SOURCE_NOTE[teethSource] && (
+                <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                  {TEETH_SOURCE_NOTE[teethSource]}
+                </span>
+              )}
             </label>
           )}
 
