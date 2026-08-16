@@ -15,7 +15,7 @@ import type { CopyGroupAxes } from "@/lib/copy-groups";
 import type { LocationGroupBy } from "@/lib/location-groups";
 import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
-import type { StampNodeData, IssueData } from "@/lib/issues";
+import type { StampNodeData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { StampHoldings } from "@/lib/stamp-holdings";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -460,8 +460,12 @@ export function useItemYears(
   });
 }
 
-/** Stamp nodes (base + variants) that belong to an issue, for the stamp picker. */
-export function useIssueMembers(collectionId: string, issueId: string) {
+/** Stamp nodes (base + variants) that belong to an issue, for the stamp picker.
+ *
+ * The picker browser's rows are paged (#604), so a row's tree is read here when the row needs it —
+ * on expand, or to work out which of its stamps a search matched — rather than riding along with
+ * every row on the page. `enabled` is what the caller holds that back with. */
+export function useIssueMembers(collectionId: string, issueId: string, enabled = true) {
   return useQuery<StampNodeData[]>({
     queryKey: ["inventory", collectionId, "issueMembers", issueId] as const,
     queryFn: async () => {
@@ -472,7 +476,7 @@ export function useIssueMembers(collectionId: string, issueId: string) {
       const data = await res.json();
       return data.members;
     },
-    enabled: !!issueId,
+    enabled: enabled && !!issueId,
   });
 }
 
@@ -542,27 +546,6 @@ export function useStampPickerSearch(collectionId: string, query: string) {
       return data.items;
     },
     enabled: query.length >= 1,
-  });
-}
-
-/** Full issues (with embedded stamp members) for the picker popup browser's
- * issue → stamp/variant drill-down (#104). `areaIds` scopes to a set of areas (a
- * selected area plus its descendants, so a parent selection includes children);
- * `null` means "All areas" and returns every issue in the collection. */
-export function useIssuesByArea(collectionId: string, areaIds: string[] | null) {
-  const key = areaIds && areaIds.length > 0 ? [...areaIds].sort() : null;
-  return useQuery<IssueData[]>({
-    queryKey: ["inventory", collectionId, "issuesByArea", key ?? "all"] as const,
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (key) params.set("areaIds", key.join(","));
-      const res = await fetch(
-        `/api/collections/${collectionId}/issues/by-area?${params.toString()}`
-      );
-      if (!res.ok) throw new Error("Failed to fetch issues for area");
-      const data = await res.json();
-      return data.items;
-    },
   });
 }
 
@@ -662,16 +645,14 @@ export function useInvalidateInventory() {
     /** Refresh the picker popup's area→issue→stamp data after an inline create
      * (#105), so a new issue/stamp shows without touching the inventory list. */
     invalidatePickerData: (collectionId: string) => {
+      // The browser's pages and year facets are the issues list's own caches since #604, and a
+      // prefix override an inline-created issue carries (#377) is keyed under the same root — one
+      // invalidation covers the rows, the facets and the chips they render through.
       queryClient.invalidateQueries({
-        queryKey: ["inventory", collectionId, "issuesByArea"],
+        queryKey: ["issues", collectionId],
       });
       queryClient.invalidateQueries({
         queryKey: ["inventory", collectionId, "issueMembers"],
-      });
-      // An issue created from the picker may carry prefix overrides of its own (#377), and its
-      // catalog chips render through them.
-      queryClient.invalidateQueries({
-        queryKey: ["issues", collectionId, "catalog-prefixes"],
       });
     },
   };

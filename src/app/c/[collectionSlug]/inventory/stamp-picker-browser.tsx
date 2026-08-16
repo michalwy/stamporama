@@ -4,9 +4,9 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
-import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { catalogMatchKey, catalogKeyMatches, parseCatalogSearch } from "@/lib/catalog-number";
+import { parseEntityNoSearch } from "@/lib/quick-jump";
 import type {
-  IssueData,
   IssueListItem,
   IssueChecklistSummary,
   StampNodeData,
@@ -31,7 +31,16 @@ import {
   type VendorMap,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
+import {
+  useIssuesInfinite,
+  useIssueYears,
+  type IssueListFilters,
+  type IssueYearFacetFilters,
+} from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
+import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { useIssueMembers, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
@@ -41,30 +50,56 @@ import { Icon } from "@/app/icons";
  * area, or a new stamp / variant (parent set) in an issue. */
 type CreateState =
   | { kind: "issue"; areaId: string | null }
-  | { kind: "stamp"; issue: IssueData; parentStampId?: string };
+  | { kind: "stamp"; issue: IssueListItem; parent?: StampNodeData };
 
-/** Adapt a browser `IssueData` to the `IssueListItem` shape `StampFormDialog`
- * expects. Only id/name/year are actually read (the issue step is prefilled), so
- * list-only fields are filled with safe placeholders. */
-function toIssueListItem(issue: IssueData): IssueListItem {
-  return {
-    id: issue.id,
-    collectionId: issue.collectionId,
-    issueNo: issue.issueNo,
-    collectionAreaId: issue.collectionAreaId,
-    name: issue.name,
-    nameByLanguage: issue.nameByLanguage,
-    year: issue.year,
-    isAutoCreated: issue.isAutoCreated,
-    createdAt: String(issue.createdAt),
-    catalogNumbers: issue.catalogNumbers,
-    catalogPrefixes: [],
-    memberCount: issue.members.length,
-    requiredCount: issue.checklists.reduce((n, c) => Math.max(n, c.stampCount), 0),
-    checklists: issue.checklists.map((c) => ({ ...c, priceTotal: null, priceStale: false })),
-    rangeSuggestions: [],
-    photos: [],
-  };
+/** Does the issue's *own* header explain why the search returned this row?
+ *
+ * The server decides which issues a search matches, and it matches an issue by things the row
+ * already draws (name, year, its short number, its declared range) as well as by the stamps inside
+ * it. #186 hangs on telling those apart: a row that surfaced only through a stamp opens itself and
+ * dims the rest, and one that matched on its own reads normally. Nothing has to come back from the
+ * server for that — the row carries every header field the query could have hit, so it works it out
+ * for itself and only the *inner* case pays for reading the issue's stamps.
+ *
+ * Numbers are matched on their normalized key (vendor abbreviation + area prefix + number), so a
+ * prefixed query resolves in any spacing — `Mi PL 200`, `MiPL200`, `PL200` and bare `200` all
+ * reach the same issue (#146).
+ */
+function issueHeaderMatches(issue: IssueListItem, search: string, vendorMap: VendorMap): boolean {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  if ((issue.name ?? "").toLowerCase().includes(q)) return true;
+  if (issue.year != null && String(issue.year).includes(q)) return true;
+  if (parseEntityNoSearch(search) === issue.issueNo) return true;
+  const keys = issue.catalogNumbers.flatMap((cn) => {
+    const v = vendorMap.get(cn.catalogVendorId);
+    const abbr = v?.vendorAbbreviation ?? "";
+    return [cn.firstNumber, cn.lastNumber]
+      .filter((n): n is string => !!n)
+      .map((n) => catalogMatchKey(abbr, v?.prefix, n));
+  });
+  return catalogKeyMatches(search, keys);
+}
+
+/** Which of an issue's stamps a search matched — by name or by catalog number (#186). Empty when
+ *  none did, which is also the answer for a row whose header explained the hit. */
+function matchStampsInIssue(
+  members: StampNodeData[],
+  search: string,
+  vendorMap: VendorMap
+): Set<string> {
+  const q = search.trim().toLowerCase();
+  const out = new Set<string>();
+  if (!q) return out;
+  for (const m of members) {
+    const nameHit = (m.name ?? "").toLowerCase().includes(q);
+    const keys = m.catalogNumbers.map((cn) => {
+      const v = vendorMap.get(cn.catalogVendorId);
+      return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
+    });
+    if (nameHit || catalogKeyMatches(search, keys)) out.add(m.stampId);
+  }
+  return out;
 }
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -134,7 +169,7 @@ export function StampPickerBrowser({
   // Area + year come from the shared per-collection store (#143), so the picker
   // opens on the same filter as the lists and changes here carry back to them.
   // Year values: "none" = no-year bucket, a numeric string = a year, null = all.
-  // Filtering is client-side — the picker already loads every in-scope issue.
+  // The store rather than the URL, as everywhere else in a dialog: a popup has no address.
   const { storedAreaId, storedYear, writeStore } =
     useCollectionFilterStore(collectionId);
   const areaId = storedAreaId;
@@ -165,30 +200,68 @@ export function StampPickerBrowser({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: issues = [], isLoading } = useIssuesByArea(collectionId, areaIds);
+  // The search box lives up here rather than on the list (#604): it narrows the rows *and* the
+  // year facets, and both are read from the server now, so one value has to feed both queries.
+  // Persisted so the picker reopens on the filter it was left on (#183), debounced because every
+  // keystroke would otherwise be a page request.
+  const [filter, setFilter] = usePersistedSearch(`${collectionId}:issues`);
+  const search = useDebouncedValue(filter);
 
-  // Year facets from the full in-scope issue set (before the year filter), so the
-  // counts stay stable while a year is selected. null → the "No year" bucket.
-  const yearFacets = useMemo(() => {
-    const counts = new Map<number | null, number>();
-    for (const issue of issues) {
-      counts.set(issue.year, (counts.get(issue.year) ?? 0) + 1);
+  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
+    const seen = new Map<string, CatalogVendorOption>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            name: entry.vendorName,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
     }
-    return [...counts.entries()]
-      .map(([y, count]) => ({ year: y, count }))
-      .sort((a, b) => {
-        if (a.year === null) return 1;
-        if (b.year === null) return -1;
-        return b.year - a.year;
-      });
-  }, [issues]);
+    return Array.from(seen.values());
+  }, [areas]);
 
-  const yearFilteredIssues = useMemo(() => {
-    if (!year) return issues;
-    if (year === "none") return issues.filter((i) => i.year === null);
-    const y = Number(year);
-    return issues.filter((i) => i.year === y);
-  }, [issues, year]);
+  // A prefixed number typed into the box ("Mi PL 200", "PL200", "BL31") never appears verbatim in
+  // a stored number, so the bare number and the vendor its abbreviation named ride alongside the
+  // raw text and the server ORs them in — the issues list's own handling (#146/#289).
+  const parsedSearch = useMemo(
+    () => parseCatalogSearch(search, catalogVendors),
+    [search, catalogVendors]
+  );
+
+  const filters: IssueListFilters = useMemo(
+    () => ({
+      areaIds: areaIds ?? undefined,
+      search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
+      year: year || undefined,
+    }),
+    [areaIds, search, parsedSearch, year]
+  );
+
+  // The facets drop the year and keep everything else, so each count says what picking that year
+  // would leave — the list's rule, and the reason they cannot count a row the page would not show.
+  const yearFacetFilters: IssueYearFacetFilters = useMemo(
+    () => ({
+      areaIds: areaIds ?? undefined,
+      search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
+    }),
+    [areaIds, search, parsedSearch]
+  );
+
+  const { data: yearFacets = [], isLoading: yearsLoading } = useIssueYears(
+    collectionId,
+    yearFacetFilters
+  );
+
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useIssuesInfinite(collectionId, filters);
+  const issues = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   const selectedYearNumber = year && year !== "none" ? Number(year) : undefined;
 
@@ -272,7 +345,7 @@ export function StampPickerBrowser({
             filterAreaId={areaId}
             onNavigateArea={setAreaId}
             yearFacets={yearFacets}
-            yearsLoading={isLoading}
+            yearsLoading={yearsLoading}
             selectedYear={year}
             onSelectYear={setYear}
           />
@@ -290,16 +363,20 @@ export function StampPickerBrowser({
               collectionId={collectionId}
               areas={areas}
               selectedAreaId={areaId}
-              issues={yearFilteredIssues}
+              issues={issues}
               isLoading={isLoading}
+              filter={filter}
+              onFilterChange={setFilter}
+              search={search}
+              hasMore={!!hasNextPage}
+              isFetchingMore={isFetchingNextPage}
+              onLoadMore={fetchNextPage}
               justCreatedIssueId={justCreatedIssueId}
               onPick={onPick}
               onPickIssue={onPickIssue}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
-              onNewVariant={(issue, parentStampId) =>
-                openCreate({ kind: "stamp", issue, parentStampId })
-              }
+              onNewVariant={(issue, parent) => openCreate({ kind: "stamp", issue, parent })}
             />
           </div>
         </div>
@@ -332,22 +409,21 @@ export function StampPickerBrowser({
 
           {create.kind === "stamp" &&
             (() => {
-              const { issue, parentStampId } = create;
+              const { issue, parent } = create;
               // Already deduplicated by vendor, and carrying the issue's own prefix override (#377).
               const uniqueVendors = [...vendorMapFor(issue.collectionAreaId, issue.id).values()];
-              // `members` is the issue's stamps *flat* (each carrying its own `parentId`), so a
-              // parent is found by id however deep it hangs in the variant tree.
-              const parent = issue.members.find((m) => m.stampId === parentStampId);
+              // The parent node comes from the row that offered the + variant link — the row holds
+              // its own tree since #604, so there is nothing here to look the id up in.
               return (
                 <StampFormDialog
                   mode="add"
                   aside={aside}
                   asideWidth={asideWidth}
                   collectionId={collectionId}
-                  issues={[toIssueListItem(issue)]}
+                  issues={[issue]}
                   areaVendors={uniqueVendors}
                   prefilledIssueId={issue.id}
-                  prefilledParentStampId={parentStampId ?? null}
+                  prefilledParentStampId={parent?.stampId ?? null}
                   prefilledParentIssuedYear={parent?.issuedYear ?? null}
                   // A variant is numbered off its parent (`309` → `309A`), so the inputs open on
                   // the parent's numbers for the collector to suffix — the same prefill the
@@ -373,6 +449,12 @@ function IssueBrowser({
   selectedAreaId,
   issues,
   isLoading,
+  filter,
+  onFilterChange,
+  search,
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
   justCreatedIssueId,
   onPick,
   onPickIssue,
@@ -383,18 +465,25 @@ function IssueBrowser({
   collectionId: string;
   areas: CollectionAreaData[];
   selectedAreaId: string | null;
-  /** Issues in scope, already filtered by the year panel (#142). */
-  issues: IssueData[];
+  /** The pages loaded so far, already narrowed by area, year and search on the server (#604). */
+  issues: IssueListItem[];
   isLoading: boolean;
+  /** What is in the search box right now — the input's value. */
+  filter: string;
+  onFilterChange: (value: string) => void;
+  /** The debounced text the loaded rows were actually fetched with; what a row measures its own
+   *  match against, so a row never dims itself on a query the server has not answered yet. */
+  search: string;
+  hasMore: boolean;
+  isFetchingMore: boolean;
+  onLoadMore: () => void;
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
   onNewIssue: (areaId: string | null) => void;
-  onNewStamp: (issue: IssueData) => void;
-  onNewVariant: (issue: IssueData, parentStampId: string) => void;
+  onNewStamp: (issue: IssueListItem) => void;
+  onNewVariant: (issue: IssueListItem, parent: StampNodeData) => void;
 }) {
-  const [filter, setFilter] = usePersistedSearch(`${collectionId}:issues`);
-
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 
   // Effective vendor entries + primary vendor per area (ancestor-inherited), matching how the main
@@ -402,43 +491,7 @@ function IssueBrowser({
   // prefix override (#377), so the picker's chips and its search keys read like the list's.
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
-  // Filter issues by the search term, matching issue name/year AND the stamps nested within each
-  // issue — by stamp name or catalog number (#186). `innerMatchByIssue` records, for issues that
-  // surfaced *only* because of an inner stamp match (the issue header itself didn't match), which
-  // member stamps matched; the row uses it to reveal and highlight those while dimming the rest.
-  const { filtered, innerMatchByIssue } = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return { filtered: issues, innerMatchByIssue: new Map<string, Set<string>>() };
-    const out: IssueData[] = [];
-    const innerMatch = new Map<string, Set<string>>();
-    for (const issue of issues) {
-      const headerMatch =
-        (issue.name ?? "").toLowerCase().includes(q) ||
-        (issue.year != null && String(issue.year).includes(q));
-      // Match catalog numbers on their normalized key (vendor abbreviation + area prefix +
-      // number) so a prefixed query resolves in any spacing — "Mi PL 200", "MiPL200", "PL200",
-      // or bare "200" all hit the same stamp (#146).
-      const vm = vendorMapFor(issue.collectionAreaId, issue.id);
-      const matchedStampIds = new Set<string>();
-      for (const m of issue.members) {
-        const nameHit = (m.name ?? "").toLowerCase().includes(q);
-        const keys = m.catalogNumbers.map((cn) => {
-          const v = vm.get(cn.catalogVendorId);
-          return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
-        });
-        if (nameHit || catalogKeyMatches(filter, keys)) matchedStampIds.add(m.stampId);
-      }
-      if (headerMatch || matchedStampIds.size > 0) {
-        out.push(issue);
-        // Grey-out only when the issue surfaced purely via its stamps; a header match shows the
-        // whole tree normally.
-        if (!headerMatch && matchedStampIds.size > 0) innerMatch.set(issue.id, matchedStampIds);
-      }
-    }
-    return { filtered: out, innerMatchByIssue: innerMatch };
-  }, [issues, filter, vendorMapFor]);
-
-  function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueData) {
+  function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
     const catalogLabels = orderedCatalogLabels(
       node.catalogNumbers,
@@ -474,7 +527,7 @@ function IssueBrowser({
         <input
           type="text"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => onFilterChange(e.target.value)}
           placeholder={selectedAreaId ? "Filter issues in this area…" : "Filter issues…"}
           style={{ ...SEARCH_STYLE, flex: 1 }}
           aria-label="Filter issues"
@@ -492,23 +545,25 @@ function IssueBrowser({
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {isLoading ? (
           <p style={HINT_STYLE}>Loading issues…</p>
-        ) : filtered.length === 0 ? (
+        ) : issues.length === 0 ? (
           <p style={HINT_STYLE}>
-            {issues.length === 0 ? "No issues here yet." : "No issues match your filter."}
+            {search ? "No issues match your filter." : "No issues here yet."}
           </p>
         ) : (
-          filtered.map((issue, i) => (
+          <>
+          {issues.map((issue, i) => (
             <PickIssueRow
               key={issue.id}
+              collectionId={collectionId}
               issue={issue}
               areaName={areaById.get(issue.collectionAreaId)?.name ?? null}
               showArea={selectedAreaId !== issue.collectionAreaId}
               vendorMap={vendorMapFor(issue.collectionAreaId, issue.id)}
               primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
-              isLast={i === filtered.length - 1}
+              isLast={i === issues.length - 1 && !hasMore}
               defaultExpanded={issue.id === justCreatedIssueId}
               justAdded={issue.id === justCreatedIssueId}
-              matchedStampIds={innerMatchByIssue.get(issue.id) ?? null}
+              search={search}
               onPick={handlePick}
               onPickIssue={
                 onPickIssue
@@ -524,9 +579,15 @@ function IssueBrowser({
                   : undefined
               }
               onNewStamp={() => onNewStamp(issue)}
-              onNewVariant={(parentStampId) => onNewVariant(issue, parentStampId)}
+              onNewVariant={(parent) => onNewVariant(issue, parent)}
             />
-          ))
+          ))}
+          <InfiniteScrollSentinel
+            onLoadMore={onLoadMore}
+            hasMore={hasMore}
+            isLoading={isFetchingMore}
+          />
+          </>
         )}
       </div>
     </>
@@ -534,6 +595,7 @@ function IssueBrowser({
 }
 
 function PickIssueRow({
+  collectionId,
   issue,
   areaName,
   showArea,
@@ -542,13 +604,14 @@ function PickIssueRow({
   isLast,
   defaultExpanded,
   justAdded,
-  matchedStampIds,
+  search,
   onPick,
   onPickIssue,
   onNewStamp,
   onNewVariant,
 }: {
-  issue: IssueData;
+  collectionId: string;
+  issue: IssueListItem;
   areaName: string | null;
   showArea: boolean;
   vendorMap: VendorMap;
@@ -557,18 +620,34 @@ function PickIssueRow({
   defaultExpanded: boolean;
   /** Flash this row once right after the issue is created inline (#158). */
   justAdded: boolean;
-  /** When set, this issue surfaced only via matching stamps inside it (#186): expand the tree
-   * and let the nodes dim non-matches. Null when the issue matched by name/year (show normally). */
-  matchedStampIds: Set<string> | null;
-  onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueData) => void;
+  /** The search the page was fetched with, empty when there is none. The row decides for itself
+   *  whether its own header explains the hit and, when it does not, which of its stamps did (#186). */
+  search: string;
+  onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) => void;
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   /** Called with the checklist whose button was pressed (#531). */
   onPickIssue?: (checklist: IssueChecklistSummary) => void;
   onNewStamp: () => void;
-  onNewVariant: (parentStampId: string) => void;
+  onNewVariant: (parent: StampNodeData) => void;
 }) {
   const [userExpanded, setUserExpanded] = useState(defaultExpanded);
   const [hovered, setHovered] = useState(false);
+  // Where the row's own name/year/number does not account for the search that returned it, the hit
+  // must have come from a stamp inside — so this row reads its stamps even while collapsed, which
+  // is the one case #186 needs them for. Everything else waits for the collector to expand.
+  const probeForInnerMatch = !issueHeaderMatches(issue, search, vendorMap);
+  const { data: members = [], isLoading: membersLoading } = useIssueMembers(
+    collectionId,
+    issue.id,
+    userExpanded || probeForInnerMatch
+  );
+  // Null while the probe is still out or the header explained the hit: only a row that really
+  // surfaced through its stamps dims the rest of its tree.
+  const matchedStampIds = useMemo(() => {
+    if (!probeForInnerMatch) return null;
+    const matched = matchStampsInIssue(members, search, vendorMap);
+    return matched.size > 0 ? matched : null;
+  }, [probeForInnerMatch, members, search, vendorMap]);
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || matchedStampIds !== null;
@@ -576,17 +655,8 @@ function PickIssueRow({
   // Local to the row and not remembered: a picker is opened to answer one question.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
   const { tree, contextIds } = useMemo(
-    () => filterStampTreeByChecklists(buildStampTree(issue.members), treeChecklistIds),
-    [issue.members, treeChecklistIds]
-  );
-  // Issue-level gallery (#137): the main photos of the stamps on a checklist (#531) —
-  // computed client-side from the members the picker already loaded.
-  const issuePhotos = useMemo(
-    () =>
-      issue.members
-        .filter((m) => m.checklistIds.length > 0)
-        .flatMap((m) => m.photos.filter((p) => p.role === "main")),
-    [issue.members]
+    () => filterStampTreeByChecklists(buildStampTree(members), treeChecklistIds),
+    [members, treeChecklistIds]
   );
 
   return (
@@ -633,7 +703,7 @@ function PickIssueRow({
             empty for alignment. Stop propagation so opening a thumbnail's lightbox doesn't toggle
             the issue row. */}
         <div onClick={(e) => e.stopPropagation()}>
-          <PhotoThumb collectionId={issue.collectionId} photos={issuePhotos} plain reserveWhenEmpty />
+          <PhotoThumb collectionId={issue.collectionId} photos={issue.photos} plain reserveWhenEmpty />
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -706,7 +776,7 @@ function PickIssueRow({
               ))}
         </div>
 
-        {(issue.catalogNumbers.length > 0 || issue.members.length > 0) && (
+        {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
           <div
             style={{
               display: "flex",
@@ -721,18 +791,11 @@ function PickIssueRow({
               vendorMap={vendorMap}
               primaryVendorId={primaryVendorId}
             />
-            {issue.members.length > 0 && (
+            {issue.memberCount > 0 && (
               <ChecklistsBadge
-                checklists={issue.checklists.map((c) => ({
-                  ...c,
-                  priceTotal: null,
-                  priceStale: false,
-                }))}
-                requiredCount={
-                  new Set(issue.members.filter((m) => m.checklistIds.length > 0).map((m) => m.stampId))
-                    .size
-                }
-                memberCount={issue.members.length}
+                checklists={issue.checklists}
+                requiredCount={issue.requiredCount}
+                memberCount={issue.memberCount}
               />
             )}
           </div>
@@ -781,10 +844,13 @@ function PickIssueRow({
             >
               {/* Said explicitly rather than shown as an empty row: with a text search also on
                   (which is what forces a row open, #186), an unexplained blank reads as "this
-                  issue has nothing", when in fact the checklist filter is what emptied it. */}
-              {treeChecklistIds.length > 0 && issue.members.length > 0
-                ? "No stamp on the checklists you picked."
-                : "No stamps in this issue yet."}
+                  issue has nothing", when in fact the checklist filter is what emptied it — or
+                  the stamps are simply still on their way, the tree being read per row (#604). */}
+              {membersLoading
+                ? "Loading stamps…"
+                : treeChecklistIds.length > 0 && members.length > 0
+                  ? "No stamp on the checklists you picked."
+                  : "No stamps in this issue yet."}
             </div>
           ) : (
             tree.map((treeNode, i) => (
@@ -798,7 +864,12 @@ function PickIssueRow({
                 primaryVendorId={primaryVendorId}
                 isLast={i === tree.length - 1}
                 onPick={(node, unknownVariant) => onPick(node, unknownVariant, issue)}
-                onNewVariant={onNewVariant}
+                // The create dialog prefills from the parent's own numbers and year (#386/#360),
+                // so it takes the node rather than its id — the row holds the tree it came from.
+                onNewVariant={(parentStampId) => {
+                  const parent = members.find((m) => m.stampId === parentStampId);
+                  if (parent) onNewVariant(parent);
+                }}
                 matchedStampIds={matchedStampIds}
               />
             ))

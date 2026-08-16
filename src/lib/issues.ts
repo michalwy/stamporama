@@ -539,31 +539,6 @@ export async function findDuplicateIssuesByName(
   });
 }
 
-export async function listAllIssues(
-  ownerId: string,
-  collectionId: string,
-  areaIds?: string[]
-): Promise<IssueData[]> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const issues = await prisma.issue.findMany({
-    where: {
-      collectionId,
-      ...(areaIds && areaIds.length > 0 ? { collectionAreaId: { in: areaIds } } : {}),
-    },
-    orderBy: [{ collectionAreaId: "asc" }, { year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
-    select: ISSUE_SELECT,
-  });
-  // Both catalogue markers, together: the popup's rows are `StampDetailLine`s, the very line the
-  // Stamps and Issues lists draw, so a stamp picked here should read there as it reads anywhere else
-  // (#562). Wants are what was missing — the copy counts have always been loaded — and picking a
-  // stamp for a purchase lot is exactly the moment "you are looking for this" is worth knowing.
-  const stampIds = issues.flatMap((i) => i.members.map((m) => m.stampId));
-  const [copyCounts, wants] = await Promise.all([
-    loadStampCopyCounts(collectionId, stampIds),
-    loadStampWantSummaries(collectionId, stampIds),
-  ]);
-  return issues.map((i) => toIssueData(i, copyCounts, wants));
-}
 
 /** Just the fields needed to render an issue header (title, catalog chips, counts) —
  * used by the lot intake view's grouped-by-issue mode (#121) so a lot's issue rows read

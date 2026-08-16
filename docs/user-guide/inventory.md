@@ -398,6 +398,11 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
      name or catalog number (but not the issue's own name) still surfaces that issue, opens it,
      and highlights the matching stamps while dimming the rest.
 
+     The issue list loads **as you scroll**, like the Issues screen, and the area, year and
+     search filters all narrow it before it is fetched — so the picker opens just as quickly on
+     a collection of thousands of issues as on a small one. An issue's stamps are read when you
+     open it, which is why a tree can take a moment to appear the first time.
+
    Choose a specific variant if you know it, or the **base stamp** if the variant is
    unknown. The chosen stamp appears as a summary with a **Change** link to reselect. Its
    catalog numbers show as one **chip each**, carrying the catalog abbreviation and area
