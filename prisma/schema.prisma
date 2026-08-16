@@ -1206,6 +1206,7 @@ model Stamp {
   auctionLotLines    AuctionLotLine[]
   photos             Photo[]
   translations       StampTranslation[]
+  tileCandidates     ScanTileCandidate[]
 
   @@index([subtypeId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
@@ -1671,8 +1672,9 @@ model ScanTile {
   /** Reading order within the batch: rows by top edge within a tolerance taken from the median box
    * height, each row left to right. Assigned at commit and stable afterwards. */
   position     Int
-  /** unidentified | consumed | discarded (#567). `consumed` means the tile became a copy and
-   * handed it these very images; `discarded` means it became nothing and keeps them. */
+  /** unidentified | consumed | discarded (#567) | parked (#597). `consumed` means the tile became a
+   * copy and handed it these very images; `discarded` means it became nothing and keeps them;
+   * `parked` is still to be identified, set aside because the answer is not at the desk. */
   state        String   @default("unidentified")
   /** The copy a `consumed` tile became (#567) — created from it, or an already-identified copy on
    * the lot that needed photographs rather than identification. `SetNull` rather than cascade: a
@@ -1703,6 +1705,9 @@ model ScanTile {
   backSheet  ScanSheet? @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
   /** The tile's front/back crops, as `Photo` rows under the fourth owner. */
   photos     Photo[]
+  /** The shortlist a parked tile carries (#607): what this piece could be, kept so the return
+   * sitting does not repeat the narrowing that discovered the picture cannot settle it. */
+  candidates ScanTileCandidate[]
 
   // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
   // express check constraints.
@@ -1711,6 +1716,39 @@ model ScanTile {
   @@index([purchaseId, state])
   @@index([itemId])
   @@map("scan_tile")
+}
+
+// What a parked tile **could be** (#607) — the narrowing that discovering "this cannot be
+// identified from its picture" already required.
+//
+// Knowing that a watermark or a shade decides a piece means having worked out which stamps it could
+// be, and #597 kept the note and threw that away. A row here is one of those possibilities;
+// returning to the tile offers them as one-press identifications.
+//
+// **Nothing survives the identification.** What the copy became is the record, and refinement
+// history (#101/#130) is where a later change of mind is written — a shortlist standing beside it
+// would be a second, staler account of the same question. So these rows are deleted when the tile is
+// consumed, and when it is put back in the queue with its note (the doubt is spent either way). A
+// discard keeps them for the reason it keeps the note: for a sight-unseen stockbook the tile is the
+// only record of what the parcel held.
+//
+// No `position`: a shortlist of two or three has no order worth storing, and the surfaces read it in
+// the order it was built.
+model ScanTileCandidate {
+  tileId    String
+  stampId   String
+  createdAt DateTime @default(now())
+
+  tile  ScanTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
+  /** `Cascade`: a stamp that has been deleted is no longer one of the possibilities, and a
+   * shortlist is a working note rather than a record anything is owed to. */
+  stamp Stamp    @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  // The pair **is** the row: one stamp is on a tile's shortlist or it is not, so the composite key
+  // is also the "no duplicates" rule and there is nothing for a write to have to check.
+  @@id([tileId, stampId])
+  @@index([stampId])
+  @@map("scan_tile_candidate")
 }
 
 // A card scan arriving in **parts** (#590) — the row that holds an upload together between the

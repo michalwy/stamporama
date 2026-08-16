@@ -44,6 +44,11 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  * it leaves is the sweep, so working through a card stops re-offering the one piece that cannot be
  * settled now. See {@link parkTile}.
  *
+ * #607 gives that waiting tile a **shortlist** — what the piece could be, kept so the return sitting
+ * does not repeat the narrowing that discovered the picture could not settle it. See
+ * {@link addTileCandidate}; the rule about when a shortlist is the wrong answer altogether lives in
+ * the pure `tile-candidates.ts`.
+ *
  * Two rules run through all three:
  *
  * - **Images move, they are never copied.** A tile's crops are `Photo` rows under the fourth owner
@@ -388,6 +393,63 @@ export async function parkTile(
   // Stated rather than left to the count, because this is the write the guarantee is about.
 }
 
+// ── The shortlist a parked tile carries (#607) ────────────────────────────────────────────────
+
+/**
+ * Add a stamp to a tile's shortlist — one of the things this piece **could be**.
+ *
+ * Discovering that a piece cannot be identified from its picture is not free: to know that a
+ * watermark or a shade decides it, the collector has already worked out which stamps it could be.
+ * #597 kept the note and threw that narrowing away, so the return sitting started from the catalogue
+ * again. This keeps it, and {@link listPurchaseScans} hands it back as one-press identifications.
+ *
+ * **Only on a tile still to be identified** (`loadOpenTile`), which is the same gate every other
+ * working verb here passes: a shortlist on a tile that has already become a copy would be a
+ * possibility list for a question with an answer. In practice it is the parked tile's, parking being
+ * where the narrowing happens — but the state is not checked separately, because a candidate written
+ * a moment before the tile is parked is the same fact as one written a moment after, and a refusal
+ * there would only make the collector do the two in the app's preferred order.
+ *
+ * The stamp must be in the tile's **own collection**: a shortlist that could name another
+ * collection's stamp would be offering to identify a piece as something this order cannot hold.
+ *
+ * Re-adding is a no-op rather than an error — `(tileId, stampId)` is the primary key, so the row
+ * *is* the fact, and a second press of the same stamp in the picker means what the first did.
+ */
+export async function addTileCandidate(
+  ownerId: string,
+  tileId: string,
+  stampId: string
+): Promise<void> {
+  const tile = await loadOpenTile(ownerId, tileId);
+  const purchase = await prisma.purchase.findUniqueOrThrow({
+    where: { id: tile.purchaseId },
+    select: { collectionId: true },
+  });
+  const stamp = await prisma.stamp.findFirst({
+    where: { id: stampId, collectionId: purchase.collectionId },
+    select: { id: true },
+  });
+  if (!stamp) throw new ScanValidationError("That stamp is not in this collection.");
+  await prisma.scanTileCandidate.upsert({
+    where: { tileId_stampId: { tileId: tile.id, stampId } },
+    create: { tileId: tile.id, stampId },
+    update: {},
+  });
+}
+
+/** Take a stamp off a tile's shortlist. A possibility ruled out is the ordinary progress of the
+ * work this state exists for, so removing one costs exactly what adding it did — and a stamp that
+ * is not on the list is not an error, the end state being what was asked for either way. */
+export async function removeTileCandidate(
+  ownerId: string,
+  tileId: string,
+  stampId: string
+): Promise<void> {
+  const tile = await loadOpenTile(ownerId, tileId);
+  await prisma.scanTileCandidate.deleteMany({ where: { tileId: tile.id, stampId } });
+}
+
 /**
  * Write (or clear) a tile's note.
  *
@@ -437,6 +499,11 @@ export async function returnTileToQueue(ownerId: string, tileId: string): Promis
     where: { id: tile.id },
     data: { state: "unidentified", note: null },
   });
+  // The shortlist goes with the note, and for the same reason (#607): putting a piece back is the
+  // collector saying the doubt is spent — either it was a mis-click or the answer is now known — so
+  // what was written *about the doubt* is spent with it. A discard is the other case and keeps both,
+  // being the only record of what a sight-unseen parcel held.
+  await prisma.scanTileCandidate.deleteMany({ where: { tileId: tile.id } });
   // The batch has something waiting again, so it is no longer finished with. Clearing this is what
   // keeps #578 from sweeping the original out from under a batch still being worked. A parked tile
   // never let it be stamped in the first place, so this is a no-op on that path and the guard on
@@ -455,6 +522,11 @@ export async function returnTileToQueue(ownerId: string, tileId: string): Promis
 async function consumeTile(tileId: string, itemId: string): Promise<void> {
   const tile = await prisma.$transaction(async (tx) => {
     await movePhotosToItem(tx, tileId, itemId);
+    // **Nothing survives the identification** (#607). What the copy became is the record, and
+    // refinement history (#101/#130) is where a later change of mind is written — a shortlist left
+    // standing beside it would be a second, staler account of the same question, and the first place
+    // it would be read is the tile dialog of a piece that is already in the box.
+    await tx.scanTileCandidate.deleteMany({ where: { tileId } });
     return tx.scanTile.update({
       where: { id: tileId },
       data: { state: "consumed", itemId },

@@ -462,7 +462,9 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   the answer, so working through the rest of the card stops offering you the one piece you cannot
   finish at this desk. When you know the answer, identify it as usual from the same dialog (the note
   is at the top of it, and you can change it there); or **Put back in the queue** if it turns out
-  there was nothing to check.
+  there was nothing to check. Before you press it — or afterwards — you can list **what the piece
+  could be**, so the narrowing you have already done is there when you come back; see
+  [Pieces you cannot identify from the picture](#pieces-you-cannot-identify-from-the-picture).
 - **Discard** — junk, damaged beyond interest, unidentifiable. One click, and it asks for nothing:
   on a parcel full of junk this is the frequent answer, and it is safe to make it that cheap because
   it is reversible — **Put back in the queue** is in the same dialog. The tile **keeps its image**,
@@ -589,6 +591,44 @@ and the identification is right underneath it — a set-aside tile is identified
 other, with no un-parking step in front of it. It also still has its **tick box**, which is the point:
 five pieces that turn out to be the same variant are settled in one pass, and the sitting where you
 finally tell them apart is precisely the sitting where that happens.
+
+**Write down what it could be — before you set it aside.** Finding out that a piece cannot be
+identified from its picture is not free: to know that a watermark or a shade is what decides it, you
+have already worked out which stamps it could be. Every tile still to be identified carries a line
+for exactly that — **Cannot tell? List what it could be…** — which opens the same browse popup you
+identify from, with the piece beside it. That popup **stays open**: pick the two or three stamps it
+could be one after another (they appear beside the picture as you go), then close it and press **Set
+aside to check**. You never have to come back into the tile to write the list down.
+
+Each stamp you add becomes a row on the tile — the picker's own row, with its picture, its catalogue
+numbers, its price and how many copies you already hold, which is what you actually compare a piece
+against under the lamp. Coming back, pressing one **identifies the tile as that stamp**, going on to
+the usual condition step and its confirm; the × beside it rules a possibility out when the lamp
+settles it. Nothing is forced: **Identify as a new copy** is where it always was, one click away, for
+the piece that turns out to be neither of the stamps you shortlisted it to. The list also shows under
+the tile on the strip, which is what makes a sitting plannable — five pieces narrowed to the same
+pair is one comparison, not five.
+
+**Often you do not need to set the piece aside at all, and the app will say so.** If everything on
+your list is a variant of one stamp — *it is Mi 200, but is it watermark A or B?* — then Stamporama
+already has a better answer than a tile in a tray: identify it as **Mi 200** itself. The copy is
+created, marked *variant not yet known*, valued cautiously, given its number and its place in the
+box, and [**Identify variant**](inventory.md#identifying-a-variant) settles it whenever you get to
+the lamp — with the change recorded on the copy. A line offers exactly that, once and quietly: under
+the list, and again in the *what to check* box the moment you press **Set aside to check** — which is
+the better moment to read it, since it is cheaper not to put the piece in the tray than to take it
+out again. It changes nothing on its own: the piece stays where you put it until you press it. It
+appears only for
+true variants; a shortlist of *the base stamp or its overprint* is a different question — there the
+base stamp is one of the answers — so nothing is suggested. That is what candidates are for:
+possibilities that are not variants of one another, two different issues, or a base stamp you have
+not settled yet.
+
+Once the tile becomes a copy the list is gone, and so is the note: what the copy **is** is the
+record from then on, and a change of mind later is written in the copy's own refinement history
+rather than in a shortlist standing beside it. Putting a piece back in the queue clears both for the
+same reason — the doubt is spent. A **discard** keeps them, since a discarded tile is the only
+record of what a sight-unseen parcel held.
 
 **A card with a piece set aside on it is not finished with**, and the app treats it that way
 throughout: the batch stays in the live list rather than being put away, it is never marked done, and

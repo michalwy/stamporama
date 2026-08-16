@@ -708,16 +708,31 @@ export function PurchaseDetailPanel({
           toggle below leaves it alone — how the copies are grouped is a question about copies. */}
       <PurchaseScansCard
         collectionId={collectionId}
+        // For the picker a parked tile's shortlist is built from (#607) — the same one this panel
+        // opens for the identification itself.
+        areas={areas}
         scanDpi={scanDpi}
         purchaseId={purchase.id}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
-        onIdentifyTiles={(pieces) => {
+        onIdentifyTiles={(pieces, pick) => {
           setTileIntake(pieces);
           setTileRepeat(null);
           setError(undefined);
+          if (pick) {
+            // The stamp is already known (#607): a candidate pressed on a parked tile's shortlist,
+            // or the parent offered in place of one. So the chain enters at the step the picker
+            // would have led to — with **no** prefill, unlike *Same as the last* (#595): what has
+            // been answered is the stamp and nothing else, and the condition, the format and the
+            // ref must arrive at the ordinary remembered defaults rather than at the previous
+            // tile's answers.
+            setTileSelection({ kind: "stamp", stampId: pick.stampId, label: pick.label });
+            setTileShortLabel(pick.shortLabel);
+            setTileStep("condition");
+            return;
+          }
           setTileStep("picker");
         }}
         // *Same as the last* (#595): the picker is skipped, because its answer is the record, and

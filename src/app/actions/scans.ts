@@ -13,11 +13,13 @@ import {
   type CutReport,
 } from "@/lib/scan-sheets";
 import {
+  addTileCandidate,
   assignTileToCopy,
   discardTile,
   identifyTilesAsNewCopies,
   noteTile,
   parkTile,
+  removeTileCandidate,
   returnTileToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
@@ -271,6 +273,48 @@ export async function noteTileAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to save the note. Please try again.",
+    };
+  }
+}
+
+/**
+ * Add a stamp to a tile's shortlist of what it could be (#607) — the narrowing that discovering
+ * *this cannot be identified from its picture* already required, kept instead of thrown away.
+ *
+ * Its own door rather than a field on `parkTileAction`, because a shortlist is built and pruned over
+ * the whole life of the wait: one candidate now, another when the collector remembers the reprint,
+ * two struck off when the lamp settles them.
+ */
+export async function addTileCandidateAction(
+  tileId: string,
+  stampId: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await addTileCandidate(session.user.id, tileId, stampId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add the candidate. Please try again.",
+    };
+  }
+}
+
+/** Take a possibility off a tile's shortlist — ruling one out is the ordinary progress of the work
+ * parking exists for, so it costs exactly what adding it did. */
+export async function removeTileCandidateAction(
+  tileId: string,
+  stampId: string
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await removeTileCandidate(session.user.id, tileId, stampId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to remove the candidate. Please try again.",
     };
   }
 }

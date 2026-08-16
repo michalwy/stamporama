@@ -23,6 +23,8 @@ import { normalizeBox, pairByPosition, readingOrder, type Box } from "./scan-box
 import { detectSheetBoxes } from "./scan-detect";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
+import { toTileCandidate, type TileCandidate } from "./tile-candidates";
+import { VARIANT_FLAG_SELECT } from "./variant-classification";
 
 /**
  * Scan sheet ingest (#566, ADR-0033): a stockbook card is scanned whole, the scan is retained, its
@@ -1148,6 +1150,13 @@ export interface ScanTileData {
     catalogNumbers: string[];
     conditionAbbreviation: string;
   } | null;
+  /** What this piece **could be** (#607) — the shortlist a parked tile carries, in the order it was
+   * built. Empty on every other tile: a shortlist is the working state of a piece still to be
+   * identified, and nothing survives the identification (see `tile-candidates.ts`).
+   *
+   * Read for every tile rather than only the parked ones, because the strip and the dialog draw the
+   * same `ScanTileData` and a second, narrower read would be a second answer to one question. */
+  candidates: TileCandidate[];
   /** True when this tile's copy is for a stamp on **none** of the settled auction lot's lines
    * (#567): the parcel holds something its description never announced. Information rather than a
    * problem to hide — always false on a lot that came from no auction. */
@@ -1235,6 +1244,39 @@ export async function listPurchaseScans(
         backW: true,
         backH: true,
         photos: { select: { id: true, role: true } },
+        // The shortlist a parked tile carries (#607), with everything the *use the parent instead*
+        // correction needs to decide itself and then name the parent: the variant flags
+        // (`VARIANT_FLAG_SELECT`) and the parent node. Resolved into `TileCandidate` by the pure
+        // module, so the effective-flag order is stated once.
+        candidates: {
+          select: {
+            stamp: {
+              select: {
+                id: true,
+                name: true,
+                catalogNumbers: { select: { number: true } },
+                ...VARIANT_FLAG_SELECT,
+                parent: {
+                  select: { id: true, name: true, catalogNumbers: { select: { number: true } } },
+                },
+                // The issue the candidate is reported under — the **first** membership, the same
+                // one-issue-per-stamp rule the copies list and the issue groups follow, ordered so
+                // it is one answer rather than whatever the database hands back. The screen draws a
+                // candidate as the picker's own row, and that row is fetched per issue and
+                // formatted per area.
+                issueMemberships: {
+                  orderBy: { issueId: "asc" },
+                  take: 1,
+                  select: { issue: { select: { id: true, collectionAreaId: true } } },
+                },
+                // Whether the candidate is itself an umbrella — picking it would mean *this stamp,
+                // variant unknown*, which the row says exactly as the picker's does.
+                variants: { select: VARIANT_FLAG_SELECT },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
         item: {
           select: {
             id: true,
@@ -1293,6 +1335,7 @@ export async function listPurchaseScans(
       frontBox: boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH),
       backBox: boxOrNull(t.backX, t.backY, t.backW, t.backH),
       note: t.note,
+      candidates: t.candidates.map((c) => toTileCandidate(c.stamp)),
       item: t.item
         ? {
             id: t.item.id,

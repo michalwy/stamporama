@@ -22,13 +22,16 @@ import {
   recutBatch,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
+import { sharedVariantParent } from "../../src/lib/tile-candidates";
 import {
+  addTileCandidate,
   assignTileToCopy,
   discardTile,
   identifyTileAsNewCopy,
   identifyTilesAsNewCopies,
   noteTile,
   parkTile,
+  removeTileCandidate,
   returnTileToQueue,
 } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
@@ -58,6 +61,13 @@ describe("identifying scan tiles into copies (#567)", () => {
   let conditionId: string;
   let stampId: string;
   let describedStampId: string;
+  /** A base stamp with two watermark variants under it, and a stamp in another collection — the
+   * three a parked tile's shortlist (#607) is tested against: what the correction fires on, and
+   * what a candidate may not be. */
+  let baseStampId: string;
+  let variantAId: string;
+  let variantBId: string;
+  let foreignStampId: string;
 
   const SHEET_W = 1200;
   const SHEET_H = 600;
@@ -153,6 +163,53 @@ describe("identifying scan tiles into copies (#567)", () => {
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Tile stamp" } })).id;
     describedStampId = (
       await prisma.stamp.create({ data: { collectionId, name: "Described stamp" } })
+    ).id;
+
+    // *It is Mi 200, but watermark A or B?* — the case #607's correction is about. The subtype is
+    // what makes the children **effective** variants (ADR-0010), which is the whole condition.
+    const vendorId = (
+      await prisma.catalogVendor.create({
+        data: { collectionId, name: "Michel", abbreviation: "Mi" },
+      })
+    ).id;
+    const watermark = await prisma.stampSubtype.create({
+      data: { collectionId, name: "Watermark", actsAsVariant: true, sortOrder: 0 },
+    });
+    baseStampId = (
+      await prisma.stamp.create({
+        data: {
+          collectionId,
+          name: "Birds",
+          catalogNumbers: { create: { catalogVendorId: vendorId, number: "200" } },
+        },
+      })
+    ).id;
+    const variant = async (number: string) =>
+      (
+        await prisma.stamp.create({
+          data: {
+            collectionId,
+            parentId: baseStampId,
+            subtypeId: watermark.id,
+            catalogNumbers: { create: { catalogVendorId: vendorId, number } },
+          },
+        })
+      ).id;
+    variantAId = await variant("200a");
+    variantBId = await variant("200b");
+
+    const otherCollection = await prisma.collection.create({
+      data: {
+        slug: `col-tiles-other-${ts}`,
+        name: `Other collection tiles-${ts}`,
+        baseCurrency: "EUR",
+        ownerId: userId,
+      },
+    });
+    foreignStampId = (
+      await prisma.stamp.create({
+        data: { collectionId: otherCollection.id, name: "Another collection's stamp" },
+      })
     ).id;
   });
 
@@ -671,6 +728,82 @@ describe("identifying scan tiles into copies (#567)", () => {
     const gone = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(gone.state, "discarded");
     assert.equal(gone.note, "watermark?");
+  });
+
+  it("keeps the narrowing on a parked tile, and nothing of it survives the identification (#607)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    // Listed **while the piece is on screen**, before the collector concludes it cannot be settled
+    // here: the narrowing is what discovers that, so a shortlist that could only be written after
+    // parking meant setting the tile aside and opening it again to say what was already in mind.
+    await addTileCandidate(userId, tileIds[0], variantAId);
+    await parkTile(userId, tileIds[0], "watermark?");
+    await addTileCandidate(userId, tileIds[0], variantBId);
+    // The same stamp twice is what a second press of it in the picker means — the pair is the row.
+    await addTileCandidate(userId, tileIds[0], variantAId);
+
+    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const parked = batches[0].tiles.find((t) => t.id === tileIds[0])!;
+    assert.deepEqual(
+      parked.candidates.map((c) => c.stampId),
+      [variantAId, variantBId],
+      "in the order the shortlist was built, with no duplicate"
+    );
+    assert.deepEqual(parked.candidates[0].catalogNumbers, ["200a"]);
+    // …and enough of the tree for the correction to decide itself: both are effective variants of
+    // one node, so the app can say the parent is available instead of a parked tile at all.
+    assert.deepEqual(sharedVariantParent(parked.candidates), {
+      stampId: baseStampId,
+      stampName: "Birds",
+      catalogNumbers: ["200"],
+    });
+
+    // A possibility ruled out costs what adding it did, and one that was never there is not an
+    // error — the end state is what was asked for either way.
+    await removeTileCandidate(userId, tileIds[0], variantBId);
+    await removeTileCandidate(userId, tileIds[0], variantBId);
+    assert.equal(
+      await prisma.scanTileCandidate.count({ where: { tileId: tileIds[0] } }),
+      1
+    );
+
+    // **Nothing survives the identification.** What the copy became is the record, and refinement
+    // history is where a later change of mind is written.
+    await identifyTileAsNewCopy(userId, tileIds[0], { stampId: variantAId, conditionId });
+    assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: tileIds[0] } }), 0);
+  });
+
+  it("spends the shortlist with the doubt, and keeps it where the note is kept (#607)", async () => {
+    const { tileIds } = await orderWithTiles();
+
+    // Put back: the answer is known (or it was a mis-click), so the doubt and everything written
+    // about it are spent — the note's own rule.
+    await parkTile(userId, tileIds[0], "dark or light blue?");
+    await addTileCandidate(userId, tileIds[0], variantAId);
+    await returnTileToQueue(userId, tileIds[0]);
+    assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: tileIds[0] } }), 0);
+
+    // Discarded: the tile is the only record of what a sight-unseen parcel held, so what it might
+    // have been is kept beside the note saying why it went.
+    await parkTile(userId, tileIds[1], "watermark?");
+    await addTileCandidate(userId, tileIds[1], variantBId);
+    await discardTile(userId, tileIds[1], "");
+    assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: tileIds[1] } }), 1);
+  });
+
+  it("refuses a candidate from another collection, or on a tile already worked through (#607)", async () => {
+    const { tileIds } = await orderWithTiles();
+    await parkTile(userId, tileIds[0], "");
+    // A shortlist that could name another collection's stamp would offer to identify this piece as
+    // something the order cannot hold.
+    await assert.rejects(
+      () => addTileCandidate(userId, tileIds[0], foreignStampId),
+      ScanValidationError
+    );
+    await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
+    await assert.rejects(
+      () => addTileCandidate(userId, tileIds[1], variantAId),
+      ScanValidationError
+    );
   });
 
   it("does not let a parked tile finish a batch (#597)", async () => {

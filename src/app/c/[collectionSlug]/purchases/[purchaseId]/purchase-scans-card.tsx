@@ -37,8 +37,10 @@ import {
   type TileBoxState,
 } from "@/lib/scan-tile-selection";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import type { CollectionAreaData } from "@/lib/areas";
+import { candidateLabel, candidateShortLabel } from "@/lib/tile-candidates";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
-import { TileIdentifyDialog } from "./tile-identify-dialog";
+import { TileIdentifyDialog, type TileStampPick } from "./tile-identify-dialog";
 import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidateLotCopies } from "./use-lot-copies-query";
 import { useInvalidatePurchaseScans, usePurchaseScans } from "./use-purchase-scans-query";
@@ -85,6 +87,9 @@ import {
 
 interface Props {
   collectionId: string;
+  /** The area tree, for the picker a parked tile's shortlist is built from (#607) — the same one
+   * the identification opens, so a candidate is chosen exactly the way a stamp is. */
+  areas: CollectionAreaData[];
   purchaseId: string;
   /** Scan tiles on this order still waiting to become something, and how many cards it holds —
    * server-rendered with the order (`getPurchaseDetail`), so the header can say what is inside
@@ -109,8 +114,13 @@ interface Props {
    *
    * **A list of pieces** since #596: several tiles ticked on the strip are answered in one pass, and
    * one tile is a list of one. The pieces travel in card order, which is the order the copies are
-   * created and numbered in. */
-  onIdentifyTiles: (pieces: IdentifiedPiece[]) => void;
+   * created and numbered in.
+   *
+   * **The stamp may already be known** (#607): a candidate pressed on a parked tile's shortlist, or
+   * the parent offered in place of one — in which case `pick` rides along and the panel enters the
+   * chain at the condition step instead of the picker, the picker's question having been answered.
+   * Everything after that is identical, confirm included. */
+  onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
   /** *Same as the last* (#595): the same handover as `onIdentifyTile`, for the tile that is to be
    * identified as the previous one of this sitting was. Null until one has been — the panel above
    * owns that record, because it owns the step that answers it. `summary` is what the action names,
@@ -144,6 +154,7 @@ interface EditorTarget {
 
 export function PurchaseScansCard({
   collectionId,
+  areas,
   scanDpi,
   purchaseId,
   unidentifiedTileCount,
@@ -575,7 +586,8 @@ export function PurchaseScansCard({
       {filter === "parked" && (
         <Banner tone="info">
           Showing only the tiles parked to be checked. Each one carries the note you left about what
-          to look for — click it to read it, then identify it here as any other tile.
+          to look for, and the stamps you narrowed it to — click it to read them, then identify it in
+          one press or through the picker as any other tile.
         </Banner>
       )}
 
@@ -654,6 +666,7 @@ export function PurchaseScansCard({
       {openTile && (
         <TileIdentifyDialog
           collectionId={collectionId}
+          areas={areas}
           scanDpi={scanDpi}
           purchaseId={purchaseId}
           tile={openTile}
@@ -680,6 +693,14 @@ export function PurchaseScansCard({
             // A list of one (#596): this tile, whatever happens to be ticked on the strip behind it.
             setTileId(null);
             onIdentifyTiles([{ tileId: openTile.id, sides, position: openTile.position }]);
+          }}
+          // A candidate off the shortlist, or the parent offered in its place (#607) — the same
+          // handover with the picker's answer already given, so the chain resumes at the condition
+          // step. Never the whole strip selection: a shortlist is one piece's, and pressing one of
+          // its candidates is an answer about that piece.
+          onIdentifyAs={(pick, sides) => {
+            setTileId(null);
+            onIdentifyTiles([{ tileId: openTile.id, sides, position: openTile.position }], pick);
           }}
           // The same handover, minus the picker (#595) — the panel drops this tile straight onto
           // the condition step with the last one's answers in the fields.
@@ -1478,6 +1499,23 @@ function TileCell({
           <Icon name={tile.backPhotoId ? "check" : "noPhoto"} size="xs" />
         )}
       </div>
+      {/* **The shortlist, on the strip** (#607) — because that is what makes a return sitting
+          plannable: five pieces narrowed to the same pair is one comparison at the colour key, not
+          five, and reading that off the strip is what says so. Short labels, one catalogue number
+          each: a square is 5.5 rem wide and the full identity is a hover and a click away. */}
+      {parked && tile.candidates.length > 0 && (
+        <div
+          style={{
+            padding: "0 0.25rem 0.25rem",
+            fontSize: "0.625rem",
+            lineHeight: 1.3,
+            color: "var(--color-text-muted)",
+            overflow: "hidden",
+          }}
+        >
+          {tile.candidates.map(candidateShortLabel).join(" · ")}
+        </div>
+      )}
     </>
   );
 
@@ -1789,9 +1827,15 @@ function tileTitle(tile: ScanTileData): string {
   // The note is the whole reason the tile was parked with one, so the hover says it before the
   // dialog is opened — on a strip of thirty parked pieces that is what tells them apart.
   if (tile.state === "parked") {
+    // …and what it was narrowed down to (#607), which is what makes the *to check* list plannable
+    // without opening thirty dialogs: five pieces shortlisted to the same pair is one comparison.
+    const could =
+      tile.candidates.length > 0
+        ? ` · could be ${tile.candidates.map(candidateLabel).join(" or ")}`
+        : "";
     return tile.note
-      ? `${head} · to check: ${tile.note} — click to identify it or put it back`
-      : `${head} · set aside to check — click to identify it or put it back`;
+      ? `${head} · to check: ${tile.note}${could} — click to identify it or put it back`
+      : `${head} · set aside to check${could} — click to identify it or put it back`;
   }
   return `${head}${tile.backPhotoId ? " · front and back" : " · front only"} — click to identify`;
 }

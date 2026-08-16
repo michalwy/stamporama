@@ -10,18 +10,37 @@ import {
   DialogShell,
 } from "@/app/dialog-shell";
 import {
+  addTileCandidateAction,
   assignTileAction,
   discardTileAction,
   noteTileAction,
   parkTileAction,
+  removeTileCandidateAction,
   returnTileToQueueAction,
 } from "@/app/actions/scans";
+import type { CollectionAreaData } from "@/lib/areas";
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
 import { tileSideViews, type TileSheetRef, type TileSideView } from "@/lib/scan-tile-view";
+import {
+  candidateLabel,
+  candidateShortLabel,
+  sharedVariantParent,
+  type TileCandidate,
+} from "@/lib/tile-candidates";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
-import { TileZoomView } from "./tile-zoom-view";
+import { StampPickerBrowser } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { useIssueMembers } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import {
+  StampDetailLine,
+  StampTitle,
+  type VendorMap,
+} from "@/app/c/[collectionSlug]/shared/issue-view";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { IdentifiedPieceAside, TileZoomView } from "./tile-zoom-view";
 import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
@@ -73,6 +92,12 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
  * the cursor that just pressed it. Enter sets the tile aside, Escape abandons the question and not
  * the tile, and an empty field is a complete answer.
  *
+ * A parked tile also carries a **shortlist** (#607) — what the piece could be — added from the very
+ * picker the identification uses, offered on the way back as one-press choices, and never standing
+ * in front of that picker: a narrowing can be wrong, so *Identify as a new copy* stays exactly where
+ * it is for every tile. See {@link CandidateShortlist}, and `tile-candidates.ts` for the one case in
+ * which a shortlist is the wrong answer altogether.
+ *
  * **Every state opens this dialog, and none of them navigates on the click itself** (#584). A
  * consumed tile used to be an `<a>` straight to its copy, which left the tile itself impossible to
  * inspect — which batch, which position, what it became — and threw the collector out of the
@@ -81,8 +106,22 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
  * a deliberate action in the footer: leaving is a choice, never a side effect of looking at a tile.
  */
 
+/** A stamp this dialog hands upward to be identified as, without the picker having been opened for
+ * it — a candidate pressed, or the parent offered in its place (#607). The two labels are what the
+ * chain downstream would otherwise have taken from `PickedStamp`: the long one names the pick in the
+ * condition step, the short one is what *Same as the last* has a button's width to say. */
+export interface TileStampPick {
+  stampId: string;
+  label: string;
+  shortLabel: string;
+}
+
 interface Props {
   collectionId: string;
+  /** The area tree the stamp picker needs (#607) — the shortlist is built from the **same** picker
+   * the identification uses, opened over this dialog rather than in place of it, so a candidate and
+   * an identification are one act of choosing a stamp and not two vocabularies. */
+  areas: CollectionAreaData[];
   /** What this collection scans at (#598) — the scale the viewer's ruler and perforation gauge
    * convert with, prefilled into the measuring bar and correctable there for this sitting. */
   scanDpi: number;
@@ -124,6 +163,16 @@ interface Props {
    * created, and a consumed tile has no undo short of deleting the copy.
    */
   repeatLast?: { summary: string; onRepeat: (sides: TileSideView[]) => void } | null;
+  /**
+   * *Identify as this stamp* with the picker skipped (#607) — a candidate off the shortlist, or the
+   * parent offered in place of a shortlist that is all variants of one node.
+   *
+   * The same handover `onIdentifyNew` makes, with the picker's answer already given: picking a
+   * candidate identifies the tile **exactly as picking that stamp from the picker would**, stopping
+   * at the condition step's ordinary confirm like every other route into it. Nothing here creates a
+   * copy in one press — a consumed tile has no undo short of deleting the copy.
+   */
+  onIdentifyAs: (pick: TileStampPick, sides: TileSideView[]) => void;
   /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
    * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
@@ -186,6 +235,7 @@ function assignParams(tile: ScanTileData): LotCopiesParams {
 
 export function TileIdentifyDialog({
   collectionId,
+  areas,
   scanDpi,
   purchaseId,
   tile,
@@ -195,6 +245,7 @@ export function TileIdentifyDialog({
   copyHref,
   onIdentifyNew,
   repeatLast,
+  onIdentifyAs,
   onDone,
   onChanged,
   onClose,
@@ -213,6 +264,12 @@ export function TileIdentifyDialog({
    * to be found afterwards on a surface the collector would have to cross the screen to reach. */
   const [parking, setParking] = useState(false);
   const [parkNote, setParkNote] = useState("");
+
+  /** Whether the picker is open **over** this dialog to add a candidate (#607). The same
+   * `StampPickerBrowser` the identification opens one screen on, stacked rather than navigated to:
+   * the tile, its note and the rest of the shortlist are what the collector is choosing against, and
+   * a shortlist built on a screen that had put the piece away would be built from memory. */
+  const [addingCandidate, setAddingCandidate] = useState(false);
 
   /** The sides there are to look at, and which of them still have a retained scan behind them.
    * Decided in a pure module, so a swept batch (#578) is a case a unit test reaches rather than one
@@ -309,8 +366,22 @@ export function TileIdentifyDialog({
 
   const commitPark = () => run(() => parkTileAction(tile.id, parkNote), false);
 
+  /** The parent the shortlist has turned out to be variants of, if it has (#607). Read here as well
+   * as inside the shortlist because **this is the moment the issue asked for**: a collector reaching
+   * for *park* with two watermark variants listed does not need to park at all, and the sentence is
+   * worth more before the piece goes into the tray than after. */
+  const parkShortcut = sharedVariantParent(tile.candidates);
+
   const parkPrompt = (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", width: "100%" }}>
+      {parkShortcut && (
+        <ParentInsteadNotice
+          parent={parkShortcut}
+          disabled={pending || !canIdentify}
+          onIdentifyAs={(pick) => onIdentifyAs(pick, viewSides)}
+        />
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
       <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         What to check?
         <input
@@ -360,6 +431,7 @@ export function TileIdentifyDialog({
       >
         Cancel
       </DialogSecondaryButton>
+      </div>
     </div>
   );
 
@@ -390,6 +462,7 @@ export function TileIdentifyDialog({
   ) : null;
 
   return (
+    <>
     <DialogShell
       title={`Tile ${tile.position + 1}`}
       onClose={onClose}
@@ -403,7 +476,9 @@ export function TileIdentifyDialog({
       // document in the capture phase, so a handler on the input cannot stop it — stepping this
       // dialog out of the stack is the documented way to hand the key over. It also stops a stray
       // backdrop click from taking the sentence with it.
-      dismissable={!parking}
+      // …and while the picker is stacked over this dialog (#607), for the reason `StampSelect` hands
+      // the key over the same way: one Escape must close the picker and leave the tile where it is.
+      dismissable={!parking && !addingCandidate}
     >
       {/* The picture takes the room and the outcome sits beside it in a column of its own, which
           scrolls on its own so a lot's whole copy list can never push the tile off screen. */}
@@ -443,6 +518,29 @@ export function TileIdentifyDialog({
               note={tile.note}
               disabled={pending}
               onSave={(n) => run(() => noteTileAction(tile.id, n), false, true)}
+            />
+          )}
+          {/* What the piece could be (#607) — under the note, because the note says what to check and
+              the shortlist says what to check it *against*. Both above the outcomes, since coming
+              back to a parked tile is reading those two and then answering.
+              **On every tile still to be identified, not only a parked one**: the narrowing happens
+              while the piece is on screen and *before* the collector concludes it cannot be settled
+              here, so a list that only appeared after parking meant setting the tile aside, closing
+              the dialog and opening it again to write down what was already in mind. On a waiting
+              tile with nothing listed it is one quiet line and no panel. */}
+          {!settled && (
+            <CandidateShortlist
+              collectionId={collectionId}
+              areas={areas}
+              candidates={tile.candidates}
+              parked={parked}
+              canIdentify={canIdentify}
+              disabled={pending}
+              onAdd={() => setAddingCandidate(true)}
+              onRemove={(stampId) =>
+                run(() => removeTileCandidateAction(tile.id, stampId), false, true)
+              }
+              onIdentifyAs={(pick) => onIdentifyAs(pick, viewSides)}
             />
           )}
           {settled ? (
@@ -548,6 +646,49 @@ export function TileIdentifyDialog({
         />
       )}
     </DialogShell>
+
+    {/* Adding a candidate is **the identification's own picker**, opened over this dialog (#607).
+        Not a second, lighter chooser: a shortlist entry and an identification name the same kind of
+        thing, and two ways of naming a stamp would drift in what they can reach — a variant deep in
+        a tree, a stamp that has to be created on the spot, the copies-held badge that says the
+        collector already owns one. The piece stays on screen through it (#592's slot), because the
+        shortlist is being built *from* the picture. */}
+    {addingCandidate && (
+      <StampPickerBrowser
+        collectionId={collectionId}
+        areas={areas}
+        aside={
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              gap: "0.625rem",
+            }}
+          >
+            <IdentifiedPieceAside
+              collectionId={collectionId}
+              pieces={[{ tileId: tile.id, sides: viewSides, position: tile.position }]}
+              scanDpi={scanDpi}
+            />
+            {/* The shortlist as it stands, beside the piece — which is what lets the picker stay
+                open across several picks: a stamp added is visibly added, so a second pick reads as
+                *and this one* rather than as a press that may not have registered. */}
+            <ShortlistSoFar candidates={tile.candidates} />
+          </div>
+        }
+        asideWidth="26rem"
+        // **It stays open.** The case this exists for is *watermark A or B*, which is two picks, and
+        // a chooser that closes on the first turns listing three stamps into three trips through
+        // the area tree. Nothing is lost by staying: each pick is written on its own, the shortlist
+        // beside the piece says so, and closing is the ordinary Escape.
+        onPick={(picked) => run(() => addTileCandidateAction(tile.id, picked.stampId), false, true)}
+        onClose={() => setAddingCandidate(false)}
+      />
+    )}
+    </>
   );
 }
 
@@ -761,6 +902,354 @@ function ParkedNote({
         disabled={disabled}
         onSave={onSave}
       />
+    </div>
+  );
+}
+
+/**
+ * What the piece **could be** (#607), and the one press that settles it.
+ *
+ * Discovering that a tile cannot be identified from its picture is not free: to know that a
+ * watermark or a shade decides it, the collector has already worked out which stamps it could be.
+ * #597 kept the note and threw that away, so the return sitting started from the catalogue again.
+ * These are the possibilities, and pressing one identifies the tile as that stamp **exactly as
+ * picking it from the picker would** — the same condition step, the same confirm, nothing created by
+ * the press itself.
+ *
+ * **The ordinary picker is never replaced by this.** A narrowing can be wrong, and the piece under
+ * the lamp may turn out to be neither of the two stamps it was shortlisted to; if the shortlist stood
+ * where *Identify as a new copy* stands, the wrong case would be the expensive one. So the footer is
+ * untouched and this sits above it.
+ *
+ * **Nothing survives the identification** — the rows are deleted when the tile becomes a copy, and
+ * with the note when it is put back — so this list never has to be reconciled with what the copy
+ * actually is. `scan-tiles.ts` owns that.
+ */
+function CandidateShortlist({
+  collectionId,
+  areas,
+  candidates,
+  parked,
+  canIdentify,
+  disabled,
+  onAdd,
+  onRemove,
+  onIdentifyAs,
+}: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  candidates: TileCandidate[];
+  /** Whether the tile has been set aside. Decides only how much of this is drawn: a waiting tile
+   * with nothing listed gets one line, because most tiles are identified where they stand and a
+   * panel on every one of them would be a form in front of the ordinary answer. */
+  parked: boolean;
+  /** Whether this order can take a new copy at all — an order whose every lot is closed cannot, so
+   * the one-press choices are offered disabled rather than absent: the shortlist is still what the
+   * collector came back to read. */
+  canIdentify: boolean;
+  disabled: boolean;
+  onAdd: () => void;
+  onRemove: (stampId: string) => void;
+  onIdentifyAs: (pick: TileStampPick) => void;
+}) {
+  const parent = sharedVariantParent(candidates);
+  // One derivation for the whole list, not one per row: the vendor maps come off a shared query and
+  // every candidate resolves through the same (area, issue) lookup the picker's rows do (#377).
+  const { vendorMapFor, primaryVendorByArea } = useAreaVendorMaps(areas, collectionId);
+
+  const add = (
+    <button
+      type="button"
+      onClick={onAdd}
+      disabled={disabled}
+      style={{
+        alignSelf: "flex-start",
+        background: "none",
+        border: "none",
+        padding: 0,
+        fontSize: "0.8125rem",
+        color: "var(--color-action-primary)",
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      <Icon name="add" size="sm" />{" "}
+      {candidates.length === 0 ? "Cannot tell? List what it could be…" : "Add another it could be…"}
+    </button>
+  );
+
+  // A waiting tile with nothing listed: one quiet line and no panel. This is the ordinary tile —
+  // identified where it stands — and the line is here rather than only on a parked one so the
+  // narrowing can be written down **while the piece is on screen**, which is when it is in mind.
+  if (candidates.length === 0 && !parked) {
+    return <div style={{ marginBottom: "0.875rem" }}>{add}</div>;
+  }
+
+  return (
+    <div
+      style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "0.875rem" }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+        <strong style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+          It could be
+        </strong>
+        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          {candidates.length === 0
+            ? "— the narrowing you have already done, kept for the trip back"
+            : "— press one to identify it as that stamp"}
+        </span>
+      </div>
+
+      {candidates.map((c) => (
+        <CandidateRow
+          key={c.stampId}
+          collectionId={collectionId}
+          candidate={c}
+          vendorMap={vendorMapFor(c.collectionAreaId, c.issueId)}
+          primaryVendorId={
+            c.collectionAreaId ? primaryVendorByArea.get(c.collectionAreaId) ?? null : null
+          }
+          canIdentify={canIdentify}
+          disabled={disabled}
+          onRemove={() => onRemove(c.stampId)}
+          onIdentifyAs={onIdentifyAs}
+        />
+      ))}
+
+      {add}
+
+      {parent && (
+        <ParentInsteadNotice
+          parent={parent}
+          disabled={disabled || !canIdentify}
+          onIdentifyAs={onIdentifyAs}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * One possibility, drawn **as the picker draws a stamp** (#607).
+ *
+ * A shortlist is compared against a piece under a lamp, and a bare catalogue number is not enough to
+ * do that with: the thumbnail is what the piece is held against, the subtype is what separates two
+ * siblings sharing a number, the catalogue price is what says whether the difference is worth the
+ * trip, and the copies-held badge and want marker say whether this one is already in the box or
+ * still being looked for. Those are exactly the things the picker's row carries — so the row *is*
+ * the picker's, from the same query (`useIssueMembers`, one fetch per issue and shared with the
+ * picker's own cache) through the same components (`PhotoThumb`, `StampTitle`, `StampDetailLine`).
+ * Restating them here in a smaller form would be a second, poorer rendering of one thing.
+ *
+ * It degrades rather than blocks: until the issue's members arrive — and permanently for a stamp on
+ * no issue — the row is the plain label the read model always carries, and it is pressable
+ * throughout. What must never happen is the row being *absent* while a fetch is in flight, since the
+ * collector came back to this tile to press it.
+ */
+function CandidateRow({
+  collectionId,
+  candidate,
+  vendorMap,
+  primaryVendorId,
+  canIdentify,
+  disabled,
+  onRemove,
+  onIdentifyAs,
+}: {
+  collectionId: string;
+  candidate: TileCandidate;
+  vendorMap: VendorMap;
+  primaryVendorId: string | null;
+  canIdentify: boolean;
+  disabled: boolean;
+  onRemove: () => void;
+  onIdentifyAs: (pick: TileStampPick) => void;
+}) {
+  const { data: members = [] } = useIssueMembers(
+    collectionId,
+    candidate.issueId ?? "",
+    !!candidate.issueId
+  );
+  const node = members.find((m) => m.stampId === candidate.stampId) ?? null;
+  const label = candidateLabel(candidate);
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", gap: "0.25rem" }}>
+      <Tooltip content="Identify this tile as this stamp" align="start" style={{ flex: 1, minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() =>
+            onIdentifyAs({
+              stampId: candidate.stampId,
+              label,
+              shortLabel: candidateShortLabel(candidate),
+            })
+          }
+          disabled={disabled || !canIdentify}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "0.4rem 0.625rem 0.5rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-elevated)",
+            color: "var(--color-text-primary)",
+            font: "inherit",
+            fontSize: "0.8125rem",
+            cursor: disabled || !canIdentify ? "not-allowed" : "pointer",
+            opacity: disabled ? 0.6 : 1,
+          }}
+        >
+          {node ? (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+              {/* The catalogue photo is the whole reason this row is not a line of text: it is what
+                  the piece in the tweezers is held against. Not a button of its own here — the row
+                  is one, and a lightbox inside it would be a click that does not identify. */}
+              <PhotoThumb collectionId={collectionId} photos={node.photos} reserveWhenEmpty />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <StampTitle node={node} />
+                  {candidate.unknownVariant && (
+                    <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
+                  )}
+                </span>
+                <StampDetailLine
+                  node={node}
+                  vendorMap={vendorMap}
+                  primaryVendorId={primaryVendorId}
+                />
+              </div>
+            </div>
+          ) : (
+            label
+          )}
+        </button>
+      </Tooltip>
+      {/* Ruling one out is the ordinary progress of the work parking exists for, so it costs
+          exactly what adding it did — and it is a button of its own rather than a menu, there
+          being one thing to do to a possibility that is no longer one. */}
+      <Tooltip content="Rule this one out">
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label={`Rule out ${label}`}
+          style={{
+            padding: "0 0.5rem",
+            height: "100%",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-elevated)",
+            color: "var(--color-text-muted)",
+            cursor: disabled ? "not-allowed" : "pointer",
+          }}
+        >
+          <Icon name="close" size="sm" />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/** The shortlist as it stands, under the piece in the picker's aside (#607) — what makes a chooser
+ * that stays open legible: a pick lands here, so the next one reads as *and this one* rather than as
+ * a press that may not have registered. Plain labels, since the rows themselves are two feet away in
+ * the tree the collector is picking from. */
+function ShortlistSoFar({ candidates }: { candidates: TileCandidate[] }) {
+  if (candidates.length === 0) {
+    return (
+      <Muted>Pick everything this piece could be — the popup stays open until you close it.</Muted>
+    );
+  }
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        padding: "0.5rem 0.625rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-border)",
+        background: "var(--color-bg-page)",
+        fontSize: "0.8125rem",
+        color: "var(--color-text-secondary)",
+      }}
+    >
+      <strong>It could be:</strong>{" "}
+      {candidates.map((c) => candidateShortLabel(c)).join(" · ")}
+    </div>
+  );
+}
+
+/**
+ * **Much of the case this feature serves already has a better answer, and this is where the app says
+ * so** (#607).
+ *
+ * A copy may point at a stamp at any level of the variant tree, and pointing at the *parent* is the
+ * statement "I know which stamp, not which variant": the copy is created, flagged unknown-variant,
+ * valued cautiously, given an internal number and a place in the box, and *Identify variant*
+ * re-points it later with the change recorded in its refinement history. So *it is Mi 200, but
+ * watermark A or B?* needs **no parking at all** — a parked tile keeps the piece loose in a tray
+ * instead, which is worse in every respect.
+ *
+ * **Said once, quietly, and never as a nag.** It appears only when the shortlist has in fact become
+ * *these variants of one node* — which is the whole of its condition, and `sharedVariantParent`
+ * insists on the effective `actsAsVariant` of every candidate, because an error, a plate flaw or an
+ * overprint is its own collectible and the parent is a concrete stamp in its own right. On such a
+ * shortlist the parent would be **one of the answers rather than the question**, and this must not
+ * appear. It is a sentence with an action, not a warning: the collector may still have reasons to
+ * keep the piece in the tray, and nothing here undoes the parking on their behalf.
+ */
+function ParentInsteadNotice({
+  parent,
+  disabled,
+  onIdentifyAs,
+}: {
+  parent: NonNullable<TileCandidate["parent"]>;
+  disabled: boolean;
+  onIdentifyAs: (pick: TileStampPick) => void;
+}) {
+  const label = candidateLabel(parent);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.375rem",
+        padding: "0.5rem 0.625rem",
+        borderRadius: "0.375rem",
+        border: "1px dashed var(--color-border-strong)",
+        background: "var(--color-bg-page)",
+        fontSize: "0.8125rem",
+        color: "var(--color-text-secondary)",
+      }}
+    >
+      <span>
+        These are all variants of <strong>{label}</strong>. You do not have to keep this piece in the
+        tray: identify it as {label} and it is recorded as <em>variant not yet known</em> — a copy
+        with a number and a place in the box, valued cautiously, and <em>Identify variant</em> settles
+        it whenever the lamp comes out.
+      </span>
+      <button
+        type="button"
+        onClick={() =>
+          onIdentifyAs({
+            stampId: parent.stampId,
+            label,
+            shortLabel: candidateShortLabel(parent),
+          })
+        }
+        disabled={disabled}
+        style={{
+          alignSelf: "flex-start",
+          padding: "0.25rem 0.625rem",
+          borderRadius: "0.375rem",
+          border: "1px solid var(--color-border-strong)",
+          background: "var(--color-bg-elevated)",
+          color: "var(--color-text-secondary)",
+          fontSize: "0.8125rem",
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
+      >
+        Identify as {label} instead
+      </button>
     </div>
   );
 }
