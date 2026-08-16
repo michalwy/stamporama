@@ -167,26 +167,6 @@ export interface IssueCatalogPrefixData {
   areaPrefix: string;
 }
 
-export interface IssueData {
-  id: string;
-  collectionId: string;
-  /** The short per-collection issue number (#432). */
-  issueNo: number;
-  collectionAreaId: string;
-  /** Default-language name (#295); {@link nameByLanguage} overrides it per language. */
-  name: string | null;
-  /** Per-language overrides of {@link name} (#295), keyed by ISO 639-1 code. */
-  nameByLanguage: Record<string, string>;
-  year: number | null;
-  isAutoCreated: boolean;
-  createdAt: Date;
-  members: StampNodeData[];
-  catalogNumbers: IssueCatalogNumberData[];
-  /** The issue's checklists (#531), in display order. An issue may carry none (nothing is a goal
-   *  yet), one (the ordinary case, and what `requiredForCompleteness` used to express) or several. */
-  checklists: IssueChecklistSummary[];
-}
-
 /** A checklist as a list row needs it: named, counted, and identified so an action can act on it. */
 export interface IssueChecklistSummary {
   id: string;
@@ -210,9 +190,9 @@ const HEADLINE_PRICE_SELECT = {
 
 const MEMBER_SELECT = {
   stampId: true,
-  // The collector's own position in the tree (#549). Selected rather than ordered by: this select
-  // is `as const` and a readonly `orderBy` is not assignable to Prisma's input type — the same
-  // reason `checklists` is ordered in the mapper. `orderIssueMembers` is what applies it.
+  // The collector's own position in the tree (#549). Selected as well as ordered by: the one query
+  // reading this select applies it in SQL (`sortOrder` then `stampId`, so a group still sharing the
+  // seeded value reads the same on every request), and the field rides along for the row itself.
   sortOrder: true,
   stamp: {
     select: {
@@ -236,14 +216,6 @@ const MEMBER_SELECT = {
     },
   },
 } as const;
-
-/** The tree's own order (#549): the collector's manual position, with the stamp id as the tiebreak
- *  so a group whose members still share the seeded value reads the same on every request. Sorting
- *  in memory rather than in the query, because {@link MEMBER_SELECT} is `as const`; the callers
- *  that *can* order in SQL do, and this keeps the two answers identical. */
-function orderIssueMembers<T extends { stampId: string; sortOrder: number }>(members: T[]): T[] {
-  return [...members].sort((a, b) => a.sortOrder - b.sortOrder || a.stampId.localeCompare(b.stampId));
-}
 
 /** For a set of umbrella stamps (unknown-variant base stamps), the variant-kind descendants'
  *  prices, so the headline catalog price can roll up from the lowest variant (#238). Mirrors
@@ -390,30 +362,6 @@ function toStampNode(
   };
 }
 
-const ISSUE_SELECT = {
-  id: true,
-  collectionId: true,
-  issueNo: true,
-  collectionAreaId: true,
-  name: true,
-  year: true,
-  isAutoCreated: true,
-  createdAt: true,
-  // Per-language names (#295), so an issue edited from the inventory stamp picker seeds its
-  // translation fields the same way the issues list does.
-  translations: { select: { language: true, name: true } },
-  members: { select: MEMBER_SELECT },
-  // The issue's checklists (#531), in the order the collector set — the first one is what a
-  // single-checklist badge shows and what a new stamp joins by default.
-  // Ordered in the mapper rather than by the query: this select is `as const`, and a readonly
-  // `orderBy` tuple is not assignable to Prisma's mutable input type. An issue carries a handful
-  // of checklists, so sorting them in memory costs nothing.
-  checklists: {
-    select: { id: true, name: true, sortOrder: true, createdAt: true, stamps: { select: { stampId: true } } },
-  },
-  catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
-} as const;
-
 /** An issue's checklists as both list selects load them — ordered in memory (see the select). */
 interface ChecklistRow {
   id: string;
@@ -429,82 +377,6 @@ function orderChecklists(rows: ChecklistRow[]): ChecklistRow[] {
   return [...rows].sort(
     (a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime()
   );
-}
-
-function toIssueData(issue: {
-  id: string;
-  collectionId: string;
-  issueNo: number;
-  collectionAreaId: string;
-  name: string | null;
-  year: number | null;
-  isAutoCreated: boolean;
-  createdAt: Date;
-  translations: { language: string; name: string | null }[];
-  members: {
-    stampId: string;
-    sortOrder: number;
-    stamp: {
-      checklistEntries: { checklistId: string }[];
-      parentId: string | null;
-      name: string | null;
-      issuedDay: number | null;
-      issuedMonth: number | null;
-      issuedYear: number | null;
-      colnectId: string | null;
-      catalogNumbers: { catalogVendorId: string; number: string }[];
-      catalogPrices: RawCatalogPrice[];
-      photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
-      actsAsVariantOverride: boolean | null;
-      subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
-      variants: {
-        actsAsVariantOverride: boolean | null;
-        subtype: { actsAsVariant: boolean } | null;
-      }[];
-    };
-  }[];
-  checklists: ChecklistRow[];
-  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-}, copyCounts?: StampCopyCountMaps, wantsByStamp?: Map<string, StampWantSummary>): IssueData {
-  const checklistIds = new Set(issue.checklists.map((c) => c.id));
-  return {
-    id: issue.id,
-    collectionId: issue.collectionId,
-    issueNo: issue.issueNo,
-    collectionAreaId: issue.collectionAreaId,
-    name: issue.name,
-    nameByLanguage: translationsByLanguage(issue.translations, (t) => t.name),
-    year: issue.year,
-    isAutoCreated: issue.isAutoCreated,
-    createdAt: issue.createdAt,
-    members: orderIssueMembers(issue.members).map((m) =>
-      toStampNode(m, undefined, copyCounts, checklistIds, wantsByStamp)
-    ),
-    catalogNumbers: issue.catalogNumbers,
-    checklists: orderChecklists(issue.checklists).map((c) => ({
-      id: c.id,
-      name: c.name,
-      stampCount: c.stamps.length,
-    })),
-  };
-}
-
-export async function listIssuesForArea(
-  ownerId: string,
-  collectionId: string,
-  areaId: string
-): Promise<IssueData[]> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const issues = await prisma.issue.findMany({
-    where: { collectionId, collectionAreaId: areaId },
-    orderBy: [{ year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
-    select: ISSUE_SELECT,
-  });
-  const copyCounts = await loadStampCopyCounts(
-    collectionId,
-    issues.flatMap((i) => i.members.map((m) => m.stampId))
-  );
-  return issues.map((i) => toIssueData(i, copyCounts));
 }
 
 /** A lightweight reference to an existing issue that shares a proposed name, for the
