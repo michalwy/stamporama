@@ -8,6 +8,8 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
+import { formatEntityNo } from "@/lib/quick-jump";
 import type { OfferListItem } from "@/lib/offers";
 import { type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
@@ -46,7 +48,46 @@ type DialogState =
   | { kind: "sell"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
   | { kind: "delete"; offer: OfferListItem }
+  | { kind: "bulkWithdraw" }
+  | { kind: "bulkDelete" }
   | { kind: "quickOffer" };
+
+/** What a bulk run refused, named against the row it belongs to. Kept as a list rather than a
+ * count: each refusal is fixed somewhere different — a sold set is removed on the offer's own
+ * screen, a closed listing is nothing to withdraw at all — so "3 offers were skipped" is a number
+ * with no next step behind it. */
+interface BulkSkip {
+  offerNo: number;
+  message: string;
+}
+
+/** The bar's plain textual control (Clear) — a link in a row of buttons, since it undoes the
+ * selection rather than acting on it. */
+const LINK_BTN: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-secondary)",
+  textDecoration: "underline",
+};
+
+/** A bulk action in the selection bar. Both are destructive, so neither is drawn as the primary
+ * button on the screen — the emphasis belongs to *New offer*, not to deleting a dozen listings. */
+const BULK_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  padding: "0.3125rem 0.75rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-elevated)",
+  color: "var(--color-text-primary)",
+  fontSize: "0.8125rem",
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 /** The stored value standing for the derived "needs action" overlay, which is not an `OfferState`
  *  and shares its slot with one (#325). No offer state can collide with it. */
@@ -250,6 +291,103 @@ export function OffersListPanel({
   // loaded pages — a total that grows as you scroll would be worse than none.
   const { data: summary } = useOffersSummary(collectionId, filters);
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+
+  /* ── Bulk selection ────────────────────────────────────────────────────────────────────────────
+   * The copies list's rule (#373), applied to offers: the selection is keyed on the filter set and
+   * dropped when it changes (adjusted during render, never a `setState` in an effect), because a
+   * selection surviving a filter change would act on offers no longer on screen — and here that
+   * means withdrawing or deleting listings nobody is looking at.
+   *
+   * It holds the **offers themselves**, not their ids: a bulk run reports its refusals per offer,
+   * and the row it names has to be identifiable after the list has been invalidated and refetched.
+   *
+   * *Select all* covers the **loaded** rows and says so. The list is cursor-paginated, so "all" over
+   * the whole filtered set would be a promise about offers that have not been fetched — a click that
+   * deletes three hundred listings, most of which were never on screen.
+   */
+  const filterSignature = JSON.stringify(filters);
+  const [selection, setSelection] = useState<{ sig: string; offers: Map<string, OfferListItem> }>({
+    sig: filterSignature,
+    offers: new Map(),
+  });
+  // What the last bulk run could not do. Cleared whenever a new selection question is asked.
+  const [bulkSkips, setBulkSkips] = useState<BulkSkip[]>([]);
+  if (selection.sig !== filterSignature) {
+    setSelection({ sig: filterSignature, offers: new Map() });
+    setBulkSkips([]);
+  }
+  const selectedOffers = useMemo(() => [...selection.offers.values()], [selection]);
+  const toggleSelected = useCallback((offer: OfferListItem) => {
+    setSelection((prev) => {
+      const offers = new Map(prev.offers);
+      if (offers.has(offer.id)) offers.delete(offer.id);
+      else offers.set(offer.id, offer);
+      return { sig: prev.sig, offers };
+    });
+  }, []);
+  const clearSelection = useCallback(() => {
+    setSelection((prev) => ({ sig: prev.sig, offers: new Map() }));
+    setBulkSkips([]);
+  }, []);
+  const allLoadedSelected = rows.length > 0 && rows.every((r) => selection.offers.has(r.id));
+  const toggleAllLoaded = useCallback(() => {
+    setBulkSkips([]);
+    setSelection((prev) => ({
+      sig: prev.sig,
+      offers: rows.every((r) => prev.offers.has(r.id))
+        ? new Map()
+        : new Map(rows.map((r) => [r.id, r] as const)),
+    }));
+  }, [rows]);
+
+  /** Withdraw or delete the whole selection. One path for both, because the two differ only in the
+   * verb and the action they call: the refusal handling, the toast and what stays ticked afterwards
+   * are the same question either way. */
+  function runBulk(kind: "withdraw" | "delete") {
+    const batch = selectedOffers;
+    const noById = new Map(batch.map((o) => [o.id, o.offerNo] as const));
+    setActionError(undefined);
+    startTransition(async () => {
+      const { withdrawOffersAction, deleteOffersAction } = await import("@/app/actions/offers");
+      const result =
+        kind === "withdraw"
+          ? await withdrawOffersAction(batch.map((o) => o.id))
+          : await deleteOffersAction(batch.map((o) => o.id));
+      invalidateAll(collectionId);
+      const skips = result.skipped.map((s) => ({
+        offerNo: noById.get(s.offerId) ?? 0,
+        message: s.message,
+      }));
+      setBulkSkips(skips);
+      // Nothing happened at all: the dialog stays open with the reason in it. A blocking failure
+      // belongs next to the decision that caused it, not in a strip behind a dialog nobody closed.
+      if (result.succeeded.length === 0) {
+        setActionError(
+          result.skipped.length === 1
+            ? result.skipped[0].message
+            : `None of these ${batch.length} offers could be ${kind === "withdraw" ? "withdrawn" : "deleted"}.`
+        );
+        return;
+      }
+      setDialog({ kind: "none" });
+      setActionError(undefined);
+      // Exactly the refused offers stay ticked — they are what is left to deal with, and the ones
+      // that went through are gone or closed. A selection left whole after the fact is an invitation
+      // to run it a second time.
+      const refused = new Set(result.skipped.map((s) => s.offerId));
+      setSelection((prev) => ({
+        sig: prev.sig,
+        offers: new Map([...prev.offers].filter(([id]) => refused.has(id))),
+      }));
+      const n = result.succeeded.length;
+      toast({
+        message:
+          kind === "withdraw"
+            ? `${n} offer${n === 1 ? "" : "s"} withdrawn`
+            : `${n} offer${n === 1 ? "" : "s"} deleted — their copies are still in inventory`,
+      });
+    });
+  }
 
   function closeDialog() {
     if (!isPending) {
@@ -591,6 +729,126 @@ export function OffersListPanel({
 
         {rows.length > 0 && (
           <>
+            {/* The selection bar (bulk withdraw / delete). Always drawn while there are rows, not
+                only once something is ticked: the select-all box lives in it, aligned with the
+                rows' own gutter, and a bar that appears only after the first tick would leave the
+                whole feature undiscoverable. The actions appear with the selection. */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.625rem",
+                padding: "0.5rem 1.25rem 0.5rem 0",
+                borderBottom: "1px solid var(--color-border)",
+                background: selectedOffers.length
+                  ? "var(--color-accent-soft)"
+                  : "var(--color-bg-elevated)",
+              }}
+            >
+              <Tooltip
+                content={
+                  allLoadedSelected
+                    ? "Deselect all"
+                    : `Select the ${rows.length} offer${rows.length === 1 ? "" : "s"} loaded so far`
+                }
+                style={SELECT_STRIP}
+              >
+                <input
+                  type="checkbox"
+                  checked={allLoadedSelected}
+                  // A partial selection is neither on nor off, and a box reading "off" over a list
+                  // with twelve rows ticked is the one thing it must not say.
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedOffers.length > 0 && !allLoadedSelected;
+                  }}
+                  onChange={toggleAllLoaded}
+                  aria-label="Select all loaded offers"
+                  style={{ cursor: "pointer" }}
+                />
+              </Tooltip>
+              {selectedOffers.length > 0 ? (
+                <>
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: "var(--color-accent)",
+                    }}
+                  >
+                    {selectedOffers.length} offer{selectedOffers.length === 1 ? "" : "s"} selected
+                  </span>
+                  <button type="button" onClick={clearSelection} style={LINK_BTN}>
+                    Clear
+                  </button>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      marginLeft: "auto",
+                    }}
+                  >
+                    <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionError(undefined);
+                          setDialog({ kind: "bulkWithdraw" });
+                        }}
+                        disabled={isPending}
+                        style={BULK_BTN}
+                      >
+                        <Icon name="withdraw" size="sm" /> Withdraw
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Permanently remove these offers and their sets. The copies stay in your inventory.">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionError(undefined);
+                          setDialog({ kind: "bulkDelete" });
+                        }}
+                        disabled={isPending}
+                        style={{ ...BULK_BTN, color: "var(--color-error)" }}
+                      >
+                        <Icon name="delete" size="sm" /> Delete
+                      </button>
+                    </Tooltip>
+                  </div>
+                </>
+              ) : (
+                <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                  Select offers to withdraw or delete them together
+                </span>
+              )}
+            </div>
+
+            {/* What the last run refused, one line each (#323's rule): each is fixed somewhere
+                different, so a count would be a number with no next step behind it. The offers
+                named here are the ones still ticked. */}
+            {bulkSkips.length > 0 && (
+              <div
+                role="status"
+                style={{
+                  padding: "0.5rem 1.25rem 0.5rem 2.5rem",
+                  borderBottom: "1px solid var(--color-border)",
+                  background: "var(--color-bg-page)",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-warning)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.25rem",
+                }}
+              >
+                {bulkSkips.map((s) => (
+                  <span key={s.offerNo}>
+                    <strong style={{ fontWeight: 600 }}>{formatEntityNo(s.offerNo)}</strong>{" "}
+                    {s.message}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {rows.map((offer, idx) => (
               <OfferRow
                 key={offer.id}
@@ -604,6 +862,10 @@ export function OffersListPanel({
                 onSell={(row) => setDialog({ kind: "sell", offer: row })}
                 onSetInActiveBidding={setOfferBidding}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
+                selection={{
+                  selected: selection.offers.has(offer.id),
+                  onToggle: toggleSelected,
+                }}
               />
             ))}
             <InfiniteScrollSentinel
@@ -732,6 +994,31 @@ export function OffersListPanel({
               } else setActionError(result.message);
             });
           }}
+        />
+      )}
+
+      {/* Bulk withdraw / delete confirmation. Same words as the single-row dialogs above — the act
+          is the same one, asked of a selection — with the count named in the title so what is about
+          to happen is not a matter of remembering what was ticked. */}
+      {(dialog.kind === "bulkWithdraw" || dialog.kind === "bulkDelete") && (
+        <ConfirmDialog
+          title={
+            dialog.kind === "bulkWithdraw"
+              ? `Withdraw ${selectedOffers.length} offer${selectedOffers.length === 1 ? "" : "s"}`
+              : `Delete ${selectedOffers.length} offer${selectedOffers.length === 1 ? "" : "s"}`
+          }
+          message={
+            dialog.kind === "bulkWithdraw"
+              ? "This takes these listings down on their platforms. Withdrawn is final — to sell here again, create a new offer. The copies are untouched. An offer that is already closed is skipped and named."
+              : "This permanently removes these offers and their sets. The copies stay in your inventory. This cannot be undone. An offer with a sold set is skipped and named — withdraw it instead."
+          }
+          actionLabel={dialog.kind === "bulkWithdraw" ? "Withdraw" : "Delete offers"}
+          pendingLabel={dialog.kind === "bulkWithdraw" ? "Withdrawing…" : "Deleting…"}
+          variant="destructive"
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onConfirm={() => runBulk(dialog.kind === "bulkWithdraw" ? "withdraw" : "delete")}
         />
       )}
 

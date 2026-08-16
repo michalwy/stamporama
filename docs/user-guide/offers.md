@@ -1353,6 +1353,32 @@ The detail header's **⋮** menu adds **Regenerate title** (see [Listing title](
 Deleting removes the offer and its sets; the copies stay in your inventory. An offer with a sold
 set can't be deleted — withdraw it.
 
+## Working on several offers at once
+
+Every row in the offers list carries a **checkbox** on its left, and a bar at the top of the list
+carries one for **all of them**. Tick a few rows, or tick the bar's box to take everything, and the
+bar turns into a count with the actions that work on a selection:
+
+- **Withdraw** — takes those listings down, exactly as the row's own **Withdraw** does. Withdrawn is
+  final: to sell there again, create a new offer. The copies are untouched.
+- **Clear** puts the selection back to nothing.
+- **Delete** — permanently removes those offers and their sets. The copies stay in your inventory.
+
+Both ask for confirmation first, naming how many offers are about to be affected.
+
+**Select all means the rows loaded so far.** The list loads more offers as you scroll, so the box
+takes what is on screen and says how many that is — it never reaches offers you have not seen. Scroll
+further and tick again to take those too.
+
+**The selection is dropped whenever you change a filter**, including the search box: a selection made
+under one filter and acted on under another would take down listings you were no longer looking at.
+
+**Every row is selectable, and what an action cannot do it says.** The two actions disagree about
+what they can touch — a closed listing has nothing to withdraw, while an offer with a sold set can be
+withdrawn but never deleted — so nothing is greyed out in advance. A run does what it can and lists
+what it could not, one line per offer with the reason, under the bar. Those offers **stay ticked**,
+so what is left to deal with is still selected; everything that went through is cleared.
+
 ## Filtering
 
 The toolbar has a **search** box, and filters offers by **platform**, by **state** (Preparing /

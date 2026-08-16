@@ -13,6 +13,7 @@ import {
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
@@ -85,6 +86,18 @@ interface OfferRowProps {
   onSell: (offer: OfferListItem) => void;
   onSetInActiveBidding: (offer: OfferListItem, value: boolean) => void;
   onDelete: (offer: OfferListItem) => void;
+  /** Bulk selection: when present the row gains a checkbox in the gutter the list's select-all
+   * shares. **Every** row gets one, terminal offers included — unlike the copies list (#373), where
+   * one eligibility rule covers every bulk action, the two actions here disagree (a withdrawn offer
+   * has nothing to withdraw but can still be deleted; one with a sold set can be withdrawn but never
+   * deleted), so a gutter following either of them would misdescribe the other. What an action
+   * cannot do it refuses per offer and says so. */
+  selection?: OfferSelection;
+}
+
+export interface OfferSelection {
+  selected: boolean;
+  onToggle: (offer: OfferListItem) => void;
 }
 
 /** A single offer as a stacked card row: its derived label + actions on top, then platform /
@@ -100,6 +113,7 @@ export function OfferRow({
   onSell,
   onSetInActiveBidding,
   onDelete,
+  selection,
 }: OfferRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
@@ -181,16 +195,48 @@ export function OfferRow({
     },
   ];
 
+  const checked = !!selection?.selected;
+
   return (
-    <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
+    <div
+      style={{
+        borderBottom: isLast ? undefined : "1px solid var(--color-border)",
+        // The gutter is a sibling of the card, not part of it: the card is one big click target that
+        // opens the offer, and a checkbox inside it would be a hole in that target.
+        ...(selection ? { display: "flex", alignItems: "stretch" } : {}),
+        // A ticked row leads — what is selected is what the bar above is about to act on.
+        ...(checked ? { background: "var(--color-accent-soft)" } : {}),
+      }}
+    >
+      {selection && (
+        // A `<label>`, so the whole strip is the hit area rather than the 13px box in it, and its
+        // own click never reaches the row's navigation handler.
+        <label style={SELECT_STRIP} onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => selection.onToggle(offer)}
+            aria-label={`Select offer ${offer.name ?? offer.label}`}
+            style={{ cursor: "pointer" }}
+          />
+        </label>
+      )}
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => router.push(detailHref)}
         style={{
           position: "relative",
+          flex: selection ? 1 : undefined,
+          minWidth: 0,
           padding: "0.75rem 1.25rem",
-          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          // Transparent while ticked, so the wrapper's tint shows through the card rather than the
+          // card's own surface hiding it; hover still wins, being the more immediate signal.
+          background: hovered
+            ? "var(--color-bg-row-hover)"
+            : checked
+              ? "transparent"
+              : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           cursor: "pointer",
           opacity: terminal ? 0.7 : 1,

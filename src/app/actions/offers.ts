@@ -670,6 +670,62 @@ export async function setOfferStateAction(
   }
 }
 
+/**
+ * The outcome of an action asked of **several** offers at once (the offers list's bulk withdraw and
+ * bulk delete).
+ *
+ * Per-offer refusals are **collected, not thrown** — `generateOffersPhotosAction`'s rule (#323), and
+ * for its reason: whether an offer can be withdrawn or deleted is a fact about that offer (a sold
+ * listing has nothing to withdraw, one with a sold set cannot be deleted at all), and abandoning the
+ * other twenty-nine over it would turn a selection into a puzzle. The caller names each skip against
+ * the row it belongs to, so the collector reads which offers are left and why.
+ */
+export interface BulkOfferActionState {
+  /** Offers the action actually ran on. */
+  succeeded: string[];
+  skipped: { offerId: string; message: string }[];
+}
+
+/** Run `run` over every id, collecting each refusal instead of stopping at the first. Sequential on
+ * purpose: these are ordinary writes on a self-hosted database, and a fan-out over a selection of
+ * two hundred would only crowd the pool. */
+async function runOverOffers(
+  offerIds: string[],
+  fallback: string,
+  run: (offerId: string) => Promise<void>
+): Promise<BulkOfferActionState> {
+  const succeeded: string[] = [];
+  const skipped: { offerId: string; message: string }[] = [];
+  for (const offerId of offerIds) {
+    try {
+      await run(offerId);
+      succeeded.push(offerId);
+    } catch (e) {
+      skipped.push({ offerId, message: fail(e, fallback).message });
+    }
+  }
+  return { succeeded, skipped };
+}
+
+/** Withdraw a selection of offers in one motion (the offers list's bulk bar). Each goes through the
+ * same `setOfferState` a single row does, so the lifecycle rules — and the refusal on an offer that
+ * is already closed — are stated in exactly one place. */
+export async function withdrawOffersAction(offerIds: string[]): Promise<BulkOfferActionState> {
+  const session = await getSession();
+  return runOverOffers(offerIds, "Failed to withdraw the offer.", (offerId) =>
+    setOfferState(session.user.id, offerId, "withdrawn")
+  );
+}
+
+/** Delete a selection of offers in one motion. Same guard as the single-row delete: an offer with a
+ * sold set survives, because the sale record must. */
+export async function deleteOffersAction(offerIds: string[]): Promise<BulkOfferActionState> {
+  const session = await getSession();
+  return runOverOffers(offerIds, "Failed to delete the offer.", (offerId) =>
+    deleteOffer(session.user.id, offerId)
+  );
+}
+
 /** Publish a prepared offer from the bulk listing workspace (#322): `ready → active`, stamping the
  * listing date (#320), plus the listing URL the platform gave back. A blank URL is accepted — the
  * listing may not have one to copy yet — and clears whatever was there. */
