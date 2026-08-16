@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -1618,6 +1618,12 @@ function TickBox({
  * It offers exactly one thing to do with the selection and no menu of them: identifying them
  * together is the whole reason ticking exists. Discarding a run in one press was not asked for, and
  * a discard is already one click on the tile itself.
+ *
+ * **It stays in view while the tiles scroll under it.** Ticking a run that crosses two cards means
+ * scrolling — a parcel can hold a dozen batches of thirty squares — and a bar pinned to the top of
+ * the card would be a bar the collector has to scroll back up to every time, having lost sight of
+ * both the count and the button that acts on it. It pins to the top of the viewport, like every
+ * other header on this screen, and travels no further than the card it belongs to.
  */
 function TileSelectionBar({
   count,
@@ -1632,9 +1638,16 @@ function TileSelectionBar({
   onIdentify: () => void;
   onClear: () => void;
 }) {
+  const { barRef, stuck } = useStuck();
   return (
     <div
+      ref={barRef}
       style={{
+        position: "sticky",
+        // The whole page scrolls, so this is the app's own top edge (`STICKY_TOOLBAR_STYLE`). The
+        // z-index sits above the tiles but below the portalled menus and dialogs that must cover it.
+        top: 0,
+        zIndex: 5,
         display: "flex",
         alignItems: "center",
         gap: "0.625rem",
@@ -1642,7 +1655,9 @@ function TileSelectionBar({
         padding: "0.5rem 0.75rem",
         borderRadius: "0.5rem",
         border: "1px solid var(--color-accent)",
+        // Opaque, because tiles now pass beneath it.
         background: "var(--color-accent-soft)",
+        boxShadow: stuck ? "0 6px 8px -6px rgba(0, 0, 0, 0.28)" : undefined,
         fontSize: "0.8125rem",
       }}
     >
@@ -1665,6 +1680,32 @@ function TileSelectionBar({
       </SmallButton>
     </div>
   );
+}
+
+/**
+ * Whether the selection bar is currently pinned, so the drop shadow appears only then — at rest it
+ * is one more box in the column and needs no lift.
+ *
+ * The bar watches itself against a viewport shortened by one pixel at the top: while it flows with
+ * the column it is fully inside that box, and the moment it pins to `top: 0` that pixel is cut off.
+ * No sentinel element, which in this flex column would have carried a gap of its own.
+ */
+function useStuck() {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setStuck(entry.intersectionRatio < 1),
+      // The bottom edge is pushed far out of the way so a bar scrolling up into view from below —
+      // clipped by the viewport's foot, not pinned at its head — is not mistaken for a stuck one.
+      { threshold: [1], rootMargin: "-1px 0px 9999px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { barRef, stuck };
 }
 
 /**
