@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
 import {
@@ -132,7 +140,28 @@ export interface IdentifiedPiece {
  * Any one of them can still be looked at properly — clicking a thumbnail opens #585's viewer on it,
  * with the way back to the grid — because the doubt a grid raises is answered by a loupe, and there
  * is already one.
+ *
+ * The loupe **steps along the run** (‹ / ›, ← / →, with `n / N` between them): the comparison this
+ * panel exists for is made by flicking from one piece to the next at the same magnification, and
+ * grid → click → grid → click turns that into three acts per pair. It does not wrap, and the
+ * buttons say so by going dead at the ends — on a card of fifteen near-identical stamps a step
+ * that quietly landed back on the first would read as "still going".
  */
+/** The one shape the opened piece's header buttons share — back, previous and next are the same
+ * control at three widths, so a single object keeps them from drifting apart. */
+const PIECE_NAV_BTN: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  padding: "0.25rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-elevated)",
+  color: "var(--color-text-secondary)",
+  font: "inherit",
+  fontSize: "0.8125rem",
+  cursor: "pointer",
+};
+
 export function IdentifiedPieceAside({
   collectionId,
   pieces,
@@ -145,7 +174,32 @@ export function IdentifiedPieceAside({
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
-  const opened = shown.find((p) => p.tileId === openId) ?? null;
+  const openedIndex = shown.findIndex((p) => p.tileId === openId);
+  const opened = openedIndex === -1 ? null : shown[openedIndex];
+
+  // ‹ / › and the arrow keys, while one piece is open. Stepping *is* the comparison this panel
+  // exists for — a run is told apart by flicking between two pieces at the same zoom, and going
+  // back out to the grid to click the neighbour breaks that into three acts. Not while a field has
+  // focus: the steps in front of this panel are forms, and ← / → are cursor keys inside them.
+  useEffect(() => {
+    if (openedIndex === -1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable))
+        return;
+      const next = openedIndex + (e.key === "ArrowRight" ? 1 : -1);
+      // Deliberately no wrap-around, matching the disabled buttons: the last piece of the run is a
+      // fact worth feeling, and a step that silently lands back on the first would be read as
+      // "still going" on a card of fifteen near-identical stamps.
+      if (next < 0 || next >= shown.length) return;
+      e.preventDefault();
+      setOpenId(shown[next].tileId);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openedIndex, shown]);
 
   if (shown.length === 0) return null;
   if (shown.length === 1) {
@@ -161,24 +215,60 @@ export function IdentifiedPieceAside({
   if (opened) {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
-        <button
-          type="button"
-          onClick={() => setOpenId(null)}
+        <div
           style={{
-            alignSelf: "flex-start",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
             marginBottom: "0.5rem",
-            padding: "0.25rem 0.5rem",
-            borderRadius: "0.375rem",
-            border: "1px solid var(--color-border-strong)",
-            background: "var(--color-bg-elevated)",
-            color: "var(--color-text-secondary)",
-            font: "inherit",
-            fontSize: "0.8125rem",
-            cursor: "pointer",
           }}
         >
-          ← All {shown.length} pieces
-        </button>
+          <button type="button" onClick={() => setOpenId(null)} style={PIECE_NAV_BTN}>
+            ← All {shown.length} pieces
+          </button>
+          <span style={{ flex: 1 }} />
+          <Tooltip content="Previous piece (←)">
+            <button
+              type="button"
+              onClick={() => setOpenId(shown[openedIndex - 1].tileId)}
+              disabled={openedIndex === 0}
+              aria-label="Previous piece"
+              style={{
+                ...PIECE_NAV_BTN,
+                padding: "0.25rem 0.375rem",
+                cursor: openedIndex === 0 ? "default" : "pointer",
+                opacity: openedIndex === 0 ? 0.45 : 1,
+              }}
+            >
+              <Icon name="previous" size="sm" />
+            </button>
+          </Tooltip>
+          <span
+            style={{
+              fontSize: "0.8125rem",
+              color: "var(--color-text-secondary)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {openedIndex + 1} / {shown.length}
+          </span>
+          <Tooltip content="Next piece (→)">
+            <button
+              type="button"
+              onClick={() => setOpenId(shown[openedIndex + 1].tileId)}
+              disabled={openedIndex === shown.length - 1}
+              aria-label="Next piece"
+              style={{
+                ...PIECE_NAV_BTN,
+                padding: "0.25rem 0.375rem",
+                cursor: openedIndex === shown.length - 1 ? "default" : "pointer",
+                opacity: openedIndex === shown.length - 1 ? 0.45 : 1,
+              }}
+            >
+              <Icon name="next" size="sm" />
+            </button>
+          </Tooltip>
+        </div>
         <TileZoomView
           // Remounted per piece, so the viewer opens fitted to the tile that was clicked rather than
           // carrying the previous one's zoom onto a differently sized crop.
@@ -405,11 +495,16 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
   }, []);
 
   // Measure the viewport, and fit inside it. One observer covers the dialog being resized with the
-  // window and the first observation the browser delivers on mount, which is where the opening fit
-  // comes from.
-  useEffect(() => {
+  // window and the later observations; the **first** measurement is taken here, synchronously,
+  // because the observer's first callback only arrives after a paint has already happened — and a
+  // viewer with no measured viewport draws the picture at 100% of the panel, which is the flash of
+  // an over-sized stamp seen when stepping from one piece to the next remounts this view.
+  useLayoutEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    }
     const observer = new ResizeObserver(() => {
       const next = { width: el.clientWidth, height: el.clientHeight };
       if (next.width === 0 || next.height === 0) return;
@@ -422,7 +517,9 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
   // Fit is the default; a chosen zoom is only re-clamped. This runs on the picture changing as well
   // as on the viewport changing, which is what carries a zoom across the front/back flip: the two
   // crops differ by a few pixels of card, so re-clamping is the whole of the adjustment.
-  useEffect(() => {
+  // A layout effect, so the fit lands in the same commit as the measurement above rather than a
+  // painted frame later.
+  useLayoutEffect(() => {
     if (!ready) return;
     const picture = { width: pictureWidth, height: pictureHeight };
     setView((v) =>
@@ -773,6 +870,12 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
             top: view.offsetY,
             width: ready ? pictureWidth * view.scale : "100%",
             height: ready ? pictureHeight * view.scale : "100%",
+            // Nothing is drawn before the picture has a scale. The unmeasured fallback above is the
+            // whole panel, so painting it would show the stamp blown up for a frame and then snap
+            // it down — worse than an empty panel, and it is the one thing the eye catches when
+            // stepping along a run. `visibility` rather than a mount guard: the photo still loads
+            // (and reports its natural size, which is what makes a box-less tile ready at all).
+            visibility: ready ? "visible" : "hidden",
           }}
         >
           {/* Served by an authenticated route at whatever size the crop was, which is exactly the

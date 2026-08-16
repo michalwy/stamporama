@@ -500,6 +500,12 @@ identification — which is how you catch a stamp that does not belong in the ru
 fifteen copies rather than after. Click any one of them to look at it at full resolution in the usual
 viewer, and use the *← All N pieces* button to come back.
 
+**Step along the run without going back to the grid.** With one piece open, the *‹* and *›* buttons —
+or the <kbd>←</kbd> and <kbd>→</kbd> keys — move to the piece before or after it on the card, with
+*n / N* between them saying where you are. That is how a run is compared: flick from one piece to the
+next at the same magnification and the odd one out shows itself. It does not wrap around, so the
+button goes dead when you reach the first or the last piece.
+
 If one of the tiles turns out to have been dealt with meanwhile — in another tab, or from its own
 dialog — the whole pass is refused and **nothing is created**, so you can untick it and go again.
 
