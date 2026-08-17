@@ -30,7 +30,7 @@ import { buildAreaPrefixNodes, effectivePrefixFor } from "./area-prefix";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
-import { makeFormatFactorResolver } from "./format-pricing";
+import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import {
   loadStampCopyCounts,
@@ -1222,7 +1222,8 @@ export interface QuickCatalogPriceReference {
   price: string;
   currency: string;
   /** True for the exact target the field writes to (primary catalog's latest edition ×
-   * this condition × this certificate × this format) — the value the amount field prefills from. */
+   * this condition × this certificate, at the **single**) — the value the amount field prefills
+   * from. Never a format row: the quick editor does not write those. */
   isTarget: boolean;
 }
 
@@ -1238,6 +1239,12 @@ export interface QuickCatalogTarget {
   currency: string;
   amount: string | null;
   isPrimary: boolean;
+  /** An **explicit** price already recorded on this edition for the format the caller is showing,
+   * when that format is not the single. It is what the copy on screen is actually worth, and it is
+   * also the one case where nothing this dialog writes changes that figure: an explicit format row
+   * outranks the derivation (`pickFormatCatalogPrice`), and only the stamp's Prices tab can edit it.
+   * Null when there is none — the format's value then derives from the single being typed here. */
+  formatAmount: string | null;
 }
 
 /** Context for the quick catalog-price editor: every catalog the value can land in (one row
@@ -1253,6 +1260,19 @@ export interface QuickCatalogPriceContext {
   /** Every recorded price for this stamp across editions/conditions/certificates, newest
    * edition first, for reference. Empty when nothing is on file yet. */
   otherPrices: QuickCatalogPriceReference[];
+  /**
+   * The format the caller is *showing*, when it is not the single — read-only orientation, never a
+   * write target (#343).
+   *
+   * The quick editor always writes the single's row, because that is what a catalogue quotes: a
+   * multiple's value is the single's price times this multiplier, which is exactly how a copy in
+   * that format is valued when it has no explicit row of its own. So the dialog can say what the
+   * figure being typed means for the copy on screen without pretending to price it.
+   *
+   * `factor` is null when no factor row applies — nothing derives there, and a copy in that format
+   * stays unpriced until either a factor or an explicit price exists.
+   */
+  displayFormat: { formatId: string; abbreviation: string; factor: number | null } | null;
 }
 
 /** Resolve the catalogs the quick-price editor can write to for a stamp: every catalog active
@@ -1338,14 +1358,17 @@ export async function getQuickCatalogPriceContext(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  /** The format the value is recorded for (#343); null is the single. The list's format switcher
-   *  supplies it, so the link prices what the column on screen is showing. */
-  formatId: string | null = null
+  /**
+   * The format the caller is *showing* (#343) — a list's format switcher, or a copy's own format.
+   * It never moves the row being read: the quick editor prices the **single**, and this only
+   * decides what the dialog can say the typed figure works out at for the copy on screen. Null when
+   * the caller is showing singles, which is most of them.
+   */
+  displayFormatId: string | null = null
 ): Promise<QuickCatalogPriceContext> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   const certId = certificateStatusId ?? null;
-  const fmtId = formatId ?? null;
   const targets = await resolveAreaCatalogTargets(collectionId, stampId);
 
   const prices = await prisma.stampCatalogPrice.findMany({
@@ -1367,13 +1390,19 @@ export async function getQuickCatalogPriceContext(
     orderBy: { catalogEdition: { year: "desc" } },
   });
 
-  const amountFor = (editionId: string) => {
+  // The row every input reads from and writes to: the **single**, always. Not the format the caller
+  // happens to be showing — a catalogue quotes singles, and a multiple's value is that figure times
+  // the format's factor, so writing the shown format's row here would file a single's quotation as
+  // the multiple's own price and stop the factor from ever applying. A price that genuinely deviates
+  // from the derivation is an explicit row, entered on the stamp's Prices tab, which is the only
+  // place with the grid to see what it is deviating from.
+  const amountFor = (editionId: string, formatId: string | null) => {
     const existing = prices.find(
       (p) =>
         p.catalogEditionId === editionId &&
         p.conditionId === conditionId &&
         p.certificateStatusId === certId &&
-        p.formatId === fmtId
+        p.formatId === formatId
     );
     return existing ? existing.price.toFixed(2) : null;
   };
@@ -1388,8 +1417,9 @@ export async function getQuickCatalogPriceContext(
       vendorAbbreviation: t.vendorAbbreviation,
       editionYear: t.editionYear,
       currency: t.currency,
-      amount: amountFor(t.editionId),
+      amount: amountFor(t.editionId, null),
       isPrimary: t.isPrimary,
+      formatAmount: displayFormatId ? amountFor(t.editionId, displayFormatId) : null,
     })),
     areaName,
     otherPrices: prices.map((p) => ({
@@ -1401,13 +1431,53 @@ export async function getQuickCatalogPriceContext(
       price: p.price.toFixed(2),
       currency: p.currency,
       // A recorded price is a "target" (the value an input prefills from) when it sits on one
-      // of the editable editions for this condition × certificate × format.
+      // of the editable editions for this condition × certificate, at the single.
       isTarget:
         targetEditionIds.has(p.catalogEditionId) &&
         p.conditionId === conditionId &&
         p.certificateStatusId === certId &&
-        p.formatId === fmtId,
+        p.formatId === null,
     })),
+    displayFormat: await resolveDisplayFormat(collectionId, stampId, conditionId, displayFormatId),
+  };
+}
+
+/** The shown format's name and the multiplier that derives its value from the single's, for the
+ * read-only line the quick editor draws (#343). Null for the single, and for a format id that is
+ * not this collection's — the dialog then simply says nothing about formats. */
+async function resolveDisplayFormat(
+  collectionId: string,
+  stampId: string,
+  conditionId: string,
+  displayFormatId: string | null
+): Promise<QuickCatalogPriceContext["displayFormat"]> {
+  if (!displayFormatId) return null;
+  const format = await prisma.stampFormat.findFirst({
+    where: { id: displayFormatId, collectionId },
+    select: { id: true, abbreviation: true },
+  });
+  if (!format) return null;
+  const [stamp, lookup] = await Promise.all([
+    prisma.stamp.findUnique({
+      where: { id: stampId },
+      select: {
+        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        issueMemberships: { select: { issueId: true }, take: 1 },
+      },
+    }),
+    makeFormatFactorLookup(collectionId),
+  ]);
+  // The **primary** area link, the one `areaPathIds` resolves a factor against everywhere else.
+  const link = stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0];
+  return {
+    formatId: format.id,
+    abbreviation: format.abbreviation,
+    factor: lookup(
+      format.id,
+      link?.collectionAreaId ?? null,
+      stamp?.issueMemberships[0]?.issueId ?? null,
+      conditionId
+    ),
   };
 }
 
@@ -1434,19 +1504,27 @@ export interface QuickCatalogPriceEntry {
   amount: number;
 }
 
-/** Quickly set (or overwrite) catalog values for a stamp at `conditionId × certificateStatusId`
+/**
+ * Quickly set (or overwrite) catalog values for a stamp at `conditionId × certificateStatusId`
  * from the quick-add dialog: each entry lands on the latest edition of its catalog, in that
  * catalog's currency (#170). Catalogs must belong to the collection; each is written on the
  * latest edition (ADR-0006). Used by the lot intake / offer-set screens to price a copy inline
- * without opening the full stamp editor (#121, #164). */
+ * without opening the full stamp editor (#121, #164).
+ *
+ * **Always the single**, and there is deliberately no parameter for a format. A quick price is a
+ * figure read straight off a paper catalogue, and a catalogue quotes singles: a multiple's value is
+ * that figure times the resolved `StampFormatFactor` (`pickFormatCatalogPrice`). Writing the
+ * displayed format's row instead would file a single's quotation as the multiple's own price *and*
+ * suppress the factor for good, from a dialog whose collector never asked for either. A multiple
+ * whose real price deviates from the derivation gets an explicit row on the stamp's Prices tab —
+ * the one screen that shows what it is deviating from.
+ */
 export async function quickSetCatalogPrices(
   ownerId: string,
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: QuickCatalogPriceEntry[],
-  /** The format the value is recorded for (#343); null is the single. */
-  formatId: string | null = null
+  entries: QuickCatalogPriceEntry[]
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -1464,13 +1542,6 @@ export async function quickSetCatalogPrices(
       select: { id: true },
     });
     if (!cert) throw new Error("Certificate status not found in this collection.");
-  }
-  if (formatId) {
-    const fmt = await prisma.stampFormat.findFirst({
-      where: { id: formatId, collectionId },
-      select: { id: true },
-    });
-    if (!fmt) throw new Error("Format not found in this collection.");
   }
 
   for (const entry of entries) {
@@ -1496,7 +1567,7 @@ export async function quickSetCatalogPrices(
         catalogEditionId: edition.id,
         conditionId,
         certificateStatusId: certificateStatusId ?? null,
-        formatId: formatId ?? null,
+        formatId: null,
       },
       select: { id: true },
     });
@@ -1512,7 +1583,7 @@ export async function quickSetCatalogPrices(
           catalogEditionId: edition.id,
           conditionId,
           certificateStatusId: certificateStatusId ?? null,
-          formatId: formatId ?? null,
+          formatId: null,
           price: priceStr,
           currency: catalog.currency,
         },

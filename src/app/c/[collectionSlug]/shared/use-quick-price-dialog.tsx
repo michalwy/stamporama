@@ -59,12 +59,13 @@ export function useQuickPriceDialog({
           setError(undefined);
           startTransition(async () => {
             const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+            // No format: the quick editor prices the single wherever it is opened from, and
+            // `subject.formatId` is only what the calling screen is showing (#343).
             const r = await quickSetCatalogPricesAction(
               subject.stampId,
               subject.conditionId,
               subject.certificateStatusId,
-              entries,
-              subject.formatId ?? null
+              entries
             );
             if (r.status === "error") setError(r.message);
             else {

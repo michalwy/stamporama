@@ -13,6 +13,8 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { PhotoSummary } from "@/lib/photos";
 import type { QuickCatalogPriceContext } from "@/lib/stamps";
+import { deriveFormatPrice } from "@/lib/format-factor";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
 import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
@@ -46,10 +48,10 @@ const CONDITION_BADGE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** What the dialog prices: a stamp at one condition × certificate × format, plus the context it
- * shows. `ItemListItem` satisfies it structurally (a copy carries its own condition and format),
- * and the Issue list builds one from a stamp-tree node plus the list's display condition and
- * display format (#341, #343). */
+/** What the dialog prices: a stamp at one condition × certificate, plus the context it shows.
+ * `ItemListItem` satisfies it structurally (a copy carries its own condition and format), and the
+ * Issue list builds one from a stamp-tree node plus the list's display condition and display format
+ * (#341, #343). The format is **context, not a target** — see the dialog's own doc comment. */
 export interface QuickPriceSubject {
   stampId: string;
   stampName: string | null;
@@ -59,9 +61,12 @@ export interface QuickPriceSubject {
   conditionAbbreviation: string;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
-  /** Physical format the value is recorded for (#343); null / absent is the single. */
+  /** The format the calling screen is *showing* — a copy's own format, or a list's format switcher
+   * (#343). Null / absent is the single. It is never written: it buys the read-only line saying what
+   * the figure being typed works out at for a copy in that format. */
   formatId?: string | null;
-  /** Abbreviation shown on the badge, so the dialog names what it is about to write. */
+  /** Kept because a copy row's item and a lot line both carry one structurally; the dialog names the
+   * format from the loaded context instead, which is the same read that resolves its factor. */
   formatAbbreviation?: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   photos: PhotoSummary[];
@@ -75,6 +80,23 @@ export interface QuickPriceSubject {
  * marked) so the user can price consistently. Shared by the purchase-order intake view (#121),
  * the sale-lot composition view (#164), the Copies list (#228) and the Issue list (#341). The
  * dialog only loads the context and reports the entered amounts; the caller performs the save.
+ *
+ * ## It always prices the single, wherever it is opened from
+ *
+ * A figure typed here is read off a paper catalogue, and a catalogue quotes singles. A multiple's
+ * value is that quotation times the resolved `StampFormatFactor` — which is exactly how a copy in
+ * that format is valued when it carries no explicit price of its own (`pickFormatCatalogPrice`). So
+ * the row read and written is the **single's**, whatever format the calling screen is showing, and
+ * the shown format earns a *read-only* line per catalogue instead: `× 2.2 = 27.50` as the collector
+ * types, so the number they are checking against the copy in their hand is on screen without the
+ * dialog pretending to write it.
+ *
+ * Writing the shown format's row instead would do two wrong things at once — file a single's
+ * quotation as the multiple's own price, and suppress the factor for that stamp for good — from a
+ * dialog whose collector asked for neither. A multiple whose real price *deviates* from the
+ * derivation is a deliberate act: an explicit row on the stamp's **Prices** tab, the one screen that
+ * shows the grid it deviates from. When such a row already exists the line says so and names it,
+ * because then nothing typed here changes what that copy is worth.
  */
 export function QuickPriceDialog({
   subject: item,
@@ -112,7 +134,10 @@ export function QuickPriceDialog({
   // Keyed on the identity fields, not the subject object: a caller building the subject
   // inline (the Issue list's stamp rows) would otherwise refetch on every render.
   const { stampId, conditionId, certificateStatusId } = item;
-  const formatId = item.formatId ?? null;
+  /** The format the caller is showing. It changes what the dialog *says*, never what it reads or
+   * writes — but it is still in the key, since the derived line and any explicit format price on
+   * file come back with the context. */
+  const displayFormatId = item.formatId ?? null;
   useEffect(() => {
     let active = true;
     (async () => {
@@ -121,7 +146,7 @@ export function QuickPriceDialog({
         stampId,
         conditionId,
         certificateStatusId,
-        formatId
+        displayFormatId
       );
       if (!active) return;
       if (r.status === "success") {
@@ -139,7 +164,7 @@ export function QuickPriceDialog({
     return () => {
       active = false;
     };
-  }, [stampId, conditionId, certificateStatusId, formatId]);
+  }, [stampId, conditionId, certificateStatusId, displayFormatId]);
 
   const filledEntries = useMemo(
     () =>
@@ -155,12 +180,45 @@ export function QuickPriceDialog({
     onSubmit(filledEntries);
   }
 
-  // The badge names every axis the value is keyed on, so a block price entered while the list
-  // shows blocks can't be mistaken for a single's (#343). A single adds nothing — null *is* the
-  // single, and spelling it out on every ordinary entry would be noise.
+  /**
+   * The read-only line under one catalogue's input, saying what a copy in the *shown* format is
+   * worth — null when the caller is showing singles, which is most of them, and there is nothing to
+   * add.
+   *
+   * Three answers, and they are different:
+   *
+   * - an **explicit** price is already on file for that format, so the factor does not apply and
+   *   nothing typed here moves it — named, with where to change it;
+   * - a factor applies → the derivation, recomputed as the collector types, so the figure they are
+   *   checking against the copy in their hand is on screen;
+   * - no factor and no explicit price → said plainly, because a copy in that format stays *unpriced*
+   *   however carefully the single is filled in here, and that is worth knowing before the dialog
+   *   closes on a job that looks done.
+   */
+  function derivedLineFor(c: QuickCatalogPriceContext["catalogs"][number]): string | null {
+    const fmt = context?.displayFormat;
+    if (!fmt) return null;
+    if (c.formatAmount != null) {
+      return `${fmt.abbreviation}: ${c.formatAmount} ${c.currency} recorded explicitly — not derived from this value`;
+    }
+    if (fmt.factor == null) {
+      return `${fmt.abbreviation}: no factor set, so it stays unpriced`;
+    }
+    // A blank or unparseable field shows the multiplier alone rather than a derived `0.00`, which
+    // would read as a value.
+    const raw = (amounts[c.catalogNameId] ?? "").trim();
+    const typed = raw === "" ? NaN : Number(normalizeDecimalInput(raw));
+    if (!Number.isFinite(typed)) return `${fmt.abbreviation}: × ${fmt.factor}`;
+    return `${fmt.abbreviation}: × ${fmt.factor} = ${deriveFormatPrice(typed, fmt.factor).toFixed(2)} ${c.currency}`;
+  }
+
+  // The badge names every axis the value is keyed on — condition and certificate, at the single.
+  // The shown format is deliberately **not** on it: it is not an axis of what is being written, and
+  // a badge reading "MNH · 4-blk" over an input that files the single's price would be the exact
+  // misreading #343's badge was added to prevent. The format gets its own derived line below.
   const condLabel = `${item.conditionAbbreviation}${
     item.certificateStatusName ? ` · ${item.certificateStatusName}` : ""
-  }${item.formatAbbreviation ? ` · ${item.formatAbbreviation}` : ""}`;
+  }`;
   const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
   const canSave = !isPending && !loading && !loadError && filledEntries.length > 0;
 
@@ -300,8 +358,9 @@ export function QuickPriceDialog({
                 {context!.catalogs.map((c) => (
                   <div
                     key={c.catalogNameId}
-                    style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
+                    style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
                   >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <label
                       htmlFor={`quick-price-${c.catalogNameId}`}
                       style={{
@@ -354,11 +413,27 @@ export function QuickPriceDialog({
                       style={{ ...INPUT_STYLE, width: "8rem", flexShrink: 0, textAlign: "right" }}
                     />
                   </div>
+                    {/* What the copy on screen is worth, when it is not a single — read-only, and
+                        right-aligned under the input it follows from. */}
+                    {derivedLineFor(c) && (
+                      <span
+                        style={{
+                          alignSelf: "flex-end",
+                          fontSize: "0.6875rem",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        {derivedLineFor(c)}
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
               <p style={{ margin: "0.625rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                 Each value is saved on the latest edition of its catalog for this condition ×
-                certificate × format. Leave a field blank to skip it.
+                certificate, as the <strong>single&apos;s</strong> value — a multiple is derived from
+                it by that format&apos;s factor. Leave a field blank to skip it. To price a multiple
+                differently from its factor, edit the stamp&apos;s <strong>Prices</strong> tab.
               </p>
             </>
           )}

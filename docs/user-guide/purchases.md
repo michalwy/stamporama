@@ -813,12 +813,17 @@ long after identification.
   catalogue has been looked up; if you have already started changing the condition or typing
   somewhere else, the cursor is left where you put it. A value already on file is selected, so the
   first digit you type replaces it instead of being added to the end.
-- If a value is **already recorded** for that stamp at the condition, certificate and format you
-  have chosen, it is shown in the field and editing it replaces it — you never end up with two.
-- **The figure belongs to the condition you typed it for.** Change the condition, the certificate or
-  the format afterwards and the field re-reads for the new one — which may already have a value of
-  its own. A figure you had typed and not yet saved is not carried across, and the field says so
-  rather than just emptying itself.
+- **It is always the single's value**, whatever you picked in the format field beside it. Catalogues
+  quote singles: a block of four is that figure times the block's factor, which is how the app values
+  a multiple that has no price of its own. So the figure is filed against the condition and the
+  certificate only, exactly where the **Set catalog value** dialog on a copy row puts it.
+- If a value is **already recorded** for that stamp at the condition and certificate you have chosen,
+  it is shown in the field and editing it replaces it — you never end up with two.
+- **The figure belongs to the condition you typed it for.** Change the condition or the certificate
+  afterwards and the field re-reads for the new one — which may already have a value of its own. A
+  figure you had typed and not yet saved is not carried across, and the field says so rather than
+  just emptying itself. Changing the format leaves it alone: it is not one of the answers the value
+  is filed under.
 - The field waits for a condition to be chosen, since the value is recorded against the pair.
 - Collections whose area has no catalogue with an edition never see the field.
 

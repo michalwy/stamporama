@@ -625,8 +625,10 @@ the same rules, so the two can never disagree:
   line is left **unpriced** — never quietly valued at the single's price, which would be a different
   stamp's figure.
 - A line with no catalogue price at all shows a **+ catalog value** link in place of the figure.
-  Click it and the usual catalogue-value dialog opens on that stamp at that condition and format, so
-  you can fill the gap without leaving the lot.
+  Click it and the usual catalogue-value dialog opens on that stamp at that condition. What you type
+  is the **single's** value, as it is everywhere that dialog opens; when the line is a multiple, the
+  dialog shows what that comes to with the format's multiplier — and says so when there is no
+  multiplier to apply, which is the case where filling this in leaves the line unpriced.
 
 Unpriced lines are **counted and reported**, never dropped silently: the totals footer says how many
 there are, so a value that is only half the lot never looks like a finished answer. A lot with lines

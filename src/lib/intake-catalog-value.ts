@@ -15,7 +15,7 @@ export interface IntakeCatalogValue {
   /** Exactly what is in the input. Blank is the ordinary case, not a missing answer: the paper
    * catalogue is not always to hand, and this step must never start blocking on it. */
   amount: string;
-  /** What is already on file for the chosen condition × certificate × format, so an untouched
+  /** What is already on file for the chosen condition × certificate, at the single, so an untouched
    * prefill is not written back as though it were an edit. */
   recorded: string | null;
   /**
@@ -59,21 +59,24 @@ export function catalogValueEntry(
 }
 
 /**
- * What the value is keyed on — a change to any part of it re-reads, and drops what was typed.
+ * What the value is keyed on — a change to either part of it re-reads, and drops what was typed.
  *
- * The stamp is in it beside the three chosen axes, because the intake dialog is re-used for the
+ * The stamp is in it beside the two chosen axes, because the intake dialog is re-used for the
  * next pick without unmounting, and a catalogue price is a fact about a stamp before it is a fact
  * about a condition.
  *
- * **Format is in the key even though #593 does not mention it**: prices are recorded against it
- * (#343), this dialog has a format field (#573), and leaving it out would file a block of four's
- * catalogue value as the single's.
+ * **The chosen format is deliberately not in the key**, and this figure is always the *single's*
+ * price whatever format the copy is being filed as. A paper catalogue quotes singles; the block of
+ * four the collector happens to be holding is not a separate quotation, it is that figure times the
+ * format's factor, which is exactly how `pickFormatCatalogPrice` values a non-single copy. Filing
+ * the figure under the chosen format instead would write a block's row from a single's quotation and
+ * then stop the factor from ever applying. It is also what the quick-CV dialog on a copy row
+ * already does, and the two surfaces write the same fact, so they must write it to the same row.
  */
 export function catalogValueSubjectKey(
   stampId: string,
   conditionId: string,
-  certificateStatusId: string,
-  formatId: string
+  certificateStatusId: string
 ): string {
-  return `${stampId}|${conditionId}|${certificateStatusId}|${formatId}`;
+  return `${stampId}|${conditionId}|${certificateStatusId}`;
 }

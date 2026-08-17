@@ -881,12 +881,13 @@ export function AuctionLotCardsView({
             setPriceError(undefined);
             startLineTransition(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              // The single's row, whatever format the line is for — see the lines dialog's own
+              // note; a format row is the stamp editor's business (#343).
               const result = await quickSetCatalogPricesAction(
                 line.stampId,
                 line.conditionId,
                 line.certificateStatusId,
-                entries,
-                line.formatId
+                entries
               );
               if (result.status === "error") setPriceError(result.message);
               else {

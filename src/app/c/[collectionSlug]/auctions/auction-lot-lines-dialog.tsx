@@ -474,12 +474,14 @@ export function AuctionLotLinesDialog({
             setPriceError(undefined);
             startTransition(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              // The single's row, whatever format the line is for: a multiple's value derives from
+              // it by that format's factor, and only the stamp's Prices tab writes a format row
+              // (#343).
               const result = await quickSetCatalogPricesAction(
                 line.stampId,
                 line.conditionId,
                 line.certificateStatusId,
-                entries,
-                line.formatId
+                entries
               );
               if (result.status === "error") setPriceError(result.message);
               else {

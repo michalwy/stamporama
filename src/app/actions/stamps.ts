@@ -61,12 +61,14 @@ async function getSession() {
 }
 
 /** Load the quick catalog-price editor's context (target catalog/edition/currency and the
- * current amount) for a stamp at a condition × certificate × format (#121, #343). */
+ * current amount) for a stamp at a condition × certificate (#121). The editor prices the
+ * **single**; `displayFormatId` is only the format the caller is showing, and it buys the read-only
+ * line saying what the typed figure works out at for a copy in that format (#343). */
 export async function getQuickCatalogPriceContextAction(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  formatId: string | null = null
+  displayFormatId: string | null = null
 ): Promise<QuickPriceContextState> {
   const session = await getSession();
   try {
@@ -75,7 +77,7 @@ export async function getQuickCatalogPriceContextAction(
       stampId,
       conditionId,
       certificateStatusId,
-      formatId
+      displayFormatId
     );
     return { status: "success", context };
   } catch (e) {
@@ -87,14 +89,14 @@ export async function getQuickCatalogPriceContextAction(
 }
 
 /** Quickly set catalog values for a stamp at a condition × certificate, one per catalog vendor
- * active on the stamp's area — each lands on that catalog's latest edition (#170). `entries`
+ * active on the stamp's area — each lands on that catalog's latest edition (#170), **at the
+ * single**, whatever format the calling screen is showing (see `quickSetCatalogPrices`). `entries`
  * carries raw amount strings from the inputs; only non-empty ones are submitted. */
 export async function quickSetCatalogPricesAction(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: Array<{ catalogNameId: string; amount: string }>,
-  formatId: string | null = null
+  entries: Array<{ catalogNameId: string; amount: string }>
 ): Promise<StampActionState> {
   const session = await getSession();
   const parsed: Array<{ catalogNameId: string; amount: number }> = [];
@@ -110,14 +112,7 @@ export async function quickSetCatalogPricesAction(
     return { status: "error", message: "Enter at least one catalog value." };
   }
   try {
-    await quickSetCatalogPrices(
-      session.user.id,
-      stampId,
-      conditionId,
-      certificateStatusId,
-      parsed,
-      formatId
-    );
+    await quickSetCatalogPrices(session.user.id, stampId, conditionId, certificateStatusId, parsed);
     return { status: "success" };
   } catch (e) {
     return {

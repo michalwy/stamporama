@@ -66,21 +66,18 @@ describe("catalogValueEntry", () => {
 });
 
 describe("catalogValueSubjectKey", () => {
-  it("separates every axis a catalogue price is recorded against", () => {
-    const base = catalogValueSubjectKey("s1", "mnh", "", "");
-    assert.notEqual(base, catalogValueSubjectKey("s1", "used", "", ""));
-    assert.notEqual(base, catalogValueSubjectKey("s1", "mnh", "cert-bpp", ""));
-    // Format is an axis of the price too (#343/#573): a block of four must not be filed as the
-    // single, which is the gap #593's wording left open.
-    assert.notEqual(base, catalogValueSubjectKey("s1", "mnh", "", "block4"));
+  it("separates the axes this figure is recorded against", () => {
+    const base = catalogValueSubjectKey("s1", "mnh", "");
+    assert.notEqual(base, catalogValueSubjectKey("s1", "used", ""));
+    assert.notEqual(base, catalogValueSubjectKey("s1", "mnh", "cert-bpp"));
     // …and the stamp itself, since the dialog is re-used for the next pick without unmounting.
-    assert.notEqual(base, catalogValueSubjectKey("s2", "mnh", "", ""));
+    assert.notEqual(base, catalogValueSubjectKey("s2", "mnh", ""));
   });
 
   it("is stable for the same subject", () => {
     assert.equal(
-      catalogValueSubjectKey("s1", "mnh", "cert", "pair"),
-      catalogValueSubjectKey("s1", "mnh", "cert", "pair")
+      catalogValueSubjectKey("s1", "mnh", "cert"),
+      catalogValueSubjectKey("s1", "mnh", "cert")
     );
   });
 });

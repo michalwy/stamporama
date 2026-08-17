@@ -28,13 +28,17 @@ import { catalogValueSubjectKey, type IntakeCatalogValue } from "@/lib/intake-ca
  * ## The price belongs to the condition it was typed for
  *
  * A catalogue price is recorded against **stamp × edition × condition × certificate × format**, and
- * this dialog is where three of those are *chosen*. So the field is keyed on all three and re-reads
- * whenever any of them changes: the figure typed for MNH must never silently become the price of
- * *Used*, and *Used* may already have a price of its own to show instead.
+ * this dialog is where two of those are *chosen*. So the field is keyed on both and re-reads
+ * whenever either changes: the figure typed for MNH must never silently become the price of *Used*,
+ * and *Used* may already have a price of its own to show instead.
  *
- * **Format is in the key even though #593 does not mention it** — the schema keys prices on it
- * (#343), this dialog has a format field (#573), and leaving it out would file a block of four's
- * catalogue value as the single's. Same axis, same rule, and it costs one more entry in the key.
+ * **The format the step is filing the copy as is not one of them.** The figure always lands on the
+ * single, whatever is picked in the format field beside it — a paper catalogue quotes singles, and
+ * the block of four in the collector's hand is that quotation times the format's factor, which is
+ * how `pickFormatCatalogPrice` values a non-single copy. Writing it under the chosen format instead
+ * would file a single's quotation as the block's own price and stop the factor from ever applying.
+ * It is also what the quick-CV dialog on a copy row does with the very same figure, and two surfaces
+ * writing the same fact must write it to the same row.
  *
  * A figure typed and then stranded by a change of condition is **said, not swallowed**: it was
  * typed for a condition that is no longer chosen, so keeping it would be the silent reassignment
@@ -61,10 +65,9 @@ export function IntakeCatalogValueField({
   stampId,
   conditionId,
   certificateStatusId,
-  formatId,
-  /** How the chosen condition × certificate × format reads, for the line naming what the figure is
-   * being recorded against and for the notice when a change strands one. Built by the dialog, which
-   * is where the dictionaries are. */
+  /** How the chosen condition × certificate reads, for the line naming what the figure is being
+   * recorded against and for the notice when a change strands one. Built by the dialog, which is
+   * where the dictionaries are. The format is deliberately absent — see the module header. */
   subjectLabel,
   columns,
   disabled,
@@ -73,7 +76,6 @@ export function IntakeCatalogValueField({
   stampId: string;
   conditionId: string;
   certificateStatusId: string;
-  formatId: string;
   subjectLabel: string;
   /** How many equal columns the condition row above is drawn in — two, or three once the collection
    * defines formats (#573). The input takes exactly one of them, so it lines up with the Condition
@@ -94,7 +96,7 @@ export function IntakeCatalogValueField({
   /** One shot, spent whether or not it was taken — see the focus effect below. */
   const focusClaim = useRef(false);
 
-  const key = catalogValueSubjectKey(stampId, conditionId, certificateStatusId, formatId);
+  const key = catalogValueSubjectKey(stampId, conditionId, certificateStatusId);
   /** The subject the dialog opened on, kept for the focus effect below. */
   const openedOn = useRef(key);
 
@@ -109,11 +111,13 @@ export function IntakeCatalogValueField({
     let active = true;
     (async () => {
       const { getQuickCatalogPriceContextAction } = await import("@/app/actions/stamps");
+      // Read at the single, for the reason the write goes there — the format picked beside this
+      // field never moves which row is being read or shown.
       const r = await getQuickCatalogPriceContextAction(
         stampId,
         conditionId,
         certificateStatusId || null,
-        formatId || null
+        null
       );
       if (!active) return;
       // A failed read is the same as no catalogue: the field simply is not there. This dialog is

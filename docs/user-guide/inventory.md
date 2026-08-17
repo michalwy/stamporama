@@ -589,9 +589,10 @@ A value that had to be **derived** from the single by a multiplier is shown in g
 leading `~`, the same marking used for an estimate from an unidentified variant — hover it to see
 which of the two it is. An issue's total says how many of its stamps were counted that way.
 
-The **+ catalog value** link records against the format on screen, so a value typed while a block
-column is showing is stored as the block's price, not the single's. The dialog's condition badge
-names the format so there is no doubt about what is being written.
+The **+ catalog value** link always records the **single's** value, even while a block column is
+showing — see [Adding a catalog value](#adding-a-catalog-value) below. What the switcher changes is
+what the dialog *tells* you: it works the block's value out from the single you are typing and shows
+it under the input.
 
 ## Adding a catalog value
 
@@ -602,6 +603,21 @@ stamp, its catalog numbers, the copy's condition (and any certificate), and any 
 recorded, with one input per catalog active on the stamp's area — the primary catalog focused
 first. Enter the value(s) and save; each lands on the latest edition of its catalog for this
 condition, and the copy's value updates in place.
+
+**It always records the single's value** — never a block's, a pair's or a strip's, whatever format
+the copy or the column on screen is. Catalogues quote singles, and the app works a multiple out from
+that figure using the format's multiplier, so a single value keeps every multiple of that stamp
+right at once. When the copy on screen is not a single, a small line under each input says what it
+comes to: *4-blk: × 2.2 = 27.50 EUR*, recalculated as you type. Two things it also tells you there:
+
+- if a value is **already recorded explicitly** for that format, it is named — the multiplier does
+  not apply to it, and nothing you type here changes it;
+- if **no multiplier is set** for that format, it says so — the copy stays unpriced until you set
+  one, or price the format explicitly.
+
+To price a multiple *differently* from what the multiplier gives — a block that a catalogue prices
+in its own right — use the stamp's **Prices** tab (a copy's **⋮** → **Edit stamp**), which shows the
+whole condition × format grid and what each derived value would otherwise have been.
 
 To work through the gaps in bulk, turn on the **Missing catalog value** filter to list only the
 copies that still need pricing, then click each row's **+ catalog value** in turn.
