@@ -259,6 +259,48 @@ the empty token, as usual. Keep the body on one line if you prefer the legend in
 `{#conditionLegend}{conditionAbbr} = {condition}, {/conditionLegend}` — the separator is literal
 text, so the last entry keeps its trailing comma.
 
+### Saying that the variant was not identified
+
+Some pieces cannot be pinned down to one specific variant — a shade needs comparison material, a gum
+variety is unidentifiable on a used stamp. Stamporama lists such a copy under its **cheapest**
+variant (see [Offers](offers.md)), which means the marketplace page names one particular variant
+while the piece in the envelope might be any of them. `{#unknownVariant}…{/unknownVariant}` is how
+your description says so:
+
+```
+{#copy}{catalog} {name} — {conditionAbbr}
+{/copy}
+{#unknownVariant}The variant is not identified — this is one of {variants}.
+It is offered under {listedAs}.
+{/unknownVariant}
+```
+
+- `{listedAs}` is the variant the listing stands under, e.g. `Mi·PL 865a`.
+- `{variants}` is what it might be — the stamp's own variants, collapsed into a range the same way a
+  title collapses catalog numbers, e.g. `Mi·PL 865a-c`.
+
+The block renders **nothing at all** when nothing in the offer is unidentified, so a template can
+carry it permanently. Written at the top level it states the caveat once for the whole listing;
+written *inside* `{#copy}` it becomes a per-copy aside, appearing only on the lines it applies to:
+
+```
+{#copy}{catalog} {name}{#unknownVariant} (offered as {listedAs}){/unknownVariant}
+{/copy}
+```
+
+Everything inside the block describes only the unidentified copies, never the identified ones beside
+them in the same listing — so `{catalog}` there names exactly the pieces the sentence is about.
+
+`{listedAs}` is empty on a platform that is not listed against a catalogue (that is, one with no
+Colnect connection set up in Settings → Colnect), and on a piece whose variant tree the app cannot
+resolve yet — for instance while some of the variants still have no catalog price. Give it a line of
+its own, as above: a line whose placeholders all came out empty is dropped whole, so the caveat still
+reads properly when there is no variant to name.
+
+Both tokens and the block are for the description and the private note only: put one in a **title**
+and it renders empty, since a title has no room for the caveat and a range there would read as a span
+you are selling.
+
 Blank means *no text is generated at all* for that field — unlike the title, there is no built-in
 default.
 

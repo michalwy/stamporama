@@ -95,6 +95,7 @@ import {
   titleFallbacks,
   listingFallbacks,
   templateUsesOfferContext,
+  templateUsesListedAs,
   type TitleSegment,
   type TitleFallback,
   type TemplateSet,
@@ -314,6 +315,10 @@ async function assertPlatform(
       /** How a new offer here is sold by default (#449), or null for "no preference" — read at
        * creation exactly as the price above is, and outranked by anything the form states. */
       defaultListingType: string | null;
+      /** The extension's platform module (#406), or null for a marketplace listed by hand. Read here
+       * because a generated listing text can name the catalogue entry the piece stands under
+       * (`{listedAs}`, #619), which only a platform listing *against* a catalogue has. */
+      platformModule: string | null;
     }
 > {
   const contact = await prisma.contact.findFirst({
@@ -322,6 +327,7 @@ async function assertPlatform(
       platformCurrency: true,
       defaultStartingPrice: true,
       defaultListingType: true,
+      platformModule: true,
       titleTemplate: true,
       descriptionTemplate: true,
       privateNoteTemplate: true,
@@ -341,6 +347,7 @@ async function assertPlatform(
     platformCurrency: contact.platformCurrency,
     defaultStartingPrice: contact.defaultStartingPrice?.toFixed(2) ?? null,
     defaultListingType: contact.defaultListingType,
+    platformModule: contact.platformModule,
     titleTemplate: contact.titleTemplate,
     descriptionTemplate: contact.descriptionTemplate,
     privateNoteTemplate: contact.privateNoteTemplate,
@@ -492,6 +499,11 @@ export type OfferTextField = "name" | "description" | "privateNote";
  * `offerId` is the offer these texts belong to, for the tokens that describe the *offer* rather than
  * its copies (#415). Null while an offer is being created — its row does not exist yet — which makes
  * `{offerUrl}` render empty; {@link syncOfferContextTexts} renders it again once the id is real.
+ *
+ * `platformModule` (#406) decides whether `{listedAs}` (#619) can say anything: the variant a listing
+ * stands under is a claim about the platform's own catalogue, so a marketplace listing by category
+ * gets an empty token rather than a number read off a catalogue it is not in (#493's rule). The other
+ * two unknown-variant additions are facts about the goods and are resolved for every platform.
  */
 async function generateListingTexts(
   ownerId: string,
@@ -499,7 +511,8 @@ async function generateListingTexts(
   composition: readonly OfferComposition[],
   templates: PlatformTemplates,
   language: string | null,
-  offerId: string | null
+  offerId: string | null,
+  platformModule: string | null
 ): Promise<GeneratedListingTexts> {
   const configured = (t: string | null) => (t?.trim() ? t : null);
   const title = configured(templates.titleTemplate);
@@ -509,10 +522,11 @@ async function generateListingTexts(
   if (copyCount === 0 || (!title && !description && !privateNote)) {
     return { name: null, description: null, privateNote: null };
   }
-  const [sets, context] = await Promise.all([
-    templateSets(ownerId, collectionId, composition, language),
+  const [context, listedAs] = await Promise.all([
     listingContext(collectionId, offerId, [description, privateNote]),
+    listedAsByItem(collectionId, composition, platformModule, [description, privateNote]),
   ]);
+  const sets = await templateSets(ownerId, collectionId, composition, language, listedAs);
   const copies = sets.flatMap((s) => [...s.copies]);
   return {
     name: title ? renderTitleTemplate(title, copies) || null : null,
@@ -542,6 +556,65 @@ async function listingContext(
   };
 }
 
+/** Which catalogue entry each copy's listing stands under, for `{listedAs}` (#619) — keyed by copy
+ * id, and holding only the copies that resolved to a variant at all.
+ *
+ * It is #616's own answer, read through the one function that derives it, so a description cannot
+ * name a different variant than the form is filled with. Three things make it free for every render
+ * that does not ask: a template naming no `{listedAs}` (the guard `{offerUrl}`'s slug lookup uses,
+ * #415), a platform listing against no catalogue (#493), and an offer with no copies. Where it *is*
+ * asked, the rollup costs one valuation pass over the whole composition — which is why the copies are
+ * resolved in one call rather than one per set.
+ *
+ * The **title** is deliberately not offered the token's value: `{listedAs}` is not a title token, and
+ * a title regenerating on every composition change must not pay for a valuation. It renders empty
+ * there, `{offerUrl}`'s rule exactly. */
+async function listedAsByItem(
+  collectionId: string,
+  composition: readonly OfferComposition[],
+  platformModule: string | null,
+  templates: readonly (string | null)[]
+): Promise<Map<string, string>> {
+  if (!usesPlatformCatalogue(platformModule) || !templates.some((t) => templateUsesListedAs(t))) {
+    return new Map();
+  }
+  const itemIds = [...new Set(composition.flatMap((s) => [...s.itemIds]))];
+  if (itemIds.length === 0) return new Map();
+  const [items, labeller] = await Promise.all([
+    prisma.item.findMany({
+      where: { id: { in: itemIds }, collectionId },
+      select: {
+        id: true,
+        stampId: true,
+        conditionId: true,
+        certificateStatusId: true,
+        formatId: true,
+        stamp: { select: { colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+      },
+    }),
+    makeOfferLabeller(collectionId),
+  ]);
+  const resolved = await resolveListingCatalogItemIds(
+    collectionId,
+    items.map((item) => ({
+      itemId: item.id,
+      stampId: item.stampId,
+      conditionId: item.conditionId,
+      certificateStatusId: item.certificateStatusId,
+      formatId: item.formatId,
+      unknownVariant: isUnknownVariantStamp(item.stamp),
+      ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+    })),
+    labeller
+  );
+  // `sourceLabel` is non-null exactly where the listing was derived from a variant — an umbrella
+  // matched by hand keeps its own entry and has no variant to name, and a tree that could not be
+  // resolved (#617) has none either. Both leave the token empty, which the tidy passes already handle.
+  return new Map(
+    [...resolved].flatMap(([itemId, r]) => (r.sourceLabel ? ([[itemId, r.sourceLabel]] as const) : []))
+  );
+}
+
 /** Whether a platform's listing templates hold anything that only exists once the offer's row does
  * (#415) — the one reason a freshly created offer has to render its texts a second time. */
 function platformTemplatesUseOfferContext(templates: PlatformTemplates): boolean {
@@ -552,18 +625,26 @@ function platformTemplatesUseOfferContext(templates: PlatformTemplates): boolean
 }
 
 /** A composition normalised into the engine's `TemplateSet`s — one query for every copy involved,
- * preserving set order and each set's copy order (so a regenerated text is stable). */
+ * preserving set order and each set's copy order (so a regenerated text is stable). `listedAs`
+ * (#619) is folded onto the copies here because that is the last point a copy still has an id: the
+ * engine's `TitleTemplateCopy` deliberately carries none. */
 async function templateSets(
   ownerId: string,
   collectionId: string,
   composition: readonly OfferComposition[],
-  language: string | null
+  language: string | null,
+  listedAs: ReadonlyMap<string, string> = new Map()
 ): Promise<TemplateSet[]> {
   const itemIds = [...new Set(composition.flatMap((s) => [...s.itemIds]))];
   const byId = await titleCopiesById(ownerId, collectionId, itemIds, language);
   return composition.map((s) => ({
     title: s.title,
-    copies: s.itemIds.map((id) => byId.get(id)).filter((c) => c != null),
+    copies: s.itemIds.flatMap((id) => {
+      const copy = byId.get(id);
+      if (!copy) return [];
+      const variant = listedAs.get(id);
+      return [variant ? { ...copy, listedAs: variant } : copy];
+    }),
   }));
 }
 
@@ -4129,7 +4210,8 @@ export async function createOffer(
     platform,
     platform.titleLanguage,
     // No id yet — a template using `{offerUrl}` is rendered again below, once the row exists (#415).
-    null
+    null,
+    platform.platformModule
   );
 
   // The offer's own photo configuration (#308), copied from the platform's defaults and its default
@@ -4291,7 +4373,8 @@ export async function duplicateOffer(
     cloneSets,
     platform,
     platform.titleLanguage,
-    null // as in `createOffer` (#415): the clone's own id exists only after the transaction.
+    null, // as in `createOffer` (#415): the clone's own id exists only after the transaction.
+    platform.platformModule
   );
 
   // Photo configuration follows the same rule as the texts (#308): the clone is a listing on another
@@ -4630,7 +4713,8 @@ export async function regenerateOfferText(
     composition,
     only,
     language === undefined ? platform.titleLanguage : language,
-    offerId
+    offerId,
+    platform.platformModule
   );
   const value = texts[field];
   // What the field said before, so a ↻ that reproduces the text already there is not reported as a
@@ -4765,7 +4849,8 @@ async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<voi
     composition,
     templates,
     platform.titleLanguage,
-    offerId
+    offerId,
+    platform.platformModule
   );
   // A field whose template rendered nothing at all (an empty offer, every token blank) keeps what it
   // has: the derived label already stands in for a missing title, and blanking a description because

@@ -7,6 +7,7 @@ import {
   listingFallbackTokens,
   listingFallbacks,
   templateUsesOfferContext,
+  templateUsesListedAs,
   AVAILABLE_LISTING_TOKENS,
   AVAILABLE_LISTING_BLOCKS,
   type TemplateSet,
@@ -51,6 +52,9 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     formatAbbr: null,
     issueName: null,
     issueYear: null,
+    unknownVariant: false,
+    variants: null,
+    listedAs: null,
     ...over,
   };
 }
@@ -306,6 +310,110 @@ describe("{offerUrl} (#415)", () => {
   });
 });
 
+// A piece whose variant was never identified (#619): the listing stands under one specific variant
+// and the buyer has to be told that, which variant it might be, and which one it is sold under.
+describe("{#unknownVariant} and its tokens (#619)", () => {
+  const umbrella = copy({
+    name: "Mercury",
+    catalogNumbers: [cn("Mi", "865")],
+    unknownVariant: true,
+    variants: "Mi 865a-c",
+    listedAs: "Mi 865a",
+  });
+  const identified = copy({ name: "Venus", catalogNumbers: [cn("Mi", "13")] });
+
+  it("renders once over the copies whose variant is unknown", () => {
+    assert.equal(
+      renderListingTemplate("{#unknownVariant}Sold as {listedAs}, one of {variants}.{/unknownVariant}", [
+        { title: null, copies: [umbrella] },
+      ]),
+      "Sold as Mi 865a, one of Mi 865a-c."
+    );
+  });
+
+  it("renders nothing at all when every copy is identified", () => {
+    assert.equal(
+      renderListingTemplate("{name}\n{#unknownVariant}Variant not identified.{/unknownVariant}", [
+        { title: null, copies: [identified] },
+      ]),
+      "Venus"
+    );
+  });
+
+  it("narrows to the unidentified copies, never the ones standing beside them", () => {
+    assert.equal(
+      renderListingTemplate("{#unknownVariant}{catalog}: one of {variants}{/unknownVariant}", [
+        { title: null, copies: [identified, umbrella] },
+      ]),
+      "Mi 865: one of Mi 865a-c"
+    );
+  });
+
+  it("renders once for the whole description, however many umbrellas it lists", () => {
+    const other = copy({
+      name: "Mars",
+      catalogNumbers: [cn("Mi", "900")],
+      unknownVariant: true,
+      variants: "Mi 900I-II",
+      listedAs: "Mi 900I",
+    });
+    assert.equal(
+      renderListingTemplate("{#unknownVariant}Unidentified: {variants}{/unknownVariant}", [
+        { title: null, copies: [umbrella] },
+        { title: null, copies: [other] },
+      ]),
+      "Unidentified: Mi 865a-c / Mi 900I-II"
+    );
+  });
+
+  it("becomes a per-copy caveat inside {#copy}, skipping the identified ones", () => {
+    assert.equal(
+      renderListingTemplate(
+        "{#copy}{catalog} {name}{#unknownVariant} (sold as {listedAs}){/unknownVariant}\n{/copy}",
+        [{ title: null, copies: [umbrella, identified] }]
+      ),
+      "Mi 865 Mercury (sold as Mi 865a)\nMi 13 Venus"
+    );
+  });
+
+  it("drops a line whose only tokens were an unresolved listing's", () => {
+    const unresolved = copy({ name: "Mars", unknownVariant: true, variants: "Mi 900a-b" });
+    assert.equal(
+      renderListingTemplate(
+        "{#unknownVariant}Sold as: {listedAs}\nOne of: {variants}{/unknownVariant}",
+        [{ title: null, copies: [unresolved] }]
+      ),
+      "One of: Mi 900a-b"
+    );
+  });
+
+  it("keeps an unbalanced tag literal, like every other block", () => {
+    assert.equal(
+      renderListingTemplate("{#unknownVariant}{name}", [{ title: null, copies: [umbrella] }]),
+      "{#unknownVariant}Mercury"
+    );
+  });
+
+  it("says nothing in a title — empty tokens rather than literal braces, and no block", () => {
+    assert.equal(renderTitleTemplate("{name} {listedAs} {variants}", [umbrella]), "Mercury");
+    assert.equal(
+      renderTitleTemplate("{name}{#unknownVariant} — variant unknown{/unknownVariant}", [umbrella]),
+      "Mercury"
+    );
+  });
+});
+
+describe("templateUsesListedAs (#619)", () => {
+  it("spots the token, in a fallback group too, and ignores everything else", () => {
+    assert.equal(templateUsesListedAs("Sold as {listedAs}"), true);
+    assert.equal(templateUsesListedAs("{listedAs|catalog}"), true);
+    assert.equal(templateUsesListedAs("{LISTEDAS}"), true);
+    assert.equal(templateUsesListedAs("{#unknownVariant}One of {variants}{/unknownVariant}"), false);
+    assert.equal(templateUsesListedAs("listedAs without braces"), false);
+    assert.equal(templateUsesListedAs(null), false);
+  });
+});
+
 describe("templateUsesOfferContext (#415)", () => {
   it("spots the token, in a fallback group too, and ignores everything else", () => {
     assert.equal(templateUsesOfferContext("Link: {offerUrl}"), true);
@@ -318,10 +426,12 @@ describe("templateUsesOfferContext (#415)", () => {
 });
 
 describe("listing token legend", () => {
-  it("offers the title tokens plus {setTitle} and {offerUrl}, and the repeating blocks", () => {
+  it("offers the title tokens plus the listing-only ones, and every block", () => {
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{setTitle}"));
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{offerUrl}"));
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{catalog}"));
+    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{listedAs}"));
+    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{variants}"));
     assert.deepEqual(
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),
       [
@@ -330,6 +440,7 @@ describe("listing token legend", () => {
         "{#conditionLegend}{/conditionLegend}",
         "{#certificateLegend}{/certificateLegend}",
         "{#formatLegend}{/formatLegend}",
+        "{#unknownVariant}{/unknownVariant}",
       ]
     );
   });

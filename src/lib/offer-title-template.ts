@@ -20,6 +20,13 @@
 // appends a legend of the abbreviations it just printed — the collector writes the entry's format
 // inside the block.
 //
+// A listing text can also say that a piece was **not identified down to its variant** (#619):
+// `{#unknownVariant}…{/unknownVariant}` is the engine's one *conditional* block — it renders its body
+// once, over the copies in scope that are unknown-variant umbrellas, and not at all when there are
+// none — and `{listedAs}` / `{variants}` name the variant the listing stands under and the ones it
+// might actually be. Both arrive as resolved strings on the copy, so the engine still knows nothing
+// about the rollup that derived them.
+//
 // Those texts also carry the one token that is **not** about the copies at all: `{offerUrl}` (#415),
 // the offer's own screen on this instance, which reaches the engine through a
 // `ListingTemplateContext` rather than through `TitleTemplateCopy`. Everything here stays pure — the
@@ -88,6 +95,22 @@ export interface TitleTemplateCopy {
   issueName: string | null;
   /** Year of that issue, or null. */
   issueYear: number | null;
+  /** True when the copy's stamp is an **unknown-variant umbrella** (#238/#239, ADR-0010 §3): it has
+   * variant children and which of them this piece is was never identified. A fact about the *goods*,
+   * so it holds whatever platform the offer is on — it is what `{#unknownVariant}` tests (#619). */
+  unknownVariant: boolean;
+  /** What the piece might be: the umbrella's **direct** variant children, already prefixed and
+   * collapsed into a range (`Mi·PL 865a-c`) by the caller. Null on anything that is not an umbrella.
+   * Direct children rather than every descendant leaf, because *which of these is it* is the question
+   * the collector could not answer, and a flattened deep tree names variants nobody was choosing
+   * between. */
+  variants: string | null;
+  /** What the piece is being **sold as**: the variant this listing resolved to (#616's
+   * `sourceStampId`), named by its own catalog number with the same prefixes (`Mi·PL 865a`). Null
+   * wherever nothing was rolled up — an umbrella matched by hand, a platform that lists against no
+   * catalogue at all, a tree that cannot be resolved — which renders the token empty and takes its
+   * glue separator with it. */
+  listedAs: string | null;
   /** Which of the translatable fields above rendered **untranslated** text for the language the copy
    * was resolved in (#298), and which entity row each one came from (#299). Absent / empty when
    * nothing fell back, which is also the case for a copy resolved without a language. */
@@ -115,7 +138,8 @@ export interface TitleFallback {
 
 /** The translatable fields of a {@link TitleTemplateCopy} — the ones that can appear in
  * `fallbacks`, keyed by the lower-cased token name that renders them. `{catalog}`, `{year}`,
- * `{issueYear}`, `{location}`, `{ref}` and `{itemNo}` are not translatable and never flag. */
+ * `{issueYear}`, `{location}`, `{ref}`, `{itemNo}`, `{listedAs}` and `{variants}` are not
+ * translatable and never flag — the last two are catalog numbers, which no language rewrites. */
 const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   name: "name",
   condition: "condition",
@@ -180,20 +204,36 @@ export function templateUsesOfferContext(template: string | null | undefined): b
   return /\{[^{}]*\bofferUrl\b[^{}]*\}/i.test(template ?? "");
 }
 
+/** Whether `template` asks which variant the listing resolved to (#619). The same guard
+ * {@link templateUsesOfferContext} is: `{listedAs}` is the only one of the three unknown-variant
+ * additions whose value is not a fact about the stamp, so it costs a valuation pass (#616's rollup)
+ * to answer — and a template that never names it must not pay for one. `{#unknownVariant}` and
+ * `{variants}` need no guard: they read the copy's own variant children, which the normalisation
+ * already carries. */
+export function templateUsesListedAs(template: string | null | undefined): boolean {
+  return /\{[^{}]*\blistedAs\b[^{}]*\}/i.test(template ?? "");
+}
+
 /** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
  * `{setTitle}`, which only names something inside a `{#set}` block (or when the template renders one
- * set's own title), and `{offerUrl}` (#415), which is a fact about the offer rather than its copies:
- * a link on a marketplace page back to the listing's own screen here. It is deliberately **not** a
- * title token — a URL in a listing title is nothing a buyer wants to read — so it resolves empty
- * there, exactly as it does in a preview. */
+ * set's own title); `{listedAs}` / `{variants}` (#619), which say which catalogue entry a piece that
+ * was not identified down to its variant is being sold under and which ones it might be; and
+ * `{offerUrl}` (#415), which is a fact about the offer rather than its copies: a link on a
+ * marketplace page back to the listing's own screen here. None of the four is a title token — a URL
+ * is nothing a buyer wants to read in a title, and the variant caveat wants a sentence rather than a
+ * fragment of one — so each resolves empty there rather than showing literal braces, exactly as in a
+ * preview. */
 export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
   ...AVAILABLE_TITLE_TOKENS,
   { token: "{setTitle}", label: "Set title", example: "Complete series" },
+  { token: "{listedAs}", label: "Listed as (variant)", example: "Mi·PL 865a" },
+  { token: "{variants}", label: "Possible variants", example: "Mi·PL 865a-c" },
   { token: "{offerUrl}", label: "Offer link", example: EXAMPLE_OFFER_URL },
 ];
 
-/** The repeating blocks a listing text may use (#266), for the builder's chips: each renders its
- * body once per set / per copy in scope. */
+/** The blocks a listing text may use (#266), for the builder's chips: each renders its body once per
+ * set / per copy / per distinct dictionary entry in scope — except the last, which repeats nothing
+ * and is simply skipped when nothing in scope is an unknown-variant umbrella (#619). */
 export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; label: string }[] = [
   { open: "{#set}", close: "{/set}", label: "Repeat once per set in the offer" },
   { open: "{#copy}", close: "{/copy}", label: "Repeat once per copy (of the enclosing set)" },
@@ -211,6 +251,11 @@ export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; l
     open: "{#formatLegend}",
     close: "{/formatLegend}",
     label: "Repeat once per distinct format used — singles are not listed",
+  },
+  {
+    open: "{#unknownVariant}",
+    close: "{/unknownVariant}",
+    label: "Only when a copy's variant was not identified — narrowed to those copies",
   },
 ];
 
@@ -590,7 +635,8 @@ function resolveTokenValue(
   spec: string,
   copies: readonly TitleTemplateCopy[],
   setTitle: string | null,
-  context: ListingTemplateContext
+  context: ListingTemplateContext,
+  listingText: boolean
 ): string | null {
   const segments = spec.split(":");
   const name = segments[0].trim().toLowerCase();
@@ -601,6 +647,16 @@ function resolveTokenValue(
     // it simply has nothing to render there, like a certificate token on a copy without one.
     case "offerurl":
       return context.offerUrl?.trim() ?? "";
+    // Known everywhere for the same reason (#619), and **blank outside a listing text**: unlike
+    // `{offerUrl}`, whose value simply is not there in a title, theirs rides on the copy and would
+    // otherwise render — see {@link TemplateScope.listingText} for why a title must not print it.
+    // Both are catalog numbers already prefixed and collapsed by the caller, so they join across
+    // copies exactly as `{catalog}`'s groups do: two umbrellas in one offer name two ranges, and two
+    // copies of one umbrella name it once.
+    case "listedas":
+      return listingText ? distinct(copies.map((c) => c.listedAs)).join(" / ") : "";
+    case "variants":
+      return listingText ? distinct(copies.map((c) => c.variants)).join(" / ") : "";
     case "name":
       return distinct(copies.map((c) => c.name)).join(" / ");
     case "catalog":
@@ -680,7 +736,8 @@ function resolvePlaceholder(
   inner: string,
   copies: readonly TitleTemplateCopy[],
   setTitle: string | null = null,
-  context: ListingTemplateContext = NO_CONTEXT
+  context: ListingTemplateContext = NO_CONTEXT,
+  listingText = false
 ): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
   const resolved = (value: string, spec: string): ResolvedPlaceholder => {
@@ -688,13 +745,13 @@ function resolvePlaceholder(
     return { value, spec, fellBack: fallbacks.length > 0, fallbacks };
   };
   if (parts.length === 1) {
-    const v = resolveTokenValue(parts[0], copies, setTitle, context);
+    const v = resolveTokenValue(parts[0], copies, setTitle, context, listingText);
     // unknown → literal (no token produced it); known → value (maybe "")
     if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false, fallbacks: [] };
     return resolved(v, parts[0]);
   }
   for (const p of parts) {
-    const v = resolveTokenValue(p, copies, setTitle, context);
+    const v = resolveTokenValue(p, copies, setTitle, context, listingText);
     // first non-empty (skips unknown → null and empty → "")
     if (v) return resolved(v, p);
   }
@@ -769,13 +826,31 @@ interface TemplateScope {
   copies: readonly TitleTemplateCopy[];
   setTitle: string | null;
   context: ListingTemplateContext;
+  /** Whether this render is a **multi-line listing text** (#266/#267) rather than a one-line title.
+   * Only the unknown-variant tokens read it (#619): unlike `{offerUrl}`, whose value simply is not
+   * there in a title, theirs rides on the copy and would otherwise render — and a variant caveat
+   * belongs in a sentence, not in the line a buyer scans. A range in a title would be worse than
+   * noise: `Mi 865a-c` there reads as a span the listing holds. So a title renders them empty, and
+   * they are absent from {@link AVAILABLE_TITLE_TOKENS} for the same reason. */
+  listingText: boolean;
 }
 
-/** What a repeating block iterates: the offer's sets, the copies in scope, or — for a legend of
+/** What a block iterates: the offer's sets, the copies in scope, or — for a legend of
  * abbreviations (#318) — the distinct conditions / certificate statuses those copies use. The legend
  * blocks are named `…Legend` rather than after the dictionary itself so `{#conditionLegend}` cannot
- * be misread as the `{condition}` token it is normally wrapped around. */
-type BlockOver = "set" | "copy" | "conditionLegend" | "certificateLegend" | "formatLegend";
+ * be misread as the `{condition}` token it is normally wrapped around.
+ *
+ * `unknownVariant` (#619) is the one that iterates nothing: it renders **once or not at all**, which
+ * is what makes it the engine's only conditional. It is named after the state the rest of the app
+ * calls by that name (#238/#239) rather than after what it does, so a collector reading a template
+ * meets one word for one thing. */
+type BlockOver =
+  | "set"
+  | "copy"
+  | "conditionLegend"
+  | "certificateLegend"
+  | "formatLegend"
+  | "unknownVariant";
 
 /** The legend blocks, and which pair of {@link TitleTemplateCopy} fields each iterates. */
 type LegendOver = "conditionLegend" | "certificateLegend" | "formatLegend";
@@ -791,6 +866,7 @@ const BLOCK_TAGS: readonly BlockOver[] = [
   "conditionLegend",
   "certificateLegend",
   "formatLegend",
+  "unknownVariant",
 ];
 
 const BLOCK_TAG_RE = new RegExp(`\\{(${BLOCK_TAGS.map((t) => `#${t}|/${t}`).join("|")})\\}`, "g");
@@ -837,7 +913,8 @@ function renderTextRun(text: string, scope: TemplateScope): string {
       inner,
       scope.copies,
       scope.setTitle,
-      scope.context
+      scope.context,
+      scope.listingText
     );
     if (value === "") return EMPTY_MARK;
     if (spec === null) return value; // unknown token → literal
@@ -900,15 +977,50 @@ function legendScopes(scope: TemplateScope, over: LegendOver): TemplateScope[] {
       copies: sets.flatMap((s) => [...s.copies]),
       setTitle: scope.setTitle,
       context: scope.context,
+      listingText: scope.listingText,
     };
   });
+}
+
+/** Narrow `scope` to the copies whose variant was never identified (#619), as the **one** iteration
+ * `{#unknownVariant}` renders — or none at all, which is how the block comes out as a conditional
+ * rather than a repeat.
+ *
+ * One rule covers both places a template puts it. At description level the scope is every copy of the
+ * offer, so the body renders once for all the umbrellas together and `{variants}` lists each of their
+ * ranges. Inside `{#copy}` the scope is already a single copy, so the same rule renders the body once
+ * for a copy that qualifies and skips it for one that does not — which is the per-copy caveat, without
+ * a second kind of block to explain it.
+ *
+ * Narrowing rather than merely testing is what makes the body worth writing: `{catalog}`, `{listedAs}`
+ * and `{variants}` inside it describe exactly the pieces the caveat is about, never the identified
+ * ones standing beside them in the same listing. That is `legendScopes`' rule, for the same reason.
+ *
+ * Outside a listing text it renders nothing at all, its tokens' rule exactly: the caveat is a
+ * sentence, and there is no room for one in a title. */
+function unknownVariantScopes(scope: TemplateScope): TemplateScope[] {
+  if (!scope.listingText) return [];
+  const sets = scope.sets
+    .map((s) => ({ title: s.title, copies: s.copies.filter((c) => c.unknownVariant) }))
+    .filter((s) => s.copies.length > 0);
+  if (sets.length === 0) return [];
+  return [
+    {
+      sets,
+      copies: sets.flatMap((s) => [...s.copies]),
+      setTitle: scope.setTitle,
+      context: scope.context,
+      listingText: scope.listingText,
+    },
+  ];
 }
 
 /** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
  * with tokens narrowed to that set's copies; a `{#copy}` block once per copy in scope — nested in a
  * set block that means that set's copies, at the top level every copy of the offer. The legend blocks
  * `{#conditionLegend}` / `{#certificateLegend}` (#318) / `{#formatLegend}` (#345) repeat once per
- * distinct dictionary entry the copies use, narrowed to the copies using it. */
+ * distinct dictionary entry the copies use, narrowed to the copies using it; `{#unknownVariant}`
+ * (#619) renders once, narrowed to the copies whose variant was never identified, or not at all. */
 function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): string {
   let out = "";
   for (const node of nodes) {
@@ -923,14 +1035,18 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
             copies: s.copies,
             setTitle: s.title,
             context: scope.context,
+            listingText: scope.listingText,
           }))
-        : node.over in LEGEND_FIELDS
+        : node.over === "unknownVariant"
+          ? unknownVariantScopes(scope)
+          : node.over in LEGEND_FIELDS
           ? legendScopes(scope, node.over as LegendOver)
           : scope.copies.map((c) => ({
               sets: [{ title: scope.setTitle, copies: [c] }],
               copies: [c],
               setTitle: scope.setTitle,
               context: scope.context,
+              listingText: scope.listingText,
             }));
     for (const iteration of iterations) {
       const body = renderNodes(node.body, iteration);
@@ -943,12 +1059,14 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
 /** The top-level scope for a render: plain tokens aggregate over every copy of every set. */
 function rootScope(
   sets: readonly TemplateSet[],
-  context: ListingTemplateContext = NO_CONTEXT
+  context: ListingTemplateContext = NO_CONTEXT,
+  listingText = false
 ): TemplateScope {
   return {
     sets,
     copies: sets.flatMap((s) => [...s.copies]),
     context,
+    listingText,
     // `{setTitle}` outside a block only names something when the render *is* one set (generating a
     // set's own title); across several sets there is no single title to use.
     setTitle: sets.length === 1 ? sets[0].title : null,
@@ -992,7 +1110,7 @@ function renderSegments(
   const tpl = template?.trim() || opts.fallbackTemplate?.trim() || "";
   if (!tpl) return [];
   const nodes: TemplateNode[] = parseTemplateNodes(tpl) ?? [{ kind: "text", text: tpl }];
-  const rendered = renderNodes(nodes, rootScope(sets, opts.context));
+  const rendered = renderNodes(nodes, rootScope(sets, opts.context, opts.multiline ?? false));
   const tidied = opts.multiline ? tidyMultiline(rendered) : tidyLine(rendered);
   if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
   return tidied
@@ -1051,6 +1169,9 @@ export function renderTitleTemplateSegments(
  * `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
  * A blank template renders "" — unlike the title there is no built-in default, because "no
  * description template" means the offer simply gets none.
+ *
+ * This is also the only mode that renders the unknown-variant caveat (#619) — `{#unknownVariant}` and
+ * its `{listedAs}` / `{variants}` tokens — since a title has no room for it.
  *
  * `context` carries what the copies cannot answer (#415) — the offer's own link. Omitted, its tokens
  * render empty rather than literal, which is what a preview and a not-yet-created offer both want.

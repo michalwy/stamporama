@@ -327,6 +327,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         subtype: null,
         catalogNumbers: [],
         stampAreaLinks: [],
+        variants: [],
         issueMemberships: [
           {
             issue: {

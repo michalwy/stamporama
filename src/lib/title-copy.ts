@@ -12,11 +12,14 @@ import { DEFAULT_ITEM_NO_PAD } from "./item-number";
 import {
   buildAreaVendorMaps,
   buildAreaTitleEntries,
+  catalogLabel,
   type AreaTitleEntry,
   type AreaVendorMaps,
 } from "./area-vendor";
 import { normalizeLanguage } from "./languages";
 import { resolveTranslationWithFallback } from "./translations";
+import { compactCatalogNumbers } from "./offer-title-template";
+import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -70,6 +73,22 @@ export const TITLE_COPY_SELECT = {
           },
         },
         take: 1,
+      },
+      // The stamp's **direct** children, behind `{#unknownVariant}` and `{variants}` (#619): whether
+      // any of them acts as a variant is what makes this copy an unidentified umbrella (ADR-0010 §3),
+      // and their numbers are what the listing text says the piece might be. Direct children only —
+      // *which of these is it* is the question the collector could not answer, and a flattened deep
+      // tree names variants nobody was choosing between. The denormalized catalog sort key (ADR-0014)
+      // and the id ride along because the text this feeds is **stored**: an order left to the database
+      // would rewrite a description on nothing but a re-read, so `toTitleCopy` pins one.
+      variants: {
+        select: {
+          id: true,
+          name: true,
+          primaryCatalogSortKey: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          ...VARIANT_FLAG_SELECT,
+        },
       },
     },
   },
@@ -127,6 +146,14 @@ export type TitleCopyRow = {
     stampAreaLinks: { isPrimary: boolean; collectionAreaId: string; collectionArea: { name: string } }[];
     issueMemberships: {
       issue: { id: string; name: string | null; year: number | null; translations: NameTranslation[] };
+    }[];
+    variants: {
+      id: string;
+      name: string | null;
+      primaryCatalogSortKey: number | null;
+      catalogNumbers: { catalogVendorId: string; number: string }[];
+      actsAsVariantOverride: boolean | null;
+      subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
     }[];
   };
   condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] };
@@ -194,6 +221,35 @@ export function toTitleCopy(
   // Primary vendor first (drives the default `{catalog}` selection + a stable render order); the
   // rest keep their recorded order.
   catalogNumbers.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+
+  // What the piece might be, when its variant was never identified (#619). Only children that
+  // actually *act* as variants count (ADR-0010 §3) — a distinct-entry child is another stamp, not
+  // another reading of this one — and each is named through `catalogLabel`, the shared rule every
+  // other surface names a stamp's number by, so the range reads in one notation with the copy's own
+  // `{catalog}`. They are resolved against the **umbrella's** area and issue rather than their own:
+  // a variant hangs under its parent, and the range only collapses (`865a-c`) while every member is
+  // written under one prefix. A child recording neither number nor name is left out entirely — the
+  // placeholder `catalogLabel` would return says nothing to a buyer.
+  const variantChildren = row.stamp.variants.filter(childIsVariant);
+  const variantLabels = [...variantChildren]
+    // Catalog order, with an id tiebreak — the same pairing an offer's own copy order falls back to
+    // (#306), and for the reason #429 added one: rows sharing a key must not swap places between two
+    // reads of a text that is written to the database.
+    .sort(
+      (a, b) =>
+        (a.primaryCatalogSortKey ?? Number.MAX_SAFE_INTEGER) -
+          (b.primaryCatalogSortKey ?? Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id)
+    )
+    .filter((v) => v.catalogNumbers.length > 0 || v.name)
+    .map((v) =>
+      catalogLabel(
+        { areaId, issueId: issue?.id ?? null, catalogNumbers: v.catalogNumbers, name: v.name },
+        maps
+      )
+    );
+  // #150's collapsing, through the one implementation of it — `123a,123b,123c,123d` is `123a-d` on
+  // every other surface and has to be here too.
+  const variants = variantLabels.length > 0 ? compactCatalogNumbers(variantLabels) || null : null;
 
   // Each translatable field resolves *and* reports whether it fell back; `fallbacks` collects the
   // ones that did, keyed by the `TitleTemplateCopy` field the token renders from and carrying the
@@ -285,6 +341,13 @@ export function toTitleCopy(
     area: areaTitle,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
+    // A fact about the stamp, so it is resolved wherever a copy is normalised (#619) — an umbrella
+    // is an umbrella on a marketplace that lists against no catalogue at all. What the listing
+    // *stands under* is not: `listedAs` is left null here and filled in by the offer's own text
+    // generation, which is the only caller that knows the platform and can pay for #616's rollup.
+    unknownVariant: variantChildren.length > 0,
+    variants,
+    listedAs: null,
     // Not translatable and not an entity — plain digits, so it never joins the fallback machinery.
     itemNo: row.itemNo,
     itemNoPad,

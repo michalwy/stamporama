@@ -72,6 +72,9 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     formatAbbr: null,
     issueName: null,
     issueYear: null,
+    unknownVariant: false,
+    variants: null,
+    listedAs: null,
     ...over,
   };
 }
