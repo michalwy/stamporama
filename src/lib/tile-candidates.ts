@@ -102,6 +102,49 @@ export function sharedVariantParent(
   return parent;
 }
 
+/**
+ * One shortlist over a **run of ticked tiles**, and how many of them carry each possibility.
+ *
+ * Ticking several tiles asserts they are the same stamp (#596), so *what they could be* is one
+ * question asked of the run rather than N private ones — five pieces narrowed to the same pair is
+ * one trip to the colour key, which is the whole of what a shortlist is for.
+ *
+ * **The union, never the intersection.** The tiles come to the selection with shortlists of their
+ * own — one was narrowed yesterday, another parked without a list — and an intersection would
+ * silently drop the very narrowing the collector is coming back to read. So every possibility any
+ * ticked tile carries is here, with `onCount` saying how many of them it is written on: a candidate
+ * on some-but-not-all is a fact about the run and is said in words rather than smoothed over.
+ * Adding writes to all of them and removing takes it off all of them, so the ordinary run converges
+ * on `onCount === total` and the partial state is what a mixed selection *arrives* in.
+ *
+ * Ordered by the tiles' own order, first appearance first — the shortlist has no order worth storing
+ * (`ScanTileCandidate` has no `position`), so the one it is drawn in is the card's.
+ */
+export interface MergedTileCandidate {
+  candidate: TileCandidate;
+  /** How many of the tiles in the selection carry this possibility. Equal to the selection's size
+   * for a shortlist that was built through it. */
+  onCount: number;
+}
+
+export function mergeTileCandidates(
+  tiles: readonly { candidates: readonly TileCandidate[] }[]
+): MergedTileCandidate[] {
+  const merged = new Map<string, MergedTileCandidate>();
+  for (const tile of tiles) {
+    // Per tile, so one tile listing a stamp twice — which the `(tileId, stampId)` primary key makes
+    // impossible in the database and which a caller could still hand in — cannot inflate the count
+    // past the number of tiles.
+    for (const stampId of new Set(tile.candidates.map((c) => c.stampId))) {
+      const candidate = tile.candidates.find((c) => c.stampId === stampId)!;
+      const seen = merged.get(stampId);
+      if (seen) seen.onCount += 1;
+      else merged.set(stampId, { candidate, onCount: 1 });
+    }
+  }
+  return [...merged.values()];
+}
+
 /** {@link sharedVariantParent}'s input, built from a stamp row selected with `VARIANT_FLAG_SELECT`
  * plus its parent — the one place the effective flag is resolved, so no caller has to remember the
  * `override ?? subtype ?? false` order. */

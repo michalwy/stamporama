@@ -27,12 +27,14 @@ import {
   addTileCandidate,
   assignTileToCopy,
   discardTile,
+  discardTiles,
   identifyTileAsNewCopy,
   identifyTilesAsNewCopies,
   noteTile,
   parkTile,
+  parkTiles,
   removeTileCandidate,
-  returnTileToQueue,
+  returnTilesToQueue,
 } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
 
@@ -653,7 +655,7 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // And it can be put back, because a mis-click on a card of forty should not need a re-cut —
     // which is exactly what makes the one-click discard safe.
-    await returnTileToQueue(userId, tileIds[0]);
+    await returnTilesToQueue(userId, [tileIds[0]]);
     const back = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(back.state, "unidentified");
     assert.equal(back.note, null);
@@ -709,7 +711,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   it("puts a parked tile back, and refuses a note once it is in the queue again (#597)", async () => {
     const { tileIds } = await orderWithTiles();
     await parkTile(userId, tileIds[0], "check perf against Mi 200");
-    await returnTileToQueue(userId, tileIds[0]);
+    await returnTilesToQueue(userId, [tileIds[0]]);
     const back = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(back.state, "unidentified");
     assert.equal(back.note, null, "the doubt was spent when the answer arrived");
@@ -735,11 +737,11 @@ describe("identifying scan tiles into copies (#567)", () => {
     // Listed **while the piece is on screen**, before the collector concludes it cannot be settled
     // here: the narrowing is what discovers that, so a shortlist that could only be written after
     // parking meant setting the tile aside and opening it again to say what was already in mind.
-    await addTileCandidate(userId, tileIds[0], variantAId);
+    await addTileCandidate(userId, [tileIds[0]], variantAId);
     await parkTile(userId, tileIds[0], "watermark?");
-    await addTileCandidate(userId, tileIds[0], variantBId);
+    await addTileCandidate(userId, [tileIds[0]], variantBId);
     // The same stamp twice is what a second press of it in the picker means — the pair is the row.
-    await addTileCandidate(userId, tileIds[0], variantAId);
+    await addTileCandidate(userId, [tileIds[0]], variantAId);
 
     const { batches } = await listPurchaseScans(userId, purchaseId);
     const parked = batches[0].tiles.find((t) => t.id === tileIds[0])!;
@@ -759,8 +761,8 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // A possibility ruled out costs what adding it did, and one that was never there is not an
     // error — the end state is what was asked for either way.
-    await removeTileCandidate(userId, tileIds[0], variantBId);
-    await removeTileCandidate(userId, tileIds[0], variantBId);
+    await removeTileCandidate(userId, [tileIds[0]], variantBId);
+    await removeTileCandidate(userId, [tileIds[0]], variantBId);
     assert.equal(
       await prisma.scanTileCandidate.count({ where: { tileId: tileIds[0] } }),
       1
@@ -778,14 +780,14 @@ describe("identifying scan tiles into copies (#567)", () => {
     // Put back: the answer is known (or it was a mis-click), so the doubt and everything written
     // about it are spent — the note's own rule.
     await parkTile(userId, tileIds[0], "dark or light blue?");
-    await addTileCandidate(userId, tileIds[0], variantAId);
-    await returnTileToQueue(userId, tileIds[0]);
+    await addTileCandidate(userId, [tileIds[0]], variantAId);
+    await returnTilesToQueue(userId, [tileIds[0]]);
     assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: tileIds[0] } }), 0);
 
     // Discarded: the tile is the only record of what a sight-unseen parcel held, so what it might
     // have been is kept beside the note saying why it went.
     await parkTile(userId, tileIds[1], "watermark?");
-    await addTileCandidate(userId, tileIds[1], variantBId);
+    await addTileCandidate(userId, [tileIds[1]], variantBId);
     await discardTile(userId, tileIds[1], "");
     assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: tileIds[1] } }), 1);
   });
@@ -796,12 +798,12 @@ describe("identifying scan tiles into copies (#567)", () => {
     // A shortlist that could name another collection's stamp would offer to identify this piece as
     // something the order cannot hold.
     await assert.rejects(
-      () => addTileCandidate(userId, tileIds[0], foreignStampId),
+      () => addTileCandidate(userId, [tileIds[0]], foreignStampId),
       ScanValidationError
     );
     await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
     await assert.rejects(
-      () => addTileCandidate(userId, tileIds[1], variantAId),
+      () => addTileCandidate(userId, [tileIds[1]], variantAId),
       ScanValidationError
     );
   });
@@ -834,9 +836,99 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // Nothing here reads the stamp — #578's retention sweep will — but a tile coming back means
     // the batch is being worked again, so the sweep must not still be counting down on it.
-    await returnTileToQueue(userId, tileIds[1]);
+    await returnTilesToQueue(userId, [tileIds[1]]);
     const reopened = await prisma.scanSheet.findFirstOrThrow({ where: { purchaseId } });
     assert.equal(reopened.batchDoneAt, null);
+  });
+
+  // A selection of tiles reaches every outcome, not only identification: the strip's bar opens the
+  // tile's own dialog, so discarding, parking and the shortlist all take the list the ticking made.
+  it("discards and parks a run of tiles under one answer", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+
+    await parkTiles(userId, tileIds, "  dark or light blue?  ");
+    let tiles = await prisma.scanTile.findMany({ where: { purchaseId } });
+    assert.deepEqual(
+      tiles.map((t) => [t.state, t.note]).sort(),
+      [
+        ["parked", "dark or light blue?"],
+        ["parked", "dark or light blue?"],
+      ],
+      "the sentence is written onto every piece, since it is read off whichever one is opened"
+    );
+    // Parked pieces keep the batch outstanding, however many were set aside at once (#597).
+    assert.equal(
+      await prisma.scanSheet.count({ where: { purchaseId, batchDoneAt: { not: null } } }),
+      0
+    );
+
+    // A mixed run — one piece parked last week, one still waiting — keeps the sentence that was
+    // already written and fills only the blank one: the press is aimed at the pieces beside it, and
+    // a doubt overwritten by it would be gone with nothing saying so.
+    await noteTile(userId, tileIds[0], "check perf against Mi 200");
+    await returnTilesToQueue(userId, [tileIds[1]]);
+    await parkTiles(userId, tileIds, "watermark?");
+    tiles = await prisma.scanTile.findMany({ where: { purchaseId }, orderBy: { position: "asc" } });
+    assert.deepEqual(tiles.map((t) => t.note), ["check perf against Mi 200", "watermark?"]);
+
+    // Put back is one move for the run, and spends the doubt with it.
+    await returnTilesToQueue(userId, tileIds);
+    tiles = await prisma.scanTile.findMany({ where: { purchaseId } });
+    assert.deepEqual(tiles.map((t) => t.state).sort(), ["unidentified", "unidentified"]);
+    assert.deepEqual(tiles.map((t) => t.note), [null, null]);
+
+    // And a run of junk goes in one act — the images stay, as they do for one tile.
+    await discardTiles(userId, tileIds, "");
+    tiles = await prisma.scanTile.findMany({ where: { purchaseId } });
+    assert.deepEqual(tiles.map((t) => t.state).sort(), ["discarded", "discarded"]);
+    assert.equal(await prisma.photo.count({ where: { tileId: { in: tileIds } } }), 2);
+  });
+
+  it("refuses a whole selection before writing any of it", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    // One tile of the run has been worked through in another tab. The pass is refused rather than
+    // half-run: a stale strip costs a sentence, not a card discarded in part with nothing saying
+    // which part.
+    await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    await assert.rejects(() => discardTiles(userId, tileIds, ""), ScanValidationError);
+    assert.equal(
+      await prisma.scanTile.count({ where: { purchaseId, state: "unidentified" } }),
+      1,
+      "the still-waiting tile was not discarded"
+    );
+
+    // A tile named twice would be counted once on the bar and written to once here — refused, since
+    // the two numbers disagreeing is the kind of thing nobody notices.
+    await assert.rejects(
+      () => parkTiles(userId, [tileIds[1], tileIds[1]], "watermark?"),
+      ScanValidationError
+    );
+    // …as is a selection spanning two orders: the pass is about one card on the desk.
+    const elsewhere = await orderWithTiles();
+    await assert.rejects(
+      () => parkTiles(userId, [tileIds[1], elsewhere.tileIds[0]], ""),
+      ScanValidationError
+    );
+  });
+
+  it("writes and rules out a shortlist across the whole run (#607)", async () => {
+    const { tileIds } = await orderWithTiles();
+    await addTileCandidate(userId, tileIds, variantAId);
+    assert.equal(
+      await prisma.scanTileCandidate.count({ where: { tileId: { in: tileIds } } }),
+      2,
+      "a possibility listed for the run is listed on each of its pieces"
+    );
+    // Pressed again over a run one piece already carries it on: an upsert, so it means what the
+    // first press did.
+    await addTileCandidate(userId, [tileIds[0]], variantAId);
+    await addTileCandidate(userId, tileIds, variantBId);
+    assert.equal(await prisma.scanTileCandidate.count({ where: { tileId: { in: tileIds } } }), 4);
+
+    // Ruling one out is the mirror: off all of them, or the shortlist would disagree with itself.
+    await removeTileCandidate(userId, tileIds, variantBId);
+    const left = await prisma.scanTileCandidate.findMany({ where: { tileId: { in: tileIds } } });
+    assert.deepEqual([...new Set(left.map((c) => c.stampId))], [variantAId]);
   });
 
   it("refuses to work a tile twice", async () => {

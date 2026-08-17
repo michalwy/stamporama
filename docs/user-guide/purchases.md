@@ -492,6 +492,12 @@ that ticks every tile still waiting on that card, showing a dash while only some
 Ticking changes nothing about clicking: the rest of the square still opens the tile's dialog, and a
 tile you have already dealt with has no box, having reached its end.
 
+**Work through N tiles** opens the **same dialog a single tile opens**, with all of the pieces beside
+the answers — so a ticked run can be identified together, **set aside to check** together, or
+**discarded** together, and the shortlist of what they could be is written once for all of them. The
+one thing it cannot do is *assign to a copy on this order*: a copy has one front and one back, so
+assigning is about one piece and stays on the single tile's dialog.
+
 **Identify N tiles as one stamp** takes you through the same two steps as one tile — pick the stamp,
 then answer the condition step once — and creates **one copy per tile**. Everything the step asks
 applies to all of them: one stamp, one condition, one certificate, one format, one lot, one location,
@@ -518,6 +524,25 @@ button goes dead when you reach the first or the last piece.
 
 If one of the tiles turns out to have been dealt with meanwhile — in another tab, or from its own
 dialog — the whole pass is refused and **nothing is created**, so you can untick it and go again.
+
+**Set aside to check, for a run.** *Set aside N pieces to check* asks the one question it asks for a
+single tile — *what to check on all N?* — and writes that sentence onto every piece. That is the case
+the state exists for at its full size: thirty of one definitive in two shades pose one question, and
+you answer it once. Each piece keeps its own copy of the note, so it is there on whichever square you
+open when you come back; change one from that tile's own dialog. Bring them all back with **Put N
+pieces back in the queue**, which appears in place of *set aside* once every ticked piece is parked.
+
+**Discarding a run asks once.** A single tile is discarded on one press, because it is the frequent
+answer on a parcel of junk and one press puts it back. Fifteen is the same act at a scale where the
+way back is not — a discarded tile has no tick box, so putting them back is one press each — so the
+count is confirmed first. The pictures are kept either way: the discarded tiles stay on the card as
+the record of what the parcel held.
+
+**What they could be, listed once.** *Cannot tell? List what it could be…* opens the same browse
+popup for a run, and each stamp you pick is written onto **every** ticked piece — five pieces narrowed
+to the same pair is one comparison at the colour key, not five. If the pieces arrive carrying
+different shortlists, you see all of them, and one written on only some says so (*on 3 of 5*); adding
+or ruling out from here settles it for the whole run.
 
 **Duplicates you meet as you go: *Same as the last*.** Once you have identified one tile in this sitting, the dialog
 offers to identify the next one the same way — and it **names what it will repeat**, so the button

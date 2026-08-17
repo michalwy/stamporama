@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   candidateLabel,
   candidateShortLabel,
+  mergeTileCandidates,
   sharedVariantParent,
   toTileCandidate,
   type TileCandidate,
@@ -155,5 +156,36 @@ describe("a parked tile's candidates (#607)", () => {
     assert.equal(onIssue.issueId, "issue-1");
     assert.equal(onIssue.collectionAreaId, "area-1");
     assert.equal(onIssue.unknownVariant, true);
+  });
+});
+
+// One shortlist over a run of ticked tiles: the selection dialog asks *what could these be* once,
+// so the possibilities have to be merged — and merged as a **union**, since an intersection would
+// drop the narrowing the collector came back to read.
+describe("a shortlist across a selection of tiles", () => {
+  it("lists every possibility once, with how many tiles carry it", () => {
+    const merged = mergeTileCandidates([
+      { candidates: [candidate({ stampId: "a" }), candidate({ stampId: "b" })] },
+      { candidates: [candidate({ stampId: "b" })] },
+      { candidates: [] },
+    ]);
+    assert.deepEqual(
+      merged.map((m) => [m.candidate.stampId, m.onCount]),
+      [
+        ["a", 1],
+        ["b", 2],
+      ]
+    );
+  });
+
+  it("counts a tile once however many times it names a stamp", () => {
+    const merged = mergeTileCandidates([
+      { candidates: [candidate({ stampId: "a" }), candidate({ stampId: "a" })] },
+    ]);
+    assert.deepEqual(merged.map((m) => m.onCount), [1]);
+  });
+
+  it("is empty when nothing has been listed", () => {
+    assert.deepEqual(mergeTileCandidates([{ candidates: [] }, { candidates: [] }]), []);
   });
 });

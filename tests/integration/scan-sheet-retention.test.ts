@@ -24,7 +24,7 @@ import {
   discardTile,
   identifyTileAsNewCopy,
   parkTile,
-  returnTileToQueue,
+  returnTilesToQueue,
 } from "../../src/lib/scan-tiles";
 import { getStorage, sheetVariantKey } from "../../src/lib/storage";
 import type { Box } from "../../src/lib/scan-boxes";
@@ -285,7 +285,7 @@ describe("retained-scan retention (#578)", () => {
     const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);
-    await returnTileToQueue(userId, tileIds[0]);
+    await returnTilesToQueue(userId, [tileIds[0]]);
 
     const freed = await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
     assert.equal(freed.sheets, 0, "the batch is being worked again; the clock was cleared");

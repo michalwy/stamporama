@@ -160,20 +160,12 @@ export async function identifyTilesAsNewCopies(
     );
   }
 
-  // Loaded and checked in full before a copy exists. The duplicate guard is here rather than left
-  // to the loop below because the same tile named twice would otherwise create two copies and give
-  // the second one no images — the images having moved to the first.
-  const unique = [...new Set(tileIds)];
-  if (unique.length !== tileIds.length) {
-    throw new ScanValidationError("The same tile was named twice.");
-  }
-  const tiles = [];
-  for (const tileId of unique) tiles.push(await loadOpenTile(ownerId, tileId));
-  const purchaseId = tiles[0].purchaseId;
-  if (tiles.some((t) => t.purchaseId !== purchaseId)) {
-    throw new ScanValidationError("Those tiles are not all on this order.");
-  }
-  const lotId = await resolveTileLot(purchaseId, input.lotId);
+  // Loaded and checked in full before a copy exists — `loadSelectedTiles` is that rule, shared with
+  // the outcomes that followed this one. The duplicate guard inside it matters most here: the same
+  // tile named twice would otherwise create two copies and give the second one no images, the images
+  // having moved to the first.
+  const tiles = await loadSelectedTiles(ownerId, tileIds);
+  const lotId = await resolveTileLot(tiles[0].purchaseId, input.lotId);
 
   const copies = await intakeStamps(ownerId, lotId, {
     stampId: input.stampId,
@@ -324,20 +316,39 @@ export async function discardTile(
   tileId: string,
   note?: string | null
 ): Promise<void> {
-  const tile = await loadOpenTile(ownerId, tileId);
-  await prisma.scanTile.update({
-    where: { id: tile.id },
-    data: {
-      state: "discarded",
-      // A blank note leaves whatever is already there, which matters for exactly one tile: a
-      // **parked** one (#597), whose note says what the doubt was. Discarding it is the answer to
-      // that doubt turning out to be "nothing worth keeping", so *dark or light blue?* is a fair
-      // record of why it went — and the screen sends a blank note on every discard, so clearing it
-      // here would silently throw away the only sentence the collector wrote about the piece.
-      note: note?.trim() || tile.note,
-    },
-  });
-  await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
+  await discardTiles(ownerId, [tileId], note);
+}
+
+/**
+ * Discard a **run of tiles** — the answer a card of junk needs most, and the one the selection bar
+ * could not give.
+ *
+ * One tile is this call with one tile in it, exactly as {@link identifyTilesAsNewCopies} is the one
+ * door for identification. The pass is **refused before anything is written**
+ * ({@link loadSelectedTiles}), so a stale strip in a second tab costs a sentence rather than half a
+ * card discarded with nothing saying which half.
+ */
+export async function discardTiles(
+  ownerId: string,
+  tileIds: string[],
+  note?: string | null
+): Promise<void> {
+  const tiles = await loadSelectedTiles(ownerId, tileIds);
+  for (const tile of tiles) {
+    await prisma.scanTile.update({
+      where: { id: tile.id },
+      data: {
+        state: "discarded",
+        // A blank note leaves whatever is already there, which matters for exactly one tile: a
+        // **parked** one (#597), whose note says what the doubt was. Discarding it is the answer to
+        // that doubt turning out to be "nothing worth keeping", so *dark or light blue?* is a fair
+        // record of why it went — and the screen sends a blank note on every discard, so clearing it
+        // here would silently throw away the only sentence the collector wrote about the piece.
+        note: note?.trim() || tile.note,
+      },
+    });
+    await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
+  }
 }
 
 // ── Parking (#597) ────────────────────────────────────────────────────────────────────────────
@@ -378,19 +389,43 @@ export async function parkTile(
   tileId: string,
   note?: string | null
 ): Promise<void> {
-  const tile = await loadOpenTile(ownerId, tileId);
-  if (tile.state === "parked") {
-    // Not an error worth a sentence — the note is what a second park would be saying, and that has
-    // its own door.
-    if (note != null) await noteTile(ownerId, tileId, note);
-    return;
+  await parkTiles(ownerId, [tileId], note);
+}
+
+/**
+ * Set a **run of tiles** aside under one sentence.
+ *
+ * The state's whole value is that the parked pieces collect, so a run of them is the ordinary case
+ * rather than a bulk convenience: a card of one definitive in two shades is thirty pieces posing one
+ * question, and the note answers it once — *dark or light blue?* is as true of the thirtieth piece as
+ * of the first. The note is written to **each** tile rather than kept anywhere shared: it is read
+ * from the tile the collector opens months later, and a note that lived on a selection would be gone
+ * by then.
+ */
+export async function parkTiles(
+  ownerId: string,
+  tileIds: string[],
+  note?: string | null
+): Promise<void> {
+  const tiles = await loadSelectedTiles(ownerId, tileIds);
+  for (const tile of tiles) {
+    if (tile.state === "parked") {
+      // Already where it is being asked to go — not an error worth a sentence, the note being all a
+      // second park could be saying. It **fills a blank note and never replaces one**: this is only
+      // reachable from a mixed run (the single tile's button is absent once it is parked), where the
+      // parked pieces may be carrying doubts written on another day, and a sentence overwritten by a
+      // press aimed at the pieces beside it would be gone with nothing saying so. Changing one is
+      // the tile's own note field.
+      if (note?.trim() && !tile.note?.trim()) await noteTile(ownerId, tile.id, note);
+      continue;
+    }
+    await prisma.scanTile.update({
+      where: { id: tile.id },
+      data: { state: "parked", note: note?.trim() || null },
+    });
+    // No `stampBatchIfFinished`: a parked tile is outstanding, so it cannot be what finishes a
+    // batch. Stated rather than left to the count, because this is the write the guarantee is about.
   }
-  await prisma.scanTile.update({
-    where: { id: tile.id },
-    data: { state: "parked", note: note?.trim() || null },
-  });
-  // No `stampBatchIfFinished`: a parked tile is outstanding, so it cannot be what finishes a batch.
-  // Stated rather than left to the count, because this is the write the guarantee is about.
 }
 
 // ── The shortlist a parked tile carries (#607) ────────────────────────────────────────────────
@@ -418,12 +453,12 @@ export async function parkTile(
  */
 export async function addTileCandidate(
   ownerId: string,
-  tileId: string,
+  tileIds: string[],
   stampId: string
 ): Promise<void> {
-  const tile = await loadOpenTile(ownerId, tileId);
+  const tiles = await loadSelectedTiles(ownerId, tileIds);
   const purchase = await prisma.purchase.findUniqueOrThrow({
-    where: { id: tile.purchaseId },
+    where: { id: tiles[0].purchaseId },
     select: { collectionId: true },
   });
   const stamp = await prisma.stamp.findFirst({
@@ -431,11 +466,18 @@ export async function addTileCandidate(
     select: { id: true },
   });
   if (!stamp) throw new ScanValidationError("That stamp is not in this collection.");
-  await prisma.scanTileCandidate.upsert({
-    where: { tileId_stampId: { tileId: tile.id, stampId } },
-    create: { tileId: tile.id, stampId },
-    update: {},
-  });
+  // Written to every ticked tile, because a shortlist built through a selection is a statement about
+  // the run: five pieces narrowed to the same pair is one trip to the colour key, and it is read off
+  // whichever of them the collector opens when they get back. The upsert is what makes a stamp
+  // pressed twice — or pressed onto a run one tile already carries it on — mean what the first press
+  // did.
+  for (const tile of tiles) {
+    await prisma.scanTileCandidate.upsert({
+      where: { tileId_stampId: { tileId: tile.id, stampId } },
+      create: { tileId: tile.id, stampId },
+      update: {},
+    });
+  }
 }
 
 /** Take a stamp off a tile's shortlist. A possibility ruled out is the ordinary progress of the
@@ -443,11 +485,15 @@ export async function addTileCandidate(
  * is not on the list is not an error, the end state being what was asked for either way. */
 export async function removeTileCandidate(
   ownerId: string,
-  tileId: string,
+  tileIds: string[],
   stampId: string
 ): Promise<void> {
-  const tile = await loadOpenTile(ownerId, tileId);
-  await prisma.scanTileCandidate.deleteMany({ where: { tileId: tile.id, stampId } });
+  const tiles = await loadSelectedTiles(ownerId, tileIds);
+  // Off all of them, the mirror of adding: ruling a possibility out is a conclusion about the run,
+  // and a stamp left standing on one tile of five would be the shortlist disagreeing with itself.
+  await prisma.scanTileCandidate.deleteMany({
+    where: { tileId: { in: tiles.map((t) => t.id) }, stampId },
+  });
 }
 
 /**
@@ -490,11 +536,22 @@ export async function noteTile(
  * A **consumed** tile has no such door — its images belong to a copy now, and the way back is to
  * delete that copy.
  */
-export async function returnTileToQueue(ownerId: string, tileId: string): Promise<void> {
-  const tile = await loadTileForOwner(ownerId, tileId);
-  if (tile.state !== "discarded" && tile.state !== "parked") {
-    throw new ScanValidationError("Only a discarded or parked tile can be put back.");
+export async function returnTilesToQueue(ownerId: string, tileIds: string[]): Promise<void> {
+  // Loaded and checked in full first, the rule every plural verb here follows: a run of parked
+  // pieces put back together is one act, and one of them having been discarded in another tab is a
+  // sentence rather than half a run restored.
+  const tiles = [];
+  for (const tileId of [...new Set(tileIds)]) {
+    const tile = await loadTileForOwner(ownerId, tileId);
+    if (tile.state !== "discarded" && tile.state !== "parked") {
+      throw new ScanValidationError("Only a discarded or parked tile can be put back.");
+    }
+    tiles.push(tile);
   }
+  for (const tile of tiles) await restoreTile(tile);
+}
+
+async function restoreTile(tile: { id: string; purchaseId: string; batchNo: number }) {
   await prisma.scanTile.update({
     where: { id: tile.id },
     data: { state: "unidentified", note: null },
@@ -633,6 +690,29 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
  * variant are identified in one pass — so every path that works a waiting tile takes a parked one
  * unchanged. Only the two real ends are refused.
  */
+/**
+ * The tiles a **selection** names, every one of them checked before any of them is written to.
+ *
+ * The rule {@link identifyTilesAsNewCopies} states for identification, applied to the outcomes that
+ * followed it: a stale strip in a second tab should cost a sentence rather than a half-worked
+ * selection with nothing on screen saying which half. A tile named twice is refused rather than
+ * quietly de-duplicated, since a count on the bar that is not the number of tiles written to is the
+ * kind of disagreement nobody notices, and everything here must stay on **one order** — the pass is
+ * about a card on the desk.
+ */
+async function loadSelectedTiles(ownerId: string, tileIds: string[]) {
+  if (tileIds.length === 0) throw new ScanValidationError("Pick at least one tile.");
+  if (new Set(tileIds).size !== tileIds.length) {
+    throw new ScanValidationError("The same tile was named twice.");
+  }
+  const tiles: Awaited<ReturnType<typeof loadOpenTile>>[] = [];
+  for (const tileId of tileIds) tiles.push(await loadOpenTile(ownerId, tileId));
+  if (tiles.some((t) => t.purchaseId !== tiles[0].purchaseId)) {
+    throw new ScanValidationError("Those tiles are not all on this order.");
+  }
+  return tiles;
+}
+
 async function loadOpenTile(ownerId: string, tileId: string) {
   const tile = await loadTileForOwner(ownerId, tileId);
   if (!isOpenTileState(tile.state)) {

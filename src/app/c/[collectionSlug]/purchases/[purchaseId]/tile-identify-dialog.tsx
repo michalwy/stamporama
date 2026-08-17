@@ -12,21 +12,23 @@ import {
 import {
   addTileCandidateAction,
   assignTileAction,
-  discardTileAction,
+  discardTilesAction,
   noteTileAction,
-  parkTileAction,
+  parkTilesAction,
   removeTileCandidateAction,
-  returnTileToQueueAction,
+  returnTilesToQueueAction,
 } from "@/app/actions/scans";
 import type { CollectionAreaData } from "@/lib/areas";
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
-import { tileSideViews, type TileSheetRef, type TileSideView } from "@/lib/scan-tile-view";
+import type { TileSideView } from "@/lib/scan-tile-view";
 import {
   candidateLabel,
   candidateShortLabel,
+  mergeTileCandidates,
   sharedVariantParent,
+  type MergedTileCandidate,
   type TileCandidate,
 } from "@/lib/tile-candidates";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
@@ -40,11 +42,26 @@ import {
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import { IdentifiedPieceAside, TileZoomView } from "./tile-zoom-view";
+import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
 
 /**
- * One tile, and what can become of it (#567) — three ends, and since #597 one waiting room.
+ * A tile — or a **run of them** — and what can become of it (#567) — three ends, and since #597 one
+ * waiting room.
+ *
+ * **One dialog for one piece and for fifteen**, which is the correction #596 needed. Ticking tiles
+ * on the strip offered exactly one thing, *identify them as one stamp*, and led straight into the
+ * picker; so a run could be identified together but never discarded or set aside together, although
+ * a card of junk and a run of one doubtful variant are precisely the cases a selection is made for.
+ * Adding a button per outcome to the bar would have been a second, poorer statement of the vocabulary
+ * this dialog already is — and the bar cannot show the pictures, which are what the answer is read
+ * off. So the selection opens **here**, where the outcomes live, with the pieces beside them
+ * (#592's aside, one piece being #585's viewer and several a grid with a loupe).
+ *
+ * What a run cannot do is what is genuinely about one piece: **assigning** to an existing copy —
+ * front and back are singleton slots, so one copy takes one tile — and the panels of a **settled**
+ * tile, which cannot be ticked in the first place. Everything else is the same control with a count
+ * on it.
  *
  * **The tile is the dialog** (#585), not a thumbnail above the controls: a picture large enough to
  * be zoomed and panned, with the outcome beside it. That is the dialog's entire reason for
@@ -116,6 +133,19 @@ export interface TileStampPick {
   shortLabel: string;
 }
 
+/**
+ * A tile this dialog is about, with **the sides already worked out** (#592).
+ *
+ * `tileSideViews` is answered in `purchase-scans-card.tsx`, where the batch a tile came from — and
+ * therefore whether its scan has been swept (#578) — is in hand. That matters more for a selection
+ * than for one tile: a run can cross two cards of a parcel, so the sides cannot be derived here from
+ * one pair of sheets at all.
+ */
+export interface SelectedTile {
+  tile: ScanTileData;
+  sides: TileSideView[];
+}
+
 interface Props {
   collectionId: string;
   /** The area tree the stamp picker needs (#607) — the shortlist is built from the **same** picker
@@ -126,11 +156,10 @@ interface Props {
    * convert with, prefilled into the measuring bar and correctable there for this sitting. */
   scanDpi: number;
   purchaseId: string;
-  tile: ScanTileData;
-  /** The batch's two scans, for the deeper look past the tile photo's own resolution (#585). A
-   * missing or swept sheet (#578) is not an error here — it is the absence of a second source, and
-   * the tile's photo carries the pass on its own. */
-  sheets: { front: TileSheetRef | null; back: TileSheetRef | null };
+  /** The tiles this dialog is about, in card order: one opened from the strip, or the run ticked on
+   * it. Never empty. A run holds only tiles that are still to be identified, since those are the
+   * only ones that get a tick box (`scan-tile-selection.ts`). */
+  tiles: SelectedTile[];
   /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies (its
    * pool has been split across the copies it had), but a photograph is not money — assigning and
    * discarding stay. Which lot the new copy goes onto is asked at the condition step, so all this
@@ -150,7 +179,7 @@ interface Props {
    * which sides there are and which still have a retained card behind them. Handing that answer on
    * rather than a tile id keeps it computed once, where the batch's sheets are in hand.
    */
-  onIdentifyNew: (sides: TileSideView[]) => void;
+  onIdentifyNew: (pieces: IdentifiedPiece[]) => void;
   /**
    * *Same as the last* (#595): identify this tile the way the previous one of this sitting was
    * identified. Null until something has been, so the action is never offered with nothing to
@@ -162,7 +191,7 @@ interface Props {
    * around it already comes back on its own. One extra press buys sight of what is about to be
    * created, and a consumed tile has no undo short of deleting the copy.
    */
-  repeatLast?: { summary: string; onRepeat: (sides: TileSideView[]) => void } | null;
+  repeatLast?: { summary: string; onRepeat: (pieces: IdentifiedPiece[]) => void } | null;
   /**
    * *Identify as this stamp* with the picker skipped (#607) — a candidate off the shortlist, or the
    * parent offered in place of a shortlist that is all variants of one node.
@@ -172,7 +201,7 @@ interface Props {
    * at the condition step's ordinary confirm like every other route into it. Nothing here creates a
    * copy in one press — a consumed tile has no undo short of deleting the copy.
    */
-  onIdentifyAs: (pick: TileStampPick, sides: TileSideView[]) => void;
+  onIdentifyAs: (pick: TileStampPick, pieces: IdentifiedPiece[]) => void;
   /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
    * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
@@ -225,11 +254,13 @@ const ASSIGN_LIST_STALE_MS = 30 * 1000;
  * front-only tiles, the ordinary case — share one fetch, and a tile needing different slots gets its
  * own list rather than a wrongly cached one.
  */
-function assignParams(tile: ScanTileData): LotCopiesParams {
+function assignParams(tile: ScanTileData | null): LotCopiesParams {
   return {
     sort: "catalog",
     sortDir: "asc",
-    freePhotoSlots: tilePhotoRoles(tile),
+    // A run has no answer to this — one copy takes one tile — so the query is disabled and the slots
+    // are a stable placeholder rather than a key that would vary per selection.
+    freePhotoSlots: tile ? tilePhotoRoles(tile) : ["front"],
   };
 }
 
@@ -238,8 +269,7 @@ export function TileIdentifyDialog({
   areas,
   scanDpi,
   purchaseId,
-  tile,
-  sheets,
+  tiles,
   canIdentify,
   fromAuction,
   copyHref,
@@ -253,11 +283,39 @@ export function TileIdentifyDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  /** The one tile this dialog is about, or null when it is about a run. Everything that is genuinely
+   * about a single piece — the assign list, the settled panels, the note editor — reads this and is
+   * simply absent for a selection, rather than being generalised into something that would have to
+   * pick one piece to stand for the rest. */
+  const tile = tiles.length === 1 ? tiles[0].tile : null;
+  const ids = tiles.map((t) => t.tile.id);
+  const count = tiles.length;
+  /** What the identification chain carries (#592/#596): the pieces themselves, so every dialog after
+   * this one shows the very pictures the outcome was chosen from. */
+  const pieces: IdentifiedPiece[] = tiles.map((t) => ({
+    tileId: t.tile.id,
+    sides: t.sides,
+    position: t.tile.position,
+  }));
+
+  /** What these pieces could be (#607) — one shortlist over the run, as a **union** with how many
+   * tiles carry each possibility. The tiles arrive with lists of their own (one narrowed yesterday,
+   * another parked with nothing listed), and an intersection would drop exactly the narrowing the
+   * collector came back to read. `tile-candidates.ts` owns the merge. */
+  const merged = mergeTileCandidates(tiles.map((t) => t.tile));
+  /** Whether anything is drawn beside the outcomes at all — a swept batch's back-only tile can have
+   * no picture left, and the column then takes the whole dialog rather than sitting beside a gap. */
+  const hasPictures = pieces.some((p) => p.sides.length > 0);
+
   /** Reached an end. A **parked** tile (#597) has not: it is a waiting tile whose answer is not at
    * this desk, so this dialog stays the working surface it is for a waiting one — identify, assign,
-   * discard — with the note and the way back added. */
-  const settled = tile.state === "consumed" || tile.state === "discarded";
-  const parked = tile.state === "parked";
+   * discard — with the note and the way back added. Only a single tile can be settled at all: the
+   * strip gives a tick box to the two outstanding states alone. */
+  const settled = tile != null && (tile.state === "consumed" || tile.state === "discarded");
+  /** Every piece in hand is parked, which is what decides between *set aside* and *put back*. A
+   * **mixed** run is not put back on one press — some of it was never set aside — so it keeps
+   * offering the park, which is the move that makes the run uniform. */
+  const parked = tiles.every((t) => t.tile.state === "parked");
 
   /** Whether *Set aside to check* has been pressed and is asking what to check (#597) — the note
    * being the ordinary case, not the exception, so it is asked for at the button rather than left
@@ -271,10 +329,16 @@ export function TileIdentifyDialog({
    * a shortlist built on a screen that had put the piece away would be built from memory. */
   const [addingCandidate, setAddingCandidate] = useState(false);
 
-  /** The sides there are to look at, and which of them still have a retained scan behind them.
-   * Decided in a pure module, so a swept batch (#578) is a case a unit test reaches rather than one
-   * that first runs on a collector's screen. */
-  const viewSides = tileSideViews(tile, sheets);
+  /**
+   * Whether *Discard* has been pressed on a **run** and is asking to be confirmed.
+   *
+   * One tile keeps its single press, which #567 made cheap on purpose: on a parcel of junk it is the
+   * frequent answer and it is reversible one click later. A run is the same act at a scale where the
+   * way back is not: putting fifteen pieces back is fifteen presses on fifteen squares, because a
+   * discarded tile takes no tick box. So the count is confirmed once, and the sentence says the
+   * pictures are kept — which is the part that makes a mis-press survivable.
+   */
+  const [discarding, setDiscarding] = useState(false);
 
   // Lifted out of the assign list, because *whether the list holds anything* is what chooses the
   // opening mode. TanStack hashes the key structurally, so rebuilding the params per render is
@@ -283,12 +347,16 @@ export function TileIdentifyDialog({
   // The `staleTime` is what keeps that true now the latch below waits for a fetch to finish: at the
   // screen's default of 0 the cached answer is stale the instant it arrives, so every tile of a card
   // would re-ask and wait on it.
-  const roles = tilePhotoRoles(tile);
+  //
+  // **A run does not ask it at all.** Front and back are singleton slots per copy, so a copy takes
+  // one tile and "assign these fifteen" names no move; the query is disabled and the mode is
+  // identify without waiting for anything.
+  const roles = tile ? tilePhotoRoles(tile) : [];
   const copies = usePurchaseCopiesInfinite(
     collectionId,
     purchaseId,
     assignParams(tile),
-    !settled,
+    !settled && tile != null,
     ASSIGN_LIST_STALE_MS
   );
   const candidates = copies.data?.pages.flatMap((p) => p.items) ?? [];
@@ -308,8 +376,8 @@ export function TileIdentifyDialog({
   // `fetchState` applied whenever it will fetch on mount, so `isFetching` is already true on the
   // first render after an invalidation — never briefly false with stale data in hand.
   const [mode, setMode] = useState<Mode | null>(null);
-  if (mode === null && !copies.isPending && !copies.isFetching) {
-    setMode(candidates.length > 0 ? "assign" : "identify");
+  if (mode === null && (tile == null || (!copies.isPending && !copies.isFetching))) {
+    setMode(tile != null && candidates.length > 0 ? "assign" : "identify");
   }
 
   /** `touchedCopy` rides with each call rather than being inferred afterwards: the action itself is
@@ -331,12 +399,35 @@ export function TileIdentifyDialog({
 
   const discard = (
     <DialogSecondaryButton
-      // A discard changes the tile and nothing else — its images stay where they are.
-      onClick={() => run(() => discardTileAction(tile.id, ""), false)}
+      // A discard changes the tiles and nothing else — their images stay where they are. One tile
+      // acts on the press; a run asks once, for the reason `discarding` states.
+      onClick={() => (count === 1 ? run(() => discardTilesAction(ids, ""), false) : setDiscarding(true))}
       disabled={pending}
     >
-      <Icon name="delete" size="sm" /> {pending ? "Working…" : "Discard"}
+      <Icon name="delete" size="sm" />{" "}
+      {pending ? "Working…" : count === 1 ? "Discard" : `Discard ${count} pieces`}
     </DialogSecondaryButton>
+  );
+
+  /** The one question a bulk discard stops to ask. It replaces the other actions for the reason the
+   *  park prompt does: a confirmation standing beside the outcomes it is confirming is a row of
+   *  buttons where one is expected. */
+  const discardPrompt = (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+        Discard all {count} pieces? They keep their pictures and stay on the card as the record of
+        what the parcel held — but putting them back is one press each.
+      </span>
+      <DialogSecondaryButton
+        onClick={() => run(() => discardTilesAction(ids, ""), false)}
+        disabled={pending}
+      >
+        <Icon name="delete" size="sm" /> {pending ? "Working…" : `Discard ${count} pieces`}
+      </DialogSecondaryButton>
+      <DialogSecondaryButton onClick={() => setDiscarding(false)} disabled={pending}>
+        Cancel
+      </DialogSecondaryButton>
+    </div>
   );
 
   /**
@@ -360,17 +451,22 @@ export function TileIdentifyDialog({
    */
   const park = !parked ? (
     <DialogSecondaryButton onClick={() => setParking(true)} disabled={pending}>
-      <Icon name="pause" size="sm" /> Set aside to check
+      <Icon name="pause" size="sm" />{" "}
+      {count === 1 ? "Set aside to check" : `Set aside ${count} pieces to check`}
     </DialogSecondaryButton>
   ) : null;
 
-  const commitPark = () => run(() => parkTileAction(tile.id, parkNote), false);
+  // One note for the whole run, written onto each of its tiles: thirty pieces of one definitive in
+  // two shades pose *one* question, and *dark or light blue?* is as true of the thirtieth as of the
+  // first. It is written to every tile rather than held anywhere shared because it is read months
+  // later off whichever square the collector opens.
+  const commitPark = () => run(() => parkTilesAction(ids, parkNote), false);
 
   /** The parent the shortlist has turned out to be variants of, if it has (#607). Read here as well
    * as inside the shortlist because **this is the moment the issue asked for**: a collector reaching
    * for *park* with two watermark variants listed does not need to park at all, and the sentence is
    * worth more before the piece goes into the tray than after. */
-  const parkShortcut = sharedVariantParent(tile.candidates);
+  const parkShortcut = sharedVariantParent(merged.map((m) => m.candidate));
 
   const parkPrompt = (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", width: "100%" }}>
@@ -378,12 +474,14 @@ export function TileIdentifyDialog({
         <ParentInsteadNotice
           parent={parkShortcut}
           disabled={pending || !canIdentify}
-          onIdentifyAs={(pick) => onIdentifyAs(pick, viewSides)}
+          onIdentifyAs={(pick) => onIdentifyAs(pick, pieces)}
         />
       )}
       <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
       <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-        What to check?
+        {/* One question for the run, since that is what a run of one definitive poses — and the
+            count says how many pieces the sentence is about to be written on. */}
+        {count === 1 ? "What to check?" : `What to check on all ${count}?`}
         <input
           autoFocus
           value={parkNote}
@@ -420,7 +518,8 @@ export function TileIdentifyDialog({
         />
       </label>
       <DialogSecondaryButton onClick={commitPark} disabled={pending}>
-        <Icon name="pause" size="sm" /> {pending ? "Working…" : "Set aside"}
+        <Icon name="pause" size="sm" />{" "}
+        {pending ? "Working…" : count === 1 ? "Set aside" : `Set aside ${count} pieces`}
       </DialogSecondaryButton>
       <DialogSecondaryButton
         onClick={() => {
@@ -440,10 +539,11 @@ export function TileIdentifyDialog({
    * which is why it says what it says rather than *Un-park*. */
   const putBack = (
     <DialogSecondaryButton
-      onClick={() => run(() => returnTileToQueueAction(tile.id), false)}
+      onClick={() => run(() => returnTilesToQueueAction(ids), false)}
       disabled={pending}
     >
-      <Icon name="restore" size="sm" /> Put back in the queue
+      <Icon name="restore" size="sm" />{" "}
+      {count === 1 ? "Put back in the queue" : `Put ${count} pieces back in the queue`}
     </DialogSecondaryButton>
   );
 
@@ -454,7 +554,7 @@ export function TileIdentifyDialog({
    * taken minutes ago, so what it will do has to be readable before it is pressed. */
   const repeat = repeatLast ? (
     <DialogSecondaryButton
-      onClick={() => repeatLast.onRepeat(viewSides)}
+      onClick={() => repeatLast.onRepeat(pieces)}
       disabled={pending || !canIdentify}
     >
       <Icon name="duplicate" size="sm" /> Same as the last: {repeatLast.summary}
@@ -464,7 +564,9 @@ export function TileIdentifyDialog({
   return (
     <>
     <DialogShell
-      title={`Tile ${tile.position + 1}`}
+      // One piece is named by where it lies on the card, which is how it is found in the tray; a run
+      // is named by its size, there being no one position to name it after.
+      title={tile ? `Tile ${tile.position + 1}` : `${count} tiles selected`}
       onClose={onClose}
       // Sized for the picture rather than for the text beside it, and the same shape as the cut
       // editor: the two surfaces that show a scan large are the two that are worth a whole screen.
@@ -478,6 +580,9 @@ export function TileIdentifyDialog({
       // backdrop click from taking the sentence with it.
       // …and while the picker is stacked over this dialog (#607), for the reason `StampSelect` hands
       // the key over the same way: one Escape must close the picker and leave the tile where it is.
+      // The bulk-discard confirmation deliberately does **not** take the key: it holds nothing the
+      // collector typed, so Escape closing the whole dialog abandons it at no cost — where the note
+      // field is three words someone meant.
       dismissable={!parking && !addingCandidate}
     >
       {/* The picture takes the room and the outcome sits beside it in a column of its own, which
@@ -491,18 +596,15 @@ export function TileIdentifyDialog({
           padding: "1.25rem 1.5rem",
         }}
       >
-        {viewSides.length > 0 && (
-          <TileZoomView
-            collectionId={collectionId}
-            sides={viewSides}
-            position={tile.position}
-            scanDpi={scanDpi}
-          />
-        )}
+        {/* One piece is #585's viewer, exactly as before; a run is the grid of them with a loupe
+            one click away and ‹ / › between neighbours (#596's aside, which is already the shape
+            this needs — it is drawn beside the condition step for the same selection). Answering
+            *show the first one* would be one photograph standing in for fifteen pieces of paper. */}
+        <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
 
         <div
           style={{
-            width: viewSides.length > 0 ? "24rem" : "100%",
+            width: hasPictures ? "24rem" : "100%",
             flexShrink: 0,
             overflowY: "auto",
             display: "flex",
@@ -513,13 +615,18 @@ export function TileIdentifyDialog({
               what the collector wrote to themselves about this piece, so it is the first thing to
               read on coming back — and the identification it was waiting for is right underneath,
               which is the whole point of the tile staying workable while parked. */}
-          {parked && (
+          {parked && tile && (
             <ParkedNote
               note={tile.note}
               disabled={pending}
               onSave={(n) => run(() => noteTileAction(tile.id, n), false, true)}
             />
           )}
+          {/* A run's notes are **read here and edited on the piece**. Each parked tile carries its
+              own sentence, and one field over fifteen of them would either overwrite fourteen or
+              have to invent a merge; what the return sitting needs from this surface is to see the
+              doubts that were written, which is what this says. */}
+          {parked && !tile && <ParkedRunNotes tiles={tiles.map((t) => t.tile)} />}
           {/* What the piece could be (#607) — under the note, because the note says what to check and
               the shortlist says what to check it *against*. Both above the outcomes, since coming
               back to a parked tile is reading those two and then answering.
@@ -532,18 +639,19 @@ export function TileIdentifyDialog({
             <CandidateShortlist
               collectionId={collectionId}
               areas={areas}
-              candidates={tile.candidates}
+              candidates={merged}
+              tileCount={count}
               parked={parked}
               canIdentify={canIdentify}
               disabled={pending}
               onAdd={() => setAddingCandidate(true)}
               onRemove={(stampId) =>
-                run(() => removeTileCandidateAction(tile.id, stampId), false, true)
+                run(() => removeTileCandidateAction(ids, stampId), false, true)
               }
-              onIdentifyAs={(pick) => onIdentifyAs(pick, viewSides)}
+              onIdentifyAs={(pick) => onIdentifyAs(pick, pieces)}
             />
           )}
-          {settled ? (
+          {settled && tile ? (
             <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
           ) : mode === null ? (
             // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
@@ -559,10 +667,10 @@ export function TileIdentifyDialog({
               hasMore={copies.hasNextPage ?? false}
               loadingMore={copies.isFetchingNextPage}
               onLoadMore={() => void copies.fetchNextPage()}
-              onPick={(itemId) => run(() => assignTileAction(tile.id, itemId), true)}
+              onPick={(itemId) => tile && run(() => assignTileAction(tile.id, itemId), true)}
             />
           ) : (
-            <IdentifyIntro canIdentify={canIdentify} />
+            <IdentifyIntro canIdentify={canIdentify} count={count} />
           )}
 
           {error && (
@@ -573,7 +681,7 @@ export function TileIdentifyDialog({
         </div>
       </div>
 
-      {settled ? (
+      {settled && tile ? (
         <DialogFooter>
           {/* The settled states' one way onward, each on the left where the other outcomes sit:
               a discard goes back into the queue, and a consumed tile leads to what it became
@@ -588,6 +696,10 @@ export function TileIdentifyDialog({
           )}
           <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
         </DialogFooter>
+      ) : discarding ? (
+        // The same treatment the park prompt gets, and for the same reason: a confirmation with the
+        // other outcomes still standing beside it is a row of buttons where one answer is expected.
+        <DialogFooter>{discardPrompt}</DialogFooter>
       ) : parking ? (
         // The whole footer while the question is open (#597): it is a question, and a question with
         // the other outcomes still standing beside it is a row of buttons one stray click from
@@ -607,7 +719,7 @@ export function TileIdentifyDialog({
             style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
           >
             <DialogSecondaryButton
-              onClick={() => onIdentifyNew(viewSides)}
+              onClick={() => onIdentifyNew(pieces)}
               disabled={pending || !canIdentify}
             >
               <Icon name="add" size="sm" /> Identify as new copy
@@ -622,12 +734,16 @@ export function TileIdentifyDialog({
         </DialogFooter>
       ) : (
         <DialogActions
-          actionLabel="Identify as a new copy"
+          // The count is stated before anything is created, as every bulk action on this screen
+          // does — and it says *one stamp*, which is the assertion ticking the tiles made.
+          actionLabel={
+            count === 1 ? "Identify as a new copy" : `Identify ${count} tiles as one stamp`
+          }
           cancelLabel="Cancel"
           disabled={pending || !canIdentify}
           cancelDisabled={pending}
           onCancel={onClose}
-          onAction={() => onIdentifyNew(viewSides)}
+          onAction={() => onIdentifyNew(pieces)}
           leading={
             <>
               {repeat}
@@ -636,7 +752,7 @@ export function TileIdentifyDialog({
               {/* Only when there is something to assign to — which is the very condition that chose
                   identify over assign, so this is one expression rather than a second rule. Without
                   it the button is always here and always opens an empty list. */}
-              {candidates.length > 0 && (
+              {tile && candidates.length > 0 && (
                 <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
                   <Icon name="link" size="sm" /> Assign to a copy on this order
                 </DialogSecondaryButton>
@@ -668,15 +784,11 @@ export function TileIdentifyDialog({
               gap: "0.625rem",
             }}
           >
-            <IdentifiedPieceAside
-              collectionId={collectionId}
-              pieces={[{ tileId: tile.id, sides: viewSides, position: tile.position }]}
-              scanDpi={scanDpi}
-            />
+            <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
             {/* The shortlist as it stands, beside the piece — which is what lets the picker stay
                 open across several picks: a stamp added is visibly added, so a second pick reads as
                 *and this one* rather than as a press that may not have registered. */}
-            <ShortlistSoFar candidates={tile.candidates} />
+            <ShortlistSoFar candidates={merged.map((m) => m.candidate)} />
           </div>
         }
         asideWidth="26rem"
@@ -684,7 +796,10 @@ export function TileIdentifyDialog({
         // a chooser that closes on the first turns listing three stamps into three trips through
         // the area tree. Nothing is lost by staying: each pick is written on its own, the shortlist
         // beside the piece says so, and closing is the ordinary Escape.
-        onPick={(picked) => run(() => addTileCandidateAction(tile.id, picked.stampId), false, true)}
+        // Written to **every** ticked tile: a shortlist built through a selection is a statement
+        // about the run, which is the saving — five pieces narrowed to the same pair is one trip to
+        // the colour key rather than five.
+        onPick={(picked) => run(() => addTileCandidateAction(ids, picked.stampId), false, true)}
         onClose={() => setAddingCandidate(false)}
       />
     )}
@@ -696,7 +811,7 @@ export function TileIdentifyDialog({
 
 /** What the dialog says when it opens on *identify*: one line, because the images above it are the
  * thing being read and the action is in the footer. */
-function IdentifyIntro({ canIdentify }: { canIdentify: boolean }) {
+function IdentifyIntro({ canIdentify, count }: { canIdentify: boolean; count: number }) {
   return (
     <p
       style={{
@@ -706,8 +821,14 @@ function IdentifyIntro({ canIdentify }: { canIdentify: boolean }) {
       }}
     >
       {canIdentify
-        ? "Identify the piece from the catalogue — the lot it belongs to, condition, certificate and location follow, and these images move onto the copy it creates."
-        : "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify this tile, or assign the images to a copy the order already holds."}
+        ? count === 1
+          ? "Identify the piece from the catalogue — the lot it belongs to, condition, certificate and location follow, and these images move onto the copy it creates."
+          : // What the run's own answer creates, said before anything is created: one stamp, one
+            // condition, one lot — and one copy per piece, each keeping its own pictures.
+            `Identify these ${count} pieces as one stamp — the lot, condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
+        : count === 1
+          ? "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify this tile, or assign the images to a copy the order already holds."
+          : "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify these pieces — setting them aside and discarding them still work."}
     </p>
   );
 }
@@ -907,6 +1028,55 @@ function ParkedNote({
 }
 
 /**
+ * The doubts a **run** of parked pieces is carrying — read here, written on the piece.
+ *
+ * A run put back in front of the collector months later is answered by the sentences that were
+ * written when it was set aside, so this panel has to show them; what it must not do is offer one
+ * field over fifteen tiles, which could only overwrite fourteen sentences or invent a merge of them.
+ * Editing stays where the note belongs — the tile's own dialog — and the distinct ones are listed
+ * because a run parked together usually wrote the same doubt on all of them, and saying it fifteen
+ * times would bury the one piece whose note differs.
+ */
+function ParkedRunNotes({ tiles }: { tiles: ScanTileData[] }) {
+  const notes = [...new Set(tiles.map((t) => t.note?.trim()).filter(Boolean))] as string[];
+  const unwritten = tiles.filter((t) => !t.note?.trim()).length;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.375rem",
+        marginBottom: "0.875rem",
+        padding: "0.625rem 0.75rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-warning-border)",
+        background: "var(--color-warning-soft)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+        <strong>
+          {tiles.length} pieces set aside to check.
+        </strong>{" "}
+        They are still to be identified. Identify them together below when you have the answer, or
+        put them back.
+      </p>
+      {notes.length > 0 && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+          {notes.join(" · ")}
+          {unwritten > 0 && (
+            <span style={{ color: "var(--color-text-muted)" }}>
+              {" "}
+              · {unwritten} with no note
+            </span>
+          )}
+        </p>
+      )}
+      <Muted>Open a piece on the strip to change what its note says.</Muted>
+    </div>
+  );
+}
+
+/**
  * What the piece **could be** (#607), and the one press that settles it.
  *
  * Discovering that a tile cannot be identified from its picture is not free: to know that a
@@ -929,6 +1099,7 @@ function CandidateShortlist({
   collectionId,
   areas,
   candidates,
+  tileCount,
   parked,
   canIdentify,
   disabled,
@@ -938,7 +1109,12 @@ function CandidateShortlist({
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
-  candidates: TileCandidate[];
+  /** The shortlist over whatever this dialog is about — one tile's, or the union across a run with
+   * how many of them carry each possibility (`mergeTileCandidates`). */
+  candidates: MergedTileCandidate[];
+  /** How many tiles the shortlist is being read for, so a possibility written on only some of them
+   * can say so. One is the ordinary case and says nothing. */
+  tileCount: number;
   /** Whether the tile has been set aside. Decides only how much of this is drawn: a waiting tile
    * with nothing listed gets one line, because most tiles are identified where they stand and a
    * panel on every one of them would be a form in front of the ordinary answer. */
@@ -952,7 +1128,7 @@ function CandidateShortlist({
   onRemove: (stampId: string) => void;
   onIdentifyAs: (pick: TileStampPick) => void;
 }) {
-  const parent = sharedVariantParent(candidates);
+  const parent = sharedVariantParent(candidates.map((c) => c.candidate));
   // One derivation for the whole list, not one per row: the vendor maps come off a shared query and
   // every candidate resolves through the same (area, issue) lookup the picker's rows do (#377).
   const { vendorMapFor, primaryVendorByArea } = useAreaVendorMaps(areas, collectionId);
@@ -999,11 +1175,15 @@ function CandidateShortlist({
         </span>
       </div>
 
-      {candidates.map((c) => (
+      {candidates.map(({ candidate: c, onCount }) => (
         <CandidateRow
           key={c.stampId}
           collectionId={collectionId}
           candidate={c}
+          // Said only when it is not true of the whole run: a possibility carried by three of five
+          // ticked pieces is a fact about how they were narrowed, and smoothing it over would be the
+          // union pretending to be an intersection. Adding or removing from here settles it.
+          partial={onCount < tileCount ? `on ${onCount} of ${tileCount}` : null}
           vendorMap={vendorMapFor(c.collectionAreaId, c.issueId)}
           primaryVendorId={
             c.collectionAreaId ? primaryVendorByArea.get(c.collectionAreaId) ?? null : null
@@ -1048,6 +1228,7 @@ function CandidateShortlist({
 function CandidateRow({
   collectionId,
   candidate,
+  partial,
   vendorMap,
   primaryVendorId,
   canIdentify,
@@ -1057,6 +1238,9 @@ function CandidateRow({
 }: {
   collectionId: string;
   candidate: TileCandidate;
+  /** *on 3 of 5*, when this possibility is written on only some of the ticked pieces — null for the
+   * ordinary case, which is one tile or a run that agrees. */
+  partial: string | null;
   vendorMap: VendorMap;
   primaryVendorId: string | null;
   canIdentify: boolean;
@@ -1111,6 +1295,9 @@ function CandidateRow({
                   {candidate.unknownVariant && (
                     <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
                   )}
+                  {partial && (
+                    <span style={{ color: "var(--color-text-muted)" }}> — {partial}</span>
+                  )}
                 </span>
                 <StampDetailLine
                   node={node}
@@ -1120,7 +1307,10 @@ function CandidateRow({
               </div>
             </div>
           ) : (
-            label
+            <>
+              {label}
+              {partial && <span style={{ color: "var(--color-text-muted)" }}> — {partial}</span>}
+            </>
           )}
         </button>
       </Tooltip>

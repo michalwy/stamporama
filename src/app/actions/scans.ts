@@ -15,12 +15,12 @@ import {
 import {
   addTileCandidate,
   assignTileToCopy,
-  discardTile,
+  discardTiles,
   identifyTilesAsNewCopies,
   noteTile,
-  parkTile,
+  parkTiles,
   removeTileCandidate,
-  returnTileToQueue,
+  returnTilesToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
 
@@ -218,20 +218,30 @@ export async function assignTileAction(
   }
 }
 
-/** Record that a tile became nothing, and why. The image stays; the tile leaves the unidentified
- * count and survives the lot closing, because it is evidence rather than a queue item. */
-export async function discardTileAction(
-  tileId: string,
+/**
+ * Record that one or several tiles became nothing, and why. The images stay; the tiles leave the
+ * unidentified count and survive the lot closing, because they are evidence rather than queue items.
+ *
+ * **A list, like every other outcome on this screen.** A card of junk is discarded a run at a time,
+ * and one tile is a list of one so there is a single door rather than two that could drift.
+ */
+export async function discardTilesAction(
+  tileIds: string[],
   note: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await discardTile(session.user.id, tileId, note);
+    await discardTiles(session.user.id, tileIds, note);
     return { status: "success" };
   } catch (e) {
     return {
       status: "error",
-      message: e instanceof Error ? e.message : "Failed to discard the tile. Please try again.",
+      message:
+        e instanceof Error
+          ? e.message
+          : tileIds.length === 1
+            ? "Failed to discard the tile. Please try again."
+            : "Failed to discard the tiles. Please try again.",
     };
   }
 }
@@ -243,18 +253,23 @@ export async function discardTileAction(
  * park has to stay smaller than what parking saves, or the interruption it exists to prevent simply
  * moves into this button. The note is written or changed afterwards through `noteTileAction`.
  */
-export async function parkTileAction(
-  tileId: string,
+export async function parkTilesAction(
+  tileIds: string[],
   note: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await parkTile(session.user.id, tileId, note);
+    await parkTiles(session.user.id, tileIds, note);
     return { status: "success" };
   } catch (e) {
     return {
       status: "error",
-      message: e instanceof Error ? e.message : "Failed to park the tile. Please try again.",
+      message:
+        e instanceof Error
+          ? e.message
+          : tileIds.length === 1
+            ? "Failed to park the tile. Please try again."
+            : "Failed to park the tiles. Please try again.",
     };
   }
 }
@@ -286,12 +301,12 @@ export async function noteTileAction(
  * two struck off when the lamp settles them.
  */
 export async function addTileCandidateAction(
-  tileId: string,
+  tileIds: string[],
   stampId: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await addTileCandidate(session.user.id, tileId, stampId);
+    await addTileCandidate(session.user.id, tileIds, stampId);
     return { status: "success" };
   } catch (e) {
     return {
@@ -304,12 +319,12 @@ export async function addTileCandidateAction(
 /** Take a possibility off a tile's shortlist — ruling one out is the ordinary progress of the work
  * parking exists for, so it costs exactly what adding it did. */
 export async function removeTileCandidateAction(
-  tileId: string,
+  tileIds: string[],
   stampId: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await removeTileCandidate(session.user.id, tileId, stampId);
+    await removeTileCandidate(session.user.id, tileIds, stampId);
     return { status: "success" };
   } catch (e) {
     return {
@@ -321,15 +336,20 @@ export async function removeTileCandidateAction(
 
 /** Put a discarded or parked tile back in the queue — a mis-clicked discard undone, or a parked
  * piece whose answer is now known. */
-export async function returnTileToQueueAction(tileId: string): Promise<ScanActionState> {
+export async function returnTilesToQueueAction(tileIds: string[]): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await returnTileToQueue(session.user.id, tileId);
+    await returnTilesToQueue(session.user.id, tileIds);
     return { status: "success" };
   } catch (e) {
     return {
       status: "error",
-      message: e instanceof Error ? e.message : "Failed to restore the tile. Please try again.",
+      message:
+        e instanceof Error
+          ? e.message
+          : tileIds.length === 1
+            ? "Failed to restore the tile. Please try again."
+            : "Failed to restore the tiles. Please try again.",
     };
   }
 }

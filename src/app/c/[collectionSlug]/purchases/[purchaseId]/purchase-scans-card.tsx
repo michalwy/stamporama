@@ -40,7 +40,11 @@ import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-i
 import type { CollectionAreaData } from "@/lib/areas";
 import { candidateLabel, candidateShortLabel } from "@/lib/tile-candidates";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
-import { TileIdentifyDialog, type TileStampPick } from "./tile-identify-dialog";
+import {
+  TileIdentifyDialog,
+  type SelectedTile,
+  type TileStampPick,
+} from "./tile-identify-dialog";
 import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidateLotCopies } from "./use-lot-copies-query";
 import { useInvalidatePurchaseScans, usePurchaseScans } from "./use-purchase-scans-query";
@@ -71,12 +75,19 @@ import {
  * *unidentified* one: this section is where those pieces gather, because the strip is a map of the
  * card and a list of them anywhere else would be pictures with nothing saying which card to pull.
  *
- * Several tiles can also be **ticked and identified in one pass** (#596), which is what a card
+ * Several tiles can also be **ticked and worked through in one pass** (#596), which is what a card
  * holding a run of one definitive comes to. The selection is a layer *over* the strip and never a
  * change to it: the box is a small control in a tile's free corner, the rest of the square still
  * opens the dialog, and a settled tile — which can take no identification — has no box at all. The
  * model is `scan-tile-selection.ts`, which says why this is a set of ids rather than #571's
  * containers.
+ *
+ * **The bar opens the same dialog a tile does**, and does not act by itself. It used to offer one
+ * outcome — identify them as one stamp — and led straight into the picker, so a ticked run could
+ * never be discarded or set aside, which are exactly the two answers a card of junk and a run of one
+ * doubtful variant need. Growing a button per outcome on the bar would have restated the vocabulary
+ * the tile dialog already is, in a place that cannot show the pictures the answer is read off. So the
+ * bar counts the selection and opens it, and the outcomes stay in one place.
  *
  * Clicking a tile opens that question (`tile-identify-dialog.tsx`) — **whatever state it is in**
  * (#584), so nothing here navigates on a click. Two answers inside the dialog leave: *new copy*,
@@ -201,6 +212,10 @@ export function PurchaseScansCard({
   /** Which tile's three outcomes are being asked. Held by id rather than by value so the dialog
    * re-reads the tile after a refetch instead of showing the state it had when it was opened. */
   const [tileId, setTileId] = useState<string | null>(null);
+  /** Whether the dialog is open on the **selection** rather than on one tile (#596). A flag and not
+   * a copy of the ticked ids: the selection is already held below and is pruned against the strip on
+   * every render, so a second list here could name a tile that has since been worked through. */
+  const [selectionOpen, setSelectionOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   /** How far the scan being sent has got (#590), or null while none is. Two phases and not one
    * number: *uploading* is the chunks the server has acknowledged, and *preparing* is the assembly
@@ -257,6 +272,9 @@ export function PurchaseScansCard({
   const live = pruneSelection(selected, allTiles);
   if (live.size !== selected.size) setSelected(live);
   const selectedTiles = selectedInOrder(live, allTiles);
+  // A selection worked through to nothing takes its dialog with it — and, more importantly, closes
+  // the door behind it: a flag left standing would make the *next* tick open the dialog on its own.
+  if (selectionOpen && selectedTiles.length === 0) setSelectionOpen(false);
 
   /**
    * Re-read what a write changed — **everywhere it is visible, not just on the surface that made
@@ -295,16 +313,35 @@ export function PurchaseScansCard({
    * came from is in hand — including whether its scan has been swept (#578), which is exactly what a
    * second derivation further down the chain would get wrong.
    */
-  const identifySelected = () => {
-    const pieces = selectedTiles.map((tile) => {
-      const batch = batches.find((b) => b.tiles.some((t) => t.id === tile.id));
-      return {
-        tileId: tile.id,
-        sides: tileSideViews(tile, { front: batch?.front ?? null, back: batch?.back ?? null }),
-        position: tile.position,
-      };
-    });
-    if (pieces.length > 0) onIdentifyTiles(pieces);
+  const withSides = (tile: ScanTileData): SelectedTile => {
+    const batch = batches.find((b) => b.tiles.some((t) => t.id === tile.id));
+    return {
+      tile,
+      sides: tileSideViews(tile, { front: batch?.front ?? null, back: batch?.back ?? null }),
+    };
+  };
+
+  /**
+   * What the dialog is about: the ticked run, or the one tile that was clicked.
+   *
+   * Re-derived from the live batches on every render rather than captured when the dialog opened, so
+   * a refetch is what the dialog reads — a tile parked a moment ago comes back parked, and a run
+   * whose tiles were consumed empties and closes rather than acting on ids that no longer stand for
+   * anything.
+   */
+  const dialogTiles: SelectedTile[] = selectionOpen
+    ? selectedTiles.map(withSides)
+    : openTile
+      ? [withSides(openTile)]
+      : [];
+
+  /** Closing the dialog closes **whichever** way it was opened. The ticked run is deliberately left
+   * ticked: what it names is pruned against the strip on every render, so an outcome that settled the
+   * pieces empties the bar on its own, while a cancelled pass keeps the selection the collector made
+   * rather than making them tick fifteen squares again. */
+  const closeDialog = () => {
+    setTileId(null);
+    setSelectionOpen(false);
   };
 
   /**
@@ -625,9 +662,8 @@ export function PurchaseScansCard({
       {selectedTiles.length > 0 && (
         <TileSelectionBar
           count={selectedTiles.length}
-          canIdentify={canIdentify}
           busy={uploading || pending || detecting}
-          onIdentify={identifySelected}
+          onOpen={() => setSelectionOpen(true)}
           onClear={() => setSelected(new Set())}
         />
       )}
@@ -663,17 +699,17 @@ export function PurchaseScansCard({
         />
       ))}
 
-      {openTile && (
+      {dialogTiles.length > 0 && (
         <TileIdentifyDialog
           collectionId={collectionId}
           areas={areas}
           scanDpi={scanDpi}
           purchaseId={purchaseId}
-          tile={openTile}
-          // `ScanSheetData` already answers both questions the deep look asks — which scan, and
-          // whether the retention sweep has taken it (#578) — so the dialog is handed the sheets
-          // rather than a second read of them.
-          sheets={{ front: openBatch?.front ?? null, back: openBatch?.back ?? null }}
+          // One tile, or the ticked run — one dialog either way (#596), with the sides worked out
+          // here: `ScanSheetData` already answers both questions the deep look asks (which scan, and
+          // whether the retention sweep has taken it, #578), and a run can cross two cards of the
+          // parcel, so nothing downstream could derive them from one pair of sheets.
+          tiles={dialogTiles}
           canIdentify={canIdentify}
           fromAuction={fromAuction}
           // The copies list searches internal numbers, so a copy's own number is the address that
@@ -681,49 +717,45 @@ export function PurchaseScansCard({
           // rides into the dialog now rather than onto the tile (#584): the tile no longer goes
           // anywhere, and *Open copy* inside is where the address is needed.
           copyHref={
-            openTile.state === "consumed" && openTile.item
+            openTile?.state === "consumed" && openTile.item
               ? `/c/${collectionSlug}/inventory?search=${openTile.item.itemNo}`
               : null
           }
-          onIdentifyNew={(sides) => {
-            // The lot card takes it from here: the picker and the condition dialog are the ones
+          onIdentifyNew={(pieces) => {
+            // The order panel takes it from here: the picker and the condition dialog are the ones
             // every other intake goes through, and a second pair of them would be a second set of
-            // remembered choices. The sides ride along so the piece stays on screen for all of it
+            // remembered choices. The pieces ride along so they stay on screen for all of it
             // (#592) — this dialog is where they were worked out, and the only place they are free.
-            // A list of one (#596): this tile, whatever happens to be ticked on the strip behind it.
-            setTileId(null);
-            onIdentifyTiles([{ tileId: openTile.id, sides, position: openTile.position }]);
+            closeDialog();
+            onIdentifyTiles(pieces);
           }}
           // A candidate off the shortlist, or the parent offered in its place (#607) — the same
           // handover with the picker's answer already given, so the chain resumes at the condition
-          // step. Never the whole strip selection: a shortlist is one piece's, and pressing one of
-          // its candidates is an answer about that piece.
-          onIdentifyAs={(pick, sides) => {
-            setTileId(null);
-            onIdentifyTiles([{ tileId: openTile.id, sides, position: openTile.position }], pick);
+          // step.
+          onIdentifyAs={(pick, pieces) => {
+            closeDialog();
+            onIdentifyTiles(pieces, pick);
           }}
-          // The same handover, minus the picker (#595) — the panel drops this tile straight onto
-          // the condition step with the last one's answers in the fields.
+          // The same handover, minus the picker (#595) — the panel drops these pieces straight onto
+          // the condition step with the last tile's answers in the fields.
           repeatLast={
             repeatLast && {
               summary: repeatLast.summary,
-              onRepeat: (sides) => {
-                setTileId(null);
-                repeatLast.onRepeatTile([
-                  { tileId: openTile.id, sides, position: openTile.position },
-                ]);
+              onRepeat: (pieces) => {
+                closeDialog();
+                repeatLast.onRepeatTile(pieces);
               },
             }
           }
           onDone={(touchedCopy) => {
-            setTileId(null);
+            closeDialog();
             refresh(touchedCopy);
           }}
-          // Parking and its note (#597) leave the dialog where it is: the tile is held by id, so it
-          // re-reads itself from the refetch and comes back parked, with the note box already in
-          // front of the collector who has the doubt in mind this second.
+          // Parking and its note (#597) leave the dialog where it is: the tiles are re-derived from
+          // the refetch, so they come back parked with the note box already in front of the
+          // collector who has the doubt in mind this second.
           onChanged={(touchedCopy) => refresh(touchedCopy)}
-          onClose={() => setTileId(null)}
+          onClose={closeDialog}
         />
       )}
 
@@ -1647,15 +1679,18 @@ function TickBox({
 }
 
 /**
- * What the ticked tiles are about to become (#596).
+ * What is ticked, and the one press that opens it (#596).
  *
- * **The count is stated before anything is created**, as every other bulk action on this screen
- * does — the step that follows creates one copy per tile, and a collector who ticked a run across
- * two batches should not have to count the ring-marked squares to know how many that is.
+ * **The count is stated before anything happens**, as every other bulk action on this screen does: a
+ * collector who ticked a run across two batches should not have to count the ring-marked squares to
+ * know how many pieces the answer will be about.
  *
- * It offers exactly one thing to do with the selection and no menu of them: identifying them
- * together is the whole reason ticking exists. Discarding a run in one press was not asked for, and
- * a discard is already one click on the tile itself.
+ * **It opens the tile dialog rather than acting.** It used to offer exactly one outcome — identify
+ * them as one stamp — which left a ticked run with no way to be discarded or set aside, the two
+ * answers a card of junk and a run of one doubtful variant need most. The fix is not a button per
+ * outcome here: the outcomes are a vocabulary that already exists one surface over, together with the
+ * pictures they are chosen from, and this bar cannot show a picture. So it counts and opens, and
+ * `tile-identify-dialog.tsx` stays the one place a tile's fate is decided.
  *
  * **It stays in view while the tiles scroll under it.** Ticking a run that crosses two cards means
  * scrolling — a parcel can hold a dozen batches of thirty squares — and a bar pinned to the top of
@@ -1665,15 +1700,13 @@ function TickBox({
  */
 function TileSelectionBar({
   count,
-  canIdentify,
   busy,
-  onIdentify,
+  onOpen,
   onClear,
 }: {
   count: number;
-  canIdentify: boolean;
   busy: boolean;
-  onIdentify: () => void;
+  onOpen: () => void;
   onClear: () => void;
 }) {
   const { barRef, stuck } = useStuck();
@@ -1703,18 +1736,16 @@ function TileSelectionBar({
         {count} {count === 1 ? "tile" : "tiles"} selected
       </strong>
       <span style={{ color: "var(--color-text-secondary)" }}>
-        {/* What the collector is asserting, said plainly: the app takes their word for it and
-            neither checks it nor goes looking for duplicates of its own. */}
-        Identifying them together answers the step once and creates {count}{" "}
-        {count === 1 ? "copy" : "copies"} — one per tile, each with its own pictures.
+        {/* What can be done with them, in the order the collector will want it: identifying them
+            together is what ticking is for, and the other two are why they are named here at all. */}
+        Identify them as one stamp, set them aside to check, or discard them — together.
       </span>
       <span style={{ flex: 1 }} />
       <SmallButton onClick={onClear} disabled={busy}>
         Clear
       </SmallButton>
-      <SmallButton onClick={onIdentify} disabled={busy || !canIdentify}>
-        <Icon name="scan" size="sm" /> Identify {count} {count === 1 ? "tile" : "tiles"} as one
-        stamp
+      <SmallButton onClick={onOpen} disabled={busy}>
+        <Icon name="scan" size="sm" /> Work through {count} {count === 1 ? "tile" : "tiles"}
       </SmallButton>
     </div>
   );
