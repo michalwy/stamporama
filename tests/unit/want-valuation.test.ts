@@ -155,7 +155,10 @@ describe("wantCatalogRange", () => {
       want({ conditionIds: [MNH], certificateStatusIds: [null], formatIds: [null] }),
       stamp({
         unknownVariant: true,
-        variantPrices: [[price("30.00", MNH)], [price("12.00", MNH)]],
+        variantPrices: [
+          { stampId: "v-a", prices: [price("30.00", MNH)] },
+          { stampId: "v-b", prices: [price("12.00", MNH)] },
+        ],
       }),
       DICTIONARIES,
       "EUR",

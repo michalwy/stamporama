@@ -28,6 +28,12 @@ import type { CostBasisTotal } from "./cost-basis";
 // Certificate matching is exact (null = none); there is no fall-back across
 // certificate levels. When no price matches, the copy is `unpriced`.
 
+/** One descendant variant's catalog prices, with the stamp they belong to (#616). */
+export interface VariantPrices {
+  stampId: string;
+  prices: RawCatalogPrice[];
+}
+
 export interface CopyValuationInput {
   conditionId: string;
   certificateStatusId: string | null;
@@ -44,8 +50,11 @@ export interface CopyValuationInput {
   /** The linked stamp's own catalog prices. */
   ownPrices: RawCatalogPrice[];
   /** Per-descendant-variant catalog prices; only consulted for unknown-variant copies
-   * whose base stamp has no matching price of its own. Each inner array is one variant. */
-  variantPrices?: RawCatalogPrice[][];
+   * whose base stamp has no matching price of its own. One entry is one variant, **tagged with the
+   * variant it belongs to** (#616): the rollup's answer is a figure *and* the stamp it came from,
+   * and the listing side needs the second half to know which catalogue entry the copy stands
+   * under. */
+  variantPrices?: VariantPrices[];
   baseCurrency: string;
   /** Non-base currency → base rate (see `safeRateMap`); missing/undefined = no rate. */
   rates: Map<string, number | null>;
@@ -63,6 +72,13 @@ export interface CopyValuation {
   uncertain: boolean;
   /** True when no catalog price matched (condition/cert/catalog). */
   unpriced: boolean;
+  /** The **variant** this figure came from (#616), and null whenever the linked stamp's own price was
+   *  used — including every identified copy and every unpriced one. It is the same answer read a
+   *  second way: what the copy is valued at and what catalogue entry that figure describes. The
+   *  listing side derives an umbrella's item-ID from it (`listing-catalog-ids.ts`), which is why it
+   *  is reported here rather than re-derived there — a listing that stood under one variant while
+   *  being priced from another would be two answers to one question. */
+  sourceStampId: string | null;
 }
 
 /** Value a single physical copy from the catalog. Pure; see module header for the rule. */
@@ -85,23 +101,30 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
     return toValuation(own, false, baseCurrency, rates);
   }
 
-  // Unknown variant, base stamp priced directly: use it, flagged uncertain.
+  // Unknown variant, base stamp priced directly: use it, flagged uncertain. No source stamp — the
+  // figure is the umbrella's own, which is the same precedence the listing side gives its item-ID.
   if (own) {
     return toValuation(own, true, baseCurrency, rates);
   }
 
-  // Unknown variant, base stamp unpriced: lowest descendant-variant price (in base currency).
+  // Unknown variant, base stamp unpriced: lowest descendant-variant price (in base currency). The
+  // candidates carry the variant they came from, so the winner names it (#616).
   const candidates = (input.variantPrices ?? [])
-    .map(pick)
-    .filter((p): p is PickedPrice => p !== null);
-  return toValuation(pickLowestByBase(candidates, baseCurrency, rates), true, baseCurrency, rates);
+    .map((v) => {
+      const picked = pick(v.prices);
+      return picked ? { ...picked, stampId: v.stampId } : null;
+    })
+    .filter((p): p is PickedPrice & { stampId: string } => p !== null);
+  const lowest = pickLowestByBase(candidates, baseCurrency, rates);
+  return toValuation(lowest, true, baseCurrency, rates, lowest?.stampId ?? null);
 }
 
 function toValuation(
   picked: PickedPrice | null,
   uncertain: boolean,
   baseCurrency: string,
-  rates: Map<string, number | null>
+  rates: Map<string, number | null>,
+  sourceStampId: string | null = null
 ): CopyValuation {
   if (!picked) {
     return {
@@ -111,6 +134,7 @@ function toValuation(
       baseAmountDisplay: null,
       uncertain,
       unpriced: true,
+      sourceStampId: null,
     };
   }
   const baseAmount = baseValueOf(picked.amount, picked.currency, baseCurrency, rates);
@@ -121,6 +145,7 @@ function toValuation(
     baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
     uncertain,
     unpriced: false,
+    sourceStampId,
   };
 }
 

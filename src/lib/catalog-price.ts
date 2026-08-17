@@ -142,14 +142,19 @@ export function pickFormatCatalogPrice(
 /** The candidate with the lowest base-currency value. Unconvertible candidates (no rate)
  * cannot be compared, so they are skipped; if every candidate is unconvertible the first is
  * returned (amount known, base value unknown). Null when there are no candidates. Shared by
- * the copy valuation (unknown-variant rule) and the issue-list headline rollup. */
-export function pickLowestByBase(
-  candidates: PickedPrice[],
+ * the copy valuation (unknown-variant rule) and the issue-list headline rollup.
+ *
+ * Generic over the candidate, and returning the candidate **itself** rather than a fresh price, so a
+ * caller that tagged its candidates can read the tag back off the winner — which is how a rolled-up
+ * copy valuation reports *which* variant it took its figure from (#616). Comparison needs nothing
+ * but the amount and the currency. */
+export function pickLowestByBase<T extends { amount: number; currency: string }>(
+  candidates: readonly T[],
   baseCurrency: string,
   rates: Map<string, number | null>
-): PickedPrice | null {
+): T | null {
   if (candidates.length === 0) return null;
-  let best: PickedPrice | null = null;
+  let best: T | null = null;
   let bestBase: number | null = null;
   for (const c of candidates) {
     const bv = baseValueOf(c.amount, c.currency, baseCurrency, rates);

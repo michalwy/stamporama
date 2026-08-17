@@ -144,8 +144,10 @@ export async function valuateItemRows(
         unknownVariant: r.unknownVariant,
         primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
         ownPrices: pricesByStamp.get(r.stampId) ?? [],
+        // Tagged with the variant each array belongs to (#616), so the rollup's answer names the
+        // stamp it took its figure from.
         variantPrices: descendants
-          ? descendants.map((id) => pricesByStamp.get(id) ?? [])
+          ? descendants.map((id) => ({ stampId: id, prices: pricesByStamp.get(id) ?? [] }))
           : undefined,
         baseCurrency,
         rates,

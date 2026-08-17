@@ -56,6 +56,11 @@ import { colnectGradeFor } from "./colnect-conditions";
 import { catalogChipCopyValueFromLabel } from "./catalog-number";
 import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
+  resolveListingCatalogItemIds,
+  type ResolvedCatalogItemId,
+} from "./listing-catalog-ids";
+import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import {
   evaluateListingPreconditions,
   type ListingBlocker,
   type ListingMode,
@@ -2663,6 +2668,10 @@ const LISTING_SETS_SELECT = {
         select: {
           stampId: true,
           conditionId: true,
+          // The rest of the valuation key (#616): an unknown-variant umbrella is listed under the
+          // variant that is cheapest at *this* copy's condition, certificate and format.
+          certificateStatusId: true,
+          formatId: true,
           condition: { select: { name: true } },
           stamp: {
             select: {
@@ -2670,6 +2679,8 @@ const LISTING_SETS_SELECT = {
               ...STAMP_LABEL_SELECT.stamp.select,
               issuedYear: true,
               colnectId: true,
+              // Whether the stamp is an umbrella at all, which is what makes the derivation apply.
+              variants: { select: VARIANT_FLAG_SELECT },
             },
           },
         },
@@ -2761,6 +2772,14 @@ export async function listReadyOffersForListing(
       ? loadColnectConditionMap(collectionId)
       : new Map<string, string>(),
   ]);
+  // …and so is the item-ID derivation (#616): one pass over every copy of the batch, rather than one
+  // valuation per offer. It needs the labeller, hence the second step.
+  const catalogIds = await resolveSetCatalogItemIds(
+    collectionId,
+    rows.flatMap((row) => row.sets),
+    platformModule,
+    labeller
+  );
   const items: ListingWorkspaceOffer[] = rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -2775,7 +2794,14 @@ export async function listReadyOffersForListing(
     photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
     url: row.url,
     areaYears: distinctAreaYears(row.sets),
-    blockers: listingBlockersFor(row.sets, platformModule, labeller, conditionMap, "ready"),
+    blockers: listingBlockersFor(
+      row.sets,
+      platformModule,
+      labeller,
+      conditionMap,
+      catalogIds,
+      "ready"
+    ),
   }));
 
   await attachBasePrices(collectionId, baseCurrency, items);
@@ -2784,6 +2810,41 @@ export async function listReadyOffersForListing(
 
 /** One of the batch's sets, exactly as {@link LISTING_SETS_SELECT} returns it. */
 type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SELECT }>;
+
+/**
+ * Which catalogue entry each of these copies is listed under (#616) — the stamp's own item-ID where
+ * it has one, and otherwise, for an unknown-variant umbrella, the **cheapest variant's**, derived by
+ * the same rule that values the copy.
+ *
+ * Asked over as many sets as the caller holds at once, so a posting session's whole batch is one
+ * derivation rather than forty; the workspace passes every offer's sets in, an offer's own screen
+ * its own. It is only *derived* where the module lists against a catalogue of its own (#493) — a
+ * platform filed by category has no entry for a variant to be an entry of, and the flag being false
+ * is what keeps the read from happening at all.
+ */
+async function resolveSetCatalogItemIds(
+  collectionId: string,
+  sets: readonly ListingSetRow[],
+  platformModule: string | null,
+  labeller: OfferLabeller
+): Promise<Map<string, ResolvedCatalogItemId>> {
+  const catalogued = usesPlatformCatalogue(platformModule);
+  return resolveListingCatalogItemIds(
+    collectionId,
+    sets.flatMap((set) =>
+      set.items.map(({ itemId, item }) => ({
+        itemId,
+        stampId: item.stampId,
+        conditionId: item.conditionId,
+        certificateStatusId: item.certificateStatusId,
+        formatId: item.formatId,
+        unknownVariant: catalogued && isUnknownVariantStamp(item.stamp),
+        ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+      }))
+    ),
+    labeller
+  );
+}
 
 /**
  * The listing preconditions for one offer of the batch (#406), or **nothing** where the platform has
@@ -2804,6 +2865,10 @@ function listingBlockersFor(
   platformModule: string | null,
   labeller: OfferLabeller,
   conditionMap: Map<string, string>,
+  /** What each copy is listed under (#616), from {@link resolveSetCatalogItemIds}. Required rather
+   *  than defaulted: a caller that forgot it would report every umbrella as unmatched, which is the
+   *  refusal this derivation exists to lift. */
+  catalogIds: Map<string, ResolvedCatalogItemId>,
   state: OfferState,
   /** Which act is being judged (#462) — posting this offer, or re-filling the listing it is already
    *  live as. Only the leading state check differs; everything about the goods is asked either way. */
@@ -2823,7 +2888,7 @@ function listingBlockersFor(
         itemId,
         label: labeller.copy(item.stamp),
         stampId: item.stampId,
-        catalogItemId: item.stamp.colnectId?.trim() || null,
+        catalogItemId: catalogIds.get(itemId)?.catalogItemId ?? null,
         conditionId: item.conditionId,
         conditionName: item.condition.name,
         platformCondition: conditionMap.get(item.conditionId) ?? null,
@@ -2868,7 +2933,20 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
           ? loadColnectConditionMap(collectionId)
           : new Map<string, string>(),
       ]);
-      return listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready");
+      const catalogIds = await resolveSetCatalogItemIds(
+        collectionId,
+        offer.sets,
+        platformModule,
+        labeller
+      );
+      return listingBlockersFor(
+        offer.sets,
+        platformModule,
+        labeller,
+        conditionMap,
+        catalogIds,
+        "ready"
+      );
     })(),
     readOfferPhotoBlockers(offerId),
   ]);
@@ -3215,6 +3293,10 @@ export interface OfferPlatformItem {
   /** What this stamp in this grade is currently being asked for (#423), null when the stamp is
    * unmatched or its condition is not mapped into the platform's vocabulary. */
   marketUrl: string | null;
+  /** The **variant** the two links above resolved to (#616) — set only where this stamp is an
+   * unknown-variant umbrella with no item-ID of its own, and the listing therefore stands under the
+   * cheapest variant. Null for every ordinary row, including an umbrella matched by hand. */
+  catalogItemVariant: string | null;
   /** How many of the offer's copies this row stands for. */
   copyCount: number;
 }
@@ -3296,9 +3378,16 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                   ...STAMP_LABEL_SELECT,
                   stampId: true,
                   conditionId: true,
+                  certificateStatusId: true,
+                  formatId: true,
                   condition: { select: { name: true } },
                   stamp: {
-                    select: { ...STAMP_LABEL_SELECT.stamp.select, issuedYear: true, colnectId: true },
+                    select: {
+                      ...STAMP_LABEL_SELECT.stamp.select,
+                      issuedYear: true,
+                      colnectId: true,
+                      variants: { select: VARIANT_FLAG_SELECT },
+                    },
                   },
                 },
               },
@@ -3359,6 +3448,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       ? loadColnectConditionMap(offer.collectionId)
       : new Map<string, string>(),
   ]);
+  // What each copy is listed under (#616), resolved once for the screen and read by all four
+  // surfaces below — the two blocker lists, the ready gate and the **On Colnect** card — so the page
+  // cannot say a stamp is unmatched in one place and link its variant's catalogue page in another.
+  const catalogIds = await resolveSetCatalogItemIds(
+    offer.collectionId,
+    offer.sets,
+    platformModule,
+    labeller
+  );
 
   // The base → offer-currency rate, fetched **once** for the whole screen: every set's two figures
   // and the suggested asking price are all converted with it. Null when the offer already prices in
@@ -3574,7 +3672,14 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
     },
     platformModule,
-    listingBlockers: listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, state),
+    listingBlockers: listingBlockersFor(
+      offer.sets,
+      platformModule,
+      labeller,
+      conditionMap,
+      catalogIds,
+      state
+    ),
     // The same evaluation asked as an **update** (#462). Its own field rather than a mode on the one
     // above, because the two answer about different acts and are read by two different controls: an
     // Active offer reports `not-ready` to the first — correctly, there is nothing to post — while the
@@ -3584,6 +3689,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       platformModule,
       labeller,
       conditionMap,
+      catalogIds,
       state,
       "update",
       offer.url
@@ -3595,11 +3701,18 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     readyBlockers:
       state === "preparing"
         ? [
-            ...listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready"),
+            ...listingBlockersFor(
+              offer.sets,
+              platformModule,
+              labeller,
+              conditionMap,
+              catalogIds,
+              "ready"
+            ),
             ...readyPhotoBlockers,
           ]
         : [],
-    platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap),
+    platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap, catalogIds),
     allegroPublication:
       offer.allegroOfferId && offer.allegroPublishStatus
         ? { offerId: offer.allegroOfferId, status: offer.allegroPublishStatus }
@@ -3633,19 +3746,24 @@ function platformItemsFor(
   sets: readonly ListingSetRow[],
   platformModule: string | null,
   labeller: OfferLabeller,
-  conditionMap: Map<string, string>
+  conditionMap: Map<string, string>,
+  catalogIds: Map<string, ResolvedCatalogItemId>
 ): OfferPlatformItem[] {
   if (!usesPlatformCatalogue(platformModule)) return [];
   const rows = new Map<string, OfferPlatformItem>();
   for (const set of sets) {
-    for (const { item } of orderedItems(set.items)) {
+    for (const { itemId, item } of orderedItems(set.items)) {
       const key = `${item.stampId} ${item.conditionId}`;
       const existing = rows.get(key);
       if (existing) {
         existing.copyCount += 1;
         continue;
       }
-      const colnectId = item.stamp.colnectId?.trim() || null;
+      // The derivation (#616) is per copy, since the cheapest variant is a fact about a
+      // `condition × certificate × format`; a row is `stamp × condition`, so it reports the first
+      // copy's answer — the same copy every other field on the row already comes from.
+      const resolved = catalogIds.get(itemId);
+      const colnectId = resolved?.catalogItemId ?? null;
       const grade = colnectGradeFor(conditionMap.get(item.conditionId) ?? "");
       const catalogNumbers = labeller.catalogNumbers(item.stamp);
       rows.set(key, {
@@ -3664,6 +3782,7 @@ function platformItemsFor(
               catalogNumbers[0] ? catalogChipCopyValueFromLabel(catalogNumbers[0]) : null
             ),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
+        catalogItemVariant: resolved?.sourceLabel ?? null,
         copyCount: 1,
       });
     }

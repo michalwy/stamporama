@@ -89,6 +89,18 @@ export type AssistantHandoffState =
 /** Which act a handoff is (#462), mirroring the kit's own `mode`. */
 export type AssistantHandoffMode = "create" | "update";
 
+/** One copy of the handed-over listing that stands under a **variant** rather than under the stamp
+ *  the collector picked (#616) — an unknown-variant umbrella listed under its cheapest variant. Read
+ *  off the kit as it is handed over, not out of the extension's answer: it is the instance's own
+ *  derivation and the form is filled identically either way, so there is nothing for the extension to
+ *  report about it. */
+export interface AssistantListedVariant {
+  /** The copy, by the number it is named by. */
+  label: string;
+  /** The variant the listing went under, with its vendor prefix. */
+  variant: string;
+}
+
 export interface AssistantHandoff {
   offerId: string;
   requestId: string;
@@ -99,6 +111,9 @@ export interface AssistantHandoff {
   state: AssistantHandoffState;
   message: string | null;
   report: AssistantReport | null;
+  /** What the kit resolved to a variant (#616), deduplicated, in listing order. Empty for almost
+   *  every listing. */
+  variants: AssistantListedVariant[];
 }
 
 /** The states the **extension** writes onto the node. `loading`, `activated` and the publication's
@@ -321,6 +336,7 @@ export function useAssistantHandoff(
         state: "loading",
         message: mode === "update" ? "Preparing the update…" : "Preparing the listing…",
         report: null,
+        variants: [],
       });
 
       const fail = (message: string) =>
@@ -356,11 +372,24 @@ export function useAssistantHandoff(
         return;
       }
 
-      const task = await res.json();
+      const task = (await res.json()) as {
+        items?: { label: string; catalogItemSource?: { label: string } | null }[];
+      };
+      // What this listing stands under, where that is not the stamp itself (#616). Taken here, from
+      // the payload actually handed over, so the report names the entries the form was filled with.
+      const variants: AssistantListedVariant[] = [];
+      for (const item of task.items ?? []) {
+        const variant = item.catalogItemSource?.label;
+        if (!variant || variants.some((v) => v.label === item.label && v.variant === variant)) {
+          continue;
+        }
+        variants.push({ label: item.label, variant });
+      }
       setHandoff((current) =>
         current?.requestId === requestId
           ? {
               ...current,
+              variants,
               payload: JSON.stringify({ v: 1, requestId, task }),
               // Handed over, and now the extension's to answer. Said as its own step so a browser
               // where the script never picks the node up does not sit on "Preparing…" for ever.

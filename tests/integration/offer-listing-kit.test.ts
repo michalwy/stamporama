@@ -20,6 +20,12 @@ describe("offer listing kit (#405)", () => {
   let platformId: string;
   let mnhId: string;
   let usedId: string;
+  // The pieces an unknown-variant umbrella's item-ID is derived through (#616): a priced catalogue
+  // in an area that names it, and a subtype whose children act as variants.
+  let vendorId: string;
+  let catalogEditionId: string;
+  let areaId: string;
+  let variantSubtypeId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -87,6 +93,43 @@ describe("offer listing kit (#405)", () => {
         },
       })
     ).id;
+    vendorId = (
+      await prisma.catalogVendor.create({
+        data: { collectionId, name: "Michel", abbreviation: "Mi" },
+      })
+    ).id;
+    const catalogNameId = (
+      await prisma.catalogName.create({
+        data: { vendorId, name: "Michel Katalog", currency: "EUR" },
+      })
+    ).id;
+    catalogEditionId = (
+      await prisma.catalogEdition.create({ data: { catalogNameId, year: 2024 } })
+    ).id;
+    areaId = (
+      await prisma.collectionArea.create({
+        data: { collectionId, name: "Poland", primaryCatalogNameId: catalogNameId },
+      })
+    ).id;
+    // The area's own catalogue and its vendor prefix, which is what a number is printed with
+    // (`Mi·PL 900b`, #66) — the form a variant is named in when the listing says what it went under.
+    await prisma.collectionAreaCatalog.create({
+      data: { collectionAreaId: areaId, catalogNameId },
+    });
+    await prisma.collectionAreaVendor.create({
+      data: { collectionAreaId: areaId, catalogVendorId: vendorId, areaPrefix: "PL" },
+    });
+    variantSubtypeId = (
+      await prisma.stampSubtype.create({
+        data: {
+          collectionId,
+          name: "Colour variety",
+          actsAsVariant: true,
+          isDefault: true,
+          sortOrder: 0,
+        },
+      })
+    ).id;
     // Only MNH is mapped to start with; the Used case is what the unmapped precondition rides on.
     await setColnectConditionMapping(userId, mnhId, "1");
   });
@@ -105,6 +148,49 @@ describe("offer listing kit (#405)", () => {
     return (
       await prisma.stamp.create({ data: { collectionId, name: `${name} ${seq}`, colnectId } })
     ).id;
+  }
+
+  /** A base stamp with variant children (ADR-0010 §3), each priced and each with its own number and
+   *  item-ID — the shape an umbrella listing is derived over (#616). Returns the umbrella. */
+  async function umbrella(
+    name: string,
+    variants: { number: string; colnectId: string | null; price: string; conditionId?: string }[]
+  ): Promise<string> {
+    seq += 1;
+    const base = await prisma.stamp.create({
+      data: { collectionId, name: `${name} ${seq}`, colnectId: null },
+    });
+    await prisma.stampCollectionArea.create({
+      data: { stampId: base.id, collectionAreaId: areaId, isPrimary: true },
+    });
+    for (const v of variants) {
+      const child = await prisma.stamp.create({
+        data: {
+          collectionId,
+          parentId: base.id,
+          name: `${name} ${seq} ${v.number}`,
+          subtypeId: variantSubtypeId,
+          colnectId: v.colnectId,
+        },
+      });
+      await prisma.stampCollectionArea.create({
+        data: { stampId: child.id, collectionAreaId: areaId, isPrimary: true },
+      });
+      await prisma.stampCatalogNumber.create({
+        data: { stampId: child.id, catalogVendorId: vendorId, number: v.number },
+      });
+      await prisma.stampCatalogPrice.create({
+        data: {
+          stampId: child.id,
+          catalogEditionId,
+          conditionId: v.conditionId ?? mnhId,
+          certificateStatusId: null,
+          price: v.price,
+          currency: "EUR",
+        },
+      });
+    }
+    return base.id;
   }
 
   async function copy(stampId: string, conditionId = mnhId): Promise<string> {
@@ -241,6 +327,114 @@ describe("offer listing kit (#405)", () => {
     const kit = await getOfferListingKit(userId, collectionId, offerId);
     assert.deepEqual(kit?.blockers.map((b) => b.code), ["mixed-sets"]);
     assert.equal(kit?.quantity, 2);
+  });
+
+  // ── An unknown-variant umbrella (#616) ─────────────────────────────────────
+  //
+  // Colnect keys a sale on one specific variant, and the practice for a piece that cannot be resolved
+  // that far is to list it under its **cheapest** one. The item-ID is derived by the same rule that
+  // values the copy, so a listing and its valuation cannot describe different variants.
+
+  it("lists an unknown-variant umbrella under its cheapest variant, and names it", async () => {
+    const base = await umbrella("PL var", [
+      { number: "900a", colnectId: "2001", price: "30.00" },
+      { number: "900b", colnectId: "2002", price: "12.00" },
+      { number: "900c", colnectId: "2003", price: "40.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+
+    const kit = await getOfferListingKit(userId, collectionId, offerId);
+    assert.deepEqual(kit?.blockers, []);
+    assert.equal(kit?.items[0].catalogItemId, "2002");
+    assert.equal(kit?.items[0].catalogItemSource?.label, "Mi·PL 900b");
+    // Nothing is written back: the umbrella is still unmatched, this being a claim about one
+    // listing rather than about the stamp's identity.
+    assert.equal(
+      (await prisma.stamp.findUnique({ where: { id: base }, select: { colnectId: true } }))
+        ?.colnectId,
+      null
+    );
+  });
+
+  it("resolves per condition — the cheapest MNH variant need not be the cheapest used", async () => {
+    const base = await umbrella("PL var cond", [
+      { number: "910a", colnectId: "2101", price: "30.00" },
+      { number: "910b", colnectId: "2102", price: "12.00" },
+    ]);
+    // The second variant is dear used, so the used copy stands under the first.
+    await prisma.stampCatalogPrice.createMany({
+      data: [
+        {
+          stampId: (await prisma.stamp.findFirstOrThrow({
+            where: { parentId: base, catalogNumbers: { some: { number: "910a" } } },
+            select: { id: true },
+          })).id,
+          catalogEditionId,
+          conditionId: usedId,
+          certificateStatusId: null,
+          price: "5.00",
+          currency: "EUR",
+        },
+        {
+          stampId: (await prisma.stamp.findFirstOrThrow({
+            where: { parentId: base, catalogNumbers: { some: { number: "910b" } } },
+            select: { id: true },
+          })).id,
+          catalogEditionId,
+          conditionId: usedId,
+          certificateStatusId: null,
+          price: "18.00",
+          currency: "EUR",
+        },
+      ],
+    });
+    await setColnectConditionMapping(userId, usedId, "4");
+    try {
+      const mnh = await getOfferListingKit(
+        userId,
+        collectionId,
+        await offer([[await copy(base, mnhId)]])
+      );
+      const used = await getOfferListingKit(
+        userId,
+        collectionId,
+        await offer([[await copy(base, usedId)]])
+      );
+      assert.equal(mnh?.items[0].catalogItemId, "2102");
+      assert.equal(used?.items[0].catalogItemId, "2101");
+    } finally {
+      await setColnectConditionMapping(userId, usedId, null);
+    }
+  });
+
+  it("keeps an umbrella's own item-ID where one was matched by hand", async () => {
+    const base = await umbrella("PL var matched", [
+      { number: "920a", colnectId: "2201", price: "12.00" },
+    ]);
+    await prisma.stamp.update({ where: { id: base }, data: { colnectId: "2200" } });
+    const kit = await getOfferListingKit(
+      userId,
+      collectionId,
+      await offer([[await copy(base)]])
+    );
+    assert.equal(kit?.items[0].catalogItemId, "2200");
+    assert.equal(kit?.items[0].catalogItemSource, null);
+  });
+
+  it("still refuses when the cheapest variant carries no item-ID of its own", async () => {
+    const base = await umbrella("PL var unmatched", [
+      { number: "930a", colnectId: null, price: "12.00" },
+      { number: "930b", colnectId: "2302", price: "30.00" },
+    ]);
+    const kit = await getOfferListingKit(
+      userId,
+      collectionId,
+      await offer([[await copy(base)]])
+    );
+    // The dearer variant is not tried in its place: that would stand the listing under a different
+    // claim about the goods.
+    assert.deepEqual(kit?.blockers.map((b) => b.code), ["missing-catalog-id"]);
+    assert.equal(kit?.items[0].catalogItemId, null);
   });
 
   it("is null for another owner's offer and for the wrong collection", async () => {

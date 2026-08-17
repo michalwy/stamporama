@@ -21,6 +21,8 @@ import {
   readAllegroListingSection,
   type AllegroListingSection,
 } from "./allegro-listing-task";
+import { resolveListingCatalogItemIds } from "./listing-catalog-ids";
+import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import type { OfferState } from "./offer-rules";
 import type { DescriptionFormat } from "./description-format";
 
@@ -52,8 +54,14 @@ export interface ListingKitItem {
   /** The copy's label — its leading catalog number (#379). */
   label: string;
   /** The platform's catalog item-ID (Colnect's item-ID, #247) — null when the stamp has none, and
-   *  null throughout for a module that lists against no catalogue of its own (#493). */
+   *  null throughout for a module that lists against no catalogue of its own (#493). For an
+   *  unknown-variant umbrella it is **derived** from the cheapest variant (#616); see
+   *  {@link ListingKitItem.catalogItemSource}. */
   catalogItemId: string | null;
+  /** The variant the id above was derived from (#616), or null when the copy's own stamp carried it.
+   *  A form is filled identically either way — this is what lets the surfaces say the listing went
+   *  under a variant rather than under the umbrella the collector picked. */
+  catalogItemSource: { stampId: string; label: string } | null;
   condition: ListingKitCondition;
 }
 
@@ -153,9 +161,20 @@ const KIT_ITEM_SELECT = {
       itemNo: true,
       stampId: true,
       conditionId: true,
+      // The rest of the valuation key (#616): an umbrella's item-ID is derived from the variant that
+      // is cheapest at *this* copy's condition, certificate and format.
+      certificateStatusId: true,
+      formatId: true,
       condition: { select: { name: true, abbreviation: true } },
-      // The label fields (#379) plus the one external identifier the form points at (#247).
-      stamp: { select: { ...STAMP_LABEL_SELECT.stamp.select, colnectId: true } },
+      // The label fields (#379) plus the one external identifier the form points at (#247), plus
+      // whether this stamp is an unknown-variant umbrella at all.
+      stamp: {
+        select: {
+          ...STAMP_LABEL_SELECT.stamp.select,
+          colnectId: true,
+          variants: { select: VARIANT_FLAG_SELECT },
+        },
+      },
     },
   },
 } as const;
@@ -214,6 +233,28 @@ export async function getOfferListingKit(
   ]);
   const catalogued = usesPlatformCatalogue(platformModule);
 
+  // Which catalogue entry each copy stands under (#616). An unknown-variant umbrella has no item-ID
+  // of its own and is listed under its **cheapest variant**, resolved by the same rule that values
+  // the copy — reading nothing at all for an offer whose stamps are all matched, and nothing for a
+  // module that lists against no catalogue.
+  const catalogIds = await resolveListingCatalogItemIds(
+    collectionId,
+    catalogued
+      ? offer.sets.flatMap((set) =>
+          set.items.map(({ itemId, item }) => ({
+            itemId,
+            stampId: item.stampId,
+            conditionId: item.conditionId,
+            certificateStatusId: item.certificateStatusId,
+            formatId: item.formatId,
+            unknownVariant: isUnknownVariantStamp(item.stamp),
+            ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+          }))
+        )
+      : [],
+    labeller
+  );
+
   const sets = offer.sets.map((set) => {
     const items = orderedLabelItems(set.items);
     return {
@@ -221,12 +262,17 @@ export async function getOfferListingKit(
       label: labeller.set({ title: set.title, items }),
       copies: items.map(({ itemId, item }): ListingKitItem => {
         const platformValue = conditionMap.get(item.conditionId) ?? null;
+        const resolved = catalogIds.get(itemId);
         return {
           itemId,
           itemNo: item.itemNo,
           stampId: item.stampId,
           label: labeller.copy(item.stamp),
-          catalogItemId: catalogued ? item.stamp.colnectId?.trim() || null : null,
+          catalogItemId: catalogued ? (resolved?.catalogItemId ?? null) : null,
+          catalogItemSource:
+            catalogued && resolved?.sourceStampId
+              ? { stampId: resolved.sourceStampId, label: resolved.sourceLabel ?? "" }
+              : null,
           condition: {
             id: item.conditionId,
             name: item.condition.name,

@@ -127,7 +127,10 @@ export interface ListingTaskItem {
   stampId: string;
   /** The copy's label — its leading catalog number (#379). What a message names it by. */
   label: string;
-  /** The platform's catalog item-ID (Colnect's item-ID, #247). */
+  /** The platform's catalog item-ID (Colnect's item-ID, #247). For a stamp whose variant is not
+   *  identified the instance derives it from the cheapest variant (#616) — a form is filled
+   *  identically either way, so the task carries no marker of it that a module would read; the
+   *  instance's own payload has one, and it is the instance that reports which variant it was. */
   catalogItemId: string | null;
   condition: ListingTaskCondition;
 }

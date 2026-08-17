@@ -507,7 +507,11 @@ async function loadCatalogRanges(
           catalogPrices: { select: CATALOG_PRICE_SELECT },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           variants: {
-            select: { ...VARIANT_FLAG_SELECT, catalogPrices: { select: CATALOG_PRICE_SELECT } },
+            select: {
+              id: true,
+              ...VARIANT_FLAG_SELECT,
+              catalogPrices: { select: CATALOG_PRICE_SELECT },
+            },
           },
           issueMemberships: { orderBy: { issueId: "asc" }, take: 1, select: { issueId: true } },
         },
@@ -565,7 +569,7 @@ async function loadCatalogRanges(
       unknownVariant: isUnknownVariantStamp(stamp),
       primaryCatalogNameId: areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null,
       ownPrices: stamp.catalogPrices,
-      variantPrices: stamp.variants.map((v) => v.catalogPrices),
+      variantPrices: stamp.variants.map((v) => ({ stampId: v.id, prices: v.catalogPrices })),
     };
     // The multiplier depends on the stamp's area and issue, not on the want, so it is bound once
     // per stamp and the pure half only ever asks it about a format.

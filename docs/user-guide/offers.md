@@ -762,15 +762,41 @@ Both gaps are marked in **amber**: the *N not matched* count in the heading, and
 to a page like Catalog and Market. A row with no amber on it is ready. The heading's count is
 readable with the card collapsed, which is where you are looking before you have opened it.
 
-A stamp with **no Colnect item-ID** cannot have a page of its own here, so its **Catalog** link
-becomes **Search** — Colnect's own catalogue search for that stamp's leading catalog number, in the
-form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the catalogue abbreviation dropped
-exactly as when you copy the chip). It answers the question you had, and it is the first step of
-recording the item-ID that turns the row's real links on.
+A stamp with **no Colnect item-ID** and no variant to fall back on cannot have a page of its own
+here, so its **Catalog** link becomes **Search** — Colnect's own catalogue search for that stamp's
+leading catalog number, in the form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the
+catalogue abbreviation dropped exactly as when you copy the chip). It answers the question you had,
+and it is the first step of recording the item-ID that turns the row's real links on.
+
+### A stamp whose variant you haven't identified
+
+Colnect files a stamp under its most precise catalogue number, and a sale attaches to one specific
+variant. Plenty of stamps can't be pinned down that far — telling two shades apart needs comparison
+material, and a gum variety is unknowable on a used copy. The practice on Colnect is to list such a
+piece under its **cheapest** variant, and Stamporama does that for you.
+
+So a copy filed under a base stamp that has variants is listed under whichever variant is cheapest
+**in that copy's condition** — the same variant its catalog value already comes from, so the price
+you are judging and the entry you are selling under are never two different stamps. The row's
+**Catalog** and **Market** links go to that variant's pages, and the row says which one, as
+`~ Mi·PL 900b` beside the stamp's name. The `~` and the italics are the same "worked out, not
+recorded" marker you see on a rolled-up catalog value.
+
+Nothing is written to your collection: the base stamp stays unmatched, because "this listing goes
+under the cheapest variant" is a fact about one listing, not a claim about which variant the stamp
+is. It is worked out afresh every time, so a catalogue correction that changes which variant is
+cheapest changes the listing too — where an item-ID pasted onto the stamp by hand would quietly stay
+wrong. Two copies of the same stamp in different conditions can end up under different variants, and
+that is correct.
+
+If the cheapest variant has no item-ID of its own, or none of the variants is priced, the offer is
+blocked exactly as before and the stamp is named — the next-cheapest variant is not quietly used
+instead, since that would be selling under a different claim.
 
 ### Filling the missing item-IDs without leaving the offer
 
-An offer cannot be posted on Colnect until **every** stamp in it carries an item-ID, and Search only
+An offer cannot be posted on Colnect until **every** stamp in it has an item-ID — its own, or its
+[cheapest variant's](#a-stamp-whose-variant-you-havent-identified) — and Search only
 gets you as far as the search results: you still had to press the Assistant's toolbar icon, match,
 and reload this screen. With the [Assistant](assistant.md) installed, two buttons take those steps
 for you:
@@ -915,7 +941,10 @@ half-way through a filled form.
 
 - **Every stamp needs the platform's catalog item-ID.** The form is opened *on* the catalog items
   being sold, so a stamp the platform doesn't know is a form with nothing to point at. Match the named
-  stamps with the Assistant on the platform's own catalog pages — that is what it already does.
+  stamps with the Assistant on the platform's own catalog pages — that is what it already does. A
+  stamp whose variant you haven't identified doesn't need matching: it is listed under its
+  [cheapest variant](#a-stamp-whose-variant-you-havent-identified), and the fill report names the one
+  each copy went under.
 - **Every condition needs a grade on that platform.** The card names the conditions with none; map
   them under **Settings → Colnect** (see [Colnect condition mapping](collections.md#colnect-condition-mapping)). A
   blank is a legitimate answer for a condition the platform has no grade for — it just means offers

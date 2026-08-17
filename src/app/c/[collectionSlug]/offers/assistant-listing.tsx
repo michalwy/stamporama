@@ -311,6 +311,40 @@ export function AssistantOutcome({
         </ul>
       )}
 
+      {/* What the listing stands **under** (#616). An unknown-variant umbrella carries no item-ID of
+          its own, so the form was filled with its cheapest variant's — which is what the sale will
+          attach to, and therefore the one thing about this fill that is not readable off the form.
+          `~` + muted italic is #238's vocabulary for inferred rather than recorded; nothing was
+          written onto the stamp. It survives the later states with the fill's own detail, since it
+          describes the same act. */}
+      {handoff.variants.length > 0 && (
+        <ul
+          style={{
+            listStyle: "none",
+            margin: "0 0 0 1.25rem",
+            padding: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.125rem",
+          }}
+        >
+          {handoff.variants.map((v) => (
+            <li
+              key={`${v.label}:${v.variant}`}
+              style={{
+                fontSize: "0.6875rem",
+                lineHeight: 1.5,
+                fontStyle: "italic",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              ~ {v.label} listed under {v.variant} — its variant isn&rsquo;t identified, so the
+              cheapest one is what it goes under.
+            </li>
+          ))}
+        </ul>
+      )}
+
       {report && report.filled.length > 0 && (
         <p
           style={{

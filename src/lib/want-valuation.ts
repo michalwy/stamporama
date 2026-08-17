@@ -1,4 +1,4 @@
-import { valuateCopy } from "./valuation";
+import { valuateCopy, type VariantPrices } from "./valuation";
 import type { RawCatalogPrice } from "./catalog-price";
 import type { WantAcceptance } from "./want-rules";
 
@@ -31,8 +31,9 @@ export interface WantValuationStamp {
   unknownVariant: boolean;
   primaryCatalogNameId: string | null;
   ownPrices: RawCatalogPrice[];
-  /** One inner array per descendant variant; only consulted for an unknown-variant want. */
-  variantPrices: RawCatalogPrice[][];
+  /** One entry per descendant variant, tagged with the variant it belongs to (#616); only consulted
+   *  for an unknown-variant want. */
+  variantPrices: VariantPrices[];
 }
 
 /** What the row draws. Null when nothing the want accepts carries a price at all. */

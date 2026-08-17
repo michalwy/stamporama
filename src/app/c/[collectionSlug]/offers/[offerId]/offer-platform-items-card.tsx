@@ -44,6 +44,11 @@ import { Icon } from "@/app/icons";
 // across both would fight the collector on every visit. It collapses from the heading itself, as
 // that card does; the header's count already says how many stamps a buyer would be comparing.
 //
+// A row whose stamp is an **unknown-variant umbrella** links its cheapest variant's pages (#616) and
+// says so: that is the entry the listing will attach to, so the market page opened while pricing has
+// to be the same one. It is named in the `~` + muted-italic vocabulary #238 uses for inferred rather
+// than recorded, and it is *derived* — nothing is written onto the stamp.
+//
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
 // that would otherwise have taken them to the market. An unmatched stamp does better than being
@@ -427,6 +432,29 @@ export function OfferPlatformItemsCard({
                   >
                     {item.stampName}
                   </span>
+                )}
+                {/* Which catalogue entry this row's links — and the listing itself — stand under
+                    (#616). Shown only where it is *not* the stamp the collector picked: an
+                    unknown-variant umbrella carries no item-ID of its own and is listed under its
+                    cheapest variant, which is a thing to know before pressing Market. It sits in
+                    this column rather than beside the links so that column stays aligned down the
+                    card, and it is `~` + muted italic — #238's vocabulary for inferred, not
+                    recorded. */}
+                {item.catalogItemVariant && (
+                  <Tooltip
+                    content={`This stamp's variant isn't identified, so it has no item-ID of its own. The listing goes under ${item.catalogItemVariant}, the cheapest variant ${item.conditionName.toLowerCase()} — which is also what the copy is valued at. Nothing is recorded on the stamp.`}
+                  >
+                    <span
+                      style={{
+                        ...MUTED,
+                        fontStyle: "italic",
+                        whiteSpace: "nowrap",
+                        cursor: "help",
+                      }}
+                    >
+                      ~ {item.catalogItemVariant}
+                    </span>
+                  </Tooltip>
                 )}
               </span>
               <span style={CELL}>

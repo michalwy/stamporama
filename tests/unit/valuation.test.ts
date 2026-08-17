@@ -19,6 +19,12 @@ const MNH = "cond-mnh";
 const USED = "cond-used";
 const CERT = "cert-guarantee";
 
+/** One descendant variant's prices, tagged with the variant they belong to (#616). The stamp id is
+ *  what a rolled-up valuation reports back as `sourceStampId`. */
+function variant(stampId: string, ...prices: RawCatalogPrice[]) {
+  return { stampId, prices };
+}
+
 function price(
   amount: number,
   opts: {
@@ -152,13 +158,16 @@ describe("valuateCopy — unknown variant", () => {
       unknownVariant: true,
       primaryCatalogNameId: MICHEL,
       ownPrices: [price(30)],
-      variantPrices: [[price(10)], [price(20)]],
+      variantPrices: [variant("v-a", price(10)), variant("v-b", price(20))],
       baseCurrency: "EUR",
       rates: noRates,
     });
     assert.equal(v.amount, "30.00");
     assert.equal(v.uncertain, true);
     assert.equal(v.unpriced, false);
+    // The umbrella's own price, so no variant is named (#616) — which is what makes the listing
+    // side keep an item-ID recorded on the umbrella itself.
+    assert.equal(v.sourceStampId, null);
   });
 
   it("falls back to the lowest descendant-variant price when the base is unpriced", () => {
@@ -168,12 +177,14 @@ describe("valuateCopy — unknown variant", () => {
       unknownVariant: true,
       primaryCatalogNameId: MICHEL,
       ownPrices: [], // base stamp has no price of its own
-      variantPrices: [[price(25)], [price(12)], [price(40)]],
+      variantPrices: [variant("v-a", price(25)), variant("v-b", price(12)), variant("v-c", price(40))],
       baseCurrency: "EUR",
       rates: noRates,
     });
     assert.equal(v.amount, "12.00");
     assert.equal(v.uncertain, true);
+    // …and it names which variant that was (#616).
+    assert.equal(v.sourceStampId, "v-b");
   });
 
   it("compares descendant prices in base currency, not nominal amount", () => {
@@ -185,13 +196,17 @@ describe("valuateCopy — unknown variant", () => {
       unknownVariant: true,
       primaryCatalogNameId: MICHEL,
       ownPrices: [],
-      variantPrices: [[price(30, { currency: "EUR" })], [price(100, { currency: "PLN" })]],
+      variantPrices: [
+        variant("v-a", price(30, { currency: "EUR" })),
+        variant("v-b", price(100, { currency: "PLN" })),
+      ],
       baseCurrency: "EUR",
       rates,
     });
     assert.equal(v.currency, "PLN");
     assert.equal(v.amount, "100.00");
     assert.equal(v.baseAmount, 25);
+    assert.equal(v.sourceStampId, "v-b");
   });
 
   it("considers each descendant's own headline (latest edition) price", () => {
@@ -202,8 +217,8 @@ describe("valuateCopy — unknown variant", () => {
       primaryCatalogNameId: MICHEL,
       ownPrices: [],
       variantPrices: [
-        [price(18, { year: 2022 }), price(22, { year: 2024 })], // latest = 22
-        [price(19, { year: 2024 })],
+        variant("v-a", price(18, { year: 2022 }), price(22, { year: 2024 })), // latest = 22
+        variant("v-b", price(19, { year: 2024 })),
       ],
       baseCurrency: "EUR",
       rates: noRates,
@@ -218,12 +233,13 @@ describe("valuateCopy — unknown variant", () => {
       unknownVariant: true,
       primaryCatalogNameId: MICHEL,
       ownPrices: [],
-      variantPrices: [[price(10, { conditionId: USED })]],
+      variantPrices: [variant("v-a", price(10, { conditionId: USED }))],
       baseCurrency: "EUR",
       rates: noRates,
     });
     assert.equal(v.unpriced, true);
     assert.equal(v.uncertain, true);
+    assert.equal(v.sourceStampId, null);
   });
 });
 
@@ -268,6 +284,7 @@ describe("aggregateHoldings", () => {
     baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
     uncertain: false,
     unpriced,
+    sourceStampId: null,
   });
   const uncertain = (baseAmount: number): CopyValuation => ({
     ...certain(baseAmount),
@@ -424,11 +441,13 @@ describe("valuateCopy — physical format (#343)", () => {
       unknownVariant: true,
       primaryCatalogNameId: MICHEL,
       ownPrices: [],
-      variantPrices: [[price(30)], [price(10)], [price(20)]],
+      variantPrices: [variant("v-a", price(30)), variant("v-b", price(10)), variant("v-c", price(20))],
       baseCurrency: "EUR",
       rates: noRates,
     });
     assert.equal(v.amount, "40.00");
     assert.equal(v.uncertain, true);
+    // The scaled figure still names the variant it was scaled from.
+    assert.equal(v.sourceStampId, "v-b");
   });
 });
