@@ -104,6 +104,20 @@ describe("offer set + copy ordering (#306)", () => {
     assert.deepEqual(rows.map((r) => r.sortOrder), [0, 1, 2]);
   });
 
+  it("numbers per-copy sets in the order the copies were named, not the database's", async () => {
+    // `sortOrder` is canonical — it is what a buyer reads as "the second lot" — and the per-copy add
+    // assigns it from the addable list. That list used to come back in `findMany` row order, so a
+    // stock of duplicates ticked in one order could be listed in another, with nothing saying why.
+    // Asked for **against** the catalog order and against creation order, so no incidental ordering
+    // can pass for the caller's.
+    const offerId = await newOffer();
+    await addOfferSetsPerCopy(userId, offerId, [high, low, mid]);
+    assert.deepEqual(
+      (await detail(offerId)).sets.map((s) => s.itemIds[0]),
+      [high, low, mid]
+    );
+  });
+
   it("reorders sets by hand and keeps the order", async () => {
     const offerId = await newOffer();
     await addOfferSetsPerCopy(userId, offerId, [low, mid, high]);

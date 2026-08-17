@@ -4822,7 +4822,15 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
 
 /** Verify copies are addable to a set: they belong to the collection, have not already sold, and —
  * when `excludeOfferId` is given — are not already listed elsewhere in that same offer (an offer
- * never lists the same copy twice). Returns the valid, addable ids. */
+ * never lists the same copy twice). Returns the valid, addable ids **in the order they were asked
+ * for**.
+ *
+ * That order is load-bearing rather than incidental: `addOfferSetsPerCopy` numbers a set per copy
+ * from this list, and `sortOrder` on `OfferSet` is canonical — it is what a buyer reads as "the
+ * second lot" (#306). Returning the ids in the order `findMany` handed the rows back made that
+ * position **whatever Postgres felt like**, so a stock of duplicates ticked in one order could be
+ * listed in another, with nothing anywhere saying why. Filtering the caller's own list is also what
+ * makes the answer deterministic between two runs on the same data, which is how CI found this. */
 async function assertAddableCopies(
   collectionId: string,
   itemIds: string[],
@@ -4843,7 +4851,11 @@ async function assertAddableCopies(
   });
   const soldIds = new Set(sold.map((r) => r.itemId));
   const inOffer = excludeOfferId ? await itemsInOffer(excludeOfferId, [...validIds]) : new Set<string>();
-  return [...validIds].filter((id) => !soldIds.has(id) && !inOffer.has(id));
+  // The caller's list leads, deduplicated: a copy named twice is one copy, and one named first is
+  // listed first.
+  return [...new Set(itemIds)].filter(
+    (id) => validIds.has(id) && !soldIds.has(id) && !inOffer.has(id)
+  );
 }
 
 /** Which of `itemIds` are already held by some set of `offerId` (an offer never lists a copy
