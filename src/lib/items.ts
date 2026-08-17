@@ -2280,12 +2280,6 @@ export type LotCopyFilter = "none" | "unpriced" | "to-sort" | "no-photos";
  */
 export type CopyDispositionFilter = "in-collection" | "for-sale" | "for-trade";
 
-export const COPY_DISPOSITION_FILTERS: readonly CopyDispositionFilter[] = [
-  "in-collection",
-  "for-sale",
-  "for-trade",
-];
-
 /** The `where` fragment for a disposition filter — one boolean column each, so unlike `unpriced`
  * this axis is always answerable in SQL. Shared by the paged reads and the scoped bulk write, so
  * "select every copy this filter is showing" targets exactly the rows on screen (#622). */

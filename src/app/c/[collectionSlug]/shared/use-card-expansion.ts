@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 /** Collapsed-by-default expansion state for a screen's lot / set cards (#382), shared by the
  * purchase order's lots, an offer's sets and an auction sale's lots so the three cannot drift.
@@ -13,6 +13,11 @@ import { useState } from "react";
  *  - a card that **appears while the screen is open** — it was created here, so it is what the
  *    collector is looking at. The first render is the baseline (these views all mount after
  *    their data has loaded), so an ordinary page load opens nothing.
+ *
+ * The state is held in component state by default and **remembered** when a `store` is passed (the
+ * purchase order's, #382 read against the order screen's remembered UI state). Both rules above
+ * still hold against a restored set: the baseline is what was restored, so a lot created while the
+ * screen is open still opens itself, and a deep-linked card is seeded on top of what was stored.
  */
 export interface CardExpansion {
   isExpanded(id: string): boolean;
@@ -22,10 +27,29 @@ export interface CardExpansion {
   toggleAll(): void;
 }
 
-export function useCardExpansion(ids: string[], initiallyExpandedId?: string | null): CardExpansion {
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
+/** Somewhere to keep the open set that outlives the component — the order screen's remembered UI
+ * state. `expanded` must be referentially stable while unchanged, since it is what the hook reads
+ * on every render. */
+export interface CardExpansionStore {
+  expanded: readonly string[];
+  setExpanded(updater: (prev: Set<string>) => Set<string>): void;
+}
+
+export function useCardExpansion(
+  ids: string[],
+  initiallyExpandedId?: string | null,
+  store?: CardExpansionStore | null
+): CardExpansion {
+  const [localExpanded, setLocalExpanded] = useState<Set<string>>(() =>
     initiallyExpandedId ? new Set([initiallyExpandedId]) : new Set()
   );
+  const storedExpanded = useMemo(
+    () => (store ? new Set(store.expanded) : null),
+    [store?.expanded] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const expanded = storedExpanded ?? localExpanded;
+  const setExpanded = store ? store.setExpanded : setLocalExpanded;
+
   // Ids seen so far. Null until the first render, whose list is the baseline: without it every
   // card of a freshly loaded screen would count as new and the screen would open fully expanded.
   const [known, setKnown] = useState<Set<string> | null>(null);
@@ -34,6 +58,12 @@ export function useCardExpansion(ids: string[], initiallyExpandedId?: string | n
   // would render the new card collapsed for a frame and only then open it.
   if (known === null) {
     setKnown(new Set(ids));
+    // A stored set cannot be seeded by `useState`'s initialiser, so the deep-linked card is opened
+    // here instead — guarded, and on the one render where `known` is still null. Writing the same
+    // set again is a no-op down in the store, so a double-invoked render costs nothing.
+    if (store && initiallyExpandedId && !expanded.has(initiallyExpandedId)) {
+      setExpanded((prev) => new Set([...prev, initiallyExpandedId]));
+    }
   } else {
     const fresh = ids.filter((id) => !known.has(id));
     if (fresh.length > 0) {
@@ -54,6 +84,8 @@ export function useCardExpansion(ids: string[], initiallyExpandedId?: string | n
         return next;
       }),
     allExpanded,
-    toggleAll: () => setExpanded(allExpanded ? new Set() : new Set(ids)),
+    // Updater form rather than a bare value: a store takes only updaters, and `useState` reads a
+    // function as one too, so the one shape works for both.
+    toggleAll: () => setExpanded(() => (allExpanded ? new Set() : new Set(ids))),
   };
 }

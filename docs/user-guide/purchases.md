@@ -705,11 +705,16 @@ here is deleted on a schedule you did not ask for. If you do switch it on, the b
 its copies, its discards and their notes; its line adds **scan deleted**, and **Re-cut** stops being
 offered, because there is no longer a card to draw on.
 
-Which batches are open is worked out from the work itself, not remembered as a setting: **a batch
-with tiles still waiting shows, and opens, by itself**, the same way a lot you add while the screen
-is open opens by itself. Put a discarded tile back in the queue and its batch has something waiting
-again, so it comes back to the list on its own; a batch with a piece set aside to check never left. Finish the last tile on a card and it goes the other
-way — the strip leaves the list and the count above it goes up by one.
+Which batches are open is worked out from the work itself: **a batch with tiles still waiting
+shows, and opens, by itself**, the same way a lot you add while the screen is open opens by itself.
+Put a discarded tile back in the queue and its batch has something waiting again, so it comes back
+to the list on its own; a batch with a piece set aside to check never left. Finish the last tile on
+a card and it goes the other way — the strip leaves the list and the count above it goes up by one.
+
+What is remembered between visits is only where you **overruled** that: a finished batch you opened
+by hand is still open when you come back, while a batch that has finished since folds itself away
+as it always would. So the rule keeps working as the work moves, and only your own decisions
+persist.
 
 **Batches are never reordered.** Batch order is the order the cards came in, and the pile on your
 desk is in that order too — moving the unfinished ones to the top would break the one thing the
@@ -919,9 +924,10 @@ whether it is also in the collection.
 
 While a filter is narrowing the list, each issue header counts what it is **showing** (`12 shown`
 rather than `12 in lot`), and issues left with nothing to show drop out of the view entirely
-instead of appearing as an empty group. Unlike *Group by* and *Sort copies*, the **Kept for** chips
-are not remembered between visits — a filter hides copies, and one that survived a reload would
-have you open the order tomorrow to find most of it missing.
+instead of appearing as an empty group. The **Kept for** chips are **remembered for that order**,
+along with the lot chips beside them — a filing pass runs over several sittings, and re-narrowing
+the screen each time was work you should not have to repeat. A chip stays lit for as long as it is
+on, so an order that looks short is showing you why in the same row.
 
 **Sorting the copies.** A **Sort copies** control next to *Group by* orders the stamps *within*
 each lot by **Order added** (the default), **Year**, **Catalog no.**, **Price**, or **Name**,
@@ -940,6 +946,15 @@ all are). A lot you add while the screen is open opens by itself. **Lot manageme
 edit price, close/reopen, delete) lives only in a **by-lot** view. Sorting is not lot management,
 so **Store** and **Move to location** work in every view — the issue-only and flat views are for
 sweeping through copies and sorting them, and that is exactly what those two acts are for.
+
+**The screen remembers where you left off.** Which lots you had open, which issue groups you had
+collapsed, the chips you had pressed and the state of the **Card scans** section are all kept
+**per order**, so reopening a part-finished intake puts you back where you stopped rather than
+making you click the screen back into shape. Nothing expires on a clock: an order you have not
+touched in a year opens exactly as you left it. What does eventually go is the **oldest** — the
+app keeps this for the fifty orders you worked on most recently, so a long-finished parcel
+eventually opens at the defaults again. Nothing is lost when it does; it is only the view, and one
+click puts it back.
 
 **How close a series is to a complete set for sale.** In a grouped-by-issue view, each issue
 header also carries one figure per [checklist](collections.md#checklists) the issue has — the

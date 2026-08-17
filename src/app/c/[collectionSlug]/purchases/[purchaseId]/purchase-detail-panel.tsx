@@ -27,6 +27,7 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
 import type {
   CopyDispositionFilter,
   ItemListItem,
@@ -107,8 +108,14 @@ import {
   useHydrated,
   usePersistentToggle,
   usePersistentString,
-  usePersistentStringSet,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import {
+  usePurchaseCollapsedGroups,
+  usePurchaseDispositionFilter,
+  usePurchaseLotExpansion,
+  usePurchaseLotFilter,
+} from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
+import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
 import {
   readLast,
   writeLast,
@@ -331,9 +338,13 @@ export function PurchaseDetailPanel({
   // Lot cards are collapsed by default (#382): an order is read as its lots, and a lot's copies
   // are a second question. A lot added while the screen is open opens itself, as does the one
   // that was navigated to.
+  // Remembered per order, so a part-finished intake pass resumes where it stopped rather than
+  // being clicked back into shape after every reload.
+  const lotExpansionStore = usePurchaseLotExpansion(collectionId, purchase.id);
   const lotExpansion = useCardExpansion(
     purchase.lots.map((l) => l.id),
-    highlightLotId
+    highlightLotId,
+    lotExpansionStore
   );
 
   // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
@@ -354,10 +365,21 @@ export function PurchaseDetailPanel({
   // chips: a card of stock copies is filed in one act whatever lot each piece came out of, and one
   // control governing every view is what lets *the for-sale copies still to sort* be asked once.
   //
-  // Component state rather than a stored preference: it hides copies, and a filter that survived a
-  // reload would have the collector open an order tomorrow and find most of it missing. The
-  // grouping and sort toggles persist because neither takes a copy off the screen.
-  const [dispositionFilter, setDispositionFilter] = useState<CopyDispositionFilter | null>(null);
+  // **Remembered per order**, which reverses the original call (#622) that this alone of the view
+  // controls must not persist, on the grounds that a filter surviving a reload has the collector
+  // open an order and find most of it missing. That risk is real and unchanged; it is outweighed by
+  // what the filter is *for*. A filing pass is the long job on this screen, it runs over several
+  // sittings, and having to re-narrow the screen each time was the friction being paid — while the
+  // filter, unlike a stale expansion, announces itself: the chip stays lit for as long as it is on,
+  // so the missing copies are explained on the screen that is hiding them.
+  const [storedDisposition, setStoredDisposition] = usePurchaseDispositionFilter(
+    collectionId,
+    purchase.id
+  );
+  // Read back through the endpoints' own parser rather than cast: the stored value reaches five
+  // query strings, and a hand-edited entry must not put an unknown filter into any of them.
+  const dispositionFilter = parseDispositionFilter(storedDisposition) ?? null;
+  const setDispositionFilter: (value: CopyDispositionFilter | null) => void = setStoredDisposition;
 
   // Order-level catalog-value-vs-cost figure (#179): the same holdings summary as the Copies
   // screen (#134), aggregated over every copy in the purchase. Undefined until it loads (the
@@ -429,7 +451,11 @@ export function PurchaseDetailPanel({
   // the exception and are retired when that chip changes (`dropFilteredContainers`), since "all 40
   // to sort" must not silently become "all 900".
   const [selection, setSelection] = useState<CopySelection>(EMPTY_SELECTION);
-  const clearSelection = useCallback(() => setSelection(EMPTY_SELECTION), []);
+  // A plain function, not a `useCallback`: it is only ever read from event handlers (`onBulkDone`,
+  // the bar's `onClear`), so its identity is never a dependency — and hand-memoizing it stopped the
+  // React Compiler from optimizing this component at all once the disposition filter stopped being
+  // a `useState` setter the compiler could recognise.
+  const clearSelection = () => setSelection(EMPTY_SELECTION);
 
   // The pinned selection bar (#621) and what pins under it: its height is the top offset every lot
   // header takes, and each lot header's own height is added again for the issue headers inside it.
@@ -1066,6 +1092,7 @@ export function PurchaseDetailPanel({
               onToggleExpanded={() => lotExpansion.toggle(lot.id)}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
+              purchaseId={purchase.id}
               scanDpi={scanDpi}
               currency={purchase.currency}
               baseCurrency={purchase.baseCurrency}
@@ -1438,6 +1465,9 @@ interface LotCardProps {
   onToggleExpanded: () => void;
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
+  /** The order this lot belongs to — the card's own remembered view state (its collapsed groups
+   * and header chip) is kept in that order's entry, so it can be evicted with it. */
+  purchaseId: string;
   /** The collection's stated scan resolution (#598), on its way to the tile viewer's measuring
    * tools through the condition dialog this card opens. */
   scanDpi: number;
@@ -2282,6 +2312,7 @@ function LotCard({
   onToggleExpanded,
   issueHeaderById,
   collectionId,
+  purchaseId,
   currency,
   baseCurrency,
   areas,
@@ -2311,20 +2342,28 @@ function LotCard({
     | "reopen"
   >("none");
   const [pending, setPending] = useState<PendingSelection | null>(null);
-  // Collapsed issue groups are remembered per lot; the grouping mode itself is an order-level
-  // toggle passed in as `groupByIssue` (#121).
-  const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
-    `${LS_COLLAPSED_GROUPS}:${collectionId}:${lot.id}`
+  // Collapsed issue groups are remembered per lot, inside the order's entry; the grouping mode
+  // itself is an order-level toggle passed in as `groupByIssue` (#121).
+  const [collapsedGroups, setCollapsedGroups] = usePurchaseCollapsedGroups(
+    collectionId,
+    purchaseId,
+    lot.id
   );
   // Hold the copies list until the persisted view prefs are read, so grouping/collapse don't
   // flash from their defaults to the stored values for a returning user (#121).
   const hydrated = useHydrated();
   // Optional filter narrowing the copies list to just the blockers ("unpriced"), the not-yet-sorted
   // copies ("to-sort"), or copies still needing a photo ("no-photos", #177), toggled by the matching
-  // header chip (#121).
-  const [filterMode, setFilterMode] = useState<
-    "none" | "unpriced" | "to-sort" | "no-photos"
-  >("none");
+  // header chip (#121). Remembered per lot alongside the order's disposition filter, and read back
+  // through the endpoints' parser for the same reason.
+  const [storedLotFilter, setStoredLotFilter] = usePurchaseLotFilter(
+    collectionId,
+    purchaseId,
+    lot.id
+  );
+  const filterMode = parseLotCopyFilter(storedLotFilter) ?? "none";
+  const setFilterMode = (next: LotCopyFilter) =>
+    setStoredLotFilter(next === "none" ? null : next);
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
@@ -3251,8 +3290,10 @@ function OrderCopiesView({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const hydrated = useHydrated();
-  const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
-    `${LS_COLLAPSED_GROUPS}:${collectionId}:order`
+  const [collapsedGroups, setCollapsedGroups] = usePurchaseCollapsedGroups(
+    collectionId,
+    purchaseId,
+    ORDER_GROUP_SCOPE
   );
 
   // Each copy's lot drives its editability (its lot must be open) and its estimate (its lot's
@@ -4098,12 +4139,13 @@ interface IntakeConditionDialogProps {
 
 // The last condition/certificate/location/disposition chosen for an add-copy are remembered
 // across every entry point (#121, #234) — see shared/add-copy-defaults (readLast/writeLast).
-// Persisted order-level view preferences (#121): whether copies group by lot and/or by issue
-// (per collection), and which issue groups are collapsed (per collection + lot/scope).
-// Suffixed with the ids by the caller.
+// Persisted order-level view preferences (#121): whether copies group by lot and/or by issue, and
+// how the copies inside sort. Held **per collection** — they are a way of reading an order, not a
+// fact about one, so a collector who works by issue works by issue everywhere. What belongs to one
+// order (its expanded lots, collapsed groups and filters) lives in that order's own entry instead,
+// under a cap — see shared/purchase-ui-state. Suffixed with the ids by the caller.
 const LS_GROUP_BY_LOT = "stamporama:lot:groupByLot";
 const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
-const LS_COLLAPSED_GROUPS = "stamporama:lot:collapsedGroups";
 const LS_SORT_KEY = "stamporama:lot:sortKey";
 const LS_SORT_DIR = "stamporama:lot:sortDir";
 

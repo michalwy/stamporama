@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { usePurchaseScansUi } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   commitCutAction,
@@ -151,6 +152,14 @@ interface Props {
  */
 type TileFilter = "all" | "waiting" | "parked";
 
+const TILE_FILTERS: readonly TileFilter[] = ["all", "waiting", "parked"];
+
+/** Read a stored chip back, falling to the unnarrowed strip for anything unrecognised — a filter
+ * only ever narrows, so an unknown one is a wider answer and never the wrong tiles. */
+function parseTileFilter(raw: string): TileFilter {
+  return TILE_FILTERS.find((f) => f === raw) ?? "all";
+}
+
 function matchesTileFilter(tile: ScanTileData, filter: TileFilter): boolean {
   if (filter === "all") return true;
   return filter === "waiting" ? tile.state === "unidentified" : tile.state === "parked";
@@ -176,9 +185,14 @@ export function PurchaseScansCard({
   repeatLast,
   onChanged,
 }: Props) {
+  /** The card's own view state, remembered per order so an identification pass resumes where it
+   * stopped — which section was open, what the strip was narrowed to, whether the worked-through
+   * batches were showing, and which batches were opened against their default. */
+  const [scansUi, patchScansUi] = usePurchaseScansUi(collectionId, purchaseId);
   /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
    * cards, so the section rests as one line naming what is inside. */
-  const [open, setOpen] = useState(false);
+  const open = scansUi.open;
+  const setOpen = (next: boolean) => patchScansUi({ open: next });
   /**
    * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #597
    * there are **two of them**: the tiles still waiting, and the tiles parked for the trip to the
@@ -194,7 +208,8 @@ export function PurchaseScansCard({
    * control, and working the last tile through would otherwise leave the section narrowed to nothing
    * with nothing to press to get out of it.
    */
-  const [filterChoice, setFilterChoice] = useState<TileFilter>("all");
+  const filterChoice = parseTileFilter(scansUi.filter);
+  const setFilterChoice = (next: TileFilter) => patchScansUi({ filter: next });
   const filter: TileFilter =
     (filterChoice === "waiting" && unidentifiedTileCount === 0) ||
     (filterChoice === "parked" && parkedTileCount === 0)
@@ -244,7 +259,7 @@ export function PurchaseScansCard({
 
   const batches = data?.batches ?? [];
   const fromAuction = data?.fromAuction ?? false;
-  const expansion = useBatchExpansion();
+  const expansion = useBatchExpansion(scansUi.batches, (batches) => patchScansUi({ batches }));
   // The tile and the batch it was cut from — the batch because the dialog looks *into* the tile
   // (#585) and the scans behind it are where anything past the tile photo's own resolution comes
   // from.
@@ -256,7 +271,8 @@ export function PurchaseScansCard({
   // A carton is fifty cards, and fifty header lines is still a wall to read past — so a
   // worked-through batch is not merely collapsed but **set aside**, behind the count below.
   const doneCount = batches.filter((b) => b.doneAt != null).length;
-  const [showDone, setShowDone] = useState(false);
+  const showDone = scansUi.showDone;
+  const setShowDone = (next: boolean) => patchScansUi({ showDone: next });
 
   /**
    * The tiles ticked to be identified as one stamp (#596) — a plain set of ids, and see
@@ -490,7 +506,7 @@ export function PurchaseScansCard({
       <header style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(!open)}
           aria-expanded={open}
           style={{
             display: "flex",
@@ -528,7 +544,7 @@ export function PurchaseScansCard({
                 : "Scan tiles not yet identified into copies — click to work through just those"
             }
             onClick={() => {
-              setFilterChoice((f) => (f === "waiting" ? "all" : "waiting"));
+              setFilterChoice(filterChoice === "waiting" ? "all" : "waiting");
               // Pressing a filter opens the section: a filter over something nobody can see is a
               // click that appears to do nothing. Releasing one leaves it as it was.
               if (filter !== "waiting") setOpen(true);
@@ -551,7 +567,7 @@ export function PurchaseScansCard({
                 : "Tiles set aside because the piece cannot be told apart from its picture — click to work through just those"
             }
             onClick={() => {
-              setFilterChoice((f) => (f === "parked" ? "all" : "parked"));
+              setFilterChoice(filterChoice === "parked" ? "all" : "parked");
               // Pressing a filter opens the section: a filter over something nobody can see is a
               // click that appears to do nothing. Releasing one leaves it as it was.
               if (filter !== "parked") setOpen(true);
@@ -651,7 +667,7 @@ export function PurchaseScansCard({
           at is a fact about the work. Reaching for the record of a card you finished last week is
           a deliberate act, and it should start from the same place every time. */}
       {doneCount > 0 && !filtered && (
-        <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone((v) => !v)} />
+        <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone(!showDone)} />
       )}
 
       {/* **One bar for the whole card, above the batches** (#596), the copy list's own arrangement
@@ -847,17 +863,22 @@ export function PurchaseScansCard({
  * shut because the derived default moved underneath would be the app arguing with them. A batch
  * finished while the screen is open and never touched here does fold itself away — that is the rule
  * working, and the caret is one click.
+ *
+ * Storing the **choices** rather than the resulting open set is what lets this survive a reload
+ * without going stale: a batch finished since the last sitting folds away on its own, because the
+ * default moved and nothing was ever recorded against it, while a batch the collector deliberately
+ * kept open is still open. An open set would have frozen last week's defaults into the entry.
  */
-function useBatchExpansion() {
-  const [choices, setChoices] = useState<Map<number, boolean>>(new Map());
+function useBatchExpansion(
+  choices: Record<string, boolean>,
+  setChoices: (next: Record<string, boolean>) => void
+) {
+  const isExpanded = (batch: ScanBatchData) =>
+    choices[String(batch.batchNo)] ?? batch.doneAt == null;
   return {
-    isExpanded: (batch: ScanBatchData) => choices.get(batch.batchNo) ?? batch.doneAt == null,
+    isExpanded,
     toggle: (batch: ScanBatchData) =>
-      setChoices((prev) => {
-        const next = new Map(prev);
-        next.set(batch.batchNo, !(prev.get(batch.batchNo) ?? batch.doneAt == null));
-        return next;
-      }),
+      setChoices({ ...choices, [String(batch.batchNo)]: !isExpanded(batch) }),
   };
 }
 

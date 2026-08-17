@@ -37,7 +37,14 @@ export function lsRemove(key: string): void {
 
 const LOT_PREF_EVENT = "stamporama:lotPref";
 
-function subscribeLotPref(callback: () => void): () => void {
+/** Re-render every localStorage-backed view after a write. Exported so the per-order UI state
+ * store (`purchase-ui-state.ts`) rides the same event: the order screen reads both, and two
+ * notification channels would let one half of a screen update while the other stayed stale. */
+export function notifyLotPref(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(LOT_PREF_EVENT));
+}
+
+export function subscribeLotPref(callback: () => void): () => void {
   window.addEventListener("storage", callback);
   window.addEventListener(LOT_PREF_EVENT, callback);
   return () => {
@@ -67,7 +74,7 @@ export function useHydrated(): boolean {
 
 function writeLotPref(key: string, value: string): void {
   lsSet(key, value);
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(LOT_PREF_EVENT));
+  notifyLotPref();
 }
 
 function parseStringSet(raw: string | null): Set<string> {
