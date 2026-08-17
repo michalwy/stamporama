@@ -2889,6 +2889,8 @@ function listingBlockersFor(
         label: labeller.copy(item.stamp),
         stampId: item.stampId,
         catalogItemId: catalogIds.get(itemId)?.catalogItemId ?? null,
+        // Which of the two catalogue gaps left it null (#617), from the same resolution.
+        catalogRollup: catalogIds.get(itemId)?.gap ?? null,
         conditionId: item.conditionId,
         conditionName: item.condition.name,
         platformCondition: conditionMap.get(item.conditionId) ?? null,

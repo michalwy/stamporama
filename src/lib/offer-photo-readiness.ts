@@ -23,6 +23,9 @@ export type PhotoReadinessCode =
 /** One reason an offer's photos are not ready, in the shape every ready-gate reason takes. */
 export interface PhotoReadinessBlocker {
   code: PhotoReadinessCode;
+  /** The fault in one short line, exactly as {@link ListingBlocker.title} — the ready gate states
+   *  both kinds of reason in one hover hint and renders them from one shape. */
+  title: string;
   message: string;
   subjects: string[];
   stampIds: string[];
@@ -42,8 +45,12 @@ export interface PhotoReadinessInput {
   plannedCount: number;
 }
 
-function blocker(code: PhotoReadinessCode, message: string): PhotoReadinessBlocker {
-  return { code, message, subjects: [], stampIds: [] };
+function blocker(
+  code: PhotoReadinessCode,
+  title: string,
+  message: string
+): PhotoReadinessBlocker {
+  return { code, title, message, subjects: [], stampIds: [] };
 }
 
 /**
@@ -63,6 +70,7 @@ export function evaluatePhotoReadiness(input: PhotoReadinessInput): PhotoReadine
     return [
       blocker(
         "photos-generating",
+        "The listing photos are still being generated",
         "The listing photos are still being generated. Wait for the run to finish, then mark this offer ready."
       ),
     ];
@@ -72,6 +80,7 @@ export function evaluatePhotoReadiness(input: PhotoReadinessInput): PhotoReadine
     return [
       blocker(
         "photos-missing",
+        "No listing photos have been generated yet",
         `This offer has no generated listing photos — its plan holds ${input.plannedCount} ${input.plannedCount === 1 ? "image" : "images"}. Generate them on the Photos card before marking it ready.`
       ),
     ];
@@ -82,6 +91,7 @@ export function evaluatePhotoReadiness(input: PhotoReadinessInput): PhotoReadine
     blockers.push(
       blocker(
         "photos-outdated",
+        "The generated listing photos are out of date",
         "The generated listing photos are out of date — the offer has changed since they were rendered. Generate them again before marking it ready."
       )
     );
@@ -90,6 +100,7 @@ export function evaluatePhotoReadiness(input: PhotoReadinessInput): PhotoReadine
     blockers.push(
       blocker(
         "photos-failed",
+        "The last photo generation failed",
         "The last photo generation failed. Fix what the Photos card reports and generate again before marking this offer ready."
       )
     );

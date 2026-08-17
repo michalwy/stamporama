@@ -32,6 +32,17 @@ import type { CostBasisTotal } from "./cost-basis";
 export interface VariantPrices {
   stampId: string;
   prices: RawCatalogPrice[];
+  /**
+   * True when this variant is **fully identified** — it has no variant children of its own, so a
+   * catalog prices it directly. Absent reads as true.
+   *
+   * Only these are expected to carry a price (#617): an intermediate node is itself an
+   * unknown-variant umbrella (ADR-0010 §3), and its value *is* the lowest of its own children rather
+   * than a figure of its own, so an unpriced one is not a gap in the data. It says nothing about the
+   * rollup's own arithmetic, which compares whatever is priced at any depth — it is what
+   * {@link CopyValuation.unpricedVariantIds} is counted over.
+   */
+  identified?: boolean;
 }
 
 export interface CopyValuationInput {
@@ -79,6 +90,18 @@ export interface CopyValuation {
    *  is reported here rather than re-derived there — a listing that stood under one variant while
    *  being priced from another would be two answers to one question. */
   sourceStampId: string | null;
+  /**
+   * The **fully identified** variants of an unknown-variant umbrella that carry no price at this key
+   * (#617), in candidate order. Empty for an identified copy, for an umbrella priced directly (where
+   * no rollup happens at all), and for one whose variants are all priced.
+   *
+   * A report, never a rule of its own: the figure above is still the lowest of what *is* priced, and
+   * it is flagged `uncertain` precisely because it is an estimate over incomplete information. What
+   * cannot rest on it is a **listing** (`listing-catalog-ids.ts`), which claims to stand under the
+   * *cheapest* variant — and while any variant is unpriced there is nothing to say which that is.
+   * The asymmetry is deliberate: an estimate may be marked as one, a sale may not.
+   */
+  unpricedVariantIds: string[];
 }
 
 /** Value a single physical copy from the catalog. Pure; see module header for the rule. */
@@ -103,20 +126,32 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
 
   // Unknown variant, base stamp priced directly: use it, flagged uncertain. No source stamp — the
   // figure is the umbrella's own, which is the same precedence the listing side gives its item-ID.
+  // No variant coverage is reported either: nothing was rolled up, so there is no rollup to call
+  // incomplete (#617).
   if (own) {
     return toValuation(own, true, baseCurrency, rates);
   }
 
   // Unknown variant, base stamp unpriced: lowest descendant-variant price (in base currency). The
-  // candidates carry the variant they came from, so the winner names it (#616).
-  const candidates = (input.variantPrices ?? [])
-    .map((v) => {
-      const picked = pick(v.prices);
-      return picked ? { ...picked, stampId: v.stampId } : null;
-    })
-    .filter((p): p is PickedPrice & { stampId: string } => p !== null);
+  // candidates carry the variant they came from, so the winner names it (#616) — and the identified
+  // variants that priced *nothing* are collected as they go, which is what tells a listing that the
+  // cheapest one is not actually known yet (#617).
+  const candidates: (PickedPrice & { stampId: string })[] = [];
+  const unpricedVariantIds: string[] = [];
+  for (const variant of input.variantPrices ?? []) {
+    const picked = pick(variant.prices);
+    if (picked) candidates.push({ ...picked, stampId: variant.stampId });
+    else if (variant.identified ?? true) unpricedVariantIds.push(variant.stampId);
+  }
   const lowest = pickLowestByBase(candidates, baseCurrency, rates);
-  return toValuation(lowest, true, baseCurrency, rates, lowest?.stampId ?? null);
+  return toValuation(
+    lowest,
+    true,
+    baseCurrency,
+    rates,
+    lowest?.stampId ?? null,
+    unpricedVariantIds
+  );
 }
 
 function toValuation(
@@ -124,7 +159,8 @@ function toValuation(
   uncertain: boolean,
   baseCurrency: string,
   rates: Map<string, number | null>,
-  sourceStampId: string | null = null
+  sourceStampId: string | null = null,
+  unpricedVariantIds: string[] = []
 ): CopyValuation {
   if (!picked) {
     return {
@@ -135,6 +171,7 @@ function toValuation(
       uncertain,
       unpriced: true,
       sourceStampId: null,
+      unpricedVariantIds,
     };
   }
   const baseAmount = baseValueOf(picked.amount, picked.currency, baseCurrency, rates);
@@ -146,6 +183,7 @@ function toValuation(
     uncertain,
     unpriced: false,
     sourceStampId,
+    unpricedVariantIds,
   };
 }
 

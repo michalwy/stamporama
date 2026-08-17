@@ -117,6 +117,130 @@ describe("evaluateListingPreconditions", () => {
     assert.match(blockers[0].message, /One stamp has/);
   });
 
+  // #617 — the two ways an unknown-variant umbrella fails to resolve an item-ID through the price
+  // rollup (#616). Each is fixed on a different screen, so each has to be its own line.
+  describe("an umbrella whose item-ID could not be derived", () => {
+    it("names the cheapest variant, not the umbrella, when that variant is unmatched", () => {
+      const umbrella = copy({
+        label: "865",
+        stampId: "stamp-865",
+        catalogItemId: null,
+        catalogRollup: { kind: "unmatched-variant", stampId: "stamp-865a", label: "Mi·PL 865a" },
+      });
+      const blockers = evaluateListingPreconditions(
+        input({ sets: [{ setId: "set-1", label: "A", copies: [umbrella] }] })
+      );
+      assert.deepEqual(
+        blockers.map((b) => b.code),
+        ["missing-catalog-id"]
+      );
+      // The variant is the stamp an item-ID would be recorded on, so it is what the match window has
+      // to be pointed at — the umbrella never gets one written to it (#616).
+      assert.deepEqual(blockers[0].subjects, ["Mi·PL 865a"]);
+      assert.deepEqual(blockers[0].stampIds, ["stamp-865a"]);
+      assert.deepEqual(blockers[0].stampSubjects, [
+        { stampId: "stamp-865a", label: "Mi·PL 865a" },
+      ]);
+    });
+
+    it("names the unpriced variants, which is what wants a price and what links away", () => {
+      const umbrella = () =>
+        copy({
+          label: "870",
+          stampId: "stamp-870",
+          catalogItemId: null,
+          catalogRollup: {
+            kind: "unpriced-variants",
+            variants: [
+              { stampId: "stamp-870a", label: "Mi\u00b7PL 870a" },
+              { stampId: "stamp-870c", label: "Mi\u00b7PL 870c" },
+            ],
+          },
+        });
+      const blockers = evaluateListingPreconditions(
+        input({ sets: [{ setId: "set-1", label: "A", copies: [umbrella(), umbrella()] }] })
+      );
+      assert.deepEqual(
+        blockers.map((b) => b.code),
+        ["no-variant-price"]
+      );
+      // The umbrella is not named: it is not what a price is recorded on, and each variant has a
+      // price grid of its own to go to. Named once however many copies carry it.
+      assert.deepEqual(blockers[0].subjects, ["Mi\u00b7PL 870a", "Mi\u00b7PL 870c"]);
+      assert.deepEqual(blockers[0].stampIds, ["stamp-870a", "stamp-870c"]);
+      assert.deepEqual(blockers[0].stampSubjects, [
+        { stampId: "stamp-870a", label: "Mi\u00b7PL 870a" },
+        { stampId: "stamp-870c", label: "Mi\u00b7PL 870c" },
+      ]);
+      assert.match(blockers[0].message, /cheapest variant/);
+    });
+
+    it("states the two apart rather than as one line — they are fixed in different places", () => {
+      const unmatched = copy({
+        catalogItemId: null,
+        catalogRollup: { kind: "unmatched-variant", stampId: "stamp-865a", label: "Mi·PL 865a" },
+      });
+      const unpriced = copy({
+        catalogItemId: null,
+        catalogRollup: {
+          kind: "unpriced-variants",
+          variants: [{ stampId: "stamp-870a", label: "Mi\u00b7PL 870a" }],
+        },
+      });
+      assert.deepEqual(
+        codes(input({ sets: [{ setId: "set-1", label: "A", copies: [unmatched, unpriced] }] })),
+        ["missing-catalog-id", "no-variant-price"]
+      );
+    });
+
+    it("reports a plain unmatched stamp against itself, rollup or no rollup", () => {
+      // An umbrella whose own catalogue price won the valuation was never rolled up (#616's
+      // precedence), so there is no gap to report and the umbrella is what wants matching.
+      const blockers = evaluateListingPreconditions(
+        input({
+          sets: [
+            {
+              setId: "set-1",
+              label: "A",
+              copies: [copy({ label: "880", stampId: "stamp-880", catalogItemId: null })],
+            },
+          ],
+        })
+      );
+      assert.deepEqual(
+        blockers.map((b) => b.code),
+        ["missing-catalog-id"]
+      );
+      assert.deepEqual(blockers[0].stampIds, ["stamp-880"]);
+    });
+
+    it("asks neither of a module that lists against no catalogue (#493)", () => {
+      assert.deepEqual(
+        codes(
+          input({
+            platformModule: "allegro",
+            sets: [
+              {
+                setId: "set-1",
+                label: "A",
+                copies: [
+                  copy({
+                    catalogItemId: null,
+                    catalogRollup: {
+                      kind: "unpriced-variants",
+                      variants: [{ stampId: "stamp-870a", label: "Mi\u00b7PL 870a" }],
+                    },
+                  }),
+                ],
+              },
+            ],
+          })
+        ),
+        []
+      );
+    });
+  });
+
   it("names an unmapped condition by our own name, once however many copies carry it", () => {
     const used = () =>
       copy({ conditionId: "cond-u", conditionName: "Used", platformCondition: null });

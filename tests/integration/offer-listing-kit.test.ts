@@ -154,7 +154,13 @@ describe("offer listing kit (#405)", () => {
    *  item-ID — the shape an umbrella listing is derived over (#616). Returns the umbrella. */
   async function umbrella(
     name: string,
-    variants: { number: string; colnectId: string | null; price: string; conditionId?: string }[]
+    /** `price` absent leaves the variant unpriced, which is what an unresolvable rollup needs (#617). */
+    variants: {
+      number: string;
+      colnectId: string | null;
+      price?: string;
+      conditionId?: string;
+    }[]
   ): Promise<string> {
     seq += 1;
     const base = await prisma.stamp.create({
@@ -179,16 +185,18 @@ describe("offer listing kit (#405)", () => {
       await prisma.stampCatalogNumber.create({
         data: { stampId: child.id, catalogVendorId: vendorId, number: v.number },
       });
-      await prisma.stampCatalogPrice.create({
-        data: {
-          stampId: child.id,
-          catalogEditionId,
-          conditionId: v.conditionId ?? mnhId,
-          certificateStatusId: null,
-          price: v.price,
-          currency: "EUR",
-        },
-      });
+      if (v.price !== undefined) {
+        await prisma.stampCatalogPrice.create({
+          data: {
+            stampId: child.id,
+            catalogEditionId,
+            conditionId: v.conditionId ?? mnhId,
+            certificateStatusId: null,
+            price: v.price,
+            currency: "EUR",
+          },
+        });
+      }
     }
     return base.id;
   }
@@ -435,6 +443,117 @@ describe("offer listing kit (#405)", () => {
     // claim about the goods.
     assert.deepEqual(kit?.blockers.map((b) => b.code), ["missing-catalog-id"]);
     assert.equal(kit?.items[0].catalogItemId, null);
+    // And it is the **variant** that is named (#617), not the umbrella the collector picked: that is
+    // the stamp the match window has to be pointed at.
+    assert.deepEqual(kit?.blockers[0].subjects, ["Mi·PL 930a"]);
+    const cheapest = await prisma.stamp.findFirstOrThrow({
+      where: { parentId: base, catalogNumbers: { some: { number: "930a" } } },
+      select: { id: true },
+    });
+    assert.deepEqual(kit?.blockers[0].stampIds, [cheapest.id]);
+  });
+
+  it("refuses a tree where nothing is priced, and names the variants (#617)", async () => {
+    // Nothing under the umbrella is priced, so the rollup has nothing to choose between — a gap in
+    // the catalogue prices, fixed in each variant's own price grid, and not the same fault as an
+    // unmatched variant.
+    const base = await umbrella("PL var unpriced", [
+      { number: "940a", colnectId: "2401" },
+      { number: "940b", colnectId: "2402" },
+    ]);
+    const kit = await getOfferListingKit(
+      userId,
+      collectionId,
+      await offer([[await copy(base)]])
+    );
+    assert.deepEqual(kit?.blockers.map((b) => b.code), ["no-variant-price"]);
+    assert.equal(kit?.items[0].catalogItemId, null);
+    assert.deepEqual(kit?.blockers[0].subjects, ["Mi\u00b7PL 940a", "Mi\u00b7PL 940b"]);
+  });
+
+  it("refuses a **partly** priced tree — the cheapest variant is not known yet (#617)", async () => {
+    // The one price recorded happens to sit on the dearest variant. Listing under it because it is
+    // the only priced one would quietly sell the copy under exactly the wrong entry, so the offer is
+    // refused and the unpriced variants are named.
+    const base = await umbrella("PL var partly priced", [
+      { number: "950a", colnectId: "2501" },
+      { number: "950b", colnectId: "2502", price: "80.00" },
+      { number: "950c", colnectId: "2503" },
+    ]);
+    const kit = await getOfferListingKit(
+      userId,
+      collectionId,
+      await offer([[await copy(base)]])
+    );
+    assert.deepEqual(kit?.blockers.map((b) => b.code), ["no-variant-price"]);
+    assert.equal(kit?.items[0].catalogItemId, null);
+    assert.equal(kit?.items[0].catalogItemSource, null);
+    assert.deepEqual(kit?.blockers[0].subjects, ["Mi\u00b7PL 950a", "Mi\u00b7PL 950c"]);
+    const unpriced = await prisma.stamp.findMany({
+      where: { parentId: base, catalogNumbers: { some: { number: { in: ["950a", "950c"] } } } },
+      select: { id: true },
+      orderBy: { name: "asc" },
+    });
+    assert.deepEqual(
+      [...(kit?.blockers[0].stampIds ?? [])].sort(),
+      unpriced.map((s) => s.id).sort()
+    );
+  });
+
+  it("expects no price of an intermediate variant — its value is its own children's (#617)", async () => {
+    // A deep tree (309 \u2192 309A \u2192 309AP): the middle node is itself an umbrella, so a catalog
+    // prices it through its children and an unpriced one is not a gap. Every leaf being priced, the
+    // listing resolves to the cheapest of them.
+    const base = await umbrella("PL var deep", [{ number: "960a", colnectId: "2601", price: "40.00" }]);
+    const middle = await prisma.stamp.create({
+      data: {
+        collectionId,
+        parentId: base,
+        name: "PL var deep middle",
+        subtypeId: variantSubtypeId,
+        colnectId: "2610",
+      },
+    });
+    await prisma.stampCollectionArea.create({
+      data: { stampId: middle.id, collectionAreaId: areaId, isPrimary: true },
+    });
+    await prisma.stampCatalogNumber.create({
+      data: { stampId: middle.id, catalogVendorId: vendorId, number: "960b" },
+    });
+    const leaf = await prisma.stamp.create({
+      data: {
+        collectionId,
+        parentId: middle.id,
+        name: "PL var deep leaf",
+        subtypeId: variantSubtypeId,
+        colnectId: "2611",
+      },
+    });
+    await prisma.stampCollectionArea.create({
+      data: { stampId: leaf.id, collectionAreaId: areaId, isPrimary: true },
+    });
+    await prisma.stampCatalogNumber.create({
+      data: { stampId: leaf.id, catalogVendorId: vendorId, number: "960ba" },
+    });
+    await prisma.stampCatalogPrice.create({
+      data: {
+        stampId: leaf.id,
+        catalogEditionId,
+        conditionId: mnhId,
+        certificateStatusId: null,
+        price: "15.00",
+        currency: "EUR",
+      },
+    });
+
+    const kit = await getOfferListingKit(
+      userId,
+      collectionId,
+      await offer([[await copy(base)]])
+    );
+    assert.deepEqual(kit?.blockers, []);
+    assert.equal(kit?.items[0].catalogItemId, "2611");
+    assert.equal(kit?.items[0].catalogItemSource?.label, "Mi\u00b7PL 960ba");
   });
 
   it("is null for another owner's offer and for the wrong collection", async () => {

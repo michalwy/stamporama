@@ -32,6 +32,11 @@ export type ListingBlockerCode =
   | "not-ready"
   | "no-sets"
   | "missing-catalog-id"
+  // #617, the second way an unknown-variant umbrella fails to resolve an item-ID through the price
+  // rollup (#616). Its own code and not a second wording of `missing-catalog-id`, because the codes
+  // are what the surfaces route on and a shared code with a variable sentence is how a link ends up
+  // pointing at the wrong screen.
+  | "no-variant-price"
   | "unmapped-condition"
   | "mixed-sets"
   // #462, the update mode's own three. Each stands alone, exactly as `not-ready` does: an offer that
@@ -40,9 +45,46 @@ export type ListingBlockerCode =
   | "no-listing-url"
   | "no-update-support";
 
+/**
+ * Why a copy's catalogue item-ID could not be **derived from its variants** (#617) — asked only of an
+ * unknown-variant umbrella that carries no item-ID of its own, whose listing stands under its
+ * cheapest variant (#616). The two answers are different faults fixed on different screens, which is
+ * the whole reason they are told apart rather than sharing one blocker:
+ *
+ *   - `unpriced-variants` — some fully identified variant carries no price at the copy's own key, so
+ *     **which variant is cheapest is not known**: a gap in the **catalogue prices**, fixed in each
+ *     variant's own price grid, and named against those variants. It takes precedence over the
+ *     matching gap below, and covers the wholly unpriced tree as its extreme case. The rollup's
+ *     *figure* is still the lowest of what is priced — a catalogue value is allowed to be an
+ *     estimate and is marked as one (#238) — but a listing may not rest on one, since a price
+ *     recorded on the dearest variant alone would list the copy under exactly that variant.
+ *   - `unmatched-variant` — every variant is priced, so the cheapest one is known, and it carries no
+ *     item-ID of its own: a gap in **matching**, fixed in the match window, and reported against
+ *     *that variant*, since it is the stamp that is actually unmatched.
+ *
+ * Neither loosens the refusal (#405's rule): listing under a *dearer* variant because the cheapest
+ * one is unmatched would quietly turn a data gap into a pricing decision.
+ *
+ * Absent on every other copy — including an umbrella whose **own** catalogue price won the valuation
+ * (#616's precedence), where nothing was rolled up at all and the umbrella itself is the stamp that
+ * wants matching.
+ */
+export type CatalogRollupGap =
+  | { kind: "unmatched-variant"; stampId: string; label: string }
+  /** `variants` are the unpriced ones themselves, each already named — they are what wants a price,
+   *  so they are what the blocker reports and links to. */
+  | { kind: "unpriced-variants"; variants: { stampId: string; label: string }[] };
+
 /** One reason an offer cannot be listed, ready to show verbatim. */
 export interface ListingBlocker {
   code: ListingBlockerCode;
+  /** The fault in **one short line**, for a surface with no room for the sentence below — the ready
+   *  gate's hover hint states four of these at once, and four full sentences there are a wall of
+   *  text nobody reads. It names the fault and, where it is short enough to be useful, where it is
+   *  fixed; the `subjects` are stated beside it rather than inside it. Never a replacement for
+   *  {@link ListingBlocker.message}, which is what a surface with room shows and what the server's
+   *  own refusal says. */
+  title: string;
   /** English, complete, and naming what is at fault — the extension has no vocabulary of its own. */
   message: string;
   /** What has to be fixed, by the name the collector knows it under (copy labels, condition names,
@@ -51,6 +93,12 @@ export interface ListingBlocker {
   /** The stamps carrying the fault, for the surface that offers to go and match them (#406). Empty
    *  for a blocker that is not about stamps. */
   stampIds: string[];
+  /** The same stamps as {@link ListingBlocker.stampIds}, each with the name it is reported under, for
+   *  a surface that draws **one link per stamp** (#617 — the unpriced tree links through to the price
+   *  grid). A field of its own rather than an index into `subjects`: the two lists are deduplicated on
+   *  different things — a name a collector reads, and an identity — so positions cannot be paired
+   *  without eventually naming the wrong stamp. Absent wherever `stampIds` is empty. */
+  stampSubjects?: { stampId: string; label: string }[];
 }
 
 /** One copy as the preconditions see it: the two platform-side values that may be missing, plus the
@@ -61,8 +109,14 @@ export interface PreconditionCopy {
   label: string;
   stampId: string;
   /** The platform's catalog item-ID for this copy's stamp (Colnect's item-ID, #247), or null when
-   *  the stamp carries none. */
+   *  the stamp carries none. For an unknown-variant umbrella it is **derived** from the cheapest
+   *  variant (#616), which is why a null one has {@link PreconditionCopy.catalogRollup} to explain
+   *  itself. */
   catalogItemId: string | null;
+  /** Why the derivation came back empty (#617), on a copy whose item-ID was to come from the variant
+   *  rollup. Null on every copy that resolved one and on every copy whose own stamp is the thing at
+   *  fault — see {@link CatalogRollupGap}. */
+  catalogRollup?: CatalogRollupGap | null;
   conditionId: string;
   /** Our own condition's name, which is what an unmapped condition is reported under. */
   conditionName: string;
@@ -134,6 +188,34 @@ function distinct(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
+/** One stamp as a blocker names it: the id to link to and the label to link under. */
+interface StampSubject {
+  stampId: string;
+  label: string;
+}
+
+/** The stamps of a fault, one entry per **stamp** in first-seen order — deduplicated on identity
+ *  rather than on the name, since this is what a link is built from. */
+function distinctStamps(subjects: readonly StampSubject[]): StampSubject[] {
+  const byId = new Map<string, StampSubject>();
+  for (const subject of subjects) if (!byId.has(subject.stampId)) byId.set(subject.stampId, subject);
+  return [...byId.values()];
+}
+
+/**
+ * The stamp a copy's missing item-ID is reported **against** — the cheapest variant where the id was
+ * to be derived from one (#617), and the copy's own stamp otherwise.
+ *
+ * The variant, and not the umbrella, because it is the stamp that is actually unmatched: the surface
+ * that offers to go and match one (#406) has to point at the stamp an item-ID would be recorded on,
+ * and nothing is ever recorded on the umbrella (#616 — that would assert it *is* that variant).
+ */
+function unmatchedStamp(copy: PreconditionCopy): StampSubject {
+  return copy.catalogRollup?.kind === "unmatched-variant"
+    ? { stampId: copy.catalogRollup.stampId, label: copy.catalogRollup.label }
+    : { stampId: copy.stampId, label: copy.label };
+}
+
 /**
  * Every reason this offer cannot be handed over, in the order they are worth fixing. An empty array
  * means the listing kit is servable.
@@ -147,9 +229,9 @@ function distinct(values: readonly string[]): string[] {
  * one evaluation rather than two: a stamp with no item-ID and a condition with no grade misdescribe
  * the goods just as badly on an edit form as on a new one.
  *
- * Of what follows, the first two are the **module's** rules and are asked only where its own entry
- * claims them (#493); the homogeneity of the sets is asked of every module, being a fact about the
- * offer.
+ * Of what follows, the catalogue pair (#617) and the grade are the **module's** rules and are asked
+ * only where its own entry claims them (#493); the homogeneity of the sets is asked of every module,
+ * being a fact about the offer.
  *
  * `no-platform-module` is a refusal, not a fault to fix: a marketplace the Assistant cannot post to
  * is a perfectly good marketplace, listed by hand. A surface that only ever asks "what do I fix"
@@ -164,6 +246,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     return [
       {
         code: "no-platform-module",
+        title: "No Assistant module for this platform",
         message:
           "This platform has no Assistant module that can fill its listing form. Post it by hand.",
         subjects: [],
@@ -175,32 +258,38 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
   // What the offer has to **be** is the one thing the two modes disagree about (#462), and each
   // answer stands alone for `not-ready`'s reason: there is nothing else worth saying about an offer
   // that is not in a position to be listed at all.
-  const standalone = (code: ListingBlockerCode, message: string): ListingBlocker[] => [
-    { code, message, subjects: [], stampIds: [] },
-  ];
+  const standalone = (
+    code: ListingBlockerCode,
+    title: string,
+    message: string
+  ): ListingBlocker[] => [{ code, title, message, subjects: [], stampIds: [] }];
 
   if ((input.mode ?? "create") === "update") {
     if (!rules.supportsUpdate) {
       return standalone(
         "no-update-support",
+        "This platform's listings cannot be edited by the Assistant",
         "This platform's Assistant module can post a listing but cannot go back and edit one. Correct it on the platform's own page."
       );
     }
     if (input.state !== "active") {
       return standalone(
         "not-active",
+        `Not Active — it is ${OFFER_STATE_LABEL[input.state]}`,
         `This offer is ${OFFER_STATE_LABEL[input.state]}, not Active — only a live listing can be updated.`
       );
     }
     if (!input.listingUrl?.trim()) {
       return standalone(
         "no-listing-url",
+        "No listing URL recorded on this offer",
         "This offer carries no listing URL, so there is no listing to go back to. Paste the platform's address into the offer first."
       );
     }
   } else if (input.state !== "ready") {
     return standalone(
       "not-ready",
+      `Not Ready — it is ${OFFER_STATE_LABEL[input.state]}`,
       `This offer is ${OFFER_STATE_LABEL[input.state]}, not Ready — only a Ready offer can be listed.`
     );
   }
@@ -210,6 +299,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     return [
       {
         code: "no-sets",
+        title: "No copies to list",
         message: "This offer holds no copies — there is nothing to list.",
         subjects: [],
         stampIds: [],
@@ -220,14 +310,47 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
   const blockers: ListingBlocker[] = [];
   const copies = sets.flatMap((s) => s.copies);
 
-  const unmatched = rules.requiresCatalogItemId ? copies.filter((c) => c.catalogItemId === null) : [];
+  // A copy with no item-ID fails in **two** ways once one can be derived from a variant (#617), and
+  // they are fixed in different places — one in the match window, one in the price grid — so they are
+  // never printed as one line. Both are still refusals: nothing is substituted for a missing id.
+  const unresolved = rules.requiresCatalogItemId
+    ? copies.filter((c) => c.catalogItemId === null)
+    : [];
+  const unpriced = unresolved.filter((c) => c.catalogRollup?.kind === "unpriced-variants");
+  const unmatched = unresolved.filter((c) => c.catalogRollup?.kind !== "unpriced-variants");
+
   if (unmatched.length > 0) {
-    const subjects = distinct(unmatched.map((c) => c.label));
+    // Named against the stamp that is actually unmatched — the cheapest variant where the id was to
+    // come from one, the copy's own stamp otherwise. See {@link unmatchedStamp}.
+    const stamps = distinctStamps(unmatched.map(unmatchedStamp));
+    const subjects = distinct(stamps.map((s) => s.label));
     blockers.push({
       code: "missing-catalog-id",
+      title: `${subjects.length === 1 ? "A stamp has" : `${subjects.length} stamps have`} no catalog item-ID on this platform`,
       message: `${subjects.length === 1 ? "One stamp has" : `${subjects.length} stamps have`} no catalog item-ID on this platform: ${subjects.join(", ")}. Match ${subjects.length === 1 ? "it" : "them"} with the Assistant on the platform's own catalog pages first — the listing form has nothing to point at without one.`,
       subjects,
-      stampIds: distinct(unmatched.map((c) => c.stampId)),
+      stampIds: stamps.map((s) => s.stampId),
+      stampSubjects: stamps,
+    });
+  }
+
+  if (unpriced.length > 0) {
+    // Named against the **unpriced variants**, not the umbrella: they are what wants a price, and each
+    // has a price grid of its own to go and fill.
+    const stamps = distinctStamps(
+      unpriced.flatMap((c) =>
+        c.catalogRollup?.kind === "unpriced-variants" ? c.catalogRollup.variants : []
+      )
+    );
+    const subjects = distinct(stamps.map((s) => s.label));
+    const one = subjects.length === 1;
+    blockers.push({
+      code: "no-variant-price",
+      title: `${one ? "A variant is" : `${subjects.length} variants are`} unpriced, so the cheapest one is unknown`,
+      message: `${one ? "One variant has" : `${subjects.length} variants have`} no catalog price at the condition being listed: ${subjects.join(", ")}. A listing stands under the cheapest variant, and which one that is cannot be known until every variant is priced — a price recorded on the dearest one alone would list the copy under exactly that variant. Price ${one ? "it" : "them"} on ${one ? "its" : "their"} own stamp screen first.`,
+      subjects,
+      stampIds: stamps.map((s) => s.stampId),
+      stampSubjects: stamps,
     });
   }
 
@@ -238,6 +361,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     const subjects = distinct(unmapped.map((c) => c.conditionName));
     blockers.push({
       code: "unmapped-condition",
+      title: `${subjects.length === 1 ? "A condition has" : `${subjects.length} conditions have`} no grade mapped for this platform`,
       message: `${subjects.length === 1 ? "One condition has" : `${subjects.length} conditions have`} no grade mapped for this platform: ${subjects.join(", ")}. Map them under ${rules.conditionMappingLocation} — a wrong grade on a published listing is worse than a blank.`,
       subjects,
       stampIds: [],
@@ -251,6 +375,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     const subjects = distinct(differing.map((s) => s.label));
     blockers.push({
       code: "mixed-sets",
+      title: "The sets are not interchangeable, so one quantity cannot describe them",
       message: `The sets are not interchangeable, so one quantity cannot describe them: ${subjects.join(", ")} ${subjects.length === 1 ? "differs" : "differ"} from ${sets[0].label}. List them separately, or make the sets match.`,
       subjects,
       stampIds: [],

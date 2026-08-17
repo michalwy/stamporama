@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { STAMP_LABEL_SELECT, type OfferLabeller } from "./offer-labels";
+import type { CatalogRollupGap } from "./listing-preconditions";
 
 // Which catalogue entry a copy is **listed under** on the platform (#616, part of #155).
 //
@@ -29,9 +30,18 @@ import { STAMP_LABEL_SELECT, type OfferLabeller } from "./offer-labels";
 //     umbrella can resolve to two item-IDs — and two umbrellas to one, which `colnect/listing.ts`
 //     already deduplicates when declaring a komplet (#410).
 //
-// What happens when the cheapest variant carries no item-ID of its own, or when no variant is priced
-// at all, is deliberately unchanged: the copy resolves to nothing and the existing
-// `missing-catalog-id` precondition (#406) refuses the listing, naming it.
+// **A listing may only be derived from a tree that is fully priced** (#617). The rollup picks the
+// lowest among the variants that *have* a price, which is a sound estimate — it is flagged uncertain
+// and shown as such (#238) — but it is not an answer to "which variant is the cheapest": a collector
+// who has so far recorded a price on the dearest variant alone would have every such copy listed
+// under exactly that variant, silently. So a copy whose tree has an unpriced variant resolves to
+// nothing, however much of the tree is priced. The valuation side is deliberately left as it is: an
+// estimate may be marked as an estimate, while a sale attaches to one specific catalogue entry.
+//
+// When the derivation comes back empty the copy is refused — nothing is ever substituted — and
+// **which** way it came back empty is reported, because the two are fixed on different screens: an
+// unpriced variant is a gap in the catalogue prices, fixed in that variant's own price grid, while a
+// cheapest variant carrying no item-ID is a gap in matching. See {@link CatalogRollupGap}.
 
 /** One copy as the derivation sees it: the axes the rollup is resolved at, plus the id its own stamp
  *  already carries. */
@@ -60,6 +70,9 @@ export interface ResolvedCatalogItemId {
   /** That variant's leading catalog number with its vendor prefix (`Mi·PL 865a`), for the surfaces
    *  that name what the listing went under. Null with `sourceStampId`. */
   sourceLabel: string | null;
+  /** Why the derivation resolved nothing (#617), and null whenever it resolved something or was never
+   *  asked. It is what lets the preconditions state the two gaps apart. */
+  gap: CatalogRollupGap | null;
 }
 
 /**
@@ -82,7 +95,7 @@ export async function resolveListingCatalogItemIds(
   const resolved = new Map<string, ResolvedCatalogItemId>(
     copies.map((c) => [
       c.itemId,
-      { catalogItemId: c.ownCatalogItemId, sourceStampId: null, sourceLabel: null },
+      { catalogItemId: c.ownCatalogItemId, sourceStampId: null, sourceLabel: null, gap: null },
     ])
   );
 
@@ -101,36 +114,82 @@ export async function resolveListingCatalogItemIds(
   }));
   const valuations = await valuateItemRows(collectionId, rows);
 
-  const sourceIds = new Set<string>();
+  // Every stamp whose name this answer may have to state: the variant a copy resolved to, and the
+  // variants that left it unresolvable by carrying no price (#617).
+  const namedIds = new Set<string>();
   for (const copy of pending) {
-    const sourceStampId = valuations.get(copy.itemId)?.sourceStampId;
-    if (sourceStampId) sourceIds.add(sourceStampId);
+    const valuation = valuations.get(copy.itemId);
+    if (valuation?.sourceStampId) namedIds.add(valuation.sourceStampId);
+    for (const id of valuation?.unpricedVariantIds ?? []) namedIds.add(id);
   }
-  if (sourceIds.size === 0) return resolved;
 
-  // The winning variants are stamps the offer does not hold, so their ids and names are read here —
-  // a handful of rows per offer, and none at all for a batch that resolved nothing.
-  const sources = await prisma.stamp.findMany({
-    where: { id: { in: [...sourceIds] } },
-    select: { id: true, colnectId: true, ...STAMP_LABEL_SELECT.stamp.select },
-  });
-  const sourceById = new Map(sources.map((s) => [s.id, s]));
+  // These are stamps the offer does not hold, so their ids and names are read here — a handful of
+  // rows per offer, and none at all for a batch that resolved nothing.
+  const named =
+    namedIds.size === 0
+      ? []
+      : await prisma.stamp.findMany({
+          where: { id: { in: [...namedIds] } },
+          select: { id: true, colnectId: true, ...STAMP_LABEL_SELECT.stamp.select },
+        });
+  const namedById = new Map(named.map((s) => [s.id, s]));
+  // Prefixed with its vendor (`Mi·PL 865a`), unlike a copy's bare number: these name stamps that are
+  // not in the offer, read against the platform's own catalogue (#423's reasoning).
+  const nameOf = (stamp: (typeof named)[number]) =>
+    labeller.catalogNumbers(stamp)[0] ?? labeller.copy(stamp);
 
   for (const copy of pending) {
-    const sourceStampId = valuations.get(copy.itemId)?.sourceStampId ?? null;
-    const source = sourceStampId ? sourceById.get(sourceStampId) : undefined;
-    const catalogItemId = source?.colnectId?.trim() || null;
-    // A variant that is itself unmatched leaves the copy exactly where it was — unlisted, and named
-    // by the existing precondition. Nothing is invented, and no *other* variant is tried: the
-    // cheapest one is what the listing would stand under, and the second-cheapest is a different
-    // claim about the goods.
-    if (!source || !catalogItemId) continue;
+    const valuation = valuations.get(copy.itemId);
+
+    // **Which variant is cheapest is only knowable once every one of them is priced** (#617). A
+    // partially priced tree therefore resolves to nothing rather than to the cheapest of what
+    // happens to be priced: a single price recorded on the dearest variant would otherwise list the
+    // copy under exactly that variant. The valuation keeps its lowest-of-what-is-priced estimate —
+    // it is marked uncertain (#238) — but a sale is a claim and may not rest on one.
+    const unpricedVariants = (valuation?.unpricedVariantIds ?? [])
+      .map((id) => namedById.get(id))
+      .filter((stamp): stamp is (typeof named)[number] => stamp !== undefined)
+      .map((stamp) => ({ stampId: stamp.id, label: nameOf(stamp) }));
+    if (unpricedVariants.length > 0) {
+      resolved.set(copy.itemId, {
+        catalogItemId: null,
+        sourceStampId: null,
+        sourceLabel: null,
+        gap: { kind: "unpriced-variants", variants: unpricedVariants },
+      });
+      continue;
+    }
+
+    const sourceStampId = valuation?.sourceStampId ?? null;
+    const source = sourceStampId ? namedById.get(sourceStampId) : undefined;
+    if (!source) {
+      // Nothing was rolled up at all — the umbrella's **own** catalogue price won the valuation
+      // (#616's precedence), or it has no variant prices to roll up and none missing either. There is
+      // no rollup gap to report: the umbrella itself is the stamp that wants matching, which is what
+      // the plain refusal already says.
+      continue;
+    }
+    const sourceLabel = nameOf(source);
+    const catalogItemId = source.colnectId?.trim() || null;
+    if (!catalogItemId) {
+      // A variant that is itself unmatched leaves the copy unlisted, and the fault is named against
+      // **that variant** (#617) rather than against the umbrella — it is the stamp an item-ID would
+      // be recorded on. Nothing is invented, and no *other* variant is tried: the cheapest one is
+      // what the listing would stand under, and the second-cheapest is a different claim about the
+      // goods. `sourceStampId` stays null, there being no derived id for a surface to mark inferred.
+      resolved.set(copy.itemId, {
+        catalogItemId: null,
+        sourceStampId: null,
+        sourceLabel: null,
+        gap: { kind: "unmatched-variant", stampId: source.id, label: sourceLabel },
+      });
+      continue;
+    }
     resolved.set(copy.itemId, {
       catalogItemId,
       sourceStampId: source.id,
-      // Prefixed with its vendor (`Mi·PL 865a`), unlike a copy's bare number: this names a stamp
-      // that is not in the offer, read against the platform's own catalogue (#423's reasoning).
-      sourceLabel: labeller.catalogNumbers(source)[0] ?? labeller.copy(source),
+      sourceLabel,
+      gap: null,
     });
   }
   return resolved;

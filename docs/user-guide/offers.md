@@ -775,6 +775,17 @@ variant. Plenty of stamps can't be pinned down that far — telling two shades a
 material, and a gum variety is unknowable on a used copy. The practice on Colnect is to list such a
 piece under its **cheapest** variant, and Stamporama does that for you.
 
+This only works when **every** variant is priced. If some of them have no catalog price yet, the app
+cannot say which is the cheapest — it would only know the cheapest of the ones you happen to have
+filled in, and if the one price you recorded sits on the dearest variant, the listing would go under
+exactly that one. So a partly priced variant tree blocks the offer instead, and the unpriced variants
+are named. Your **catalog value** is unaffected: it goes on showing the lowest of what is priced,
+marked `~` as the estimate it is. An estimate may be labelled an estimate; a sale may not.
+
+A variant that has variants of its own (a deeper tree, `309 → 309A → 309AP`) needs no price of its
+own — it is still an unidentified stamp, and its value is the cheapest of its own children. Only the
+fully identified variants at the ends of the tree are expected to carry a price.
+
 So a copy filed under a base stamp that has variants is listed under whichever variant is cheapest
 **in that copy's condition** — the same variant its catalog value already comes from, so the price
 you are judging and the entry you are selling under are never two different stamps. The row's
@@ -789,9 +800,18 @@ cheapest changes the listing too — where an item-ID pasted onto the stamp by h
 wrong. Two copies of the same stamp in different conditions can end up under different variants, and
 that is correct.
 
-If the cheapest variant has no item-ID of its own, or none of the variants is priced, the offer is
-blocked exactly as before and the stamp is named — the next-cheapest variant is not quietly used
-instead, since that would be selling under a different claim.
+The derivation can come up empty in **two** ways, and the offer says which, because they are fixed on
+different screens:
+
+- **A variant has no catalog price.** Then which variant is cheapest is not known yet, so the offer is
+  blocked and the **unpriced variants** are named, each as a link to its own screen. Record their
+  prices and the listing resolves itself. This covers a stamp none of whose variants is priced as much
+  as one where a single price is missing — the answer is equally unknown either way.
+- **The cheapest variant has no item-ID of its own.** Every variant being priced, the cheapest one is
+  known and simply is not matched on the platform. The offer is blocked, and what is named is *that
+  variant* — it is the stamp to go and match, and matching it lists the copy straight away. The
+  next-cheapest variant is not quietly used instead, since that would be selling under a different
+  claim.
 
 ### Filling the missing item-IDs without leaving the offer
 
@@ -944,7 +964,10 @@ half-way through a filled form.
   stamps with the Assistant on the platform's own catalog pages — that is what it already does. A
   stamp whose variant you haven't identified doesn't need matching: it is listed under its
   [cheapest variant](#a-stamp-whose-variant-you-havent-identified), and the fill report names the one
-  each copy went under.
+  each copy went under — provided **all** of its variants are priced, since otherwise which one is
+  cheapest is guesswork. Where that fails you get **one of two reasons**, never a single vague line:
+  the variants that carry no catalog price, each linking to its own screen, or the cheapest variant
+  itself when that is what has no item-ID.
 - **Every condition needs a grade on that platform.** The card names the conditions with none; map
   them under **Settings → Colnect** (see [Colnect condition mapping](collections.md#colnect-condition-mapping)). A
   blank is a legitimate answer for a condition the platform has no grade for — it just means offers
@@ -957,7 +980,9 @@ half-way through a filled form.
 The same three checks also gate **Mark ready**: an offer on that platform stays in **Preparing**
 until they pass, so you find out while you are still assembling it rather than in the middle of a
 posting session. The quick-advance button on the offer's own screen stays where it is and is
-**disabled with the reasons in its hover hint**; marking it ready from the Offers list or the **⋮**
+**disabled with the reasons in its hover hint** — one short line per reason, with the stamps or
+conditions at fault listed under it; the full explanation of each, and the links that fix it, are on
+the listing card; marking it ready from the Offers list or the **⋮**
 menu is refused with the same wording. Only that one step is gated — an offer already live can still
 be paused, withdrawn or sold, and a platform naming no Assistant module is not checked at all.
 

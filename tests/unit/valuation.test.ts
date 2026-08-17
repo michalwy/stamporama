@@ -187,6 +187,60 @@ describe("valuateCopy — unknown variant", () => {
     assert.equal(v.sourceStampId, "v-b");
   });
 
+  // #617 — the coverage of the rollup, beside its figure. The figure stays the lowest of what is
+  // priced; this is what tells a *listing* that the cheapest variant is not actually known yet.
+  it("reports which identified variants carry no price at this key", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      unknownVariant: true,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [],
+      variantPrices: [variant("v-a", price(25)), variant("v-b"), variant("v-c", price(40))],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    // The estimate is unchanged and still marked uncertain — only a sale may not rest on it.
+    assert.equal(v.amount, "25.00");
+    assert.equal(v.uncertain, true);
+    assert.deepEqual(v.unpricedVariantIds, ["v-b"]);
+  });
+
+  it("expects no price of an intermediate node — its value is the lowest of its own children", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      unknownVariant: true,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [],
+      variantPrices: [
+        // `v-a` is itself an umbrella (309A over 309AP…), so it is still underspecified and a catalog
+        // prices it through its children rather than directly.
+        { ...variant("v-a"), identified: false },
+        variant("v-a-1", price(25)),
+        variant("v-b", price(40)),
+      ],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.deepEqual(v.unpricedVariantIds, []);
+    assert.equal(v.sourceStampId, "v-a-1");
+  });
+
+  it("reports nothing where the umbrella's own price won — nothing was rolled up", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      unknownVariant: true,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [price(30)],
+      variantPrices: [variant("v-a"), variant("v-b", price(20))],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.deepEqual(v.unpricedVariantIds, []);
+  });
+
   it("compares descendant prices in base currency, not nominal amount", () => {
     // 100 PLN ≈ 25 EUR (rate 0.25) is cheaper than 30 EUR nominal.
     const rates = new Map<string, number | null>([["PLN", 0.25]]);
@@ -285,6 +339,7 @@ describe("aggregateHoldings", () => {
     uncertain: false,
     unpriced,
     sourceStampId: null,
+    unpricedVariantIds: [],
   });
   const uncertain = (baseAmount: number): CopyValuation => ({
     ...certain(baseAmount),

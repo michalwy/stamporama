@@ -85,6 +85,11 @@ export async function valuateItemRows(
       where: { id: { in: [...stampIds] } },
       select: {
         id: true,
+        // Which descendants are **fully identified** (#617) is a fact about the tree's shape: a node
+        // with variant children of its own is an umbrella too (ADR-0010 §3), so it is not expected to
+        // carry a price. Read as one column here rather than as a `variants` relation per stamp — the
+        // whole subtree is already in this result set, so the parent edges are enough.
+        parentId: true,
         catalogPrices: { select: VALUATION_PRICE_SELECT },
         stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
         // The issue anchors a format multiplier (#343) — the narrowest anchor a catalog prints one
@@ -103,10 +108,13 @@ export async function valuateItemRows(
   // Which descendants count as variants (ADR-0010 §3): only variant-kind children
   // feed the lowest-child price; distinct-entry descendants are excluded.
   const isVariantByStamp = new Map<string, boolean>();
+  /** Stamps that have a variant-kind child of their own — the ones no price is expected of (#617). */
+  const umbrellaStampIds = new Set<string>();
   const currencies: string[] = [];
   for (const s of stamps) {
     pricesByStamp.set(s.id, s.catalogPrices);
     isVariantByStamp.set(s.id, childIsVariant(s));
+    if (s.parentId && childIsVariant(s)) umbrellaStampIds.add(s.parentId);
     for (const p of s.catalogPrices) currencies.push(p.currency);
     const link = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
     const areaId = link?.collectionAreaId ?? null;
@@ -147,7 +155,14 @@ export async function valuateItemRows(
         // Tagged with the variant each array belongs to (#616), so the rollup's answer names the
         // stamp it took its figure from.
         variantPrices: descendants
-          ? descendants.map((id) => ({ stampId: id, prices: pricesByStamp.get(id) ?? [] }))
+          ? descendants.map((id) => ({
+              stampId: id,
+              prices: pricesByStamp.get(id) ?? [],
+              // A leaf of the variant tree is fully identified; a node with variants of its own is
+              // still an umbrella, whose value is the lowest of its children rather than a price of
+              // its own (#617).
+              identified: !umbrellaStampIds.has(id),
+            }))
           : undefined,
         baseCurrency,
         rates,

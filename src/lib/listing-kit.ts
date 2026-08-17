@@ -299,6 +299,9 @@ export async function getOfferListingKit(
         label: c.label,
         stampId: c.stampId,
         catalogItemId: c.catalogItemId,
+        // Why a null id came back null (#617) — read off the one derivation above, never re-derived,
+        // so the refusal names the same stamp the resolution was about.
+        catalogRollup: catalogIds.get(c.itemId)?.gap ?? null,
         conditionId: c.condition.id,
         conditionName: c.condition.name,
         platformCondition: c.condition.platformValue,

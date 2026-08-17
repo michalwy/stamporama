@@ -392,7 +392,7 @@ function PostingKit({
   if (isLoading || isError || !offer) {
     return (
       <div style={{ borderTop: "1px solid var(--color-border)" }}>
-        <ListingBlockers blockers={blockers} />
+        <ListingBlockers blockers={blockers} collectionSlug={collectionSlug} />
         {isLoading ? (
           <Note>Loading the listing…</Note>
         ) : (
@@ -420,7 +420,7 @@ function PostingKit({
         background: "var(--color-bg-page)",
       }}
     >
-      <ListingBlockers blockers={blockers} inset />
+      <ListingBlockers blockers={blockers} collectionSlug={collectionSlug} inset />
 
       <Field label="Title" copyValue={offer.name}>
         <p style={{ ...BODY, color: offer.name ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
@@ -619,12 +619,21 @@ function PostingKit({
  * only that something is wrong, and each of these is fixed in a different place. Rendering nothing
  * when there is nothing to say keeps the caller a single code path.
  *
- * Deliberately **not** a per-reason link: an unmatched stamp is matched on the platform's own catalog
- * pages through the Assistant, which the app cannot navigate to, and a condition is mapped in
- * Settings — so the messages name where they are fixed and the offer's own screen is one click away
- * in the header above.
+ * A reason links through only where the app can actually navigate to the fix, which is **one** of
+ * them (#617): an unpriced variant tree is priced on the umbrella's own screen, so the stamps are
+ * drawn as links under the sentence. An unmatched stamp is matched on the platform's own catalog pages
+ * through the Assistant, which the app cannot navigate to, and a condition is mapped in Settings — so
+ * those messages name where they are fixed and nothing more.
  */
-function ListingBlockers({ blockers, inset }: { blockers: ListingBlocker[]; inset?: boolean }) {
+function ListingBlockers({
+  blockers,
+  collectionSlug,
+  inset,
+}: {
+  blockers: ListingBlocker[];
+  collectionSlug: string;
+  inset?: boolean;
+}) {
   if (blockers.length === 0) return null;
   return (
     <div
@@ -661,7 +670,31 @@ function ListingBlockers({ blockers, inset }: { blockers: ListingBlocker[]; inse
               color: "var(--color-text-primary)",
             }}
           >
-            {blocker.message}
+            {/* The fault leads in strong type and the sentence that says what to do about it follows
+                muted underneath: three or four of these are read by scanning for the one to deal with
+                next, and a paragraph per reason is scanned by nobody. Same split as the ready gate's
+                hover hint, which has room for the titles alone. */}
+            <span style={{ display: "block", fontWeight: 600 }}>{blocker.title}</span>
+            <span style={{ display: "block", color: "var(--color-text-secondary)" }}>
+              {blocker.message}
+            </span>
+            {/* The one reason with a screen here to go and fix it on (#617): the umbrella's own page
+                carries both its catalog prices and its variants. */}
+            {blocker.code === "no-variant-price" && (blocker.stampSubjects ?? []).length > 0 && (
+              <span style={{ display: "block", marginTop: "0.125rem" }}>
+                {(blocker.stampSubjects ?? []).map((stamp, index) => (
+                  <span key={stamp.stampId}>
+                    {index > 0 && " · "}
+                    <Link
+                      href={`/c/${collectionSlug}/stamps/${stamp.stampId}`}
+                      style={{ color: "var(--color-accent)", textDecoration: "underline" }}
+                    >
+                      {stamp.label}
+                    </Link>
+                  </span>
+                ))}
+              </span>
+            )}
           </li>
         ))}
       </ul>

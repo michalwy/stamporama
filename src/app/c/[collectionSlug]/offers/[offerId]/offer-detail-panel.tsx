@@ -549,14 +549,47 @@ export function OfferDetailPanel({
               const blocked = readyBlockers.length > 0;
               return (
                 <Tooltip
+                  maxWidth="26rem"
                   content={
                     blocked ? (
                       // One line per reason, never a count: each is fixed somewhere different (#406,
                       // #311) — a catalogue match on another screen, a photo run on the card below.
-                      <span style={{ display: "grid", gap: "0.25rem", maxWidth: "22rem" }}>
-                        <strong>This offer is not ready to be listed on {offer.platformName} yet:</strong>
+                      //
+                      // The reason's **short title** and its subjects, never the full sentences: four
+                      // of those ran into one unreadable block, which is the one thing a hint must not
+                      // be. What is at fault leads in strong type, what has to be fixed follows muted
+                      // and indented under it, and the whole sentence is a click away on the surfaces
+                      // that have room for it — this card's own screens and the server's refusal.
+                      <span style={{ display: "grid", gap: "0.5rem", textAlign: "left" }}>
+                        <span style={{ fontWeight: 600 }}>
+                          Not ready to be listed on {offer.platformName} yet:
+                        </span>
                         {readyBlockers.map((b) => (
-                          <span key={b.code}>{b.message}</span>
+                          <span
+                            key={b.code}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "auto 1fr",
+                              columnGap: "0.4375rem",
+                              rowGap: "0.125rem",
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            <span aria-hidden style={{ color: "var(--color-error)" }}>
+                              •
+                            </span>
+                            <span>{b.title}</span>
+                            {b.subjects.length > 0 && (
+                              <span
+                                style={{
+                                  gridColumn: 2,
+                                  color: "var(--color-text-muted)",
+                                }}
+                              >
+                                {b.subjects.join(", ")}
+                              </span>
+                            )}
+                          </span>
                         ))}
                       </span>
                     ) : (
