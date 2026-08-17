@@ -6,6 +6,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
@@ -48,6 +49,11 @@ import { Icon } from "@/app/icons";
 // says so: that is the entry the listing will attach to, so the market page opened while pricing has
 // to be the same one. It is named in the `~` + muted-italic vocabulary #238 uses for inferred rather
 // than recorded, and it is *derived* — nothing is written onto the stamp.
+//
+// Where that derivation came back empty because a **variant carries no price** (#617), the row has
+// no links at all and `+ CV` would not help: the umbrella's own price is not what the rollup reads,
+// and until every variant is priced there is nothing to say which one is cheapest. That row gets
+// **Price variants** instead (#618) — the whole tree on one grid, which is what actually closes it.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
@@ -208,6 +214,11 @@ export function OfferPlatformItemsCard({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  // One grid for the whole card, opened over whichever row was pressed — a hook cannot be called in
+  // a `.map`, which is why the scope is supplied at the click rather than per row.
+  const variantPrices = useVariantPriceGrid({
+    onSaved: () => void invalidateAll(collectionId),
+  });
   const [priceError, setPriceError] = useState<string | undefined>();
   const [isPricing, startPricing] = useTransition();
 
@@ -540,31 +551,52 @@ export function OfferPlatformItemsCard({
                   missing and open the same quick dialog the copies below do — which is the scroll it
                   saves. Priced rows say nothing: the figure is still not this card's business. */}
               <span style={CELL}>
-                {(() => {
-                  const unpriced = unpricedFor(item);
-                  if (!unpriced) return null;
-                  return (
-                    <Tooltip
-                      content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
+                {/* An umbrella whose tree is not fully priced (#618) is a different gap from an
+                    unpriced stamp, and it is the one that stops the listing outright: until every
+                    variant carries a price, *which* of them is cheapest is not known, so the row
+                    has no catalogue link and nothing to search for either (#617). It is offered
+                    ahead of `+ CV` and instead of it — pricing the umbrella itself would not close
+                    it, the tree being what the rollup reads. */}
+                {item.unpricedVariantStampId ? (
+                  <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
+                    <button
+                      type="button"
+                      onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
+                      style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPriceError(undefined);
-                          setQuickPriceItem(unpriced);
-                        }}
-                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      Price variants
+                    </button>
+                  </Tooltip>
+                ) : (
+                  (() => {
+                    const unpriced = unpricedFor(item);
+                    if (!unpriced) return null;
+                    return (
+                      <Tooltip
+                        content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
                       >
-                        + CV
-                      </button>
-                    </Tooltip>
-                  );
-                })()}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPriceError(undefined);
+                            setQuickPriceItem(unpriced);
+                          }}
+                          style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                        >
+                          + CV
+                        </button>
+                      </Tooltip>
+                    );
+                  })()
+                )}
               </span>
             </li>
           ))}
         </ul>
       )}
+
+      {/* The variant price grid (#618), over the whole tree of whichever umbrella was pressed. */}
+      {variantPrices.dialog}
 
       {/* The same dialog and the same save the copies below use (#147/#170/#341) — a value set from
           here is set the one way it is ever set. */}

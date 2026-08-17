@@ -46,6 +46,7 @@ import { useChecklistsAction } from "@/app/c/[collectionSlug]/shared/use-checkli
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
+import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import type { StampFormatData } from "@/lib/stamp-formats";
@@ -573,6 +574,18 @@ export function IssueRow({
     scopeLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
   });
 
+  // The whole issue's stamp tree priced in one pass (#618), opened from the row for the same reason
+  // the multipliers above are: the printed catalogue's page *is* an issue, and the row already
+  // answers which one. Writing prices moves the row's own totals and every member's headline price,
+  // so both caches are refreshed once the grid closes.
+  const variantPrices = useVariantPriceGrid({
+    defaultScope: { kind: "issue", issueId: issue.id },
+    onSaved: async () => {
+      await invalidateList(collectionId);
+      await invalidateMembers(collectionId, issue.id);
+    },
+  });
+
   const rangeSuggestions = issue.rangeSuggestions;
   // Recomputing the declared range (#333) is an explicit, always-available action that confirms
   // before writing — the list row's warning chip is a hint, not the only way in.
@@ -589,6 +602,7 @@ export function IssueRow({
     copies.action,
     offers.action,
     ...prices.actions,
+    variantPrices.action,
     checklists.action,
     formatFactors.action,
     {
@@ -709,6 +723,7 @@ export function IssueRow({
           {copies.dialog}
           {offers.dialog}
           {prices.dialog}
+          {variantPrices.dialog}
           {checklists.dialog}
           {formatFactors.dialog}
           {recomputeOpen && (

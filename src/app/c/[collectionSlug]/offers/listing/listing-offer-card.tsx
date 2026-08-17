@@ -13,7 +13,8 @@ import { normalizeDescriptionFormat } from "@/lib/description-format";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
 import type { ListingBlocker } from "@/lib/listing-preconditions";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
-import { useOfferDetail, useOfferPhotoPlan } from "../use-offers-query";
+import { useOfferDetail, useOfferPhotoPlan, useInvalidateOffers } from "../use-offers-query";
+import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import type { AssistantHandoff } from "../assistant-handoff";
 import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
 import { Icon } from "@/app/icons";
@@ -392,7 +393,7 @@ function PostingKit({
   if (isLoading || isError || !offer) {
     return (
       <div style={{ borderTop: "1px solid var(--color-border)" }}>
-        <ListingBlockers blockers={blockers} collectionSlug={collectionSlug} />
+        <ListingBlockers blockers={blockers} collectionId={collectionId} />
         {isLoading ? (
           <Note>Loading the listing…</Note>
         ) : (
@@ -420,7 +421,7 @@ function PostingKit({
         background: "var(--color-bg-page)",
       }}
     >
-      <ListingBlockers blockers={blockers} collectionSlug={collectionSlug} inset />
+      <ListingBlockers blockers={blockers} collectionId={collectionId} inset />
 
       <Field label="Title" copyValue={offer.name}>
         <p style={{ ...BODY, color: offer.name ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
@@ -619,21 +620,27 @@ function PostingKit({
  * only that something is wrong, and each of these is fixed in a different place. Rendering nothing
  * when there is nothing to say keeps the caller a single code path.
  *
- * A reason links through only where the app can actually navigate to the fix, which is **one** of
- * them (#617): an unpriced variant tree is priced on the umbrella's own screen, so the stamps are
- * drawn as links under the sentence. An unmatched stamp is matched on the platform's own catalog pages
- * through the Assistant, which the app cannot navigate to, and a condition is mapped in Settings — so
- * those messages name where they are fixed and nothing more.
+ * A reason offers the fix only where the app can actually carry it out, which is **one** of them
+ * (#617): an unpriced variant tree is priced on the variant price grid (#618), so each named variant
+ * is a button that opens it over that variant's whole tree — the grid, rather than the stamp's own
+ * screen, because what is missing is a *tree* of prices and the umbrella's page prices one stamp. An
+ * unmatched stamp is matched on the platform's own catalog pages through the Assistant, which the app
+ * cannot navigate to, and a condition is mapped in Settings — so those messages name where they are
+ * fixed and nothing more.
  */
 function ListingBlockers({
   blockers,
-  collectionSlug,
+  collectionId,
   inset,
 }: {
   blockers: ListingBlocker[];
-  collectionSlug: string;
+  collectionId: string;
   inset?: boolean;
 }) {
+  const { invalidateAll } = useInvalidateOffers();
+  const variantPrices = useVariantPriceGrid({
+    onSaved: () => void invalidateAll(collectionId),
+  });
   if (blockers.length === 0) return null;
   return (
     <div
@@ -685,12 +692,23 @@ function ListingBlockers({
                 {(blocker.stampSubjects ?? []).map((stamp, index) => (
                   <span key={stamp.stampId}>
                     {index > 0 && " · "}
-                    <Link
-                      href={`/c/${collectionSlug}/stamps/${stamp.stampId}`}
-                      style={{ color: "var(--color-accent)", textDecoration: "underline" }}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        variantPrices.open({ kind: "stamp", stampId: stamp.stampId })
+                      }
+                      style={{
+                        padding: 0,
+                        border: "none",
+                        background: "none",
+                        font: "inherit",
+                        color: "var(--color-accent)",
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                      }}
                     >
                       {stamp.label}
-                    </Link>
+                    </button>
                   </span>
                 ))}
               </span>
@@ -698,6 +716,7 @@ function ListingBlockers({
           </li>
         ))}
       </ul>
+      {variantPrices.dialog}
     </div>
   );
 }

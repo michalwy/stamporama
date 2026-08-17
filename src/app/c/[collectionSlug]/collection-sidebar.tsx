@@ -266,7 +266,16 @@ export function CollectionSidebar({
           href={`${base}/stamps`}
           icon={<Icon name="stamps" />}
           label="Stamps"
-          active={isActive(`${base}/stamps`)}
+          active={isActive(`${base}/stamps`, false, [`${base}/stamps/variant-prices`])}
+        />
+        {/* The variant-pricing worklist (#618) — its own entry rather than a filter on Stamps,
+            because what it lists is *trees* that are not fully priced, which no row of a flat stamp
+            list can say. It sits under Stamps for the same reason its route does. */}
+        <NavItem
+          href={`${base}/stamps/variant-prices`}
+          icon={<Icon name="prices" />}
+          label="Variant prices"
+          active={isActive(`${base}/stamps/variant-prices`)}
         />
 
         <p style={sectionLabelStyle}>Collection</p>

@@ -3299,6 +3299,14 @@ export interface OfferPlatformItem {
    * unknown-variant umbrella with no item-ID of its own, and the listing therefore stands under the
    * cheapest variant. Null for every ordinary row, including an umbrella matched by hand. */
   catalogItemVariant: string | null;
+  /** The umbrella whose variant tree wants pricing (#618) — this row's own stamp, and set **only**
+   * where the derivation above came back empty because a variant carries no price (#617's
+   * `unpriced-variants`). Which variant is cheapest is not knowable until every one of them is
+   * priced, so this is the row that has no catalogue link *and* nothing to search for; the card
+   * offers the variant price grid on it, over the whole tree at once. Null on every other row,
+   * including one whose cheapest variant is merely unmatched — that is a gap in matching, fixed on
+   * the platform's own pages. */
+  unpricedVariantStampId: string | null;
   /** How many of the offer's copies this row stands for. */
   copyCount: number;
 }
@@ -3785,6 +3793,8 @@ function platformItemsFor(
             ),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
         catalogItemVariant: resolved?.sourceLabel ?? null,
+        unpricedVariantStampId:
+          resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
         copyCount: 1,
       });
     }
