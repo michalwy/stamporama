@@ -154,6 +154,7 @@ export function StampPickerBrowser({
   areas,
   onPick,
   onPickIssue,
+  marked,
   aside,
   asideWidth,
   onClose,
@@ -164,6 +165,13 @@ export function StampPickerBrowser({
   /** When provided, each issue row offers one "add this whole set" button per checklist
    *  (lot intake, #121; #531). */
   onPickIssue?: (picked: PickedIssue) => void;
+  /**
+   * Stamps the caller has **already taken**, marked on their rows (#607) — see
+   * `SelectableStampNode`. Only a picker that does not close on the pick needs it: the tile
+   * shortlist stays open across several picks, and without this the collector is comparing the tree
+   * against a list elsewhere on screen and pressing the same stamp twice to be sure.
+   */
+  marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onClose: () => void;
 }) {
   // Area + year come from the shared per-collection store (#143), so the picker
@@ -374,6 +382,7 @@ export function StampPickerBrowser({
               justCreatedIssueId={justCreatedIssueId}
               onPick={onPick}
               onPickIssue={onPickIssue}
+              marked={marked}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
               onNewVariant={(issue, parent) => openCreate({ kind: "stamp", issue, parent })}
@@ -458,6 +467,7 @@ function IssueBrowser({
   justCreatedIssueId,
   onPick,
   onPickIssue,
+  marked,
   onNewIssue,
   onNewStamp,
   onNewVariant,
@@ -480,6 +490,8 @@ function IssueBrowser({
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
+  /** Stamps already taken by the caller, marked on their rows (#607). */
+  marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewIssue: (areaId: string | null) => void;
   onNewStamp: (issue: IssueListItem) => void;
   onNewVariant: (issue: IssueListItem, parent: StampNodeData) => void;
@@ -565,6 +577,7 @@ function IssueBrowser({
               justAdded={issue.id === justCreatedIssueId}
               search={search}
               onPick={handlePick}
+              marked={marked}
               onPickIssue={
                 onPickIssue
                   ? (checklist) =>
@@ -607,6 +620,7 @@ function PickIssueRow({
   search,
   onPick,
   onPickIssue,
+  marked,
   onNewStamp,
   onNewVariant,
 }: {
@@ -627,6 +641,8 @@ function PickIssueRow({
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   /** Called with the checklist whose button was pressed (#531). */
   onPickIssue?: (checklist: IssueChecklistSummary) => void;
+  /** Stamps already taken by the caller, marked on their rows (#607). */
+  marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewStamp: () => void;
   onNewVariant: (parent: StampNodeData) => void;
 }) {
@@ -870,6 +886,7 @@ function PickIssueRow({
                   const parent = members.find((m) => m.stampId === parentStampId);
                   if (parent) onNewVariant(parent);
                 }}
+                marked={marked}
                 matchedStampIds={matchedStampIds}
               />
             ))

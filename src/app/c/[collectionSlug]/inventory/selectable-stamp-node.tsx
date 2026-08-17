@@ -37,6 +37,7 @@ export function SelectableStampNode({
   onNewVariant,
   matchedStampIds,
   contextIds,
+  marked,
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
@@ -46,6 +47,20 @@ export function SelectableStampNode({
   isLast: boolean;
   onPick: (node: StampNodeData, unknownVariant: boolean) => void;
   onNewVariant?: (parentStampId: string) => void;
+  /**
+   * Stamps the **caller has already taken** (#607), marked on their own rows with a chip saying so.
+   *
+   * A picker normally closes on the pick, so *what have I already chosen* cannot arise; the tile
+   * shortlist's does not, because listing *watermark A or B* is two picks and reopening the tree per
+   * stamp is the cost that made the shortlist expensive in the first place. A chooser that stays
+   * open has to answer that question on the rows, or the collector is left comparing the tree
+   * against a list somewhere else on screen and pressing the same stamp twice to be sure.
+   *
+   * The row stays **pickable** while marked: pressing it again is what the caller says it is (for the
+   * shortlist, a no-op upsert), and a row that went dead would read as *this stamp is not allowed*
+   * rather than *this one is already in*.
+   */
+  marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   /** When set, the active filter matched only stamps within this issue (#186): nodes whose
    * subtree contains no match are dimmed, and nodes on the path to a match start expanded. */
   matchedStampIds?: Set<string> | null;
@@ -74,10 +89,19 @@ export function SelectableStampNode({
   // tree is arbitrarily deep by design (#54).
   const isUnknownVariant = children.some((c) => c.node.actsAsVariant);
   const indent = `${depth * 1.25}rem`;
+  /** Already on the caller's list. Said **twice on purpose**: a tint on the whole row, which is what
+   * is legible while scanning a tree of forty, and a chip beside the title, which is what says *what*
+   * it is already on. The hover hint takes the same news, since a marked row is the one a collector
+   * stops on to check they have not pressed it twice. */
+  const isMarked = !!marked?.stampIds.has(node.stampId);
 
   return (
     <>
-      <Tooltip content="Select this stamp" align="start" style={{ display: "block" }}>
+      <Tooltip
+        content={isMarked ? marked!.hint : "Select this stamp"}
+        align="start"
+        style={{ display: "block" }}
+      >
         <div
           role="button"
           tabIndex={0}
@@ -93,7 +117,11 @@ export function SelectableStampNode({
           style={{
             padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
             fontSize: "0.8125rem",
-            background: hovered ? "var(--color-bg-row-hover)" : undefined,
+            background: hovered
+              ? "var(--color-bg-row-hover)"
+              : isMarked
+                ? "var(--color-accent-soft)"
+                : undefined,
             transition: "background 0.1s ease, opacity 0.1s ease",
             borderBottom: isLast ? undefined : "1px solid var(--color-border)",
             cursor: "pointer",
@@ -154,6 +182,30 @@ export function SelectableStampNode({
                   )}
                 </span>
 
+                {/* Already taken (#607). A filled accent chip, the app's own *this is in* mark, so it
+                    reads the same over a row the filter has dimmed as over a plain one — and it
+                    names the list rather than only showing a tick, since a bare ✓ on a catalogue row
+                    would read as *held* or *complete*, which the badges beside it already mean. */}
+                {isMarked && (
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                      fontSize: "0.6875rem",
+                      fontWeight: 600,
+                      padding: "0.05rem 0.4rem",
+                      borderRadius: "0.25rem",
+                      background: "var(--color-accent)",
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Icon name="check" size="xs" /> {marked!.label}
+                  </span>
+                )}
+
                 {/* A child hangs under a node at **any** depth (#401): the tree is `Issue → X → Xa →
                     Xay → XayI` by design (#54), so `3a` takes `3a1` exactly as `3` takes `3a`. The
                     issue list's own "Add child stamp" has always allowed this — only the picker
@@ -193,6 +245,7 @@ export function SelectableStampNode({
             onNewVariant={onNewVariant}
             matchedStampIds={matchedStampIds}
             contextIds={contextIds}
+            marked={marked}
           />
         ))}
     </>

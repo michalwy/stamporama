@@ -792,6 +792,23 @@ export function TileIdentifyDialog({
           </div>
         }
         asideWidth="26rem"
+        // **What is already on the list is marked on its own row.** A picker that closes on the pick
+        // never has to answer *which of these have I taken*; this one stays open, so without the mark
+        // the collector is reading the tree against a list on the other side of the screen and
+        // pressing a stamp twice to be sure. It names the list rather than showing a bare tick,
+        // because a catalogue row already carries badges for *held* and *wanted*.
+        // Marked when **any** piece in hand carries it, not only when every one does: the question the
+        // mark answers is *have I already picked this*, and the answer is yes. Pressing it again is
+        // still meaningful on a mixed run — it writes the stamp to the pieces missing it — which is
+        // why the hint says that rather than promising nothing happens.
+        marked={{
+          stampIds: new Set(merged.map((m) => m.candidate.stampId)),
+          label: "shortlisted",
+          hint:
+            count === 1
+              ? "Already on this piece's shortlist"
+              : "Already shortlisted — pressing it again adds it to any ticked piece still missing it",
+        }}
         // **It stays open.** The case this exists for is *watermark A or B*, which is two picks, and
         // a chooser that closes on the first turns listing three stamps into three trips through
         // the area tree. Nothing is lost by staying: each pick is written on its own, the shortlist

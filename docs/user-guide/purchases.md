@@ -639,7 +639,9 @@ have already worked out which stamps it could be. Every tile still to be identif
 for exactly that — **Cannot tell? List what it could be…** — which opens the same browse popup you
 identify from, with the piece beside it. That popup **stays open**: pick the two or three stamps it
 could be one after another (they appear beside the picture as you go), then close it and press **Set
-aside to check**. You never have to come back into the tile to write the list down.
+aside to check**. You never have to come back into the tile to write the list down. A stamp you have
+already added is **marked in the tree** — its row is tinted and carries a *shortlisted* chip — so you
+can see at a glance what is on the list without leaving the popup; pressing it again is harmless.
 
 Each stamp you add becomes a row on the tile — the picker's own row, with its picture, its catalogue
 numbers, its price and how many copies you already hold, which is what you actually compare a piece
