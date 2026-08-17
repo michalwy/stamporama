@@ -19,6 +19,8 @@ import { AllegroPlatformPanel } from "./allegro-platform-panel";
 import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { AllegroProfilesPanel } from "./allegro-profiles-panel";
 import { AllegroCategoriesPanel } from "./allegro-categories-panel";
+import { DelcampePlatformPanel } from "./delcampe-platform-panel";
+import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
@@ -39,6 +41,7 @@ import type { CarrierData } from "@/lib/carriers";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
+import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -81,6 +84,9 @@ interface SettingsTabsProps {
   /** What the collection has learned about Allegro's categories (#488) — both registers, empty with
    *  a null platform until one of the collection's platforms is Allegro. */
   allegroLearnedCategories: AllegroLearnedCategoryList;
+  /** Which platform is Delcampe (#608), and the profiles its uploads are built from. */
+  delcampePlatformId: string | null;
+  delcampeListingProfiles: DelcampeListingProfileList;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -128,6 +134,9 @@ const TABS = [
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
   { key: "allegro", label: "Allegro" },
+  // Beside Allegro, and asking the same first question: which platform is this marketplace. Its own
+  // tab rather than a section of Allegro's — they are two marketplaces, set up in two sittings.
+  { key: "delcampe", label: "Delcampe" },
   { key: "assistant", label: "Assistant" },
 ] as const;
 
@@ -165,6 +174,8 @@ export function SettingsTabs({
   allegroConnection,
   allegroListingProfiles,
   allegroLearnedCategories,
+  delcampePlatformId,
+  delcampeListingProfiles,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -198,6 +209,7 @@ export function SettingsTabs({
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
     rawTab === "allegro" ||
+    rawTab === "delcampe" ||
     rawTab === "assistant"
       ? rawTab
       : "general";
@@ -453,6 +465,22 @@ export function SettingsTabs({
             list={allegroLearnedCategories}
             connected={allegroConnection.connected && !allegroConnection.needsReconnect}
           />
+        </section>
+      )}
+      {activeTab === "delcampe" && (
+        <section>
+          {/* The same question the other two marketplace tabs lead with (#608). Delcampe has no
+              connection half to follow it: listings go up as an uploaded file, so what comes after
+              naming the platform is what that file's rows carry. */}
+          <h2 style={sectionHeadingStyle}>Delcampe platform</h2>
+          <DelcampePlatformPanel
+            collectionId={collectionId}
+            platforms={platformContacts}
+            selectedId={delcampePlatformId}
+          />
+
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Listing profiles</h2>
+          <DelcampeProfilesPanel collectionId={collectionId} list={delcampeListingProfiles} />
         </section>
       )}
       {activeTab === "assistant" && (

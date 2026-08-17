@@ -77,6 +77,10 @@ import {
   type AllegroOfferListingConfig,
 } from "./allegro-offer-listing";
 import {
+  getDelcampeOfferListingConfig,
+  type DelcampeOfferListingConfig,
+} from "./delcampe-listing-profile";
+import {
   evaluatePhotoReadiness,
   type PhotoReadinessBlocker,
   type ReadyBlocker,
@@ -3338,6 +3342,11 @@ export interface OfferDetail {
    * is a value the two would eventually disagree about. The offer's own screen is where it is seen
    * and corrected. */
   allegroListing: AllegroOfferListingConfig | null;
+  /** Which Delcampe listing profile this offer's upload row is built from (#608), or null on every
+   * offer that is not on the Delcampe platform. Its own field beside the Allegro one rather than a
+   * shared "platform listing config": the two marketplaces agree on nothing but the idea of a named
+   * profile, and one shape covering both could only be the union of two unrelated forms. */
+  delcampeListing: DelcampeOfferListingConfig | null;
   createdAt: Date;
 }
 
@@ -3812,6 +3821,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // inside `getAllegroOfferListingConfig` on the platform's own module marker, so a Colnect offer
     // pays nothing for a card it will never draw.
     allegroListing: await getAllegroOfferListingConfig(ownerId, offerId),
+    // Gated the same way, on the platform's own marker, so only a Delcampe offer pays for it.
+    delcampeListing: await getDelcampeOfferListingConfig(ownerId, offerId),
     createdAt: offer.createdAt,
   };
 }

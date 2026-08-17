@@ -36,6 +36,7 @@ import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferPlatformItemsCard } from "./offer-platform-items-card";
 import { OfferAllegroCard } from "./offer-allegro-card";
+import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
@@ -976,6 +977,17 @@ export function OfferDetailPanel({
           collectionSlug={collectionSlug}
           offerId={offerId}
           config={offer.allegroListing}
+          onChanged={() => invalidateAll(collectionId)}
+        />
+      )}
+
+      {/* The same question on Delcampe (#608): which listing profile this offer's upload row is
+          built from, and what that profile says the row will carry. Null (and so absent) on every
+          platform that is not Delcampe. */}
+      {offer.delcampeListing && (
+        <OfferDelcampeCard
+          offerId={offerId}
+          config={offer.delcampeListing}
           onChanged={() => invalidateAll(collectionId)}
         />
       )}

@@ -14,7 +14,9 @@ A contact can carry any combination of **roles**, or none at all:
 - **Seller** / **Buyer** — someone you buy from or sell to.
 - **Exchange partner** — someone you swap stamps with.
 - **Auction house** — e.g. Cherrystone, David Feldman.
-- **Platform** — an online marketplace a purchase, offer, or sale is routed through.
+- **Platform** — an online marketplace a purchase, offer, or sale is routed through. Some platforms
+  have settings of their own beyond the contact form: see [Allegro](allegro.md) and
+  [Delcampe](delcampe.md).
 - **Other** — anyone who doesn't fit the above.
 
 Roles are just labels: they show as badges on each row and let you filter the list. A

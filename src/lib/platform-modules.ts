@@ -32,6 +32,18 @@ export const COLNECT_PLATFORM_MODULE = "colnect";
 export const ALLEGRO_PLATFORM_MODULE = "allegro";
 
 /**
+ * The same, for Delcampe (#608).
+ *
+ * A **marker and nothing more**, and pointedly absent from the listing rules below. Delcampe is
+ * listed to by uploading a CSV built here (#610), not by an extension filling a form, so there is no
+ * module to post with: `hasListingModule` answers false and the offer screens offer no ⚡ handoff,
+ * which is the truthful outcome rather than a gap. What the marker *is* read for is which `Contact`
+ * this collection calls Delcampe — the platform its listing profiles (#608), its learned categories
+ * (#609) and its export (#610) hang off, and the one fact none of those can work out for itself.
+ */
+export const DELCAMPE_PLATFORM_MODULE = "delcampe";
+
+/**
  * What one module's sale form asks of an offer before it can be filled (#493).
  *
  * The listing preconditions (#406) were written while Colnect was the only module that could list,

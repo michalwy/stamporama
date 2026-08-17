@@ -41,6 +41,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | Photos and binary assets, background jobs, upload caps, retention and deletion | [`docs/agents/storage-and-jobs.md`](docs/agents/storage-and-jobs.md) |
 | The `extension/` package, Colnect matcher, marks drawn on marketplace pages | [`docs/agents/extension.md`](docs/agents/extension.md) |
 | Allegro API access, sync worklist, listing profiles, categories, publishing | [`docs/agents/allegro.md`](docs/agents/allegro.md) |
+| Delcampe platform marker, listing profiles, Easy Uploader defaults | [`docs/agents/delcampe.md`](docs/agents/delcampe.md) |
 | Offers, listing texts, listing kit, offer pricing, offer screens | [`docs/agents/offers.md`](docs/agents/offers.md) |
 | Auction sales and lots, bid anchors, bid recommendations, auction screens | [`docs/agents/auctions.md`](docs/agents/auctions.md) |
 | Market value, catalogue value, the Valuation dialog | [`docs/agents/valuation.md`](docs/agents/valuation.md) |

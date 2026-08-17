@@ -147,6 +147,7 @@ model Collection {
   allegroOrderLines AllegroOrderLine[]
   allegroListings   AllegroListing[]
   allegroListingProfiles AllegroListingProfile[]
+  delcampeListingProfiles DelcampeListingProfile[]
   allegroCategoryLessons AllegroCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
 
@@ -926,6 +927,86 @@ model AllegroListingProfile {
   @@index([collectionId])
   @@index([platformId])
   @@map("allegro_listing_profile")
+}
+
+// Everything an **Easy Uploader** row carries that is not a fact about the stamps (#608; ADR-0034).
+//
+// Delcampe is listed to by uploading a CSV, not through an API — the REST path sits behind the paid
+// API Pass and is deliberately not taken — so the file's columns are the contract. Most of them the
+// app already answers: the title and description come from the platform's templates (#210, #266),
+// the price and quantity from the offer, `selling_type` from its listing type (#449), the currency
+// from `platformCurrency` (#196). What is left over is this: which of the seller's own shipping
+// models the row names, how long and how often the listing renews itself, whether any of Delcampe's
+// paid promotions is bought, and the bid step a row is written with.
+//
+// Held as one **named profile** rather than as columns on the contact, exactly as Allegro's is, and
+// for a reason the collector stated in advance: the second answer is real — heavier lots want the
+// other shipping model — and the whole set moves together when it does. A pick list of shipping
+// model names beside a separate set of renewal defaults would be two lists to keep in step for what
+// is one decision at upload time.
+model DelcampeListingProfile {
+  id           String @id @default(cuid())
+  collectionId String
+  // The platform (the `Contact` this collection calls Delcampe) whose uploads use this. Owned by it,
+  // as the Allegro profiles and the shipping-method price list are.
+  platformId   String
+  // What the collector calls it — "Standard letter", "Heavy lot, tracked". The pick list, so unique
+  // per platform.
+  name         String
+
+  // ── Delivery ──────────────────────────────────────────────────────────────────────────────
+  // Delcampe's `shipping_model` column: the **name** of one of the shipping models the seller has
+  // defined on Delcampe. Inverted from Allegro's rate set (#486), which stores Allegro's own id with
+  // the name as a screen label: here the CSV carries the name itself and there is no id in reserve,
+  // so a model renamed on Delcampe makes the upload fail and nothing here can find out beforehand —
+  // `GET /shippingModels` is API-Pass-only. Stored as unvalidatable data, said out loud in the
+  // editor, so a refused upload does not read as a fault in the export.
+  shippingModel String
+
+  // ── Renewal ───────────────────────────────────────────────────────────────────────────────
+  // `renew_duration` (days a listing runs before it renews) and `renew_total_count` (how many times
+  // it may). 28 × 99 is shop-stock behaviour: a fixed-price listing that stays up until it sells.
+  // An auction wants an end date and a second set of defaults instead, which is #620's, not this
+  // model's — nothing here describes a listing with a real end.
+  renewDuration   Int @default(28)
+  renewTotalCount Int @default(99)
+  // `has_renewable_options`: whether the paid options below are re-bought on each renewal. `N` in
+  // practice, and a plain boolean rather than a nullable one — the file writes a letter either way,
+  // so "unticked" is an answer rather than a gap.
+  hasRenewableOptions Boolean @default(false)
+
+  // ── Paid promotions ───────────────────────────────────────────────────────────────────────
+  // Delcampe's five `option_*` columns, each a `Y`/`N` that costs money. All false today; they are
+  // here because the file demands a value for every one of them, and a column silently written `N`
+  // by the exporter is a decision nobody could find later.
+  optionStrongTitle       Boolean @default(false)
+  optionBackgroundColor   Boolean @default(false)
+  optionBorderColor       Boolean @default(false)
+  optionListPromotion     Boolean @default(false)
+  optionHomepagePromotion Boolean @default(false)
+
+  // ── Bid step ──────────────────────────────────────────────────────────────────────────────
+  // `minimum_bid_step` is not a constant: `0,01` was observed on cheap items and `0,10` on dearer
+  // ones, so it is a **threshold rule** — below the threshold one step, at or above it the other.
+  // The threshold is a field and not a constant because it was never confirmed against Delcampe, and
+  // a guess compiled into the exporter is a guess nobody can see or correct. In the platform's own
+  // currency, like every other figure on a listing there.
+  minBidStepThreshold  Decimal @default(1.00) @db.Decimal(10, 2)
+  minBidStepBelow      Decimal @default(0.01) @db.Decimal(10, 2)
+  minBidStepAtOrAbove  Decimal @default(0.10) @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  platform   Contact    @relation("PlatformDelcampeListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
+  defaultForPlatforms Contact[] @relation("PlatformDefaultDelcampeListingProfile")
+  offers              Offer[]   @relation("OfferDelcampeListingProfile")
+
+  @@unique([platformId, name])
+  @@index([collectionId])
+  @@index([platformId])
+  @@map("delcampe_listing_profile")
 }
 
 // What was published for a kind of stamp — the **key → category** register (#488; ADR-0026).
@@ -2265,6 +2346,11 @@ model Offer {
   // gap. Nothing here is read until #477 publishes, and nothing about an already-published listing
   // changes when it is edited — Allegro holds the published values from then on.
   allegroListingProfileId String?
+  // The Delcampe listing profile this offer is uploaded with (#608), or null for the platform's
+  // default — the column above's rule, on the marketplace it was written for. Its escape hatch is a
+  // concrete one: a heavier lot needs the other shipping model, and a shipping model on Delcampe
+  // travels in a profile rather than on its own (ADR-0034 §1). Also `SetNull`, for the same reason.
+  delcampeListingProfileId String?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside
@@ -2316,6 +2402,7 @@ model Offer {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
   allegroListingProfile AllegroListingProfile? @relation("OfferAllegroListingProfile", fields: [allegroListingProfileId], references: [id], onDelete: SetNull)
+  delcampeListingProfile DelcampeListingProfile? @relation("OfferDelcampeListingProfile", fields: [delcampeListingProfileId], references: [id], onDelete: SetNull)
   sets       OfferSet[]
   saleLines  SaleLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
@@ -2337,6 +2424,7 @@ model Offer {
   @@index([collectionId])
   @@index([platformId])
   @@index([allegroListingProfileId])
+  @@index([delcampeListingProfileId])
   // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
   @@index([state, closedAt])
   @@map("offer")
@@ -2934,6 +3022,12 @@ model Contact {
   // from. `onDelete: SetNull`: deleting the default profile leaves the platform without one rather
   // than blocking the delete, and "no default" is a state the settings tab states plainly.
   defaultAllegroListingProfileId String?
+  // The Delcampe listing profile every upload row from this platform is written with unless the
+  // offer names another (#608). The column above's shape and its `SetNull`, on a marketplace that
+  // needs a great deal more of it: an Easy Uploader row carries a shipping model, renewal counters
+  // and five promotion flags, none of which is a fact about a stamp. Null on every platform that is
+  // not Delcampe, and on a Delcampe platform whose first profile has not been written yet.
+  defaultDelcampeListingProfileId String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -2961,6 +3055,9 @@ model Contact {
   allegroCategoryLessons AllegroCategoryLesson[] @relation("PlatformAllegroCategoryLesson")
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[] @relation("PlatformAllegroCategoryParameterMemory")
   defaultAllegroListingProfile AllegroListingProfile? @relation("PlatformDefaultAllegroListingProfile", fields: [defaultAllegroListingProfileId], references: [id], onDelete: SetNull)
+  // The same pair for Delcampe (#608; ADR-0034).
+  delcampeListingProfiles DelcampeListingProfile[] @relation("PlatformDelcampeListingProfile")
+  defaultDelcampeListingProfile DelcampeListingProfile? @relation("PlatformDefaultDelcampeListingProfile", fields: [defaultDelcampeListingProfileId], references: [id], onDelete: SetNull)
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")

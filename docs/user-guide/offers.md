@@ -158,6 +158,9 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    Allegro's own API instead: **🛒 Publish to Allegro** in the header creates the listing — as a draft
    or live, your choice — and records its address and the activation for you. See
    [Publishing an offer](allegro.md#publishing-an-offer).
+   On the platform named as **Delcampe**, an offer carries an **On Delcampe** card instead, naming
+   the [listing profile](delcampe.md#on-an-offer) its upload row is built from — the shipping model,
+   the renewal setting and the bid step it will state.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.

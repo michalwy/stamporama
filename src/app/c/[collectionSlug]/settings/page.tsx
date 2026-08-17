@@ -20,6 +20,8 @@ import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
+import { getDelcampePlatform } from "@/lib/delcampe";
+import { listDelcampeListingProfiles } from "@/lib/delcampe-listing-profile";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
 import { getCarriers } from "@/lib/carriers";
@@ -68,6 +70,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     allegroConnection,
     allegroListingProfiles,
     allegroLearnedCategories,
+    delcampePlatform,
+    delcampeListingProfiles,
     platformContacts,
     assistantTokens,
     photoStorageBytes,
@@ -92,6 +96,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getAllegroConnectionStatus(session.user.id, collection.id),
     listAllegroListingProfiles(session.user.id, collection.id),
     listAllegroLearnedCategories(session.user.id, collection.id),
+    getDelcampePlatform(session.user.id, collection.id),
+    listDelcampeListingProfiles(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -146,6 +152,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           allegroConnection={allegroConnection}
           allegroListingProfiles={allegroListingProfiles}
           allegroLearnedCategories={allegroLearnedCategories}
+          delcampePlatformId={delcampePlatform?.id ?? null}
+          delcampeListingProfiles={delcampeListingProfiles}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
