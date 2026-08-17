@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LabelWithError } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { catalogValueSubjectKey, type IntakeCatalogValue } from "@/lib/intake-catalog-value";
@@ -90,8 +90,13 @@ export function IntakeCatalogValueField({
   /** The subject a typed-but-unwritten figure belonged to, once a change of condition has stranded
    * it. Cleared as soon as anything is typed again. */
   const [stranded, setStranded] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** One shot, spent whether or not it was taken — see the focus effect below. */
+  const focusClaim = useRef(false);
 
   const key = catalogValueSubjectKey(stampId, conditionId, certificateStatusId, formatId);
+  /** The subject the dialog opened on, kept for the focus effect below. */
+  const openedOn = useRef(key);
 
   // One read per subject. The condition may still be blank — the context does not need it to
   // resolve which catalogue the value would land on, only to find what is already recorded there —
@@ -163,6 +168,44 @@ export function IntakeCatalogValueField({
     });
   }, [onChange, target, amount, recorded, loading]);
 
+  /**
+   * The cursor opens **here** — the one field of the step that is never remembered and never
+   * derived (#534's rule, applied to the field that has since become the step's real work): the
+   * condition, the certificate, the location and the disposition all come back from the last copy,
+   * the lot from the last tile, the format is a pick rather than a typed value, and the figure off
+   * the paper catalogue is the thing the collector's hands are actually there to type.
+   *
+   * It cannot be `data-autofocus` on the input, which is how every other dialog says this. The
+   * shell's focus pass runs once on mount, and on that render this field does not exist at all —
+   * it is behind the read that decides whether there is a primary catalogue to price against. So
+   * the claim is made **here**, on the first render where the field is on screen and usable.
+   *
+   * Which makes it a focus effect that fires *later*, and those pull the cursor out from under a
+   * collector who has already started working — hence the guards, and hence the claim being spent
+   * on the first eligible render whether or not it was taken, so nothing reaches back for the
+   * cursor once that moment has passed:
+   *
+   * - **The subject must still be the one the dialog opened on.** A collector who has changed the
+   *   condition, certificate or format is driving the form themselves, and the read this field is
+   *   waiting on is the one *their* change started.
+   * - **Nothing may be mid-typing.** The shell leaves the cursor on a `<select>`, which is not a
+   *   thing anyone is part-way through; a text field holding a caret is.
+   */
+  useEffect(() => {
+    if (focusClaim.current) return;
+    // Still waiting on the read, or waiting on a condition to record the figure against — the same
+    // condition the input's own `disabled` is built from. Not the moment yet; the claim stands.
+    if (loading || disabled || !conditionId || !target) return;
+    focusClaim.current = true;
+    if (openedOn.current !== key) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+    inputRef.current?.focus();
+    // Selected rather than appended to, for `data-autofocus-select`'s reason (#183): a value
+    // already on file is overwritten by the first keystroke instead of growing a digit.
+    inputRef.current?.select();
+  }, [loading, disabled, conditionId, target, key]);
+
   // No primary catalogue with an edition on this stamp's area — no field, the rule the format
   // field already follows. Also the state of the very first render, before the read comes back.
   if (!target) return null;
@@ -184,6 +227,7 @@ export function IntakeCatalogValueField({
       >
         <NumericInput
           id="intake-catalog-value"
+          ref={inputRef}
           value={amount}
           onChange={(e) => {
             setAmount(e.target.value);

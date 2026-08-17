@@ -805,6 +805,12 @@ long after identification.
   names it, with the currency. The full [Set catalog value](#closing-a-lot) dialog, which prices
   every catalogue active on the area, is still on each copy's row for when you want the rest.
 - **Optional, always.** Blank is the ordinary case, and nothing ever waits on it.
+- **The cursor lands here when the dialog opens**, ready to type — the condition, certificate,
+  location, disposition and lot all come back from the last copy you added, so this is the one
+  answer that is genuinely new each time. It appears a moment after the dialog does, once the
+  catalogue has been looked up; if you have already started changing the condition or typing
+  somewhere else, the cursor is left where you put it. A value already on file is selected, so the
+  first digit you type replaces it instead of being added to the end.
 - If a value is **already recorded** for that stamp at the condition, certificate and format you
   have chosen, it is shown in the field and editing it replaces it — you never end up with two.
 - **The figure belongs to the condition you typed it for.** Change the condition, the certificate or
