@@ -149,6 +149,15 @@ export async function resolveDisplayConditionId(
  * Scoped to the subtrees under `ancestorIds` via a recursive CTE rather than a flat read
  * of the whole collection, so the cost scales with the descendants actually needed, not
  * the size of the collection (#171).
+ *
+ * Each set is in a **pinned order** — catalog sort key (#181, nulls last), then name, then id — and
+ * that is load-bearing rather than tidy (#617). Two readers turn this order into an answer: a tie in
+ * the lowest-price rollup is broken by whichever candidate came first (`pickLowestByBase`), so the
+ * variant a copy is valued and *listed* under would otherwise be whichever row Postgres handed back;
+ * and the listing preconditions print the unpriced variants in this order for the collector to go and
+ * price. An unordered `SELECT` is not stable across runs, which is exactly how CI caught it. It is
+ * the general rule stated in `offers.md` for `assertAddableCopies`: an order that is used has to be
+ * written down, because `orderBy` at the point of use cannot recover one the source never had.
  */
 export async function buildDescendantMap(
   collectionId: string,
@@ -172,7 +181,11 @@ export async function buildDescendantMap(
       JOIN subtree st ON c."parentId" = st.id
       WHERE c."collectionId" = ${collectionId}
     )
-    SELECT root, id FROM subtree WHERE id <> root
+    SELECT st.root, st.id
+    FROM subtree st
+    JOIN "stamp" s ON s."id" = st.id
+    WHERE st.id <> st.root
+    ORDER BY s."primaryCatalogSortKey" ASC NULLS LAST, s."name" ASC, s."id" ASC
   `;
 
   for (const { root, id } of rows) {
