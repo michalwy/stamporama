@@ -623,7 +623,13 @@ export function useCollectionItemNoPad(collectionId: string): number {
 
 /** Storage locations for the add-copy dialog opened from list rows and the read-only
  * popup (#56). Mirrors {@link useCollectionCertificateStatuses}: fetched client-side so
- * the stamp/issue lists don't thread server-loaded locations down to every row. */
+ * the stamp/issue lists don't thread server-loaded locations down to every row.
+ *
+ * Re-read on every window focus, unlike the other dictionaries (#624). A new location is created
+ * *mid-task*, in the other tab, precisely because the copies in hand need somewhere to go — and the
+ * collector comes straight back to file them, well inside any stale window. Refetching whenever the
+ * tab regains focus is what makes the picker show it without a reload; the list is a handful of rows,
+ * so asking again costs about as much as deciding not to. */
 export function useCollectionLocations(collectionId: string) {
   return useQuery<LocationData[]>({
     queryKey: ["locations", collectionId] as const,
@@ -632,6 +638,7 @@ export function useCollectionLocations(collectionId: string) {
       return getLocationsAction(collectionId);
     },
     staleTime: 60_000,
+    refetchOnWindowFocus: "always",
   });
 }
 

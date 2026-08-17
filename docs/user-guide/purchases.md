@@ -909,6 +909,20 @@ right-hand end — **Add lot** and **Add lot with stamps**.
 - **Issue** only — no lot cards; every copy in the order grouped by issue **across all lots**.
 - **neither** — a single **flat list** of every copy in the order, with no lot boundaries.
 
+**Showing only what you're filing.** A **Kept for** control on the same row has three chips —
+**In collection**, **For sale**, **For trade** — and pressing one shows only the copies kept for
+that, across every lot of the order. Press it again to show everything. It works **together with**
+a lot's own **N to sort** / **⚠ N unpriced** / **N no photos** chips, so *the stock copies I still
+have to put away* is one view: press **For sale** here and **N to sort** on the lot. A copy can be
+kept for more than one purpose, so **For sale** means "kept for sale" and says nothing about
+whether it is also in the collection.
+
+While a filter is narrowing the list, each issue header counts what it is **showing** (`12 shown`
+rather than `12 in lot`), and issues left with nothing to show drop out of the view entirely
+instead of appearing as an empty group. Unlike *Group by* and *Sort copies*, the **Kept for** chips
+are not remembered between visits — a filter hides copies, and one that survived a reload would
+have you open the order tomorrow to find most of it missing.
+
 **Sorting the copies.** A **Sort copies** control next to *Group by* orders the stamps *within*
 each lot by **Order added** (the default), **Year**, **Catalog no.**, **Price**, or **Name**,
 with an **↑ Asc / ↓ Desc** toggle to flip the direction. It sorts the copies inside a lot (and
@@ -1044,6 +1058,11 @@ does not respect lot boundaries — copies from three lots go onto one transport
 so the selection spans lots, and the bar is pressed once rather than once per card. Changing
 **Group by** or the sort order is a change of view and leaves what you picked standing.
 
+The bar **stays at the top of the window** while you scroll, so **Store** and **Move to
+location** are where you left them however far down the order the last tick was. The lot header
+and the issue header pin **below** it rather than under it — the three read as one stack, and
+none of them covers a copy.
+
 You can also edit **a single copy** right on its row: its **delivery chip** is a dropdown for
 setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it
 to advance one step, and its **disposition** shows all three flags — **In collection / For
@@ -1068,6 +1087,9 @@ closed, since photographing usually happens once the stamps are in hand.
 
 When you put copies into a **location** (storing, moving, or setting one copy's), the picker
 remembers the last location you used and pre-selects it, so working box after box is one click.
+If you realise mid-sort that you need a **new** location, add it on the
+[Locations](locations.md) screen — in another tab if you like — and it appears in the picker as
+soon as you come back to this one. No page reload needed.
 New copies can still be identified into a lot at any time while it is open — handy for a mixed
 album bought sight-unseen.
 

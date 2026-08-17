@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   EMPTY_SELECTION,
   containerBoxState,
+  dropDispositionContainers,
   dropFilteredContainers,
   isRowSelected,
   isSelectionEmpty,
@@ -169,5 +170,49 @@ describe("the filter chip a container was taken under", () => {
       kind: "scope",
       scope: { selectors: [{ lotId: "lotB", filter: "unpriced" }] },
     });
+  });
+});
+
+describe("the disposition axis a container was taken under (#622)", () => {
+  it("travels with it into the write, beside the chip", () => {
+    const sel = toggleContainer(EMPTY_SELECTION, {
+      lotId: "lotA",
+      filter: "to-sort",
+      disposition: "for-sale",
+    });
+    assert.deepEqual(resolveSelection(sel), {
+      kind: "scope",
+      scope: { selectors: [{ lotId: "lotA", filter: "to-sort", disposition: "for-sale" }] },
+    });
+  });
+
+  it("is retired across every lot when the axis changes — the chips govern the whole screen", () => {
+    let sel = toggleContainer(EMPTY_SELECTION, { lotId: "lotA", disposition: "for-sale" });
+    sel = toggleContainer(sel, { issueKey: "i1", disposition: "for-sale" });
+    sel = toggleRow(sel, B1);
+    sel = dropDispositionContainers(sel);
+    // Both containers go, whichever lot they named; the loose tick stays.
+    assert.deepEqual(resolveSelection(sel), { kind: "ids", ids: ["b1"] });
+  });
+
+  it("leaves containers taken with no disposition standing", () => {
+    let sel = toggleContainer(EMPTY_SELECTION, { lotId: "lotA" });
+    sel = dropDispositionContainers(sel);
+    assert.deepEqual(resolveSelection(sel), {
+      kind: "scope",
+      scope: { selectors: [{ lotId: "lotA" }] },
+    });
+  });
+
+  it("retires an exclusion taken under it too, so the tick it narrowed cannot outlive it", () => {
+    let sel = toggleContainer(EMPTY_SELECTION, { disposition: "for-trade" });
+    sel = toggleContainer(sel, { issueKey: "i1", disposition: "for-trade" });
+    // Unticking a group inside the whole-order tick records an exclusion carrying the same axis.
+    assert.equal(
+      sel.exContainers.some((c) => c.disposition === "for-trade"),
+      true
+    );
+    sel = dropDispositionContainers(sel);
+    assert.equal(isSelectionEmpty(sel), true);
   });
 });

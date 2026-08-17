@@ -27,13 +27,19 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import type { ItemListItem, LotCopyFilter, LotCopySort } from "@/lib/items";
+import type {
+  CopyDispositionFilter,
+  ItemListItem,
+  LotCopyFilter,
+  LotCopySort,
+} from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
 import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import {
   EMPTY_SELECTION,
   containerBoxState,
+  dropDispositionContainers,
   dropFilteredContainers,
   isRowSelected,
   resolveSelection,
@@ -57,6 +63,7 @@ import {
   useLotSelectionCount,
   bulkScopeFields,
   type BulkScopeClient,
+  type IntakeFilterParams,
   type LotCopiesParams,
 } from "./use-lot-copies-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
@@ -70,6 +77,7 @@ import {
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import {
   useCollectionFormats,
+  useCollectionLocations,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
@@ -187,6 +195,23 @@ const DISPOSITION_FLAGS = [
   { key: "forTrade", label: "For trade" },
 ] as const;
 
+/** The same three, as the order-level *Kept for* filter (#622). Labelled identically to the flags
+ * above on purpose: the chip that files a copy *For sale* and the chip that shows only the for-sale
+ * copies are about one thing, and two vocabularies for it would read as two. */
+const DISPOSITION_FILTERS: readonly {
+  key: CopyDispositionFilter;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: "in-collection",
+    label: "In collection",
+    hint: "Show only the copies kept for the collection",
+  },
+  { key: "for-sale", label: "For sale", hint: "Show only the copies kept as stock" },
+  { key: "for-trade", label: "For trade", hint: "Show only the copies kept for trading" },
+];
+
 function tintChip(token: string, label: string): { style: React.CSSProperties; label: string } {
   if (token === "muted") return { style: CHIP, label };
   return {
@@ -264,11 +289,17 @@ export function PurchaseDetailPanel({
   purchase,
   issueHeaderById,
   areas,
-  locations,
+  locations: serverLocations,
   conditions,
   certificateStatuses,
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
+  // Storage locations, re-read client-side rather than taken from the server render (#624). Filing
+  // a parcel is exactly when a collector realises a new location is needed, and they add it in
+  // another tab: the picker here has to reflect that without a reload, which a prop from the RSC
+  // pass never can. The server-rendered list stands in until the first read answers, so the first
+  // paint is unchanged.
+  const locations = useCollectionLocations(collectionId).data ?? serverLocations;
   const { invalidateLotCopies } = useInvalidateLotCopies();
   // The purchase list is a client-side infinite query with a 30s stale time, so it survives a
   // back-navigation from here and would keep showing the pre-edit delivery status (#440).
@@ -318,10 +349,27 @@ export function PurchaseDetailPanel({
   const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
   const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
 
+  // What the copies on screen are kept for (#622) — the filing pass's other question, beside the
+  // header chips' "which of these still need something". Held at the **order** level, unlike those
+  // chips: a card of stock copies is filed in one act whatever lot each piece came out of, and one
+  // control governing every view is what lets *the for-sale copies still to sort* be asked once.
+  //
+  // Component state rather than a stored preference: it hides copies, and a filter that survived a
+  // reload would have the collector open an order tomorrow and find most of it missing. The
+  // grouping and sort toggles persist because neither takes a copy off the screen.
+  const [dispositionFilter, setDispositionFilter] = useState<CopyDispositionFilter | null>(null);
+
   // Order-level catalog-value-vs-cost figure (#179): the same holdings summary as the Copies
   // screen (#134), aggregated over every copy in the purchase. Undefined until it loads (the
   // bar renders a fixed-height skeleton so nothing shifts).
-  const purchaseHoldings = usePurchaseSummary(collectionId, purchase.id).data?.holdings;
+  // The same filters the order view reads with, so the two share one cached summary rather than
+  // making the order pay for a second whole-order valuation. The holdings inside it are over every
+  // copy whatever is filtered — the bar is about the order, not about the current view.
+  const orderFilters: IntakeFilterParams = dispositionFilter
+    ? { disposition: dispositionFilter }
+    : {};
+  const purchaseHoldings = usePurchaseSummary(collectionId, purchase.id, orderFilters).data
+    ?.holdings;
 
   // What the order has earned back so far (#559): the cost side above read against the sale side.
   // The bar draws itself away until a copy of this order has actually sold.
@@ -382,6 +430,25 @@ export function PurchaseDetailPanel({
   // to sort" must not silently become "all 900".
   const [selection, setSelection] = useState<CopySelection>(EMPTY_SELECTION);
   const clearSelection = useCallback(() => setSelection(EMPTY_SELECTION), []);
+
+  // The pinned selection bar (#621) and what pins under it: its height is the top offset every lot
+  // header takes, and each lot header's own height is added again for the issue headers inside it.
+  const [selectionBarRef, selectionBarHeight] = useMeasuredHeight<HTMLDivElement>();
+  const { sentinelRef: selectionBarSentinelRef, stuck: selectionBarStuck } = useStuck(0);
+
+  /** *Select the whole order* under the disposition axis (#622): what the bar offers is what the
+   *  screen is showing, so with a chip on it means every copy kept for that, not every copy. */
+  const wholeOrderContainer: CopyContainer = dispositionFilter
+    ? { disposition: dispositionFilter }
+    : {};
+
+  /** Press a disposition chip — the same bargain the per-lot chips strike (`changeFilter`): the
+   *  loose ticks are the collector's own and stay, the containers taken under the old axis go with
+   *  it, since "every for-sale copy here" must not become "every copy here". */
+  function changeDisposition(next: CopyDispositionFilter | null) {
+    setDispositionFilter(next);
+    setSelection(dropDispositionContainers);
+  }
 
   /**
    * Identifying a scan tile into a **new copy** (#567), which since #586 is the order's job rather
@@ -809,6 +876,39 @@ export function PurchaseDetailPanel({
           </div>
         )}
 
+        {/* Disposition filter (#622): show only the copies kept for one purpose, so a filing pass
+            can be about the stock or about the collection-bound pieces rather than about
+            everything. Order-level and combinable with each lot's own chips — "still to sort" and
+            "for sale" are two halves of one question. A copy carries the three flags
+            independently, so these are three separate narrowings and not a three-way switch. */}
+        {purchase.lots.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Kept for</span>
+            {DISPOSITION_FILTERS.map(({ key, label, hint }) => {
+              const on = dispositionFilter === key;
+              return (
+                <Tooltip key={key} content={on ? "Click to show every copy again" : hint}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => changeDisposition(on ? null : key)}
+                    style={{
+                      ...CHIP,
+                      cursor: "pointer",
+                      fontWeight: on ? 600 : 500,
+                      color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                      background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                    }}
+                  >
+                    {on && <Icon name="check" size="xs" />} {label}
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+
         {/* Sort order for the copies inside each lot (also the flat / by-issue copy views) (#157).
             Sorts the stamps within a lot, not the lot cards themselves. */}
         {purchase.lots.length > 0 && (
@@ -904,23 +1004,49 @@ export function PurchaseDetailPanel({
       )}
 
       {/* Selection action bar (#565/#571) — one for the whole order, above every view of its
-          copies. It sits in the flow rather than floating: this screen already pins a lot header
-          and an issue header, and a third floating strip would be the third thing covering the
-          list. */}
-      {selectionTarget && (
-        <CopySelectionBar
-          count={selectionCount}
-          isPending={isPending}
-          onSelectAll={
-            containerBoxState(selection, {}) === "on"
-              ? null
-              : () => setSelection((sel) => toggleContainer(sel, {}))
-          }
-          onClear={clearSelection}
-          onStore={() => selectionEditing.setBulkStore(selectionTarget)}
-          onMove={() => selectionEditing.setBulkMove(selectionTarget)}
-        />
-      )}
+          copies, and **pinned** while they scroll (#621): a card of forty is ticked from the top of
+          a lot and filed from wherever the last tick happened to be, so a bar that scrolled away
+          made *Store* a trip back up the page.
+          It pins rather than floats, which is the objection it used to answer: the lot header and
+          the issue header pin *below* it — each one measured, none of them overlapping — so the
+          three read as one stack and cover nothing, exactly the nesting #172 built. */}
+      {/* The pinned slot is mounted for the whole life of the screen and merely *hidden* while
+          nothing is ticked: it is what the headers below measure themselves against, and a wrapper
+          that came and went with the selection would report a height of zero for the first bar it
+          ever showed. Hidden with `display: none` rather than by not rendering, so it claims neither
+          space nor one of this column's gaps until it has a bar in it. */}
+      <div
+        ref={selectionBarSentinelRef}
+        style={{ height: 0, display: selectionTarget ? "block" : "none" }}
+        aria-hidden
+      />
+      <div
+        ref={selectionBarRef}
+        style={{
+          display: selectionTarget ? "block" : "none",
+          position: "sticky",
+          top: 0,
+          // Above both pinned headers: they slide beneath this bar, never over it.
+          zIndex: 5,
+          boxShadow: selectionTarget && selectionBarStuck ? STUCK_SHADOW : undefined,
+        }}
+      >
+        {selectionTarget && (
+          <CopySelectionBar
+            count={selectionCount}
+            isPending={isPending}
+            onSelectAll={
+              containerBoxState(selection, wholeOrderContainer) === "on"
+                ? null
+                : () => setSelection((sel) => toggleContainer(sel, wholeOrderContainer))
+            }
+            wholeOrderIsFiltered={!!dispositionFilter}
+            onClear={clearSelection}
+            onStore={() => selectionEditing.setBulkStore(selectionTarget)}
+            onMove={() => selectionEditing.setBulkMove(selectionTarget)}
+          />
+        )}
+      </div>
 
       {purchase.lots.length === 0 ? (
         <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
@@ -953,6 +1079,8 @@ export function PurchaseDetailPanel({
               groupByIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
+              dispositionFilter={dispositionFilter}
+              stickyTop={selectionBarHeight}
               selection={selection}
               setSelection={setSelection}
               onRun={run}
@@ -973,6 +1101,8 @@ export function PurchaseDetailPanel({
           byIssue={byIssue}
           sortKey={sortKey}
           sortDir={sortDir}
+          dispositionFilter={dispositionFilter}
+          stickyTop={selectionBarHeight}
           isPending={isPending}
           selection={selection}
           setSelection={setSelection}
@@ -1335,6 +1465,12 @@ interface LotCardProps {
    * copies by before rendering. */
   sortKey: string;
   sortDir: string;
+  /** The order-level *Kept for* filter (#622), narrowing this card's copies to one disposition.
+   * Independent of the card's own chips — both may be on, and the list means their intersection. */
+  dispositionFilter: CopyDispositionFilter | null;
+  /** How far down the viewport this card's own sticky header pins (#621): the height of the pinned
+   * selection bar above it, so the two stack instead of overlapping. */
+  stickyTop: number;
   /** The order's one selection (#571), held above the cards: a batch on the desk routinely spans
    *  lots, and a selection per card would put an action bar over every one of them. */
   selection: CopySelection;
@@ -1927,6 +2063,7 @@ function CopySelectionBar({
   count,
   isPending,
   onSelectAll,
+  wholeOrderIsFiltered,
   onClear,
   onStore,
   onMove,
@@ -1939,6 +2076,9 @@ function CopySelectionBar({
    *  every copy from any view — the flat copy list has no heading to hang a checkbox on — and it
    *  is resolved on the server like every other container (#172). */
   onSelectAll: (() => void) | null;
+  /** Whether a disposition chip is narrowing the order (#622) — so the offer says which "whole"
+   *  it means rather than promising more than it takes. */
+  wholeOrderIsFiltered: boolean;
   onClear: () => void;
   onStore: () => void;
   onMove: () => void;
@@ -1960,9 +2100,15 @@ function CopySelectionBar({
           : `${count} cop${count === 1 ? "y" : "ies"} selected`}
       </span>
       {onSelectAll && (
-        <Tooltip content="Selects every copy in this order that is still in an open lot, including the ones further down that have not loaded yet.">
+        <Tooltip
+          content={
+            wholeOrderIsFiltered
+              ? "Selects every copy this filter is showing across the order — including the ones further down that have not loaded yet — as long as its lot is still open."
+              : "Selects every copy in this order that is still in an open lot, including the ones further down that have not loaded yet."
+          }
+        >
           <button type="button" onClick={onSelectAll} style={SELECTION_LINK}>
-            Select the whole order
+            {wholeOrderIsFiltered ? "Select everything shown" : "Select the whole order"}
           </button>
         </Tooltip>
       )}
@@ -2057,6 +2203,7 @@ function IssueGroupSection({
   primaryVendorId,
   vendorMap,
   collapsed,
+  countLabel,
   stickyTop,
   onToggle,
   select,
@@ -2069,6 +2216,10 @@ function IssueGroupSection({
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   collapsed: boolean;
+  /** Wording for the group's copy count. "in lot" ordinarily; "shown" while a filter is narrowing
+   * the groups (#622/#623), since the number is then the matching copies rather than the group's
+   * whole size. */
+  countLabel?: string;
   /** Where this issue header pins — just below the pinned lot header/label above it. */
   stickyTop: number;
   onToggle: () => void;
@@ -2094,6 +2245,7 @@ function IssueGroupSection({
           header={header}
           fallbackLabel={group.label}
           copyCount={group.count}
+          {...(countLabel ? { countLabel } : {})}
           areaName={areaName}
           primaryVendorId={primaryVendorId}
           vendorMap={vendorMap}
@@ -2142,6 +2294,8 @@ function LotCard({
   groupByIssue,
   sortKey,
   sortDir,
+  dispositionFilter,
+  stickyTop,
   selection,
   setSelection,
   onRun,
@@ -2176,7 +2330,7 @@ function LotCard({
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
   // copies scroll, show a drop shadow once pinned, and measure its height so issue-group
   // headers can pin just beneath it.
-  const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(0);
+  const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(stickyTop);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
 
   // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
@@ -2203,9 +2357,30 @@ function LotCard({
 
   const open = lot.status === "open";
 
+  // Server-side filter for the copy page query, driven by the header chips. The "unpriced" and
+  // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
+  // (#177) stays available regardless of lot status.
+  const filter: LotCopyFilter =
+    filterMode === "none"
+      ? "none"
+      : filterMode === "no-photos"
+        ? "no-photos"
+        : open
+          ? filterMode
+          : "none";
+  // The two filter axes as one value (#622), so the reads, the summary and the containers a tick
+  // records cannot end up disagreeing about what is on screen.
+  const intakeFilters: IntakeFilterParams = {
+    ...(filter === "none" ? {} : { filter }),
+    ...(dispositionFilter ? { disposition: dispositionFilter } : {}),
+  };
+
   // Whole-lot aggregates (counts, cost-estimate denominator, derived label, issue groups) that
   // the paginated copy list can no longer compute client-side (#172). Fetched once per lot.
-  const summaryQuery = useLotSummary(collectionId, lot.id);
+  // Keyed by the filters the list is reading with (#623): the issue groups it reports are the ones
+  // those filters leave with copies in them, so a group emptied by a chip stops being drawn instead
+  // of heading a "No copies.".
+  const summaryQuery = useLotSummary(collectionId, lot.id, intakeFilters);
   const summary = summaryQuery.data;
   // What this lot has earned back (#559), on the same bar as its cost. Only while the card is
   // open: a collapsed lot draws no bar, so the query would answer nobody.
@@ -2240,33 +2415,17 @@ function LotCard({
   const lotName = lot.title ?? summary?.derivedLabel ?? `Lot ${index + 1}`;
   const statusChip = open ? tintChip("accent", "Open") : tintChip("success", "Closed");
 
-  // Server-side filter for the copy page query, driven by the header chips. The "unpriced" and
-  // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
-  // (#177) stays available regardless of lot status.
-  const filter: LotCopyFilter =
-    filterMode === "none"
-      ? "none"
-      : filterMode === "no-photos"
-        ? "no-photos"
-        : open
-          ? filterMode
-          : "none";
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
     filter,
+    ...(dispositionFilter ? { disposition: dispositionFilter } : {}),
   };
 
-  // How many copies the current chip is showing — the number "select everything matching" claims,
-  // taken from the whole-lot summary rather than counted off the loaded page (#565).
-  const filteredCount =
-    filter === "to-sort"
-      ? toSortCount
-      : filter === "unpriced"
-        ? blockingCount
-        : filter === "no-photos"
-          ? noPhotoCount
-          : totalCount;
+  // How many copies the current filters are showing — the number "select everything matching"
+  // claims, counted over the whole lot by the summary rather than off the loaded page (#565), and
+  // over both axes since #622.
+  const filteredCount = summary?.filteredCount ?? totalCount;
 
   // The container this lot's header checkbox stands for. It carries the chip the tick was taken
   // under, so the write means the set the collector was looking at (#565); pressing a chip retires
@@ -2274,7 +2433,7 @@ function LotCard({
   // being judged against a row.
   const lotContainer: CopyContainer = {
     lotId: lot.id,
-    ...(filter === "none" ? {} : { filter }),
+    ...intakeFilters,
   };
   const lotBoxState = containerBoxState(selection, lotContainer);
 
@@ -2438,7 +2597,7 @@ function LotCard({
         ref={headerRef}
         style={{
           position: "sticky",
-          top: 0,
+          top: stickyTop,
           zIndex: 3,
           background: "var(--color-bg-elevated)",
           boxShadow: headerStuck ? STUCK_SHADOW : undefined,
@@ -2716,7 +2875,10 @@ function LotCard({
                         vendorMapFor(areaId, group.key === "__none__" ? null : group.key)
                       }
                       collapsed={collapsed}
-                      stickyTop={headerHeight}
+                      countLabel={
+                        filter !== "none" || dispositionFilter ? "shown" : undefined
+                      }
+                      stickyTop={stickyTop + headerHeight}
                       completeness={setCompleteness?.[group.key]}
                       onToggle={() =>
                         setCollapsedGroups((prev) => {
@@ -2765,7 +2927,11 @@ function LotCard({
                         ? "Nothing left to sort."
                         : filterMode === "no-photos"
                           ? "Every copy has a photo."
-                          : "No stamps identified into this lot yet."
+                          : // A lot with copies, none of them kept for what the order-level chip
+                            // asks (#622) — which is not the same thing as an empty lot.
+                            dispositionFilter && totalCount > 0
+                            ? "No copies in this lot are kept for that."
+                            : "No stamps identified into this lot yet."
                   }
                 />
               )}
@@ -3042,6 +3208,8 @@ function OrderCopiesView({
   byIssue,
   sortKey,
   sortDir,
+  dispositionFilter,
+  stickyTop,
   isPending,
   selection,
   setSelection,
@@ -3059,6 +3227,11 @@ function OrderCopiesView({
   byIssue: boolean;
   sortKey: string;
   sortDir: string;
+  /** The order-level *Kept for* filter (#622) — the only filter this view has, and the same value
+   * the lot cards read, so switching the grouping does not change what is on screen. */
+  dispositionFilter: CopyDispositionFilter | null;
+  /** Where the pinned selection bar ends (#621), so the issue headers pin below it. */
+  stickyTop: number;
   isPending: boolean;
   /** The order's one selection (#571), shared with the by-lot view — switching how the copies are
    *  grouped is a change of view, not of what was picked. */
@@ -3091,7 +3264,12 @@ function OrderCopiesView({
     return m;
   }, [lots]);
   const lotStatusByLot = useMemo(() => new Map(lots.map((l) => [l.id, l.status])), [lots]);
-  const summary = usePurchaseSummary(collectionId, purchaseId).data;
+  // The same filters the panel reads this summary with, so both share one cached answer — and the
+  // issue groups come back over the copies those filters show (#623).
+  const intakeFilters: IntakeFilterParams = dispositionFilter
+    ? { disposition: dispositionFilter }
+    : {};
+  const summary = usePurchaseSummary(collectionId, purchaseId, intakeFilters).data;
   const issueGroups = summary?.issueGroups ?? [];
   // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
   // these groups are merged across every lot of the order, which is what this view is for.
@@ -3101,6 +3279,7 @@ function OrderCopiesView({
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
     filter: "none",
+    ...intakeFilters,
   };
 
   const renderRow = (it: ItemListItem) => {
@@ -3180,7 +3359,8 @@ function OrderCopiesView({
               primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
               vendorMap={vendorMapFor(areaId, group.key === "__none__" ? null : group.key)}
               collapsed={collapsed}
-              stickyTop={0}
+              countLabel={dispositionFilter ? "shown" : undefined}
+              stickyTop={stickyTop}
               completeness={setCompleteness?.[group.key]}
               onToggle={() =>
                 setCollapsedGroups((prev) => {
@@ -3193,9 +3373,14 @@ function OrderCopiesView({
               select={
                 canSelect
                   ? {
-                      state: containerBoxState(selection, { issueKey: group.key }),
+                      state: containerBoxState(selection, {
+                        issueKey: group.key,
+                        ...intakeFilters,
+                      }),
                       onChange: () =>
-                        setSelection((sel) => toggleContainer(sel, { issueKey: group.key })),
+                        setSelection((sel) =>
+                          toggleContainer(sel, { issueKey: group.key, ...intakeFilters })
+                        ),
                       label: "Select this issue's copies",
                     }
                   : undefined
@@ -3217,7 +3402,11 @@ function OrderCopiesView({
           purchaseId={purchaseId}
           params={listParams}
           renderRow={renderRow}
-          emptyText="No copies identified into this order yet."
+          emptyText={
+            dispositionFilter
+              ? "No copies in this order are kept for that."
+              : "No copies identified into this order yet."
+          }
         />
       )}
       {copy.dialogs}

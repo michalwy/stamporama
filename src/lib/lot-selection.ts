@@ -1,4 +1,4 @@
-import type { LotCopyFilter } from "./items";
+import type { CopyDispositionFilter, LotCopyFilter } from "./items";
 
 /**
  * *Which copies the intake screen's action bar is about* (#571).
@@ -37,6 +37,14 @@ export interface CopyContainer {
    * cannot evaluate.
    */
   filter?: LotCopyFilter;
+  /**
+   * The disposition axis at the moment this container was ticked (#622), carried for the same
+   * reason as {@link filter} and retired the same way — by {@link dropDispositionContainers} when
+   * the axis changes. Two narrowings rather than one because the collector may set both: *the
+   * for-sale copies still to sort* is one set, and a container that recorded only half of it would
+   * write the other half too.
+   */
+  disposition?: CopyDispositionFilter;
 }
 
 /** A copy as the selection sees it: its own id, and the containers it falls under. */
@@ -173,6 +181,20 @@ export function isSelectionEmpty(sel: CopySelection): boolean {
  *  a copy against a chip it cannot evaluate. */
 export function dropFilteredContainers(sel: CopySelection, lotId: string): CopySelection {
   const stale = (c: CopyContainer) => !!c.filter && c.lotId === lotId;
+  if (!sel.containers.some(stale) && !sel.exContainers.some(stale)) return sel;
+  return {
+    ...sel,
+    containers: sel.containers.filter((c) => !stale(c)),
+    exContainers: sel.exContainers.filter((c) => !stale(c)),
+  };
+}
+
+/** Drop every container taken under a disposition filter (#622). The counterpart of
+ *  {@link dropFilteredContainers} for the other axis, and lot-wide rather than per-lot because the
+ *  disposition chips govern the whole screen: pressing one changes what every lot card and the
+ *  order-level list are showing at once, so every container that recorded the old axis is stale. */
+export function dropDispositionContainers(sel: CopySelection): CopySelection {
+  const stale = (c: CopyContainer) => !!c.disposition;
   if (!sel.containers.some(stale) && !sel.exContainers.some(stale)) return sel;
   return {
     ...sel,

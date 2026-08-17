@@ -4,12 +4,11 @@ import { auth } from "@/lib/auth";
 import {
   getPurchaseIntakePage,
   type LotCopySort,
-  type LotCopyFilter,
 } from "@/lib/items";
+import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
 import { parseTilePhotoRoles } from "@/lib/tile-photo-roles";
 
 const VALID_SORT = new Set<LotCopySort>(["added", "year", "catalog", "price", "name"]);
-const VALID_FILTER = new Set<LotCopyFilter>(["none", "unpriced", "to-sort", "no-photos"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
 
 /** One page of a whole purchase's copies (across all lots) for the order-level intake view with
@@ -30,13 +29,15 @@ export async function GET(
   const offset = offsetParam && /^\d+$/.test(offsetParam) ? parseInt(offsetParam, 10) : undefined;
   const sortParam = sp.get("sort") as LotCopySort | null;
   const sort = sortParam && VALID_SORT.has(sortParam) ? sortParam : undefined;
-  const filterParam = sp.get("filter") as LotCopyFilter | null;
-  const filter = filterParam && VALID_FILTER.has(filterParam) ? filterParam : undefined;
+  const filter = parseLotCopyFilter(sp.get("filter"));
   const sortDirParam = sp.get("sortDir");
   const sortDir =
     sortDirParam && VALID_SORT_DIR.has(sortDirParam)
       ? (sortDirParam as "asc" | "desc")
       : undefined;
+  // What the copies are kept for (#622) — a second, orthogonal filter axis, so it is read
+  // alongside `filter` rather than folded into it.
+  const disposition = parseDispositionFilter(sp.get("disposition"));
   const issueKey = sp.get("issueKey") || undefined;
   // Which photo slots a scan tile needs free, for its assign list (#567) — asked at the **order**
   // level since #586, a card of a settled auction holding pieces of every lot in the parcel.
@@ -49,6 +50,7 @@ export async function GET(
       sort,
       sortDir,
       filter,
+      disposition,
       freePhotoSlots,
       issueKey,
       offset,

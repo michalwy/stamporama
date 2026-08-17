@@ -3,13 +3,16 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
   allocateItemNumbers,
+  dispositionFilterWhere,
   listItemsPaginated,
   listUnpricedItemIds,
   lotCopyFilterWhere,
   valuateItemsByIds,
+  type CopyDispositionFilter,
   type ItemListItem,
   type LotCopyFilter,
 } from "./items";
+import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
 import type { ArrivingCopy } from "./want-rules";
@@ -1130,6 +1133,9 @@ export interface LotBulkSelector {
   /** An issue id, or `"__none__"` for copies belonging to no issue. */
   issueKey?: string;
   filter?: LotCopyFilter;
+  /** The disposition axis the container was ticked under (#622), narrowing it the same way
+   * `filter` does — the two are independent, and a container may carry both. */
+  disposition?: CopyDispositionFilter;
 }
 
 export interface LotBulkScope {
@@ -1169,6 +1175,10 @@ function parseSelector(raw: unknown): LotBulkSelector | null {
   // An unknown chip is dropped rather than refused — it can only ever narrow the target.
   if (typeof o.filter === "string" && LOT_COPY_FILTERS.has(o.filter)) {
     sel.filter = o.filter as LotCopyFilter;
+  }
+  if (typeof o.disposition === "string") {
+    const disposition = parseDispositionFilter(o.disposition);
+    if (disposition) sel.disposition = disposition;
   }
   return sel;
 }
@@ -1231,6 +1241,7 @@ function selectorWhere(sel: LotBulkSelector): Prisma.ItemWhereInput {
     ...(sel.lotId ? { lotId: sel.lotId } : {}),
     ...(sel.issueKey ? issueKeyWhere(sel.issueKey) : {}),
     ...lotCopyFilterWhere(sel.filter),
+    ...dispositionFilterWhere(sel.disposition),
   };
 }
 

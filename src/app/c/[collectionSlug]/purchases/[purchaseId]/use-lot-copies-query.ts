@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CopyDispositionFilter,
   ItemListItem,
   LotCopySort,
   LotCopyFilter,
@@ -19,10 +20,17 @@ interface LotCopiesPage {
   nextCursor: string | null;
 }
 
-export interface LotCopiesParams {
+/** The two filter axes the sort screen can narrow its copies by (#622) — the header chip and what
+ * the copies are kept for. Travel together everywhere: the paged reads, the summaries whose issue
+ * groups must not outlive them (#623), and the containers a selection records. */
+export interface IntakeFilterParams {
+  filter?: LotCopyFilter;
+  disposition?: CopyDispositionFilter;
+}
+
+export interface LotCopiesParams extends IntakeFilterParams {
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
-  filter?: LotCopyFilter;
   /** Photo slots that must be free, for a scan tile's assign list (#567). Part of the params, so it
    * is part of the query key: two tiles needing different slots are two different lists, and one
    * needing the same slots is served from cache. */
@@ -37,12 +45,12 @@ export const lotCopiesKeys = {
     ["lot-copies", collectionId, lotId] as const,
   list: (collectionId: string, lotId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, lotId, "list", params] as const,
-  summary: (collectionId: string, lotId: string) =>
-    ["lot-copies", collectionId, lotId, "summary"] as const,
+  summary: (collectionId: string, lotId: string, filters: IntakeFilterParams) =>
+    ["lot-copies", collectionId, lotId, "summary", filters] as const,
   purchaseList: (collectionId: string, purchaseId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "list", params] as const,
-  purchaseSummary: (collectionId: string, purchaseId: string) =>
-    ["lot-copies", collectionId, "purchase", purchaseId, "summary"] as const,
+  purchaseSummary: (collectionId: string, purchaseId: string, filters: IntakeFilterParams) =>
+    ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters] as const,
   purchaseReturn: (collectionId: string, purchaseId: string) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "return"] as const,
   lotReturn: (collectionId: string, lotId: string) =>
@@ -69,8 +77,8 @@ export interface BulkScopeClient {
 
 /** The scope as name/value pairs — the one encoding both the count read and the write use, so
  * what the bar says it is about and what the write touches cannot drift apart (#571). The
- * containers go as JSON: they are records with three optional fields, and flattening them into
- * parallel lists is exactly how a lot and an issue key end up paired with the wrong partner. */
+ * containers go as JSON: they are records of optional fields, and flattening them into parallel
+ * lists is exactly how a lot and an issue key end up paired with the wrong partner. */
 export function bulkScopeFields(scope: BulkScopeClient): [string, string][] {
   const out: [string, string][] = [];
   const put = (name: string, value: string | undefined) => {
@@ -117,6 +125,7 @@ function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchPar
   if (params.sort) sp.set("sort", params.sort);
   if (params.sortDir) sp.set("sortDir", params.sortDir);
   if (params.filter) sp.set("filter", params.filter);
+  if (params.disposition) sp.set("disposition", params.disposition);
   if (params.issueKey) sp.set("issueKey", params.issueKey);
   if (params.freePhotoSlots?.length) {
     sp.set("freePhotoSlots", formatTilePhotoRoles(params.freePhotoSlots));
@@ -189,13 +198,23 @@ export function usePurchaseCopiesInfinite(
 }
 
 /** Whole-lot aggregates (header counts, cost-estimate denominator, derived label, issue
- * groups) the paginated views can no longer compute client-side (#172). */
-export function useLotSummary(collectionId: string, lotId: string, enabled = true) {
+ * groups) the paginated views can no longer compute client-side (#172).
+ *
+ * Takes the list's filters, and keys on them: the issue groups it reports are the groups the filters
+ * leave with copies in them (#623), so a summary shared across chips would keep drawing the ones the
+ * chip just emptied. The chip counts inside it stay whole-lot whatever is passed. */
+export function useLotSummary(
+  collectionId: string,
+  lotId: string,
+  filters: IntakeFilterParams = {},
+  enabled = true
+) {
   return useQuery<LotIntakeSummary>({
-    queryKey: lotCopiesKeys.summary(collectionId, lotId),
+    queryKey: lotCopiesKeys.summary(collectionId, lotId, filters),
     queryFn: async () => {
+      const sp = buildCopyParams(filters);
       const res = await fetch(
-        `/api/collections/${collectionId}/purchases/lots/${lotId}/copies/summary`
+        `/api/collections/${collectionId}/purchases/lots/${lotId}/copies/summary?${sp.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch lot summary");
       return res.json();
@@ -207,12 +226,18 @@ export function useLotSummary(collectionId: string, lotId: string, enabled = tru
 /** Whole-purchase aggregates for the order-level view (#172): the per-lot estimate denominator
  * (each copy's estimate uses its own lot's pool + weight base) and issue groups merged across
  * all the purchase's lots. */
-export function usePurchaseSummary(collectionId: string, purchaseId: string, enabled = true) {
+export function usePurchaseSummary(
+  collectionId: string,
+  purchaseId: string,
+  filters: IntakeFilterParams = {},
+  enabled = true
+) {
   return useQuery<PurchaseIntakeSummary>({
-    queryKey: lotCopiesKeys.purchaseSummary(collectionId, purchaseId),
+    queryKey: lotCopiesKeys.purchaseSummary(collectionId, purchaseId, filters),
     queryFn: async () => {
+      const sp = buildCopyParams(filters);
       const res = await fetch(
-        `/api/collections/${collectionId}/purchases/${purchaseId}/copies/summary`
+        `/api/collections/${collectionId}/purchases/${purchaseId}/copies/summary?${sp.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch purchase summary");
       return res.json();

@@ -2267,10 +2267,56 @@ export function freePhotoSlotsWhere(
 export type LotCopySort = "added" | "year" | "catalog" | "price" | "name";
 export type LotCopyFilter = "none" | "unpriced" | "to-sort" | "no-photos";
 
+/**
+ * *What the copies on the sort screen are kept for* (#99), as a filter (#622).
+ *
+ * An **axis of its own**, beside {@link LotCopyFilter} rather than three more values of it, because
+ * the two answer different questions and the filing pass asks both at once: *the stock copies I have
+ * not put away yet* is `to-sort` **and** `for-sale`, and folding disposition into the chip
+ * vocabulary would make the collector choose between the two halves of one sentence.
+ *
+ * A copy carries all three flags independently, so this matches on the one flag being set and says
+ * nothing about the other two — *For sale* means "kept for sale", not "kept only for sale".
+ */
+export type CopyDispositionFilter = "in-collection" | "for-sale" | "for-trade";
+
+export const COPY_DISPOSITION_FILTERS: readonly CopyDispositionFilter[] = [
+  "in-collection",
+  "for-sale",
+  "for-trade",
+];
+
+/** The `where` fragment for a disposition filter — one boolean column each, so unlike `unpriced`
+ * this axis is always answerable in SQL. Shared by the paged reads and the scoped bulk write, so
+ * "select every copy this filter is showing" targets exactly the rows on screen (#622). */
+export function dispositionFilterWhere(
+  disposition: CopyDispositionFilter | undefined
+): Prisma.ItemWhereInput {
+  if (disposition === "in-collection") return { inCollection: true };
+  if (disposition === "for-sale") return { forSale: true };
+  if (disposition === "for-trade") return { forTrade: true };
+  return {};
+}
+
+/** Does this copy carry the flag a disposition filter asks for? The in-memory twin of
+ * {@link dispositionFilterWhere}, for the callers that have already enriched their rows. */
+export function matchesDispositionFilter(
+  item: ItemListItem,
+  disposition: CopyDispositionFilter | undefined
+): boolean {
+  if (disposition === "in-collection") return item.inCollection;
+  if (disposition === "for-sale") return item.forSale;
+  if (disposition === "for-trade") return item.forTrade;
+  return true;
+}
+
 export interface LotIntakePageOptions {
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
   filter?: LotCopyFilter;
+  /** Narrow to copies kept for one purpose (#622). Orthogonal to `filter` — both may be set, and
+   * the read means their intersection. */
+  disposition?: CopyDispositionFilter;
   /** Restrict to copies that could take a scan tile carrying these photo roles (#567) — i.e. copies
    * holding **none** of them. Separate from `filter` because it is parameterised by the tile in
    * hand rather than being one of the header chips; see {@link freePhotoSlotsWhere}. */
@@ -2327,6 +2373,9 @@ async function getIntakePage(
   const sort = opts.sort ?? "added";
   const sortDir = opts.sortDir ?? "asc";
   const filter = opts.filter ?? "none";
+  // A column on every path (#622), so it narrows the SQL in both branches below rather than being
+  // re-applied in memory the way `unpriced` has to be.
+  const dispositionWhere = dispositionFilterWhere(opts.disposition);
   const freeSlots = opts.freePhotoSlots ?? [];
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
@@ -2346,6 +2395,7 @@ async function getIntakePage(
         ...scopeWhere,
         ...issueWhere,
         ...lotCopyFilterWhere(filter),
+        ...dispositionWhere,
         ...freePhotoSlotsWhere(freeSlots),
       },
       // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
@@ -2362,7 +2412,13 @@ async function getIntakePage(
   }
 
   const rows = await prisma.item.findMany({
-    where: { collectionId, ...scopeWhere, ...issueWhere, ...freePhotoSlotsWhere(freeSlots) },
+    where: {
+      collectionId,
+      ...scopeWhere,
+      ...issueWhere,
+      ...dispositionWhere,
+      ...freePhotoSlotsWhere(freeSlots),
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: ITEM_LIST_SELECT,
   });
@@ -2411,10 +2467,59 @@ export interface LotIssueGroupSummary {
   /** Issue id, or `"__none__"` for copies with no issue. */
   key: string;
   label: string;
-  /** Copies in this lot under this issue. */
+  /** Copies in this lot under this issue **matching the active filters** (#623) — a group whose
+   * copies are all excluded is not reported at all, so the grouped view never draws a heading over
+   * an empty list. */
   count: number;
   /** Of those, copies whose owning lot is still open (bulk-action target scope). */
   openCount: number;
+}
+
+/**
+ * *What the copies list is currently showing* — the chip and the disposition axis together (#622).
+ *
+ * The summaries take it as well as the reads, because the issue-group headers are the one part of
+ * the screen that is **not** paged: they come from the summary, so a filter the summary knows
+ * nothing about draws a heading (and a "No copies.") over every group the filter emptied (#623).
+ */
+export interface IntakeFilterOptions {
+  filter?: LotCopyFilter;
+  disposition?: CopyDispositionFilter;
+}
+
+/** Does this copy match the filters the list is showing? Applied over already-enriched rows, which
+ * is why `unpriced` — a valuation no column carries — costs nothing here. */
+function matchesIntakeFilters(item: ItemListItem, opts: IntakeFilterOptions): boolean {
+  if (!matchesDispositionFilter(item, opts.disposition)) return false;
+  if (opts.filter === "unpriced") return isBlockingCopy(item);
+  if (opts.filter === "to-sort") return item.deliveryState === TO_SORT_DELIVERY_STATE;
+  if (opts.filter === "no-photos") return item.photos.length === 0;
+  return true;
+}
+
+/** Issue groups in first-added order over the copies the list is showing, one per issue a matching
+ * copy reports under (its `issueId`, or `__none__`). Shared by both intake summaries. */
+function buildIssueGroups(items: ItemListItem[]): LotIssueGroupSummary[] {
+  const order: string[] = [];
+  const byKey = new Map<string, LotIssueGroupSummary>();
+  for (const it of items) {
+    const key = it.issueId ?? "__none__";
+    let group = byKey.get(key);
+    if (!group) {
+      const label =
+        it.issueId == null
+          ? "No issue"
+          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
+              .filter(Boolean)
+              .join(" ") || "Untitled issue";
+      group = { key, label, count: 0, openCount: 0 };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.count += 1;
+    if (it.lotStatus === "open") group.openCount += 1;
+  }
+  return order.map((k) => byKey.get(k)!);
 }
 
 /** The market medians every copy in a set might be valued at (#458), read once for the whole set.
@@ -2474,6 +2579,9 @@ function summarizeHoldings(
  * derived lot label, and the issue-group headers. Computed by enriching the whole lot once. */
 export interface LotIntakeSummary {
   totalCount: number;
+  /** Copies matching the filters the list is showing (#622/#623) — what "select every copy the
+   * current filter is showing" is about. Equals `totalCount` when nothing is filtered. */
+  filteredCount: number;
   /** Copies actually in the `to_sort` state — the "N to sort" chip and its filter (#375). */
   toSortCount: number;
   /** Copies still awaiting the sort pass (ordered / to sort / in transit) — the wider count
@@ -2489,17 +2597,22 @@ export interface LotIntakeSummary {
   /** Label derived from the lot's copies' catalog numbers, or null for an empty lot. The UI
    * still prefers a stored lot title over this. */
   derivedLabel: string | null;
-  /** Issue groups in first-added order, for the grouped-by-issue view headers. */
+  /** Issue groups in first-added order, for the grouped-by-issue view headers — over the copies
+   * the active filters show (#623). */
   issueGroups: LotIssueGroupSummary[];
   /** Catalog value vs. actual purchase cost over the lot's copies (#179), for the CV-vs-cost
    * bar. Same shape/aggregators as the holdings bar (#134). */
   holdings: HoldingsSummary;
 }
 
+/** Every count but `filteredCount` and the issue groups is over the **whole** lot on purpose: the
+ * header chips are what the filters are pressed from, so a chip that counted only the copies its own
+ * filter left on screen would drop to zero the moment it was used. */
 export async function getLotIntakeSummary(
   ownerId: string,
   collectionId: string,
-  lotId: string
+  lotId: string,
+  filters: IntakeFilterOptions = {}
 ): Promise<LotIntakeSummary> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.item.findMany({
@@ -2521,35 +2634,18 @@ export async function getLotIntakeSummary(
     0
   );
 
-  const order: string[] = [];
-  const byKey = new Map<string, LotIssueGroupSummary>();
-  for (const it of all) {
-    const key = it.issueId ?? "__none__";
-    let group = byKey.get(key);
-    if (!group) {
-      const label =
-        it.issueId == null
-          ? "No issue"
-          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
-              .filter(Boolean)
-              .join(" ") || "Untitled issue";
-      group = { key, label, count: 0, openCount: 0 };
-      byKey.set(key, group);
-      order.push(key);
-    }
-    group.count += 1;
-    if (it.lotStatus === "open") group.openCount += 1;
-  }
+  const matching = all.filter((i) => matchesIntakeFilters(i, filters));
 
   return {
     totalCount: all.length,
+    filteredCount: matching.length,
     toSortCount: all.filter((i) => i.deliveryState === TO_SORT_DELIVERY_STATE).length,
     unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
-    issueGroups: order.map((k) => byKey.get(k)!),
+    issueGroups: buildIssueGroups(matching),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
@@ -2559,11 +2655,14 @@ export async function getLotIntakeSummary(
  * pool and weight base), and the issue groups merged across every lot of the purchase. */
 export interface PurchaseIntakeSummary {
   totalCount: number;
+  /** Copies across the order matching the filters the list is showing (#622/#623). */
+  filteredCount: number;
   /** lot id → Σ positive base-currency catalog weight over that lot's staying copies. The
    * client computes a copy's estimate as `poolBase(lot) * weight / lotWeightBase[lotId]`. */
   lotWeightBase: Record<string, number>;
-  /** Issue groups merged across all the purchase's lots, in first-added order. `openCount` is
-   * copies whose owning lot is still open (the bulk-action target across the order). */
+  /** Issue groups merged across all the purchase's lots, in first-added order, over the copies the
+   * active filters show (#623). `openCount` is copies whose owning lot is still open (the
+   * bulk-action target across the order). */
   issueGroups: LotIssueGroupSummary[];
   /** Catalog value vs. actual purchase cost over the whole order's copies (#179), for the
    * order-level CV-vs-cost bar. Same shape/aggregators as the holdings bar (#134). */
@@ -2573,7 +2672,8 @@ export interface PurchaseIntakeSummary {
 export async function getPurchaseIntakeSummary(
   ownerId: string,
   collectionId: string,
-  purchaseId: string
+  purchaseId: string,
+  filters: IntakeFilterOptions = {}
 ): Promise<PurchaseIntakeSummary> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.item.findMany({
@@ -2584,9 +2684,10 @@ export async function getPurchaseIntakeSummary(
   const all = await enrichItemRows(collectionId, rows);
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
 
+  // The estimate denominator is a property of the lot, not of the view: it stays Σ over **all** the
+  // lot's staying copies, or a filtered view would print a different cost estimate per copy than the
+  // same copy shows unfiltered.
   const lotWeightBase: Record<string, number> = {};
-  const order: string[] = [];
-  const byKey = new Map<string, LotIssueGroupSummary>();
   for (const it of all) {
     if (
       it.lotId &&
@@ -2596,27 +2697,14 @@ export async function getPurchaseIntakeSummary(
     ) {
       lotWeightBase[it.lotId] = (lotWeightBase[it.lotId] ?? 0) + it.value.baseAmount;
     }
-    const key = it.issueId ?? "__none__";
-    let group = byKey.get(key);
-    if (!group) {
-      const label =
-        it.issueId == null
-          ? "No issue"
-          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
-              .filter(Boolean)
-              .join(" ") || "Untitled issue";
-      group = { key, label, count: 0, openCount: 0 };
-      byKey.set(key, group);
-      order.push(key);
-    }
-    group.count += 1;
-    if (it.lotStatus === "open") group.openCount += 1;
   }
+  const matching = all.filter((i) => matchesIntakeFilters(i, filters));
 
   return {
     totalCount: all.length,
+    filteredCount: matching.length,
     lotWeightBase,
-    issueGroups: order.map((k) => byKey.get(k)!),
+    issueGroups: buildIssueGroups(matching),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
