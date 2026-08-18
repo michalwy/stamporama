@@ -33,6 +33,7 @@ import {
   noteTile,
   parkTile,
   parkTiles,
+  reidentifyTileCopy,
   removeTileCandidate,
   returnTilesToQueue,
 } from "../../src/lib/scan-tiles";
@@ -61,6 +62,9 @@ describe("identifying scan tiles into copies (#567)", () => {
   let userId: string;
   let collectionId: string;
   let conditionId: string;
+  let mintConditionId: string;
+  let certificateStatusId: string;
+  let formatId: string;
   let stampId: string;
   let describedStampId: string;
   /** A base stamp with two watermark variants under it, and a stamp in another collection — the
@@ -160,6 +164,24 @@ describe("identifying scan tiles into copies (#567)", () => {
     conditionId = (
       await prisma.stampCondition.create({
         data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    // The dictionaries a **re-identification** re-answers (the condition step asks all of them, so
+    // the correction has to be able to say all of them): a second condition to move to, a
+    // certificate to put on and take off again, and a format that says the piece is not a single.
+    mintConditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint", abbreviation: "**", sortOrder: 1 },
+      })
+    ).id;
+    certificateStatusId = (
+      await prisma.certificateStatus.create({
+        data: { collectionId, name: "Certified", abbreviation: "cert", sortOrder: 0 },
+      })
+    ).id;
+    formatId = (
+      await prisma.stampFormat.create({
+        data: { collectionId, name: "Pair", abbreviation: "pair", sortOrder: 0 },
       })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Tile stamp" } })).id;
@@ -416,6 +438,127 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(
       batches[0].tiles.map((t) => t.position),
       [0, 1]
+    );
+  });
+
+  it("identifies a consumed tile's copy again — the whole answer, not just the stamp", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    const outcome = await identifyTileAsNewCopy(userId, tileIds[0], {
+      stampId: baseStampId,
+      conditionId,
+      certificateStatusId,
+    });
+    const photoId = (await prisma.photo.findFirstOrThrow({ where: { itemId: outcome.itemId } })).id;
+
+    // The mistake caught on the card: it is the watermark variant, it is mint rather than used, it
+    // is a pair, and the certificate belonged to the piece it was confused with. Being wrong about
+    // which stamp this is is usually being wrong about what was read off it, which is why the
+    // correction takes the identification's whole answer and not only its first field.
+    const corrected = await reidentifyTileCopy(userId, tileIds[0], {
+      stampId: variantAId,
+      conditionId: mintConditionId,
+      formatId,
+      forSale: true,
+    });
+    assert.equal(corrected.itemId, outcome.itemId, "the same copy, corrected — never a second one");
+    assert.equal(corrected.itemNo, outcome.itemNo);
+
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: {
+        stampId: true,
+        conditionId: true,
+        certificateStatusId: true,
+        formatId: true,
+        inCollection: true,
+        forSale: true,
+        lotId: true,
+        itemNo: true,
+      },
+    });
+    assert.equal(item.stampId, variantAId);
+    assert.equal(item.conditionId, mintConditionId);
+    assert.equal(item.formatId, formatId);
+    assert.equal(item.forSale, true);
+    assert.equal(item.inCollection, false);
+    // A field left empty is the collector **clearing** it, not declining to answer: the step opens
+    // on what the copy is, so the certificate that is no longer ticked has to come off.
+    assert.equal(item.certificateStatusId, null);
+    // What the identification never asked stays exactly as it was — the copy's number and the lot
+    // its money comes from.
+    assert.equal(item.itemNo, outcome.itemNo);
+    assert.notEqual(item.lotId, null);
+
+    // The images stay where they went — a correction is not a re-identification of the pictures.
+    const photo = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
+    assert.equal(photo.itemId, outcome.itemId);
+
+    // And the changed stamp is in the copy's refinement history, the same record the identical
+    // correction made from the copies list leaves.
+    const history = await prisma.itemVariantHistory.findMany({
+      where: { itemId: outcome.itemId },
+      select: { fromStampId: true, toStampId: true },
+    });
+    assert.deepEqual(history, [{ fromStampId: baseStampId, toStampId: variantAId }]);
+
+    // The tile still says what it became, now naming the stamp it actually is.
+    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const tile = batches[0].tiles.find((t) => t.id === tileIds[0]);
+    assert.equal(tile?.state, "consumed");
+    assert.equal(tile?.item?.stampId, variantAId);
+    // …and carries what the correction's own condition step opens on next time.
+    assert.equal(tile?.item?.conditionId, mintConditionId);
+    assert.equal(tile?.item?.formatId, formatId);
+  });
+
+  it("corrects only what the piece is, never which lot the money came from", async () => {
+    const { tileIds } = await orderWithTiles();
+    const outcome = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    const before = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { lotId: true, deliveryState: true },
+    });
+
+    await reidentifyTileCopy(userId, tileIds[0], { stampId: variantBId, conditionId });
+
+    const after = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { lotId: true, deliveryState: true },
+    });
+    // A copy takes its cost basis from a lot (ADR-0009 §3), so moving one between lots is a decision
+    // about money and not about what the piece is. The correction asks no lot and moves none — nor
+    // does it touch the delivery axis, which is about the parcel rather than the stamp.
+    assert.equal(after.lotId, before.lotId);
+    assert.equal(after.deliveryState, before.deliveryState);
+  });
+
+  it("refuses a correction on a tile that became no copy, or one whose copy is gone", async () => {
+    const { tileIds } = await orderWithTiles();
+    // Still waiting: there is nothing to correct, and identifying is the move.
+    await assert.rejects(
+      () => reidentifyTileCopy(userId, tileIds[0], { stampId, conditionId }),
+      ScanValidationError
+    );
+
+    const outcome = await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
+    // The condition step's own requirement, restated at the door: a copy always has a condition, so
+    // a correction that dropped it would be a blank where an answer is.
+    await assert.rejects(
+      () => reidentifyTileCopy(userId, tileIds[1], { stampId: variantAId, conditionId: "" }),
+      ScanValidationError
+    );
+    // A stamp from another collection is refused by the copy write itself, so the tile path cannot
+    // be a way around collection scoping.
+    await assert.rejects(() =>
+      reidentifyTileCopy(userId, tileIds[1], { stampId: foreignStampId, conditionId })
+    );
+
+    await prisma.item.delete({ where: { id: outcome.itemId } });
+    // `SetNull` leaves the tile consumed with nothing behind it: there is no copy to re-answer and
+    // no images to re-answer it with.
+    await assert.rejects(
+      () => reidentifyTileCopy(userId, tileIds[1], { stampId: variantBId, conditionId }),
+      ScanValidationError
     );
   });
 

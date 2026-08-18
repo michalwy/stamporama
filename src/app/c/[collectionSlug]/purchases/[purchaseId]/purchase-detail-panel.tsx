@@ -269,6 +269,21 @@ interface TileIdentification {
   lotId: string;
 }
 
+/**
+ * A correction in flight: which tile is being identified again, and what its copy answers **now**.
+ *
+ * The prefill is built where the tile is — from `ScanTileData.item`, which the scans card already
+ * holds — rather than fetched at the far end of the chain: it is the copy as the strip last read it,
+ * and a second read three dialogs later would be a second answer to a question already in hand.
+ * `stampId` rides along for the picker's *current* mark, so the tree says where the copy already
+ * sits instead of leaving the collector to check it on the other side of the screen.
+ */
+interface TileCorrection {
+  tileId: string;
+  stampId: string;
+  prefill: NonNullable<IntakeConditionDialogProps["prefill"]>;
+}
+
 /** The condition step's answers as the intake write is given them (#595). One field is absent from
  * the form when the collection defines no formats and another when it has no locations, so every
  * read falls back to the empty string — the same "not chosen" the fields themselves start at. */
@@ -516,6 +531,20 @@ export function PurchaseDetailPanel({
    * onto. Non-null only on the repeat path — the ordinary picker → condition chain must keep
    * arriving at the remembered defaults and nothing else. */
   const [tileRepeat, setTileRepeat] = useState<TileIdentification | null>(null);
+  /**
+   * The tile whose identification is being **corrected** — *Identify again* on a tile that already
+   * became a copy. Null on every ordinary intake, and what it changes is only the chain's two ends:
+   * the condition step opens on the copy's own answers instead of the remembered defaults, and the
+   * submit re-answers that copy instead of creating one.
+   *
+   * The whole middle — the picker, the issue and stamp dialogs it can open, the condition step's own
+   * fields, the catalogue value (#593), the piece beside all of them (#592) — is the identification's
+   * unchanged. Being wrong about which stamp a piece is usually means being wrong about what was
+   * read off it, so the correction has to be able to say everything the identification said; a
+   * stamp-only re-point would have sent the collector to the copies list for the other half of the
+   * same mistake.
+   */
+  const [tileCorrection, setTileCorrection] = useState<TileCorrection | null>(null);
   const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
   function resetTileIntake() {
     setTileStep("none");
@@ -523,6 +552,7 @@ export function PurchaseDetailPanel({
     setTileSelection(null);
     setTileShortLabel("");
     setTileRepeat(null);
+    setTileCorrection(null);
     setError(undefined);
   }
   // The dictionaries the repeat action's own wording needs. Conditions arrive as a prop; formats
@@ -826,6 +856,36 @@ export function PurchaseDetailPanel({
             setTileStep("condition");
             return;
           }
+          setTileStep("picker");
+        }}
+        // *Identify again*: the same chain, over a tile that already became a copy. It enters at
+        // the picker like an ordinary identification — the stamp is the answer being corrected, so
+        // it is asked first — and what it carries is the copy's current answers, so the condition
+        // step opens on what the copy *is* rather than on defaults remembered from another card.
+        onReidentifyTile={(piece, copy) => {
+          setTileIntake([piece]);
+          setTileRepeat(null);
+          setError(undefined);
+          setTileCorrection({
+            tileId: piece.tileId,
+            stampId: copy.stampId,
+            prefill: {
+              conditionId: copy.conditionId,
+              certificateStatusId: copy.certificateStatusId ?? "",
+              formatId: copy.formatId ?? "",
+              locationId: copy.locationId ?? "",
+              locationRef: copy.locationRef ?? "",
+              disposition: {
+                inCollection: copy.inCollection,
+                forSale: copy.forSale,
+                forTrade: copy.forTrade,
+              },
+              // The lot is not asked on a correction — the copy has one, and moving it is a
+              // decision about money rather than about what the piece is — so this is the field
+              // `lotChoice` being absent leaves unread.
+              lotId: "",
+            },
+          });
           setTileStep("picker");
         }}
         // *Same as the last* (#595): the picker is skipped, because its answer is the record, and
@@ -1155,6 +1215,19 @@ export function PurchaseDetailPanel({
             />
           }
           asideWidth="26rem"
+          // Correcting an identification, the stamp the copy is pointing at now is marked on its own
+          // row: the tree is being read *against* that answer, and one that said nothing about where
+          // the copy already sits sends the collector to check on the other side of the screen.
+          // Pressing it is a complete answer — the condition and the rest may be what was wrong.
+          marked={
+            tileCorrection
+              ? {
+                  stampIds: new Set([tileCorrection.stampId]),
+                  label: "current",
+                  hint: "What this copy is identified as now",
+                }
+              : undefined
+          }
           onPick={(picked: PickedStamp) => {
             setTileSelection({
               kind: "stamp",
@@ -1199,27 +1272,42 @@ export function PurchaseDetailPanel({
           // this screen follows.
           copyCount={tileIntake.length}
           submitLabel={
-            tileIntake.length === 1
-              ? "Identify the tile"
-              : `Identify ${tileIntake.length} tiles`
+            tileCorrection
+              ? // Never *Identify the tile*: nothing is created here, and a correction that read
+                // like an intake would leave the collector wondering whether they now hold two
+                // copies of the piece in their tweezers.
+                "Save the identification"
+              : tileIntake.length === 1
+                ? "Identify the tile"
+                : `Identify ${tileIntake.length} tiles`
           }
           // *Same as the last* (#595) arrives here with the previous tile's answers rather than
           // through the picker. Null on every other route in, which is what keeps this an action and
           // not a default.
-          prefill={tileRepeat ?? undefined}
+          prefill={tileCorrection ? tileCorrection.prefill : (tileRepeat ?? undefined)}
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.
-          lotChoice={{
-            purchaseId: purchase.id,
-            lots: purchase.lots
-              .map((l, i) => ({
-                id: l.id,
-                label: l.title ?? `Lot ${i + 1}`,
-                status: l.status,
-              }))
-              .filter((l) => l.status === "open"),
-          }}
+          lotChoice={
+            tileCorrection
+              ? // **Not asked on a correction.** The copy already belongs to a lot and takes its
+                // cost basis from it (ADR-0009 §3), so which lot it is on is a question about money
+                // rather than about what the piece is — and the identification is what is being
+                // corrected here. Offering the question would also mean quietly moving a copy off a
+                // closed lot, since only open ones can be offered. Absent is the shape this dialog
+                // already has for *the lot is not in question*, which is the stockbook case.
+                undefined
+              : {
+                  purchaseId: purchase.id,
+                  lots: purchase.lots
+                    .map((l, i) => ({
+                      id: l.id,
+                      label: l.title ?? `Lot ${i + 1}`,
+                      status: l.status,
+                    }))
+                    .filter((l) => l.status === "open"),
+                }
+          }
           onBack={() => {
             if (!isPending) {
               setError(undefined);
@@ -1248,20 +1336,32 @@ export function PurchaseDetailPanel({
             const stampId = tileSelection.kind === "stamp" ? tileSelection.stampId : "";
             const label = tileSelection.label;
             const shortLabel = tileShortLabel;
+            const correction = tileCorrection;
             run(
               async () => {
-                const { identifyTilesAction } = await import("@/app/actions/scans");
-                const r = await identifyTilesAction(tileIds, fd);
+                const scans = await import("@/app/actions/scans");
+                // The same form either way, and the only thing that differs is what it lands on: a
+                // correction re-answers the copy the tile already became, an identification creates
+                // one. Both consume the same fields, which is what keeps the two one vocabulary.
+                const r = correction
+                  ? await scans.reidentifyTileAction(correction.tileId, fd)
+                  : await scans.identifyTilesAction(tileIds, fd);
                 if (r.status === "error") setError(r.message);
                 // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
                 // so both namespaces are re-read: the shared runner invalidates the copies, and this
                 // adds the scans, without which the strip keeps showing a tile that is already a
-                // copy. (`purchase-scans-card.tsx` states the rule the other outcomes follow.)
+                // copy. (`purchase-scans-card.tsx` states the rule the other outcomes follow.) A
+                // correction touches both for the same reason: the copy changed, and the tile's
+                // square is what says what it became.
                 else void invalidatePurchaseScans(collectionId);
                 return r;
               },
               () => {
-                if (stampId) {
+                // **A correction is not what *Same as the last* repeats** (#595). That action
+                // carries the previous *intake* onto the next tile, lot included, and a correction
+                // answers no lot at all — so recording one here would hand the next tile a blank
+                // lot that the step would silently resolve to the first one offered.
+                if (stampId && !correction) {
                   setLastTileIdentify({ stampId, label, shortLabel, ...answers });
                 }
                 resetTileIntake();

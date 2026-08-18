@@ -138,6 +138,10 @@ interface Props {
    * owns that record, because it owns the step that answers it. `summary` is what the action names,
    * built there for the same reason: the condition and format dictionaries are up there. */
   repeatLast: { summary: string; onRepeatTile: (pieces: IdentifiedPiece[]) => void } | null;
+  /** *Identify again*: the same handover, for a tile that has already become a copy. One piece and
+   * the copy it became — the chain the panel runs is the identification's own, ending in a write
+   * that re-answers that copy instead of creating one. */
+  onReidentifyTile: (piece: IdentifiedPiece, copy: NonNullable<ScanTileData["item"]>) => void;
   onChanged: () => void;
   /** The collection's stated scan resolution (#598) — the tile dialog's viewer measures with it. */
   scanDpi: number;
@@ -182,6 +186,7 @@ export function PurchaseScansCard({
   scanSheetCount,
   canIdentify,
   onIdentifyTiles,
+  onReidentifyTile,
   repeatLast,
   onChanged,
 }: Props) {
@@ -751,6 +756,13 @@ export function PurchaseScansCard({
           onIdentifyAs={(pick, pieces) => {
             closeDialog();
             onIdentifyTiles(pieces, pick);
+          }}
+          // The correction leaves this dialog the way every identification does — the chain it opens
+          // shows the piece the whole way, so keeping the tile dialog under it would be the same
+          // picture twice.
+          onReidentify={(piece, copy) => {
+            closeDialog();
+            onReidentifyTile(piece, copy);
           }}
           // The same handover, minus the picker (#595) — the panel drops these pieces straight onto
           // the condition step with the last tile's answers in the fields.

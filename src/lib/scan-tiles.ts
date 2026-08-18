@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import type { Prisma } from "@/generated/prisma/client";
 import { formatItemNo } from "./item-number";
+import { updateItem } from "./items";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront } from "./photos";
 import {
@@ -43,6 +44,11 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  * a paper difference). It keeps every door a waiting tile has, because it *is* a waiting tile; what
  * it leaves is the sweep, so working through a card stops re-offering the one piece that cannot be
  * settled now. See {@link parkTile}.
+ *
+ * A consumed tile is an end, but not an irrevocable one: {@link reidentifyTileCopy} runs the whole
+ * identification again over the copy it became, because the mis-identification is discovered on the
+ * card and the correction should not cost a trip to the copies list to find one row among a parcel's
+ * hundreds.
  *
  * #607 gives that waiting tile a **shortlist** — what the piece could be, kept so the return sitting
  * does not repeat the narrowing that discovered the picture could not settle it. See
@@ -292,6 +298,103 @@ export async function assignTileToCopy(
   }
 
   await consumeTile(tile.id, item.id);
+  await seedStampImage(ownerId, item.id);
+  return { itemId: item.id, itemNo: item.itemNo };
+}
+
+// ── Correcting an identification ──────────────────────────────────────────────────────────────
+
+/**
+ * What a correction answers — **the identification's own questions**, asked again.
+ *
+ * Deliberately the same shape as {@link TileIdentification} minus `lotId`, because the two are the
+ * same act: identifying a piece is answering *which stamp, in what condition, with what certificate,
+ * in what format, filed where, held for what* — and being wrong about the first of those does not
+ * make the rest unaskable. A correction that took only a stamp id would have been a second, poorer
+ * vocabulary for one question, and the collector who re-identifies a piece has it in the tweezers:
+ * the condition read off the wrong stamp is very often wrong with it.
+ *
+ * **`lotId` is absent, and that is the one real difference.** A copy takes its cost basis from a lot
+ * (ADR-0009 §3), so moving one between lots is a decision about *money* rather than about what the
+ * piece is; the copy already has a lot, and this path leaves it exactly where it is.
+ */
+export interface TileReidentification {
+  stampId: string;
+  conditionId: string;
+  certificateStatusId?: string | null;
+  locationId?: string | null;
+  locationRef?: string | null;
+  formatId?: string | null;
+  inCollection?: boolean;
+  forSale?: boolean;
+  forTrade?: boolean;
+}
+
+/**
+ * Identify the copy a consumed tile became **again** — the identification corrected from the tile it
+ * was made on.
+ *
+ * The correction was always possible; what it cost was the problem. A tile whose stamp turns out to
+ * be wrong is discovered *on this card* — the piece beside it settles the shade, the perforation
+ * gauge says 14 rather than 14½ — and until now the only way to act on it was to leave the card,
+ * find that one copy among a parcel's hundreds in the copies list, and edit it there. On a card of
+ * forty that is the same cost as the mis-identification itself, so the answer is put where the
+ * doubt is: the tile's own dialog, running **the whole identification chain** — picker, the issue
+ * and stamp dialogs it can open, then the condition step — with the piece on screen throughout
+ * (#592), exactly as identifying it the first time did.
+ *
+ * **It re-answers the copy; it does not create one.** The copy's number, its lot, its delivery state
+ * and its images are not questions the identification asks, so they are untouched — and running
+ * `intakeStamps` again would produce a *second* copy rather than correct the one that exists. So
+ * this is `updateItem`, which is also what makes a changed stamp land in `ItemVariantHistory`
+ * exactly as the same correction made from the copies list does: one write, one record of it,
+ * whichever screen it was reached from.
+ *
+ * **No new refusal on a closed lot.** Closing splits the pool across the copies the lot had
+ * (ADR-0009 §3) and this creates no copy and removes none, so the set the split was over is
+ * unchanged; re-pointing an existing copy's stamp is already allowed from the copies list on a
+ * closed lot, and a rule invented here would be a second answer to one question.
+ *
+ * The new stamp is offered the tile's front as its catalogue image on the same terms the original
+ * identification offered it (#149's auto-seed, {@link seedStampImage}): the guard is *that stamp
+ * has no picture at all*, so it is a no-op in every case but the one it exists for. The stamp that
+ * was wrong keeps whatever it was seeded with — deleting a catalogue photo is a decision of its own,
+ * and one this path must not take on the collector's behalf.
+ */
+export async function reidentifyTileCopy(
+  ownerId: string,
+  tileId: string,
+  input: TileReidentification
+): Promise<TileOutcome> {
+  if (!input.stampId) throw new ScanValidationError("Pick the stamp this piece actually is.");
+  if (!input.conditionId) throw new ScanValidationError("A condition must be selected.");
+  const tile = await loadTileForOwner(ownerId, tileId);
+  if (tile.state !== "consumed") {
+    throw new ScanValidationError("This tile has not become a copy, so there is nothing to correct.");
+  }
+  // A copy deleted after the tile was worked through leaves the tile `consumed` with nothing behind
+  // it (`SetNull`). There is no copy to re-identify and no images to re-identify it with — they left
+  // with the copy — so this says so rather than failing on a null id.
+  if (!tile.itemId) {
+    throw new ScanValidationError(
+      "The copy this tile became has been deleted, so there is nothing to re-identify."
+    );
+  }
+  // Every field the step asked for is written, including the ones left empty: the condition dialog
+  // opens on **what the copy is now**, so a blank is the collector clearing an answer rather than
+  // declining to give one. Absent instead of null would make *remove the certificate* impossible
+  // from the one surface that shows it.
+  const { item } = await updateItem(ownerId, tile.itemId, {
+    stampId: input.stampId,
+    conditionId: input.conditionId,
+    certificateStatusId: input.certificateStatusId ?? null,
+    formatId: input.formatId ?? null,
+    locationId: input.locationId ?? null,
+    locationRef: input.locationRef ?? null,
+    inCollection: input.inCollection ?? false,
+    forSale: input.forSale ?? false,
+    forTrade: input.forTrade ?? false,
+  });
   await seedStampImage(ownerId, item.id);
   return { itemId: item.id, itemNo: item.itemNo };
 }
@@ -672,6 +775,9 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
       batchNo: true,
       state: true,
       note: true,
+      // Only a consumed tile has one, and only `reidentifyTileCopy` reads it — the copy the tile
+      // became, which is what a correction re-points.
+      itemId: true,
       photos: { select: { id: true, role: true } },
     },
   });

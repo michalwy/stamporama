@@ -19,6 +19,7 @@ import {
   identifyTilesAsNewCopies,
   noteTile,
   parkTiles,
+  reidentifyTileCopy,
   removeTileCandidate,
   returnTilesToQueue,
 } from "@/lib/scan-tiles";
@@ -214,6 +215,51 @@ export async function assignTileAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to assign the tile. Please try again.",
+    };
+  }
+}
+
+/**
+ * Identify a consumed tile's copy **again** — the same form the identification submits, applied to
+ * the copy that already exists instead of creating one.
+ *
+ * `FormData` for exactly the reason `identifyTilesAction` takes it: this is the very form the
+ * condition dialog submits, reached through the very picker, so the correction and the
+ * identification are one vocabulary rather than two. What it does **not** read is `lotId` — the copy
+ * has a lot, and moving it between lots is a decision about money rather than about what the piece
+ * is — nor a `photoChangeSet`, the tile's crops already being this copy's front and back.
+ */
+export async function reidentifyTileAction(
+  tileId: string,
+  formData: FormData
+): Promise<ScanActionState> {
+  const session = await getSession();
+  const str = (name: string): string | null => {
+    const v = formData.get(name);
+    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  };
+  const stampId = str("stampId");
+  if (!stampId) return { status: "error", message: "Select the stamp this piece actually is." };
+  const conditionId = str("conditionId");
+  if (!conditionId) return { status: "error", message: "A condition must be selected." };
+  try {
+    await reidentifyTileCopy(session.user.id, tileId, {
+      stampId,
+      conditionId,
+      certificateStatusId: str("certificateStatusId"),
+      locationId: str("locationId"),
+      locationRef: str("locationRef"),
+      formatId: str("formatId"),
+      inCollection: formData.get("inCollection") === "true",
+      forSale: formData.get("forSale") === "true",
+      forTrade: formData.get("forTrade") === "true",
+    });
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message:
+        e instanceof Error ? e.message : "Failed to change the identification. Please try again.",
     };
   }
 }

@@ -1144,6 +1144,28 @@ export interface ScanTileData {
   item: {
     id: string;
     itemNo: number;
+    /**
+     * **What the copy currently answers to the identification's questions** — the prefill a
+     * re-identification opens on (`reidentifyTileCopy`), so correcting a tile starts from what the
+     * copy *is* rather than from the remembered defaults of a card worked an hour ago.
+     *
+     * Read here rather than fetched when the correction starts: the identification chain crosses
+     * three dialogs, and a copy fetched at the far end of it is a second answer to a question this
+     * row already holds. `stampId` was already being read for `outsideDescription`, and the rest are
+     * scalars on the same row.
+     *
+     * Deliberately **not** `lotId`: which lot the copy's money comes from is not a question the
+     * identification asks, and a correction leaves it exactly where it is.
+     */
+    stampId: string;
+    conditionId: string;
+    certificateStatusId: string | null;
+    formatId: string | null;
+    locationId: string | null;
+    locationRef: string | null;
+    inCollection: boolean;
+    forSale: boolean;
+    forTrade: boolean;
     frontPhotoId: string | null;
     backPhotoId: string | null;
     stampName: string | null;
@@ -1282,6 +1304,15 @@ export async function listPurchaseScans(
             id: true,
             itemNo: true,
             stampId: true,
+            // What the correction's condition step opens on — see `ScanTileData.item`.
+            conditionId: true,
+            certificateStatusId: true,
+            formatId: true,
+            locationId: true,
+            locationRef: true,
+            inCollection: true,
+            forSale: true,
+            forTrade: true,
             // The very rows this tile handed over, now owned by the copy. Both sides, since the
             // tile's own dialog shows them at full size (#584) — the strip only ever wanted the
             // front.
@@ -1340,6 +1371,15 @@ export async function listPurchaseScans(
         ? {
             id: t.item.id,
             itemNo: t.item.itemNo,
+            stampId: t.item.stampId,
+            conditionId: t.item.conditionId,
+            certificateStatusId: t.item.certificateStatusId,
+            formatId: t.item.formatId,
+            locationId: t.item.locationId,
+            locationRef: t.item.locationRef,
+            inCollection: t.item.inCollection,
+            forSale: t.item.forSale,
+            forTrade: t.item.forTrade,
             frontPhotoId: t.item.photos.find((p) => p.role === "front")?.id ?? null,
             backPhotoId: t.item.photos.find((p) => p.role === "back")?.id ?? null,
             stampName: t.item.stamp.name,

@@ -633,6 +633,30 @@ ctrl/cmd+click, so you can look at the copy and keep the card you are working. I
 deleted later, the dialog says so: the images went with it, and the tile stays as the record that it
 was worked through.
 
+**Got it wrong? Identify it again from the tile.** **Identify again** sits beside *Open copy* and
+runs the **whole identification** a second time — the same catalogue picker, the same condition step,
+with the piece on screen throughout, exactly as identifying it the first time did. Being wrong about
+which stamp a piece is usually means being wrong about what you read off it, so the correction can
+say everything the identification said: the stamp, the condition, the certificate, the format, the
+location and its ref, the dispositions, and the catalogue value while the paper catalogue is open at
+the right page.
+
+Two things differ from a first identification. The picker marks the stamp the copy is pointing at
+now as **current** on its own row, so you can see what you are replacing while you choose the
+replacement — and you can still create the issue or the stamp on the spot if the right answer is not
+in the catalogue yet. The condition step opens on **what the copy is now** rather than on the
+choices remembered from the last card, so every field you were right about is already correct and
+you change only what was wrong; an emptied field is you clearing it, so unticking the certificate
+takes it off the copy. The confirm reads **Save the identification**, because nothing is created:
+the copy keeps its number, its lot and its images, and a changed stamp is written into its refinement
+history exactly as the same correction made from the copies list is.
+
+**Which lot the copy is on is not asked**, and that is deliberate: a copy takes its cost basis from
+its lot, so moving it between lots is a decision about money rather than about what the piece is.
+Use the copies list for that. Everything else — the piece two squares along settling the shade, the
+gauge reading 14 rather than 14½ — you can now answer without leaving the card and hunting that one
+copy down among the parcel's hundreds.
+
 **Worked tiles stay where they are.** The strip is a map of the card on your desk — tile 7 on screen
 is the seventh piece on the stockbook — so nothing disappears or shuffles up as you go, which is what
 lets you keep matching a tile to the piece in your tweezers.

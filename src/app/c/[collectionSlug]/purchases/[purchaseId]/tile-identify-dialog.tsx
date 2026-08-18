@@ -115,6 +115,23 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
  * it is for every tile. See {@link CandidateShortlist}, and `tile-candidates.ts` for the one case in
  * which a shortlist is the wrong answer altogether.
  *
+ * **A consumed tile can be identified again from here**, which is the one thing #584 left out.
+ * Settling a tile here rather than navigating to its copy was right, but it left the *wrong* answer
+ * with nowhere to go: the mis-identification is discovered on this card — the piece two squares over
+ * settles the shade, the gauge says 14 rather than 14½ — and acting on it meant leaving the pass,
+ * finding that one copy among a parcel's hundreds in the copies list, and editing it there. On a
+ * card of forty that costs as much as the mistake did.
+ *
+ * So *Identify again* hands upward exactly as *Identify as a new copy* does, and the order panel
+ * runs **the whole chain** over it — picker, the issue and stamp dialogs it can open, then the
+ * condition step, with the piece on screen throughout (#592). Not a stamp-only re-point, which was
+ * the tempting shortcut and the wrong one: being wrong about which stamp this is usually means being
+ * wrong about what was read *off* it, so a correction that could not touch the condition would send
+ * the collector to the copies list for the other half of the same mistake — the trip this exists to
+ * remove. What the chain does differently is only its ending: `reidentifyTileCopy` re-answers the
+ * copy that exists instead of creating one, so the number, the lot and the images stay put and a
+ * changed stamp lands in the copy's refinement history as it does from anywhere else.
+ *
  * **Every state opens this dialog, and none of them navigates on the click itself** (#584). A
  * consumed tile used to be an `<a>` straight to its copy, which left the tile itself impossible to
  * inspect — which batch, which position, what it became — and threw the collector out of the
@@ -203,6 +220,17 @@ interface Props {
    */
   onIdentifyAs: (pick: TileStampPick, pieces: IdentifiedPiece[]) => void;
   /**
+   * *Identify again* — the same handover `onIdentifyNew` makes, for a tile that has **already**
+   * become a copy.
+   *
+   * One piece, never a run: a settled tile takes no tick box, so a correction is always about the
+   * single tile this dialog is showing. It carries the copy as well as the piece, because the chain
+   * it opens has to start from **what the copy is now** — the condition step prefills from it, and a
+   * correction that opened on the collection's remembered defaults would quietly re-answer every
+   * field that was never wrong.
+   */
+  onReidentify: (piece: IdentifiedPiece, copy: NonNullable<ScanTileData["item"]>) => void;
+  /**
    * An outcome was written. `touchedCopy` says whether a **copy** changed, which decides what has to
    * be re-read: assigning gives a copy the tile's photos, so the copies list is stale; discarding
    * touches no copy at all, so invalidating them would be re-fetching a lot's whole copy list to
@@ -276,6 +304,7 @@ export function TileIdentifyDialog({
   onIdentifyNew,
   repeatLast,
   onIdentifyAs,
+  onReidentify,
   onDone,
   onChanged,
   onClose,
@@ -312,6 +341,10 @@ export function TileIdentifyDialog({
    * discard — with the note and the way back added. Only a single tile can be settled at all: the
    * strip gives a tick box to the two outstanding states alone. */
   const settled = tile != null && (tile.state === "consumed" || tile.state === "discarded");
+  /** The copy a consumed tile became, when there still is one — what a correction re-points, and the
+   * only thing that decides whether correcting is offered at all. Null on a tile whose copy was
+   * deleted afterwards: there is nothing to re-identify, which is what that panel already says. */
+  const consumedItem = tile?.state === "consumed" ? tile.item : null;
   /** Every piece in hand is parked, which is what decides between *set aside* and *put back*. A
    * **mixed** run is not put back on one press — some of it was never set aside — so it keeps
    * offering the park, which is the move that makes the run uniform. */
@@ -687,11 +720,28 @@ export function TileIdentifyDialog({
               a discard goes back into the queue, and a consumed tile leads to what it became
               (#584) — the click that used to happen by itself, now asked for. */}
           {tile.state === "discarded" && <div style={{ marginRight: "auto" }}>{putBack}</div>}
-          {tile.state === "consumed" && copyHref && (
-            <div style={{ marginRight: "auto" }}>
-              <DialogLinkButton href={copyHref}>
-                <Icon name="open" size="sm" /> Open copy
-              </DialogLinkButton>
+          {tile.state === "consumed" && (consumedItem || copyHref) && (
+            <div
+              style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
+            >
+              {/* The identification corrected where it is found to be wrong, beside the way to the
+                  copy rather than instead of it: one leaves this pass, the other is this pass. */}
+              {consumedItem && (
+                <DialogSecondaryButton
+                  // Never gated on `canIdentify`: that flag is about a **new** copy on a closed
+                  // lot, and this creates none. The pool a closed lot was split across is the same
+                  // set of copies after a correction as before it.
+                  onClick={() => onReidentify(pieces[0], consumedItem)}
+                  disabled={pending}
+                >
+                  <Icon name="edit" size="sm" /> Identify again
+                </DialogSecondaryButton>
+              )}
+              {copyHref && (
+                <DialogLinkButton href={copyHref}>
+                  <Icon name="open" size="sm" /> Open copy
+                </DialogLinkButton>
+              )}
             </div>
           )}
           <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
@@ -820,6 +870,7 @@ export function TileIdentifyDialog({
         onClose={() => setAddingCandidate(false)}
       />
     )}
+
     </>
   );
 }
