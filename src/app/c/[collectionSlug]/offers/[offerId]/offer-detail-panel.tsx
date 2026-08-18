@@ -981,13 +981,14 @@ export function OfferDetailPanel({
         />
       )}
 
-      {/* The same question on Delcampe (#608): which listing profile this offer's upload row is
-          built from, and what that profile says the row will carry. Null (and so absent) on every
-          platform that is not Delcampe. */}
+      {/* The same two questions on Delcampe (#608, #609): the category the row is filed under, and
+          which listing profile it is built from. Null (and so absent) on every platform that is not
+          Delcampe. */}
       {offer.delcampeListing && (
         <OfferDelcampeCard
           offerId={offerId}
           config={offer.delcampeListing}
+          categorySearchTerm={offer.delcampeListing.categorySearchTerm}
           onChanged={() => invalidateAll(collectionId)}
         />
       )}

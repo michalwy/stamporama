@@ -22,6 +22,7 @@ import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
 import { getDelcampePlatform } from "@/lib/delcampe";
 import { listDelcampeListingProfiles } from "@/lib/delcampe-listing-profile";
+import { listDelcampeLearnedCategories } from "@/lib/delcampe-categories";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
 import { getCarriers } from "@/lib/carriers";
@@ -72,6 +73,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     allegroLearnedCategories,
     delcampePlatform,
     delcampeListingProfiles,
+    delcampeLearnedCategories,
     platformContacts,
     assistantTokens,
     photoStorageBytes,
@@ -98,6 +100,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     listAllegroLearnedCategories(session.user.id, collection.id),
     getDelcampePlatform(session.user.id, collection.id),
     listDelcampeListingProfiles(session.user.id, collection.id),
+    listDelcampeLearnedCategories(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -154,6 +157,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           allegroLearnedCategories={allegroLearnedCategories}
           delcampePlatformId={delcampePlatform?.id ?? null}
           delcampeListingProfiles={delcampeListingProfiles}
+          delcampeLearnedCategories={delcampeLearnedCategories}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}

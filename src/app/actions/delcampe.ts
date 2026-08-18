@@ -9,14 +9,31 @@ import {
   createDelcampeListingProfile,
   deleteDelcampeListingProfile,
   setDefaultDelcampeListingProfile,
-  setOfferDelcampeListingProfile,
   updateDelcampeListingProfile,
 } from "@/lib/delcampe-listing-profile";
+import {
+  type DelcampeOfferListingConfig,
+  rematchDelcampeOfferCategory,
+  setDelcampeOfferCategory,
+  setOfferDelcampeListingProfile,
+} from "@/lib/delcampe-offer-listing";
+import type { DelcampeCategoryRow } from "@/lib/delcampe-category-catalog-rules";
+import {
+  type DelcampeCatalogStatus,
+  delcampeCategoryCatalogStatus,
+  readDelcampeCategories,
+  refreshDelcampeCategories,
+} from "@/lib/delcampe-category-catalog";
+import {
+  deletePlatformCategoryLesson,
+  updatePlatformCategoryLesson,
+} from "@/lib/platform-category";
 
-// Settings → Delcampe (#608): which platform contact is Delcampe, and the listing profiles its
-// uploads are built from. One file, unlike Allegro's two, because there is no connection half —
-// Delcampe is listed to by uploading a file (#610), so a tab that names the platform and configures
-// what its rows carry is the whole of it.
+// Settings → Delcampe (#608, #609): which platform contact is Delcampe, the listing profiles its
+// uploads are built from, and what the collection has learned about Delcampe's categories. One file,
+// unlike Allegro's two, because there is no connection half — Delcampe is listed to by uploading a
+// file (#610), so a tab that names the platform and configures what its rows carry is the whole of
+// it.
 //
 // Every action reports a message rather than throwing: they are all driven from one settings panel
 // (and one card on the offer screen), where a refusal is an ordinary thing to state and not a
@@ -117,5 +134,123 @@ export async function setOfferDelcampeListingProfileAction(
     return { status: "success" };
   } catch (err) {
     return failure(err, "The listing profile could not be set on this offer.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Categories (#609)
+// ---------------------------------------------------------------------------
+
+/**
+ * Delcampe's whole published category list, for the picker to build its tree from.
+ *
+ * Sent **once per picker**, not once per keystroke. The list is around seven thousand rows of short
+ * text — a few tens of kilobytes compressed — and having it in the browser is what makes the tree a
+ * tree: expanding a node, and narrowing on a search, are then instant and consistent with each
+ * other, where a server round trip per interaction would be neither. It is also public data with
+ * nothing of the collector's in it, so there is nothing here to scope.
+ */
+export async function readDelcampeCategoriesAction(): Promise<
+  { status: "success"; categories: DelcampeCategoryRow[] } | { status: "error"; message: string }
+> {
+  await getSession();
+  try {
+    return { status: "success", categories: await readDelcampeCategories() };
+  } catch (err) {
+    return failure(err, "Delcampe's category list could not be read.");
+  }
+}
+
+/** Read Delcampe's published category list again, now. The daily pass does this on its own; the
+ *  button exists for the instance that has just been set up and for the one whose last pass was
+ *  refused. */
+export async function refreshDelcampeCategoriesAction(): Promise<
+  { status: "success"; read: number; complete: boolean; message: string | null }
+  | { status: "error"; message: string }
+> {
+  await getSession();
+  try {
+    const result = await refreshDelcampeCategories();
+    return {
+      status: "success",
+      read: result.read,
+      complete: result.complete,
+      message: result.message,
+    };
+  } catch (err) {
+    return failure(err, "Delcampe's category list could not be read.");
+  }
+}
+
+/** How current the catalogue is. Read by the settings panel so it can say whether the picker is
+ *  working from something a day old or from nothing at all. */
+export async function delcampeCategoryCatalogStatusAction(): Promise<
+  ({ status: "success" } & DelcampeCatalogStatus) | { status: "error"; message: string }
+> {
+  await getSession();
+  try {
+    return { status: "success", ...(await delcampeCategoryCatalogStatus()) };
+  } catch (err) {
+    return failure(err, "The category list's state could not be read.");
+  }
+}
+
+/** Set the category one offer is uploaded in, by hand. */
+export async function setDelcampeOfferCategoryAction(
+  offerId: string,
+  input: { categoryId: string; categoryName: string | null; categoryPath: string | null }
+): Promise<
+  { status: "success"; config: DelcampeOfferListingConfig | null }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    return { status: "success", config: await setDelcampeOfferCategory(session.user.id, offerId, input) };
+  } catch (err) {
+    return failure(err, "That category could not be set on this offer.");
+  }
+}
+
+/** Ask the register again — the ↻ on the offer's Delcampe card. */
+export async function rematchDelcampeOfferCategoryAction(
+  offerId: string
+): Promise<
+  { status: "success"; config: DelcampeOfferListingConfig | null }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    return { status: "success", config: await rematchDelcampeOfferCategory(session.user.id, offerId) };
+  } catch (err) {
+    return failure(err, "This offer's category could not be matched again.");
+  }
+}
+
+/** Point one learned association at a different category — the correction that does not require
+ *  preparing something wrong again. The register is shared with Allegro (#609), so both are the same
+ *  two calls; they are exposed per tab because a panel should not have to know that. */
+export async function updateDelcampeCategoryLessonAction(
+  lessonId: string,
+  category: { categoryId: string; categoryName?: string | null; categoryPath?: string | null }
+): Promise<DelcampeActionState> {
+  const session = await getSession();
+  try {
+    await updatePlatformCategoryLesson(session.user.id, lessonId, category);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "That learned category could not be changed.");
+  }
+}
+
+/** Forget one association. Rows already uploaded keep the category they went out with. */
+export async function deleteDelcampeCategoryLessonAction(
+  lessonId: string
+): Promise<DelcampeActionState> {
+  const session = await getSession();
+  try {
+    await deletePlatformCategoryLesson(session.user.id, lessonId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "That learned category could not be deleted.");
   }
 }

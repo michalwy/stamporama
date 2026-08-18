@@ -77,9 +77,11 @@ import {
   type AllegroOfferListingConfig,
 } from "./allegro-offer-listing";
 import {
+  backfillDelcampeCategory,
   getDelcampeOfferListingConfig,
+  learnDelcampeCategoryFromReadyOffer,
   type DelcampeOfferListingConfig,
-} from "./delcampe-listing-profile";
+} from "./delcampe-offer-listing";
 import {
   evaluatePhotoReadiness,
   type PhotoReadinessBlocker,
@@ -4278,6 +4280,7 @@ export async function createOffer(
   // (#494) is repeated here for the same reason the texts are: the composition exists from the first
   // moment and the offer would otherwise sit with a blank Allegro card until something was added.
   await backfillAllegroCategory(ownerId, offerId);
+  await backfillDelcampeCategory(offerId); // #609, the same question on the marketplace next door
   return offerId;
 }
 
@@ -4970,7 +4973,13 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // Recorded on the transition rather than in each listing path for the reason that has not changed:
   // the API publish (#477), the Assistant's write-back (#412) and a URL pasted in by hand all reach
   // their state through here, and a lesson recorded per path is one a new path forgets.
-  if (to === "ready") await learnAllegroCategoryFromReadyOffer(offerId);
+  if (to === "ready") {
+    await learnAllegroCategoryFromReadyOffer(offerId);
+    // The same moment on Delcampe (#609), and the reasoning above applies to it with more force:
+    // a Delcampe listing goes up as a CSV uploaded days after the offer was described, so a register
+    // that learned at publication would answer the question long after it stopped mattering.
+    await learnDelcampeCategoryFromReadyOffer(offerId);
+  }
 }
 
 /** "an asking price" / "a starting price" — the article a missing-figure message needs. */
@@ -5149,6 +5158,8 @@ export async function addOfferSet(
   // refresh: it writes only while the offer has no category, so a correction is never undone by
   // adding a set. It cannot fail this mutation — see `backfillAllegroCategory`.
   await backfillAllegroCategory(ownerId, offerId);
+  await backfillDelcampeCategory(offerId); // #609, as above — an offer is on one platform, so one of
+                                           // the two is always a no-op
   return set.id;
 }
 
@@ -5195,6 +5206,7 @@ export async function addOfferSetsPerCopy(
   await syncGeneratedTexts(ownerId, offerId); // #380/#365, as in addOfferSet
   await markListingContentChanged(offerId); // #542, as in addOfferSet
   await backfillAllegroCategory(ownerId, offerId); // #494, as in addOfferSet
+  await backfillDelcampeCategory(offerId); // #609, as in addOfferSet
   return ids;
 }
 
@@ -5239,6 +5251,7 @@ export async function addItemsToOfferSet(
   await syncGeneratedTexts(ownerId, ref.offerId); // #380/#365, as in addOfferSet
   await markListingContentChanged(ref.offerId); // #542, as in addOfferSet
   await backfillAllegroCategory(ownerId, ref.offerId); // #494, as in addOfferSet
+  await backfillDelcampeCategory(ref.offerId); // #609, as in addOfferSet
   return addable.length;
 }
 

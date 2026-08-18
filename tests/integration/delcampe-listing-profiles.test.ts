@@ -5,13 +5,15 @@ import { getDelcampePlatform, setDelcampePlatform } from "../../src/lib/delcampe
 import {
   createDelcampeListingProfile,
   deleteDelcampeListingProfile,
-  getDelcampeOfferListingConfig,
   listDelcampeListingProfiles,
   resolveDelcampeListingProfileForOffer,
   setDefaultDelcampeListingProfile,
-  setOfferDelcampeListingProfile,
   updateDelcampeListingProfile,
 } from "../../src/lib/delcampe-listing-profile";
+import {
+  getDelcampeOfferListingConfig,
+  setOfferDelcampeListingProfile,
+} from "../../src/lib/delcampe-offer-listing";
 import {
   DELCAMPE_PROFILE_DEFAULTS,
   type DelcampeListingProfileValues,

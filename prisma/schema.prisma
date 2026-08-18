@@ -148,7 +148,7 @@ model Collection {
   allegroListings   AllegroListing[]
   allegroListingProfiles AllegroListingProfile[]
   delcampeListingProfiles DelcampeListingProfile[]
-  allegroCategoryLessons AllegroCategoryLesson[]
+  platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
 
   @@unique([ownerId, slug])
@@ -169,7 +169,7 @@ model StampCondition {
   formatFactors StampFormatFactor[]
   auctionLotLines AuctionLotLine[]
   colnectMapping ColnectConditionMapping?
-  allegroCategoryLessons AllegroCategoryLesson[]
+  platformCategoryLessons PlatformCategoryLesson[]
   wantAcceptance WantCondition[]
   profileAcceptance AcceptanceProfileCondition[]
 
@@ -340,7 +340,7 @@ model StampSubtype {
   collection   Collection                @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampSubtypeTranslation[]
-  allegroCategoryLessons AllegroCategoryLesson[]
+  platformCategoryLessons PlatformCategoryLesson[]
 
   @@index([collectionId])
   // Exactly-one-default is enforced by a partial unique index written by hand in
@@ -1009,25 +1009,73 @@ model DelcampeListingProfile {
   @@map("delcampe_listing_profile")
 }
 
-// What was published for a kind of stamp — the **key → category** register (#488; ADR-0026).
+// Delcampe's own category tree, as Delcampe publishes it (#609; ADR-0035 §4) — names for the numeric
+// `category_id` the Easy Uploader file demands.
 //
-// An Allegro listing needs a `category.id`, and unlike the profile above it is a property of *this
+// **Not a mapping and not a setting.** Nothing here says what a stamp should be listed as; that is
+// the register's job and it is learned. This is a *dictionary*: `7945` on its own is unreadable, and
+// a picker that made the collector type it from a spreadsheet would be the hand-maintained table
+// #609 exists to avoid. It is filled from Delcampe's published list at
+// `delcampe.net/en_GB/collectables/category-id/stamps/`, since there is no API (the REST one is
+// behind the paid API Pass, ADR-0034) and the CSV is the whole contract.
+//
+// **Instance-wide, with no `collectionId`** — the one table in this schema that is not scoped to a
+// collection, and deliberately so: Delcampe's taxonomy is Delcampe's, identical for every collection
+// on this instance, and a per-collection copy would be N copies of one public fact refreshed N
+// times. `StorageCacheEntry` is the existing precedent for an instance-wide row (#591), for the same
+// kind of reason. Nothing collection-specific can be read out of it, so there is nothing to scope.
+//
+// The rows are **replaceable, never authoritative**: the id is what the file carries, the name and
+// the path are how a person recognises it, and a category Delcampe retires simply stops arriving. A
+// stored offer keeps the name it was given as a display snapshot (the ADR-0025 §3 rule), so a
+// disappearing row never blanks a listing that was already prepared.
+model DelcampeCategory {
+  // Delcampe's own numeric id, held as text: it is an identifier the CSV echoes back verbatim, and
+  // nothing here does arithmetic on it.
+  id   String @id
+  name String
+  // The breadcrumb it sits at, `Stamps > Europe > Poland > 1919-1939 Second Republic > Used stamps`.
+  // The whole value of the picker: on Delcampe's tree a leaf is called `Used stamps` some three
+  // hundred times over, and only the path says which country's and which decade's.
+  path String
+  // When this row was last seen in Delcampe's list. The refresh upserts what it read and deletes
+  // only what a **complete** pass did not see, so a crawl that was rate-limited half way leaves the
+  // previous snapshot standing rather than emptying the picker.
+  refreshedAt DateTime @default(now())
+
+  @@index([refreshedAt])
+  @@map("delcampe_category")
+}
+
+// What was listed for a kind of stamp — the **key → category** register (#488; ADR-0026, generalised
+// across platforms by #609; ADR-0035).
+//
+// A marketplace listing needs a category, and unlike a listing profile it is a property of *this
 // stamp* rather than of the account: a 1935 Polish used definitive and a modern German souvenir sheet
-// belong in different categories. Nothing in the offer model says which — but the collection already
-// knows what a stamp is, so the association worth recording is between those four facts and the
-// category that was actually used. Learned, never configured: a row appears only when a listing
-// Allegro accepted went out with it (#477), and a refused publish teaches nothing.
+// belong in different categories on every marketplace there is. Nothing in the offer model says which
+// — but the collection already knows what a stamp is, so the association worth recording is between
+// those four facts and the category that was actually used. Learned, never configured: a row appears
+// only when an offer was **finished being prepared** with one (#494), and a draft teaches nothing.
+//
+// **One table for every platform**, keyed per (collection, `platformId`), which is what it has been
+// since #488 — the Allegro name it carried was the only Allegro thing about it. Delcampe (#609) files
+// its categories quite differently and still asks the same question in the same order, and two copies
+// of the relaxation ladder would drift on the first correction. What did *not* generalise is
+// `AllegroCategoryParameterMemory` below: Delcampe's categories carry no parameters, and keeping the
+// two registers apart (ADR-0026 §1) is exactly what makes only the shared half shared.
 //
 // Every part of the key is nullable, and null means **absent from this key** rather than "no value"
 // (ADR-0026 §2) — an offer whose copies disagree about their year asks a question that is not about a
 // year, exactly as a stamp with no year does. Lookup relaxes in one fixed order (§3): the exact key,
 // then without the year, then without the subtype, then one level up the area tree and again. The
 // condition is never dropped.
-model AllegroCategoryLesson {
+model PlatformCategoryLesson {
   id           String @id @default(cuid())
   collectionId String
-  // The platform this collection calls Allegro, which owns what is known about Allegro's taxonomy —
-  // the `AllegroListingProfile` ownership, for the same reason (ADR-0026 §5).
+  // The platform contact this row is about, which owns what is known about that marketplace's
+  // taxonomy — the `AllegroListingProfile` ownership, for the same reason (ADR-0026 §5). It is also
+  // what keeps one table honest: a category id means nothing without the marketplace it belongs to,
+  // and every read is filtered by it.
   platformId   String
 
   // ── The key ───────────────────────────────────────────────────────────────────────────────
@@ -1039,11 +1087,12 @@ model AllegroCategoryLesson {
   conditionId String?
   subtypeId   String?
 
-  // ── What was published ────────────────────────────────────────────────────────────────────
-  // Allegro's own category id, with the name and the breadcrumb beside it as **display snapshots**
-  // (the ADR-0025 §3 rule): the id is the truth, and a screen can name a category without a live
-  // call. A category restructured on Allegro leaves this pointing at nothing, which the publish is
-  // what turns into a refusal and the settings panel is where it is deleted.
+  // ── What was listed ───────────────────────────────────────────────────────────────────────
+  // The marketplace's own category id, with the name and the breadcrumb beside it as **display
+  // snapshots** (the ADR-0025 §3 rule): the id is the truth, and a screen can name a category without
+  // a live call. A category restructured on the marketplace leaves this pointing at nothing — which
+  // on Allegro the publish turns into a refusal, on Delcampe the upload does, and which the settings
+  // panel is where it is deleted.
   categoryId   String
   categoryName String?
   categoryPath String?
@@ -1056,7 +1105,7 @@ model AllegroCategoryLesson {
   createdAt  DateTime @default(now())
 
   collection Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact         @relation("PlatformAllegroCategoryLesson", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Contact         @relation("PlatformCategoryLesson", fields: [platformId], references: [id], onDelete: Cascade)
   // All three key references cascade: a learned association is derived knowledge about data that has
   // gone, not something the collector would want left behind pointing at an id that no longer names
   // anything.
@@ -1067,15 +1116,15 @@ model AllegroCategoryLesson {
   // One row per key per platform. The key parts are nullable and a null is a *value* of the key here,
   // so the unique index is created `NULLS NOT DISTINCT` by hand in the migration (ADR-0006) — Prisma
   // cannot express it, and without it every mixed offer would add a new row instead of bumping one:
-  //     CREATE UNIQUE INDEX "allegro_category_lesson_key"
-  //         ON "allegro_category_lesson"("platformId", "areaId", "issuedYear", "conditionId", "subtypeId")
+  //     CREATE UNIQUE INDEX "platform_category_lesson_key"
+  //         ON "platform_category_lesson"("platformId", "areaId", "issuedYear", "conditionId", "subtypeId")
   //         NULLS NOT DISTINCT;
   @@index([collectionId])
   @@index([platformId])
   @@index([areaId])
   @@index([conditionId])
   @@index([subtypeId])
-  @@map("allegro_category_lesson")
+  @@map("platform_category_lesson")
 }
 
 // What was answered for a category's parameters — the **category → parameter values** register
@@ -1085,6 +1134,10 @@ model AllegroCategoryLesson {
 // cheap to publish once its category has been picked by hand, while the first is what makes an old
 // key free. One row **per parameter** rather than one per category holding all of them, so a category
 // that gains a parameter does not invalidate what is known about the others.
+//
+// It stayed **Allegro's** when the first register went platform-generic (#609): Delcampe's categories
+// carry no parameters, so there is nothing here for a second marketplace to share — and that the two
+// registers were separate tables from the start is exactly what made only the shared half shared.
 model AllegroCategoryParameterMemory {
   id           String @id @default(cuid())
   collectionId String
@@ -1211,7 +1264,7 @@ model CollectionArea {
   collectionAreaVendors  CollectionAreaVendor[]
   issues                 Issue[]
   formatFactors          StampFormatFactor[]
-  allegroCategoryLessons AllegroCategoryLesson[]
+  platformCategoryLessons PlatformCategoryLesson[]
 
   @@map("collection_area")
 }
@@ -2382,6 +2435,26 @@ model Offer {
   // an offer half and a product half, and a product parameter sent among the offer's own is refused
   // by name (ADR-0027 §2).
   allegroCategoryParameters Json?
+  // ── The Delcampe category this upload row goes out in (#609) ──────────────────────────────────
+  // The same question on the marketplace next door, answered out of the same register
+  // (`PlatformCategoryLesson`) and stored the same way — on the offer, because the value is settled
+  // while the listing is being prepared and read later by the file that exports it (#610).
+  //
+  // Four columns rather than Allegro's six: a Delcampe category carries **no parameters at all**, so
+  // there is nothing corresponding to `allegroCategoryParameters`, and `delcampeCategorySource` has
+  // only two values (`learned` | `manual`) because Delcampe has no title-guess of its own to fall
+  // back on — an unmatched key falls through to the picker, which is a person rather than a source.
+  //
+  // The per-offer override is not a nicety here, it is the reason the design works: Delcampe files a
+  // souvenir sheet under its own category (`7911`) while the same country and condition as a single
+  // stamp goes to `7938`, and nothing in this collection records "this is a souvenir sheet"
+  // dependably enough to key on. So the key answers for the common case and the offer says otherwise
+  // where it must.
+  delcampeCategoryId        String?
+  delcampeCategoryName      String?
+  delcampeCategoryPath      String?
+  delcampeCategorySource    String?
+  delcampeCategoryMatchedOn String?
   // The Allegro offer this listing was published as (#477), and the publication state this app last
   // knew it in. Written only by a publish Allegro accepted, and never by hand.
   //
@@ -3052,7 +3125,7 @@ model Contact {
   // the `defaultCollageTemplateId` shape (#308), for the same reason: a default is one row of the
   // list, not a flag on every row that something has to keep exclusive.
   allegroListingProfiles AllegroListingProfile[] @relation("PlatformAllegroListingProfile")
-  allegroCategoryLessons AllegroCategoryLesson[] @relation("PlatformAllegroCategoryLesson")
+  platformCategoryLessons PlatformCategoryLesson[] @relation("PlatformCategoryLesson")
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[] @relation("PlatformAllegroCategoryParameterMemory")
   defaultAllegroListingProfile AllegroListingProfile? @relation("PlatformDefaultAllegroListingProfile", fields: [defaultAllegroListingProfileId], references: [id], onDelete: SetNull)
   // The same pair for Delcampe (#608; ADR-0034).

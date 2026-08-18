@@ -11,43 +11,44 @@ import {
 } from "./allegro-api";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
-  type AllegroCategoryKey,
   type AllegroParameterValue,
-  type CategoryKeyAxis,
   type CategorySuggestionSource,
-  type MatchableLesson,
-  categoryLookupTiers,
-  deriveAllegroCategoryKey,
   explainCategoryMatch,
   isBlankParameterValue,
-  isEmptyCategoryKey,
-  pickLessonForTiers,
   readParameterValue,
 } from "./allegro-category-rules";
+import type { CategoryKeyAxis } from "./platform-category-rules";
+import {
+  type PlatformCategoryKeyView,
+  type PlatformCategoryLessonRow,
+  assertCollectionOwner,
+  deletePlatformCategoryLesson,
+  getPlatformCategoryKeyForOffer,
+  listPlatformCategoryLessons,
+  lookupPlatformCategoryLesson,
+  matchedPartNames,
+  recordPlatformCategoryLesson,
+  updatePlatformCategoryLesson,
+} from "./platform-category";
 
 // Allegro categories are **learned, not configured** (#488; ADR-0026) — the stamp-side half of what a
 // listing needs, beside #486's account-side half.
 //
-// The shape this module exists to guarantee: publishing a listing Allegro accepted records what a
-// kind of stamp was listed as, and the next offer of that kind opens with it already filled in. Two
-// registers, deliberately (ADR-0026 §1): a key → category, and a category's parameter → the value
-// last answered for it.
+// The shape this module exists to guarantee: finishing an offer records what a kind of stamp was
+// listed as, and the next offer of that kind opens with it already filled in. Two registers,
+// deliberately (ADR-0026 §1): a key → category, and a category's parameter → the value last answered
+// for it.
 //
-// The judgements — what an offer's key is, which order lookup relaxes in, what a match should say it
-// was matched on — are all in the pure `allegro-category-rules.ts`. This half queries, records and
-// talks to Allegro, and makes no decision of its own.
+// Since #609 the **first** register is not Allegro's own. It lives in `platform-category.ts` and
+// Delcampe reads the same table through the same ladder — it was always keyed per (collection,
+// platform), and two copies of the relaxation logic would drift on the first correction. What is
+// still here is everything Allegro adds on top: the parameter register, which Delcampe has no
+// equivalent of, the platform lookup, and Allegro's own guess at a listing title. This module
+// therefore makes no judgement about *keys* at all.
 //
-// Nothing here publishes anything. #477 is the consumer, and what it asks of this module is
-// {@link suggestAllegroCategoryForOffer} before the listing goes out and
-// {@link recordAllegroCategoryLesson} after Allegro accepted it.
-
-async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
-  const collection = await prisma.collection.findFirst({
-    where: { id: collectionId, ownerId },
-    select: { id: true },
-  });
-  if (!collection) throw new Error("Collection not found");
-}
+// Nothing here publishes anything. #494 is the consumer, and what it asks of this module is
+// {@link suggestAllegroCategoryForOffer} while the offer is being prepared and
+// {@link recordAllegroCategoryLesson} once the collector has finished preparing it.
 
 /** The platform this collection calls Allegro — what both registers hang off (ADR-0026 §5). Read
  *  through the same marker `setAllegroPlatform` writes, so "which platform is Allegro" keeps having
@@ -74,161 +75,6 @@ async function requireAllegroPlatform(collectionId: string): Promise<{ id: strin
 }
 
 // ---------------------------------------------------------------------------
-// The area tree lookup walks
-// ---------------------------------------------------------------------------
-
-interface AreaTree {
-  /** An area and its ancestors, nearest first — the rungs lookup walks up. */
-  pathOf: (areaId: string | null) => string[];
-  /** An area's own id together with every id below it. */
-  descendantsOf: (areaId: string) => string[];
-}
-
-/** The collection's areas as the two shapes lookup needs. One flat read: the tree is small, and
- *  walking it in memory beats a recursive query per rung. */
-async function loadAreaTree(collectionId: string): Promise<AreaTree> {
-  const rows = await prisma.collectionArea.findMany({
-    where: { collectionId },
-    select: { id: true, parentId: true },
-  });
-  const parentOf = new Map(rows.map((row) => [row.id, row.parentId]));
-  const childrenOf = new Map<string, string[]>();
-  for (const row of rows) {
-    if (!row.parentId) continue;
-    childrenOf.set(row.parentId, [...(childrenOf.get(row.parentId) ?? []), row.id]);
-  }
-
-  return {
-    pathOf(areaId) {
-      const path: string[] = [];
-      let current = areaId;
-      // A cycle is not a state this app can produce, but a walk that trusts the data to be a tree is
-      // a walk that hangs the request if it ever is not.
-      while (current && !path.includes(current) && parentOf.has(current)) {
-        path.push(current);
-        current = parentOf.get(current) ?? null;
-      }
-      return path;
-    },
-    descendantsOf(areaId) {
-      const out: string[] = [];
-      const queue = [areaId];
-      while (queue.length > 0) {
-        const next = queue.shift();
-        if (!next || out.includes(next)) continue;
-        out.push(next);
-        queue.push(...(childrenOf.get(next) ?? []));
-      }
-      return out;
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// An offer's key
-// ---------------------------------------------------------------------------
-
-/** An offer's key, with the names the four ids stand for so a screen can state it without four more
- *  reads, and the axes the copies disagreed about. */
-export interface AllegroCategoryKeyView {
-  key: AllegroCategoryKey;
-  areaName: string | null;
-  conditionName: string | null;
-  subtypeName: string | null;
-  mixedOn: CategoryKeyAxis[];
-}
-
-/**
- * The key one offer looks its category up by.
- *
- * Derived from the copies of **every** set, not one representative: an offer is what a buyer takes,
- * and a bundle whose second set is something else entirely is exactly the mixed case the agreement
- * rule exists for.
- *
- * The area is the stamp's **primary** area (`StampCollectionArea.isPrimary`); a stamp filed under
- * several areas without one marked primary contributes no area, which reads as mixed and relaxes.
- */
-export async function getAllegroCategoryKeyForOffer(
-  collectionId: string,
-  offerId: string
-): Promise<AllegroCategoryKeyView | null> {
-  const offer = await prisma.offer.findFirst({
-    where: { id: offerId, collectionId },
-    select: {
-      sets: {
-        select: {
-          items: {
-            select: {
-              item: {
-                select: {
-                  conditionId: true,
-                  stamp: {
-                    select: {
-                      issuedYear: true,
-                      subtypeId: true,
-                      stampAreaLinks: {
-                        where: { isPrimary: true },
-                        select: { collectionAreaId: true },
-                        take: 1,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-  if (!offer) return null;
-
-  const copies = offer.sets.flatMap((set) =>
-    set.items.map(({ item }) => ({
-      areaId: item.stamp.stampAreaLinks[0]?.collectionAreaId ?? null,
-      issuedYear: item.stamp.issuedYear,
-      conditionId: item.conditionId,
-      subtypeId: item.stamp.subtypeId,
-    }))
-  );
-
-  const { key, mixedOn } = deriveAllegroCategoryKey(copies);
-  return { key, mixedOn, ...(await namesFor(collectionId, key)) };
-}
-
-/** What the three id-shaped key parts are called, for the sentence a suggestion carries. */
-async function namesFor(
-  collectionId: string,
-  key: AllegroCategoryKey
-): Promise<{ areaName: string | null; conditionName: string | null; subtypeName: string | null }> {
-  const [area, condition, subtype] = await Promise.all([
-    key.areaId
-      ? prisma.collectionArea.findFirst({
-          where: { id: key.areaId, collectionId },
-          select: { name: true },
-        })
-      : null,
-    key.conditionId
-      ? prisma.stampCondition.findFirst({
-          where: { id: key.conditionId, collectionId },
-          select: { name: true },
-        })
-      : null,
-    key.subtypeId
-      ? prisma.stampSubtype.findFirst({
-          where: { id: key.subtypeId, collectionId },
-          select: { name: true },
-        })
-      : null,
-  ]);
-  return {
-    areaName: area?.name ?? null,
-    conditionName: condition?.name ?? null,
-    subtypeName: subtype?.name ?? null,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // The suggestion #477 opens its dialog with
 // ---------------------------------------------------------------------------
 
@@ -244,7 +90,7 @@ export interface AllegroCategoryParameterPrefill {
 
 export interface AllegroCategorySuggestion {
   /** What the offer was looked up by, and why it is as narrow as it is. */
-  key: AllegroCategoryKeyView;
+  key: PlatformCategoryKeyView;
   source: CategorySuggestionSource;
   categoryId: string | null;
   categoryName: string | null;
@@ -277,27 +123,29 @@ export async function suggestAllegroCategoryForOffer(
   offerId: string
 ): Promise<AllegroCategorySuggestion | null> {
   await assertCollectionOwner(ownerId, collectionId);
-  const keyView = await getAllegroCategoryKeyForOffer(collectionId, offerId);
+  const keyView = await getPlatformCategoryKeyForOffer(collectionId, offerId);
   if (!keyView) return null;
 
   const platform = await allegroPlatformOf(collectionId);
-  const learned = platform ? await lookupLesson(platform.id, collectionId, keyView) : null;
+  const learned = platform
+    ? await lookupPlatformCategoryLesson(collectionId, platform.id, keyView)
+    : null;
 
   if (learned) {
     return withParameters(ownerId, collectionId, {
       key: keyView,
       source: "learned",
-      categoryId: learned.lesson.categoryId,
-      categoryName: learned.lesson.categoryName,
-      categoryPath: learned.lesson.categoryPath,
+      categoryId: learned.categoryId,
+      categoryName: learned.categoryName,
+      categoryPath: learned.categoryPath,
       matchedOn: explainCategoryMatch({
         source: "learned",
-        matchedOn: matchedPartNames(keyView, learned.tier.relaxed),
-        relaxed: learned.tier.relaxed,
-        timesUsed: learned.lesson.timesUsed,
+        matchedOn: matchedPartNames(keyView, learned.relaxed),
+        relaxed: learned.relaxed,
+        timesUsed: learned.timesUsed,
       }),
-      relaxed: learned.tier.relaxed,
-      timesUsed: learned.lesson.timesUsed,
+      relaxed: learned.relaxed,
+      timesUsed: learned.timesUsed,
       parameters: [],
       parametersError: null,
     });
@@ -338,62 +186,6 @@ export async function suggestAllegroCategoryForOffer(
     parameters: [],
     parametersError: null,
   };
-}
-
-/** The register's answer for one key, or null. The whole platform's rows are read in one query and
- *  matched in memory: the register is a collector's own handful of kinds, and one round-trip per
- *  rung of the ladder would be up to a dozen for a deep area tree. */
-async function lookupLesson(
-  platformId: string,
-  collectionId: string,
-  keyView: AllegroCategoryKeyView
-): Promise<{
-  lesson: MatchableLesson & { categoryName: string | null; categoryPath: string | null };
-  tier: { relaxed: CategoryKeyAxis[] };
-} | null> {
-  // A key that asks nothing would match every row ever recorded, which is a coin toss rather than a
-  // suggestion. Allegro's own guess is the honest answer there.
-  if (isEmptyCategoryKey(keyView.key)) return null;
-
-  const tree = await loadAreaTree(collectionId);
-  const tiers = categoryLookupTiers(keyView.key, tree.pathOf(keyView.key.areaId), (areaId) =>
-    tree.descendantsOf(areaId)
-  );
-
-  const rows = await prisma.allegroCategoryLesson.findMany({
-    where: { platformId },
-    select: {
-      id: true,
-      areaId: true,
-      issuedYear: true,
-      conditionId: true,
-      subtypeId: true,
-      categoryId: true,
-      categoryName: true,
-      categoryPath: true,
-      timesUsed: true,
-      lastUsedAt: true,
-    },
-  });
-
-  const matchable = rows.map((row) => ({ ...row, lastUsedAt: row.lastUsedAt.getTime() }));
-  const picked = pickLessonForTiers(matchable, tiers);
-  if (!picked) return null;
-
-  const lesson = matchable.find((row) => row.id === picked.lesson.id);
-  return lesson ? { lesson, tier: picked.tier } : null;
-}
-
-/** The key parts a rung still asked about, as words — "Poland · 1935 · used". */
-function matchedPartNames(keyView: AllegroCategoryKeyView, relaxed: CategoryKeyAxis[]): string[] {
-  const parts: string[] = [];
-  if (keyView.areaName && !relaxed.includes("area")) parts.push(keyView.areaName);
-  if (keyView.key.issuedYear !== null && !relaxed.includes("year")) {
-    parts.push(String(keyView.key.issuedYear));
-  }
-  if (keyView.conditionName) parts.push(keyView.conditionName);
-  if (keyView.subtypeName && !relaxed.includes("subtype")) parts.push(keyView.subtypeName);
-  return parts;
 }
 
 /** Allegro's own suggestion from the listing title. Null on anything that goes wrong, including a
@@ -553,10 +345,10 @@ export async function getAllegroCategoryForm(
 }
 
 // ---------------------------------------------------------------------------
-// Recording — the call #477 makes on a listing Allegro accepted
+// Recording — the call made on an offer the collector has finished preparing
 // ---------------------------------------------------------------------------
 
-/** What a published listing teaches. */
+/** What a finished offer teaches. */
 export interface AllegroCategoryLessonInput {
   categoryId: string;
   categoryName?: string | null;
@@ -566,15 +358,21 @@ export interface AllegroCategoryLessonInput {
 }
 
 /**
- * Record what one offer was published as — **both** registers, and only on a success.
+ * Record what one offer the collector has finished preparing was categorised as — **both**
+ * registers.
  *
- * A refused publish teaches nothing: a category Allegro rejected is precisely the association that
- * must not be learned. Correcting a suggestion and publishing again is itself a lesson, and the newer
- * choice wins over the older one — which is why the key row is an upsert that overwrites the category
- * and bumps `timesUsed` rather than a second row beside the first.
+ * Correcting a suggestion and finishing the offer again is itself a lesson, and the newer choice
+ * wins over the older one — which is why the key row is an upsert that overwrites the category and
+ * bumps `timesUsed` rather than a second row beside the first.
  *
- * Called by #477 after Allegro answered 201 (or after the operation a 202 started has finished).
- * Nothing else calls it, and it publishes nothing itself.
+ * The key half is `platform-category.ts`'s since #609, and only the parameter half is written here.
+ * They are no longer one transaction, and deliberately: they are two registers (ADR-0026 §1), the
+ * unique index is what guards the key row's race, and neither is a prerequisite of the other — a
+ * parameter answer that failed to store leaves a perfectly good category association standing, which
+ * is a better outcome than losing both.
+ *
+ * Called from `learnAllegroCategoryFromReadyOffer` on the move to `ready` (#494). Nothing else calls
+ * it, and it publishes nothing itself.
  */
 export async function recordAllegroCategoryLesson(
   collectionId: string,
@@ -582,100 +380,52 @@ export async function recordAllegroCategoryLesson(
   input: AllegroCategoryLessonInput
 ): Promise<void> {
   const platform = await requireAllegroPlatform(collectionId);
-  const keyView = await getAllegroCategoryKeyForOffer(collectionId, offerId);
+  const keyView = await getPlatformCategoryKeyForOffer(collectionId, offerId);
   if (!keyView) throw new Error("Offer not found");
 
-  const categoryName = input.categoryName?.trim() || null;
-  const categoryPath = input.categoryPath?.trim() || null;
+  await recordPlatformCategoryLesson(collectionId, platform.id, keyView.key, {
+    categoryId: input.categoryId,
+    categoryName: input.categoryName,
+    categoryPath: input.categoryPath,
+  });
 
-  await prisma.$transaction(async (tx) => {
-    // A key that asks nothing is not worth recording: it would answer every future lookup with
-    // whatever was published last, which is the one thing a suggestion must never do.
-    if (!isEmptyCategoryKey(keyView.key)) {
-      const where = {
-        platformId: platform.id,
-        areaId: keyView.key.areaId,
-        issuedYear: keyView.key.issuedYear,
-        conditionId: keyView.key.conditionId,
-        subtypeId: keyView.key.subtypeId,
-      };
-      // Nulls are values of this key, and Prisma cannot address a `NULLS NOT DISTINCT` index in an
-      // `upsert`'s `where` — so the row is found first and the index stays the guard against the
-      // race, which is one collector publishing two listings at once and is not a real one.
-      const existing = await tx.allegroCategoryLesson.findFirst({ where, select: { id: true } });
-      if (existing) {
-        await tx.allegroCategoryLesson.update({
-          where: { id: existing.id },
-          data: {
-            categoryId: input.categoryId,
-            categoryName,
-            categoryPath,
-            timesUsed: { increment: 1 },
-            lastUsedAt: new Date(),
-          },
-        });
-      } else {
-        await tx.allegroCategoryLesson.create({
-          data: {
-            collectionId,
-            ...where,
-            categoryId: input.categoryId,
-            categoryName,
-            categoryPath,
-          },
-        });
-      }
-    }
-
-    for (const answered of input.parameters ?? []) {
-      // A blank answer teaches nothing about the next listing, and storing one would mean recalling
-      // an empty value over a good one the collector gave earlier.
-      if (isBlankParameterValue(answered.value)) continue;
-      await tx.allegroCategoryParameterMemory.upsert({
-        where: {
-          platformId_categoryId_parameterId: {
-            platformId: platform.id,
-            categoryId: input.categoryId,
-            parameterId: answered.parameterId,
-          },
-        },
-        create: {
-          collectionId,
+  for (const answered of input.parameters ?? []) {
+    // A blank answer teaches nothing about the next listing, and storing one would mean recalling an
+    // empty value over a good one the collector gave earlier.
+    if (isBlankParameterValue(answered.value)) continue;
+    await prisma.allegroCategoryParameterMemory.upsert({
+      where: {
+        platformId_categoryId_parameterId: {
           platformId: platform.id,
           categoryId: input.categoryId,
           parameterId: answered.parameterId,
-          parameterName: answered.parameterName?.trim() || null,
-          value: answered.value as object,
         },
-        update: {
-          parameterName: answered.parameterName?.trim() || null,
-          value: answered.value as object,
-          timesUsed: { increment: 1 },
-          lastUsedAt: new Date(),
-        },
-      });
-    }
-  });
+      },
+      create: {
+        collectionId,
+        platformId: platform.id,
+        categoryId: input.categoryId,
+        parameterId: answered.parameterId,
+        parameterName: answered.parameterName?.trim() || null,
+        value: answered.value as object,
+      },
+      update: {
+        parameterName: answered.parameterName?.trim() || null,
+        value: answered.value as object,
+        timesUsed: { increment: 1 },
+        lastUsedAt: new Date(),
+      },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
 // What Settings → Allegro shows, and what it can change
 // ---------------------------------------------------------------------------
 
-/** One learned association, as the panel reads it. */
-export interface AllegroCategoryLessonRow {
-  id: string;
-  /** The key in words — "Poland · 1935 · used · definitive", with `Any` where a part is absent. */
-  areaName: string | null;
-  issuedYear: number | null;
-  conditionName: string | null;
-  subtypeName: string | null;
-  categoryId: string;
-  categoryName: string | null;
-  categoryPath: string | null;
-  timesUsed: number;
-  lastUsedAt: string;
-}
+/** One learned association, as the panel reads it — the shared register's own row (#609), re-exported
+ *  so the Allegro panel keeps naming the type it renders rather than reaching past this module. */
+export type AllegroCategoryLessonRow = PlatformCategoryLessonRow;
 
 /** One remembered parameter answer, as the panel reads it. */
 export interface AllegroCategoryParameterRow {
@@ -726,22 +476,7 @@ export async function listAllegroLearnedCategories(
   }
 
   const [lessons, parameters] = await Promise.all([
-    prisma.allegroCategoryLesson.findMany({
-      where: { platformId: platform.id },
-      orderBy: [{ timesUsed: "desc" }, { lastUsedAt: "desc" }],
-      select: {
-        id: true,
-        issuedYear: true,
-        categoryId: true,
-        categoryName: true,
-        categoryPath: true,
-        timesUsed: true,
-        lastUsedAt: true,
-        area: { select: { name: true } },
-        condition: { select: { name: true } },
-        subtype: { select: { name: true } },
-      },
-    }),
+    listPlatformCategoryLessons(platform.id),
     prisma.allegroCategoryParameterMemory.findMany({
       where: { platformId: platform.id },
       orderBy: [{ categoryId: "asc" }, { parameterName: "asc" }],
@@ -760,18 +495,7 @@ export async function listAllegroLearnedCategories(
   return {
     platformId: platform.id,
     platformName: platform.name,
-    lessons: lessons.map((row) => ({
-      id: row.id,
-      areaName: row.area?.name ?? null,
-      issuedYear: row.issuedYear,
-      conditionName: row.condition?.name ?? null,
-      subtypeName: row.subtype?.name ?? null,
-      categoryId: row.categoryId,
-      categoryName: row.categoryName,
-      categoryPath: row.categoryPath,
-      timesUsed: row.timesUsed,
-      lastUsedAt: row.lastUsedAt.toISOString(),
-    })),
+    lessons,
     parameters: parameters.map((row) => ({
       id: row.id,
       categoryId: row.categoryId,
@@ -784,51 +508,22 @@ export async function listAllegroLearnedCategories(
   };
 }
 
-async function assertLessonOwner(ownerId: string, lessonId: string): Promise<{ collectionId: string }> {
-  const row = await prisma.allegroCategoryLesson.findUnique({
-    where: { id: lessonId },
-    select: { collectionId: true },
-  });
-  if (!row) throw new Error("That learned category is no longer there.");
-  await assertCollectionOwner(ownerId, row.collectionId);
-  return row;
-}
-
 /**
- * Point one learned association at a different category.
+ * Point one learned association at a different category, and forget one outright.
  *
- * The direct correction, and the reason the panel is not delete-only: a collector who spots a wrong
- * association should be able to say what the right one is, rather than delete the row and wait for
- * the next publish to teach it again. The count is **reset**, not kept — what was recorded seven
- * times was the old category, and carrying its support over to a category nothing has ever been
- * published into would be this app asserting something it has never seen.
+ * Both are the shared register's since #609 and are re-exported under the names Settings → Allegro
+ * already calls them by: the correction is about a key, not about Allegro, and a second copy of it
+ * would be one more thing to keep in step.
+ *
+ * The re-point is the reason the panel is not delete-only — a collector who spots a wrong
+ * association should be able to say what the right one is rather than delete the row and wait for
+ * the next offer to teach it again — and it **resets** the count, since what was recorded seven times
+ * was the old category.
  */
-export async function updateAllegroCategoryLesson(
-  ownerId: string,
-  lessonId: string,
-  category: { categoryId: string; categoryName?: string | null; categoryPath?: string | null }
-): Promise<void> {
-  await assertLessonOwner(ownerId, lessonId);
-  const categoryId = category.categoryId.trim();
-  if (!categoryId) throw new Error("A learned association needs a category.");
-  await prisma.allegroCategoryLesson.update({
-    where: { id: lessonId },
-    data: {
-      categoryId,
-      categoryName: category.categoryName?.trim() || null,
-      categoryPath: category.categoryPath?.trim() || null,
-      timesUsed: 1,
-      lastUsedAt: new Date(),
-    },
-  });
-}
+export const updateAllegroCategoryLesson = updatePlatformCategoryLesson;
 
-/** Forget one association. Nothing else changes: listings already published keep the category they
- *  went out with, Allegro holding those from the moment they were sent. */
-export async function deleteAllegroCategoryLesson(ownerId: string, lessonId: string): Promise<void> {
-  await assertLessonOwner(ownerId, lessonId);
-  await prisma.allegroCategoryLesson.delete({ where: { id: lessonId } });
-}
+/** Forget one association. Listings already published keep the category they went out with. */
+export const deleteAllegroCategoryLesson = deletePlatformCategoryLesson;
 
 /** Forget one remembered parameter answer. The next listing in that category asks for it again,
  *  which is the whole of the correction — there is no wrong value to replace, only one to stop

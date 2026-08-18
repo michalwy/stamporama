@@ -29,6 +29,11 @@
 //   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
 //     which is what makes the worklist a list that fills itself rather than one that has to be
 //     asked for;
+//   - the Delcampe category refresh (#609) — a daily walk of Delcampe's published category list, so
+//     an upload row's `category_id` reaches the collector with a name on it. It reads somebody
+//     else's site, so it is careful about it: nothing at all unless a collection has named a
+//     Delcampe platform, nothing while the snapshot is under twenty hours old, sequential and spaced
+//     requests, and a rate-limit refusal ends the pass rather than being retried through;
 //   - the Allegro event poll (#481) — a two-minute poll over both of Allegro's event streams, which
 //     is what makes a bid on one of your auctions, and an order landing, visible within minutes.
 //     Its own timer rather than a faster sync: it reads what *changed* and so costs two requests
@@ -46,9 +51,11 @@ import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup, sweepStorageCache } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
+import { refreshDelcampeCategoriesIfStale } from "@/lib/delcampe-category-catalog";
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
+const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
 
 let started = false;
 
@@ -238,6 +245,34 @@ export async function start(): Promise<void> {
   const eventsInterval = setInterval(events, EVENT_POLL_INTERVAL_MS);
   eventsInitial.unref?.();
   eventsInterval.unref?.();
+
+  // Delcampe's published category list (#609). Daily rather than hourly because the tree changes a
+  // handful of times a year, and the pass is a walk of a few hundred pages of somebody else's site —
+  // `refreshDelcampeCategoriesIfStale` is what makes that safe to schedule: it declines on an
+  // instance with no Delcampe platform, and declines again while the snapshot is under twenty hours
+  // old, so a dev server restarting every few minutes never crawls.
+  //
+  // A pass that stops short is **not** an error and is not logged as one: Delcampe asking us to slow
+  // down is an answer, what was already read is kept, and tomorrow's pass starts again.
+  const delcampeCategories = async () => {
+    try {
+      const result = await refreshDelcampeCategoriesIfStale();
+      if (!result) return;
+      console.log(
+        `[delcampe-categories] read ${result.read} categor(ies) from ${result.pagesRead} page(s)` +
+          (result.complete ? "" : ` — stopped short: ${result.message ?? "unknown reason"}`)
+      );
+    } catch (err) {
+      console.error("[delcampe-categories] refresh failed", err);
+    }
+  };
+
+  // Offset past every sweep above, and past the Allegro passes: a boot should not spend its first
+  // two minutes on background reads of other people's servers.
+  const delcampeInitial = setTimeout(delcampeCategories, 150_000);
+  const delcampeInterval = setInterval(delcampeCategories, DELCAMPE_CATEGORY_INTERVAL_MS);
+  delcampeInitial.unref?.();
+  delcampeInterval.unref?.();
 
   // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.

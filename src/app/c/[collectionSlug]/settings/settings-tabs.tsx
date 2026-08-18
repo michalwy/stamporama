@@ -21,6 +21,7 @@ import { AllegroProfilesPanel } from "./allegro-profiles-panel";
 import { AllegroCategoriesPanel } from "./allegro-categories-panel";
 import { DelcampePlatformPanel } from "./delcampe-platform-panel";
 import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
+import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
@@ -42,6 +43,7 @@ import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
 import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
+import type { DelcampeLearnedCategoryList } from "@/lib/delcampe-categories";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -87,6 +89,7 @@ interface SettingsTabsProps {
   /** Which platform is Delcampe (#608), and the profiles its uploads are built from. */
   delcampePlatformId: string | null;
   delcampeListingProfiles: DelcampeListingProfileList;
+  delcampeLearnedCategories: DelcampeLearnedCategoryList;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -176,6 +179,7 @@ export function SettingsTabs({
   allegroLearnedCategories,
   delcampePlatformId,
   delcampeListingProfiles,
+  delcampeLearnedCategories,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -481,6 +485,12 @@ export function SettingsTabs({
 
           <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Listing profiles</h2>
           <DelcampeProfilesPanel collectionId={collectionId} list={delcampeListingProfiles} />
+
+          {/* Third and last, for the Allegro tab's reason (#609): a profile is what the collector
+              configures, and this is what the app has learned — read here only to be corrected, and
+              to say how current Delcampe's own category list is. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Categories</h2>
+          <DelcampeCategoriesPanel list={delcampeLearnedCategories} />
         </section>
       )}
       {activeTab === "assistant" && (
