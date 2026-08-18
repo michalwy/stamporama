@@ -29,11 +29,12 @@ import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { MultiSelectFilter } from "./multi-select-filter";
-import { filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
+import { filterStampTreeBy, filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
 
-// The rule that decides what survives the checklist filter is pure and lives in
-// `src/lib/stamp-tree-filter.ts`; re-exported here so the tree helpers stay in one import.
-export { filterStampTreeByChecklists };
+// The rules that decide what survives a narrowing — the checklist filter (#531) and the list
+// filter's stamp matches (#631) — are pure and live in `src/lib/stamp-tree-filter.ts`; re-exported
+// here so the tree helpers stay in one import.
+export { filterStampTreeBy, filterStampTreeByChecklists };
 
 // Shared presentational building blocks for an issue and its stamp/variant tree,
 // so the main issues list (issue-row.tsx) and the inventory stamp-picker popup

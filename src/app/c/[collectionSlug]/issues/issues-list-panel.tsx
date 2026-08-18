@@ -60,6 +60,7 @@ import { effectivePrimaryVendorId, resolveAreaFilterIds } from "@/app/c/[collect
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
+import type { StampFilterQuery } from "@/lib/issue-stamp-match";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -245,6 +246,18 @@ export function IssuesListPanel({
       sortDir,
     }),
     [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, year, displayConditionId, displayFormatId, sortBy, sortDir]
+  );
+
+  // The half of the filter set a stamp *inside* an issue can satisfy (#631). Handed to every row so
+  // an expanded tree shows the variants that matched and the numbering they hang under, rather than
+  // the whole tree an Infla-shaped issue would bury them in. Area and year are the issue's own.
+  const stampFilter: StampFilterQuery = useMemo(
+    () => ({
+      search: search || undefined,
+      catalogNumber: effectiveCatalogNumber || undefined,
+      catalogVendorId: effectiveCatalogVendorId || undefined,
+    }),
+    [search, effectiveCatalogNumber, effectiveCatalogVendorId]
   );
 
   const yearFacetFilters: IssueYearFacetFilters = useMemo(
@@ -568,6 +581,7 @@ export function IssuesListPanel({
                   displayConditionId={displayConditionId || undefined}
                   displayFormatId={displayFormatId}
                   formats={formats}
+                  stampFilter={stampFilter}
                 />
               );
             })}

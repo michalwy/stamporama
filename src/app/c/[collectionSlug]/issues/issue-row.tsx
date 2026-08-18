@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
+import { matchedStampsInIssue, type StampFilterQuery } from "@/lib/issue-stamp-match";
 import { useIssueMembers, useInvalidateIssues } from "./use-issues-query";
 import { RecomputeRangeDialog } from "./recompute-range-dialog";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
@@ -18,7 +19,7 @@ import {
   IssueCatalogChips,
   ChecklistsBadge,
   ChecklistTreeFilter,
-  filterStampTreeByChecklists,
+  filterStampTreeBy,
   StampTitle,
   StampDetailLine,
   type StampTreeNodeData,
@@ -113,6 +114,9 @@ interface StampTreeNodeProps {
   onAddChild: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
   onMove: (stampId: string) => void;
+  /** True when the active list filter narrowed this tree (#631) — everything left is a match or
+   *  the numbering one hangs under, so a node with children starts open rather than collapsed. */
+  narrowed: boolean;
   /** Reorder mode (#549), passed down so this node's own children become a drag list too. */
   reorder: StampTreeReorder | null;
   /** This row's place in its sibling group's drag list, or null when it cannot move. */
@@ -140,6 +144,7 @@ function StampTreeNode({
   onAddChild,
   onDelete,
   onMove,
+  narrowed,
   reorder,
   drag,
 }: StampTreeNodeProps) {
@@ -151,9 +156,10 @@ function StampTreeNode({
   const isContextOnly = contextIds.has(node.stampId);
 
   // Expansion is *derived*, never a setState-in-effect: a node is open when it just gained a
-  // sub-stamp (#359) or when the collector opened it themselves. The user's own toggle is
-  // remembered against the signal it was made under, so a manual collapse sticks — until the
-  // next add under this same node, whose fresh nonce supersedes it.
+  // sub-stamp (#359), when a filter narrowed the tree around it (#631), or when the collector
+  // opened it themselves. The user's own toggle is remembered against the signal it was made
+  // under, so a manual collapse sticks — until the next add under this same node, whose fresh
+  // nonce supersedes it.
   const autoExpandNonce = expandStamp?.stampId === node.stampId ? expandStamp.nonce : null;
   const [userToggle, setUserToggle] = useState<{
     forNonce: number | null;
@@ -162,7 +168,7 @@ function StampTreeNode({
   const collapsed =
     userToggle && userToggle.forNonce === autoExpandNonce
       ? userToggle.collapsed
-      : autoExpandNonce === null;
+      : autoExpandNonce === null && !narrowed;
   const setCollapsed = (next: boolean) =>
     setUserToggle({ forNonce: autoExpandNonce, collapsed: next });
 
@@ -382,6 +388,7 @@ function StampTreeNode({
               onAddChild={onAddChild}
               onDelete={onDelete}
               onMove={onMove}
+              narrowed={narrowed}
               reorder={reorder}
               drag={childDrag}
             />
@@ -439,6 +446,10 @@ interface IssueRowProps {
   displayFormatId?: string | null;
   /** The collection's formats, for naming {@link displayFormatId} on the quick-price badge. */
   formats?: StampFormatData[];
+  /** The half of the list's filter set a *stamp inside this issue* can satisfy (#631) — the quick
+   *  search and the catalog number. Where the row's own header does not account for it, the tree
+   *  is narrowed to the stamps that do; area and year are the issue's own and are not here. */
+  stampFilter?: StampFilterQuery;
 }
 
 export function IssueRow({
@@ -458,6 +469,7 @@ export function IssueRow({
   displayConditionId,
   displayFormatId,
   formats,
+  stampFilter,
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const [hovered, setHovered] = useState(false);
@@ -504,12 +516,21 @@ export function IssueRow({
     members: loadedMembers,
     onSaved: () => invalidateMembers(collectionId, issue.id),
   });
-  // The checklist filter is dropped while reordering: dragging inside a narrowed tree would move
-  // a stamp past a sibling that was never on screen, and the server refuses a partial group.
+  // Which stamps the list's own filter picked out (#631). Null — the ordinary case — when nothing
+  // narrows on a stamp, when the row's header already explains the hit, or when no stamp matched
+  // after all; the tree is then drawn whole.
+  const matchedStampIds = useMemo(
+    () => (stampFilter ? matchedStampsInIssue(issue, loadedMembers, stampFilter, vendorMap) : null),
+    [issue, loadedMembers, stampFilter, vendorMap]
+  );
+  // Both narrowings are dropped while reordering: dragging inside a narrowed tree would move a
+  // stamp past a sibling that was never on screen, and the server refuses a partial group.
   const effectiveChecklistIds = treeReorder.active ? [] : treeChecklistIds;
-  const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeByChecklists(
+  const effectiveMatchedIds = treeReorder.active ? null : matchedStampIds;
+  const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeBy(
     buildStampTree(treeReorder.members),
-    effectiveChecklistIds
+    effectiveChecklistIds,
+    effectiveMatchedIds
   );
 
   const addCopy = useInventoryAddAction({
@@ -997,6 +1018,7 @@ export function IssueRow({
                   onMove={(stampId) =>
                     callbacks.onMoveStamp(issue.id, stampId)
                   }
+                  narrowed={!!effectiveMatchedIds}
                   reorder={treeReorder.reorder}
                   drag={drag}
                 />

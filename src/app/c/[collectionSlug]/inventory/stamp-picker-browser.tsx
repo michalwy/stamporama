@@ -4,8 +4,11 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
-import { catalogMatchKey, catalogKeyMatches, parseCatalogSearch } from "@/lib/catalog-number";
-import { parseEntityNoSearch } from "@/lib/quick-jump";
+import { parseCatalogSearch } from "@/lib/catalog-number";
+import {
+  matchedStampsInIssue,
+  needsInnerStampMatch,
+} from "@/lib/issue-stamp-match";
 import type {
   IssueListItem,
   IssueChecklistSummary,
@@ -51,56 +54,6 @@ import { Icon } from "@/app/icons";
 type CreateState =
   | { kind: "issue"; areaId: string | null }
   | { kind: "stamp"; issue: IssueListItem; parent?: StampNodeData };
-
-/** Does the issue's *own* header explain why the search returned this row?
- *
- * The server decides which issues a search matches, and it matches an issue by things the row
- * already draws (name, year, its short number, its declared range) as well as by the stamps inside
- * it. #186 hangs on telling those apart: a row that surfaced only through a stamp opens itself and
- * dims the rest, and one that matched on its own reads normally. Nothing has to come back from the
- * server for that — the row carries every header field the query could have hit, so it works it out
- * for itself and only the *inner* case pays for reading the issue's stamps.
- *
- * Numbers are matched on their normalized key (vendor abbreviation + area prefix + number), so a
- * prefixed query resolves in any spacing — `Mi PL 200`, `MiPL200`, `PL200` and bare `200` all
- * reach the same issue (#146).
- */
-function issueHeaderMatches(issue: IssueListItem, search: string, vendorMap: VendorMap): boolean {
-  const q = search.trim().toLowerCase();
-  if (!q) return true;
-  if ((issue.name ?? "").toLowerCase().includes(q)) return true;
-  if (issue.year != null && String(issue.year).includes(q)) return true;
-  if (parseEntityNoSearch(search) === issue.issueNo) return true;
-  const keys = issue.catalogNumbers.flatMap((cn) => {
-    const v = vendorMap.get(cn.catalogVendorId);
-    const abbr = v?.vendorAbbreviation ?? "";
-    return [cn.firstNumber, cn.lastNumber]
-      .filter((n): n is string => !!n)
-      .map((n) => catalogMatchKey(abbr, v?.prefix, n));
-  });
-  return catalogKeyMatches(search, keys);
-}
-
-/** Which of an issue's stamps a search matched — by name or by catalog number (#186). Empty when
- *  none did, which is also the answer for a row whose header explained the hit. */
-function matchStampsInIssue(
-  members: StampNodeData[],
-  search: string,
-  vendorMap: VendorMap
-): Set<string> {
-  const q = search.trim().toLowerCase();
-  const out = new Set<string>();
-  if (!q) return out;
-  for (const m of members) {
-    const nameHit = (m.name ?? "").toLowerCase().includes(q);
-    const keys = m.catalogNumbers.map((cn) => {
-      const v = vendorMap.get(cn.catalogVendorId);
-      return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
-    });
-    if (nameHit || catalogKeyMatches(search, keys)) out.add(m.stampId);
-  }
-  return out;
-}
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -650,8 +603,9 @@ function PickIssueRow({
   const [hovered, setHovered] = useState(false);
   // Where the row's own name/year/number does not account for the search that returned it, the hit
   // must have come from a stamp inside — so this row reads its stamps even while collapsed, which
-  // is the one case #186 needs them for. Everything else waits for the collector to expand.
-  const probeForInnerMatch = !issueHeaderMatches(issue, search, vendorMap);
+  // is the one case #186 needs them for. Everything else waits for the collector to expand. The
+  // rule itself is `issue-stamp-match.ts`, shared with the Issues list (#631).
+  const probeForInnerMatch = needsInnerStampMatch(issue, { search }, vendorMap);
   const { data: members = [], isLoading: membersLoading } = useIssueMembers(
     collectionId,
     issue.id,
@@ -659,11 +613,10 @@ function PickIssueRow({
   );
   // Null while the probe is still out or the header explained the hit: only a row that really
   // surfaced through its stamps dims the rest of its tree.
-  const matchedStampIds = useMemo(() => {
-    if (!probeForInnerMatch) return null;
-    const matched = matchStampsInIssue(members, search, vendorMap);
-    return matched.size > 0 ? matched : null;
-  }, [probeForInnerMatch, members, search, vendorMap]);
+  const matchedStampIds = useMemo(
+    () => matchedStampsInIssue(issue, members, { search }, vendorMap),
+    [issue, members, search, vendorMap]
+  );
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || matchedStampIds !== null;
