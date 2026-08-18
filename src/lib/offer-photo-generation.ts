@@ -1097,8 +1097,12 @@ export interface OfferUploadImage {
  * Since #487 it is what an **API upload** reads too, which is why the mime and the photo id travel
  * beside the bytes: an image a marketplace refuses has to be reported as the image it was, and a
  * ZIP entry's name alone cannot say which photo that is.
+ *
+ * Exported since #610, which needs the **slug** as well as the images: the Delcampe bundle is flat,
+ * so two offers whose titles slug the same have to be told apart, and the same rule that names a
+ * folder in the bulk ZIP names them there.
  */
-async function readOfferUploadSet(
+export async function readOfferUploadSet(
   ownerId: string,
   offerId: string
 ): Promise<{ slug: string; images: OfferUploadImage[] } | { reason: string }> {

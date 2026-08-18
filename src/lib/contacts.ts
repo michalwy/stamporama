@@ -124,9 +124,10 @@ export interface ContactData extends ContactRoles {
   maxPhotos: number | null;
   maxPhotoEdge: number | null;
   maxPhotoFileSizeMib: number | null;
-  /** The platform's listing-text caps (#403), each null when it states none — the same kind of hard
-   * technical limit as the photo ones above, and read live for the same reason. Only meaningful for
-   * the `platform` role. */
+  /** The platform's listing-text caps (#403, the title one #610), each null when it states none —
+   * the same kind of hard technical limit as the photo ones above, and read live for the same
+   * reason. Only meaningful for the `platform` role. */
+  maxTitleLength: number | null;
   maxDescriptionLength: number | null;
   maxPrivateNoteLength: number | null;
   /** Which Assistant platform module can post to this platform (#406), or null when the Assistant
@@ -182,6 +183,7 @@ const CONTACT_SELECT = {
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
+  maxTitleLength: true,
   maxDescriptionLength: true,
   maxPrivateNoteLength: true,
   platformModule: true,
@@ -304,7 +306,8 @@ export interface ContactCreateInput {
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
   maxPhotoFileSizeMib?: number | null;
-  /** The platform's listing-text caps (#403) — null each means "no limit stated". */
+  /** The platform's listing-text caps (#403, #610) — null each means "no limit stated". */
+  maxTitleLength?: number | null;
   maxDescriptionLength?: number | null;
   maxPrivateNoteLength?: number | null;
   /** The photo defaults new offers on this platform are seeded from (#308). `photoSides` is
@@ -509,6 +512,7 @@ export async function createContact(
         ...platformListingDefaults(data),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
+        maxTitleLength: data.maxTitleLength ?? null,
         maxDescriptionLength: data.maxDescriptionLength ?? null,
         maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },
@@ -561,6 +565,7 @@ export async function updateContact(
         ...platformListingDefaults(data),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
+        maxTitleLength: data.maxTitleLength ?? null,
         maxDescriptionLength: data.maxDescriptionLength ?? null,
         maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },

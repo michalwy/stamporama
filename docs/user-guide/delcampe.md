@@ -121,6 +121,60 @@ uploaded into yet.
 Rows already uploaded are never touched by either — Delcampe holds a listing's category from the
 moment the file went up.
 
+## Uploading a batch
+
+Delcampe listings are created by uploading a file, and Stamporama builds it. On the
+[Bulk listing](offers.md#bulk-listing--posting-a-prepared-batch) screen, with Delcampe picked as the
+platform, **↓ Easy Uploader bundle** downloads one ZIP holding:
+
+- `delcampe-upload.csv` — one row per offer shown, and
+- every picture those rows name, loose in the same archive.
+
+Unzip it, then hand Easy Uploader the CSV with the pictures beside it. Nothing has to be renamed or
+rearranged: the `images` column names exactly the files that came out of the archive, in the same
+order the offer's [photo plan](offers.md#generating-the-photos) puts them in.
+
+The batch is **whatever the screen is showing** — the area and year filters on the left are how you
+cut a session down, and the button exports that, not the whole platform.
+
+Each row carries the offer's title and description, its price and quantity, the category on its
+**On Delcampe** card, and the shipping model, renewal and promotion settings of the profile that
+applies to it. `personal_reference` carries the offer's own [short address](offers.md#offer-number-and-short-link)
+— only you can see it on Delcampe, and it is what will let Stamporama match the listing back to this
+offer later.
+
+### Nothing is exported until every row can be written
+
+If an offer in the batch cannot be turned into a row, **no file is produced** and the screen lists
+what is wrong, one line per offer, linking to it. The usual reasons: no category yet, no photos
+generated, no listing profile, a title over the platform's cap, or an auction — auction uploads are
+not written yet.
+
+That is on purpose. The file goes up once, and a row quietly missing from it is a listing that never
+happened, sitting among the offers waiting for the next batch, looking exactly like them. Fixing the
+list and exporting again is one pass.
+
+Nothing is ever shortened to fit, either. A title over the cap is refused, not trimmed — a shortened
+title is one nobody proofread.
+
+### The title cap
+
+Delcampe refuses a title past a certain length. Type that length into **Max title (characters)** on
+the Delcampe platform contact (see [Contacts](contacts.md#listing-text-limits)), and from then on a
+counter appears wherever a title is written, and the export refuses an over-long one before building
+anything.
+
+Leave it blank if you do not know the number; nothing checks it until you do.
+
+### How many listings you may have running
+
+Delcampe caps how many sales you can have running at once, and the cap depends on the subscription
+you hold. **Stamporama does not check it** and cannot: it never sees your Delcampe account, only the
+offers here — listings end, sell and relist on Delcampe without this app hearing about it, so any
+number it produced would be its own guess wearing the badge of a real limit.
+
+Keeping a batch inside your package is yours to judge before you upload.
+
 ## On an offer
 
 An offer on the Delcampe platform carries an **On Delcampe** card on its own screen, under the

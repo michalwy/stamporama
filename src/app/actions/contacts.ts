@@ -76,6 +76,7 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
   // no limit stated, and a non-platform contact carries none at all.
   const textLimits = isPlatform
     ? parsePlatformTextLimits({
+        maxTitleLength: str(formData, "maxTitleLength"),
         maxDescriptionLength: str(formData, "maxDescriptionLength"),
         maxPrivateNoteLength: str(formData, "maxPrivateNoteLength"),
       })

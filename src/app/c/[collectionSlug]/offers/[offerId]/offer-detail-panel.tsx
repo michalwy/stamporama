@@ -41,6 +41,7 @@ import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { TextLengthCounter } from "@/app/c/[collectionSlug]/shared/text-length-counter";
 import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
@@ -542,6 +543,14 @@ export function OfferDetailPanel({
               the button says so rather than copying a label the platform never sees. */}
           {offer.edited.name && <EditedChip what="title" />}
           <CopyButton value={offer.name} label="listing title" />
+          {/* What this platform accepts for a title (#610), where a title is written. Delcampe's
+              Easy Uploader export refuses over it (nothing is truncated), so the number has to be
+              visible while the wording is still being decided rather than at export time. */}
+          <TextLengthCounter
+            text={offer.name}
+            limit={offer.platformTextLimits.maxTitleLength}
+            what="title"
+          />
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />

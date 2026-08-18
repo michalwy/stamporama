@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import { buildAreaPath } from "@/lib/area-path";
@@ -27,6 +28,7 @@ import {
   useAssistantPresence,
 } from "../assistant-handoff";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { DELCAMPE_PLATFORM_MODULE } from "@/lib/platform-modules";
 import { Icon } from "@/app/icons";
 
 // The bulk listing workspace (#322): one posting session on one marketplace. Most platforms have no
@@ -94,8 +96,14 @@ export function ListingWorkspacePanel({
   // the last one did — a bulk action reports itself, because nothing on screen would otherwise say
   // that thirty runs were queued or that four offers were left out of an archive.
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const [bulkPending, setBulkPending] = useState<"regenerate" | "zip" | null>(null);
+  const [bulkPending, setBulkPending] = useState<"regenerate" | "zip" | "delcampe" | null>(null);
   const [bulkNotice, setBulkNotice] = useState<string | undefined>();
+  // Why an Easy Uploader export produced nothing (#610). Its own state rather than `actionError`:
+  // it is a list, one line per offer, and it is the collector's next piece of work rather than a
+  // failure to report and dismiss.
+  const [exportRefusals, setExportRefusals] = useState<
+    { offerId: string; label: string; reasons: string[] }[]
+  >([]);
   const { invalidateAll } = useInvalidateOffers();
 
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
@@ -126,6 +134,9 @@ export function ListingWorkspacePanel({
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
+      // A refusal list describes the batch it was raised for, and re-scoping the session makes it a
+      // statement about offers that are no longer on screen.
+      setExportRefusals([]);
       const params = new URLSearchParams(searchParams.toString());
       for (const [key, value] of Object.entries(updates)) {
         if (value) params.set(key, value);
@@ -346,6 +357,61 @@ export function ListingWorkspacePanel({
     }
   }
 
+  /**
+   * The Easy Uploader bundle for the shown batch (#610): one CSV plus the pictures it names, as one
+   * flat ZIP. Delcampe only — it is that marketplace's own file format, and the button is absent
+   * everywhere else rather than disabled.
+   *
+   * A refusal comes back as a **list** and is shown as one: an offer that cannot be written as a row
+   * (no category, no photos, a title over the platform's cap) is reported before a file exists, and
+   * nothing is exported until every one of them is fixed. Which is the point — the file goes up once,
+   * and a row silently missing from it is a listing nobody notices never happened.
+   */
+  async function downloadDelcampeBundle() {
+    setActionError(undefined);
+    setBulkNotice(undefined);
+    setExportRefusals([]);
+    setBulkPending("delcampe");
+    try {
+      const res = await fetch(`/api/collections/${collectionId}/offers/delcampe-export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerIds: ordered.map((o) => o.id) }),
+      });
+      if (!res.ok) {
+        const body = await res
+          .json()
+          .then((b) => b as { error?: string; refusals?: typeof exportRefusals })
+          .catch(() => undefined);
+        setActionError(body?.error ?? "Failed to build the upload bundle.");
+        setExportRefusals(body?.refusals ?? []);
+        return;
+      }
+      const blob = await res.blob();
+      const fileName =
+        /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ??
+        "delcampe-upload.zip";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      const rowCount = Number(res.headers.get("X-Row-Count") ?? 0);
+      const imageCount = Number(res.headers.get("X-Image-Count") ?? 0);
+      setBulkNotice(
+        `Exported ${rowCount} ${rowCount === 1 ? "row" : "rows"} and ${imageCount} ${
+          imageCount === 1 ? "picture" : "pictures"
+        } · upload the CSV through Delcampe's Easy Uploader with the pictures beside it`
+      );
+    } catch {
+      setActionError("Failed to build the upload bundle.");
+    } finally {
+      setBulkPending(null);
+    }
+  }
+
   /** Step an offer back to `preparing` (#246): something turned out to be missing, and it should not
    * sit in the posting batch until it is fixed. Reversible from the Offers list, so no confirmation —
    * the offer simply leaves the session. */
@@ -424,6 +490,27 @@ export function ListingWorkspacePanel({
                 {bulkPending === "zip" ? "Preparing…" : "↓ ZIP all shown"}
               </button>
             </Tooltip>
+            {/* Delcampe's own listing path is a file (#610), so the batch leaves as one: the CSV
+                Easy Uploader consumes and the pictures its `images` column names, flat in one ZIP.
+                Absent on every other platform rather than disabled — it is not a thing you could
+                do there. */}
+            {platform?.platformModule === DELCAMPE_PLATFORM_MODULE && (
+              <Tooltip
+                content={`Build the Easy Uploader bundle for all ${visible.length} shown ${
+                  visible.length === 1 ? "offer" : "offers"
+                } — one CSV plus the pictures it names`}
+                align="end"
+              >
+                <button
+                  type="button"
+                  onClick={downloadDelcampeBundle}
+                  disabled={bulkPending !== null}
+                  style={{ ...BULK_BTN, color: "var(--color-accent)" }}
+                >
+                  {bulkPending === "delcampe" ? "Building…" : "↓ Easy Uploader bundle"}
+                </button>
+              </Tooltip>
+            )}
           </>
         )}
       </div>
@@ -444,6 +531,38 @@ export function ListingWorkspacePanel({
         >
           {bulkNotice}
         </p>
+      )}
+
+      {/* Why the export produced nothing (#610), one offer per line with every reason it carries.
+          A list rather than a sentence: each line is fixed somewhere different — a category on the
+          offer's On Delcampe card, a photo run on its card, a title in the header — and a count
+          would send the collector back to the same screen once per fault. */}
+      {exportRefusals.length > 0 && (
+        <div
+          style={{
+            padding: "0.625rem 0.75rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-warning)",
+            background: "var(--color-bg-page)",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+          }}
+        >
+          <ul style={{ margin: 0, paddingLeft: "1.125rem", display: "grid", gap: "0.25rem" }}>
+            {exportRefusals.map((refusal) => (
+              <li key={refusal.offerId}>
+                <Link
+                  href={`/c/${collectionSlug}/offers/${refusal.offerId}`}
+                  style={{ color: "var(--color-accent)", textDecoration: "none" }}
+                >
+                  {refusal.label}
+                </Link>
+                {" — "}
+                {refusal.reasons.join("; ")}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* A failed action outside the publish dialog (sending an offer back) has nowhere else to be

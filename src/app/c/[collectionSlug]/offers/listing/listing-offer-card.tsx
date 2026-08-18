@@ -423,7 +423,10 @@ function PostingKit({
     >
       <ListingBlockers blockers={blockers} collectionId={collectionId} inset />
 
-      <Field label="Title" copyValue={offer.name}>
+      {/* The platform's cap on the title (#610), read live like the two below it. On Delcampe this
+          is the figure the Easy Uploader export refuses over, so the batch it refuses is the batch
+          this counter has been reporting on all along. */}
+      <Field label="Title" copyValue={offer.name} limit={offer.platformTextLimits.maxTitleLength}>
         <p style={{ ...BODY, color: offer.name ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
           {offer.name ?? "No title yet — the derived label is used instead."}
         </p>

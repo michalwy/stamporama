@@ -51,11 +51,14 @@ Alternatively, photos can be stored in **Google Cloud Storage** — the installe
 
 There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
-If you sell on **Delcampe**, listings go up as an uploaded file rather than through an API — see
-[Delcampe](docs/user-guide/delcampe.md). Naming a platform as Delcampe switches one piece of
-outbound traffic on: once a day the instance reads Delcampe's own published category list, so an
-upload row's category number arrives with a name on it. It ships with that list already read, needs
-no credentials, and instances that do not sell on Delcampe never make the request.
+If you sell on **Delcampe**, listings go up as an uploaded file rather than through an API — the app
+builds that file, one CSV plus the pictures it names, for a batch of prepared offers; see
+[Delcampe](docs/user-guide/delcampe.md). Each row points back at the offer through this instance's
+own address, so `BETTER_AUTH_URL` has to be right for the export to run. Naming a platform as
+Delcampe switches one piece of outbound traffic on: once a day the instance reads Delcampe's own
+published category list, so an upload row's category number arrives with a name on it. It ships with
+that list already read, needs no credentials, and instances that do not sell on Delcampe never make
+the request.
 
 If you sell on **Allegro**, the instance can also talk to Allegro's own API using an application you
 register yourself — see [Allegro](docs/user-guide/allegro.md): it keeps a worklist of what has sold

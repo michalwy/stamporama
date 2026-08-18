@@ -443,16 +443,22 @@ with regularly.
 
 ### Listing text limits
 
-Under the templates sits **Listing text limits** — **Max description (characters)** and **Max private
-note (characters)**. These are the platform's own hard caps: how much text its listing form will
-physically accept. Colnect, for example, takes 100 characters for each. Leave a field blank when the
-platform states no limit, which is the usual case.
+Under the templates sits **Listing text limits** — **Max title (characters)**, **Max description
+(characters)** and **Max private note (characters)**. These are the platform's own hard caps: how
+much text its listing form will physically accept. Colnect, for example, takes 100 characters for
+each of its two texts. Leave a field blank when the platform states no limit, which is the usual
+case.
 
-They are recorded per platform, and separately per field, because platforms cap the two texts
+They are recorded per platform, and separately per field, because platforms cap the texts
 independently. Once one is set, a **character counter** appears wherever that text is written or
-copied — on the offer's own [Listing text](offers.md#listing-text-description-and-private-note) card
-and in the [bulk listing kit](offers.md#the-posting-kit) — turning amber and saying by how much once a
-text runs over.
+copied — beside the title in the offer's header, on its
+[Listing text](offers.md#listing-text-description-and-private-note) card and in the
+[bulk listing kit](offers.md#the-posting-kit) — turning amber and saying by how much once a text runs
+over.
+
+The title cap does one thing more, on [Delcampe](delcampe.md#the-title-cap): its listings are created
+from a file Stamporama builds, and a title over the cap **refuses the export** rather than being
+discovered when Delcampe rejects the upload.
 
 Nothing is ever truncated against these limits. The text is yours; the counter only makes sure you
 learn about the cap while writing rather than in the platform's form. They are read **live**, like the

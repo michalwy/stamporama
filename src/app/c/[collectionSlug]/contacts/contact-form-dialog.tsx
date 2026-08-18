@@ -712,6 +712,14 @@ export function ContactFormDialog({
                   <LabelWithError>Listing text limits</LabelWithError>
                   <div style={{ display: "flex", gap: "0.75rem" }}>
                     <LimitField
+                      id="contact-max-title-length"
+                      name="maxTitleLength"
+                      label="Max title (characters)"
+                      max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                      defaultValue={contact?.maxTitleLength}
+                      isPending={isPending}
+                    />
+                    <LimitField
                       id="contact-max-description-length"
                       name="maxDescriptionLength"
                       label="Max description (characters)"
@@ -730,8 +738,9 @@ export function ContactFormDialog({
                   </div>
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                     How long this platform lets each text be — a character counter appears wherever the
-                    offer&apos;s description and private note are written or copied. Leave a field blank
-                    when the platform states no limit.
+                    offer&apos;s title, description and private note are written or copied. Leave a
+                    field blank when the platform states no limit. Delcampe refuses an Easy Uploader
+                    row whose title is over its cap (#610), so the export refuses it first.
                   </p>
                 </div>
 

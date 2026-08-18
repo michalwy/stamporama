@@ -3458,6 +3458,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxPhotos: true,
           maxPhotoEdge: true,
           maxPhotoFileSizeMib: true,
+          maxTitleLength: true,
           maxDescriptionLength: true,
           maxPrivateNoteLength: true,
           platformModule: true,
@@ -3770,6 +3771,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
     },
     platformTextLimits: {
+      maxTitleLength: offer.platform.maxTitleLength,
       maxDescriptionLength: offer.platform.maxDescriptionLength,
       maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
     },

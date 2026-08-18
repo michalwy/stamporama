@@ -7,8 +7,9 @@
  * listing texts at 100 characters (#402), and a limit discovered in that form — after the text was
  * written and the offer marked Ready — is discovered too late.
  *
- * Two limits rather than one, because platforms cap the two texts independently; Colnect happening
- * to use the same number for both is not a reason to fuse them. Null means "no limit stated", which
+ * One limit per text rather than one for all of them, because platforms cap them independently:
+ * Colnect happening to use the same number for its two is not a reason to fuse them, and Delcampe
+ * caps the title while stating nothing about the rest (#610). Null means "no limit stated", which
  * stays the normal case. Like the photo limits they are **read live** and never seeded onto an offer
  * (#310): they describe the platform, so tightening one applies to every listing at once.
  *
@@ -20,6 +21,10 @@ export const MAX_LISTING_TEXT_LENGTH_LIMIT = 100000;
 
 /** A platform's listing-text caps. Null means "no limit stated". */
 export interface PlatformTextLimits {
+  /** Cap on `Offer.name` (#209), or null. Third of the three and last to arrive (#610): a title is
+   * short enough that no platform's form had refused one until Delcampe, whose listings are created
+   * from an uploaded file — where "too long" is discovered after the file was built. */
+  maxTitleLength: number | null;
   /** Cap on `Offer.description` (#266), or null. */
   maxDescriptionLength: number | null;
   /** Cap on `Offer.privateNote` (#267), or null. */
@@ -30,6 +35,7 @@ export type TextLimitParseResult<T> = { ok: true; value: T } | { ok: false; mess
 
 /** No platform states a limit — the shape a non-platform contact and an unconfigured one share. */
 export const NO_TEXT_LIMITS: PlatformTextLimits = {
+  maxTitleLength: null,
   maxDescriptionLength: null,
   maxPrivateNoteLength: null,
 };
@@ -52,9 +58,13 @@ function parseOptionalLength(raw: string, label: string): TextLimitParseResult<n
 
 /** Validates the raw strings the contact form submits for a platform's text limits. */
 export function parsePlatformTextLimits(raw: {
+  maxTitleLength: string;
   maxDescriptionLength: string;
   maxPrivateNoteLength: string;
 }): TextLimitParseResult<PlatformTextLimits> {
+  const maxTitleLength = parseOptionalLength(raw.maxTitleLength, "Max title length");
+  if (!maxTitleLength.ok) return maxTitleLength;
+
   const maxDescriptionLength = parseOptionalLength(
     raw.maxDescriptionLength,
     "Max description length"
@@ -70,6 +80,7 @@ export function parsePlatformTextLimits(raw: {
   return {
     ok: true,
     value: {
+      maxTitleLength: maxTitleLength.value,
       maxDescriptionLength: maxDescriptionLength.value,
       maxPrivateNoteLength: maxPrivateNoteLength.value,
     },

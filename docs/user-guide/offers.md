@@ -938,6 +938,14 @@ session with the area/year rail narrows what they touch:
   or past the platform's limit are not in it. A very large batch is refused with a message asking you
   to narrow it first — the archive is built in one go.
 
+### Exporting a Delcampe batch
+
+With **Delcampe** picked as the platform, the toolbar carries one more action: **↓ Easy Uploader
+bundle**, which builds the file Delcampe lists from — one CSV plus the pictures its rows name, as one
+archive — for exactly the offers shown. It appears on no other platform, because it is Delcampe's own
+format. See the [Delcampe guide](delcampe.md#uploading-a-batch) for what the rows carry, and for why
+an offer that cannot be written stops the whole export rather than being quietly left out.
+
 ### When something turns out to be missing
 
 If you get into a listing and find the description is wrong, a scan is missing, or the price needs

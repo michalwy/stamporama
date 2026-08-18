@@ -1,0 +1,13 @@
+-- A platform's cap on the **listing title** (#610), beside the two text caps #403 already holds.
+--
+-- The third of the same kind of fact: what this platform's own form physically accepts, read live
+-- and never seeded onto an offer. It arrives now because Delcampe's Easy Uploader is the first
+-- listing path where an over-long title is discovered *after* a file has been built and uploaded —
+-- the export refuses on it instead, and refusing needs a number.
+--
+-- A column rather than a constant in the exporter, for the reason `minBidStepThreshold` is one
+-- (ADR-0034 §3): Delcampe does not publish the figure, so whatever this app holds is somebody's
+-- observation, and an observation kept in a settings field is corrected the first time a listing
+-- disagrees with it. NULL — no cap stated — on every platform including Delcampe's own, until the
+-- collector types what they were told.
+ALTER TABLE "contact" ADD COLUMN "maxTitleLength" INTEGER;

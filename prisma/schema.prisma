@@ -3041,6 +3041,11 @@ model Contact {
   // the platform, so every surface reads them live. Two columns rather than one because platforms
   // cap the two texts independently — Colnect using one number for both is not a reason to fuse
   // them. Nothing is ever truncated against them; the app reports, it does not cut.
+  // Delcampe caps a listing title and the cap is not published anywhere this app can read (#610),
+  // which is why it is a field rather than a constant: an upload refused for a title 4 characters
+  // over is discovered after the file was built, and a guess compiled into the exporter is one
+  // nobody could correct. Blank on every platform until somebody types the number they were told.
+  maxTitleLength       Int?
   maxDescriptionLength Int?
   maxPrivateNoteLength Int?
   // Which Assistant **platform module** can post to this platform (#406, part of #155) — the

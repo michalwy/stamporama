@@ -7,28 +7,41 @@ import {
   textLengthState,
 } from "../../src/lib/listing-text-limits";
 
-const NO_LIMITS = { maxDescriptionLength: "", maxPrivateNoteLength: "" };
+const NO_LIMITS = { maxTitleLength: "", maxDescriptionLength: "", maxPrivateNoteLength: "" };
 
 describe("parsePlatformTextLimits", () => {
   it("reads blank fields as no limit stated", () => {
     const parsed = parsePlatformTextLimits(NO_LIMITS);
     assert.ok(parsed.ok);
-    assert.deepEqual(parsed.value, { maxDescriptionLength: null, maxPrivateNoteLength: null });
+    assert.deepEqual(parsed.value, {
+      maxTitleLength: null,
+      maxDescriptionLength: null,
+      maxPrivateNoteLength: null,
+    });
   });
 
-  it("reads the two limits independently", () => {
+  it("reads the three limits independently", () => {
     const parsed = parsePlatformTextLimits({
+      maxTitleLength: "80",
       maxDescriptionLength: "100",
       maxPrivateNoteLength: " 250 ",
     });
     assert.ok(parsed.ok);
-    assert.deepEqual(parsed.value, { maxDescriptionLength: 100, maxPrivateNoteLength: 250 });
+    assert.deepEqual(parsed.value, {
+      maxTitleLength: 80,
+      maxDescriptionLength: 100,
+      maxPrivateNoteLength: 250,
+    });
   });
 
-  it("allows one limit without the other — Colnect caps both, other platforms cap one", () => {
-    const parsed = parsePlatformTextLimits({ ...NO_LIMITS, maxDescriptionLength: "100" });
+  it("allows one limit without the others — Colnect caps two texts, Delcampe caps the title", () => {
+    const parsed = parsePlatformTextLimits({ ...NO_LIMITS, maxTitleLength: "80" });
     assert.ok(parsed.ok);
-    assert.deepEqual(parsed.value, { maxDescriptionLength: 100, maxPrivateNoteLength: null });
+    assert.deepEqual(parsed.value, {
+      maxTitleLength: 80,
+      maxDescriptionLength: null,
+      maxPrivateNoteLength: null,
+    });
   });
 
   it("rejects a non-integer", () => {
