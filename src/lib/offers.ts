@@ -56,6 +56,8 @@ import { colnectGradeFor } from "./colnect-conditions";
 import { catalogChipCopyValueFromLabel } from "./catalog-number";
 import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
+  listedVariantKey,
+  loadOfferListedVariants,
   resolveListingCatalogItemIds,
   type ResolvedCatalogItemId,
 } from "./listing-catalog-ids";
@@ -530,7 +532,7 @@ async function generateListingTexts(
   }
   const [context, listedAs] = await Promise.all([
     listingContext(collectionId, offerId, [description, privateNote]),
-    listedAsByItem(collectionId, composition, platformModule, [description, privateNote]),
+    listedAsByItem(collectionId, offerId, composition, platformModule, [description, privateNote]),
   ]);
   const sets = await templateSets(ownerId, collectionId, composition, language, listedAs);
   const copies = sets.flatMap((s) => [...s.copies]);
@@ -577,6 +579,7 @@ async function listingContext(
  * there, `{offerUrl}`'s rule exactly. */
 async function listedAsByItem(
   collectionId: string,
+  offerId: string | null,
   composition: readonly OfferComposition[],
   platformModule: string | null,
   templates: readonly (string | null)[]
@@ -586,7 +589,7 @@ async function listedAsByItem(
   }
   const itemIds = [...new Set(composition.flatMap((s) => [...s.itemIds]))];
   if (itemIds.length === 0) return new Map();
-  const [items, labeller] = await Promise.all([
+  const [items, labeller, chosen] = await Promise.all([
     prisma.item.findMany({
       where: { id: { in: itemIds }, collectionId },
       select: {
@@ -599,6 +602,11 @@ async function listedAsByItem(
       },
     }),
     makeOfferLabeller(collectionId),
+    // An offer being **created** has no row yet, so it can hold no choice — the texts render the
+    // derivation, and the second pass that already exists for `{offerUrl}` (#415) is what would pick
+    // one up. Nothing has to be re-decided here: a choice is recorded on an offer that exists, and
+    // recording one re-runs this generation.
+    offerId ? loadOfferListedVariants([offerId]) : new Map<string, string>(),
   ]);
   const resolved = await resolveListingCatalogItemIds(
     collectionId,
@@ -610,6 +618,9 @@ async function listedAsByItem(
       formatId: item.formatId,
       unknownVariant: isUnknownVariantStamp(item.stamp),
       ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+      listedAsStampId: offerId
+        ? (chosen.get(listedVariantKey(offerId, item.stampId, item.conditionId)) ?? null)
+        : null,
     })),
     labeller
   );
@@ -2747,6 +2758,10 @@ export async function offersSummary(
 const LISTING_SETS_SELECT = {
   id: true,
   title: true,
+  // Whose offer the set belongs to, for the **hand-picked listing variant** an offer may record
+  // (`OfferListedVariant`): the derivation is asked over as many offers' sets as the caller holds at
+  // once, so each set has to say which offer's choices apply to it.
+  offerId: true,
   items: {
     select: {
       itemId: true,
@@ -2916,6 +2931,12 @@ async function resolveSetCatalogItemIds(
   labeller: OfferLabeller
 ): Promise<Map<string, ResolvedCatalogItemId>> {
   const catalogued = usesPlatformCatalogue(platformModule);
+  // What the offers themselves say to list under, where the collector has said anything. One query
+  // for the whole batch, and none at all for a platform listing against no catalogue — a choice
+  // about a catalogue entry has nothing to say where there is no catalogue.
+  const chosen = catalogued
+    ? await loadOfferListedVariants(sets.map((set) => set.offerId))
+    : new Map<string, string>();
   return resolveListingCatalogItemIds(
     collectionId,
     sets.flatMap((set) =>
@@ -2927,6 +2948,8 @@ async function resolveSetCatalogItemIds(
         formatId: item.formatId,
         unknownVariant: catalogued && isUnknownVariantStamp(item.stamp),
         ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+        listedAsStampId:
+          chosen.get(listedVariantKey(set.offerId, item.stampId, item.conditionId)) ?? null,
       }))
     ),
     labeller
@@ -3399,6 +3422,18 @@ export interface OfferPlatformItem {
    * unpriced variant (#617), where *which* variant is cheapest is not known and there is nothing
    * truthful to name; that row carries {@link unpricedVariantStampId} instead. */
   catalogItemVariant: string | null;
+  /** Whether that variant was **chosen by hand on this offer** rather than derived from the price
+   * rollup (`OfferListedVariant`). It is what stops a recorded decision being drawn in the `~`
+   * vocabulary #238 reserves for an inference — the card marks the two apart, since one is a fact
+   * about what the collector decided and the other about what the prices happened to say. */
+  catalogItemVariantChosen: boolean;
+  /** The umbrella whose variant tree the picker opens over — this row's own stamp, set on **every**
+   * row where a variant is the thing being listed and could therefore be chosen: an unknown-variant
+   * umbrella carrying no item-ID of its own. Deliberately not gated on the derivation having
+   * succeeded, because the row that most wants a choice is the one where it did not — an unpriced
+   * tree (#617) is otherwise reachable only by pricing every variant first. Null on a plain stamp and
+   * on an umbrella matched by hand, both of which stand under themselves. */
+  variantChoiceStampId: string | null;
   /** The umbrella whose variant tree wants pricing (#618) — this row's own stamp, and set **only**
    * where the derivation above came back empty because a variant carries no price (#617's
    * `unpriced-variants`). Which variant is cheapest is not knowable until every one of them is
@@ -3480,6 +3515,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         select: {
           id: true,
           title: true,
+          offerId: true,
           items: {
             select: {
               itemId: true,
@@ -3908,6 +3944,13 @@ function platformItemsFor(
           : colnectSearchUrl(searchLabel ? catalogChipCopyValueFromLabel(searchLabel) : null),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
         catalogItemVariant: variantLabel,
+        catalogItemVariantChosen: resolved?.sourceChosen ?? false,
+        // Offered wherever there is a variant to stand under at all — which is decided by the stamp
+        // being an unmatched umbrella, not by whether the rollup managed to pick one.
+        variantChoiceStampId:
+          isUnknownVariantStamp(item.stamp) && !item.stamp.colnectId?.trim()
+            ? item.stampId
+            : null,
         unpricedVariantStampId:
           resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
         copyCount: 1,
@@ -4848,7 +4891,7 @@ export async function markOfferListingSynced(ownerId: string, offerId: string): 
  * copies at all, so nothing was written — composing it now writes the title, for the same reason it
  * refreshes it later.
  */
-async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<void> {
+export async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {

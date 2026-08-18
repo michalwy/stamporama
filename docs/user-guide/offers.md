@@ -804,6 +804,40 @@ The stamp's own row keeps its numbers, its name and its condition, and carries n
 Hovering the line says which variant it is and why, and — while it is the reason the offer is
 blocked — that matching it here is what unblocks the offer.
 
+#### Saying which variant it should be
+
+The cheapest variant is a **default**, not the last word. You may be able to rule a variant out from
+the piece in front of you, you may prefer to sell under the variant that is actually being traded,
+and you may not want to price a whole tree just to post one offer. So the variant's name on that line
+is a **button**: press it and pick from the umbrella's whole tree.
+
+The picker lists every variant, indented as the price grid draws them, each with its catalog number,
+its price at this condition, and whether it carries an item-ID on the platform. The first row is
+**automatic** — and it says what automatic currently resolves to, so you are choosing against
+something you can see rather than against a blank. Pressing a row records it and closes; pressing
+*automatic* goes back to the derivation.
+
+Three things are worth knowing about a choice:
+
+- **It belongs to that offer, and to that stamp in that condition.** Nothing is written onto the
+  stamp — the variant stays unidentified, which is the truth about it — so the same copy listed on
+  another platform, or in a later offer, takes the automatic answer again. A used and an MNH copy of
+  one stamp can be sold as different variants, which is why the choice is per condition.
+- **The catalog value does not follow it.** What the copy is *worth* goes on being the cheapest
+  variant's price, because that is a fact about the stamp; what it is *sold as* is a fact about this
+  listing. They agree while the app works both out for you, and choosing by hand is choosing to part
+  them — deliberately, and only on this offer.
+- **You can pick a variant that isn't matched yet.** The offer stays blocked until it has an item-ID,
+  but it is now blocked on the variant *you* named, and the `⚡ Link` on its line matches exactly
+  that one. Being unable to say what you want to sell until you had already gone and matched it would
+  be the worse constraint.
+
+Where the app can name no variant at all — a tree that isn't fully priced, or a base stamp whose own
+catalog price won the valuation — there is no line to press, so the row carries a **Listed as…**
+button in its last column instead. On an unpriced tree it sits beside **Price variants**: pricing the
+tree is what makes the automatic answer possible, and naming a variant is the shortcut for when you
+already know the answer.
+
 Nothing is written to your collection: the base stamp stays unmatched, because "this listing goes
 under the cheapest variant" is a fact about one listing, not a claim about which variant the stamp
 is. It is worked out afresh every time, so a catalogue correction that changes which variant is
@@ -817,14 +851,18 @@ different screens:
 - **A variant has no catalog price.** Then which variant is cheapest is not known yet, so the offer is
   blocked and the **unpriced variants** are named, each as a link to its own screen. Record their
   prices and the listing resolves itself. This covers a stamp none of whose variants is priced as much
-  as one where a single price is missing — the answer is equally unknown either way.
+  as one where a single price is missing — the answer is equally unknown either way. If you already
+  know which variant you are selling, **Listed as…** on that row
+  ([saying which variant it should be](#saying-which-variant-it-should-be)) skips the whole question.
 - **The cheapest variant has no item-ID of its own.** Every variant being priced, the cheapest one is
   known and simply is not matched on the platform. The offer is blocked, and what is named is *that
   variant* — it is the stamp to go and match, and matching it lists the copy straight away. The
   On Colnect card names it on the row's own line and puts **Search** and **⚡ Link** right there, so
   it is matched from the offer rather than hunted down through the base stamp; the search runs on the
   **variant's** number, since that is the entry the item-ID belongs on. The next-cheapest variant is
-  not quietly used instead, since that would be selling under a different claim.
+  not quietly used instead, since that would be selling under a different claim — though you may
+  [name one yourself](#saying-which-variant-it-should-be), which is a claim you are making rather
+  than one the app made for you.
 
 ### Filling the missing item-IDs without leaving the offer
 

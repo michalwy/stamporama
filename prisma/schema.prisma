@@ -174,6 +174,9 @@ model StampCondition {
   platformCategoryLessons PlatformCategoryLesson[]
   wantAcceptance WantCondition[]
   profileAcceptance AcceptanceProfileCondition[]
+  /** The condition half of a hand-picked listing variant — the cheapest variant is a per-condition
+   *  answer, so overriding it is too. See {@link OfferListedVariant}. */
+  offerListedVariants OfferListedVariant[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -1470,6 +1473,10 @@ model Stamp {
   photos             Photo[]
   translations       StampTranslation[]
   tileCandidates     ScanTileCandidate[]
+  /** Offers that hold this stamp as an umbrella and were told by hand which variant to list it
+   *  under, and offers that named this stamp as that variant. See {@link OfferListedVariant}. */
+  listedVariantUmbrellas OfferListedVariant[] @relation("OfferListedVariantUmbrella")
+  listedVariantChoices   OfferListedVariant[] @relation("OfferListedVariantChoice")
 
   @@index([subtypeId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
@@ -2635,6 +2642,9 @@ model Offer {
   /** What a Delcampe active-items export has said about this listing (#611). `SetNull` for the row
    * above's reason: an observation about a marketplace listing outlives the offer being deleted. */
   delcampeListings  DelcampeListing[]  @relation("DelcampeListingOffer")
+  /** Which variant this offer lists an unknown-variant umbrella under, where the collector has said
+   * so by hand. See {@link OfferListedVariant}. */
+  listedVariants    OfferListedVariant[]
 
   // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
   // uniqueness is the guarantee that it names one listing.
@@ -2862,6 +2872,55 @@ model OfferSetItem {
   @@id([offerSetId, itemId])
   @@index([itemId])
   @@map("offer_set_item")
+}
+
+// Which catalogue entry one offer lists an **unknown-variant umbrella** under, chosen by hand.
+//
+// #616 derives that entry — the cheapest variant, from the same rollup that values the copy — and
+// stores nothing, deliberately: a derived answer cannot go stale and cannot assert that the umbrella
+// *is* the variant. This is the escape hatch for the cases a derivation cannot cover: a collector who
+// can rule a variant out from the piece in front of them, one who would rather sell under a variant
+// that is actually being traded on the platform, and one who does not want to price a whole tree
+// (#617) to post a single offer.
+//
+// **Keyed on the offer's own row — `offer × stamp × condition`.** Not per copy: `OfferSetItem` is
+// N:M (a copy can sit in several offers' sets at once), so a per-copy choice would leak into every
+// other listing holding that copy, and the sets of one offer have to stay interchangeable (#405),
+// which this key guarantees rather than merely permits. Not per stamp either: the cheapest variant is
+// a per-condition answer, so a used and an MNH copy of one umbrella may want different variants, and
+// a shared row would force them together. The certificate and format axes the rollup also resolves at
+// are deliberately *not* in the key — the On Colnect card the choice is made on is itself keyed on
+// `stamp × condition`, and a choice made on a line has to apply to that line.
+//
+// The chosen variant may be **any** stamp in the umbrella's subtree, matched or not. Choosing an
+// unmatched one still refuses the listing (#405's `missing-catalog-id`) — but against the variant the
+// collector picked, whose own match affordance is right there on the card; requiring a match first
+// would mean not being able to say what you want to sell before you can say it.
+//
+// What this deliberately does **not** move is the **valuation**. #616 held that a listing and its
+// valuation can never drift apart, which was true of a derivation and cannot be true of a choice:
+// what a copy is worth is a fact about the stamp and stays the rollup's lowest-variant answer, while
+// what it is sold as is a fact about one listing. A collector overriding this is choosing that drift.
+model OfferListedVariant {
+  offerId        String
+  /** The umbrella the offer holds copies of — the stamp whose variant is not identified. */
+  stampId        String
+  conditionId    String
+  /** The variant to list under. A descendant of `stampId`; validated by the writer rather than by
+   *  the database, a subtree not being expressible as a constraint. */
+  variantStampId String
+
+  offer     Offer          @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  stamp     Stamp          @relation("OfferListedVariantUmbrella", fields: [stampId], references: [id], onDelete: Cascade)
+  condition StampCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  variant   Stamp          @relation("OfferListedVariantChoice", fields: [variantStampId], references: [id], onDelete: Cascade)
+
+  @@id([offerId, stampId, conditionId])
+  @@index([offerId])
+  @@index([stampId])
+  @@index([conditionId])
+  @@index([variantStampId])
+  @@map("offer_listed_variant")
 }
 
 // A sale transaction (ADR-0012). Single platform, single currency. Shared amounts —

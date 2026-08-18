@@ -968,6 +968,7 @@ export function OfferDetailPanel({
           the sets rather than inside them. Renders nothing for a platform with no module. */}
       <OfferPlatformItemsCard
         items={offer.platformItems}
+        offerId={offer.id}
         platformName={offer.platformName}
         offerState={offer.state}
         collectionId={collectionId}

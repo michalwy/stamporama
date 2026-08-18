@@ -7,6 +7,7 @@ import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
+import { ListedVariantDialog } from "./listed-variant-dialog";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
@@ -62,6 +63,15 @@ import { Icon } from "@/app/icons";
 // be named — which one is cheapest is not known — so the row has no line beneath it, no links, and
 // `+ CV` would not help either: the umbrella's own price is not what the rollup reads. That row gets
 // **Price variants** instead (#618) — the whole tree on one grid, which is what actually closes it.
+//
+// All of that is a **default**, and the card is where it is overridden. The variant's name on that
+// line is a button: it opens the picker over the umbrella's whole tree, and what is chosen is
+// recorded on *this offer* (`OfferListedVariant`), never on the stamp. A chosen variant then drops
+// the `~` and the italics — #238's marks are for an inference, and this is a decision — while a row
+// that names no variant at all carries **Listed as…** in the last column instead, which is what makes
+// the choice reachable on the two rows the derivation could not answer: an unpriced tree, and an
+// umbrella whose own catalogue price won the valuation. Both entry points open the same dialog, and a
+// row that has a variant line does not get the button as well: the name is already the trigger.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
@@ -163,6 +173,7 @@ const HEADER_CHIP: React.CSSProperties = {
 
 export function OfferPlatformItemsCard({
   items,
+  offerId,
   platformName,
   offerState,
   collectionId,
@@ -170,6 +181,9 @@ export function OfferPlatformItemsCard({
   areas,
 }: {
   items: OfferPlatformItem[];
+  /** Whose listing the hand-picked variants belong to — a choice is recorded on the offer, not on
+   *  the stamp, so the picker is opened for this offer's row and no other. */
+  offerId: string;
   /** Named in the heading, so the card says whose catalogue these links go to. */
   platformName: string;
   /** Where the offer is in its lifecycle: the card is the working surface only while `preparing`. */
@@ -229,6 +243,9 @@ export function OfferPlatformItemsCard({
   });
   const [priceError, setPriceError] = useState<string | undefined>();
   const [isPricing, startPricing] = useTransition();
+  // Which row's variant is being chosen (extends #616). One dialog for the card, opened over the row
+  // that was pressed — a hook cannot be called in a `.map`, the price grid's own constraint.
+  const [choosingFor, setChoosingFor] = useState<OfferPlatformItem | null>(null);
 
   // The handoff is named after the entry being matched, which for an umbrella is the **variant** its
   // search was built from — the strip saying "Opening the search for Mi·PL 865" while the window
@@ -416,6 +433,8 @@ export function OfferPlatformItemsCard({
             // whose Catalog button opened `Mi·PL 865a` was one row quietly standing for two stamps,
             // and a `~` chip beside the name was not enough to say which of them the buttons meant.
             const variant = item.catalogItemVariant;
+            // Whether that variant is the collector's own decision rather than the rollup's answer.
+            const chosen = item.catalogItemVariantChosen;
 
             // One block of links, drawn on the row or on the variant's line below it. Where they
             // point is resolved server-side against whatever the row stands under, so the only
@@ -569,15 +588,17 @@ export function OfferPlatformItemsCard({
                       and instead of it: pricing the umbrella itself would not close it, the tree
                       being what the rollup reads. */}
                   {item.unpricedVariantStampId ? (
-                    <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
-                      <button
-                        type="button"
-                        onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
-                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
-                      >
-                        Price variants
-                      </button>
-                    </Tooltip>
+                    <>
+                      <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
+                        <button
+                          type="button"
+                          onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
+                          style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                        >
+                          Price variants
+                        </button>
+                      </Tooltip>
+                    </>
                   ) : (
                     (() => {
                       const unpriced = unpricedFor(item);
@@ -600,6 +621,26 @@ export function OfferPlatformItemsCard({
                       );
                     })()
                   )}
+                  {/* Saying outright which variant this offer sells it as — the way out of a row the
+                      derivation could not answer (extends #616). It appears only where there is no
+                      variant *line* below: with one, the name on that line is the trigger, and a
+                      second control saying the same thing is the same button twice. So this covers
+                      the two rows that name nothing — an unpriced tree (#617), where pricing the
+                      whole thing is the other way out and this is the shortcut, and an umbrella whose
+                      own catalogue price won the valuation, which has no rollup gap at all and would
+                      otherwise have nowhere to say it. Plain, not amber: a decision this offer may
+                      take, not a gap that has to be closed. */}
+                  {item.variantChoiceStampId && !variant && (
+                    <Tooltip content="Say which variant this offer sells it as, rather than waiting for the cheapest one to be worked out.">
+                      <button
+                        type="button"
+                        onClick={() => setChoosingFor(item)}
+                        style={{ ...LINK, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      >
+                        Listed as…
+                      </button>
+                    </Tooltip>
+                  )}
                 </span>
                 {/* What this row is **listed as** (#616), on a line of its own beneath it: the
                     variant's name in `~` + muted italic — #238's vocabulary for inferred rather than
@@ -616,21 +657,47 @@ export function OfferPlatformItemsCard({
                     <span style={{ ...CELL, gridColumn: "1 / 4", paddingTop: 0, paddingLeft: "1.25rem" }}>
                       <Tooltip
                         content={
-                          item.catalogUrl
-                            ? `This stamp's variant isn't identified, so it carries no item-ID of its own. The listing goes under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}, which is also what the copy is valued at. Nothing is recorded on the stamp; the links follow the rollup.`
-                            : `This stamp's variant isn't identified, so the listing would go under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}. That variant has no item-ID yet, which is what stops this offer being posted. Match it here.`
+                          chosen
+                            ? `You told this offer to sell it as ${variant}. Nothing is recorded on the stamp, and the copy's catalog value still follows the cheapest variant. Press to change it or go back to automatic.`
+                            : item.catalogUrl
+                              ? `This stamp's variant isn't identified, so it carries no item-ID of its own. The listing goes under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}, which is also what the copy is valued at. Press to say which variant it should be instead.`
+                              : `This stamp's variant isn't identified, so the listing would go under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}. That variant has no item-ID yet, which is what stops this offer being posted: match it here, or press to list under another variant.`
                         }
                       >
-                        <span
+                        {/* The name is the picker's own trigger (extends #616). It belongs on the
+                            name rather than beside it: what is being changed is *which entry this
+                            line is about*, and a separate button would be a second thing to find on
+                            a line that already says the one thing it is for.
+
+                            A **chosen** variant drops the `~` and the italics. That pair is #238's
+                            vocabulary for *inferred, not recorded*, and a decision the collector
+                            made is recorded — so it reads as plain text, the same way an own
+                            catalogue price reads beside a rolled-up one. No glyph of its own: the
+                            absence of the inferred mark is the statement. */}
+                        <button
+                          type="button"
+                          onClick={() => setChoosingFor(item)}
                           style={{
                             ...MUTED,
-                            fontStyle: "italic",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            fontFamily: "inherit",
+                            fontStyle: chosen ? "normal" : "italic",
+                            fontWeight: chosen ? 600 : 400,
+                            color: chosen ? "var(--color-text-secondary)" : "var(--color-text-muted)",
                             whiteSpace: "nowrap",
-                            cursor: "help",
+                            padding: "0.0625rem 0.375rem",
+                            marginLeft: "-0.375rem",
+                            borderRadius: "0.375rem",
+                            border: "1px solid transparent",
+                            background: "none",
+                            cursor: "pointer",
+                            textAlign: "left",
                           }}
                         >
-                          ↳ listed as ~ {variant}
-                        </span>
+                          ↳ listed as {chosen ? "" : "~ "}{variant}
+                        </button>
                       </Tooltip>
                     </span>
                     {linksCell({ paddingTop: 0 })}
@@ -645,6 +712,19 @@ export function OfferPlatformItemsCard({
 
       {/* The variant price grid (#618), over the whole tree of whichever umbrella was pressed. */}
       {variantPrices.dialog}
+
+      {/* Saying by hand which variant this offer sells an umbrella as (extends #616). It re-reads the
+          whole offer on save rather than patching the row: the choice moves the row's links, its
+          blockers and the generated texts at once, which is exactly what one invalidation covers. */}
+      {choosingFor && (
+        <ListedVariantDialog
+          offerId={offerId}
+          stampId={choosingFor.stampId}
+          conditionId={choosingFor.conditionId}
+          onClose={() => setChoosingFor(null)}
+          onSaved={() => void invalidateAll(collectionId)}
+        />
+      )}
 
       {/* The same dialog and the same save the copies below use (#147/#170/#341) — a value set from
           here is set the one way it is ever set. */}

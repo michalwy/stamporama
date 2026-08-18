@@ -21,7 +21,11 @@ import {
   readAllegroListingSection,
   type AllegroListingSection,
 } from "./allegro-listing-task";
-import { resolveListingCatalogItemIds } from "./listing-catalog-ids";
+import {
+  listedVariantKey,
+  loadOfferListedVariants,
+  resolveListingCatalogItemIds,
+} from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import type { OfferState } from "./offer-rules";
 import type { DescriptionFormat } from "./description-format";
@@ -237,6 +241,10 @@ export async function getOfferListingKit(
   // of its own and is listed under its **cheapest variant**, resolved by the same rule that values
   // the copy — reading nothing at all for an offer whose stamps are all matched, and nothing for a
   // module that lists against no catalogue.
+  // …including the variants this offer names by hand, which short-circuit that rollup (part of #616's
+  // override). Read only where the platform lists against a catalogue at all — a choice about a
+  // catalogue entry says nothing where there is no catalogue.
+  const chosen = catalogued ? await loadOfferListedVariants([offerId]) : new Map<string, string>();
   const catalogIds = await resolveListingCatalogItemIds(
     collectionId,
     catalogued
@@ -249,6 +257,8 @@ export async function getOfferListingKit(
             formatId: item.formatId,
             unknownVariant: isUnknownVariantStamp(item.stamp),
             ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+            listedAsStampId:
+              chosen.get(listedVariantKey(offerId, item.stampId, item.conditionId)) ?? null,
           }))
         )
       : [],

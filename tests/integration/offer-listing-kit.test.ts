@@ -5,6 +5,10 @@ import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer, getOfferDetail, setOfferState } from "../../src/lib/offers";
 import { setColnectConditionMapping } from "../../src/lib/colnect";
 import { getOfferListingKit } from "../../src/lib/listing-kit";
+import {
+  getOfferListedVariantChoice,
+  setOfferListedVariant,
+} from "../../src/lib/listing-variant-choice";
 
 // The listing kit (#405): one read that says what an offer wants filled into a marketplace form.
 // The precondition rules themselves are unit-tested (`listing-preconditions.test.ts`); what needs a
@@ -615,6 +619,175 @@ describe("offer listing kit (#405)", () => {
     const row = detail!.platformItems[0];
     assert.equal(row.catalogItemVariant, null);
     assert.ok(row.catalogUrl?.endsWith("2950"));
+  });
+
+  // ── Saying by hand which variant it is listed under ───────────────────────
+  //
+  // The derivation above is a default. `OfferListedVariant` is the collector overriding it on one
+  // offer — for a piece they can rule a variant out on, for the variant that is actually traded, or
+  // to post an offer without pricing a whole tree first. It short-circuits the rollup rather than
+  // competing with it, so what is checked here is that every reader takes the same answer and that
+  // the two things a choice must not do — write to the stamp, move the valuation — still hold.
+
+  /** The variant of `base` carrying `number`. */
+  async function variantOf(base: string, number: string): Promise<string> {
+    return (
+      await prisma.stamp.findFirstOrThrow({
+        where: { parentId: base, catalogNumbers: { some: { number } } },
+        select: { id: true },
+      })
+    ).id;
+  }
+
+  it("lists under the variant the offer names, not the cheapest one", async () => {
+    const base = await umbrella("PL chosen", [
+      { number: "8010a", colnectId: "3001", price: "30.00" },
+      { number: "8010b", colnectId: "3002", price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+    // Left alone it would go under `8010b`, the cheapest.
+    assert.equal((await getOfferListingKit(userId, collectionId, offerId))?.items[0].catalogItemId, "3002");
+
+    await setOfferListedVariant(userId, offerId, base, mnhId, await variantOf(base, "8010a"));
+    const kit = await getOfferListingKit(userId, collectionId, offerId);
+    assert.deepEqual(kit?.blockers, []);
+    assert.equal(kit?.items[0].catalogItemId, "3001");
+    assert.equal(kit?.items[0].catalogItemSource?.label, "Mi\u00b7PL 8010a");
+
+    // The card reads the same answer and says it was chosen rather than inferred.
+    const row = (await getOfferDetail(userId, offerId))!.platformItems[0];
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 8010a");
+    assert.equal(row.catalogItemVariantChosen, true);
+    assert.ok(row.catalogUrl?.endsWith("3001"));
+    assert.equal(row.variantChoiceStampId, base, "the row can still open the picker");
+
+    // And nothing was written onto the stamp: the umbrella is still an unidentified variant.
+    assert.equal(
+      (await prisma.stamp.findUnique({ where: { id: base }, select: { colnectId: true } }))?.colnectId,
+      null
+    );
+  });
+
+  it("answers a tree that is not fully priced, which the derivation refuses (#617)", async () => {
+    // The whole point of the escape hatch: knowing what you want to sell should not require pricing
+    // every variant first.
+    const base = await umbrella("PL chosen unpriced", [
+      { number: "8020a", colnectId: "3101" },
+      { number: "8020b", colnectId: "3102", price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+    assert.deepEqual(
+      (await getOfferListingKit(userId, collectionId, offerId))?.blockers.map((b) => b.code),
+      ["no-variant-price"]
+    );
+
+    await setOfferListedVariant(userId, offerId, base, mnhId, await variantOf(base, "8020a"));
+    const kit = await getOfferListingKit(userId, collectionId, offerId);
+    assert.deepEqual(kit?.blockers, []);
+    assert.equal(kit?.items[0].catalogItemId, "3101");
+    const row = (await getOfferDetail(userId, offerId))!.platformItems[0];
+    assert.equal(row.unpricedVariantStampId, null, "the pricing gap no longer blocks this listing");
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 8020a");
+  });
+
+  it("still refuses a chosen variant that carries no item-ID, naming that variant", async () => {
+    const base = await umbrella("PL chosen unmatched", [
+      { number: "8030a", colnectId: null, price: "30.00" },
+      { number: "8030b", colnectId: "3202", price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+    const unmatched = await variantOf(base, "8030a");
+    await setOfferListedVariant(userId, offerId, base, mnhId, unmatched);
+
+    const kit = await getOfferListingKit(userId, collectionId, offerId);
+    assert.deepEqual(kit?.blockers.map((b) => b.code), ["missing-catalog-id"]);
+    assert.deepEqual(kit?.blockers[0].subjects, ["Mi\u00b7PL 8030a"]);
+    assert.deepEqual(kit?.blockers[0].stampIds, [unmatched]);
+    // The card names it and points Search at *its* number, so it can be matched from the offer.
+    const row = (await getOfferDetail(userId, offerId))!.platformItems[0];
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 8030a");
+    assert.ok(row.searchUrl?.includes("PL+8030a"));
+  });
+
+  it("goes back to the derivation when the choice is cleared", async () => {
+    const base = await umbrella("PL chosen cleared", [
+      { number: "8040a", colnectId: "3301", price: "30.00" },
+      { number: "8040b", colnectId: "3302", price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+    await setOfferListedVariant(userId, offerId, base, mnhId, await variantOf(base, "8040a"));
+    await setOfferListedVariant(userId, offerId, base, mnhId, null);
+
+    const row = (await getOfferDetail(userId, offerId))!.platformItems[0];
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 8040b", "the cheapest one again");
+    assert.equal(row.catalogItemVariantChosen, false);
+  });
+
+  it("keeps the choice to the offer that made it", async () => {
+    // A copy can sit in several offers' sets at once, which is exactly why the choice is keyed on the
+    // offer and not on the copy.
+    const base = await umbrella("PL chosen scoped", [
+      { number: "8050a", colnectId: "3401", price: "30.00" },
+      { number: "8050b", colnectId: "3402", price: "12.00" },
+    ]);
+    const shared = await copy(base);
+    const mine = await offer([[shared]]);
+    const other = await offer([[shared]]);
+    await setOfferListedVariant(userId, mine, base, mnhId, await variantOf(base, "8050a"));
+
+    assert.equal((await getOfferListingKit(userId, collectionId, mine))?.items[0].catalogItemId, "3401");
+    assert.equal((await getOfferListingKit(userId, collectionId, other))?.items[0].catalogItemId, "3402");
+  });
+
+  it("refuses a stamp the offer does not hold, and a variant outside the tree", async () => {
+    const base = await umbrella("PL chosen refusals", [
+      { number: "8060a", colnectId: "3501", price: "12.00" },
+    ]);
+    const elsewhere = await umbrella("PL chosen elsewhere", [
+      { number: "8070a", colnectId: "3601", price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+
+    const outside = await variantOf(elsewhere, "8070a");
+    const inside = await variantOf(base, "8060a");
+
+    await assert.rejects(
+      () => setOfferListedVariant(userId, offerId, elsewhere, mnhId, outside),
+      /holds no copy/
+    );
+    await assert.rejects(
+      () => setOfferListedVariant(userId, offerId, base, mnhId, outside),
+      /not a variant of the one being listed/
+    );
+    await assert.rejects(
+      () => setOfferListedVariant(otherUserId, offerId, base, mnhId, inside),
+      /not found or access denied/
+    );
+  });
+
+  it("offers the whole tree, marks the automatic pick and names what automatic means", async () => {
+    const base = await umbrella("PL chosen picker", [
+      { number: "8080a", colnectId: "3701", price: "30.00" },
+      { number: "8080b", colnectId: null, price: "12.00" },
+    ]);
+    const offerId = await offer([[await copy(base)]]);
+    const choice = await getOfferListedVariantChoice(userId, offerId, base, mnhId);
+
+    assert.deepEqual(choice.options.map((o) => o.label), ["Mi\u00b7PL 8080a", "Mi\u00b7PL 8080b"]);
+    assert.deepEqual(choice.options.map((o) => o.matched), [true, false]);
+    assert.deepEqual(choice.options.map((o) => o.price), ["30.00", "12.00"]);
+    // The cheapest is `8080b`, and it is unmatched — so the derivation resolves nothing and says
+    // which of #617's two gaps is in the way.
+    assert.deepEqual(choice.options.map((o) => o.automatic), [false, false]);
+    assert.equal(choice.automaticLabel, null);
+    assert.equal(choice.automaticGap, "unmatched-variant");
+    assert.equal(choice.chosenStampId, null);
+
+    await setOfferListedVariant(userId, offerId, base, mnhId, await variantOf(base, "8080a"));
+    assert.equal(
+      (await getOfferListedVariantChoice(userId, offerId, base, mnhId)).chosenStampId,
+      await variantOf(base, "8080a")
+    );
   });
 
   it("is null for another owner's offer and for the wrong collection", async () => {
