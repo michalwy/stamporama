@@ -23,9 +23,10 @@ Above the grid you choose three things once, for the whole grid:
 
 Typing:
 
-- **Tab** moves across a stamp's row, the way a catalogue line is read.
-- **Enter** drops to the same condition on the next stamp, the way a column of variants is
-  filled in.
+- **Tab** moves down a condition column, and on to the top of the next column at the end of
+  one — the way a column of variants is filled in from a catalogue that lists them down the
+  page. **Shift+Tab** goes back. **Enter** does the same thing, so there is one movement to
+  learn, and it is the same one the stamp editor's price grid uses.
 - There is **no Save**. Each figure is written when you leave the cell.
 - **Clearing a cell removes the price.** An empty cell records nothing — it is not a zero.
 
@@ -33,8 +34,16 @@ On a format tab, a greyed, dashed cell shows what that format would be worth fro
 single's price and this issue's multiplier. Nothing is stored until you type over it;
 clearing it again goes back to the derived figure.
 
-A row marked *umbrella* has variants of its own, so its value is the lowest of theirs
-unless you record a price on it directly — which you may, and which then wins.
+### Umbrella rows
+
+A row marked *umbrella* has variants of its own, so its value **is** the lowest of theirs.
+Its cells are read-only and show that figure with a `≈` — computed, not recorded — taken
+over the edition you have chosen above the grid. Tab skips them.
+
+You may still price an umbrella directly, and such a price overrides the rolled-up one. Use
+the padlock on the row to turn its cells back into inputs; the cell then prints the recorded
+figure plainly, with no `≈`. Locking the row again changes nothing that is stored — it just
+puts the rolled-up figure back on screen.
 
 ## Where to open it
 

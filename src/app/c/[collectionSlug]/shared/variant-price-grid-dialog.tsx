@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
+import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
@@ -20,10 +21,22 @@ import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-pric
  *
  * **No draft and no Save**: one write per cell, the Colnect condition-mapping panel's idiom (#404),
  * which is the only one that survives a grid this size — a lost draft here is a page of typing.
- * **Tab across, Enter down**: Tab is the browser's own left-to-right walk along a stamp's row, which
- * is how a catalogue line is read; Enter drops to the same condition on the next stamp, which is how
- * a column of variants is filled. That is deliberately the opposite of the per-stamp grid's
- * column-first Tab (#232) — there a column is one catalogue's conditions, here a row is one stamp.
+ *
+ * **Tab walks down a condition column** (#626), the per-stamp grid's convention (#232) rather than
+ * the browser's left-to-right default. It was built the other way round on the argument that a row
+ * is one stamp and a printed catalogue prints that line across; in use it is the column that is
+ * filled, because a tree is worked one condition at a time from a catalogue that lists the variants
+ * down the page — and a grid whose two price surfaces disagree about Tab is a grid whose muscle
+ * memory is wrong half the time. Enter follows the very same order, so there is now one movement
+ * rule instead of two. Locked umbrella rows are not in it: it walks the cells that can be typed in.
+ *
+ * **An umbrella row is read-only until unlocked** (#627). Its value is the lowest of its variants'
+ * (#238), so an open input on it reads as one more gap to fill while what it would record is an
+ * override of a computed figure. The cell therefore shows that rolled-up figure `≈`-prefixed —
+ * #238's own vocabulary for *inferred, not recorded* — and the row's 🔓 turns the cells back into
+ * inputs, because an umbrella's own price does outrank the rollup (#616) and recording one is a
+ * legitimate act. Read-only, never removed: the lock is about which act is the default, not about
+ * forbidding the other one.
  *
  * The three axes a cell is keyed on beyond stamp × condition are chosen **once above the grid**:
  * the catalog edition (which fixes the vendor and the currency), the certificate (defaulting to
@@ -121,6 +134,11 @@ function VariantPriceGrid({
   const [values, setValues] = useState<Map<string, string>>(() => new Map(saved));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Map<string, string>>(() => new Map());
+  /** Umbrella rows the collector has opened for editing (#627). Per stamp and not per cell: the
+   *  decision is about the row — "I am pricing this umbrella directly" — and a lock per cell would
+   *  be a dozen of them to click through for one such act. Reset by nothing: an unlocked row stays
+   *  unlocked for the life of the dialog, since re-locking it under the typing hand is a surprise. */
+  const [unlocked, setUnlocked] = useState<Set<string>>(() => new Set());
 
   const factorFor = useMemo(() => {
     const map = new Map<string, number>();
@@ -130,8 +148,43 @@ function VariantPriceGrid({
     return map;
   }, [grid.formatFactors]);
 
+  /** The variant-kind descendants of every row, at any depth — whose lowest price an umbrella row
+   *  is worth (#238). Read off the flattened tree: the rows are a depth-first walk, so a row's
+   *  subtree is the run of deeper rows that follows it. The filter is `isVariant` **flat**, not
+   *  pruned at the first non-variant: that is exactly the set `valuateItemRows` rolls up, and this
+   *  figure has to be the one the rest of the app prints. */
+  const variantDescendants = useMemo(() => {
+    const map = new Map<string, string[]>();
+    grid.rows.forEach((row, i) => {
+      const ids: string[] = [];
+      for (let j = i + 1; j < grid.rows.length && grid.rows[j].depth > row.depth; j++) {
+        if (grid.rows[j].isVariant) ids.push(grid.rows[j].stampId);
+      }
+      map.set(row.stampId, ids);
+    });
+    return map;
+  }, [grid.rows]);
+
+  const isLocked = (row: VariantPriceGridData["rows"][number]) =>
+    !row.identified && !unlocked.has(row.stampId);
+
   const edition = grid.editions.find((e) => e.editionId === editionId) ?? null;
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+
+  /** Every cell that can be typed in, **down each condition column in turn** (#626/#232). Locked
+   *  umbrella rows are absent, so unlocking one puts its cells into the walk and nothing else has
+   *  to know about the lock. */
+  const navOrder = useMemo(() => {
+    if (!editionId) return [];
+    const order: string[] = [];
+    for (const cond of grid.conditions) {
+      for (const row of grid.rows) {
+        if (!row.identified && !unlocked.has(row.stampId)) continue;
+        order.push(cellKey(row.stampId, editionId, cond.id, certId, formatId));
+      }
+    }
+    return order;
+  }, [grid.rows, grid.conditions, editionId, certId, formatId, unlocked]);
 
   const setIn = <T,>(
     setter: React.Dispatch<React.SetStateAction<Map<string, T>>>,
@@ -187,22 +240,33 @@ function VariantPriceGrid({
     });
   }
 
-  /** Enter drops to the same condition on the next stamp — how a column of variants is filled. */
+  /**
+   * Tab and Enter both step through {@link navOrder} — down the condition column, then on to the
+   * next column (#626). Shift reverses. At either end the browser takes over, so focus can leave
+   * the grid the ordinary way rather than being trapped in it.
+   *
+   * Only Enter commits here; Tab's own blur does it, and committing twice for one keystroke is how
+   * a cell gets written on the way past it.
+   */
   function handleKeyDown(
     e: KeyboardEvent<HTMLInputElement>,
-    rowIndex: number,
+    stampId: string,
     conditionId: string
   ) {
-    if (e.key !== "Enter" || !editionId) return;
+    if ((e.key !== "Enter" && e.key !== "Tab") || !editionId) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commit(stampId, conditionId, e.currentTarget.value);
+    }
+    const idx = navOrder.indexOf(cellKey(stampId, editionId, conditionId, certId, formatId));
+    if (idx === -1) return;
+    const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
+    if (nextIdx < 0 || nextIdx >= navOrder.length) return;
+    const target = inputRefs.current.get(navOrder[nextIdx]);
+    if (!target) return;
     e.preventDefault();
-    const next = grid.rows[rowIndex + 1];
-    void commit(grid.rows[rowIndex].stampId, conditionId, e.currentTarget.value);
-    if (!next) return;
-    const target = inputRefs.current.get(
-      cellKey(next.stampId, editionId, conditionId, certId, formatId)
-    );
-    target?.focus();
-    target?.select();
+    target.focus();
+    target.select();
   }
 
   /** What an empty cell would be worth on this format tab: the single's figure times the stamp's
@@ -218,6 +282,37 @@ function VariantPriceGrid({
     const amount = Number(normalizeDecimalInput(single));
     if (!Number.isFinite(amount)) return null;
     return deriveFormatPrice(amount, factor).toFixed(2);
+  }
+
+  /** What a stamp's cell is worth in this column as the grid draws it: the figure typed into it, or
+   *  failing that the one derived from the single by this format's multiplier. */
+  function shownAmount(stampId: string, conditionId: string): number | null {
+    if (!editionId) return null;
+    const own = (values.get(cellKey(stampId, editionId, conditionId, certId, formatId)) ?? "").trim();
+    const shown = own === "" ? derivedFor(stampId, conditionId) : normalizeDecimalInput(own);
+    if (!shown) return null;
+    const amount = Number(shown);
+    return Number.isFinite(amount) ? amount : null;
+  }
+
+  /**
+   * What an umbrella row is worth when it records no price of its own (#238): the **lowest** of its
+   * variant descendants', read straight off the column below it — including a derived one, since
+   * `valuateCopy` rolls up derived format prices too (ADR-0020 §5).
+   *
+   * Taken over the grid's own edition rather than #238's newest-with-a-price fallback, which is the
+   * one place this figure may differ from the headline the lists print. That is the honest reading
+   * of a grid the collector has just named an edition for: every other cell on screen is that
+   * edition's, and a rollup quietly taken from another one would not line up with the column it
+   * sits above.
+   */
+  function rollupFor(stampId: string, conditionId: string): string | null {
+    let lowest: number | null = null;
+    for (const id of variantDescendants.get(stampId) ?? []) {
+      const amount = shownAmount(id, conditionId);
+      if (amount !== null && (lowest === null || amount < lowest)) lowest = amount;
+    }
+    return lowest === null ? null : lowest.toFixed(2);
   }
 
   if (grid.rows.length === 0) {
@@ -245,7 +340,9 @@ function VariantPriceGrid({
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <p style={{ ...MUTED, margin: 0 }}>
         {grid.scopeLabel}. Every figure is saved as you leave the cell — there is nothing to submit.
-        Clear a cell to remove the price; an empty cell records nothing.
+        Clear a cell to remove the price; an empty cell records nothing. Tab and Enter both move down
+        a condition column. An <em>umbrella</em> row shows what its variants roll up to and is
+        read-only until you unlock it.
       </p>
 
       {/* The axes a cell is keyed on beyond stamp x condition, chosen once for the whole grid. The
@@ -363,7 +460,7 @@ function VariantPriceGrid({
             </tr>
           </thead>
           <tbody>
-            {grid.rows.map((row, rowIndex) => (
+            {grid.rows.map((row) => (
               <tr key={row.stampId}>
                 <td style={tdStampStyle}>
                   <span
@@ -382,12 +479,40 @@ function VariantPriceGrid({
                     )}
                     {!row.identified && (
                       // An intermediate node is an umbrella of its own (ADR-0010 §3): its value is
-                      // the lowest of its children unless it carries a price here, so saying so is
-                      // what keeps an empty row from reading as a gap.
-                      <Tooltip content="This stamp has variants of its own, so its value is the lowest of theirs unless you record one here.">
+                      // the lowest of its children, which is what the row's cells now show — the
+                      // word is still here because a row of figures says nothing about where they
+                      // came from.
+                      <Tooltip content="This stamp has variants of its own, so its value is the lowest of theirs. Unlock the row to price it directly instead.">
                         <span style={{ ...MUTED, fontStyle: "italic", whiteSpace: "nowrap" }}>
                           umbrella
                         </span>
+                      </Tooltip>
+                    )}
+                    {!row.identified && (
+                      // The lock, and it is a toggle both ways: unlocking is a deliberate act, and
+                      // a row locked again is a row whose rolled-up figure is legible once more.
+                      <Tooltip
+                        content={
+                          unlocked.has(row.stampId)
+                            ? "Locking this row again shows the rolled-up figure. Anything already recorded on it stays recorded."
+                            : "Unlock to price this umbrella directly. Its own price overrides the lowest-variant figure shown here."
+                        }
+                      >
+                        <button
+                          type="button"
+                          aria-label={`${unlocked.has(row.stampId) ? "Lock" : "Unlock"} ${row.label}`}
+                          aria-pressed={unlocked.has(row.stampId)}
+                          onClick={() =>
+                            setUnlocked((prev) => {
+                              const next = new Set(prev);
+                              if (!next.delete(row.stampId)) next.add(row.stampId);
+                              return next;
+                            })
+                          }
+                          style={LOCK_BTN}
+                        >
+                          <Icon name={unlocked.has(row.stampId) ? "unlocked" : "locked"} size="xs" />
+                        </button>
                       </Tooltip>
                     )}
                   </span>
@@ -397,6 +522,38 @@ function VariantPriceGrid({
                     ? cellKey(row.stampId, editionId, cond.id, certId, formatId)
                     : "";
                   const value = values.get(key) ?? "";
+
+                  // A locked umbrella cell is a **span, not a disabled input** (#627): it is not a
+                  // control at all, which is also what keeps it out of the Tab walk without a
+                  // second rule saying so. A price recorded on the umbrella is printed plainly —
+                  // it is the operative figure (#616) — and only an empty one falls back to the
+                  // `≈` rollup, muted and italic, #238's marking for inferred rather than recorded.
+                  if (isLocked(row)) {
+                    const rolled = value.trim() === "" ? rollupFor(row.stampId, cond.id) : null;
+                    return (
+                      <td key={cond.id} style={tdCellStyle}>
+                        <Tooltip
+                          content={
+                            value.trim() !== ""
+                              ? "Recorded on this umbrella directly, so it overrides the lowest-variant figure. Unlock the row to change it."
+                              : rolled
+                                ? "The lowest price among this stamp's variants on this edition — computed, not recorded."
+                                : "No variant of this stamp is priced at this condition yet."
+                          }
+                        >
+                          <span
+                            style={{
+                              ...CELL_READONLY,
+                              ...(rolled ? CELL_ROLLED_UP : null),
+                            }}
+                          >
+                            {value.trim() !== "" ? value : rolled ? `≈${rolled}` : "—"}
+                          </span>
+                        </Tooltip>
+                      </td>
+                    );
+                  }
+
                   const derived = derivedFor(row.stampId, cond.id);
                   const cellError = errors.get(key);
                   return (
@@ -410,7 +567,7 @@ function VariantPriceGrid({
                           value={value}
                           onChange={(e) => setIn(setValues, key, e.target.value)}
                           onBlur={(e) => void commit(row.stampId, cond.id, e.currentTarget.value)}
-                          onKeyDown={(e) => handleKeyDown(e, rowIndex, cond.id)}
+                          onKeyDown={(e) => handleKeyDown(e, row.stampId, cond.id)}
                           placeholder={derived ?? "—"}
                           style={{
                             ...CELL_INPUT,
@@ -492,6 +649,39 @@ const CELL_INPUT: React.CSSProperties = {
 
 /** A cell showing a derived value rather than a stored one — the per-stamp grid's own marking. */
 const CELL_DERIVED: React.CSSProperties = { borderStyle: "dashed" };
+
+/** A locked umbrella cell (#627). Every box metric the input has, and a transparent border in place
+ *  of its visible one: locking a row must not shift the columns beside it, or the grid jumps every
+ *  time one is opened. */
+const CELL_READONLY: React.CSSProperties = {
+  display: "block",
+  padding: "0.25rem 0.375rem",
+  border: "1px solid transparent",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  boxSizing: "border-box",
+  minHeight: "1.75rem",
+  width: "5.5rem",
+  textAlign: "right",
+};
+
+/** The rolled-up figure itself: `≈`, muted and italic — #238's vocabulary for inferred, not
+ *  recorded, so an umbrella's computed value is never read as one the collector typed. */
+const CELL_ROLLED_UP: React.CSSProperties = {
+  color: "var(--color-text-muted)",
+  fontStyle: "italic",
+};
+
+const LOCK_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0.1rem",
+  border: "none",
+  background: "transparent",
+  color: "var(--color-text-muted)",
+  cursor: "pointer",
+  lineHeight: 1,
+};
 
 const CELL_ERROR: React.CSSProperties = {
   borderColor: "var(--color-error)",

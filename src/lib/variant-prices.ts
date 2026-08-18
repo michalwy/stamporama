@@ -55,10 +55,18 @@ export interface VariantPriceRow {
   /**
    * True when the stamp has no variant children of its own — the rows a catalogue prices directly,
    * and the only ones {@link listUnpricedVariantTrees} counts as gaps. An intermediate node is an
-   * umbrella in its own right (ADR-0010 §3) and is still editable here: an umbrella's *own* price
-   * outranks the rollup (#616), so recording one is a legitimate act.
+   * umbrella in its own right (ADR-0010 §3), and its cells are **read-only until unlocked** (#627):
+   * its value is the lowest of its children, so an open input under it reads as a gap to fill. An
+   * umbrella's *own* price still outranks the rollup (#616), which is what the unlock is for.
    */
   identified: boolean;
+  /**
+   * True when this row **rolls up into its parent** — a variant-kind child (ADR-0010 §3), as against
+   * a distinct entry merely filed under it. Reported because the grid draws an umbrella's rolled-up
+   * figure client-side (#627) and must take the lowest over the same descendants
+   * `valuateCopy` does; the tree's shape alone does not say which children those are.
+   */
+  isVariant: boolean;
 }
 
 /** One catalog edition the grid may be filled in against. */
@@ -132,6 +140,10 @@ const GRID_STAMP_SELECT = {
 type GridStamp = StampLabelRow & {
   id: string;
   parentId: string | null;
+  // The stamp's own variant flags, beside its children's: `childIsVariant` reads them to say
+  // whether this row rolls up into its parent (#627), which the tree's shape alone does not.
+  actsAsVariantOverride: boolean | null;
+  subtype: { actsAsVariant: boolean } | null;
   variants: { actsAsVariantOverride: boolean | null; subtype: { actsAsVariant: boolean } | null }[];
 };
 
@@ -210,6 +222,7 @@ function flattenTree(
         label: labelOf(stamp),
         name: stamp.name?.trim() || null,
         identified: !isUnknownVariantStamp(stamp),
+        isVariant: childIsVariant(stamp),
       });
       walk(stamp.id, depth + 1);
     }
