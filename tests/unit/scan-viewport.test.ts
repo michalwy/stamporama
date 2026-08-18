@@ -14,6 +14,7 @@ import {
   regionOnSheet,
   regionRequest,
   toSheetPoint,
+  visibleRegion,
   zoomBy,
   zoomTo,
 } from "../../src/lib/scan-viewport";
@@ -164,6 +165,39 @@ describe("regionRequest over a picture that is not a downscale", () => {
     const block = { width: 4200, height: 2600, viewWidth: 2500 };
     const v = zoomTo(fitViewport(block, TILE_SIZE), 1, { x: 450, y: 350 }, block, TILE_SIZE);
     assert.ok(regionRequest(v, block, TILE_SIZE));
+  });
+});
+
+describe("visibleRegion", () => {
+  const PICTURE = { width: 1400, height: 1000 };
+
+  it("covers what is on screen, with margin, snapped out to the grid", () => {
+    const v = zoomTo(fitViewport(PICTURE, SIZE), 4, { x: 600, y: 400 }, PICTURE, SIZE);
+    const box = visibleRegion(v, PICTURE, SIZE, 0.25, 64);
+    assert.ok(box);
+    const left = toSheetPoint(v, 0, 0);
+    const right = toSheetPoint(v, SIZE.width, SIZE.height);
+    assert.ok(box.x <= left.x && box.y <= left.y, "the visible corner is inside the region");
+    assert.ok(box.x + box.w >= right.x && box.y + box.h >= right.y, "and so is the far one");
+    for (const n of [box.x, box.y]) assert.equal(n % 64, 0, `${n} sits on the grid`);
+  });
+
+  it("gives a pan of a few pixels the same region", () => {
+    const v = zoomTo(fitViewport(PICTURE, SIZE), 4, { x: 600, y: 400 }, PICTURE, SIZE);
+    const moved = panBy(v, 3, -2, PICTURE, SIZE);
+    assert.deepEqual(visibleRegion(moved, PICTURE, SIZE, 0.25, 64), visibleRegion(v, PICTURE, SIZE, 0.25, 64));
+  });
+
+  it("never leaves the picture", () => {
+    const v = fitViewport(PICTURE, SIZE);
+    const box = visibleRegion(v, PICTURE, SIZE, 1, 64);
+    assert.deepEqual(box, { x: 0, y: 0, w: PICTURE.width, h: PICTURE.height });
+  });
+
+  it("is null before the picture or the viewport has a size", () => {
+    const v = { scale: 1, offsetX: 0, offsetY: 0 };
+    assert.equal(visibleRegion(v, { width: 0, height: 0 }, SIZE, 0.25, 64), null);
+    assert.equal(visibleRegion(v, PICTURE, { width: 0, height: 0 }, 0.25, 64), null);
   });
 });
 

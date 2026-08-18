@@ -428,6 +428,43 @@ copy or the stamp. What you concluded from it belongs on the stamp you identify 
 the note of a piece you set aside. A tile with no cut box behind it — nothing in the ordinary scan
 flow — has no tools at all, because there is then no way to know what its pixels measure.
 
+#### Looking for a watermark
+
+Many variants differ by the watermark alone, and a scan of the back very often *contains* it without
+*showing* it: a watermark is a thickness difference in the paper, so on a reflective scan it is there
+as a variation far too faint to pick out of the paper grain. **Watermark** — the third button in the
+toolbar — redraws what is on screen so that variation becomes visible, without a watermark tray or a
+drop of benzine.
+
+Turn it on and the part of the tile you are looking at is reprocessed: the paper's own tone and the
+scanner's uneven lighting are subtracted, the grain is taken down, and what is left is stretched
+until it can be seen. It follows the zoom and the pan — move around and the new part is redrawn a
+moment later, so what you have already looked at stays as it was while the rest catches up.
+
+Two controls, and they are worth understanding:
+
+- **Channel** — which colour the paper's thickness shows up in. The four sit side by side and the one
+  you are on is lit, so trying another is a single click: which one works is not something you can
+  know in advance, so go through them. **Blue** is right most of the time on cream and toned paper,
+  which is most stamp paper; on a strongly coloured back, try the others.
+- **Strength** — how hard the contrast is stretched. Work up from the middle. If a mark only appears
+  at the top of the slider, it is not a mark: past a point the filter is stretching paper grain, and
+  grain stretched far enough looks like anything you are hoping to see.
+
+**Read it knowing what else comes up with it.** The design printed on the front shows through the
+paper at the same scale as a watermark, so the filter lifts both — on a heavily printed stamp the
+front's design is often what you get. And no amount of processing can add what the scan does not
+contain: how the back was scanned matters more than any filter. Scanning the back against a dark
+backing gives the filter far more to work with than a white lid does. The realistic goal is
+**readable once you know which watermarks the stamp could have** — enough to tell a candidate from
+another candidate — not a clean picture of one.
+
+**It changes nothing.** This is a way of looking, like the ruler: nothing is saved, no second image
+is made, and the scan itself is untouched. <kbd>Esc</kbd> puts the filter away. It sits under the
+same rule as the measuring tools — a tile with no cut box behind it does not offer it — and it can be
+on at the same time as the ruler or the gauge, so a perforation can be measured over the processed
+picture.
+
 **Every tile opens the same dialog, whatever state it is in, and no tile takes you off this screen
 when you click it.** One waiting to be dealt with opens on its three answers; a discarded one opens
 on its note; one that has already become a copy opens on the copy it became. Leaving the purchase is

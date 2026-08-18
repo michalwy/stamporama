@@ -13,6 +13,7 @@ import { Icon } from "@/app/icons";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
 import {
+  MM_PER_INCH,
   formatGaugeAt,
   formatMillimetres,
   isPlausibleGauge,
@@ -23,6 +24,14 @@ import {
   type ScanPoint,
 } from "@/lib/scan-measure";
 import { countTeethBetweenMarks, type Pixels } from "@/lib/scan-perf-count";
+import {
+  DEFAULT_WATERMARK_CHANNEL,
+  DEFAULT_WATERMARK_STRENGTH,
+  MAX_WATERMARK_STRENGTH,
+  MIN_WATERMARK_STRENGTH,
+  WATERMARK_CHANNELS,
+  type WatermarkChannel,
+} from "@/lib/scan-watermark";
 import {
   ZOOM_STEP,
   actualSizeViewport,
@@ -37,6 +46,7 @@ import {
 } from "@/lib/scan-viewport";
 import { ScanToolButton } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
+import { useWatermarkView, type WatermarkStatus } from "./use-watermark-view";
 
 /**
  * The tile, large and zoomable — the identification dialog's whole left-hand side (#585).
@@ -93,6 +103,20 @@ import { useSheetRegion } from "./use-sheet-region";
  * `scan-perf-count.ts`), into a field that stays hand-editable and says when the figure is one this
  * app put there. See {@link TileZoomView}'s `teethSource` for why filling it is safe where
  * inferring the *scale* would not be.
+ *
+ * ## Reading a watermark (#625)
+ *
+ * The third tool is not a measurement at all — it is a **way of looking**. A watermark is a
+ * thickness difference in the paper, so a reflective scan of the back very often *contains* it
+ * without *showing* it: a weak, low-frequency luminance variation sitting under the paper grain.
+ * `scan-watermark.ts` throws away what is louder than it at both ends of the scale and stretches
+ * what is left, and `use-watermark-view.ts` decides when that runs and where the result is put.
+ *
+ * It shares the tools' one gate — a side with **no box** has no scan geometry, so the control is
+ * absent there rather than approximate — and it shares their promise: nothing is stored, nothing is
+ * written back, and the toggle changes only what is on screen. It is deliberately *not* a fourth
+ * `MeasureTool`: it takes no marks, the plain drag stays the hand, and it composes with the ruler
+ * rather than replacing it.
  */
 
 interface Props {
@@ -481,6 +505,13 @@ const TEETH_SOURCE_NOTE: Partial<Record<TeethSource, string>> = {
   short: "too short to count — mark a longer run, or type it",
   weak: "couldn't find a perforation here — check the marks, or type it",
   "no-picture": "couldn't read the picture — type it",
+};
+
+/** What the watermark bar says while the chain is between states. Absent for the two that need no
+ * sentence — off, and a crop on screen. */
+const WATERMARK_STATUS_NOTE: Partial<Record<WatermarkStatus, string>> = {
+  working: "processing…",
+  "no-picture": "couldn't read the picture",
 };
 
 /** The natural size of a loaded photo, in its own pixels. Measured rather than stored: it is the
@@ -872,6 +903,59 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
     [dpi, loadPixels, pictureWidth]
   );
 
+  // ── Reading a watermark (#625) ──────────────────────────────────────────────────────────────
+
+  /**
+   * Whether the visible region is being redrawn through the watermark chain, and the two controls
+   * that steer it.
+   *
+   * Chosen and effective are kept apart exactly as the measuring tool is: a side with no box has no
+   * scan geometry, and correcting the choice from an effect would let one render happen with the
+   * filter down over a side that cannot support it.
+   *
+   * **Two controls and no more**, which is #625's scope and worth holding to. The channel is a
+   * control because which one carries the thickness contrast depends on the paper — blue usually
+   * wins on cream and toned stock, which is most philatelic paper, but not always. The strength is a
+   * control because the honest output sits between *too flat to read* and *grain, confidently
+   * displayed*, and where that line falls depends on the scan. Everything else — the band, the
+   * grain radius, the tile size — is fixed in `scan-watermark.ts` against the paper's own scale,
+   * where a collector has no way to judge a number and every value that helps is inside the window
+   * already chosen.
+   */
+  const [chosenWatermark, setChosenWatermark] = useState(false);
+  const [watermarkChannel, setWatermarkChannel] =
+    useState<WatermarkChannel>(DEFAULT_WATERMARK_CHANNEL);
+  const [watermarkStrength, setWatermarkStrength] = useState(DEFAULT_WATERMARK_STRENGTH);
+  const watermarkOn = canMeasure && chosenWatermark;
+
+  // Escape puts the filter away, and it is the topmost layer while it is down — so the order over a
+  // marked-up tile is: the watermark, then the marks, then the tool. Each press undoes one thing,
+  // which is the rule the measuring tools already follow (`escape-stack.ts`).
+  useEscapeLayer(() => setChosenWatermark(false), watermarkOn);
+
+  const {
+    render: watermarkCrop,
+    status: watermarkStatus,
+    paint: paintWatermark,
+  } = useWatermarkView({
+    enabled: watermarkOn,
+    // The same decoded photo the tooth count reads, fetched once per tile side — see `loadPixels`
+    // for why it comes from the route rather than off the `<img>`.
+    loadPixels,
+    photoId,
+    pictureWidth,
+    pictureHeight,
+    view,
+    size,
+    // The stated resolution again (#598), doing a different job: not converting a length into a
+    // fact, but keeping the filter's band on the millimetre scale a watermark occupies whatever the
+    // scan's density. A wrong figure here costs a picture filtered slightly off-band, which the
+    // strength control absorbs — so this falls back rather than refusing the way a reading does.
+    scanPixelsPerMm: dpi === null ? null : dpi / MM_PER_INCH,
+    channel: watermarkChannel,
+    strength: watermarkStrength,
+  });
+
   const pan = useRef<{ x: number; y: number } | null>(null);
   const marking = useRef(false);
   /** The line as the pointer left it. A ref beside the state because the count runs on pointer-up
@@ -1001,6 +1085,16 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
                 setMarks(null);
               }}
             />
+            {/* The third tool (#625) — under the same gate, since it too is about the scan's own
+                geometry, and beside the other two because it answers the same kind of question at
+                the same moment. Not a `MeasureTool`: it takes no marks and leaves the drag as the
+                hand, so it can be down at the same time as the ruler. */}
+            <ScanToolButton
+              label="Watermark"
+              hint="Redraw what is on screen so a watermark in the paper becomes readable — a way of looking, nothing is stored"
+              active={watermarkOn}
+              onClick={() => setChosenWatermark((on) => !on)}
+            />
           </>
         )}
         <span style={{ flex: 1 }} />
@@ -1125,6 +1219,26 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
             />
           )}
 
+          {/* The processed crop, in the same transformed layer as everything else — which is what
+              pins it to the pixels it was computed from. A pan therefore carries it along instead
+              of sliding it across the stamp, and the worst a stale crop can be is *too small*: raw
+              scan around the edges until the next one lands. Over the detail crop and under the
+              marks, because a measurement is still taken on the scan and its line must not be
+              buried by a picture of a filter's opinion. */}
+          {watermarkCrop && (
+            <canvas
+              ref={paintWatermark}
+              style={{
+                position: "absolute",
+                left: watermarkCrop.box.x * view.scale,
+                top: watermarkCrop.box.y * view.scale,
+                width: watermarkCrop.box.w * view.scale,
+                height: watermarkCrop.box.h * view.scale,
+                pointerEvents: "none",
+              }}
+            />
+          )}
+
           {/* The line, drawn in the same transformed layer as the picture, so it stays over the
               pixels it was placed on through every zoom and pan without a single coordinate being
               recomputed. Marks are held in scan pixels and scaled here — never the other way
@@ -1210,20 +1324,7 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
           earlier is inherited by someone who cannot see it, while one beside the result is on view
           exactly when it acts (#573). */}
       {measuring && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            flexWrap: "wrap",
-            margin: "0.5rem 0 0",
-            padding: "0.5rem 0.75rem",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.375rem",
-            background: "var(--color-bg-elevated)",
-            fontSize: "0.8125rem",
-          }}
-        >
+        <div style={TOOL_BAR}>
           <span
             style={{
               color: reading.muted ? "var(--color-text-muted)" : "var(--color-text-primary)",
@@ -1315,6 +1416,66 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
         </div>
       )}
 
+      {/* The watermark bar (#625) — its own bar rather than a third row of the measuring one,
+          because the two tools answer different questions and can be down together. What it says
+          about itself is as much the point as what it does: the chain lifts show-through from the
+          front along with the watermark, and a picture presented without that caveat is one a
+          collector could read a variant off. */}
+      {watermarkOn && (
+        <div style={TOOL_BAR}>
+          {/* Four chips rather than a dropdown, and the reason is the work: which channel carries a
+              watermark is not known in advance, so the control is *cycled through* — a dropdown
+              makes that two clicks per try and hides the alternatives between them. Lit-is-current
+              is also the vocabulary this dialog already speaks, Front/Back and Fit being the same
+              control: one of N, and the one you are on is the lit one. */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <span style={{ color: "var(--color-text-muted)", marginRight: "0.125rem" }}>
+              Channel
+            </span>
+            {WATERMARK_CHANNELS.map((c) => (
+              <ScanToolButton
+                key={c.value}
+                label={c.label}
+                hint={c.hint}
+                active={watermarkChannel === c.value}
+                tint={WATERMARK_CHANNEL_TINT[c.value]}
+                onClick={() => setWatermarkChannel(c.value)}
+              />
+            ))}
+          </div>
+
+          <Tooltip content="How hard the local contrast is stretched. Push it too far and paper grain organises itself into a watermark that is not there — if a mark only appears at the top of this slider, it is not a mark.">
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <span style={{ color: "var(--color-text-muted)" }}>Strength</span>
+              <input
+                type="range"
+                min={MIN_WATERMARK_STRENGTH}
+                max={MAX_WATERMARK_STRENGTH}
+                step={0.05}
+                value={watermarkStrength}
+                onChange={(e) => setWatermarkStrength(Number(e.target.value))}
+                aria-label="Strength of the watermark filter"
+                style={{ width: "8rem" }}
+              />
+            </label>
+          </Tooltip>
+
+          {/* Said rather than left to guess, for the reason every note in this dialog is: a filter
+              that has done nothing looks exactly like one that is not wired up. */}
+          {WATERMARK_STATUS_NOTE[watermarkStatus] && (
+            <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+              {WATERMARK_STATUS_NOTE[watermarkStatus]}
+            </span>
+          )}
+
+          <span style={{ flex: 1 }} />
+
+          <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+            The design printed on the front lifts with the watermark — nothing is stored
+          </span>
+        </div>
+      )}
+
       <p
         style={{
           margin: "0.5rem 0 0",
@@ -1342,6 +1503,38 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
     </div>
   );
 }
+
+/**
+ * What each channel chip is coloured (#625) — the channel itself, not a token.
+ *
+ * The one place in this dialog where a colour carries meaning of its own: these chips *are* the red,
+ * the green and the blue of the scan, so borrowing `--color-error` for the red one would make *the
+ * red channel* and *something is wrong* the same colour on a surface whose whole job is judging a
+ * picture. Mid tones rather than pure hues, because each one has to carry white text when it is the
+ * chip in use and sit legibly in both themes when it is not — which is also why grey is a grey with
+ * weight rather than the pale one the word suggests.
+ */
+const WATERMARK_CHANNEL_TINT: Record<WatermarkChannel, string> = {
+  blue: "#2563eb",
+  green: "#15803d",
+  red: "#b91c1c",
+  grey: "#6b7280",
+};
+
+/** The bar under the viewport — the measuring one (#598) and the watermark one (#625) are the same
+ * strip of controls under the same picture, so they are one style rather than two that drift. */
+const TOOL_BAR: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  flexWrap: "wrap",
+  margin: "0.5rem 0 0",
+  padding: "0.5rem 0.75rem",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-elevated)",
+  fontSize: "0.8125rem",
+};
 
 /** The two number fields in the measuring bar, which are one control wearing two labels. */
 const MEASURE_FIELD: React.CSSProperties = {

@@ -176,6 +176,41 @@ const REGION_GRID_PX = 128;
  * then lands inside a crop that is already on screen. */
 const REGION_MARGIN = 0.25;
 
+/**
+ * What is on screen, in the picture's own **scan pixels** — grown by a margin and snapped out to a
+ * grid, clamped to the picture.
+ *
+ * Both of those are the same idea: a viewport that has moved a few pixels should resolve to the
+ * *same* rectangle, so whatever is keyed on it — a fetched crop of the original (#579), a filtered
+ * copy of the visible region (#625) — is not redone on every frame of a drag. The margin is what
+ * makes a small pan land inside a rectangle that has already been paid for; the grid is what makes
+ * two nearby viewports agree on which rectangle that is.
+ *
+ * Null when the picture or the viewport has no size, or when the two do not overlap at all.
+ */
+export function visibleRegion(
+  v: Viewport,
+  sheet: SheetSize,
+  size: ViewportSize,
+  margin: number,
+  gridPx: number
+): Box | null {
+  if (sheet.width <= 0 || sheet.height <= 0 || size.width <= 0 || size.height <= 0) return null;
+  const grid = Math.max(1, gridPx);
+  const left = toSheetPoint(v, 0, 0);
+  const right = toSheetPoint(v, size.width, size.height);
+  const marginX = (right.x - left.x) * margin;
+  const marginY = (right.y - left.y) * margin;
+
+  const x = clamp(Math.floor((left.x - marginX) / grid) * grid, 0, sheet.width);
+  const y = clamp(Math.floor((left.y - marginY) / grid) * grid, 0, sheet.height);
+  const x1 = clamp(Math.ceil((right.x + marginX) / grid) * grid, 0, sheet.width);
+  const y1 = clamp(Math.ceil((right.y + marginY) / grid) * grid, 0, sheet.height);
+
+  const box: Box = { x, y, w: x1 - x, h: y1 - y };
+  return box.w > 0 && box.h > 0 ? box : null;
+}
+
 /** A crop of the original to display over the derivative currently on screen. */
 export interface RegionRequest {
   /** Where on the **picture**, in whole scan pixels — sheet coordinates already when the picture is
@@ -222,19 +257,8 @@ export function regionRequest(
   const viewScale = sheet.viewWidth / sheet.width;
   if (v.scale <= viewScale) return null;
 
-  // The visible rectangle in sheet pixels, grown by a margin and snapped out to the grid.
-  const left = toSheetPoint(v, 0, 0);
-  const right = toSheetPoint(v, size.width, size.height);
-  const marginX = (right.x - left.x) * REGION_MARGIN;
-  const marginY = (right.y - left.y) * REGION_MARGIN;
-
-  const x = snapDown(left.x - marginX, sheet.width);
-  const y = snapDown(left.y - marginY, sheet.height);
-  const x1 = snapUp(right.x + marginX, sheet.width);
-  const y1 = snapUp(right.y + marginY, sheet.height);
-
-  const box: Box = { x, y, w: x1 - x, h: y1 - y };
-  if (box.w <= 0 || box.h <= 0) return null;
+  const box = visibleRegion(v, sheet, size, REGION_MARGIN, REGION_GRID_PX);
+  if (!box) return null;
 
   // Rendered for the pixels the screen actually has, capped so a request can never ask for more
   // than the pipeline's own ceiling however far the zoom is pushed.
@@ -272,14 +296,6 @@ export function regionOnSheet(
  * so two viewports that resolve to the same crop share one fetch. */
 export function regionKey(r: RegionRequest): string {
   return `${r.box.x},${r.box.y},${r.box.w},${r.box.h}@${r.renderWidth}`;
-}
-
-function snapDown(n: number, limit: number): number {
-  return clamp(Math.floor(n / REGION_GRID_PX) * REGION_GRID_PX, 0, limit);
-}
-
-function snapUp(n: number, limit: number): number {
-  return clamp(Math.ceil(n / REGION_GRID_PX) * REGION_GRID_PX, 0, limit);
 }
 
 function centerOf(size: ViewportSize): { x: number; y: number } {
