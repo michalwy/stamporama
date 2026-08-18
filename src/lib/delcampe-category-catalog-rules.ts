@@ -357,3 +357,55 @@ export function delcampeCategoryAncestorIds(path: string): Set<string> {
   }
   return ids;
 }
+
+// ---------------------------------------------------------------------------
+// What one refresh changed
+// ---------------------------------------------------------------------------
+
+/**
+ * How a pass changed the catalogue, in counts only.
+ *
+ * Counts and not a list of names, deliberately: the operator question this answers is *did the
+ * nightly read do anything, and was it a normal amount of anything* — a line that named twelve
+ * categories would be a line nobody reads, and one that named four hundred (which is what a
+ * restructure on Delcampe's side looks like) would bury the rest of the log.
+ */
+export interface DelcampeCatalogChanges {
+  added: number;
+  /** Categories Delcampe no longer lists. Always `0` after a pass that stopped short — an incomplete
+   *  read has no opinion about what it never reached, and nothing is deleted on one. */
+  removed: number;
+  /** Same id, different name or different place in the tree. Delcampe renaming a period, or moving a
+   *  country under a different continent, is this and not an add-plus-remove. */
+  changed: number;
+  unchanged: number;
+}
+
+/**
+ * What changed between the stored catalogue and what a pass just read.
+ *
+ * `complete` decides whether **removals are countable at all**: a pass cut short saw a subset, so
+ * every category it did not reach would look retired. It matches how the write behaves — only a
+ * complete pass deletes — so the number reported and the number acted on are the same number.
+ */
+export function diffDelcampeCategories(
+  previous: readonly DelcampeCategoryRow[],
+  next: readonly DelcampeCategoryRow[],
+  complete: boolean
+): DelcampeCatalogChanges {
+  const before = new Map(previous.map((row) => [row.id, row]));
+  let added = 0;
+  let changed = 0;
+  let unchanged = 0;
+
+  for (const row of next) {
+    const old = before.get(row.id);
+    if (!old) added += 1;
+    else if (old.name !== row.name || old.path !== row.path) changed += 1;
+    else unchanged += 1;
+  }
+
+  const seen = new Set(next.map((row) => row.id));
+  const removed = complete ? previous.filter((row) => !seen.has(row.id)).length : 0;
+  return { added, removed, changed, unchanged };
+}

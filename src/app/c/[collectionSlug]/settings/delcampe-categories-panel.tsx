@@ -127,8 +127,8 @@ export function DelcampeCategoriesPanel({ list }: { list: DelcampeLearnedCategor
       }
       afterWrite(
         result.complete
-          ? `Read ${result.read} categories from Delcampe.`
-          : `Read ${result.read} categories, then stopped. ${result.message ?? ""}`.trim()
+          ? `Read ${result.read} categories from Delcampe — ${result.changed}.`
+          : `Read ${result.read} categories, then stopped — ${result.changed}, and nothing deleted. ${result.message ?? ""}`.trim()
       );
     });
   }

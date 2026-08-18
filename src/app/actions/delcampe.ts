@@ -21,6 +21,7 @@ import type { DelcampeCategoryRow } from "@/lib/delcampe-category-catalog-rules"
 import {
   type DelcampeCatalogStatus,
   delcampeCategoryCatalogStatus,
+  describeDelcampeCatalogChanges,
   readDelcampeCategories,
   refreshDelcampeCategories,
 } from "@/lib/delcampe-category-catalog";
@@ -165,7 +166,7 @@ export async function readDelcampeCategoriesAction(): Promise<
  *  button exists for the instance that has just been set up and for the one whose last pass was
  *  refused. */
 export async function refreshDelcampeCategoriesAction(): Promise<
-  { status: "success"; read: number; complete: boolean; message: string | null }
+  { status: "success"; read: number; changed: string; complete: boolean; message: string | null }
   | { status: "error"; message: string }
 > {
   await getSession();
@@ -174,6 +175,9 @@ export async function refreshDelcampeCategoriesAction(): Promise<
     return {
       status: "success",
       read: result.read,
+      // The same sentence the nightly log line carries, so the panel and the logs cannot come to
+      // describe one pass in two different ways.
+      changed: describeDelcampeCatalogChanges(result.changes),
       complete: result.complete,
       message: result.message,
     };

@@ -51,7 +51,10 @@ import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup, sweepStorageCache } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
-import { refreshDelcampeCategoriesIfStale } from "@/lib/delcampe-category-catalog";
+import {
+  describeDelcampeCatalogChanges,
+  refreshDelcampeCategoriesIfStale,
+} from "@/lib/delcampe-category-catalog";
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
@@ -252,15 +255,31 @@ export async function start(): Promise<void> {
   // instance with no Delcampe platform, and declines again while the snapshot is under twenty hours
   // old, so a dev server restarting every few minutes never crawls.
   //
+  // **Every tick says something**, which is where this one departs from the quiet sweeps above. Those
+  // stay silent when nothing moved because they fire hourly and speak for themselves; this fires
+  // daily against somebody else's site, and "the nightly read is not running at all" and "it ran and
+  // Delcampe had not changed anything" are opposite problems that a silent pass renders identical.
+  // So a skip states its reason and a run states what it changed.
+  //
+  // The changes are **counts only**: how many categories arrived, went, and moved. Naming them would
+  // be a line nobody reads on an ordinary night and an unreadable one on the night Delcampe
+  // restructures a continent.
+  //
   // A pass that stops short is **not** an error and is not logged as one: Delcampe asking us to slow
   // down is an answer, what was already read is kept, and tomorrow's pass starts again.
   const delcampeCategories = async () => {
     try {
-      const result = await refreshDelcampeCategoriesIfStale();
-      if (!result) return;
+      const tick = await refreshDelcampeCategoriesIfStale();
+      if (tick.status === "skipped") {
+        console.log(`[delcampe-categories] skipped — ${tick.reason}`);
+        return;
+      }
       console.log(
-        `[delcampe-categories] read ${result.read} categor(ies) from ${result.pagesRead} page(s)` +
-          (result.complete ? "" : ` — stopped short: ${result.message ?? "unknown reason"}`)
+        `[delcampe-categories] read ${tick.read} categor(ies) from ${tick.pagesRead} page(s): ` +
+          describeDelcampeCatalogChanges(tick.changes) +
+          (tick.complete
+            ? ""
+            : ` — stopped short, nothing deleted: ${tick.message ?? "unknown reason"}`)
       );
     } catch (err) {
       console.error("[delcampe-categories] refresh failed", err);

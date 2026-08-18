@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   crawlDelcampeCategories,
+  describeDelcampeCatalogChanges,
   refreshDelcampeCategories,
 } from "../src/lib/delcampe-category-catalog";
 
@@ -64,8 +65,9 @@ async function main(): Promise<void> {
 async function storeRefresh(): Promise<boolean> {
   const result = await refreshDelcampeCategories();
   console.log(
-    `[delcampe-categories] ${result.read} categories from ${result.pagesRead} page(s)` +
-      (result.complete ? "" : " — incomplete")
+    `[delcampe-categories] ${result.read} categories from ${result.pagesRead} page(s): ` +
+      describeDelcampeCatalogChanges(result.changes) +
+      (result.complete ? "" : " — incomplete, nothing deleted")
   );
   if (result.message) console.log(`[delcampe-categories] ${result.message}`);
   return result.complete;

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDelcampeCategoryTree,
+  diffDelcampeCategories,
   decodeEntities,
   delcampeCategoryAncestorIds,
   delcampeCategoryRow,
@@ -231,5 +232,53 @@ describe("expanding the tree", () => {
         "Stamps > Europe > Poland > 1919-1939 Republic",
       ]
     );
+  });
+});
+
+describe("diffDelcampeCategories", () => {
+  const before = [
+    { id: "7945", name: "Used stamps", path: "Stamps > Europe > Poland > 1919-1939 > Used stamps" },
+    { id: "7936", name: "Unused stamps", path: "Stamps > Europe > Poland > 1919-1939 > Unused stamps" },
+    { id: "9999", name: "Gone", path: "Stamps > Europe > Nowhere > Gone" },
+  ];
+
+  it("counts what arrived, what went, and what moved", () => {
+    const after = [
+      // unchanged
+      before[0],
+      // renamed in place — the same category, said differently
+      { ...before[1], name: "Mint stamps" },
+      // new
+      { id: "7911", name: "Blocks", path: "Stamps > Europe > Poland > Blocks" },
+    ];
+    assert.deepEqual(diffDelcampeCategories(before, after, true), {
+      added: 1,
+      removed: 1,
+      changed: 1,
+      unchanged: 1,
+    });
+  });
+
+  it("counts a category moved elsewhere in the tree as changed, not as added and removed", () => {
+    const after = [
+      { ...before[0], path: "Stamps > Europe > Poland > Second Republic > Used stamps" },
+      before[1],
+      before[2],
+    ];
+    const changes = diffDelcampeCategories(before, after, true);
+    assert.equal(changes.changed, 1);
+    assert.equal(changes.added, 0);
+    assert.equal(changes.removed, 0);
+  });
+
+  it("never reports a removal from an incomplete pass", () => {
+    // A walk cut short saw a subset, so every category it did not reach would look retired — which
+    // is also exactly why nothing is deleted on one. The count and the write agree.
+    assert.deepEqual(diffDelcampeCategories(before, [before[0]], false), {
+      added: 0,
+      removed: 0,
+      changed: 0,
+      unchanged: 1,
+    });
   });
 });

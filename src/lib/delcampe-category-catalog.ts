@@ -1,8 +1,10 @@
 import "server-only";
 import { prisma } from "./db";
 import {
+  type DelcampeCatalogChanges,
   type DelcampeCategoryRow,
   delcampeCategoryRow,
+  diffDelcampeCategories,
   parseDelcampeCategoryPage,
 } from "./delcampe-category-catalog-rules";
 import { DELCAMPE_PLATFORM_MODULE } from "./platform-modules";
@@ -60,6 +62,9 @@ export interface DelcampeCatalogRefresh {
   /** Rows read. Not necessarily rows stored — see {@link complete}. */
   read: number;
   pagesRead: number;
+  /** How the stored catalogue changed, in counts. What the log line and the settings panel report:
+   *  "the nightly read ran, and here is how much moved". */
+  changes: DelcampeCatalogChanges;
   /** Whether the walk finished. Only a complete pass may delete: a pass cut short by a refusal has
    *  no opinion about the categories it never reached, and treating it as one would empty the picker
    *  of everything below the page it stopped at. */
@@ -207,6 +212,13 @@ async function runRefresh(): Promise<DelcampeCatalogRefresh> {
   const { rows, pagesRead, complete, message } = await crawlDelcampeCategories();
   const refreshedAt = new Date();
 
+  // Read before writing, so the counts describe what this pass *did* rather than what it found. It
+  // is one flat read of a few thousand short rows, against a walk that has just taken minutes.
+  const previous = await prisma.delcampeCategory.findMany({
+    select: { id: true, name: true, path: true },
+  });
+  const changes = diffDelcampeCategories(previous, rows, complete);
+
   if (complete && rows.length > 0) {
     // A complete pass **is** the whole list, so it is written as one: empty the table and insert,
     // inside a single transaction. Under Postgres's MVCC a reader mid-refresh sees yesterday's rows
@@ -235,7 +247,7 @@ async function runRefresh(): Promise<DelcampeCatalogRefresh> {
   }
 
   remember(null);
-  return { read: rows.length, pagesRead, complete, message };
+  return { read: rows.length, pagesRead, changes, complete, message };
 }
 
 function chunk<T>(rows: readonly T[], size: number): T[][] {
@@ -332,17 +344,29 @@ export async function delcampeCategoryCatalogStatus(): Promise<DelcampeCatalogSt
  *  every few minutes must not walk somebody else's site every few minutes. */
 const STALE_AFTER_MS = 20 * 60 * 60 * 1000;
 
+/** Why a scheduled pass did nothing, or what it did. Reported rather than swallowed: "the nightly
+ *  read is not running" and "the nightly read ran and found nothing to do" look identical in a log
+ *  that only speaks up when something moved, and they are opposite problems. */
+export type DelcampeCatalogTick =
+  | { status: "skipped"; reason: string }
+  | ({ status: "ran" } & DelcampeCatalogRefresh);
+
 /**
  * The daily pass, and the one made shortly after boot.
  *
- * Three things it declines to do, each of which is the reason it can be scheduled at all: it does
+ * Two things it declines to do, each of which is the reason it can be scheduled at all: it does
  * nothing on an instance that has not named a Delcampe platform (the walk is somebody else's site,
- * and an instance that does not list there has no business reading it), nothing while the snapshot
- * is younger than {@link STALE_AFTER_MS} (so a restart is not a crawl), and nothing to the stored
- * rows when a pass is cut short.
+ * and an instance that does not list there has no business reading it), and nothing while the
+ * snapshot is younger than {@link STALE_AFTER_MS} (so a restart is not a crawl). A third holds
+ * inside the pass itself: nothing is deleted when a read is cut short.
+ *
+ * Both refusals come back **in words**, because the caller's job is to write one line a day saying
+ * what happened, and "nothing happened" is one of the things that can happen.
  */
-export async function refreshDelcampeCategoriesIfStale(): Promise<DelcampeCatalogRefresh | null> {
-  if (!(await anyCollectionListsOnDelcampe())) return null;
+export async function refreshDelcampeCategoriesIfStale(): Promise<DelcampeCatalogTick> {
+  if (!(await anyCollectionListsOnDelcampe())) {
+    return { status: "skipped", reason: "no collection lists on Delcampe" };
+  }
   const status = await delcampeCategoryCatalogStatus();
   // The checked-in snapshot is never "fresh enough": it is as old as the release, and the first pass
   // on a new instance is what turns it into something current.
@@ -351,7 +375,20 @@ export async function refreshDelcampeCategoriesIfStale(): Promise<DelcampeCatalo
     status.lastRefreshedAt &&
     Date.now() - Date.parse(status.lastRefreshedAt) < STALE_AFTER_MS
   ) {
-    return null;
+    const hours = Math.floor((Date.now() - Date.parse(status.lastRefreshedAt)) / 3_600_000);
+    return {
+      status: "skipped",
+      reason: `last read ${hours}h ago, refreshes after ${STALE_AFTER_MS / 3_600_000}h`,
+    };
   }
-  return refreshDelcampeCategories();
+  return { status: "ran", ...(await refreshDelcampeCategories()) };
+}
+
+/** One line's worth of what a pass changed. Kept beside the tick rather than in the caller, so the
+ *  scheduled log, the command and the settings panel all say it the same way. */
+export function describeDelcampeCatalogChanges(changes: DelcampeCatalogChanges): string {
+  return (
+    `${changes.added} added, ${changes.removed} removed, ` +
+    `${changes.changed} changed, ${changes.unchanged} unchanged`
+  );
 }

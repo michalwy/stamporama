@@ -106,6 +106,16 @@ Refreshing is a walk of somebody else's site, and is treated as such:
   read and try again tomorrow.
 - **Only a complete pass may delete.** A pass cut short has no opinion about the categories it never
   reached.
+- **Every tick says something in the log**, which is a deliberate departure from the quiet sweeps
+  beside it. Those fire hourly over the collection's own data and stay silent when nothing moved;
+  this fires daily against somebody else's site, where "the nightly read is not running at all" and
+  "it ran and Delcampe had not changed anything" are opposite problems that a silent pass renders
+  identical. So a skip states its reason — no Delcampe platform, or how old the snapshot still is —
+  and a run states what it changed: **added, removed, changed, unchanged**, as counts. Counts and not
+  names, because naming them is a line nobody reads on an ordinary night and an unreadable one on the
+  night Delcampe restructures a continent. Removals are reported as **zero after an incomplete pass**,
+  matching what the write does, so the number reported and the number acted on are the same number.
+  The settings panel and `pnpm delcampe:categories` say it in the same words, from the same function.
 
 The parse is pure and unit-tested against saved markup, because the failure that matters — the list
 stopped being readable — must be catchable in a test rather than only in a silently empty picker.
