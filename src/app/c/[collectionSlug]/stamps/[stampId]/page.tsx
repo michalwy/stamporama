@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getStampListItem, getStampRelatives } from "@/lib/stamps";
+import { getIssueListItem } from "@/lib/issues";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { StampDetailPanel } from "./stamp-detail-panel";
 
@@ -29,7 +30,8 @@ export async function generateMetadata({ params }: StampDetailPageProps): Promis
 /**
  * One stamp, whole (#518): its identity and catalog numbers, its photos, what every catalog says
  * it is worth, where it sits in the variant tree, which issue it belongs to, and the copies and
- * offers behind it. The edit dialogs stay where they are — this page reads, it does not write.
+ * offers behind it. The edit dialogs stay where they are — every field is written through the
+ * dialog that already owned it, including the variant tree's own operations (#630).
  */
 export default async function StampDetailPage({ params }: StampDetailPageProps) {
   const { collectionSlug, stampId } = await params;
@@ -53,6 +55,11 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
     getCollectionAreas(session.user.id, collection.id),
     getStampRelatives(session.user.id, stampId),
   ]);
+  // The issue the Variants card writes against (#630), read through the Issues list' own
+  // enrichment so the add dialog offers the checklists and the range prompt it offers there.
+  const treeIssue = relatives.treeIssueId
+    ? await getIssueListItem(session.user.id, collection.id, relatives.treeIssueId)
+    : null;
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -72,6 +79,7 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
         baseCurrency={collection.baseCurrency}
         stamp={stamp}
         relatives={relatives}
+        treeIssue={treeIssue}
         areas={areas}
       />
     </div>

@@ -101,7 +101,20 @@ Offers. Only Details is always there.
 - **Photos** — the stamp's catalog photos, full gallery.
 - **Catalog prices** — averages inline, full per-edition breakdown behind the button.
 - **Variants** — the base stamp this one hangs under, and the variants hanging under it. Each is a
-  link to its own page.
+  link to its own page. This is also where a variant tree is **built**: a line at the top says where
+  this stamp sits among its siblings (*Variant 2 of 5*) and which issue the card is working in, and
+  the card's own controls do the rest.
+  - **Add variant** opens the same add-stamp form the Issues list
+    opens, with this stamp already set as the parent and its catalog numbers filled in for you to
+    suffix (`309` → `309A`). The new variant joins the issue named in the line above.
+  - Each variant's `⋮` menu offers **Edit** — the same stamp form, subtype included — and
+    **Delete**. *Open stamp page* and *Edit* are also on the row as hover icons.
+  - **Reorder** turns on drag handles so the variants can be put in the order you want them listed,
+    exactly as [reordering on the issue's tree](collections.md#putting-the-stamps-in-your-own-order)
+    does — it is the same order, so a drag here shows up there.
+  - Order is per issue, so the card works in **one** issue: your stamp's first one. A stamp that
+    belongs to no issue keeps a read-only card, and when some of the variants belong to a different
+    issue the card says so instead of offering a reorder the server would refuse.
 - **Copies** — the copies you hold of exactly this stamp (a variant's copies are its own, never
   rolled up into its parent).
 - **Wants** — everything recorded on your [want list](wants.md) for this stamp: the acceptance

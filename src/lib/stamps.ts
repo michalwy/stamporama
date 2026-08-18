@@ -481,14 +481,27 @@ function toStampListItem(
     colnectId: stamp.colnectId,
     catalogNumbers: stamp.catalogNumbers,
     areaId,
-    issues: stamp.issueMemberships.map((m) => ({
-      issueId: m.issueId,
-      issueName: m.issue.name,
-      issueYear: m.issue.year,
-      // Each membership answers for its own issue: a stamp on two issues is on each one's
-      // checklists separately, exactly as the old per-membership boolean was.
-      checklists: m.issue.checklists.map((c) => ({ ...c, on: onChecklist.has(c.id) })),
-    })),
+    issues: stamp.issueMemberships
+      .map((m) => ({
+        issueId: m.issueId,
+        issueName: m.issue.name,
+        issueYear: m.issue.year,
+        // Each membership answers for its own issue: a stamp on two issues is on each one's
+        // checklists separately, exactly as the old per-membership boolean was.
+        checklists: m.issue.checklists.map((c) => ({ ...c, on: onChecklist.has(c.id) })),
+      }))
+      // Sorted so `issues[0]` is a **rule** and not whatever Postgres handed back. Several readers
+      // already call it *the first membership* and act on it — the stamp edit dialog picks the
+      // checklists it edits from it (#531), the Variants card writes its tree against it (#630) —
+      // and a stamp on two issues would otherwise have those two disagree between page loads. The
+      // earliest issue reads as first, a year-less one last, and the id settles a tie. Sorted here
+      // rather than in the select because `STAMP_LIST_SELECT` is `as const` and Prisma's `orderBy`
+      // will not take a readonly array.
+      .sort(
+        (a, b) =>
+          (a.issueYear ?? Infinity) - (b.issueYear ?? Infinity) ||
+          a.issueId.localeCompare(b.issueId)
+      ),
     // convertedAmount filled by buildStampListItems after rates are fetched
     mainCatalogPrice: main
       ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency }
@@ -802,17 +815,45 @@ export async function getStampListItem(
   return item;
 }
 
+/** Where in the tree this stamp sits among the variants beside it (#630) — `1` of `5`, one-based,
+ *  read in the very order the card lists a parent's children in. */
+export interface StampSiblingPosition {
+  index: number;
+  total: number;
+}
+
 /** A stamp's place in the variant tree (#54): the base it hangs under, and the variants under it. */
 export interface StampRelatives {
   parent: StampListItem | null;
   children: StampListItem[];
+  /** This stamp's place among its siblings, or null when it hangs under no base stamp. */
+  position: StampSiblingPosition | null;
+  /**
+   * The issue the Variants card writes against (#630): the stamp's **first** issue membership,
+   * null when it belongs to none. Sibling order and issue membership are both per-issue facts
+   * (`IssueMember.sortOrder`, #549), so a card that manages a tree has to settle on one issue —
+   * the same first-membership rule the stamp edit dialog already edits checklists by. The card
+   * *names* it rather than assuming it, so a stamp on two issues says which one is being changed.
+   */
+  treeIssueId: string | null;
+  /**
+   * Whether {@link children} are one **complete** sibling group of {@link treeIssueId} — the only
+   * shape `reorderIssueMembers` accepts (#549). False when a variant belongs to some other issue
+   * (or to none), where a drag here would send the server a partial group.
+   */
+  childrenOrderable: boolean;
 }
 
 /**
  * The parent and the direct children of a stamp, each enriched as a list row so the variant card
  * on the stamp detail screen (#518) reads like the issue tree it mirrors. One level in each
- * direction: the card is navigation, and a whole subtree drawn on a detail page is the issue
- * screen's job (#519).
+ * direction: the card manages *this* stamp's own level, and a whole subtree drawn on a detail page
+ * is the issue screen's job (#519).
+ *
+ * Order is the tree's own, not the catalogue's: `IssueMember.sortOrder` within {@link
+ * StampRelatives.treeIssueId} where the stamp is a member, then the denormalized catalog sort key
+ * (ADR-0014) — the variant price grid's rule exactly (#618), so the two surfaces list one tree the
+ * same way round and a drag here shows up there.
  */
 export async function getStampRelatives(
   ownerId: string,
@@ -823,24 +864,48 @@ export async function getStampRelatives(
   await assertCollectionOwner(ownerId, collectionId);
   const self = await prisma.stamp.findUniqueOrThrow({
     where: { id: stampId },
-    select: { parentId: true },
-  });
-  const [primaryCatalogByArea, baseCurrency, displayConditionId, rows] = await Promise.all([
-    buildEffectivePrimaryCatalogMap(collectionId),
-    getCollectionBaseCurrency(collectionId),
-    resolveDisplayConditionId(collectionId, opts?.displayConditionId),
-    prisma.stamp.findMany({
-      where: {
-        collectionId,
-        OR: [
-          { parentId: stampId },
-          ...(self.parentId ? [{ id: self.parentId }] : []),
-        ],
+    select: {
+      parentId: true,
+      // The first membership, on `toStampListItem`'s own rule — earliest issue, id to settle a
+      // tie — so the issue this card writes against is the one the header's Issues card leads with.
+      issueMemberships: {
+        select: { issueId: true, issue: { select: { year: true } } },
       },
-      orderBy: [{ primaryCatalogSortKey: { sort: "asc", nulls: "last" } }, { name: "asc" }],
-      select: STAMP_LIST_SELECT,
-    }),
-  ]);
+    },
+  });
+  const treeIssueId =
+    [...self.issueMemberships].sort(
+      (a, b) =>
+        (a.issue.year ?? Infinity) - (b.issue.year ?? Infinity) ||
+        a.issueId.localeCompare(b.issueId)
+    )[0]?.issueId ?? null;
+
+  const [primaryCatalogByArea, baseCurrency, displayConditionId, rows, memberOrder] =
+    await Promise.all([
+      buildEffectivePrimaryCatalogMap(collectionId),
+      getCollectionBaseCurrency(collectionId),
+      resolveDisplayConditionId(collectionId, opts?.displayConditionId),
+      prisma.stamp.findMany({
+        where: {
+          collectionId,
+          OR: [
+            { parentId: stampId },
+            ...(self.parentId ? [{ id: self.parentId }, { parentId: self.parentId }] : []),
+          ],
+        },
+        orderBy: [{ primaryCatalogSortKey: { sort: "asc", nulls: "last" } }, { name: "asc" }],
+        select: STAMP_LIST_SELECT,
+      }),
+      // Only the tree issue's positions are read: they are the order this card draws and the order
+      // a drag from it writes back.
+      treeIssueId
+        ? prisma.issueMember.findMany({
+            where: { issueId: treeIssueId },
+            select: { stampId: true, sortOrder: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
   const items = await buildStampListItems(
     rows,
     collectionId,
@@ -849,9 +914,38 @@ export async function getStampRelatives(
     displayConditionId,
     opts?.displayFormatId ?? null
   );
+  const sortOrderByStamp = new Map(memberOrder.map((m) => [m.stampId, m.sortOrder]));
+  /** The catalogue order the query returned, used as the tiebreak — and as the whole answer for a
+   *  group the tree issue does not order. A stable sort keeps it under equal keys. */
+  const catalogRank = new Map(items.map((i, rank) => [i.id, rank]));
+  const inTreeOrder = (group: StampListItem[]): StampListItem[] =>
+    [...group].sort((a, b) => {
+      const sa = sortOrderByStamp.get(a.id);
+      const sb = sortOrderByStamp.get(b.id);
+      if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb;
+      // A member always precedes a non-member: the manual order is the one the collector set.
+      if ((sa === undefined) !== (sb === undefined)) return sa === undefined ? 1 : -1;
+      return (catalogRank.get(a.id) ?? 0) - (catalogRank.get(b.id) ?? 0);
+    });
+
+  const children = inTreeOrder(items.filter((i) => i.parentId === stampId));
+  const siblings = self.parentId
+    ? inTreeOrder(items.filter((i) => i.parentId === self.parentId))
+    : [];
+  const selfIndex = siblings.findIndex((i) => i.id === stampId);
+
   return {
     parent: items.find((i) => i.id === self.parentId) ?? null,
-    children: items.filter((i) => i.parentId === stampId),
+    children,
+    // The stamp is one of its parent's children, so it is in `siblings` by construction; the
+    // guard is for a tree that changed under the read, not for an ordinary miss.
+    position:
+      self.parentId && selfIndex >= 0
+        ? { index: selfIndex + 1, total: siblings.length }
+        : null,
+    treeIssueId,
+    childrenOrderable:
+      !!treeIssueId && children.length > 1 && children.every((c) => sortOrderByStamp.has(c.id)),
   };
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { StampIssueMembership, StampListItem, StampRelatives } from "@/lib/stamps";
+import type { IssueListItem } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import { formatIssuedDate, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import {
@@ -29,10 +30,12 @@ import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-co
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
 import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { StampVariantsCard } from "./stamp-variants-card";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
 // two relationships a row cannot draw at all: the variant tree around it (#54) and the copies
-// held of it (#348).
+// held of it (#348). The tree is also **worked** here (#630) — see `stamp-variants-card.tsx` for
+// why that is not the page becoming a second editor.
 
 export function StampDetailPanel({
   collectionId,
@@ -40,6 +43,7 @@ export function StampDetailPanel({
   baseCurrency,
   stamp,
   relatives,
+  treeIssue,
   areas,
 }: {
   collectionId: string;
@@ -47,6 +51,9 @@ export function StampDetailPanel({
   baseCurrency: string;
   stamp: StampListItem;
   relatives: StampRelatives;
+  /** The issue the Variants card writes against (#630) — {@link StampRelatives.treeIssueId}
+   *  enriched as its list row, or null when this stamp belongs to no issue. */
+  treeIssue: IssueListItem | null;
   areas: CollectionAreaData[];
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
@@ -145,33 +152,14 @@ export function StampDetailPanel({
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: stamp.id }} />
 
-            <DetailCard
-              title="Variants"
-              count={relatives.children.length || null}
-              empty={!relatives.parent && relatives.children.length === 0}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {relatives.parent && (
-                  <RelativeRow
-                    role="Base stamp"
-                    stamp={relatives.parent}
-                    collectionSlug={collectionSlug}
-                    maps={maps}
-                  />
-                )}
-                {relatives.children.map((child) => (
-                  <RelativeRow
-                    key={child.id}
-                    role="Variant"
-                    stamp={child}
-                    collectionSlug={collectionSlug}
-                    maps={maps}
-                    indented={!!relatives.parent}
-                    showCopies
-                  />
-                ))}
-              </div>
-            </DetailCard>
+            <StampVariantsCard
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              stamp={stamp}
+              relatives={relatives}
+              treeIssue={treeIssue}
+              maps={maps}
+            />
           </DetailColumn>
 
           {/* Right: what the collection holds and does with it. */}
@@ -251,62 +239,6 @@ function IssueMembershipRow({
           "(unnamed issue)"}
       </Link>
       <ChecklistMembershipChip checklists={membership.checklists} />
-      <span style={{ marginLeft: "auto" }}>
-        <RowQuickActions actions={[detailPage]} visible={hovered} />
-      </span>
-    </div>
-  );
-}
-
-/**
- * A neighbour in the variant tree: what it is to this stamp, its identity, and the same dimmed
- * icon every row in the app carries to reach a record's own screen.
- */
-function RelativeRow({
-  role,
-  stamp,
-  collectionSlug,
-  maps,
-  indented = false,
-  showCopies = false,
-}: {
-  /** How this stamp relates to the one on screen — "Base stamp" or "Variant". */
-  role: string;
-  stamp: StampListItem;
-  collectionSlug: string;
-  maps: ReturnType<typeof useAreaVendorMaps>;
-  indented?: boolean;
-  showCopies?: boolean;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const detailPage = useDetailPageAction("stamp", stamp.id);
-  const vendorMap = maps.vendorMapFor(stamp.areaId, stamp.issues[0]?.issueId ?? null);
-  const primaryVendorId = maps.primaryVendorByArea.get(stamp.areaId ?? "") ?? null;
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        paddingLeft: indented ? "1rem" : 0,
-      }}
-    >
-      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", flexShrink: 0 }}>
-        {role}
-      </span>
-      <StampIdentity
-        stamp={stamp}
-        vendorMap={vendorMap}
-        primaryVendorId={primaryVendorId}
-        size="small"
-        href={`/c/${collectionSlug}/stamps/${stamp.id}`}
-      />
-      {showCopies && (
-        <CopyCountBadge copies={stamp.copies} variantCopies={stamp.variantCopies} />
-      )}
       <span style={{ marginLeft: "auto" }}>
         <RowQuickActions actions={[detailPage]} visible={hovered} />
       </span>
