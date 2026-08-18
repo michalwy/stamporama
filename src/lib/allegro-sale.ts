@@ -8,14 +8,15 @@ import { allegroOrderPageUrl } from "./allegro-oauth";
 import { getShippingMethods } from "./shipping-methods";
 import { listSellableOffers, createSale, addSaleLines, setSaleStatus } from "./sales";
 import type { AllegroPaymentStatus } from "./allegro-sync-rules";
+import { matchShippingMethod, type ShippingPrefill } from "./allegro-sale-rules";
+// The three an order-shaped sale needs whatever marketplace it came from (#612 moved them out of
+// the Allegro-named module): which sets a line stands for, what day it is dated, who the buyer is.
 import {
   buyerIdentityFor,
   mapLineToSets,
-  matchShippingMethod,
   saleDateOf,
   type LineSkipReason,
-  type ShippingPrefill,
-} from "./allegro-sale-rules";
+} from "./order-sale-rules";
 import type { ResolvedSaleHeader } from "./sale-header-input";
 
 /**

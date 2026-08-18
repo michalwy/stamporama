@@ -11,6 +11,9 @@ import type {
   MatchResponse,
   LotLookupResponse,
   OfferLookupResponse,
+  OrderImportResponse,
+  OrderLookupResponse,
+  ReportedOrder,
   OpenMatchResponse,
   OverwriteNumberResponse,
   SearchResponse,
@@ -21,6 +24,7 @@ import { callCapture } from "./capture-client";
 import { callSearch } from "./search-client";
 import { callOfferLookup } from "./offer-lookup-client";
 import { callLotLookup } from "./lot-lookup-client";
+import { callOrderImport, callOrderLookup } from "./order-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
 import {
@@ -179,6 +183,34 @@ async function lookupLots(platformOfferIds: string[]): Promise<LotLookupResponse
   return callLotLookup(profile, platformOfferIds);
 }
 
+/**
+ * Answer a seller screen's "which of these orders are recorded here?" (#612).
+ *
+ * No active profile is an **empty answer** rather than an error, as both lookups above are: a page
+ * that cannot be asked must be left exactly as it was found, and marking a row *Import* when there is
+ * no instance to import into would be worse than not marking it at all.
+ */
+async function lookupOrders(orderIds: string[]): Promise<OrderLookupResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) return { ok: true, matches: {} };
+  return callOrderLookup(profile, orderIds);
+}
+
+/**
+ * Record one order as a sale (#612).
+ *
+ * No active profile is an **error** here and not an empty answer, which is the opposite of the
+ * lookups: this one happens because the collector pressed a button, and a click that quietly did
+ * nothing is the one outcome they cannot act on.
+ */
+async function importOrder(order: ReportedOrder): Promise<OrderImportResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return { ok: false, error: "No active profile. Set one in the extension options." };
+  }
+  return callOrderImport(profile, order);
+}
+
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
   // Fire-and-forget page report from a content script: show what's there, then refine the badge
   // into "work to do" once the dry-run comes back. No response expected.
@@ -264,6 +296,33 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         } satisfies LotLookupResponse)
+      );
+    return true;
+  }
+
+  // "Which of these orders have I already written down?" (#612), asked by a marketplace's own sold
+  // items screen as it loads — the selling-side sibling of the two lookups above.
+  if (msg?.type === "order-lookup") {
+    lookupOrders(msg.orderIds)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies OrderLookupResponse)
+      );
+    return true;
+  }
+
+  // "Record this one" (#612) — the same page, one row, and the collector's own click.
+  if (msg?.type === "order-import") {
+    importOrder(msg.order)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies OrderImportResponse)
       );
     return true;
   }

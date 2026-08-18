@@ -2,9 +2,11 @@ import {
   canCapture,
   canExtract,
   canList,
+  canReadOrders,
   type CaptureCapableModule,
   type ExtractionCapableModule,
   type ListingCapableModule,
+  type OrdersCapableModule,
   type PlatformModule,
 } from "./module";
 
@@ -37,6 +39,13 @@ export function findCaptureModuleForUrl(url: string): CaptureCapableModule | nul
   );
 }
 
+/** The first registered module that reads a seller's own **orders** off `url`, or null when none
+ *  does (#612). A fourth question about a page for the same reason as the third: a marketplace's
+ *  order screens are neither a catalogue, nor a listing, nor an auction to bid on. */
+export function findOrdersModuleForUrl(url: string): OrdersCapableModule | null {
+  return modules.find((m): m is OrdersCapableModule => canReadOrders(m) && m.orders.matches(url)) ?? null;
+}
+
 /** The module with this id, or null. Ids come off a listing task (`platform.module`, #406) rather
  *  than off a URL: a listing starts from an offer, before any marketplace page is open. */
 export function findModuleById(id: string): PlatformModule | null {
@@ -55,7 +64,7 @@ export function registeredModules(): readonly PlatformModule[] {
 }
 
 /** What one module can do, by name (#408/#355). */
-export type ModuleCapability = "extract" | "listing" | "capture";
+export type ModuleCapability = "extract" | "listing" | "capture" | "orders";
 
 export interface ModuleReport {
   id: string;
@@ -72,6 +81,7 @@ export function moduleReports(): ModuleReport[] {
     if (canExtract(m)) capabilities.push("extract");
     if (canList(m)) capabilities.push("listing");
     if (canCapture(m)) capabilities.push("capture");
+    if (canReadOrders(m)) capabilities.push("orders");
     return { id: m.id, name: m.name, capabilities };
   });
 }

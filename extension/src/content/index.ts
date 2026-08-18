@@ -1,4 +1,8 @@
-import { findCaptureModuleForUrl, findModuleForUrl } from "../platform/modules";
+import {
+  findCaptureModuleForUrl,
+  findModuleForUrl,
+  findOrdersModuleForUrl,
+} from "../platform/modules";
 import {
   attachListingPhotos,
   fillListing,
@@ -9,15 +13,21 @@ import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
 import {
   anchorIsListRow,
   anchorNeedsLink,
-  isAssistantNode,
   offerAnchors,
   renderInlineOfferLink,
   renderOfferMarker,
   type OfferMarkerTarget,
 } from "../core/offer-marker";
+import { isAssistantNode } from "../core/marker-shell";
+import {
+  orderNeedsMark,
+  renderOrderMark,
+  type OrderSaleTarget,
+} from "../core/order-marker";
 import { renderLotMarker, type LotMarkerTarget } from "../core/lot-marker";
 import { getProfileStore } from "../core/profile";
 import { markIconUrl as iconUrl } from "../core/mark";
+import type { PlatformOrder } from "../platform/orders";
 import type {
   AttachPhotoPayload,
   AttachPhotosRequest,
@@ -35,14 +45,19 @@ import type {
   ListingSubmittedNotice,
   OfferLookupRequest,
   OfferLookupResponse,
+  OrderImportRequest,
+  OrderImportResponse,
+  OrderLookupRequest,
+  OrderLookupResponse,
 } from "../core/messages";
 import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
 //   • declaratively (manifest `content_scripts`) on Colnect — so the toolbar badge can show how many
-//     items the page holds before the popup is ever opened — and on Allegro's offer pages and the
+//     items the page holds before the popup is ever opened — on Allegro's offer pages and the
 //     seller's own assortment list, for the links back to the offers those listings are here (#466)
-//     and to the auction lots they are being bid on as (#575);
+//     and to the auction lots they are being bid on as (#575), and on Delcampe's own sold-items
+//     screens, for what each order is here and the button that records one (#612);
 //   • injected on demand by the popup (chrome.scripting) — which also covers tabs that were already
 //     open when the extension was installed or reloaded, where the declarative script never ran.
 //
@@ -51,7 +66,9 @@ import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 // — the offer pages (`/oferta/*`, `/produkt/*`) and the seller's own assortment list — because #355
 // scripted none of that site: a capture starts with a toolbar click, which is what grants access to
 // the page. An in-page link cannot wait for a click, so the narrowest match that still covers the
-// pages the collector reads their own listings on is the trade made for it.
+// pages the collector reads their own listings on is the trade made for it. Delcampe's is narrower
+// still — the seller's own sold-items screens and nothing else — for the same reason: those are the
+// only Delcampe pages this extension has anything to say about.
 //
 // Detection is entirely local — no instance call is made to produce the badge count.
 
@@ -362,6 +379,95 @@ async function markOwnListings(): Promise<void> {
   }
 }
 
+// ── The seller's own sold orders (#612) ─────────────────────────────────────
+
+/** What the instance last said about each order on this page, by the marketplace's own order id.
+ *  A miss is remembered too, exactly as the two listing lookups remember theirs: an order that is not
+ *  recorded is the ordinary case, and the row showing *Import* is that answer being drawn. */
+const knownOrders = new Map<string, OrderSaleTarget | null>();
+
+/**
+ * Mark every sold order on this page with what it is here (#612).
+ *
+ * The page states which orders it holds — read by the module that knows this marketplace, so the
+ * shell never names Delcampe — and the **instance** states which of them are already sales. An order
+ * it has never heard of gets the *Import* affordance, which is the only mark in the extension that
+ * offers an act rather than an answer: it is what the collector came to the screen to do.
+ *
+ * Silent when the page is not a sold-order screen, when there is no profile, and when the instance
+ * says nothing — a marked row that could not actually import would be worse than an unmarked one.
+ */
+async function markSoldOrders(): Promise<void> {
+  const module = findOrdersModuleForUrl(location.href);
+  if (!module) return;
+
+  const orders = module.orders.read(document, location.href);
+  if (orders.length === 0) return;
+
+  const unknown = orders
+    .map((order) => order.orderId)
+    .filter((orderId) => !knownOrders.has(orderId));
+  if (unknown.length > 0) {
+    const res = (await chrome.runtime.sendMessage({
+      type: "order-lookup",
+      orderIds: unknown,
+    } satisfies OrderLookupRequest)) as OrderLookupResponse;
+    // No answer leaves the page unmarked rather than marked wrongly: nothing is recorded here as far
+    // as this page is concerned, and offering to import into an instance that did not reply would
+    // promise something the next click cannot deliver.
+    if (!res?.ok) return;
+    for (const orderId of unknown) knownOrders.set(orderId, res.matches[orderId] ?? null);
+  }
+
+  for (const order of orders) {
+    if (!orderNeedsMark(order.anchor, order.orderId)) continue;
+    drawOrderMark(order);
+  }
+}
+
+/** Draw one row's mark from what is currently known about it, and wire its button. */
+function drawOrderMark(order: PlatformOrder, refusal?: string): void {
+  const sale = knownOrders.get(order.orderId);
+  const state = sale
+    ? ({ kind: "recorded", sale } as const)
+    : refusal
+      ? ({ kind: "refused", message: refusal } as const)
+      : ({ kind: "importable" } as const);
+  renderOrderMark(order.anchor, order.orderId, state, iconUrl, () => {
+    void importOrder(order);
+  });
+}
+
+/**
+ * Record one order, and redraw its row with whatever the instance answered.
+ *
+ * The row says *Importing…* while the instance is deciding, because this is the one mark that starts
+ * something: a button that stayed unchanged would be pressed again. What replaces it is always the
+ * instance's own answer — the sale it created, or the sentence naming the item that stopped it, kept
+ * verbatim so the collector reads the same words the app would have shown them.
+ */
+async function importOrder(order: PlatformOrder): Promise<void> {
+  renderOrderMark(order.anchor, order.orderId, { kind: "importing" }, iconUrl, () => {});
+  let res: OrderImportResponse;
+  try {
+    // The element the mark hangs on is not sent: what the instance decides from is what the page
+    // printed, and an element is not something a message can carry anyway.
+    const { anchor: _anchor, ...reported } = order;
+    res = (await chrome.runtime.sendMessage({
+      type: "order-import",
+      order: reported,
+    } satisfies OrderImportRequest)) as OrderImportResponse;
+  } catch (e) {
+    res = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (res?.ok) {
+    knownOrders.set(order.orderId, res.sale);
+    drawOrderMark(order);
+    return;
+  }
+  drawOrderMark(order, res?.error ?? "The import failed.");
+}
+
 /** How long to let a burst of DOM changes settle before re-scanning. A filtered, sorted or paged
  *  table rewrites hundreds of rows in one go, and scanning after each would be a scan per row. */
 const RESCAN_DELAY_MS = 300;
@@ -391,6 +497,7 @@ function watchForNewListings(): void {
     timer = setTimeout(() => {
       timer = null;
       void markOwnListings().catch(() => {});
+      void markSoldOrders().catch(() => {});
     }, RESCAN_DELAY_MS);
   });
   observer.observe(document.body, { childList: true, subtree: true });
@@ -489,6 +596,7 @@ if (!window.__stamporamaAssistantLoaded) {
   // listing marker, which additionally asks the instance a question — one it may not be there to
   // answer, on a page that must not notice either way.
   void linkifyPrivateNote().catch(() => {});
+  void markSoldOrders().catch(() => {});
   void markOwnListings()
     .catch(() => {})
     .finally(() => watchForNewListings());

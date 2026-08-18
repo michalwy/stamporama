@@ -1,13 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { matchShippingMethod, type MatchableShippingMethod } from "../../src/lib/allegro-sale-rules";
 import {
   buyerIdentityFor,
   mapLineToSets,
-  matchShippingMethod,
   saleDateOf,
   type MappableSet,
-  type MatchableShippingMethod,
-} from "../../src/lib/allegro-sale-rules";
+} from "../../src/lib/order-sale-rules";
 
 const METHODS: MatchableShippingMethod[] = [
   { id: "m1", name: "List polecony ekonomiczny", cost: "8.50", currency: "PLN" },

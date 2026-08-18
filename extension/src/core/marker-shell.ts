@@ -15,6 +15,20 @@
 /** Marks the stack, so a chip can find the one this document already has. */
 export const STACK_ATTR = "data-stamporama-markers";
 
+// The attributes that say a node is the Assistant's own. They live here, together, because the one
+// thing every surface has to be able to ask is "did *we* draw this?" — the page watcher's own
+// question (see {@link isAssistantNode}) — and an answer assembled from constants scattered across
+// the modules that draw them is one that silently stops covering a mark somebody adds later.
+
+/** The corner chip naming the offer a listing is here (#466). */
+export const OFFER_MARKER_ATTR = "data-stamporama-offer";
+/** The inline link naming that offer beside a row's own identifier (#466). */
+export const OFFER_LINK_ATTR = "data-stamporama-offer-link";
+/** The corner chip naming the auction lot a listing is being bid on as (#575). */
+export const LOT_MARKER_ATTR = "data-stamporama-lot";
+/** The mark on a sold order: the sale it is here, or the affordance that records it (#612). */
+export const ORDER_MARK_ATTR = "data-stamporama-order";
+
 /**
  * The document's marker stack, created on first use. Null when there is no body to attach to — a
  * document being parsed is a normal thing to be handed.
@@ -76,3 +90,22 @@ export const CHIP_STYLE = [
   "text-decoration: none",
   "cursor: pointer",
 ].join("; ");
+
+/** True for markup the Assistant drew — the corner stack and anything in it (a chip of either kind),
+ *  an inline link, an order mark, or anything inside one.
+ *
+ *  A page that redraws itself is watched so the marks survive it, and our own writing is a change
+ *  like any other. Without this the first mark drawn schedules the scan that draws the next, and a
+ *  page the site is also rebuilding never settles — which is the page moving under the collector's
+ *  hands. The stack counts as ours in its own right: it is created and pruned by the chips, so a page
+ *  whose answers are all misses would otherwise schedule a scan for the container appearing and
+ *  another for it going away. */
+export function isAssistantNode(node: Node): boolean {
+  const element =
+    node.nodeType === 1 ? (node as Element) : ((node.parentElement as Element | null) ?? null);
+  return (
+    element?.closest(
+      `[${OFFER_MARKER_ATTR}], [${OFFER_LINK_ATTR}], [${LOT_MARKER_ATTR}], [${ORDER_MARK_ATTR}], [${STACK_ATTR}]`
+    ) != null
+  );
+}

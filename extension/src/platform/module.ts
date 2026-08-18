@@ -1,6 +1,7 @@
 import type { ExtractedItem } from "./types";
 import type { PlatformListing } from "./listing";
 import type { PlatformCapture } from "./capture";
+import type { PlatformOrders } from "./orders";
 
 // The interface a marketplace-specific module implements to plug into the neutral shell. Colnect is
 // the first module (#249); Delcampe/Allegro/… follow.
@@ -10,7 +11,8 @@ import type { PlatformCapture } from "./capture";
 //
 //   • **extraction** (#249) — a catalogue page read for the stamps on it, to match against ours;
 //   • **listing** (#408) — a sale form navigated to and filled, stopping before submit;
-//   • **capture** (#355) — one auction page read as the lot it is, for the watchlist.
+//   • **capture** (#355) — one auction page read as the lot it is, for the watchlist;
+//   • **orders** (#612) — a marketplace's own seller screens read for the orders on them.
 //
 // A module carrying only one of them is a **complete** module, and the surface that wanted another
 // simply does not offer it: a read-only marketplace offers no **List via Assistant** (#407), and one
@@ -28,6 +30,9 @@ export interface PlatformModule {
   listing?: PlatformListing;
   /** How this module reads one auction listing for the watchlist (#355). */
   capture?: PlatformCapture;
+  /** How this module reads the seller's own sold orders (#612). Absent = a marketplace whose sales
+   *  are recorded here by hand. */
+  orders?: PlatformOrders;
 }
 
 /** The extraction half: pure DOM → data, with no knowledge of profiles or matching. */
@@ -44,13 +49,15 @@ export type ExtractionCapableModule = PlatformModule & { extraction: PlatformExt
 export type ListingCapableModule = PlatformModule & { listing: PlatformListing };
 /** A module that carries the capture half, narrowed. */
 export type CaptureCapableModule = PlatformModule & { capture: PlatformCapture };
+/** A module that carries the orders half, narrowed. */
+export type OrdersCapableModule = PlatformModule & { orders: PlatformOrders };
 
 /** True when `module` can read a catalogue page, and narrows it. */
 export function canExtract(module: PlatformModule): module is ExtractionCapableModule {
   return module.extraction !== undefined;
 }
 
-/** True when `module` can list, and narrows it. These three are the only places an optional half is
+/** True when `module` can list, and narrows it. These four are the only places an optional half is
  *  tested, so the shell never reads `module.listing?.` and quietly does nothing. */
 export function canList(module: PlatformModule): module is ListingCapableModule {
   return module.listing !== undefined;
@@ -59,4 +66,9 @@ export function canList(module: PlatformModule): module is ListingCapableModule 
 /** True when `module` can capture a lot, and narrows it. */
 export function canCapture(module: PlatformModule): module is CaptureCapableModule {
   return module.capture !== undefined;
+}
+
+/** True when `module` can read a seller's own orders, and narrows it (#612). */
+export function canReadOrders(module: PlatformModule): module is OrdersCapableModule {
+  return module.orders !== undefined;
 }

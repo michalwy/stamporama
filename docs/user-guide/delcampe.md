@@ -248,6 +248,61 @@ A **fixed-price** offer's price is never overwritten. That figure is the one you
 listing disagrees with it, that is something to look at rather than something to have quietly
 corrected in Delcampe's favour.
 
+## Recording a sale from My Sold Items
+
+The import above tells you a listing has **come down**; the sale itself is recorded from Delcampe's
+own **My Sold Items** screens, with the [Assistant](assistant.md) installed and connected.
+
+Open any of them — *To invoice*, *Invoiced*, *To send*, *Shipped*, *Archived*, or the whole list —
+and each order row gains a small mark right after the line that says which order it is:
+
+- **Sale #34** — a link. That order is already recorded here; clicking opens the sale in a new tab.
+- **Import** — it is not recorded yet. One click records it.
+
+So the question you actually have when you are packing — *have I written this one down?* — is
+answered on the screen you are packing from, and answering it does not mean searching your sales list
+for a buyer's login.
+
+### What gets recorded
+
+One order becomes one sale: its buyer, its date, its own order number, a link back to the order on
+Delcampe, and one line per item, each matched to the offer it was here and priced at what that item
+actually sold for. The sale opens at **Ordered**, like every sale — Delcampe's own phases are not
+copied onto it, because that status is your record of what *you* have done with the parcel.
+
+If the screen states the order's total exactly, it is recorded as [what the buyer
+paid](sales.md#step-3--amounts), and your handling is worked out from it. The `± €13.95` figure
+beside it is Delcampe converting into the currency your screen displays; that one is never used.
+
+Pressing **Import** twice is harmless: an order already recorded answers with the sale it is, never a
+second one.
+
+### About the buyer, Stamporama keeps two things
+
+The buyer's **login** and the **name printed beside it** — nothing else. The address on that row and
+the e-mail behind *Contact the buyer* are not read, so they are never stored: Delcampe's e-mail is a
+relay whose lifetime nobody here can check, and an address this app could never refresh is worth less
+than no address at all. The buyer is filed under their login, so the next order from the same person
+lands on the same contact.
+
+### An order is recorded whole, or not at all
+
+If any item on the order cannot be matched, **nothing** is recorded and the mark reads **Not
+imported** — hover it for the reason, which names the item. The usual reasons:
+
+- **No offer here carries this listing.** Something sold that Stamporama never listed, or listed
+  before the [import](#reading-your-listings-back) taught it the listing's id.
+- **That offer still has several sets for sale.** Two identical copies are listed as one offer, one
+  sold, and nothing on the order says which — so it is not guessed.
+- **Sold in another currency.** The row's price is not in the currency this platform's sales are in.
+- **Delcampe states no amount.** A cancelled item prices the whole order at zero.
+
+Record that one through the offer's own [sell flow](offers.md#selling-directly-from-the-list), and
+press **Import** again for the rest — or leave it, since a sale recorded by hand is a sale.
+
+The reason it is all-or-nothing: nothing is shown to you between the click and the record, and a sale
+quietly missing a line looks exactly like a complete one while understating what you took.
+
 ## On an offer
 
 An offer on the Delcampe platform carries an **On Delcampe** card on its own screen, under the

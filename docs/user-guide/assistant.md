@@ -3,7 +3,8 @@
 The Assistant is a Chrome extension that connects marketplace pages to your collection while you
 browse. On a Colnect list page it tells you which stamps you already have, which need a decision, and
 writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
-bidding on into your [watchlist](auctions.md).
+bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** it tells you
+which of them you have already written down, and records the ones you have not.
 
 On **any page whatsoever**, selecting a catalog number and right-clicking answers the two questions
 you opened the listing with — [do I still want this, and have I already got
@@ -407,6 +408,35 @@ neither is not recognised, and no card appears.
 
 If a listing is somehow both — your own offer *and* a lot you are tracking — both cards are shown,
 one above the other.
+
+## Your Delcampe sales
+
+Open any of your **My Sold Items** screens on Delcampe — *To invoice*, *Invoiced*, *To send*,
+*Shipped*, *Archived*, or the whole list — and each order row gains a small mark right after the line
+that says which order it is:
+
+- **Sale #34** — a link. That order is already a sale here; clicking opens it in a new tab, so the
+  list you were working through keeps its place.
+- **Import** — it is not recorded yet, and one click records it: the buyer, the date, the order
+  number, and one line per item matched to the offer it was here, priced at what it sold for.
+
+It is the only mark in the Assistant that *does* something rather than telling you something, and
+that is deliberate: recording the sale is what you came to the screen for.
+
+While the click is being answered the mark reads **Importing…**, and then becomes either the new
+sale's link or **Not imported**. The second one means the order could not be recorded in full —
+hover it for the reason, which names the item that stopped it. Nothing is recorded in that case: an
+order goes in whole or not at all, because nothing is shown to you in between and a sale quietly
+missing a line looks exactly like a complete one.
+
+Stamporama keeps the buyer's **login** and the **name printed beside it**, and nothing else — not the
+address on that row, not the e-mail behind *Contact the buyer*.
+
+The full account of what is recorded, and of each reason an order can be refused, is in
+[Delcampe → Recording a sale from My Sold Items](delcampe.md#recording-a-sale-from-my-sold-items).
+It needs the platform named under **Settings → Delcampe**, and it matches items to offers best once
+you have [imported your active items](delcampe.md#reading-your-listings-back) at least once, since
+that is what teaches Stamporama each listing's own Delcampe number.
 
 ## Keeping it up to date
 

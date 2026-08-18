@@ -4,12 +4,14 @@ import { parseHTML } from "linkedom";
 import {
   anchorIsListRow,
   anchorNeedsLink,
-  isAssistantNode,
   offerAnchors,
   removeOfferMarker,
   renderInlineOfferLink,
   renderOfferMarker,
 } from "./offer-marker";
+// The "did we draw this?" test moved to the shared shell when a third kind of mark (#612) had to be
+// covered by it too; the fixtures for it are still this module's, which is why it is asserted here.
+import { isAssistantNode } from "./marker-shell";
 
 // The in-page link from a listing to the offer behind it (#466). What is worth testing here is not
 // how the chip looks but that a page can be handed the answer twice — a re-check, a second load of

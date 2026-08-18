@@ -5,6 +5,8 @@ import type { BackfillProposal, MatchResult } from "./decisions";
 import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
 import type { LotMarkerTarget } from "./lot-marker";
+import type { OrderSaleTarget } from "./order-marker";
+import type { PlatformOrder } from "../platform/orders";
 import type { SearchAnswer } from "./search";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
@@ -114,6 +116,42 @@ export interface LotLookupRequest {
 }
 export type LotLookupResponse =
   | { ok: true; matches: Record<string, LotMarkerTarget> }
+  | { ok: false; error: string };
+
+// content script (on a marketplace's own sold-order screens) → background service worker: "which of
+// these orders are already recorded here?" (#612). The selling-side sibling of the two lookups above
+// and the same trip for the same reasons — the worker holds the profile and its token, and a
+// cross-site fetch is only exempt from CORS there.
+//
+// **Many orders at once**, because a phase screen is a list of them. An order that is not recorded
+// yet is an absent entry rather than an error: it is the ordinary case, and the one the *Import*
+// affordance on that row exists for.
+export interface OrderLookupRequest {
+  type: "order-lookup";
+  /** The marketplace's own order ids, read from the addresses by the page's own module. */
+  orderIds: string[];
+}
+export type OrderLookupResponse =
+  | { ok: true; matches: Record<string, OrderSaleTarget> }
+  | { ok: false; error: string };
+
+/** One order exactly as the page printed it — the module's own reading, minus the element it is to
+ *  be marked on. What the instance decides *from*, and deliberately not a decision itself (#409). */
+export type ReportedOrder = Omit<PlatformOrder, "anchor">;
+
+// content script → background service worker: "record this order as a sale" (#612). The one message
+// from a marketplace page that **writes**, and it writes nothing itself: it reports what the row
+// printed and the instance decides which offers those items are, whether the order can be recorded
+// whole, and what the sale then says.
+//
+// A refusal comes back as a sentence naming the item that stopped it, because the way through is
+// that offer's own screen and then the same button again.
+export interface OrderImportRequest {
+  type: "order-import";
+  order: ReportedOrder;
+}
+export type OrderImportResponse =
+  | { ok: true; sale: OrderSaleTarget }
   | { ok: false; error: string };
 
 // search window → background service worker: "what does the collection hold matching this text?"
@@ -295,6 +333,8 @@ export type BackgroundMessage =
   | CaptureSaveRequest
   | OfferLookupRequest
   | LotLookupRequest
+  | OrderLookupRequest
+  | OrderImportRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

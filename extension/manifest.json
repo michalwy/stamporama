@@ -15,6 +15,14 @@
     },
     {
       "matches": [
+        "*://*.delcampe.net/*/collectables/sell/sold-items/*",
+        "*://*.delcampe.net/*/collectibles/sell/sold-items/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "*://*.allegro.pl/oferta/*",
         "*://*.allegro.pl/produkt/*",
         "*://*.allegro.pl/moje-allegro/sprzedaz/obsluga-ofert/moj-asortyment*"

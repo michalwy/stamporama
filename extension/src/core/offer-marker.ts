@@ -23,19 +23,19 @@
 //
 // Pure DOM work: no `chrome.*`, so it is unit-tested against `linkedom` like the platform modules.
 
-import { CHIP_STYLE, markerStack, pruneMarkerStack, STACK_ATTR } from "./marker-shell";
-
-/** Marks the chip, so a re-run replaces it instead of stacking a second one on the page. */
-const MARKER_ATTR = "data-stamporama-offer";
+import {
+  CHIP_STYLE,
+  markerStack,
+  OFFER_LINK_ATTR as LINK_ATTR,
+  OFFER_MARKER_ATTR as MARKER_ATTR,
+  pruneMarkerStack,
+} from "./marker-shell";
 
 /** Records **which listing** an anchor has already been answered for. It carries the id rather than
  *  being a bare flag, and it goes on the marketplace's own anchor rather than on ours, because a
  *  client-rendered list reuses its row elements: paging a table rewrites the `href` of an anchor we
  *  have already linked, and a flag would leave that row pointing at the previous page's offer. */
 const LINKED_ATTR = "data-stamporama-linked";
-
-/** Marks the inline link itself, so a caller can find, count or clear them. */
-const LINK_ATTR = "data-stamporama-offer-link";
 
 /** The offer as the page should name it. Every field comes from the instance's own answer — the
  *  page is told what its listing is, and states none of it itself. */
@@ -158,20 +158,6 @@ export function offerAnchors(doc: Document): HTMLAnchorElement[] {
  */
 export function anchorIsListRow(anchor: Element): boolean {
   return anchor.closest("tr") !== null;
-}
-
-/** True for markup the Assistant drew — the corner stack and anything in it (a chip of either kind),
- *  an inline link, or anything inside one.
- *
- *  The caller watches the page for changes so its links survive a redraw, and its own writing is a
- *  change like any other. Without this the first link drawn schedules the scan that draws the next,
- *  and a page the site is also rebuilding never settles. The stack counts as ours in its own right:
- *  it is created and pruned by the chips, so a page whose answers are all misses would otherwise
- *  schedule a scan for the container appearing and another for it going away. */
-export function isAssistantNode(node: Node): boolean {
-  const element =
-    node.nodeType === 1 ? (node as Element) : (node.parentElement as Element | null) ?? null;
-  return element?.closest(`[${MARKER_ATTR}], [${LINK_ATTR}], [${STACK_ATTR}]`) != null;
 }
 
 /** True when this anchor has not been answered for *this* listing yet — either never, or for the

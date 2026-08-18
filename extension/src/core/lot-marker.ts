@@ -23,10 +23,12 @@
 //
 // Pure DOM: no `chrome.*`, so it is unit-tested against `linkedom` like the platform modules.
 
-import { CHIP_STYLE, markerStack, pruneMarkerStack } from "./marker-shell";
-
-/** Marks the chip, so a re-run replaces it instead of stacking a second one on the page. */
-const MARKER_ATTR = "data-stamporama-lot";
+import {
+  CHIP_STYLE,
+  LOT_MARKER_ATTR as MARKER_ATTR,
+  markerStack,
+  pruneMarkerStack,
+} from "./marker-shell";
 
 /**
  * How a lot's derived outcome (ADR-0021 §4) is worded, mirrored by hand from

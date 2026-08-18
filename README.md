@@ -49,12 +49,14 @@ so there is usually nothing to configure. Only a proxy set *below* that needs an
 
 Alternatively, photos can be stored in **Google Cloud Storage** — the installer asks for the bucket and service-account key and sets it up for you (or configure it by hand via the GCS section of `.env.prod.example`). Photos are served via short-lived signed URLs so bytes bypass the app. Switching is safe at any time — existing filesystem photos keep serving from the volume while new photos write to GCS, and the optional `pnpm photos:migrate:gcs` command moves old photos across so the volume can be retired.
 
-There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
+There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse, marks your own marketplace listings with the offer they are here, and records a Delcampe order as a sale from the screen you pack it on. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
 If you sell on **Delcampe**, listings go up as an uploaded file rather than through an API — the app
 builds that file, one CSV plus the pictures it names, for a batch of prepared offers, and reads
 Delcampe's own export of your active items back — which is what moves those offers to *active* with
-a link to each listing, and what tells you when one has come down; see
+a link to each listing, and what tells you when one has come down. The sale at the end of that is
+recorded from Delcampe's own **My Sold Items** screens, where the Assistant marks each order with
+whether you have written it down yet and records the ones you have not; see
 [Delcampe](docs/user-guide/delcampe.md). Each row points back at the offer through this instance's
 own address, so `BETTER_AUTH_URL` has to be right for the export to run. Naming a platform as
 Delcampe switches one piece of outbound traffic on: once a day the instance reads Delcampe's own
