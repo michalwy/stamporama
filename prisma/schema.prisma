@@ -148,6 +148,8 @@ model Collection {
   allegroListings   AllegroListing[]
   allegroListingProfiles AllegroListingProfile[]
   delcampeListingProfiles DelcampeListingProfile[]
+  delcampeListings  DelcampeListing[]
+  delcampeImportState DelcampeImportState?
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
 
@@ -1007,6 +1009,108 @@ model DelcampeListingProfile {
   @@index([collectionId])
   @@index([platformId])
   @@map("delcampe_listing_profile")
+}
+
+// One listing as Delcampe's own **active-items export** last stated it (#611; ADR-0037) — the read
+// half of a contract whose write half is #610's Easy Uploader file.
+//
+// It is `AllegroListing`'s shape (#467) on a marketplace with no API: a file the seller downloads
+// stands in for the sweep, and everything that follows from it follows for the same reasons.
+//
+//   * **Rows of its own, not a state on `Offer`.** A listing may match no offer at all — one posted
+//     straight on Delcampe, or one whose reference belongs to a collection that is not this one —
+//     and an observation with nowhere to live is one the collector never gets to see.
+//   * **Absence is the signal.** A row the newest import did not carry is marked `ENDED` rather than
+//     deleted: keeping it is what lets the screen say *when the listing was last seen up*, which is
+//     the only date there is for a listing nobody watched go. It is cleaner here than on Allegro —
+//     a file is whole by nature, so there is no half-finished sweep to guard against the way
+//     `AllegroSyncState.listingsSweptAt` does.
+//   * **What it says about money is what the platform said.** `presentPrice`, `bidsCount` and
+//     `bestBidder` are kept beside the row whether or not they reach an offer, exactly as the
+//     Allegro row keeps its bidding: an unmatched auction still has a standing bid.
+model DelcampeListing {
+  id           String @id @default(cuid())
+  collectionId String
+
+  // Delcampe's own listing id (`id_auction` in the file) — matched on **exactly**, never derived
+  // from an address, and the address is composed back from it
+  // (`delcampe.net/en_US/collectibles/item/<itemId>.html`) rather than stored a second time.
+  itemId String
+  title  String
+  // The `personal_reference` the row came back with, verbatim, and what it resolved to. Both, on
+  // purpose: the reference is what the collector sees on Delcampe and has to correct there, and the
+  // offer number is what makes an unmatched row readable ("names offer 412, which is not here") and
+  // what groups the two rows of a duplicated reference together.
+  personalReference String?
+  referenceOfferNo  Int?
+
+  // `ACTIVE` — carried by the newest import — or `ENDED`, which is this app's own word for a row
+  // that dropped out of one. Delcampe is never asked about it, and the file states no status.
+  status String
+  // When Delcampe says the listing closes, from `end_date` read against its **separate `GMT`
+  // column**; null where the file stated neither or the pair could not be read.
+  endsAt DateTime?
+
+  // What the listing is at right now, its currency taken from the Delcampe platform contact
+  // (#196) — the file states none, and a figure without a currency is not a price. `bidsCount` is
+  // `bids_number` (`0` is "up, nobody has bid", which is not the same as unknown) and `bestBidder`
+  // is the login the file names, held because it is what the row *said*; nothing is derived from it.
+  presentPrice Decimal? @db.Decimal(10, 2)
+  currency     String?
+  quantity     Int?
+  bidsCount    Int?
+  bestBidder   String?
+  visits       Int?
+  // Delcampe's `id_category` as the listing actually carries it — the answer to what was uploaded,
+  // beside `Offer.delcampeCategoryId`, which is what would be uploaded next.
+  categoryId   String?
+
+  offerId   String?
+  // How the row found its offer. Only ever `reference` today; a column rather than a boolean for
+  // `AllegroListing.matchedBy`'s reason — the provenance of a match is what makes it correctable.
+  matchedBy String?
+  // Why it did **not**, where it did not: `no-reference`, `unknown-offer`, `duplicate-reference`,
+  // `offer-already-listed`. Stored rather than re-derived on every read, because it is the
+  // conclusion the import came to about *that file* — a screen that recomputed it would quietly
+  // answer a question about the offers as they are now, which is not what the collector is looking
+  // at when they go and fix a reference on Delcampe.
+  problem   String?
+
+  // When the listing was last seen **up**. Deliberately not restamped when the row is marked
+  // `ENDED`: an ended row still has to say when it was last observed active.
+  observedAt DateTime
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  offer      Offer?     @relation("DelcampeListingOffer", fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@unique([collectionId, itemId])
+  @@index([offerId])
+  @@map("delcampe_listing")
+}
+
+// When this collection last read Delcampe's active-items export (#611).
+//
+// The header's honesty, and the whole of what this table is for: a list of live listings that was
+// last refreshed a fortnight ago must say so where it is being read, exactly as the Allegro
+// worklist's header does. It carries no cursor, no lock and no error — an import is a file a person
+// chose and pressed a button for, so its failures are answered in the dialog they happened in
+// rather than latched for a background pass nobody is watching.
+model DelcampeImportState {
+  id           String @id @default(cuid())
+  collectionId String @unique
+
+  lastImportedAt DateTime?
+  // The name of the file the collector picked, kept so the screen can say *which* export it is
+  // showing — Delcampe names its exports by date, which is the one thing about them worth quoting.
+  lastFileName   String?
+  lastRowCount   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@map("delcampe_import_state")
 }
 
 // Delcampe's own category tree, as Delcampe publishes it (#609; ADR-0035 §4) — names for the numeric
@@ -2471,6 +2575,19 @@ model Offer {
   // `ready` offer carrying an Allegro offer id, and only one of them can be activated.
   allegroOfferId      String?
   allegroPublishStatus String?
+  // The Delcampe listing this offer is up as (#611) — Delcampe's own `id_auction`, written by the
+  // reconciliation of an active-items export and never by hand.
+  //
+  // It is `allegroOfferId`'s counterpart and arrives the other way round: Allegro hands its id back
+  // from the publish this app made, while Delcampe's listings are created from a file uploaded by
+  // hand and their ids only ever come back in an export. So this is written **on confirmation from
+  // the platform** and nothing is written at export time — an offer that was exported but never
+  // successfully uploaded must not read as live.
+  //
+  // `Offer.url` is composed from it (`…/collectibles/item/<id>.html`) rather than the address being
+  // stored a second time, and it is what #612 will match an order's items on. Unique per collection:
+  // two offers claiming one listing is a contradiction, not a state to be reconciled later.
+  delcampeItemId       String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -2490,6 +2607,9 @@ model Offer {
    * an unmatched row, which is a state the worklist already knows how to show. */
   allegroOrderLines AllegroOrderLine[] @relation("AllegroOrderLineOffer")
   allegroListing    AllegroListing[]   @relation("AllegroListingOffer")
+  /** What a Delcampe active-items export has said about this listing (#611). `SetNull` for the row
+   * above's reason: an observation about a marketplace listing outlives the offer being deleted. */
+  delcampeListings  DelcampeListing[]  @relation("DelcampeListingOffer")
 
   // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
   // uniqueness is the guarantee that it names one listing.
@@ -2498,6 +2618,9 @@ model Offer {
   @@index([platformId])
   @@index([allegroListingProfileId])
   @@index([delcampeListingProfileId])
+  // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
+  // enforceable rather than merely intended.
+  @@unique([collectionId, delcampeItemId])
   // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
   @@index([state, closedAt])
   @@map("offer")

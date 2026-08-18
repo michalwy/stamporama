@@ -14,6 +14,7 @@ import {
   recordPlatformCategoryLesson,
 } from "./platform-category";
 import { explainLearnedCategoryMatch } from "./platform-category-rules";
+import { delcampeItemUrl } from "./delcampe-import-rules";
 
 // What an offer is configured to be uploaded as on Delcampe (#608 for the profile, #609 for the
 // category) — the two questions an Easy Uploader row asks that are not answered by the stamps
@@ -41,6 +42,21 @@ import { explainLearnedCategoryMatch } from "./platform-category-rules";
 // on. So the register answers for the common case and the offer says otherwise where it must — which
 // is exactly why a hand-maintained key → category table was rejected and this was not.
 
+/** What the last import saw of this offer's own listing (#611). */
+export interface DelcampeOfferListingState {
+  /** Delcampe's own listing id, and the address composed from it. */
+  itemId: string;
+  url: string;
+  /** `ACTIVE` — carried by the newest import — or `ENDED`, meaning it has come down. */
+  status: string;
+  /** When the listing was last seen **up**, which on an ended row is the only date there is. */
+  lastSeenAt: string;
+  endsAt: string | null;
+  presentPrice: string | null;
+  currency: string | null;
+  bidsCount: number | null;
+}
+
 /** Where a stored category came from. Display only — nothing branches on it. */
 export type DelcampeCategorySourceKind = "learned" | "manual";
 
@@ -61,6 +77,10 @@ export interface DelcampeOfferListingConfig {
   profileIsOverride: boolean;
   /** Every profile the platform has, so the card's select needs no read of its own. */
   profileOptions: { id: string; name: string; isDefault: boolean }[];
+  /** What Delcampe's own active-items export last said about this listing (#611), or null where no
+   *  import has ever carried it. The list's *Came down* row and this are the same fact from the same
+   *  place, which is the rule for every flag shown on a list. */
+  listing: DelcampeOfferListingState | null;
   /** What the picker's search opens on — the offer's key in words, "Poland used". Computed **only
    *  while the offer has no category**, which is the one case the picker is reached from: the key is
    *  derived from every copy of every set, and paying for that on an offer whose category is already
@@ -77,6 +97,7 @@ const CONFIG_SELECT = {
   delcampeCategoryPath: true,
   delcampeCategorySource: true,
   delcampeCategoryMatchedOn: true,
+  delcampeItemId: true,
   platform: { select: { id: true, platformModule: true } },
 } as const;
 
@@ -114,6 +135,7 @@ export async function getDelcampeOfferListingConfig(
     source: readSource(offer.delcampeCategorySource),
     matchedOn: offer.delcampeCategoryMatchedOn,
     profile,
+    listing: await readOfferListingState(offerId),
     profileIsOverride: offer.delcampeListingProfileId !== null,
     profileOptions: profiles.profiles.map((row) => ({
       id: row.id,
@@ -123,6 +145,44 @@ export async function getDelcampeOfferListingConfig(
     categorySearchTerm: offer.delcampeCategoryId
       ? null
       : await categorySearchTermFor(offer.collectionId, offerId),
+  };
+}
+
+/**
+ * The newest thing an import has said about this offer's listing.
+ *
+ * Read from the `DelcampeListing` row rather than from `Offer.delcampeItemId`, and the difference is
+ * the whole point: the offer holds the id it is up as, while the row holds *when it was last seen*
+ * and whether it still is. The card has to be able to say "came down on the 14th", which is a fact
+ * about an observation and not about the offer.
+ *
+ * The newest by `observedAt`, since a relisted offer legitimately has an older row beside its
+ * current one.
+ */
+async function readOfferListingState(offerId: string): Promise<DelcampeOfferListingState | null> {
+  const listing = await prisma.delcampeListing.findFirst({
+    where: { offerId },
+    orderBy: { observedAt: "desc" },
+    select: {
+      itemId: true,
+      status: true,
+      observedAt: true,
+      endsAt: true,
+      presentPrice: true,
+      currency: true,
+      bidsCount: true,
+    },
+  });
+  if (!listing) return null;
+  return {
+    itemId: listing.itemId,
+    url: delcampeItemUrl(listing.itemId),
+    status: listing.status,
+    lastSeenAt: listing.observedAt.toISOString(),
+    endsAt: listing.endsAt?.toISOString() ?? null,
+    presentPrice: listing.presentPrice?.toFixed(2) ?? null,
+    currency: listing.currency,
+    bidsCount: listing.bidsCount,
   };
 }
 

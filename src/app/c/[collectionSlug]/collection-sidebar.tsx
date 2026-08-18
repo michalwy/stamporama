@@ -298,11 +298,12 @@ export function CollectionSidebar({
             is built from, but selling is the side worked on daily — offers prepared, batches posted,
             orders caught up with — and the section reached first should be the one opened most. */}
         <p style={sectionLabelStyle}>Selling</p>
-        {/* Three entries, not one (#502), on the reasoning #376 split Auctions with. The offer list
-            is the daily screen, but posting a prepared batch and working through what the
-            marketplace has already sold are their own sittings — and both were reachable only by
-            first landing on the list and finding the way out of it. Nested rather than flat: they
-            are three views of one subject, and Offers leads. */}
+        {/* Four entries, not one (#502, #611), on the reasoning #376 split Auctions with. The offer
+            list is the daily screen, but posting a prepared batch and working through what a
+            marketplace has already done with it are their own sittings — and all of those were
+            reachable only by first landing on the list and finding the way out of it. Nested rather
+            than flat: they are views of one subject, and Offers leads. The two marketplace entries
+            sit last and in the order the work reaches them. */}
         <NavGroup icon={<Icon name="offers" />} label="Offers">
           <NavItem
             href={`${base}/offers`}
@@ -312,6 +313,7 @@ export function CollectionSidebar({
             active={isActive(`${base}/offers`, false, [
               `${base}/offers/listing`,
               `${base}/offers/allegro`,
+              `${base}/offers/delcampe`,
             ])}
           />
           <NavItem
@@ -323,6 +325,16 @@ export function CollectionSidebar({
             href={`${base}/offers/allegro`}
             label="Sold on Allegro"
             active={isActive(`${base}/offers/allegro`)}
+          />
+          {/* The same sitting on the marketplace next door (#611), and it is the *other* end of Bulk
+              Listing above: a batch leaves as a file and comes back as one, so what the export
+              confirmed and what has since come down is read here rather than inside the workspace
+              that built the file. Named for what it states rather than for what it does, as its
+              two siblings are. */}
+          <NavItem
+            href={`${base}/offers/delcampe`}
+            label="On Delcampe"
+            active={isActive(`${base}/offers/delcampe`)}
           />
         </NavGroup>
         <NavItem

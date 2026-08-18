@@ -140,8 +140,8 @@ cut a session down, and the button exports that, not the whole platform.
 Each row carries the offer's title and description, its price and quantity, the category on its
 **On Delcampe** card, and the shipping model, renewal and promotion settings of the profile that
 applies to it. `personal_reference` carries the offer's own [short address](offers.md#offer-number-and-short-link)
-— only you can see it on Delcampe, and it is what will let Stamporama match the listing back to this
-offer later.
+— only you can see it on Delcampe, and it is what lets Stamporama match the listing back to this
+offer when you [read your listings back](#reading-your-listings-back).
 
 ### Nothing is exported until every row can be written
 
@@ -175,13 +175,70 @@ number it produced would be its own guess wearing the badge of a real limit.
 
 Keeping a batch inside your package is yours to judge before you upload.
 
+## Reading your listings back
+
+Uploading a file tells Stamporama nothing. Until you bring an answer back, an offer you have just
+listed still says **ready** here and has no link to its listing — which is why Delcampe's own
+**active-items export** is the other half of the loop.
+
+On Delcampe, go to your selling area and download the export of your **current sales** (the list of
+what you have running). Then, under **Offers → On Delcampe**, press **↑ Import active items** and
+pick that file.
+
+What the import does:
+
+- an offer that is in the file moves to **active**, gains Delcampe's own item number and a link
+  straight to the listing;
+- listings you had before and that are *not* in the file are reported as having **come down**;
+- anything that could not be matched to an offer is listed with the reason.
+
+The screen prints all of that as a report, and keeps the last two lists until the next import.
+
+Do it whenever you want the state here to be true — after uploading a batch, and every so often to
+catch what has sold or ended.
+
+### Came down does not mean sold
+
+A listing missing from the export has come down: it sold, it ran out, or you pulled it. The export
+does not say which, so **Stamporama changes nothing about the offer** — it shows you the row and the
+date the listing was last seen up, and recording the sale (or withdrawing the offer) stays yours.
+
+### When two listings carry the same reference
+
+Every row in the export carries the offer's [short address](offers.md#offer-number-and-short-link) as
+its personal reference, and that is how a listing finds its offer. Delcampe does not stop two
+listings carrying the same one — uploading the same batch twice will do it.
+
+When that happens, **neither** listing is attached to the offer and both are reported. Nothing is
+guessed: end or correct one of them on Delcampe, then import again.
+
+The same goes for a listing whose reference names an offer number this collection does not have, and
+for one carrying no reference at all — a listing you created directly on Delcampe, for instance. Both
+are shown so you know they are there; neither changes anything here.
+
+### Auctions
+
+For an offer you have recorded as an **auction**, the import also brings back what the bidding is at,
+how many bids there are and when the listing closes — and raises the *in active bidding* flag the
+first time somebody has bid, exactly as a bid on Allegro does.
+
+A **fixed-price** offer's price is never overwritten. That figure is the one you set, and if the
+listing disagrees with it, that is something to look at rather than something to have quietly
+corrected in Delcampe's favour.
+
 ## On an offer
 
 An offer on the Delcampe platform carries an **On Delcampe** card on its own screen, under the
-photos. It shows two things: the **category** the row will be filed under, with where that category
-came from, and which **profile** applies — the platform's default, or one this offer names — with
-what that profile actually says: the shipping model, the renewal setting, the bid step, and whether
-any paid promotion is bought.
+photos.
+
+Once an import has seen this offer's listing, the card leads with it: the item number, a link to the
+listing, and whether it is still up or has come down — with the date it was last seen up. That part
+is not editable, because it is Delcampe's answer rather than a setting.
+
+Below it are the two settings the next upload is built from: the **category** the row will be filed
+under, with where that category came from, and which **profile** applies — the platform's default, or
+one this offer names — with what that profile actually says: the shipping model, the renewal setting,
+the bid step, and whether any paid promotion is bought.
 
 Neither is a gate. Whatever the card shows is what the upload file will carry, and both are
 correctable in place.

@@ -404,6 +404,16 @@ What turns a prepared batch into a listing: `delcampe-export-rules.ts` (pure —
 - **`personal_reference` is the offer's short URL** (`offerScreenUrl`, #415/#416), which is what makes #611's reconciliation exact; an instance with no `BETTER_AUTH_URL` refuses rather than writing unmatched rows.
 - **`Contact.maxTitleLength`** joins #403's two caps — the second unconfirmed number in this file to be a settings field rather than a constant, after `minBidStepThreshold`. The **ongoing-sales ceiling is deliberately not held**: this app cannot see the seller's live count, so anything it counted would be its own offers wearing a guarantee's clothes.
 
+#### Reconciling the active-items export (#611; [ADR-0037](../decisions/0037-delcampe-active-items-reconciliation.md))
+
+The return half, and the only channel there is — Delcampe publishes a CSV of the seller's own active items, and it carries `personal_reference` back. `delcampe-import-rules.ts` is pure (an RFC 4180 reader, the decimal **dot**, `end_date` read against its **separate `GMT` column**, the reference → `offerNo` rule, the reconciliation and every refusal it can carry); `delcampe-import.ts` performs it and `delcampe-worklist.ts` reads it back, behind `POST …/offers/delcampe-import` and `GET …/delcampe/worklist`, on the *On Delcampe* screen (`offers/delcampe`) beside *Sold on Allegro*.
+
+- **`ready → active` on confirmation from the platform, never at export time.** The listing id lands on `Offer.delcampeItemId` (unique per collection) and `Offer.url` is **composed** from it. A downloaded file is not a listing, and #612 will match an order's items on that id.
+- **Absence is the signal**, and cleaner than #467's: a file has no pages, so there is no half-finished sweep to guard against and nothing like `listingsSweptAt` is stored. A `DelcampeListing` row the newest import did not carry is marked `ENDED` with the date it was last seen **up**, the offer is left exactly as it is, and what the absence *meant* stays #612's question. The rows are never pruned — an ended listing's id is what a sold order will name months later.
+- **Two listings claiming one offer is a refusal**: Delcampe does not enforce uniqueness on `personal_reference`, so both rows are reported and neither applied. An offer already up as a *different* listing that is also in the file is the same refusal; where the id it names is **absent**, that is a relist and is taken over.
+- **The read ignores the origin** where the write needs it (ADR-0036 §2): the path decides which offer and the slug must be this collection's. A file is not a page (#417) — the collector picked it — and comparing origins would orphan every listing already up the day the instance moves domain.
+- **`present_price` / `bids_number` reach an offer only where the offer itself is an auction** (#481's rule, narrowed: the file states no format and no currency). A fixed-price offer's price is never overwritten — a file that disagrees with it is drift (#542), which is shown rather than resolved.
+
 ### Storage locations (`Location`)
 
 `Location` is a per-collection **adjacency-list hierarchy** of physical storage — cabinets, stockbooks, albums, boxes — reusing the same pattern as `CollectionArea` (see [ADR-0010](../decisions/0010-storage-location-model.md), design in #55, built in #56).

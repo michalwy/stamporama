@@ -145,6 +145,47 @@ export function OfferDelcampeCard({
 
       {error && <p style={{ ...helpText, color: "var(--color-error)", marginTop: 0 }}>{error}</p>}
 
+      {/* ── The listing itself (#611) ────────────────────────────────────────────────────────
+          What the last active-items export said about this offer, and the only part of the card
+          that is an **observation** rather than a setting: nothing here is editable, because it is
+          Delcampe's own answer and the way to change it is to change the listing. It leads the card
+          for that reason — whether this is up, and since when, is the first thing anyone opening the
+          offer wants to know, and the two questions below are about the next upload rather than
+          about the live one.
+
+          The *Came down* row on **On Delcampe** and this line are the same fact from the same row,
+          which is the rule for every flag a list shows. */}
+      {config.listing && (
+        <div style={{ marginBottom: "1rem" }}>
+          <p style={{ ...SECTION_LABEL, color: "var(--color-text-secondary)" }}>Listing</p>
+          <p style={{ margin: 0, fontSize: "0.875rem" }}>
+            <a
+              href={config.listing.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: "var(--color-accent)", textDecoration: "none" }}
+            >
+              item {config.listing.itemId}
+            </a>
+            <span style={{ ...helpText, marginLeft: "0.5rem" }}>
+              {config.listing.status === "ENDED" ? "· came down" : "· up on Delcampe"}
+              {config.listing.bidsCount ? ` · ${config.listing.bidsCount} bids` : ""}
+            </span>
+          </p>
+          <p style={{ ...helpText, margin: "0.125rem 0 0" }}>
+            {config.listing.status === "ENDED"
+              ? "Last seen up on "
+              : "Confirmed by the export of "}
+            {new Date(config.listing.lastSeenAt).toLocaleDateString(undefined, {
+              dateStyle: "medium",
+            })}
+            {config.listing.status === "ENDED"
+              ? " — sold, ended or pulled; the export does not say which."
+              : "."}
+          </p>
+        </div>
+      )}
+
       {/* ── Category ─────────────────────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: "1rem" }}>
         <p style={{ ...SECTION_LABEL, color: "var(--color-text-secondary)" }}>Category</p>

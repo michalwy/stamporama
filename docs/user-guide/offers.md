@@ -946,6 +946,10 @@ archive — for exactly the offers shown. It appears on no other platform, becau
 format. See the [Delcampe guide](delcampe.md#uploading-a-batch) for what the rows carry, and for why
 an offer that cannot be written stops the whole export rather than being quietly left out.
 
+The batch stays **ready** after the export: uploading the file is a step this app cannot see. What
+moves those offers to *active* is reading Delcampe's own active-items export back, under **Offers →
+On Delcampe** — see [reading your listings back](delcampe.md#reading-your-listings-back).
+
 ### When something turns out to be missing
 
 If you get into a listing and find the description is wrong, a scan is missing, or the price needs
