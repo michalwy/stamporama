@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
-import { compareLocationRef, nextLocationRef } from "./location-ref";
+import { compareLocationRef, highestLocationRef, nextLocationRef } from "./location-ref";
 
 // Server-side CRUD for storage locations (`Location`), collection-scoped (#56).
 // Adjacency-list hierarchy mirroring `CollectionArea` (see areas.ts): grouping-only
@@ -77,12 +77,16 @@ export interface LocationRefInUse {
 export interface LocationRefUsage {
   /** Every ref written in this location, in walk order, with its copy count. */
   refs: LocationRefInUse[];
-  /** The ref to offer when filing into this location, or null when it uses none (#565). */
+  /** The card this location's counter is at — what filing offers by default (#629), or null when
+   * the location uses no refs. */
+  highest: string | null;
+  /** The next free ref, for starting a new card and for printing a strip of blank ones (#565). */
   suggestion: string | null;
 }
 
 /**
- * What refs a location already holds, and the one to suggest next (#565).
+ * What refs a location already holds, which card its counter is at, and the next free one
+ * (#565/#629).
  *
  * Read whole rather than asked one ref at a time: a location has as many refs as it has cards in
  * it, not as many as it has copies, so the whole set is small — and holding it client-side is what
@@ -121,7 +125,12 @@ export async function getLocationRefUsage(
   const refs = [...counts.entries()]
     .map(([ref, count]) => ({ ref, count }))
     .sort((a, b) => compareLocationRef(a.ref, b.ref));
-  return { refs, suggestion: nextLocationRef(refs.map((r) => r.ref)) };
+  const written = refs.map((r) => r.ref);
+  return {
+    refs,
+    highest: highestLocationRef(written),
+    suggestion: nextLocationRef(written),
+  };
 }
 
 export async function createLocation(

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   compareLocationRef,
+  highestLocationRef,
   incrementLocationRef,
   locationRefStrip,
   nextLocationRef,
@@ -91,6 +92,30 @@ describe("incrementLocationRef", () => {
   it("refuses a ref with no trailing number", () => {
     assert.equal(incrementLocationRef("Album"), null);
     assert.equal(incrementLocationRef(""), null);
+  });
+});
+
+describe("highestLocationRef", () => {
+  it("reports the card a location is currently up to", () => {
+    assert.equal(highestLocationRef(["A1", "A147", "A12"]), "A147");
+  });
+
+  it("reports nothing for a location that has never been ref'd in", () => {
+    assert.equal(highestLocationRef([]), null);
+    assert.equal(highestLocationRef([null, "", "  "]), null);
+  });
+
+  it("follows the strip currently being filled when a location holds two", () => {
+    assert.equal(highestLocationRef(["A1", "A200", "B1", "B5"]), "B5");
+  });
+
+  it("ignores labels that carry no number", () => {
+    assert.equal(highestLocationRef(["Loose", "A3"]), "A3");
+    assert.equal(highestLocationRef(["Loose"]), null);
+  });
+
+  it("returns the ref as written, so the field opens on what is on the card", () => {
+    assert.equal(highestLocationRef([" A007 "]), "A007");
   });
 });
 

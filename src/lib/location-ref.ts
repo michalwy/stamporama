@@ -88,24 +88,41 @@ export function incrementLocationRef(ref: string): string | null {
 }
 
 /**
- * The ref to suggest for a location, given every ref already written in it: one past the highest,
- * or null when the location has never been ref'd in.
+ * The ref a location's counter is currently *at* — the highest one already written in it, or null
+ * when it has never been ref'd in.
  *
- * Null is the **normal** answer for an album or stockbook, where the location itself is the
- * address — the ref is optional and this action files copies going into the collection just as
- * much as stock, so a location that uses no refs must suggest none rather than inventing `1`.
+ * This is the card being packed right now, and it is what the Store dialog offers by default
+ * (#629): a transport card takes twenty stamps and is rarely filled in one sitting, so continuing
+ * the card already on the desk is the common act and starting a new one is the exception.
  *
  * "Highest" is {@link compareLocationRef}'s order, which sorts by prefix first: a box holding
- * `A1…A200` and `B1…B5` suggests `B6`, since `B` is the strip currently being filled. Refs with no
+ * `A1…A200` and `B1…B5` is at `B5`, since `B` is the strip currently being filled. Refs with no
  * trailing number are ignored — they are labels, not a counter.
  */
-export function nextLocationRef(refs: Iterable<string | null | undefined>): string | null {
+export function highestLocationRef(refs: Iterable<string | null | undefined>): string | null {
   let best: string | null = null;
   for (const raw of refs) {
     const ref = raw?.trim();
     if (!ref || parseLocationRef(ref).digits == null) continue;
     if (best == null || compareLocationRef(ref, best) > 0) best = ref;
   }
+  return best;
+}
+
+/**
+ * The next free ref for a location: one past {@link highestLocationRef}, or null when the location
+ * has never been ref'd in.
+ *
+ * Null is the **normal** answer for an album or stockbook, where the location itself is the
+ * address — the ref is optional and this action files copies going into the collection just as
+ * much as stock, so a location that uses no refs must suggest none rather than inventing `1`.
+ *
+ * What this answers is *"start a new card"* — the strip of blank cards to print, and the Store
+ * dialog's explicit next-ref action (#629). It is deliberately not that dialog's default: handing
+ * out a fresh number on every open is what made a collector retype the previous one all afternoon.
+ */
+export function nextLocationRef(refs: Iterable<string | null | undefined>): string | null {
+  const best = highestLocationRef(refs);
   return best == null ? null : incrementLocationRef(best);
 }
 

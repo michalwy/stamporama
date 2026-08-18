@@ -1214,15 +1214,23 @@ Copies in a **closed** lot get no checkbox anywhere: they are read-only until yo
 
 The ref is the identifier written on the **ref card** that goes with the stamps: one small
 card usually covers a whole transport card's worth, with a per-series card whenever a set
-should come out in one grab. It is suggested as **the next free ref in that location** — never
-per lot, because the box is shared across every purchase — so storing continues the strip the
-box is already on. A location nothing has ever been ref'd in suggests nothing and stays blank,
-which is the normal case for an album or stockbook: there the location *is* the address.
+should come out in one grab. The dialog opens on **the card that location is currently up to** —
+never per lot, because the box is shared across every purchase — so storing carries on filling the
+card already on your desk. A transport card takes twenty stamps and is rarely filled in one
+sitting, so continuing is the ordinary act.
 
-Typing a ref that is **already in use** is not an error. Cards get topped up over several
-sittings, so the dialog says *"A147 already holds 12 copies"* and the button reads **Add to
-A147** — which also catches the typo, since an unexpected collision reads differently from an
-expected one.
+When a card *is* full, press **Next ref** and the first unused number is filled in for you. It is
+a suggestion like any other: the field stays yours to edit, and pressing nothing keeps you on the
+current card.
+
+A location nothing has ever been ref'd in offers nothing and stays blank, which is the normal case
+for an album or stockbook: there the location *is* the address, and there is no **Next ref** to
+press.
+
+Filing onto a ref that is **already in use** is not an error — it is the default. The dialog says
+*"A147 already holds 12 copies"* and the button reads **Add to A147**. On the current card that
+line is a quiet confirmation; on any other ref it turns into a warning, which is what catches the
+typo.
 
 Blank cards are printed **before** you pack — see
 [Printing blank ref cards](locations.md#printing-blank-ref-cards).

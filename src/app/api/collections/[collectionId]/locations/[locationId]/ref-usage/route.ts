@@ -3,9 +3,10 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getLocationRefUsage } from "@/lib/locations";
 
-/** The refs already written in one location and the next one to suggest (#565). Read by the file
- * dialog when a location is chosen, so the suggestion and the "this ref already holds N copies"
- * confirmation both come from the location — never from the lot, which shares the box. */
+/** The refs already written in one location, the card its counter is at, and the next free one
+ * (#565/#629). Read by the file dialog when a location is chosen, so the offered ref and the "this
+ * ref already holds N copies" confirmation both come from the location — never from the lot, which
+ * shares the box. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string; locationId: string }> }

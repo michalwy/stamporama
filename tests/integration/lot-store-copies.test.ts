@@ -213,7 +213,7 @@ describe("storing sorted copies (#565/#571)", () => {
     assert.equal(copy.locationRef, null);
   });
 
-  it("counts the refs a location holds and suggests the next one", async () => {
+  it("counts the refs a location holds, the card it is up to, and the next one", async () => {
     const location = await prisma.location.create({
       data: { collectionId, name: `Counter box ${Date.now()}`, assignable: true },
     });
@@ -223,6 +223,9 @@ describe("storing sorted copies (#565/#571)", () => {
 
     const afterFirst = await getLocationRefUsage(userId, collectionId, location.id);
     assert.deepEqual(afterFirst.refs, [{ ref: "A10", count: 2 }]);
+    // The card being packed is what the Store dialog opens on (#629); the next free one is what
+    // its explicit action and the blank-cards sheet ask for.
+    assert.equal(afterFirst.highest, "A10");
     assert.equal(afterFirst.suggestion, "A11");
 
     // The counter belongs to the **location**, not the lot: a second purchase filing into the same
@@ -236,6 +239,7 @@ describe("storing sorted copies (#565/#571)", () => {
       { ref: "A10", count: 2 },
       { ref: "A11", count: 1 },
     ]);
+    assert.equal(afterSecond.highest, "A11");
     assert.equal(afterSecond.suggestion, "A12");
 
     // Topping the same card up is the ordinary path, and the count is what the dialog confirms on.
@@ -245,7 +249,7 @@ describe("storing sorted copies (#565/#571)", () => {
     assert.equal(topped.refs.find((r) => r.ref === "A11")!.count, 4);
   });
 
-  it("suggests nothing for a location nothing has ever been ref'd in", async () => {
+  it("offers nothing for a location nothing has ever been ref'd in", async () => {
     const location = await prisma.location.create({
       data: { collectionId, name: `Blank album ${Date.now()}`, assignable: true },
     });
@@ -255,6 +259,7 @@ describe("storing sorted copies (#565/#571)", () => {
 
     const usage = await getLocationRefUsage(userId, collectionId, location.id);
     assert.deepEqual(usage.refs, []);
+    assert.equal(usage.highest, null);
     assert.equal(usage.suggestion, null);
   });
 

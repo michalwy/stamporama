@@ -15,6 +15,7 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogSecondaryButton,
   ConfirmDialog,
   LabelWithError,
 } from "@/app/dialog-shell";
@@ -3728,13 +3729,20 @@ function LocationPickerDialog({
  *
  * Nothing is **allocated** here. The index cards are printed blank and ahead of time (the strip is
  * on the Locations screen), the stamps are packed onto a card, and only then is the filing
- * recorded — so the app suggests the number the strip is up to and takes confirmation, rather than
+ * recorded — so the app offers the number the strip is up to and takes confirmation, rather than
  * handing out refs behind the collector's back.
  *
- * The suggestion comes from the **target location**, never the lot: the box is shared across every
- * purchase, and a per-lot counter would drop two `A147`s from two stockbooks into one box. A
- * location nothing has ever been ref'd in suggests nothing and stays blank — the normal case for an
- * album, and the reason the ref is optional at all.
+ * **The card offered is the one being packed, not the next blank one** (#629). A transport card
+ * takes twenty stamps and is filled over several sittings, so *continuing* `A147` is the ordinary
+ * act and *starting* `A148` is the exception — and an app that opened on the next free number made
+ * the collector type the previous one back in, every time, which is precisely the ref most easily
+ * mistyped. Starting a new card is therefore an explicit press (*Next ref*) rather than a default,
+ * and it fills the box the same way typing does: it is a suggestion the collector can still edit.
+ *
+ * Both come from the **target location**, never the lot: the box is shared across every purchase,
+ * and a per-lot counter would drop two `A147`s from two stockbooks into one box. A location nothing
+ * has ever been ref'd in offers nothing and stays blank — the normal case for an album, and the
+ * reason the ref is optional at all.
  */
 function StoreCopiesDialog({
   count,
@@ -3769,16 +3777,20 @@ function StoreCopiesDialog({
   // they were set to, so stepping in and back out of it does not lose the choice made first.
   // It leads, because storing a batch is rarely the moment its destiny is decided.
   const [keepDisposition, setKeepDisposition] = useState(true);
-  // Only the *typed* ref is state; until the collector types, the box simply shows the location's
-  // suggestion. Derived rather than copied in, so switching location re-suggests on its own — and
-  // once they have typed, what they typed stands, because a typed ref is their answer to "where is
-  // this strip actually up to".
+  // Only the *typed* ref is state; until the collector types, the box simply shows the card this
+  // location is up to. Derived rather than copied in, so switching location re-offers on its own —
+  // and once they have typed, what they typed stands, because a typed ref is their answer to "where
+  // is this strip actually up to". *Next ref* writes through the same field, so a generated number
+  // is as editable as a typed one and reverting to the current card is a second press away.
   const [typedRef, setTypedRef] = useState<string | null>(null);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   const usage = useLocationRefUsage(collectionId, locationId);
+  /** The card being packed — the default (#629). */
+  const highest = usage.data?.highest ?? null;
+  /** The first blank one, offered only on request. */
   const suggestion = usage.data?.suggestion ?? null;
-  const ref = typedRef ?? suggestion ?? "";
+  const ref = typedRef ?? highest ?? "";
 
   const trimmedRef = ref.trim();
   // A ref already in use is a **confirmation, not an error**: a card holding twenty stamps is
@@ -3788,6 +3800,18 @@ function StoreCopiesDialog({
     ? (usage.data?.refs.find((r) => r.ref.toLocaleLowerCase() === trimmedRef.toLocaleLowerCase())
         ?.count ?? 0)
     : 0;
+  // Which of the two it is, now that the card being packed is what the dialog opens on (#629):
+  // landing on the current card is the expected path and says so in the quiet voice, while any
+  // other collision is the one that might be a typo and keeps the warning colour. Without the
+  // split, the default state of the dialog would carry a warning — and a warning shown every time
+  // is one nobody reads on the day it means something.
+  const continuingCurrentCard =
+    highest != null && trimmedRef.toLocaleLowerCase() === highest.toLocaleLowerCase();
+  // Blank cards are printed for the cards *not yet packed*, so the strip starts one past the one
+  // being filled — otherwise the default (#629) would print a fresh card carrying a ref that
+  // already has stamps on it. A ref the collector typed themselves is taken at face value: they
+  // are saying where their strip actually is.
+  const printFrom = continuingCurrentCard ? (suggestion ?? "") : trimmedRef;
 
   const copies = `${count} cop${count === 1 ? "y" : "ies"}`;
   return (
@@ -3836,27 +3860,50 @@ function StoreCopiesDialog({
 
           <div style={{ marginTop: "1rem" }}>
             <LabelWithError htmlFor="store-copies-ref">Ref (optional)</LabelWithError>
-            <input
-              id="store-copies-ref"
-              type="text"
-              value={locationId ? ref : ""}
-              onChange={(e) => setTypedRef(e.target.value)}
-              disabled={isPending || !locationId}
-              placeholder={locationId ? (suggestion ?? "No refs used here yet") : "Choose a location first"}
-              style={{ ...INPUT_STYLE, fontVariantNumeric: "tabular-nums" }}
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <input
+                id="store-copies-ref"
+                type="text"
+                value={locationId ? ref : ""}
+                onChange={(e) => setTypedRef(e.target.value)}
+                disabled={isPending || !locationId}
+                placeholder={locationId ? (highest ?? "No refs used here yet") : "Choose a location first"}
+                style={{ ...INPUT_STYLE, fontVariantNumeric: "tabular-nums" }}
+              />
+              {/* Starting a new card, on request (#629). Shown only where there is a counter to
+                  count on from: a location that has never been ref'd in has no next number to
+                  offer, and inventing `1` for an album is exactly what the blank field prevents.
+                  It writes into the field rather than committing anything — the collector still
+                  sees the number they are about to file under, and can still change it. */}
+              {locationId && suggestion != null && (
+                <Tooltip
+                  content={`Start a new card — fills in ${suggestion}, the first ref not yet used here`}
+                  style={{ flexShrink: 0 }}
+                >
+                  <DialogSecondaryButton
+                    disabled={isPending}
+                    onClick={() => setTypedRef(suggestion)}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    Next ref
+                  </DialogSecondaryButton>
+                </Tooltip>
+              )}
+            </div>
             <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
               {!locationId
                 ? "The ref numbers a card inside a location, so pick the location first."
                 : usage.isLoading
                   ? "Reading this location’s refs…"
-                  : suggestion == null
+                  : highest == null
                     ? "Nothing has been ref’d in this location yet — leave it blank for an album, where the location is the address."
-                    : `Next free ref here is ${suggestion}.`}{" "}
+                    : `${highest} is the card this location is up to — keep filling it${
+                        suggestion ? `, or start ${suggestion} with Next ref` : ""
+                      }.`}{" "}
               {locationId && (
                 <Link
                   href={`/c/${params.collectionSlug}/locations/ref-cards?locationId=${locationId}${
-                    trimmedRef ? `&start=${encodeURIComponent(trimmedRef)}` : ""
+                    printFrom ? `&start=${encodeURIComponent(printFrom)}` : ""
                   }`}
                   target="_blank"
                   style={{ color: "var(--color-accent)" }}
@@ -3870,11 +3917,14 @@ function StoreCopiesDialog({
                 style={{
                   margin: "0.5rem 0 0",
                   fontSize: "0.75rem",
-                  color: "var(--color-warning)",
+                  color: continuingCurrentCard
+                    ? "var(--color-text-secondary)"
+                    : "var(--color-warning)",
                 }}
               >
-                <Icon name="warning" size="sm" /> {trimmedRef} already holds {collision} cop
-                {collision === 1 ? "y" : "ies"} here. Adding {copies} to it.
+                <Icon name={continuingCurrentCard ? "check" : "warning"} size="sm" /> {trimmedRef}{" "}
+                already holds {collision} cop{collision === 1 ? "y" : "ies"} here. Adding {copies}{" "}
+                to it.
               </p>
             )}
           </div>

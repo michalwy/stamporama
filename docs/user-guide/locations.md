@@ -63,9 +63,10 @@ lists). In the **Storage** section:
 Leave the location empty to record a copy you haven't filed anywhere yet.
 
 A whole batch is put away at once from the purchase screen — see
-[Two acts: Store and Move](purchases.md#two-acts-store-and-move). There the ref is
-suggested for you: it is the **next free one in that location**, so the strip of cards a box
-is on carries on across purchases.
+[Two acts: Store and Move](purchases.md#two-acts-store-and-move). There the ref is filled in for
+you: it is the **card that location is currently up to**, so you carry on packing the card already
+on your desk, and **Next ref** starts a new one when it is full. Either way the counter belongs to
+the location, so the strip of cards a box is on carries on across purchases.
 
 ## Printing blank ref cards
 
