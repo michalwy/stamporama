@@ -1435,11 +1435,12 @@ const LABEL_INPUT_STYLE: React.CSSProperties = {
  * that has been finished with.
  *
  * A fade also cannot say **which** end a tile reached, and the two are not degrees of one thing —
- * one piece became a copy, the other deliberately became nothing. So each carries a corner badge,
+ * one piece became a copy, the other deliberately became nothing. So each carries a badge,
  * `photo-thumb.tsx`'s own device for exactly this problem: an opaque mark with a hairline ring,
- * which says the same thing over a black margin as over a bright stamp. They differ on three axes
- * at once — filled versus outlined, accent versus neutral, `check` versus `excluded` — so that at
- * thumbnail size neither can be mistaken for a weaker version of the other. The copy number in the
+ * which says the same thing whatever sits behind it — drawn in the card's chrome strip and never
+ * over the scan (#628). They differ on three axes at once — filled versus outlined, accent versus
+ * neutral, `check` versus `excluded` — so that at thumbnail size neither can be mistaken for a
+ * weaker version of the other. The copy number in the
  * footer stays as the consumed tile's own anchor; the badge is what is legible at a glance, and the
  * number is what is legible when you look.
  */
@@ -1514,11 +1515,22 @@ function TileCell({
 
   const body = (
     <>
+      {/* **The tile's chrome strip** (#628) — an empty band across the top of the card, reserved so
+          that the marks anchored to its corners land *beside* the picture rather than on it. Both
+          of them used to sit over the scan: the tick over the top-right corner of the stamp, the
+          state badge over the top-left. A stamp is judged from this square — and an opaque box
+          covering a corner reads as a torn one, which is the one thing a scan of a stamp must never
+          be able to say by accident.
+
+          The band is on **every** tile, not only the ones currently wearing a mark, for the same
+          reason the border is always two pixels: nothing may shift by a pixel as a tile settles.
+          Its height clears the taller of the two marks (`0.15rem` offset + `1.05rem` tick). */}
+      <div style={{ height: "1.35rem" }} />
       {/* The crop is inset from the frame rather than flush with it. A tile is a scan of a stamp
           on a black card, so its own edges are often dark — and an edge drawn right up against
           them merges into the picture, which is exactly the legibility the coloured edge is here
           to provide. The gap is what makes it read as a frame at all. */}
-      <div style={{ padding: "0.25rem 0.25rem 0" }}>
+      <div style={{ padding: "0 0.25rem" }}>
         <TileImage
           photoId={photoId}
           collectionId={collectionId}
@@ -1616,8 +1628,9 @@ function TileCell({
         </button>
       </Tooltip>
       {/* Only where identifying is still possible. A settled tile has reached an end, so a box on
-          it would be an offer the write refuses — and the top-right corner is free precisely
-          because the top-left is where a settled tile says which end it reached (#582). */}
+          it would be an offer the write refuses — and the strip's right end is free precisely
+          because its left end is where a settled tile says which end it reached (#582). Both marks
+          sit in the chrome band above the picture (#628), never over the stamp itself. */}
       {selectable && (
         <TickBox
           state={selected ? "on" : "off"}
@@ -1639,9 +1652,9 @@ function TileCell({
  * runs, and `indeterminate` is a DOM property with no attribute, so a native box would need an
  * effect to set it and would still be styled by the platform rather than by this app's tokens.
  *
- * The mark is the strip's own device — an opaque corner badge with a hairline ring, `photo-thumb`'s
- * reserved-slot marker (#582) — so it reads the same over a black card margin as over a bright
- * stamp, which is exactly the property a tick sitting on a scan needs.
+ * The mark is the strip's own device — an opaque badge with a hairline ring, `photo-thumb`'s
+ * reserved-slot marker (#582) — so it says the same thing wherever the caller puts it: in a batch
+ * header, or in the chrome band a tile reserves for it above the picture (#628).
  */
 function TickBox({
   state,
@@ -1811,12 +1824,13 @@ function useStuck() {
 }
 
 /**
- * What became of a settled tile, said in the corner of its square (#582).
+ * What became of a settled tile, said at the left end of its chrome strip (#582).
  *
- * `photo-thumb.tsx`'s reserved-slot marker is the pattern: a corner badge rather than a coloured
- * frame, opaque and hairline-ringed, so it says the same thing over a black card margin as over a
- * bright stamp. That independence from the photograph is the whole point — the thing a fade could
- * never manage on a strip where the scans vary more than the fade did.
+ * `photo-thumb.tsx`'s reserved-slot marker is the pattern: a small badge rather than a coloured
+ * frame, opaque and hairline-ringed, so it says the same thing whatever sits behind it. That
+ * independence from the photograph is the whole point — the thing a fade could never manage on a
+ * strip where the scans vary more than the fade did. It sits in the band the card reserves above
+ * the picture (#628) rather than over the scan, so a mark can never be read as a torn corner.
  *
  * The two ends are drawn as **different kinds of mark, not two strengths of one**: a copy is a
  * filled accent tick — something was made — and a discard is an outlined neutral `excluded` — the

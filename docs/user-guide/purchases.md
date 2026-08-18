@@ -522,7 +522,7 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
 **Duplicates you can see on the card: tick them and identify them together.** Fifteen of a
 definitive is an ordinary find in a stockbook, and walking each one through the browse popup and the
 condition step is fifteen passes over a decision you took once. Every tile still waiting has a small
-**tick box in its top-right corner**; tick the ones that are the same stamp in the same condition and
+**tick box in the strip above its picture**; tick the ones that are the same stamp in the same condition and
 a bar appears above the batches saying how many are selected. The batch header has a box of its own
 that ticks every tile still waiting on that card, showing a dash while only some of them are.
 
@@ -663,9 +663,12 @@ lets you keep matching a tile to the piece in your tweezers.
 
 **The tiles still waiting are the ones that stand out.** A tile nobody has dealt with wears a
 coloured edge; a tile you have finished with lets its picture step back and takes a small mark in
-its top corner saying what became of it — a **tick** for one that became a copy, a **crossed circle**
-for one you discarded, a **pause mark** for one you set aside to check. The mark sits over the scan
-rather than being a shade of it, so it reads the same on a pale stamp as on a dark one, and the ends
+the strip above its picture saying what became of it — a **tick** for one that became a copy, a
+**crossed circle** for one you discarded, a **pause mark** for one you set aside to check. Every tile
+keeps that strip clear whether or not it is currently wearing a mark, so nothing sits on the scan
+itself: a box over a corner of a stamp can read as a torn one, and the scan is what you judge
+condition from. The mark is a shape rather than a shade of the picture, so it reads the same on a
+pale stamp as on a dark one, and the ends
 never look like more and less of the same thing: one piece became something, one deliberately became
 nothing, and one is still to be identified. A tile set aside keeps its picture at full strength and
 its own coloured edge, because it is still work — only not work for right now. The label underneath
