@@ -791,10 +791,18 @@ fully identified variants at the ends of the tree are expected to carry a price.
 
 So a copy filed under a base stamp that has variants is listed under whichever variant is cheapest
 **in that copy's condition** — the same variant its catalog value already comes from, so the price
-you are judging and the entry you are selling under are never two different stamps. The row's
-**Catalog** and **Market** links go to that variant's pages, and the row says which one, as
-`~ Mi·PL 900b` beside the stamp's name. The `~` and the italics are the same "worked out, not
-recorded" marker you see on a rolled-up catalog value.
+you are judging and the entry you are selling under are never two different stamps.
+
+The card says so outright: such a row gets a **line of its own underneath**, reading
+`↳ listed as ~ Mi·PL 900b`, and the row's links move down onto it. The `~` and the italics are the
+same "worked out, not recorded" marker you see on a rolled-up catalog value. The buttons on that line
+are the ordinary ones — **Catalog**, **Market**, and where the variant is not matched yet **Search**
+and **⚡ Link** — and they all act on the *variant*, because that is the entry the sale attaches to.
+The stamp's own row keeps its numbers, its name and its condition, and carries no links: a row headed
+`Mi·PL 900` whose **Catalog** button opened `Mi·PL 900b` was one line quietly standing for two stamps.
+
+Hovering the line says which variant it is and why, and — while it is the reason the offer is
+blocked — that matching it here is what unblocks the offer.
 
 Nothing is written to your collection: the base stamp stays unmatched, because "this listing goes
 under the cheapest variant" is a fact about one listing, not a claim about which variant the stamp
@@ -813,8 +821,10 @@ different screens:
 - **The cheapest variant has no item-ID of its own.** Every variant being priced, the cheapest one is
   known and simply is not matched on the platform. The offer is blocked, and what is named is *that
   variant* — it is the stamp to go and match, and matching it lists the copy straight away. The
-  next-cheapest variant is not quietly used instead, since that would be selling under a different
-  claim.
+  On Colnect card names it on the row's own line and puts **Search** and **⚡ Link** right there, so
+  it is matched from the offer rather than hunted down through the base stamp; the search runs on the
+  **variant's** number, since that is the entry the item-ID belongs on. The next-cheapest variant is
+  not quietly used instead, since that would be selling under a different claim.
 
 ### Filling the missing item-IDs without leaving the offer
 
@@ -825,7 +835,10 @@ and reload this screen. With the [Assistant](assistant.md) installed, two button
 for you:
 
 - **⚡ Link**, beside Search on any unmatched row — opens that search *and* brings up the Assistant's
-  match window on it. Match the stamp there and the item-ID lands in your collection.
+  match window on it. Match the stamp there and the item-ID lands in your collection. On a row listed
+  under a [cheapest variant](#a-stamp-whose-variant-you-havent-identified) the button sits on the
+  variant's own line and matches **that variant**, never the base stamp — matching the base stamp
+  would be claiming it *is* that variant, which is the one thing you don't know about it.
 - **⚡ Link all (N)** in the card's heading — the same thing for every unmatched stamp in the offer,
   one after another: as each match is confirmed, the next stamp's search opens by itself. **Stop
   linking** ends the walk; whatever was matched along the way is kept. Each stamp is offered once,

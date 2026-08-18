@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { addOfferSet, createOffer, setOfferState } from "../../src/lib/offers";
+import { addOfferSet, createOffer, getOfferDetail, setOfferState } from "../../src/lib/offers";
 import { setColnectConditionMapping } from "../../src/lib/colnect";
 import { getOfferListingKit } from "../../src/lib/listing-kit";
 
@@ -554,6 +554,67 @@ describe("offer listing kit (#405)", () => {
     assert.deepEqual(kit?.blockers, []);
     assert.equal(kit?.items[0].catalogItemId, "2611");
     assert.equal(kit?.items[0].catalogItemSource?.label, "Mi\u00b7PL 960ba");
+  });
+
+  // ── What the **On Colnect** card says about that variant (#423/#616) ───────
+  //
+  // The card reads the same resolution the kit does, so the two can never name different variants —
+  // which is the whole reason these live beside the kit's own cases rather than in a suite of their
+  // own: the umbrella fixtures above are exactly what they need. What is checked here is the half
+  // the kit has no opinion on — which entry the row's *links* stand under, and whether the row says
+  // so while the listing is still blocked.
+
+  it("names the cheapest variant on the card and points the row's links at it", async () => {
+    const base = await umbrella("PL card var", [
+      { number: "970a", colnectId: "2701", price: "30.00" },
+      { number: "970b", colnectId: "2702", price: "12.00" },
+    ]);
+    const detail = await getOfferDetail(userId, await offer([[await copy(base)]]));
+    const row = detail!.platformItems[0];
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 970b");
+    assert.ok(row.catalogUrl?.endsWith("2702"), "the catalog link opens the variant's page");
+    assert.ok(row.marketUrl?.includes("2702"), "and the market search asks about that variant");
+    assert.equal(row.searchUrl, null, "a matched entry has a page, so nothing to search for");
+  });
+
+  it("names the variant that has to be matched, and searches for **its** number", async () => {
+    // The one case the card used to go silent on, and the one where knowing the target matters most:
+    // the listing is blocked precisely because this variant carries no item-ID. Searching the
+    // umbrella's number would take the collector to a page they must not match it to — that would
+    // assert the umbrella *is* that variant (#616).
+    const base = await umbrella("PL card unmatched", [
+      { number: "980a", colnectId: null, price: "12.00" },
+      { number: "980b", colnectId: "2802", price: "30.00" },
+    ]);
+    const detail = await getOfferDetail(userId, await offer([[await copy(base)]]));
+    const row = detail!.platformItems[0];
+    assert.equal(row.catalogItemVariant, "Mi\u00b7PL 980a");
+    assert.equal(row.catalogUrl, null);
+    assert.equal(row.marketUrl, null);
+    assert.ok(row.searchUrl?.includes("PL+980a"), `searched for the variant: ${row.searchUrl}`);
+    assert.equal(row.unpricedVariantStampId, null, "this is a matching gap, not a pricing one");
+  });
+
+  it("names no variant while the tree is not fully priced — none is known to be cheapest", async () => {
+    const base = await umbrella("PL card unpriced", [
+      { number: "990a", colnectId: "2901" },
+      { number: "990b", colnectId: "2902", price: "12.00" },
+    ]);
+    const detail = await getOfferDetail(userId, await offer([[await copy(base)]]));
+    const row = detail!.platformItems[0];
+    assert.equal(row.catalogItemVariant, null);
+    assert.equal(row.unpricedVariantStampId, base, "the row offers the price grid instead");
+  });
+
+  it("names nothing on an umbrella matched by hand — it stands under itself", async () => {
+    const base = await umbrella("PL card own id", [
+      { number: "995a", colnectId: "2951", price: "12.00" },
+    ]);
+    await prisma.stamp.update({ where: { id: base }, data: { colnectId: "2950" } });
+    const detail = await getOfferDetail(userId, await offer([[await copy(base)]]));
+    const row = detail!.platformItems[0];
+    assert.equal(row.catalogItemVariant, null);
+    assert.ok(row.catalogUrl?.endsWith("2950"));
   });
 
   it("is null for another owner's offer and for the wrong collection", async () => {

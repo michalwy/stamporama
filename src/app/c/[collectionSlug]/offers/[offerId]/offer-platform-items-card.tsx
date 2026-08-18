@@ -45,14 +45,22 @@ import { Icon } from "@/app/icons";
 // across both would fight the collector on every visit. It collapses from the heading itself, as
 // that card does; the header's count already says how many stamps a buyer would be comparing.
 //
-// A row whose stamp is an **unknown-variant umbrella** links its cheapest variant's pages (#616) and
-// says so: that is the entry the listing will attach to, so the market page opened while pricing has
-// to be the same one. It is named in the `~` + muted-italic vocabulary #238 uses for inferred rather
-// than recorded, and it is *derived* — nothing is written onto the stamp.
+// A row whose stamp is an **unknown-variant umbrella** stands under its cheapest variant (#616), and
+// that variant gets a **line of its own** beneath the row — its name in the `~` + muted-italic
+// vocabulary #238 uses for inferred rather than recorded, and beside it, in the same links column,
+// the same buttons any other entry gets. The links live there and not on the umbrella's own row
+// because the entry they lead to *is* the variant: a row headed `Mi·PL 865` whose Catalog button
+// opened `Mi·PL 865a` was one row quietly standing for two stamps. Nothing is written onto the
+// stamp — the variant is derived, and the line says so.
 //
-// Where that derivation came back empty because a **variant carries no price** (#617), the row has
-// no links at all and `+ CV` would not help: the umbrella's own price is not what the rollup reads,
-// and until every variant is priced there is nothing to say which one is cheapest. That row gets
+// The line is drawn **whether or not that variant is itself matched**. An unmatched one is exactly
+// what stops the offer being posted, so it is where the collector needs `Search` and `⚡ Link` most —
+// and those act on the *variant's* number, never the umbrella's: matching the umbrella would assert
+// that it *is* that variant, which is the one thing not known about it (#616).
+//
+// Where the derivation came back empty because a **variant carries no price** (#617), no variant can
+// be named — which one is cheapest is not known — so the row has no line beneath it, no links, and
+// `+ CV` would not help either: the umbrella's own price is not what the rollup reads. That row gets
 // **Price variants** instead (#618) — the whole tree on one grid, which is what actually closes it.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
@@ -222,8 +230,12 @@ export function OfferPlatformItemsCard({
   const [priceError, setPriceError] = useState<string | undefined>();
   const [isPricing, startPricing] = useTransition();
 
+  // The handoff is named after the entry being matched, which for an umbrella is the **variant** its
+  // search was built from — the strip saying "Opening the search for Mi·PL 865" while the window
+  // shows `865a` is the one place that mismatch would be read as a bug.
   const handOver = useCallback(
-    (item: OfferPlatformItem) => start(item.searchUrl!, item.catalogNumbers[0] ?? item.label),
+    (item: OfferPlatformItem) =>
+      start(item.searchUrl!, item.catalogItemVariant ?? item.catalogNumbers[0] ?? item.label),
     [start]
   );
 
@@ -397,89 +409,21 @@ export function OfferPlatformItemsCard({
 
       {expanded && (
         <ul style={LIST}>
-          {items.map((item) => (
-            // `display: contents` hands the four cells straight to the list's own grid, which is
-            // what makes every column line up down the card — a per-row flex line cannot, since each
-            // row would size itself.
-            <li key={`${item.stampId}|${item.conditionId}`} style={{ display: "contents" }}>
-              {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
-                  against the *platform's* catalogue, so which vendor a number belongs to is the
-                  thing being checked, and a stamp recorded in two is looked up in both. They are the
-                  same click-to-copy chips as everywhere else (#420) — leading catalogue first —
-                  because pasting a number into the platform's own search is exactly what this card
-                  is for. A stamp carrying no number at all falls back to its bare label. */}
-              <span style={{ ...CELL, gap: "0.375rem" }}>
-                {item.catalogNumbers.length > 0 ? (
-                  item.catalogNumbers.map((label, i) => (
-                    <CatalogNumberChip
-                      key={`${i}|${label}`}
-                      label={label}
-                      style={i === 0 ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
-                    />
-                  ))
-                ) : (
-                  <span
-                    style={{
-                      fontSize: "0.8125rem",
-                      fontWeight: 600,
-                      color: "var(--color-text-primary)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                )}
-              </span>
-              <span style={{ ...CELL, minWidth: 0 }}>
-                {item.stampName && (
-                  <span
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "var(--color-text-secondary)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.stampName}
-                  </span>
-                )}
-                {/* Which catalogue entry this row's links — and the listing itself — stand under
-                    (#616). Shown only where it is *not* the stamp the collector picked: an
-                    unknown-variant umbrella carries no item-ID of its own and is listed under its
-                    cheapest variant, which is a thing to know before pressing Market. It sits in
-                    this column rather than beside the links so that column stays aligned down the
-                    card, and it is `~` + muted italic — #238's vocabulary for inferred, not
-                    recorded. */}
-                {item.catalogItemVariant && (
-                  <Tooltip
-                    content={`This stamp's variant isn't identified, so it has no item-ID of its own. The listing goes under ${item.catalogItemVariant}, the cheapest variant ${item.conditionName.toLowerCase()} — which is also what the copy is valued at. Nothing is recorded on the stamp.`}
-                  >
-                    <span
-                      style={{
-                        ...MUTED,
-                        fontStyle: "italic",
-                        whiteSpace: "nowrap",
-                        cursor: "help",
-                      }}
-                    >
-                      ~ {item.catalogItemVariant}
-                    </span>
-                  </Tooltip>
-                )}
-              </span>
-              <span style={CELL}>
-                <span style={{ ...MUTED, whiteSpace: "nowrap" }}>{item.conditionName}</span>
-                {item.copyCount > 1 && (
-                  <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
-                    <span style={MUTED}>×{item.copyCount}</span>
-                  </Tooltip>
-                )}
-              </span>
-              {/* The links close the row, in a column of their own: they are pressed one row after
-                  another, and a pair that shifts sideways with the length of the stamp name above it
-                  is a pair the collector has to re-find every time. */}
-              <span style={{ ...CELL, gap: "0.375rem" }}>
+          {items.map((item) => {
+            // Which catalogue entry this row **stands under** (#616): its own stamp, or the cheapest
+            // variant an unknown-variant umbrella is listed as. Where there is one, the links move
+            // down to a line of their own headed by that variant's name — a row headed `Mi·PL 865`
+            // whose Catalog button opened `Mi·PL 865a` was one row quietly standing for two stamps,
+            // and a `~` chip beside the name was not enough to say which of them the buttons meant.
+            const variant = item.catalogItemVariant;
+
+            // One block of links, drawn on the row or on the variant's line below it. Where they
+            // point is resolved server-side against whatever the row stands under, so the only
+            // thing that changes between the two placements is what the hints call the thing —
+            // and on a variant's line, "this stamp" would name the wrong one.
+            const subject = variant ? "variant" : "stamp";
+            const linksCell = (style?: React.CSSProperties) => (
+              <span style={{ ...CELL, gap: "0.375rem", ...style }}>
                 {item.catalogUrl ? (
                   <a href={item.catalogUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                     Catalog
@@ -492,7 +436,7 @@ export function OfferPlatformItemsCard({
                         steps they would then take by hand, which is why it sits beside it rather
                         than replacing it — a browser without the Assistant still has Search. */}
                     <Tooltip
-                      content={`No item-ID recorded for this stamp yet — search ${platformName} for its catalog number, then match it from the stamp's own screen.`}
+                      content={`No item-ID recorded for this ${subject} yet — search ${platformName} for its catalog number and match it there.`}
                     >
                       <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                         Search
@@ -520,14 +464,16 @@ export function OfferPlatformItemsCard({
                     )}
                   </>
                 ) : (
-                  <Tooltip content="This stamp has no item-ID recorded for this platform yet, and no catalog number to search by.">
+                  <Tooltip
+                    content={`This ${subject} has no item-ID recorded for this platform yet, and no catalog number to search by.`}
+                  >
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
                   </Tooltip>
                 )}
-                {/* Market only where the stamp *has* a page here. Without an item-ID it could never
+                {/* Market only where the entry *has* a page here. Without an item-ID it could never
                     have been anything but greyed out, and a dead chip beside Search says nothing
-                    the row has not already said — the missing ID is the one fact, stated once.
-                    A matched stamp whose condition is unmapped is a different gap and keeps its
+                    the line has not already said — the missing ID is the one fact, stated once.
+                    A matched entry whose condition is unmapped is a different gap and keeps its
                     greyed chip: there, the link is one setting away. */}
                 {item.marketUrl ? (
                   <Tooltip
@@ -546,52 +492,154 @@ export function OfferPlatformItemsCard({
                   )
                 )}
               </span>
-              {/* The last column is the *other* gap this card is read for. A stamp and a condition
-                  are what a catalog value is recorded against, so the row can say whether one is
-                  missing and open the same quick dialog the copies below do — which is the scroll it
-                  saves. Priced rows say nothing: the figure is still not this card's business. */}
-              <span style={CELL}>
-                {/* An umbrella whose tree is not fully priced (#618) is a different gap from an
-                    unpriced stamp, and it is the one that stops the listing outright: until every
-                    variant carries a price, *which* of them is cheapest is not known, so the row
-                    has no catalogue link and nothing to search for either (#617). It is offered
-                    ahead of `+ CV` and instead of it — pricing the umbrella itself would not close
-                    it, the tree being what the rollup reads. */}
-                {item.unpricedVariantStampId ? (
-                  <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
-                    <button
-                      type="button"
-                      onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
-                      style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+            );
+
+            return (
+              // `display: contents` hands the cells straight to the list's own grid, which is
+              // what makes every column line up down the card — a per-row flex line cannot, since
+              // each row would size itself.
+              <li key={`${item.stampId}|${item.conditionId}`} style={{ display: "contents" }}>
+                {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
+                    against the *platform's* catalogue, so which vendor a number belongs to is the
+                    thing being checked, and a stamp recorded in two is looked up in both. They are
+                    the same click-to-copy chips as everywhere else (#420) — leading catalogue first —
+                    because pasting a number into the platform's own search is exactly what this card
+                    is for. A stamp carrying no number at all falls back to its bare label. */}
+                <span style={{ ...CELL, gap: "0.375rem" }}>
+                  {item.catalogNumbers.length > 0 ? (
+                    item.catalogNumbers.map((label, i) => (
+                      <CatalogNumberChip
+                        key={`${i}|${label}`}
+                        label={label}
+                        style={i === 0 ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
+                      />
+                    ))
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        fontWeight: 600,
+                        color: "var(--color-text-primary)",
+                        whiteSpace: "nowrap",
+                      }}
                     >
-                      Price variants
-                    </button>
-                  </Tooltip>
-                ) : (
-                  (() => {
-                    const unpriced = unpricedFor(item);
-                    if (!unpriced) return null;
-                    return (
-                      <Tooltip
-                        content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
+                      {item.label}
+                    </span>
+                  )}
+                </span>
+                <span style={{ ...CELL, minWidth: 0 }}>
+                  {item.stampName && (
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text-secondary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.stampName}
+                    </span>
+                  )}
+                </span>
+                <span style={CELL}>
+                  <span style={{ ...MUTED, whiteSpace: "nowrap" }}>{item.conditionName}</span>
+                  {item.copyCount > 1 && (
+                    <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
+                      <span style={MUTED}>×{item.copyCount}</span>
+                    </Tooltip>
+                  )}
+                </span>
+                {/* The links close the row, in a column of their own: they are pressed one row after
+                    another, and a pair that shifts sideways with the length of the stamp name above
+                    it is a pair the collector has to re-find every time. An umbrella hands this cell
+                    down to its variant's line and leaves it **empty rather than absent**: the grid
+                    has five tracks, and a row that fills four takes the next row's first cell into
+                    it and staggers everything below. */}
+                {variant ? <span style={CELL} /> : linksCell()}
+                {/* The last column is the *other* gap this card is read for. A stamp and a condition
+                    are what a catalog value is recorded against, so the row can say whether one is
+                    missing and open the same quick dialog the copies below do — which is the scroll
+                    it saves. Priced rows say nothing: the figure is still not this card's business. */}
+                <span style={CELL}>
+                  {/* An umbrella whose tree is not fully priced (#618) is a different gap from an
+                      unpriced stamp, and it is the one that stops the listing outright: until every
+                      variant carries a price, *which* of them is cheapest is not known — which is
+                      also why such a row names no variant below it. It is offered ahead of `+ CV`
+                      and instead of it: pricing the umbrella itself would not close it, the tree
+                      being what the rollup reads. */}
+                  {item.unpricedVariantStampId ? (
+                    <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
+                      <button
+                        type="button"
+                        onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
+                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPriceError(undefined);
-                            setQuickPriceItem(unpriced);
-                          }}
-                          style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                        Price variants
+                      </button>
+                    </Tooltip>
+                  ) : (
+                    (() => {
+                      const unpriced = unpricedFor(item);
+                      if (!unpriced) return null;
+                      return (
+                        <Tooltip
+                          content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
                         >
-                          + CV
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPriceError(undefined);
+                              setQuickPriceItem(unpriced);
+                            }}
+                            style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                          >
+                            + CV
+                          </button>
+                        </Tooltip>
+                      );
+                    })()
+                  )}
+                </span>
+                {/* What this row is **listed as** (#616), on a line of its own beneath it: the
+                    variant's name in `~` + muted italic — #238's vocabulary for inferred rather than
+                    recorded — and beside it, in the links column, the same buttons any other entry
+                    gets. They belong here rather than on the row above because the entry the listing
+                    attaches to is the variant, and that is the page a collector opens while pricing.
+                    Drawn whether or not the variant is itself matched: an unmatched one is exactly
+                    the entry that has to be linked before this offer can be posted, and linking it
+                    from here — rather than hunting it down through the umbrella — is the point.
+                    Three cells and not two, so column five stays filled and the next row still
+                    starts in column one. */}
+                {variant && (
+                  <>
+                    <span style={{ ...CELL, gridColumn: "1 / 4", paddingTop: 0, paddingLeft: "1.25rem" }}>
+                      <Tooltip
+                        content={
+                          item.catalogUrl
+                            ? `This stamp's variant isn't identified, so it carries no item-ID of its own. The listing goes under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}, which is also what the copy is valued at. Nothing is recorded on the stamp; the links follow the rollup.`
+                            : `This stamp's variant isn't identified, so the listing would go under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}. That variant has no item-ID yet, which is what stops this offer being posted. Match it here.`
+                        }
+                      >
+                        <span
+                          style={{
+                            ...MUTED,
+                            fontStyle: "italic",
+                            whiteSpace: "nowrap",
+                            cursor: "help",
+                          }}
+                        >
+                          ↳ listed as ~ {variant}
+                        </span>
                       </Tooltip>
-                    );
-                  })()
+                    </span>
+                    {linksCell({ paddingTop: 0 })}
+                    <span style={{ ...CELL, paddingTop: 0 }} />
+                  </>
                 )}
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

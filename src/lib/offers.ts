@@ -3378,18 +3378,26 @@ export interface OfferPlatformItem {
   /** The stamp's name, where it has one; the label already carries the number. */
   stampName: string | null;
   conditionName: string;
-  /** The stamp's page in the platform's catalogue (#290), null when it was never matched. */
+  /** The page in the platform's catalogue (#290) of whatever this row **stands under** — the stamp
+   * itself, or the variant of {@link catalogItemVariant} — null when that entry was never matched. */
   catalogUrl: string | null;
-  /** Where to *look* for a stamp that has no page here — the platform's own catalogue search for the
-   * leading catalog number. Null when the stamp is matched (its page is the better link) or carries
-   * no number to search by. */
+  /** Where to *look* for an entry that has no page here — the platform's own catalogue search for
+   * its leading catalog number, which for an umbrella is the **variant's** number and never the
+   * umbrella's: the item-ID would be recorded on that variant (#616/#617). Null when the entry is
+   * matched (its page is the better link) or carries no number to search by. */
   searchUrl: string | null;
-  /** What this stamp in this grade is currently being asked for (#423), null when the stamp is
+  /** What this row's entry in this grade is currently being asked for (#423), null when it is
    * unmatched or its condition is not mapped into the platform's vocabulary. */
   marketUrl: string | null;
-  /** The **variant** the two links above resolved to (#616) — set only where this stamp is an
-   * unknown-variant umbrella with no item-ID of its own, and the listing therefore stands under the
-   * cheapest variant. Null for every ordinary row, including an umbrella matched by hand. */
+  /** The **variant** the three links above stand under (#616) — set only where this stamp is an
+   * unknown-variant umbrella with no item-ID of its own, so the listing goes under the cheapest
+   * variant. Null for every ordinary row, including an umbrella matched by hand.
+   *
+   * Named whether or not that variant is itself matched: an unmatched one is precisely the row the
+   * collector has to go and fix, and naming it only on success left the card silent exactly where
+   * knowing the target mattered most. It stays null for the third empty answer — a tree with an
+   * unpriced variant (#617), where *which* variant is cheapest is not known and there is nothing
+   * truthful to name; that row carries {@link unpricedVariantStampId} instead. */
   catalogItemVariant: string | null;
   /** The umbrella whose variant tree wants pricing (#618) — this row's own stamp, and set **only**
    * where the derivation above came back empty because a variant carries no price (#617's
@@ -3870,8 +3878,21 @@ function platformItemsFor(
       // copy's answer — the same copy every other field on the row already comes from.
       const resolved = catalogIds.get(itemId);
       const colnectId = resolved?.catalogItemId ?? null;
+      // Which catalogue entry this row **stands under** (#616). `sourceLabel` names it once the
+      // derivation succeeded; where it failed because that very variant is unmatched, the gap names
+      // the same stamp — so the row can say what the listing would go under *before* the item-ID
+      // exists, which is the one moment the answer is worth having. The other empty answers name
+      // nothing: an unpriced tree has no cheapest variant to speak of, and an umbrella matched by
+      // hand stands under itself.
+      const variantLabel =
+        resolved?.sourceLabel ??
+        (resolved?.gap?.kind === "unmatched-variant" ? resolved.gap.label : null);
       const grade = colnectGradeFor(conditionMap.get(item.conditionId) ?? "");
       const catalogNumbers = labeller.catalogNumbers(item.stamp);
+      // A search is run on the number an item-ID would be **recorded against** — the variant's where
+      // there is one. Searching the umbrella's number would take the collector to a page they must
+      // not match it to: that would assert the umbrella *is* that variant (#616).
+      const searchLabel = variantLabel ?? catalogNumbers[0] ?? null;
       rows.set(key, {
         stampId: item.stampId,
         conditionId: item.conditionId,
@@ -3884,11 +3905,9 @@ function platformItemsFor(
         // the long way round to a link that is right there.
         searchUrl: colnectId
           ? null
-          : colnectSearchUrl(
-              catalogNumbers[0] ? catalogChipCopyValueFromLabel(catalogNumbers[0]) : null
-            ),
+          : colnectSearchUrl(searchLabel ? catalogChipCopyValueFromLabel(searchLabel) : null),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
-        catalogItemVariant: resolved?.sourceLabel ?? null,
+        catalogItemVariant: variantLabel,
         unpricedVariantStampId:
           resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
         copyCount: 1,
