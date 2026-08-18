@@ -997,6 +997,7 @@ export function OfferDetailPanel({
         <OfferDelcampeCard
           offerId={offerId}
           config={offer.delcampeListing}
+          listingType={offer.listingType}
           categorySearchTerm={offer.delcampeListing.categorySearchTerm}
           onChanged={() => invalidateAll(collectionId)}
         />

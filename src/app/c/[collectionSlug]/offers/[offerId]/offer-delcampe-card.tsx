@@ -2,7 +2,11 @@
 
 import { useCallback, useState, useTransition } from "react";
 import type { DelcampeOfferListingConfig } from "@/lib/delcampe-offer-listing";
-import { countDelcampePromotions } from "@/lib/delcampe-listing-profile-rules";
+import {
+  countDelcampePromotions,
+  delcampeAuctionGaps,
+} from "@/lib/delcampe-listing-profile-rules";
+import { isAuctionListing, type OfferListingType } from "@/lib/offer-rules";
 import {
   rematchDelcampeOfferCategoryAction,
   setDelcampeOfferCategoryAction,
@@ -23,6 +27,12 @@ import { Icon } from "@/app/icons";
 // the same reason — the value is settled while the listing is being prepared, not inside whichever
 // dialog eventually exports it — and the profile states what it *holds*, because "Standard letter"
 // says nothing about which shipping model, how often it renews, or what bid step the row will carry.
+//
+// The profile's sentence is read **for the way this offer is sold** (#620): an auction row takes its
+// duration from the profile's auction group rather than from the shop-stock counters, so a card that
+// stated 28 × 99 on an auction would be describing a row the export will never write — and where that
+// group is empty the card says so here, since the alternative is finding out when a whole batch is
+// refused.
 //
 // **Nothing on it is a gate.** The category is matched the moment the offer gains its first copy, and
 // whatever was matched is what the file carries; every value is correctable in place and none asks to
@@ -86,11 +96,15 @@ const SECTION_LABEL: React.CSSProperties = {
 export function OfferDelcampeCard({
   offerId,
   config,
+  listingType,
   categorySearchTerm,
   onChanged,
 }: {
   offerId: string;
   config: DelcampeOfferListingConfig;
+  /** How this offer is sold (#449) — which of the profile's two duration groups its row is written
+   *  from, and therefore which one this card reads back. */
+  listingType: OfferListingType;
   /** What the picker's search opens on — the offer's own key in words, "Poland used". A first guess
    *  and nothing more: Delcampe's tree is cut by country and period rather than by this collection's
    *  areas, so it is a head start rather than an answer. */
@@ -135,6 +149,11 @@ export function OfferDelcampeCard({
 
   const platformDefault = config.profileOptions.find((option) => option.isDefault);
   const profile = config.profile;
+  const auction = isAuctionListing(listingType);
+  const auctionGaps = profile ? delcampeAuctionGaps(profile) : [];
+  const closing = profile
+    ? [profile.auctionEndDay, profile.auctionEndTime].filter(Boolean).join(" ")
+    : "";
 
   return (
     <div style={CARD}>
@@ -260,14 +279,32 @@ export function OfferDelcampeCard({
           </select>
 
           {profile ? (
-            <p style={{ ...helpText, margin: "0.375rem 0 0" }}>
-              Ships as <strong>{profile.shippingModel}</strong> · renews every {profile.renewDuration}{" "}
-              days, up to {profile.renewTotalCount}× · bid step {money(profile.minBidStepBelow)} under{" "}
-              {money(profile.minBidStepThreshold)}, {money(profile.minBidStepAtOrAbove)} from there
-              {countDelcampePromotions(profile) > 0
-                ? ` · ${countDelcampePromotions(profile)} paid promotion(s)`
-                : ""}
-            </p>
+            <>
+              <p style={{ ...helpText, margin: "0.375rem 0 0" }}>
+                Ships as <strong>{profile.shippingModel}</strong> ·{" "}
+                {auction
+                  ? auctionGaps.length > 0
+                    ? "no auction duration set"
+                    : `runs ${profile.auctionDuration} days, up to ${profile.auctionRenewTotalCount}×${
+                        closing ? `, closing ${closing}` : ""
+                      }`
+                  : `renews every ${profile.renewDuration} days, up to ${profile.renewTotalCount}×`}{" "}
+                · bid step {money(profile.minBidStepBelow)} under{" "}
+                {money(profile.minBidStepThreshold)}, {money(profile.minBidStepAtOrAbove)} from there
+                {countDelcampePromotions(profile) > 0
+                  ? ` · ${countDelcampePromotions(profile)} paid promotion(s)`
+                  : ""}
+              </p>
+              {/* Said here rather than only at export time: the batch is refused as a whole, so one
+                  offer whose profile cannot describe an auction holds up everything beside it. */}
+              {auction && auctionGaps.length > 0 && (
+                <p style={{ ...helpText, margin: "0.25rem 0 0", color: "var(--color-error)" }}>
+                  This is an auction, and {profile.name} does not say {auctionGaps.join(" or ")} —
+                  the upload file has no value for those columns, so this offer is refused until the
+                  profile&rsquo;s auction settings are filled in under Settings → Delcampe.
+                </p>
+              )}
+            </>
           ) : (
             <p style={{ ...helpText, margin: "0.375rem 0 0" }}>
               No profile applies to this offer — the platform has none set as its default, so name

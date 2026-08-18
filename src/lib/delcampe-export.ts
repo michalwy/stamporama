@@ -5,9 +5,12 @@ import { offerScreenUrl } from "./app-url";
 import { DELCAMPE_PLATFORM_MODULE } from "./platform-modules";
 import { readOfferUploadSet } from "./offer-photo-generation";
 import { resolveDelcampeListingProfileForOffer } from "./delcampe-listing-profile";
+import { delcampeAuctionGaps } from "./delcampe-listing-profile-rules";
+import { normalizeListingType } from "./offer-rules";
 import {
   DELCAMPE_UPLOAD_CSV_NAME,
   type DelcampeUploadRow,
+  delcampeListedPrice,
   delcampeRowRefusals,
   delcampeUploadRow,
   disambiguateBundleNames,
@@ -20,7 +23,8 @@ import {
 //
 // **Nothing here decides what a row says.** The four groups of columns that describe a way of selling
 // are the offer's resolved profile (#608), the category is the offer's own (#609), the texts and the
-// price are the offer's (#210/#266/#449), and the pictures are the photo plan's — the same read the
+// price are the offer's (#210/#266/#449) — including which of the two prices an auction states, which
+// is the rules module's (#620) — and the pictures are the photo plan's — the same read the
 // per-offer ZIP and the bulk archive are built from (#314/#323), so a file in this bundle is
 // byte-identical to, and named exactly as, the same file downloaded on its own. What this module
 // does is *gather* those, refuse what cannot be written, and pack the result.
@@ -79,6 +83,7 @@ const OFFER_SELECT = {
   name: true,
   description: true,
   price: true,
+  startingPrice: true,
   state: true,
   listingType: true,
   collectionId: true,
@@ -182,7 +187,11 @@ export async function buildDelcampeUploadBundle(
     // Null where the plan has nothing to upload; its own sentence joins the refusals below.
     const upload = "reason" in uploadSet ? null : uploadSet;
     const images = upload?.images ?? [];
+    const listingType = normalizeListingType(offer.listingType);
     const price = Number(offer.price);
+    const startingPrice = offer.startingPrice === null ? null : Number(offer.startingPrice);
+    // An auction's row states what the seller opened at, never what the bidding has reached (#477).
+    const listedPrice = delcampeListedPrice({ listingType, price, startingPrice });
     // How many of this listing there are: the offer's sets that still hold copies, which is the
     // number the listing kit reports for every other platform (#405) — one set is what one buyer
     // takes.
@@ -194,10 +203,12 @@ export async function buildDelcampeUploadBundle(
         title: offer.name,
         description: offer.description,
         categoryId: offer.delcampeCategoryId,
-        listingType: offer.listingType,
+        listingType,
         price,
+        startingPrice,
         imageCount: images.length,
         hasProfile: profile !== null,
+        auctionProfileGaps: profile ? delcampeAuctionGaps(profile) : [],
         personalReference,
       },
       {
@@ -210,7 +221,7 @@ export async function buildDelcampeUploadBundle(
     if ("reason" in uploadSet) reasons.push(uploadSet.reason.toLowerCase().replace(/\.$/, ""));
     if (quantity === 0) reasons.push("no sets — there is nothing to sell");
 
-    if (reasons.length > 0 || !profile || !personalReference || !upload) {
+    if (reasons.length > 0 || !profile || !personalReference || !upload || listedPrice === null) {
       refusals.push({
         offerId: offer.id,
         offerNo: offer.offerNo,
@@ -241,7 +252,8 @@ export async function buildDelcampeUploadBundle(
         personalReference,
         description: offer.description ?? "",
         categoryId: offer.delcampeCategoryId!.trim(),
-        price,
+        listingType,
+        price: listedPrice,
         quantity,
         imageNames: names,
         profile,

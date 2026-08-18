@@ -17,6 +17,11 @@ import {
 // consumer, and the only thing it asks of this module is
 // {@link resolveDelcampeListingProfileForOffer}.
 //
+// The **auction group** (#620) travels with the rest: an auction row's duration and renewal count,
+// and the two end cells, held here for the same reason the shipping model is — one profile carries
+// everything a row states about a way of selling, so which settings an upload went out with has one
+// answer rather than one per screen.
+//
 // The shipping model is stored as a **name and nothing else**, and is never validated: the CSV
 // carries the name itself, no id is held in reserve, and Delcampe's own list (`GET /shippingModels`)
 // is behind the API Pass this integration deliberately does not buy. A model renamed there makes an
@@ -96,6 +101,12 @@ const PROFILE_SELECT = {
   minBidStepThreshold: true,
   minBidStepBelow: true,
   minBidStepAtOrAbove: true,
+  // The auction group (#620), which needs no conversion: two nullable counts and two cells written
+  // into the file exactly as they were typed.
+  auctionDuration: true,
+  auctionRenewTotalCount: true,
+  auctionEndDay: true,
+  auctionEndTime: true,
 } as const;
 
 /** A selected row, with the three money columns still `Decimal`s — the boundary this module exists

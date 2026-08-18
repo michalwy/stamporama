@@ -47,7 +47,28 @@ The defaults are shop-stock behaviour: the listing runs for **28 days** and rene
 times**, which in practice means it stays up until it sells. *Re-buy the paid options on every
 renewal* only means anything while one of the promotions is on — each renewal is charged again.
 
-Auction-style listings need a real end date instead, and are not configured here yet.
+These two figures are what a **quick-buy** row carries. An auction takes its own, below.
+
+### Auctions
+
+An auction ends, so it is not shop stock. A profile therefore carries a second pair of figures —
+**days the auction runs** and **times it may run again** — and any offer you have recorded as an
+auction is uploaded with those instead of the renewal settings above.
+
+Nothing is filled in for you. Every other default on this screen was taken from your own live
+listings, and there were no auctions to take one from, so how long your auctions run is yours to
+state. Until you do, an auction offer is **refused at export** and its **On Delcampe** card says so —
+better than a listing that quietly renewed itself past the deadline that was its whole point.
+
+The **closing day** and **closing hour** go into the file exactly as you type them. Which spelling
+Delcampe's Easy Uploader wants for those two columns is not published anywhere Stamporama can read
+and has never been confirmed, so put in what your own listings use and correct it if an upload
+disagrees. Leave them blank and the auction simply closes when its duration runs out.
+
+An auction row states your **starting price**, never what the bidding has reached. The current price
+on an auction offer is an observation of the bidding; listing from it would state an opening figure
+nobody offered. That is why an auction with no starting price is refused rather than listed at
+whatever the price column happens to hold.
 
 ### Paid promotions
 
@@ -139,7 +160,8 @@ cut a session down, and the button exports that, not the whole platform.
 
 Each row carries the offer's title and description, its price and quantity, the category on its
 **On Delcampe** card, and the shipping model, renewal and promotion settings of the profile that
-applies to it. `personal_reference` carries the offer's own [short address](offers.md#offer-number-and-short-link)
+applies to it. An offer recorded as an auction goes out as one: its starting price, the profile's
+[auction settings](#auctions), and the bid step for the figure it opens at. `personal_reference` carries the offer's own [short address](offers.md#offer-number-and-short-link)
 — only you can see it on Delcampe, and it is what lets Stamporama match the listing back to this
 offer when you [read your listings back](#reading-your-listings-back).
 
@@ -147,8 +169,8 @@ offer when you [read your listings back](#reading-your-listings-back).
 
 If an offer in the batch cannot be turned into a row, **no file is produced** and the screen lists
 what is wrong, one line per offer, linking to it. The usual reasons: no category yet, no photos
-generated, no listing profile, a title over the platform's cap, or an auction — auction uploads are
-not written yet.
+generated, no listing profile, a title over the platform's cap, an auction with no starting price, or
+an auction whose profile does not yet say [how long an auction runs](#auctions).
 
 That is on purpose. The file goes up once, and a row quietly missing from it is a listing that never
 happened, sitting among the offers waiting for the next batch, looking exactly like them. Fixing the
@@ -216,7 +238,7 @@ The same goes for a listing whose reference names an offer number this collectio
 for one carrying no reference at all — a listing you created directly on Delcampe, for instance. Both
 are shown so you know they are there; neither changes anything here.
 
-### Auctions
+### What an auction brings back
 
 For an offer you have recorded as an **auction**, the import also brings back what the bidding is at,
 how many bids there are and when the listing closes — and raises the *in active bidding* flag the

@@ -967,9 +967,9 @@ model DelcampeListingProfile {
 
   // ── Renewal ───────────────────────────────────────────────────────────────────────────────
   // `renew_duration` (days a listing runs before it renews) and `renew_total_count` (how many times
-  // it may). 28 × 99 is shop-stock behaviour: a fixed-price listing that stays up until it sells.
-  // An auction wants an end date and a second set of defaults instead, which is #620's, not this
-  // model's — nothing here describes a listing with a real end.
+  // it may) **on a fixed-price row**. 28 × 99 is shop-stock behaviour: a listing that stays up until
+  // it sells. An auction takes its own two figures from the auction group below (#620) rather than
+  // these — nothing here describes a listing with a real end.
   renewDuration   Int @default(28)
   renewTotalCount Int @default(99)
   // `has_renewable_options`: whether the paid options below are re-bought on each renewal. `N` in
@@ -996,6 +996,31 @@ model DelcampeListingProfile {
   minBidStepThreshold  Decimal @default(1.00) @db.Decimal(10, 2)
   minBidStepBelow      Decimal @default(0.01) @db.Decimal(10, 2)
   minBidStepAtOrAbove  Decimal @default(0.10) @db.Decimal(10, 2)
+
+  // ── Auctions ──────────────────────────────────────────────────────────────────────────────
+  // The second duration group (#620), and deliberately not a reinterpretation of the first: the
+  // renewal counters above are shop stock — a listing that stays up until it sells — while an
+  // auction's whole point is a deadline. An auction row takes `renew_duration` and
+  // `renew_total_count` from *these* two instead.
+  //
+  // **Blank until typed, and seeded with nothing.** Everything else on this model carries an
+  // observed default, because it was observed on the collector's own live listings; there are no
+  // auctions to observe, so a figure here would be this app inventing how long somebody's auctions
+  // run. An auction export refuses while they are null and says which are missing, which is the one
+  // honest thing to do with a number nobody has stated.
+  auctionDuration        Int?
+  auctionRenewTotalCount Int?
+  // `sale_end_day` / `sale_end_time`: empty on every fixed-price row — a shop listing has no end
+  // worth choosing — and meaningful on an auction, where when it closes decides who is watching.
+  //
+  // **Stored and written verbatim**, which is ADR-0034 §2's treatment of `shippingModel` applied to
+  // a second unvalidatable cell: what spelling Easy Uploader wants for a closing day and hour is not
+  // published anywhere this app can read and has never been confirmed. A day picker and an hour
+  // picker would be a claim about that format, and a wrong claim would need a release to correct;
+  // a text cell is corrected by retyping it. Blank is allowed and means the row states no end,
+  // leaving it to Delcampe's own default for the duration.
+  auctionEndDay          String @default("")
+  auctionEndTime         String @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

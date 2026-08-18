@@ -15,8 +15,12 @@
 //     counted would be its own offers, not the seller's sales, and a refusal built on that number
 //     would block a legitimate batch as confidently as it let an over-full one through. Keeping the
 //     batch inside the package is the collector's, and it is stated as theirs in the user guide.
-//   * **Auctions.** `selling_type` is `fixed_price` here; an auction wants an end date and a second
-//     set of renewal defaults, which is #620's (ADR-0034 §4).
+//   * **Where an auction's figures come from.** `selling_type` is the offer's own listing type
+//     (#449) and an auction's `price` is its **starting** price, never the standing bid — #477's
+//     rule, and the reason the two are separate columns on the offer at all: a current price is an
+//     observation of the bidding, and writing it into a new listing would state an offer nobody
+//     made. The duration and the two end cells are the profile's auction group (#620; ADR-0034 §7),
+//     which this module reads and does not second-guess.
 //   * **Where the pictures come from.** The names in `images` are the photo plan's own (#314/#326),
 //     handed in by the caller — this module never invents a file name.
 
@@ -25,6 +29,7 @@ import {
   type DelcampeListingProfileValues,
   delcampeMinimumBidStep,
 } from "./delcampe-listing-profile-rules";
+import { isAuctionListing, type OfferListingType } from "./offer-rules";
 
 /**
  * The upload file's columns, in Delcampe's own order (#608).
@@ -64,9 +69,37 @@ export type DelcampeUploadColumn = (typeof DELCAMPE_UPLOAD_COLUMNS)[number];
  *  what order they go out in. */
 export type DelcampeUploadRow = Record<DelcampeUploadColumn, string>;
 
-/** The one listing type this export writes. An auction is #620's, and is refused rather than
- *  translated into something that would go up as a quick buy. */
+/** The two values `selling_type` takes, translated from what the offer already says about itself
+ *  (#449) rather than chosen here — no listing carries a Delcampe-only flag saying how it is sold. */
 export const DELCAMPE_FIXED_PRICE_SELLING_TYPE = "fixed_price";
+export const DELCAMPE_AUCTION_SELLING_TYPE = "auction";
+
+/** `selling_type` for one offer. */
+export function delcampeSellingType(listingType: OfferListingType): string {
+  return isAuctionListing(listingType)
+    ? DELCAMPE_AUCTION_SELLING_TYPE
+    : DELCAMPE_FIXED_PRICE_SELLING_TYPE;
+}
+
+/**
+ * The figure the `price` column states: an auction's **starting** price, a quick buy's asking price.
+ *
+ * #477's rule, transferred verbatim from Allegro's `sellingMode` to a marketplace where the two
+ * readings share one column on the offer (#449). An auction's `price` here is what the bidding has
+ * reached — an *observation* — and a new listing written from it would state an opening figure
+ * nobody offered, over and over as the bidding moved. What the seller states is `startingPrice`, and
+ * that is the only thing a row may carry.
+ *
+ * Null on an auction that has no starting price, which is a refusal rather than a fallback: the
+ * asking-price column is exactly the wrong number to reach for here.
+ */
+export function delcampeListedPrice(input: {
+  listingType: OfferListingType;
+  price: number;
+  startingPrice: number | null;
+}): number | null {
+  return isAuctionListing(input.listingType) ? input.startingPrice : input.price;
+}
 
 /** The file the bundle carries, and the name it goes in under. */
 export const DELCAMPE_UPLOAD_CSV_NAME = "delcampe-upload.csv";
@@ -130,8 +163,12 @@ export interface DelcampeUploadRowInput {
    *  without one, which is what the collector's live listings are. */
   description: string;
   categoryId: string;
-  /** The asking price in the platform's currency (#196). The file carries no currency column: it is
-   *  an account-level setting on Delcampe. */
+  /** How this listing is sold (#449) — `fixed` or `auction`, which is what `selling_type` says and
+   *  which of the profile's two duration groups the row is written from. */
+  listingType: OfferListingType;
+  /** The figure the `price` column states, in the platform's currency (#196): the asking price of a
+   *  quick buy, the **starting** price of an auction (see {@link delcampeListedPrice}). The file
+   *  carries no currency column — it is an account-level setting on Delcampe. */
   price: number;
   /** How many of this listing there are — the offer's set count. */
   quantity: number;
@@ -148,17 +185,25 @@ export interface DelcampeUploadRowInput {
  * (ADR-0034 §4: a column that costs money and is filled in by code is a decision nobody could find
  * later).
  *
- * `sale_end_time` and `sale_end_day` go out **empty**: they belong to an auction, and a fixed-price
- * listing that stays up until it sells has no end to state.
+ * The **duration group depends on the selling type** (#620). A quick buy renews itself out of shop
+ * stock — 28 × 99 — and has no end to state, so `sale_end_time` and `sale_end_day` go out empty. An
+ * auction takes the profile's own auction figures and whatever closing day and hour it holds,
+ * written **verbatim**: what spelling Easy Uploader wants for those two cells has never been
+ * confirmed, so the collector's own text is the answer and this module does not reformat it.
+ *
+ * The price it is handed is already the right one for the type — the *starting* price on an auction
+ * — and `minimum_bid_step` is computed against that same figure rather than against whatever the
+ * bidding has reached, so the step the row states is the step for the listing it opens.
  */
 export function delcampeUploadRow(input: DelcampeUploadRowInput): DelcampeUploadRow {
   const { profile } = input;
+  const auction = isAuctionListing(input.listingType);
   return {
     category_id: input.categoryId,
     title: input.title,
     personal_reference: input.personalReference,
     description: input.description,
-    selling_type: DELCAMPE_FIXED_PRICE_SELLING_TYPE,
+    selling_type: delcampeSellingType(input.listingType),
     price: delcampeDecimal(input.price),
     minimum_bid_step: delcampeDecimal(delcampeMinimumBidStep(input.price, {
       threshold: profile.minBidStepThreshold,
@@ -167,10 +212,18 @@ export function delcampeUploadRow(input: DelcampeUploadRowInput): DelcampeUpload
     })),
     initial_quantity: String(input.quantity),
     images: input.imageNames.join("|"),
-    renew_duration: String(profile.renewDuration),
-    renew_total_count: String(profile.renewTotalCount),
-    sale_end_time: "",
-    sale_end_day: "",
+    // The auction group is not defaulted to the shop-stock one where it is missing: an auction whose
+    // profile does not describe an auction is refused before it gets here (see
+    // {@link delcampeRowRefusals}), and a row that quietly renewed 99 times is precisely the listing
+    // a deadline was supposed to end.
+    renew_duration: auction
+      ? String(profile.auctionDuration ?? "")
+      : String(profile.renewDuration),
+    renew_total_count: auction
+      ? String(profile.auctionRenewTotalCount ?? "")
+      : String(profile.renewTotalCount),
+    sale_end_time: auction ? profile.auctionEndTime : "",
+    sale_end_day: auction ? profile.auctionEndDay : "",
     shipping_model: profile.shippingModel,
     weight: "",
     ...Object.fromEntries(
@@ -187,11 +240,22 @@ export interface DelcampeRowCandidate {
   title: string | null;
   description: string | null;
   categoryId: string | null;
-  /** `Offer.listingType` (#449) — `fixed` or `auction`. */
-  listingType: string;
+  /** `Offer.listingType` (#449) — `fixed` or `auction`, which decides which figure the row states
+   *  and which of the profile's two duration groups has to be filled in. */
+  listingType: OfferListingType;
+  /** The offer's asking price, or on an auction the bidding as last observed — never what an auction
+   *  row carries. */
   price: number;
+  /** What an auction opened at (#449), null on a quick buy and on an auction still being assembled.
+   *  This is the figure an auction row states, so its absence is a refusal rather than a reason to
+   *  fall back on the column beside it. */
+  startingPrice: number | null;
   imageCount: number;
   hasProfile: boolean;
+  /** What the resolved profile still does not say about auctions, from `delcampeAuctionGaps` —
+   *  empty on a quick buy, which asks nothing of that group. Handed in rather than derived here so
+   *  this module keeps knowing a profile only through the values it was given. */
+  auctionProfileGaps: readonly string[];
   personalReference: string | null;
 }
 
@@ -208,7 +272,8 @@ export interface DelcampeRowLimits {
  * Colnect's texts and #477's for Allegro's titles arriving at the marketplace where it matters most:
  * the file is uploaded once, in a batch, and a title silently shortened to fit is a listing nobody
  * proofread. The same goes for everything else here — a missing category is not guessed at, and an
- * auction is not quietly listed as a quick buy.
+ * auction with nothing to open the bidding at is refused rather than opened at whatever the offer's
+ * other price column happens to hold.
  *
  * The sentences are written to be read in a list on the workspace, one offer per line, so each says
  * what is wrong and where it is fixed rather than naming a column of a file the collector has never
@@ -242,10 +307,22 @@ export function delcampeRowRefusals(
   if (!candidate.hasProfile) {
     refusals.push("no listing profile — set a default in Settings → Delcampe, or name one here");
   }
-  if (candidate.listingType !== "fixed") {
-    refusals.push("it is an auction, and auction uploads are not written yet");
-  }
-  if (!(candidate.price > 0)) {
+  // An auction states three things a quick buy does not: what the bidding opens at, how long it runs
+  // and how many times it may come back. None of them is guessed — a starting price taken from the
+  // standing bid would list an offer nobody made (#477), and a duration borrowed from the shop-stock
+  // group would put a deadline on a listing that then renews itself 99 times.
+  if (isAuctionListing(candidate.listingType)) {
+    if (!(candidate.startingPrice != null && candidate.startingPrice > 0)) {
+      refusals.push(
+        "no starting price — an auction row states what the bidding opens at, not where it stands"
+      );
+    }
+    if (candidate.hasProfile && candidate.auctionProfileGaps.length > 0) {
+      refusals.push(
+        `its listing profile does not say ${candidate.auctionProfileGaps.join(" or ")} — fill the auction settings in under Settings → Delcampe`
+      );
+    }
+  } else if (!(candidate.price > 0)) {
     refusals.push("no price");
   }
   if (candidate.imageCount === 0) {

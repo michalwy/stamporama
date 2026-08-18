@@ -4,8 +4,10 @@ import {
   DELCAMPE_PROFILE_DEFAULTS,
   DELCAMPE_PROMOTION_OPTIONS,
   DELCAMPE_RENEW_DURATION_MAX,
+  DELCAMPE_RENEW_TOTAL_COUNT_MAX,
   cleanDelcampeListingProfileValues,
   countDelcampePromotions,
+  delcampeAuctionGaps,
   delcampeMinimumBidStep,
   type DelcampeListingProfileValues,
 } from "../../src/lib/delcampe-listing-profile-rules";
@@ -106,6 +108,91 @@ describe("cleanDelcampeListingProfileValues", () => {
   it("rounds a money field to the two decimals the file carries", () => {
     const cleaned = cleanDelcampeListingProfileValues({ ...VALUES, minBidStepThreshold: 1.239 });
     assert.equal(cleaned.minBidStepThreshold, 1.24);
+  });
+});
+
+describe("the auction group (#620)", () => {
+  it("starts as nothing at all — no duration is seeded on the collector's behalf", () => {
+    assert.equal(DELCAMPE_PROFILE_DEFAULTS.auctionDuration, null);
+    assert.equal(DELCAMPE_PROFILE_DEFAULTS.auctionRenewTotalCount, null);
+    assert.equal(DELCAMPE_PROFILE_DEFAULTS.auctionEndDay, "");
+    assert.equal(DELCAMPE_PROFILE_DEFAULTS.auctionEndTime, "");
+  });
+
+  it("saves a profile that never uploads an auction", () => {
+    // The ordinary case: the group is optional as a group, and an unstated duration is the export's
+    // refusal rather than this screen's.
+    const cleaned = cleanDelcampeListingProfileValues(VALUES);
+    assert.equal(cleaned.auctionDuration, null);
+    assert.equal(cleaned.auctionRenewTotalCount, null);
+  });
+
+  it("holds a stated figure to the same bounds a shop-stock count takes", () => {
+    assert.throws(
+      () => cleanDelcampeListingProfileValues({ ...VALUES, auctionDuration: 0 }),
+      /whole number/
+    );
+    assert.throws(
+      () => cleanDelcampeListingProfileValues({ ...VALUES, auctionDuration: 7.5 }),
+      /whole number/
+    );
+    assert.throws(
+      () =>
+        cleanDelcampeListingProfileValues({
+          ...VALUES,
+          auctionRenewTotalCount: DELCAMPE_RENEW_TOTAL_COUNT_MAX + 1,
+        }),
+      /whole number/
+    );
+    assert.equal(
+      cleanDelcampeListingProfileValues({ ...VALUES, auctionDuration: 7 }).auctionDuration,
+      7
+    );
+  });
+
+  it("reads a half-typed count as unstated rather than as a zero", () => {
+    // The editor holds counts as text; an empty field arrives as NaN.
+    const cleaned = cleanDelcampeListingProfileValues({ ...VALUES, auctionDuration: Number.NaN });
+    assert.equal(cleaned.auctionDuration, null);
+  });
+
+  it("trims the two end cells and otherwise takes them as typed", () => {
+    // There is nothing to check them against — the shipping model's rule (ADR-0034 §2) applied to a
+    // format Delcampe has never published.
+    const cleaned = cleanDelcampeListingProfileValues({
+      ...VALUES,
+      auctionEndDay: "  7  ",
+      auctionEndTime: " 8 PM ",
+    });
+    assert.equal(cleaned.auctionEndDay, "7");
+    assert.equal(cleaned.auctionEndTime, "8 PM");
+  });
+});
+
+describe("delcampeAuctionGaps", () => {
+  it("names both figures on a profile that has never uploaded an auction", () => {
+    assert.deepEqual(delcampeAuctionGaps(VALUES), [
+      "how many days it runs",
+      "how many times it may renew",
+    ]);
+  });
+
+  it("is empty once both are stated", () => {
+    assert.deepEqual(
+      delcampeAuctionGaps({ ...VALUES, auctionDuration: 7, auctionRenewTotalCount: 1 }),
+      []
+    );
+  });
+
+  it("says nothing about a blank closing day — a row with no end is a listing, not a fault", () => {
+    const noClosingTime: DelcampeListingProfileValues = {
+      ...VALUES,
+      auctionDuration: 7,
+      auctionRenewTotalCount: 1,
+      auctionEndDay: "",
+      auctionEndTime: "",
+    };
+    assert.deepEqual(delcampeAuctionGaps(noClosingTime), []);
   });
 });
 

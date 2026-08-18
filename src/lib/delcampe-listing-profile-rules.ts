@@ -4,15 +4,17 @@
 //
 // What lives here is everything that can be decided without a database: the seeded defaults, the
 // promotion columns Delcampe's upload file demands a letter for, the one rule that is not a stored
-// value at all — the **bid step** — and the cleaning every write goes through.
+// value at all — the **bid step** — the second duration group an auction row is written from
+// (#620), and the cleaning every write goes through.
 //
 // Nothing here formats a CSV. How a figure is written into the file (a decimal **comma** on the way
 // up, a dot on the way back down) is the export's own business (#610); this module answers *what*
 // the row says, never how it is spelled.
 
-/** How long a listing runs before it renews itself, in days, and how many times it may. Delcampe's
- *  shop-stock behaviour: a fixed-price listing that simply stays up until it sells. An auction wants
- *  a real end date and a second set of defaults, which is #620's and deliberately not here. */
+/** How long a **fixed-price** listing runs before it renews itself, in days, and how many times it
+ *  may. Delcampe's shop-stock behaviour: a listing that simply stays up until it sells. An auction
+ *  takes its own two figures from the profile's auction group instead (#620), which is seeded with
+ *  nothing at all — see {@link delcampeAuctionGaps}. */
 export const DELCAMPE_RENEW_DURATION_DEFAULT = 28;
 export const DELCAMPE_RENEW_TOTAL_COUNT_DEFAULT = 99;
 
@@ -83,10 +85,26 @@ export interface DelcampeListingProfileValues {
   minBidStepThreshold: number;
   minBidStepBelow: number;
   minBidStepAtOrAbove: number;
+  /** The auction group (#620): what an `auction` row's `renew_duration` and `renew_total_count`
+   *  say, in place of the two shop-stock figures above. Null is "not stated yet", which is what
+   *  every profile starts as and what an auction export refuses on. */
+  auctionDuration: number | null;
+  auctionRenewTotalCount: number | null;
+  /** `sale_end_day` and `sale_end_time`, written into the row **verbatim**. Unvalidatable for the
+   *  shipping model's reason (ADR-0034 §2): the spelling Easy Uploader wants is published nowhere
+   *  this app can read. Empty is allowed and states no end at all. */
+  auctionEndDay: string;
+  auctionEndTime: string;
 }
 
 /** What a new profile starts as — the observed live values, so the first profile a collector writes
- *  needs a name and a shipping model and nothing else. */
+ *  needs a name and a shipping model and nothing else.
+ *
+ *  The auction group is the exception and is seeded with **nothing**: every other figure here was
+ *  observed on the collector's own live listings, and there are no auctions to observe. A default
+ *  would be this app inventing how long somebody's auctions run, which is the one guess a settings
+ *  field cannot make safe — an unstated duration is refused at export and read back as such, while a
+ *  plausible one goes up unnoticed. */
 export const DELCAMPE_PROFILE_DEFAULTS: Omit<DelcampeListingProfileValues, "name" | "shippingModel"> = {
   renewDuration: DELCAMPE_RENEW_DURATION_DEFAULT,
   renewTotalCount: DELCAMPE_RENEW_TOTAL_COUNT_DEFAULT,
@@ -99,6 +117,10 @@ export const DELCAMPE_PROFILE_DEFAULTS: Omit<DelcampeListingProfileValues, "name
   minBidStepThreshold: DELCAMPE_MIN_BID_STEP_THRESHOLD_DEFAULT,
   minBidStepBelow: DELCAMPE_MIN_BID_STEP_BELOW_DEFAULT,
   minBidStepAtOrAbove: DELCAMPE_MIN_BID_STEP_AT_OR_ABOVE_DEFAULT,
+  auctionDuration: null,
+  auctionRenewTotalCount: null,
+  auctionEndDay: "",
+  auctionEndTime: "",
 };
 
 function requireCount(value: number, max: number, field: string): number {
@@ -106,6 +128,14 @@ function requireCount(value: number, max: number, field: string): number {
     throw new Error(`${field} must be a whole number between 1 and ${max}.`);
   }
   return value;
+}
+
+/** A count that may simply not have been stated — the auction group's two figures, which are blank
+ *  until the collector types them. `null` passes through; anything typed is held to the same bounds
+ *  a stated count is. */
+function optionalCount(value: number | null, max: number, field: string): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  return requireCount(value, max, field);
 }
 
 function requireAmount(value: number, field: string): number {
@@ -166,7 +196,46 @@ export function cleanDelcampeListingProfileValues(
     minBidStepThreshold: requireAmount(input.minBidStepThreshold, "The bid-step threshold"),
     minBidStepBelow,
     minBidStepAtOrAbove,
+    // The auction group is optional as a *group of two*: a profile that never uploads an auction is
+    // the ordinary case and must stay savable. What is checked is each figure that was stated, on
+    // the same bounds the shop-stock ones take — a run of 0 days is a typo either way round.
+    auctionDuration: optionalCount(
+      input.auctionDuration,
+      DELCAMPE_RENEW_DURATION_MAX,
+      "The auction duration"
+    ),
+    auctionRenewTotalCount: optionalCount(
+      input.auctionRenewTotalCount,
+      DELCAMPE_RENEW_TOTAL_COUNT_MAX,
+      "The auction renewal count"
+    ),
+    // Trimmed and otherwise taken as typed. There is nothing to check them against, and a check
+    // against a format this app invented would refuse the correct answer as confidently as a wrong
+    // one — the shipping model's rule, and the reason it is said out loud in the editor.
+    auctionEndDay: input.auctionEndDay.trim(),
+    auctionEndTime: input.auctionEndTime.trim(),
   };
+}
+
+/**
+ * What an **auction** row still cannot be written from, phrased as the things themselves.
+ *
+ * One list rather than a check per surface: the export refuses with it, and the settings editor
+ * reads back the same sentence — so "this profile is not ready for auctions" cannot be true in one
+ * place and false in the other. Empty means an auction row can be written.
+ *
+ * The two end cells are deliberately **not** in it. A blank closing day is a row that states no end
+ * and lets Delcampe take the duration's own, which is a listing rather than a fault; a blank
+ * duration is a column the file has no value for at all.
+ */
+export function delcampeAuctionGaps(values: {
+  auctionDuration: number | null;
+  auctionRenewTotalCount: number | null;
+}): string[] {
+  const gaps: string[] = [];
+  if (values.auctionDuration == null) gaps.push("how many days it runs");
+  if (values.auctionRenewTotalCount == null) gaps.push("how many times it may renew");
+  return gaps;
 }
 
 /** How many of the five paid promotions a profile buys — the summary line's figure, and the one

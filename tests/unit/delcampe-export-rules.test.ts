@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   DELCAMPE_UPLOAD_COLUMNS,
   delcampeDecimal,
+  delcampeListedPrice,
   delcampeRowRefusals,
+  delcampeSellingType,
   delcampeUploadRow,
   disambiguateBundleNames,
   toDelcampeCsv,
@@ -12,6 +14,7 @@ import {
   DELCAMPE_PROFILE_DEFAULTS,
   type DelcampeListingProfileValues,
 } from "../../src/lib/delcampe-listing-profile-rules";
+import type { DelcampeRowCandidate } from "../../src/lib/delcampe-export-rules";
 
 const PROFILE: DelcampeListingProfileValues = {
   ...DELCAMPE_PROFILE_DEFAULTS,
@@ -19,11 +22,22 @@ const PROFILE: DelcampeListingProfileValues = {
   shippingModel: "Fee template",
 };
 
+/** The profile of a collector who also runs auctions: the shop-stock group above, and the auction
+ *  group filled in. Blank on a new profile — nothing here is seeded (#620). */
+const AUCTION_PROFILE: DelcampeListingProfileValues = {
+  ...PROFILE,
+  auctionDuration: 7,
+  auctionRenewTotalCount: 1,
+  auctionEndDay: "Sunday",
+  auctionEndTime: "20:00",
+};
+
 const ROW_INPUT = {
   title: "Poland (1921) - Sowing Man - Mi:158 / Fi:125I / Yt:224 - Used",
   personalReference: "https://stamps.example.test/o/main/1242",
   description: "",
   categoryId: "7945",
+  listingType: "fixed" as const,
   price: 0.1,
   quantity: 1,
   imageNames: ["poland-1921-sowing-man-01.jpg", "poland-1921-sowing-man-02.jpg"],
@@ -97,6 +111,68 @@ describe("delcampeUploadRow", () => {
     assert.equal(row.sale_end_time, "");
     assert.equal(row.sale_end_day, "");
   });
+
+  it("writes an auction from the profile's own duration group, not the shop-stock one", () => {
+    // 28 × 99 is a listing that stays up until it sells, which is the one thing an auction must not
+    // do (#620).
+    const row = delcampeUploadRow({
+      ...ROW_INPUT,
+      listingType: "auction",
+      price: 1.5,
+      profile: AUCTION_PROFILE,
+    });
+    assert.equal(row.selling_type, "auction");
+    assert.equal(row.renew_duration, "7");
+    assert.equal(row.renew_total_count, "1");
+  });
+
+  it("carries the closing day and hour exactly as they were typed", () => {
+    // Unvalidatable, like the shipping model: what spelling Easy Uploader wants was never confirmed,
+    // so the collector's own text is the answer and nothing here reformats it.
+    const row = delcampeUploadRow({
+      ...ROW_INPUT,
+      listingType: "auction",
+      price: 1.5,
+      profile: { ...AUCTION_PROFILE, auctionEndDay: "7", auctionEndTime: "8 PM" },
+    });
+    assert.equal(row.sale_end_day, "7");
+    assert.equal(row.sale_end_time, "8 PM");
+  });
+
+  it("states the bid step for the figure the auction row actually opens at", () => {
+    const row = delcampeUploadRow({
+      ...ROW_INPUT,
+      listingType: "auction",
+      // The starting price, already resolved by the caller: 0,99 is under the seeded threshold.
+      price: 0.99,
+      profile: AUCTION_PROFILE,
+    });
+    assert.equal(row.price, "0,99");
+    assert.equal(row.minimum_bid_step, "0,01");
+  });
+});
+
+describe("delcampeSellingType", () => {
+  it("translates the offer's own listing type, inventing no flag of its own", () => {
+    assert.equal(delcampeSellingType("fixed"), "fixed_price");
+    assert.equal(delcampeSellingType("auction"), "auction");
+  });
+});
+
+describe("delcampeListedPrice", () => {
+  it("states a quick buy's asking price", () => {
+    assert.equal(delcampeListedPrice({ listingType: "fixed", price: 17.44, startingPrice: null }), 17.44);
+  });
+
+  it("states an auction's **starting** price, never where the bidding stands", () => {
+    // #477's rule: the current figure is an observation of the bidding, and a new listing written
+    // from it would state an opening offer nobody made.
+    assert.equal(delcampeListedPrice({ listingType: "auction", price: 42, startingPrice: 1 }), 1);
+  });
+
+  it("has no answer for an auction that never stated one — which is a refusal, not a fallback", () => {
+    assert.equal(delcampeListedPrice({ listingType: "auction", price: 42, startingPrice: null }), null);
+  });
 });
 
 describe("toDelcampeCsv", () => {
@@ -133,15 +209,25 @@ describe("toDelcampeCsv", () => {
 });
 
 describe("delcampeRowRefusals", () => {
-  const candidate = {
+  const candidate: DelcampeRowCandidate = {
     title: "Poland (1921) - Sowing Man - Used",
     description: "",
     categoryId: "7945",
     listingType: "fixed",
     price: 0.1,
+    startingPrice: null,
     imageCount: 2,
     hasProfile: true,
+    auctionProfileGaps: [],
     personalReference: "https://stamps.example.test/o/main/1242",
+  };
+  /** The same offer sold the other way: an auction that opened at 1.00, on a profile that describes
+   *  auctions. */
+  const auction: DelcampeRowCandidate = {
+    ...candidate,
+    listingType: "auction",
+    price: 0,
+    startingPrice: 1,
   };
   const noLimits = { maxTitleLength: null, maxDescriptionLength: null };
 
@@ -189,9 +275,41 @@ describe("delcampeRowRefusals", () => {
     );
   });
 
-  it("refuses an auction rather than uploading it as a quick buy", () => {
-    const refusals = delcampeRowRefusals({ ...candidate, listingType: "auction" }, noLimits);
-    assert.match(refusals[0], /auction/);
+  it("passes an auction that has a starting price and a profile describing auctions", () => {
+    // The bidding has reached nothing yet — `price` 0 — and that is not what the row states.
+    assert.deepEqual(delcampeRowRefusals(auction, noLimits), []);
+  });
+
+  it("refuses an auction with no starting price rather than opening it at the standing bid", () => {
+    const refusals = delcampeRowRefusals({ ...auction, startingPrice: null, price: 4.5 }, noLimits);
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0], /no starting price/);
+  });
+
+  it("refuses an auction whose profile does not describe one, naming what is missing", () => {
+    const refusals = delcampeRowRefusals(
+      { ...auction, auctionProfileGaps: ["how many days it runs", "how many times it may renew"] },
+      noLimits
+    );
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0], /how many days it runs or how many times it may renew/);
+  });
+
+  it("asks nothing of the auction group on a quick buy", () => {
+    assert.deepEqual(
+      delcampeRowRefusals({ ...candidate, auctionProfileGaps: ["how many days it runs"] }, noLimits),
+      []
+    );
+  });
+
+  it("does not ask an offer with no profile at all what its auction settings say", () => {
+    // One sentence to act on: there is nothing to fill the auction group in on yet.
+    const refusals = delcampeRowRefusals(
+      { ...auction, hasProfile: false, auctionProfileGaps: [] },
+      noLimits
+    );
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0], /profile/);
   });
 
   it("reports every reason at once, so one export answers the whole batch", () => {

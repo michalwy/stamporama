@@ -16,6 +16,7 @@ import {
   DELCAMPE_RENEW_DURATION_MAX,
   DELCAMPE_RENEW_TOTAL_COUNT_MAX,
   countDelcampePromotions,
+  delcampeAuctionGaps,
   delcampeMinimumBidStep,
   type DelcampePromotionKey,
 } from "@/lib/delcampe-listing-profile-rules";
@@ -33,6 +34,13 @@ import {
 // the heavier lots' shipping model. What earns the room is the **editor**, and the one thing worth
 // saying loudly in it is that the shipping model is a *name*: Delcampe's own list cannot be read
 // from here, so a model renamed there is a rejected upload and not a fault in the export.
+//
+// The **auction group** (#620) is the same kind of thing said twice more. Its two counts are blank
+// until typed — there were no auctions to observe, so nothing was seeded — and its closing day and
+// hour are text cells written into the file verbatim, for the shipping model's reason: what spelling
+// Easy Uploader wants for them has never been confirmed, and a picker here would be a claim about a
+// format only Delcampe can settle. The panel reads the group back as what an auction row *would*
+// carry, or as the sentence saying an auction cannot be exported yet.
 
 const helpTextStyle: React.CSSProperties = {
   color: "var(--color-text-muted)",
@@ -69,6 +77,23 @@ type Notice = { tone: "ok" | "error"; message: string } | null;
  *  instead — that is the export's business (#610), not this screen's. */
 function money(value: number): string {
   return value.toFixed(2);
+}
+
+/** What this profile would upload an **auction** as (#620), or why it could not — the same gaps the
+ *  export refuses on, read from the same function, so the panel and a refused batch cannot disagree
+ *  about whether a profile is ready for auctions. */
+function auctionSummary(values: {
+  auctionDuration: number | null;
+  auctionRenewTotalCount: number | null;
+  auctionEndDay: string;
+  auctionEndTime: string;
+}): string {
+  const gaps = delcampeAuctionGaps(values);
+  if (gaps.length > 0) return `Auctions: not set up — no ${gaps.join(", no ")}`;
+  const closing = [values.auctionEndDay, values.auctionEndTime].filter(Boolean).join(" ");
+  return `Auctions: ${values.auctionDuration} days, up to ${values.auctionRenewTotalCount}×${
+    closing ? `, closing ${closing}` : ", no closing day or hour stated"
+  }`;
 }
 
 export function DelcampeProfilesPanel({
@@ -222,6 +247,12 @@ export function DelcampeProfilesPanel({
                     there ·{" "}
                     {promotions === 0 ? "no paid promotions" : `${promotions} paid promotion(s)`}
                   </p>
+                  {/* Stated on every profile rather than only on the ones that fill it in: whether
+                      this profile can upload an auction at all is exactly what somebody looking at
+                      the list wants to know, and an absent line reads as "fine". */}
+                  <p style={{ ...helpTextStyle, margin: "0.125rem 0 0" }}>
+                    {auctionSummary(profile)}
+                  </p>
                 </div>
                 <RowActionsMenu
                   ariaLabel={`Actions for ${profile.name}`}
@@ -310,6 +341,12 @@ function countValue(raw: string): number {
   return raw.trim() === "" ? Number.NaN : Number(raw);
 }
 
+/** The same, for a count that may simply not have been stated (#620): empty is `null`, which is what
+ *  an auction group nobody has filled in stores as. */
+function optionalCountValue(raw: string): number | null {
+  return raw.trim() === "" ? null : Number(raw);
+}
+
 function DelcampeProfileDialog({
   collectionId,
   profile,
@@ -343,6 +380,16 @@ function DelcampeProfileDialog({
       ])
     ) as Record<DelcampePromotionKey, boolean>
   );
+  // Blank until typed, which is what they are stored as: a text field holding "" is the honest
+  // rendering of a figure nobody has stated, and `countValue` reads it back as one.
+  const [auctionDuration, setAuctionDuration] = useState(
+    profile?.auctionDuration == null ? "" : String(profile.auctionDuration)
+  );
+  const [auctionRenewTotalCount, setAuctionRenewTotalCount] = useState(
+    profile?.auctionRenewTotalCount == null ? "" : String(profile.auctionRenewTotalCount)
+  );
+  const [auctionEndDay, setAuctionEndDay] = useState(profile?.auctionEndDay ?? "");
+  const [auctionEndTime, setAuctionEndTime] = useState(profile?.auctionEndTime ?? "");
   const [threshold, setThreshold] = useState(
     money(profile?.minBidStepThreshold ?? DELCAMPE_PROFILE_DEFAULTS.minBidStepThreshold)
   );
@@ -370,6 +417,24 @@ function DelcampeProfileDialog({
         )}.`
       : null;
 
+  // Read back as the row it would write, or as the gaps that stop it — the same function the export
+  // refuses on, so this sentence and a refused batch cannot say different things.
+  const auctionGaps = delcampeAuctionGaps({
+    auctionDuration: optionalCountValue(auctionDuration),
+    auctionRenewTotalCount: optionalCountValue(auctionRenewTotalCount),
+  });
+  const auctionPreview =
+    auctionGaps.length > 0
+      ? `An auction offer cannot be exported with this profile yet — it does not say ${auctionGaps.join(
+          " or "
+        )}.`
+      : auctionSummary({
+          auctionDuration: optionalCountValue(auctionDuration),
+          auctionRenewTotalCount: optionalCountValue(auctionRenewTotalCount),
+          auctionEndDay,
+          auctionEndTime,
+        });
+
   function save() {
     setError(undefined);
     const input = {
@@ -382,6 +447,13 @@ function DelcampeProfileDialog({
       minBidStepThreshold: Number(threshold),
       minBidStepBelow: Number(stepBelow),
       minBidStepAtOrAbove: Number(stepAtOrAbove),
+      // A blank auction count is `null` — not stated — rather than a zero. The two of them are the
+      // one group here that is allowed to be empty: a profile that never uploads an auction is the
+      // ordinary case, and the export is where an unstated duration is refused.
+      auctionDuration: optionalCountValue(auctionDuration),
+      auctionRenewTotalCount: optionalCountValue(auctionRenewTotalCount),
+      auctionEndDay,
+      auctionEndTime,
     };
     startTransition(async () => {
       const result = profile
@@ -491,8 +563,97 @@ function DelcampeProfileDialog({
               </span>
             </label>
             <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>
-              28 days × 99 renewals is shop stock: a listing that stays up until it sells. An auction
-              wants a real end date instead, which is not configured here.
+              28 days × 99 renewals is shop stock: a listing that stays up until it sells. These two
+              are what a <strong>quick-buy</strong> row carries; an auction takes its own figures
+              below.
+            </p>
+          </div>
+
+          {/* ── Auctions (#620) ─────────────────────────────────────────────────────────────
+              A second duration group rather than a reinterpretation of the one above, and seeded
+              with nothing: every other default on this screen was observed on a live listing, and
+              there are no auctions to observe. An offer recorded as an auction is refused at export
+              until these are filled in, which is said here so the refusal is not a surprise. */}
+          <div>
+            <LabelWithError>Auctions</LabelWithError>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+              <div>
+                <input
+                  id="delcampe-profile-auction-duration"
+                  type="number"
+                  min={1}
+                  max={DELCAMPE_RENEW_DURATION_MAX}
+                  step={1}
+                  value={auctionDuration}
+                  onChange={(e) => setAuctionDuration(e.target.value)}
+                  disabled={isPending}
+                  placeholder="—"
+                  style={INPUT_STYLE}
+                />
+                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Days the auction runs</p>
+              </div>
+              <div>
+                <input
+                  id="delcampe-profile-auction-renew-count"
+                  type="number"
+                  min={1}
+                  max={DELCAMPE_RENEW_TOTAL_COUNT_MAX}
+                  step={1}
+                  value={auctionRenewTotalCount}
+                  onChange={(e) => setAuctionRenewTotalCount(e.target.value)}
+                  disabled={isPending}
+                  placeholder="—"
+                  style={INPUT_STYLE}
+                />
+                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Times it may run again</p>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "0.5rem",
+                marginTop: "0.5rem",
+              }}
+            >
+              <div>
+                <input
+                  id="delcampe-profile-auction-end-day"
+                  value={auctionEndDay}
+                  onChange={(e) => setAuctionEndDay(e.target.value)}
+                  disabled={isPending}
+                  placeholder="e.g. Sunday"
+                  style={INPUT_STYLE}
+                  {...NO_AUTOFILL}
+                />
+                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
+                  Closing day (<code>sale_end_day</code>)
+                </p>
+              </div>
+              <div>
+                <input
+                  id="delcampe-profile-auction-end-time"
+                  value={auctionEndTime}
+                  onChange={(e) => setAuctionEndTime(e.target.value)}
+                  disabled={isPending}
+                  placeholder="e.g. 20:00"
+                  style={INPUT_STYLE}
+                  {...NO_AUTOFILL}
+                />
+                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
+                  Closing hour (<code>sale_end_time</code>)
+                </p>
+              </div>
+            </div>
+            <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>{auctionPreview}</p>
+            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
+              An auction ends, so it is not shop stock: these two counts replace the renewal ones
+              above on any offer you have recorded as an auction, and nothing is filled in for you —
+              how long your auctions run is yours to state, and an auction offer is refused at export
+              until it is. The closing day and hour go into the file{" "}
+              <strong>exactly as you type them</strong>: which spelling Easy Uploader wants was never
+              confirmed, so put in what your own listings use and correct it if an upload disagrees.
+              Leave them blank to let Delcampe close the auction when the duration runs out.
             </p>
           </div>
 
