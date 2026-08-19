@@ -396,7 +396,11 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
      on — and the remembered text is **selected** when it opens, so you can just start typing
      to replace it. The filter also looks **inside** each issue: a term that matches a stamp's
      name or catalog number (but not the issue's own name) still surfaces that issue, opens it,
-     and highlights the matching stamps while dimming the rest.
+     and shows **only** the matching stamps — the rest of the tree is hidden, exactly as it is on
+     the [Issues list](collections.md#filtering-the-issues-stamps-and-copies-lists). The stamps a
+     match hangs under are kept, faded, because a variant is read through them. An issue that
+     matched on its **own** name, year or number shows its whole tree, so nothing is ever hidden
+     from a plain browse.
 
      The issue list loads **as you scroll**, like the Issues screen, and the area, year and
      search filters all narrow it before it is fetched — so the picker opens just as quickly on

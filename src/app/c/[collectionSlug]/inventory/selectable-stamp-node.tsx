@@ -13,12 +13,6 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 
-/** True when this node or any descendant is in the active filter's match set (#186). */
-function subtreeHasMatch(treeNode: StampTreeNodeData, matched: Set<string>): boolean {
-  if (matched.has(treeNode.node.stampId)) return true;
-  return treeNode.children.some((c) => subtreeHasMatch(c, matched));
-}
-
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
  * the "— unknown variant" marker on a node that still has variant children). Shared by the
  * area→issue→stamp Browse popup (#104) and the issue-scoped stamp picker for adding a copy
@@ -35,7 +29,7 @@ export function SelectableStampNode({
   isLast,
   onPick,
   onNewVariant,
-  matchedStampIds,
+  narrowed,
   contextIds,
   marked,
 }: {
@@ -61,28 +55,24 @@ export function SelectableStampNode({
    * rather than *this one is already in*.
    */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
-  /** When set, the active filter matched only stamps within this issue (#186): nodes whose
-   * subtree contains no match are dimmed, and nodes on the path to a match start expanded. */
-  matchedStampIds?: Set<string> | null;
-  /** Stamps the checklist filter (#531) kept only as context for a matching descendant. Dimmed
-   *  the same way and for the same reason as #186's non-matches — one faded state, not two. */
+  /** True when the active filter narrowed this tree (#631) — the stamps it did not match are
+   *  already gone, so everything left is a match or the numbering one hangs under, and a node
+   *  with children starts open rather than collapsed. */
+  narrowed?: boolean;
+  /** Stamps a narrowing kept only as context for a matching descendant — the checklist filter
+   *  (#531) or the search (#631). Dimmed: they are the numbering the match hangs under, not part
+   *  of what was asked for. One faded state, not two. */
   contextIds?: Set<string>;
 }) {
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
-  // Under an active inner-stamp filter, reveal the path to a matching descendant.
-  const childHasMatch =
-    !!matchedStampIds && children.some((c) => subtreeHasMatch(c, matchedStampIds));
   const [userCollapsed, setUserCollapsed] = useState(true);
-  // A filter match forces the node open (so the match is visible) regardless of the user's toggle;
-  // when the filter clears, the node falls back to the user's own collapsed state.
-  const collapsed = userCollapsed && !childHasMatch;
+  // A narrowed tree forces every node open (so the matches are visible) regardless of the user's
+  // toggle; when the filter clears, the node falls back to the user's own collapsed state.
+  const collapsed = userCollapsed && !narrowed;
   const [hovered, setHovered] = useState(false);
-  // Dim a node when a filter is active and neither it nor any descendant matches (#186), or when
-  // the checklist filter kept it only as the numbering a match hangs under (#531).
-  const dimmed =
-    (!!matchedStampIds && !subtreeHasMatch(treeNode, matchedStampIds)) ||
-    !!contextIds?.has(treeNode.node.stampId);
+  // Dim a node a narrowing kept only as the numbering a match hangs under (#531/#631).
+  const dimmed = !!contextIds?.has(treeNode.node.stampId);
   // A node is selectable as the "unknown variant" when at least one of its children acts as a
   // variant (ADR-0010 §3) — not when its children are all distinct entries (errors, overprints…).
   // At **any** depth (#239/#401): `3 → 3A → 3Aa` puts the same question on `3A` as on `3`, and the
@@ -125,7 +115,7 @@ export function SelectableStampNode({
             transition: "background 0.1s ease, opacity 0.1s ease",
             borderBottom: isLast ? undefined : "1px solid var(--color-border)",
             cursor: "pointer",
-            // De-emphasize stamps that don't match the active inner-stamp filter (#186).
+            // De-emphasize a stamp kept only as context for a matching descendant (#631).
             opacity: dimmed ? 0.45 : 1,
           }}
         >
@@ -243,7 +233,7 @@ export function SelectableStampNode({
             isLast={isLast && i === children.length - 1}
             onPick={onPick}
             onNewVariant={onNewVariant}
-            matchedStampIds={matchedStampIds}
+            narrowed={narrowed}
             contextIds={contextIds}
             marked={marked}
           />

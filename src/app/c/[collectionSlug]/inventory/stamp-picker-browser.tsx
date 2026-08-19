@@ -27,7 +27,7 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import {
   buildStampTree,
   ChecklistTreeFilter,
-  filterStampTreeByChecklists,
+  filterStampTreeBy,
   IssueTitle,
   IssueCatalogChips,
   ChecklistsBadge,
@@ -612,7 +612,7 @@ function PickIssueRow({
     userExpanded || probeForInnerMatch
   );
   // Null while the probe is still out or the header explained the hit: only a row that really
-  // surfaced through its stamps dims the rest of its tree.
+  // surfaced through its stamps narrows the rest of its tree.
   const matchedStampIds = useMemo(
     () => matchedStampsInIssue(issue, members, { search }, vendorMap),
     [issue, members, search, vendorMap]
@@ -623,9 +623,12 @@ function PickIssueRow({
   // Narrowing the tree by checklist (#531), as on the issues list and the issue detail page.
   // Local to the row and not remembered: a picker is opened to answer one question.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  // Both narrowings in one walk, the Issues list' own call (#631): the stamps the search did not
+  // match are **hidden**, not faded, and the ancestors they hang under come back in `contextIds`
+  // to be dimmed.
   const { tree, contextIds } = useMemo(
-    () => filterStampTreeByChecklists(buildStampTree(members), treeChecklistIds),
-    [members, treeChecklistIds]
+    () => filterStampTreeBy(buildStampTree(members), treeChecklistIds, matchedStampIds),
+    [members, treeChecklistIds, matchedStampIds]
   );
 
   return (
@@ -840,7 +843,7 @@ function PickIssueRow({
                   if (parent) onNewVariant(parent);
                 }}
                 marked={marked}
-                matchedStampIds={matchedStampIds}
+                narrowed={!!matchedStampIds}
               />
             ))
           )}
