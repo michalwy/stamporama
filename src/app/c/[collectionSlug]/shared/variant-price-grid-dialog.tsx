@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -8,7 +8,11 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import { deriveFormatPrice } from "@/lib/format-factor";
-import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-prices";
+import type {
+  VariantPriceGridData,
+  VariantPriceRestriction,
+  VariantPriceScope,
+} from "@/lib/variant-prices";
 
 /**
  * The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
@@ -27,8 +31,26 @@ import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-pric
  * is one stamp and a printed catalogue prints that line across; in use it is the column that is
  * filled, because a tree is worked one condition at a time from a catalogue that lists the variants
  * down the page — and a grid whose two price surfaces disagree about Tab is a grid whose muscle
- * memory is wrong half the time. Enter follows the very same order, so there is now one movement
- * rule instead of two. Locked umbrella rows are not in it: it walks the cells that can be typed in.
+ * memory is wrong half the time. Locked umbrella rows are not in it: it walks the cells that can be
+ * typed in.
+ *
+ * **Enter saves the cell and closes the dialog** (#634), superseding #626's second half, where it
+ * followed Tab down the same column. Tab is still that walk, so there is still one movement rule —
+ * and Enter is now the way *out* of a grid opened to fill one gap, which is how most of them are
+ * opened. A refused write keeps the dialog open with the error on its cell: closing on a failure
+ * would throw the typed figure away at the one moment it is not recorded anywhere.
+ *
+ * **The first cell takes focus** (#634) once the payload is in. `DialogShell`'s own autofocus runs
+ * on mount, while the grid is still loading, so it lands on the close button — and the first act
+ * after opening a dialog opened to type into was always reaching for the mouse. It is the first cell
+ * of the walk, so a locked umbrella row is skipped here exactly as it is by Tab.
+ *
+ * **An offer-opened grid is narrowed to the copy's own axes** (#633, `restrict`). A listing blocked
+ * on an unpriced tree (#617) is blocked at one `condition × certificate × format` — the copy's — so
+ * the grid drawn from an offer is one condition column with the other two axes fixed, and the
+ * certificate select and the format tabs are *gone* rather than disabled: they would be three ways
+ * to walk off the axis the question was asked on. The edition stays switchable, a copy fixing none.
+ * Every other entry point draws the whole grid: those are opened to work a tree through.
  *
  * **An umbrella row is read-only until unlocked** (#627). Its value is the lowest of its variants'
  * (#238), so an open input on it reads as one more gap to fill while what it would record is an
@@ -50,10 +72,14 @@ import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-pric
  */
 export function VariantPriceGridDialog({
   scope,
+  restrict,
   onClose,
   onSaved,
 }: {
   scope: VariantPriceScope;
+  /** The copy's own axes, where the grid was opened from an offer (#633). Omitted everywhere else,
+   *  which draws the whole grid. */
+  restrict?: VariantPriceRestriction;
   onClose: () => void;
   /** Called once on close, and only when something was actually written — whatever list shows these
    *  prices is stale then, and refetching after every cell would refetch on every keystroke. */
@@ -88,7 +114,12 @@ export function VariantPriceGridDialog({
             {error instanceof Error ? error.message : "Failed to load the price grid."}
           </p>
         ) : data ? (
-          <VariantPriceGrid grid={data} onWrote={() => (wroteRef.current = true)} />
+          <VariantPriceGrid
+            grid={data}
+            restrict={restrict}
+            onWrote={() => (wroteRef.current = true)}
+            onDone={close}
+          />
         ) : null}
       </DialogBody>
     </DialogShell>
@@ -109,14 +140,41 @@ function cellKey(
 
 function VariantPriceGrid({
   grid,
+  restrict,
   onWrote,
+  onDone,
 }: {
   grid: VariantPriceGridData;
+  restrict?: VariantPriceRestriction;
   onWrote: () => void;
+  /** Close the dialog — what Enter does once the cell it was pressed in is written (#634). */
+  onDone: () => void;
 }) {
+  /**
+   * The restriction, or nothing — applied only when **every** axis of it is one this collection
+   * still holds (#633). A condition renamed out of the dictionary between the offer being read and
+   * the grid being opened would otherwise draw a table with no columns at all, and a grid that is
+   * merely wider than asked for is the harmless failure of the two.
+   */
+  const narrowed = useMemo(() => {
+    if (!restrict) return null;
+    const has = (list: { id: string }[], id: string | null) =>
+      id === null || list.some((entry) => entry.id === id);
+    if (!grid.conditions.some((c) => c.id === restrict.conditionId)) return null;
+    if (!has(grid.certificateStatuses, restrict.certificateStatusId)) return null;
+    if (!has(grid.formats, restrict.formatId)) return null;
+    return restrict;
+  }, [restrict, grid.conditions, grid.certificateStatuses, grid.formats]);
+
+  /** The columns this grid draws: the collection's conditions, or the one the copy is listed at. */
+  const conditions = useMemo(
+    () => (narrowed ? grid.conditions.filter((c) => c.id === narrowed.conditionId) : grid.conditions),
+    [grid.conditions, narrowed]
+  );
+
   const [editionId, setEditionId] = useState<string | null>(grid.defaultEditionId);
-  const [certId, setCertId] = useState<string | null>(null);
-  const [formatId, setFormatId] = useState<string | null>(null);
+  const [certId, setCertId] = useState<string | null>(narrowed?.certificateStatusId ?? null);
+  const [formatId, setFormatId] = useState<string | null>(narrowed?.formatId ?? null);
 
   // What the server holds, and what is on screen. They part company only between a keystroke and
   // the write that follows it, which is what lets a failed write keep the typed figure on screen
@@ -177,14 +235,24 @@ function VariantPriceGrid({
   const navOrder = useMemo(() => {
     if (!editionId) return [];
     const order: string[] = [];
-    for (const cond of grid.conditions) {
+    for (const cond of conditions) {
       for (const row of grid.rows) {
         if (!row.identified && !unlocked.has(row.stampId)) continue;
         order.push(cellKey(row.stampId, editionId, cond.id, certId, formatId));
       }
     }
     return order;
-  }, [grid.rows, grid.conditions, editionId, certId, formatId, unlocked]);
+  }, [grid.rows, conditions, editionId, certId, formatId, unlocked]);
+
+  /** Focus (and select) the first cell that can be typed in, once — the grid is opened to type into
+   *  (#634). Not re-run when the walk changes: switching a tab or unlocking a row under the typing
+   *  hand must not pull focus back to the top of the grid. */
+  useEffect(() => {
+    const first = navOrder[0] ? inputRefs.current.get(navOrder[0]) : null;
+    first?.focus();
+    first?.select();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setIn = <T,>(
     setter: React.Dispatch<React.SetStateAction<Map<string, T>>>,
@@ -202,14 +270,17 @@ function VariantPriceGrid({
    * One cell's write, on blur or on Enter. A value equal to what the server already holds writes
    * nothing — walking a filled row with Tab is the ordinary way to read one, and it must not
    * rewrite every cell it passes through.
+   *
+   * Answers whether the cell is **settled**: true when it was written or had nothing to write, false
+   * when the server refused it. Only Enter reads it, and only to decide whether it may close (#634).
    */
-  async function commit(stampId: string, conditionId: string, raw: string) {
-    if (!editionId) return;
+  async function commit(stampId: string, conditionId: string, raw: string): Promise<boolean> {
+    if (!editionId) return false;
     const key = cellKey(stampId, editionId, conditionId, certId, formatId);
     const typed = raw.trim();
     const normalized = typed === "" ? "" : formatAmount(typed);
     if (normalized !== typed) setIn(setValues, key, normalized);
-    if (normalized === (saved.get(key) ?? "")) return;
+    if (normalized === (saved.get(key) ?? "")) return true;
 
     setPending((prev) => new Set(prev).add(key));
     setIn(setErrors, key, undefined);
@@ -229,7 +300,7 @@ function VariantPriceGrid({
     });
     if (r.status === "error") {
       setIn(setErrors, key, r.message);
-      return;
+      return false;
     }
     onWrote();
     setSaved((prev) => {
@@ -238,15 +309,18 @@ function VariantPriceGrid({
       else next.set(key, normalized);
       return next;
     });
+    return true;
   }
 
   /**
-   * Tab and Enter both step through {@link navOrder} — down the condition column, then on to the
-   * next column (#626). Shift reverses. At either end the browser takes over, so focus can leave
-   * the grid the ordinary way rather than being trapped in it.
+   * **Tab** steps through {@link navOrder} — down the condition column, then on to the next column
+   * (#626). Shift reverses. At either end the browser takes over, so focus can leave the grid the
+   * ordinary way rather than being trapped in it. It commits nothing here: its own blur does that,
+   * and committing twice for one keystroke is how a cell gets written on the way past it.
    *
-   * Only Enter commits here; Tab's own blur does it, and committing twice for one keystroke is how
-   * a cell gets written on the way past it.
+   * **Enter** writes the cell and closes the dialog (#634) — and closes only once the write is in,
+   * since `onDone` is what tells the surface behind to refetch. A refusal leaves the dialog open
+   * with the message on the cell.
    */
   function handleKeyDown(
     e: KeyboardEvent<HTMLInputElement>,
@@ -256,7 +330,11 @@ function VariantPriceGrid({
     if ((e.key !== "Enter" && e.key !== "Tab") || !editionId) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      void commit(stampId, conditionId, e.currentTarget.value);
+      const raw = e.currentTarget.value;
+      void commit(stampId, conditionId, raw).then((settled) => {
+        if (settled) onDone();
+      });
+      return;
     }
     const idx = navOrder.indexOf(cellKey(stampId, editionId, conditionId, certId, formatId));
     if (idx === -1) return;
@@ -336,14 +414,49 @@ function VariantPriceGrid({
 
   const activeFormat = grid.formats.find((f) => f.id === formatId) ?? null;
 
+  /** What a narrowed grid is scoped to, in the collector's own words (#633): the fixed axes have no
+   *  controls left to read them off, and a single unlabelled column says nothing about which
+   *  certificate or format its figures are for. Null is *no certificate* and *single*, each named
+   *  rather than left blank — a blank reads as "not answered". */
+  const narrowedLabel = narrowed
+    ? [
+        conditions[0]?.name,
+        narrowed.certificateStatusId
+          ? (grid.certificateStatuses.find((c) => c.id === narrowed.certificateStatusId)?.name ??
+            "certificate")
+          : "no certificate",
+        narrowed.formatId
+          ? (grid.formats.find((f) => f.id === narrowed.formatId)?.name ?? "format")
+          : "single",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <p style={{ ...MUTED, margin: 0 }}>
         {grid.scopeLabel}. Every figure is saved as you leave the cell — there is nothing to submit.
-        Clear a cell to remove the price; an empty cell records nothing. Tab and Enter both move down
-        a condition column. An <em>umbrella</em> row shows what its variants roll up to and is
-        read-only until you unlock it.
+        Clear a cell to remove the price; an empty cell records nothing. Tab moves down a condition
+        column; Enter saves the cell and closes. An <em>umbrella</em> row shows what its variants
+        roll up to and is read-only until you unlock it.
       </p>
+
+      {narrowedLabel && (
+        // What the offer asked about, and the whole of what this grid draws (#633). The tree is
+        // still priced at every other axis from the Issues list or the variant-price worklist —
+        // said here, because a grid with one column and no controls otherwise reads as a grid that
+        // has lost them.
+        <p style={{ ...MUTED, margin: 0 }}>
+          Scoped to the copy being listed: <strong>{narrowedLabel}</strong>. Its other conditions,
+          certificates and formats are priced from the Issues list or from Catalog → Variant prices.
+          {/* The format tabs carried this line, and a grid fixed to a multiple still draws derived
+              cells — so it comes with the scope instead. */}
+          {narrowed?.formatId
+            ? " Greyed values are derived from the single's price by this format's multiplier — nothing is stored until you type over one."
+            : null}
+        </p>
+      )}
 
       {/* The axes a cell is keyed on beyond stamp x condition, chosen once for the whole grid. The
           edition carries the vendor and the currency with it, so there is no separate currency to
@@ -364,26 +477,31 @@ function VariantPriceGrid({
             ))}
           </select>
         </label>
-        <label style={CONTROL_LABEL}>
-          Certificate
-          <select
-            value={certId ?? ""}
-            onChange={(e) => setCertId(e.target.value || null)}
-            style={SELECT_STYLE}
-          >
-            {/* None leads and is the default: a printed catalogue quotes the plain figure, and it is
-                the price the headline rollup and a listing are read on. */}
-            <option value="">None</option>
-            {grid.certificateStatuses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Gone rather than disabled in a narrowed grid (#633): the copy fixes it, and a control
+            that cannot be used is a control still asked about. The edition above stays, a copy
+            fixing none. */}
+        {!narrowed && (
+          <label style={CONTROL_LABEL}>
+            Certificate
+            <select
+              value={certId ?? ""}
+              onChange={(e) => setCertId(e.target.value || null)}
+              style={SELECT_STYLE}
+            >
+              {/* None leads and is the default: a printed catalogue quotes the plain figure, and it
+                  is the price the headline rollup and a listing are read on. */}
+              <option value="">None</option>
+              {grid.certificateStatuses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
-      {grid.formats.length > 0 && (
+      {!narrowed && grid.formats.length > 0 && (
         <div>
           <div
             role="tablist"
@@ -450,7 +568,7 @@ function VariantPriceGrid({
           <thead>
             <tr>
               <th style={thStampStyle}>Stamp</th>
-              {grid.conditions.map((cond) => (
+              {conditions.map((cond) => (
                 <th key={cond.id} style={thCondStyle}>
                   <Tooltip content={cond.name}>
                     <span>{cond.abbreviation}</span>
@@ -517,7 +635,7 @@ function VariantPriceGrid({
                     )}
                   </span>
                 </td>
-                {grid.conditions.map((cond) => {
+                {conditions.map((cond) => {
                   const key = editionId
                     ? cellKey(row.stampId, editionId, cond.id, certId, formatId)
                     : "";

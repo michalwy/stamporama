@@ -3003,6 +3003,10 @@ function listingBlockersFor(
         catalogRollup: catalogIds.get(itemId)?.gap ?? null,
         conditionId: item.conditionId,
         conditionName: item.condition.name,
+        // The rest of the valuation key (#616), carried so a blocker raised on this copy can open
+        // the price grid at the very axes it was raised on (#633).
+        certificateStatusId: item.certificateStatusId,
+        formatId: item.formatId,
         platformCondition: conditionMap.get(item.conditionId) ?? null,
       })),
     })),
@@ -3390,6 +3394,12 @@ export interface OfferDetail {
 export interface OfferPlatformItem {
   stampId: string;
   conditionId: string;
+  /** The rest of the key a catalog price is recorded against, for the surface that opens the variant
+   * price grid narrowed to this row (#633) — the first copy's answer, exactly like the derivation
+   * below, since a row is `stamp × condition` and its copies may differ in neither often nor much.
+   * Null means *no certificate* and *single*, each the axis's own value rather than "unset". */
+  certificateStatusId: string | null;
+  formatId: string | null;
   /** The copy's own derived label (#379) — the catalogue number it is named by. Falls back to the
    * stamp's name, so it is what the row prints when {@link catalogNumbers} is empty. */
   label: string;
@@ -3932,6 +3942,8 @@ function platformItemsFor(
       rows.set(key, {
         stampId: item.stampId,
         conditionId: item.conditionId,
+        certificateStatusId: item.certificateStatusId,
+        formatId: item.formatId,
         label: labeller.copy(item.stamp),
         catalogNumbers,
         stampName: item.stamp.name?.trim() || null,

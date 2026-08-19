@@ -265,6 +265,19 @@ export async function getOfferListingKit(
     labeller
   );
 
+  // The rest of each copy's price key (#616), kept beside the kit rather than carried inside it: the
+  // blockers report it onward so an unpriced-tree link opens the price grid at the cell the listing
+  // is blocked on (#633), while the kit itself — the text the extension types into a form — has no
+  // use for a certificate or a format.
+  const priceAxes = new Map(
+    offer.sets.flatMap((set) =>
+      set.items.map(({ itemId, item }) => [
+        itemId,
+        { certificateStatusId: item.certificateStatusId, formatId: item.formatId },
+      ])
+    )
+  );
+
   const sets = offer.sets.map((set) => {
     const items = orderedLabelItems(set.items);
     return {
@@ -314,6 +327,8 @@ export async function getOfferListingKit(
         catalogRollup: catalogIds.get(c.itemId)?.gap ?? null,
         conditionId: c.condition.id,
         conditionName: c.condition.name,
+        certificateStatusId: priceAxes.get(c.itemId)?.certificateStatusId ?? null,
+        formatId: priceAxes.get(c.itemId)?.formatId ?? null,
         platformCondition: c.condition.platformValue,
       })),
     })),

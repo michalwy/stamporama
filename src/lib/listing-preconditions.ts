@@ -98,7 +98,16 @@ export interface ListingBlocker {
    *  grid). A field of its own rather than an index into `subjects`: the two lists are deduplicated on
    *  different things — a name a collector reads, and an identity — so positions cannot be paired
    *  without eventually naming the wrong stamp. Absent wherever `stampIds` is empty. */
-  stampSubjects?: { stampId: string; label: string }[];
+  stampSubjects?: StampSubject[];
+}
+
+/** The rest of the key a catalog price is recorded against, beside the condition a copy already
+ *  states (#616). Carried onward by the one blocker that is about prices, so the grid it links to
+ *  opens at the cell the listing is blocked on (#633). Null is *no certificate* and *single*. */
+export interface PriceAxes {
+  conditionId: string;
+  certificateStatusId: string | null;
+  formatId: string | null;
 }
 
 /** One copy as the preconditions see it: the two platform-side values that may be missing, plus the
@@ -120,6 +129,10 @@ export interface PreconditionCopy {
   conditionId: string;
   /** Our own condition's name, which is what an unmapped condition is reported under. */
   conditionName: string;
+  /** The rest of the price key this copy is valued on (#616) — reported onward by the unpriced-tree
+   *  blocker alone (#633). Null is *no certificate* and *single*. */
+  certificateStatusId: string | null;
+  formatId: string | null;
   /** The condition translated into the platform's vocabulary (#404), or null when unmapped. */
   platformCondition: string | null;
 }
@@ -192,10 +205,23 @@ function distinct(values: readonly string[]): string[] {
 interface StampSubject {
   stampId: string;
   label: string;
+  /** The axes of the copy this stamp was reported for (#633), where the fault is about a *price* —
+   *  what narrows the grid the link opens to the cell the listing is actually blocked on. Absent on
+   *  a fault that is not about one: matching is a fact about a stamp, not about a copy. */
+  axes?: PriceAxes;
 }
 
 /** The stamps of a fault, one entry per **stamp** in first-seen order — deduplicated on identity
  *  rather than on the name, since this is what a link is built from. */
+/** The three axes a price is keyed on beside the stamp, off the copy that is blocked. */
+function axesOf(copy: PreconditionCopy): PriceAxes {
+  return {
+    conditionId: copy.conditionId,
+    certificateStatusId: copy.certificateStatusId,
+    formatId: copy.formatId,
+  };
+}
+
 function distinctStamps(subjects: readonly StampSubject[]): StampSubject[] {
   const byId = new Map<string, StampSubject>();
   for (const subject of subjects) if (!byId.has(subject.stampId)) byId.set(subject.stampId, subject);
@@ -337,9 +363,14 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
   if (unpriced.length > 0) {
     // Named against the **unpriced variants**, not the umbrella: they are what wants a price, and each
     // has a price grid of its own to go and fill.
+    // Each variant carries the axes of the copy it was reported for (#633) — the cell the listing is
+    // blocked on, and so the cell the grid behind the link opens at. Where two copies at different
+    // grades name the same variant, `distinctStamps` keeps the first, as it does for the label.
     const stamps = distinctStamps(
       unpriced.flatMap((c) =>
-        c.catalogRollup?.kind === "unpriced-variants" ? c.catalogRollup.variants : []
+        c.catalogRollup?.kind === "unpriced-variants"
+          ? c.catalogRollup.variants.map((v) => ({ ...v, axes: axesOf(c) }))
+          : []
       )
     );
     const subjects = distinct(stamps.map((s) => s.label));

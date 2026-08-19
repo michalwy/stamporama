@@ -44,6 +44,25 @@ export type VariantPriceScope =
   | { kind: "stamp"; stampId: string }
   | { kind: "issue"; issueId: string };
 
+/**
+ * The axes an **offer-opened** grid is narrowed to (#633): the `condition × certificate × format`
+ * of the copy being listed. A blocker raised on one copy is a question about one cell of each of the
+ * tree's rows, and the columns and controls around it are three ways to walk off the axis the
+ * question was asked on.
+ *
+ * It never reaches the server: {@link getVariantPriceGrid} returns the tree whole — every condition,
+ * every price, every multiplier — because the three axes above the grid are switched constantly in
+ * every *other* entry point, and one payload per opening is the cheaper trade. This is a statement
+ * about what the dialog **draws**, so it is applied client-side and the same payload serves both.
+ */
+export interface VariantPriceRestriction {
+  conditionId: string;
+  /** Null is *no certificate* — the axis's own value, not "unset" (ADR-0006 §2). */
+  certificateStatusId: string | null;
+  /** Null is **single**, the format axis's null (ADR-0020). */
+  formatId: string | null;
+}
+
 /** One row of the grid: a stamp of the tree, at its depth. */
 export interface VariantPriceRow {
   stampId: string;

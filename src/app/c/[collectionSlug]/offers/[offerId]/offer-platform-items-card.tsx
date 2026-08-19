@@ -592,7 +592,18 @@ export function OfferPlatformItemsCard({
                       <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
                         <button
                           type="button"
-                          onClick={() => variantPrices.open({ kind: "stamp", stampId: item.unpricedVariantStampId! })}
+                          // Narrowed to this row's own copy (#633): the tree is unlistable at one
+                          // `condition × certificate × format`, and that is the cell being asked for.
+                          onClick={() =>
+                            variantPrices.open(
+                              { kind: "stamp", stampId: item.unpricedVariantStampId! },
+                              {
+                                conditionId: item.conditionId,
+                                certificateStatusId: item.certificateStatusId,
+                                formatId: item.formatId,
+                              }
+                            )
+                          }
                           style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
                         >
                           Price variants

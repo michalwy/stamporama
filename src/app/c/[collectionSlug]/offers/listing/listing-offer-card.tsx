@@ -697,8 +697,10 @@ function ListingBlockers({
                     {index > 0 && " · "}
                     <button
                       type="button"
+                      // At the very axes the blocker was raised on (#633) — the copy this variant
+                      // was reported for, which is the one cell that unblocks the listing.
                       onClick={() =>
-                        variantPrices.open({ kind: "stamp", stampId: stamp.stampId })
+                        variantPrices.open({ kind: "stamp", stampId: stamp.stampId }, stamp.axes)
                       }
                       style={{
                         padding: 0,

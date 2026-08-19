@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { VariantPriceScope } from "@/lib/variant-prices";
+import type { VariantPriceRestriction, VariantPriceScope } from "@/lib/variant-prices";
 import type { RowAction } from "./row-actions-menu";
 import { VariantPriceGridDialog } from "./variant-price-grid-dialog";
 
@@ -14,6 +14,10 @@ import { VariantPriceGridDialog } from "./variant-price-grid-dialog";
  * row was pressed. A caller with one fixed scope — an issue's row on the Issues list, where the
  * multiplier editor already lives (ADR-0020 §7) — passes it as `defaultScope` and gets a ready-made
  * `{ action }` for its `⋮` menu.
+ *
+ * An **offer** opens it narrowed to the copy being listed (#633) by passing that copy's axes beside
+ * the scope. It travels with the scope rather than with the hook for the same reason the scope does:
+ * one card opens the grid over many rows, and each row is a different copy.
  */
 export function useVariantPriceGrid({
   defaultScope,
@@ -25,25 +29,35 @@ export function useVariantPriceGrid({
   /** Called once per dialog that actually wrote something — whatever list shows these prices is
    *  stale then. */
   onSaved?: () => void;
-} = {}): { action: RowAction; open: (scope: VariantPriceScope) => void; dialog: React.ReactNode } {
-  const [scope, setScope] = useState<VariantPriceScope | null>(null);
+} = {}): {
+  action: RowAction;
+  open: (scope: VariantPriceScope, restrict?: VariantPriceRestriction) => void;
+  dialog: React.ReactNode;
+} {
+  const [opening, setOpening] = useState<{
+    scope: VariantPriceScope;
+    restrict?: VariantPriceRestriction;
+  } | null>(null);
 
   const action: RowAction = {
     key: "variant-prices",
     label: "Price variants…",
     icon: "prices",
     onSelect: () => {
-      if (defaultScope) setScope(defaultScope);
+      // The row action opens the whole grid: a `⋮` menu is on a stamp or an issue, which fixes no
+      // condition and no copy — there is nothing to narrow to.
+      if (defaultScope) setOpening({ scope: defaultScope });
     },
   };
 
   return {
     action,
-    open: setScope,
-    dialog: scope ? (
+    open: (scope, restrict) => setOpening({ scope, restrict }),
+    dialog: opening ? (
       <VariantPriceGridDialog
-        scope={scope}
-        onClose={() => setScope(null)}
+        scope={opening.scope}
+        restrict={opening.restrict}
+        onClose={() => setOpening(null)}
         onSaved={onSaved}
       />
     ) : null,

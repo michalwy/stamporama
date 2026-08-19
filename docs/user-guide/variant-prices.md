@@ -23,10 +23,13 @@ Above the grid you choose three things once, for the whole grid:
 
 Typing:
 
+- The **first cell takes the cursor** as soon as the grid appears, so you can start typing
+  without reaching for the mouse.
 - **Tab** moves down a condition column, and on to the top of the next column at the end of
   one — the way a column of variants is filled in from a catalogue that lists them down the
-  page. **Shift+Tab** goes back. **Enter** does the same thing, so there is one movement to
-  learn, and it is the same one the stamp editor's price grid uses.
+  page, and the same movement the stamp editor's price grid uses. **Shift+Tab** goes back.
+- **Enter** saves the cell and closes the grid. It is the way out of a grid you opened to
+  fill one gap. If the figure is refused, the grid stays open with the message on the cell.
 - There is **no Save**. Each figure is written when you leave the cell.
 - **Clearing a cell removes the price.** An empty cell records nothing — it is not a zero.
 
@@ -52,6 +55,13 @@ puts the rolled-up figure back on screen.
 - **A stamp** — the **Price variants** button on the worklist below, on an offer's *On
   Colnect* card, or on a listing blocker naming an unpriced variant. Opening it over any
   stamp of a tree shows the **whole tree**, since that is what the value is read from.
+
+Opened **from an offer** — the *On Colnect* card or a listing blocker — the grid is narrowed
+to the copy being listed: its condition alone, at its certificate and its format. Those two
+controls are gone, and a line above the grid names what it is scoped to; the catalog edition
+is still yours to choose. It is one cell per row, because that is the one cell the listing is
+blocked on. The rest of the tree's prices are filled in from the Issues list or from the
+worklist below, where the whole grid is drawn.
 
 ## The worklist
 

@@ -17,6 +17,8 @@ function copy(over: Partial<PreconditionCopy> = {}): PreconditionCopy {
     catalogItemId: `c${seq}`,
     conditionId: "cond-mnh",
     conditionName: "Mint Never Hinged",
+    certificateStatusId: null,
+    formatId: null,
     platformCondition: "1",
     ...over,
   };
@@ -168,11 +170,67 @@ describe("evaluateListingPreconditions", () => {
       // price grid of its own to go to. Named once however many copies carry it.
       assert.deepEqual(blockers[0].subjects, ["Mi\u00b7PL 870a", "Mi\u00b7PL 870c"]);
       assert.deepEqual(blockers[0].stampIds, ["stamp-870a", "stamp-870c"]);
+      // Each variant carries the axes of the copy it was reported for (#633) — the cell the listing
+      // is blocked on, which is what the price grid behind the link opens narrowed to.
       assert.deepEqual(blockers[0].stampSubjects, [
-        { stampId: "stamp-870a", label: "Mi\u00b7PL 870a" },
-        { stampId: "stamp-870c", label: "Mi\u00b7PL 870c" },
+        {
+          stampId: "stamp-870a",
+          label: "Mi\u00b7PL 870a",
+          axes: { conditionId: "cond-mnh", certificateStatusId: null, formatId: null },
+        },
+        {
+          stampId: "stamp-870c",
+          label: "Mi\u00b7PL 870c",
+          axes: { conditionId: "cond-mnh", certificateStatusId: null, formatId: null },
+        },
       ]);
       assert.match(blockers[0].message, /cheapest variant/);
+    });
+
+    it("reports each unpriced variant at the axes of the copy that raised it (#633)", () => {
+      const blockers = evaluateListingPreconditions(
+        input({
+          sets: [
+            {
+              setId: "set-1",
+              label: "A",
+              copies: [
+                copy({
+                  catalogItemId: null,
+                  conditionId: "cond-u",
+                  conditionName: "Used",
+                  certificateStatusId: "cert-1",
+                  formatId: "fmt-block",
+                  catalogRollup: {
+                    kind: "unpriced-variants",
+                    variants: [{ stampId: "stamp-870a", label: "Mi\u00b7PL 870a" }],
+                  },
+                }),
+                // The same variant at a second grade: the first copy's answer stands, exactly as it
+                // does for the label the variant is named under.
+                copy({
+                  catalogItemId: null,
+                  catalogRollup: {
+                    kind: "unpriced-variants",
+                    variants: [{ stampId: "stamp-870a", label: "Mi\u00b7PL 870a" }],
+                  },
+                }),
+              ],
+            },
+          ],
+        })
+      );
+      assert.deepEqual(blockers[0].stampSubjects, [
+        {
+          stampId: "stamp-870a",
+          label: "Mi\u00b7PL 870a",
+          axes: {
+            conditionId: "cond-u",
+            certificateStatusId: "cert-1",
+            formatId: "fmt-block",
+          },
+        },
+      ]);
     });
 
     it("states the two apart rather than as one line — they are fixed in different places", () => {
