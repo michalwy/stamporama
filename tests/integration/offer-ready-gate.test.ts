@@ -150,6 +150,64 @@ describe("marking an offer ready (#418)", () => {
     assert.equal(await stateOf(offerId), "ready");
   });
 
+  it("refuses a text over the platform's cap — on a platform with no Assistant at all (#636)", async () => {
+    // The caps are the platform's, not a module's: an over-long title is refused where the listing
+    // preconditions ask nothing, which is the case Delcampe's uploaded file made matter.
+    const offerId = await preparingOffer(
+      [[await copy(await stamp("PL long title", null), usedId)]],
+      handListedId
+    );
+    await prisma.offer.update({
+      where: { id: offerId },
+      data: { name: "x".repeat(92) },
+    });
+    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
+
+    const detail = await getOfferDetail(userId, offerId);
+    assert.deepEqual(
+      detail?.readyBlockers.map((blocker) => blocker.code),
+      ["title-too-long"]
+    );
+    await assert.rejects(
+      () => setOfferState(userId, offerId, "ready"),
+      /92 characters, 12 over this platform's 80/
+    );
+    assert.equal(await stateOf(offerId), "preparing");
+
+    // Nothing was shortened to make it fit, and cutting the text is what unblocks it.
+    const kept = await prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { name: true },
+    });
+    assert.equal(kept.name?.length, 92);
+    await prisma.offer.update({ where: { id: offerId }, data: { name: "x".repeat(80) } });
+    await setOfferState(userId, offerId, "ready");
+    assert.equal(await stateOf(offerId), "ready");
+
+    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
+  });
+
+  it("reports an offer that was already ready when the cap was tightened (#636)", async () => {
+    // A Ready offer has no Ready gate left to fail, so what reports it is the listing gate the bulk
+    // workspace draws its cards from — which is why the caps are read live and never seeded (#310).
+    const offerId = await preparingOffer(
+      [[await copy(await stamp("PL tightened", null), usedId)]],
+      handListedId
+    );
+    await prisma.offer.update({ where: { id: offerId }, data: { name: "x".repeat(90) } });
+    await setOfferState(userId, offerId, "ready");
+
+    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
+    const detail = await getOfferDetail(userId, offerId);
+    assert.equal(await stateOf(offerId), "ready", "the offer is not moved back by a settings change");
+    assert.deepEqual(
+      detail?.listingBlockers.map((blocker) => blocker.code),
+      ["title-too-long"]
+    );
+
+    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
+  });
+
   it("refuses a stamp with no Colnect item-ID, and leaves the offer preparing", async () => {
     const offerId = await preparingOffer([[await copy(await stamp("PL unmatched", null))]]);
     await assert.rejects(

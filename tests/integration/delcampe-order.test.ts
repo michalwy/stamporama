@@ -269,7 +269,8 @@ describe("Delcampe order import (#612)", () => {
       order("105393395", [
         {
           itemId: "2518015106",
-          reference: `https://stamps.example.test/o/${collectionSlug}/${offer.offerNo}`,
+          // The offer's own number (#635) — what `personal_reference` carries inside Delcampe's cap.
+          reference: String(offer.offerNo),
         },
       ])
     );

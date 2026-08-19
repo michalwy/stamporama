@@ -29,9 +29,6 @@ import { DELCAMPE_UPLOAD_CSV_NAME } from "../../src/lib/delcampe-export-rules";
 // repo's `.data`, exactly as the photo-generation test does.
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-delcampe-export-"));
 process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
-// `personal_reference` is the offer's own address (#154/#415), so the instance has to know it.
-process.env.BETTER_AUTH_URL = "https://stamps.example.test";
-
 // The Easy Uploader bundle (#610). What the pure tests cannot reach is exactly what is exercised
 // here: that the CSV's `images` column names the files that are actually in the archive, that a
 // batch which cannot be written produces **no file at all** and a reason per offer, and that the
@@ -228,7 +225,10 @@ describe("Delcampe Easy Uploader export (#610)", () => {
     const [categoryId, title, personalReference, description, sellingType, price, bidStep, quantity, images] = row;
     assert.equal(categoryId, "7945");
     assert.equal(title, "Poland 1921 Sowing Man used");
-    assert.equal(personalReference, `https://stamps.example.test/o/${collectionSlug}/${offerNo}`);
+    // The offer's own number and nothing else (#635): the column is capped at 20 characters, and
+    // the export no longer needs the instance to know its own address to write one.
+    assert.equal(personalReference, String(offerNo));
+    assert.ok(personalReference.length <= 20);
     assert.equal(description, "One stamp, as scanned.");
     assert.equal(sellingType, "fixed_price");
     assert.equal(price, "0,10", "the upload direction writes a decimal comma (#611 reads a dot back)");

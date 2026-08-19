@@ -73,8 +73,8 @@ describe("Delcampe active-items import (#611)", () => {
     offerNo: number | null,
     options: { price?: string; bids?: number; title?: string; reference?: string } = {}
   ): string {
-    const reference =
-      options.reference ?? (offerNo === null ? "" : `https://stamps.example.test/o/${collectionSlug}/${offerNo}`);
+    // The offer's own number (#635), which is what fits Delcampe's 20-character cap.
+    const reference = options.reference ?? (offerNo === null ? "" : String(offerNo));
     return [
       itemId,
       `"${options.title ?? `Listing ${itemId}`}"`,
