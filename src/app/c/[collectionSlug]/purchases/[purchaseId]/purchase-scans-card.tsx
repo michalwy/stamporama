@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { usePurchaseScansUi } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
@@ -1605,7 +1606,12 @@ function TileCell({
       {/* The square's own hint — what the tile is and what became of it, and for a parked one the
           note saying what to check. `display: block` on the wrapper because the cell is a grid
           item: an `inline-flex` span between them would let the picture shrink to its content. */}
-      <Tooltip content={tileTitle(tile)} style={{ display: "block" }}>
+      <ThumbPreview
+        src={photoId ? `/api/collections/${collectionId}/photos/${photoId}/full` : null}
+        thumbSrc={photoId ? `/api/collections/${collectionId}/photos/${photoId}/thumb` : null}
+        label={tileTitle(tile)}
+        style={{ display: "block" }}
+      >
         <button
           type="button"
           onClick={onOpen}
@@ -1626,7 +1632,7 @@ function TileCell({
         >
           {body}
         </button>
-      </Tooltip>
+      </ThumbPreview>
       {/* Only where identifying is still possible. A settled tile has reached an end, so a box on
           it would be an offer the write refuses — and the strip's right end is free precisely
           because its left end is where a settled tile says which end it reached (#582). Both marks

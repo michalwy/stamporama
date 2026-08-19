@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useOfferPhotoPlan, useInvalidateOffers, type OfferPhotoPlanView } from "../use-offers-query";
 import { formatBytes } from "@/lib/format-bytes";
-import { PhotoLightbox, THUMB_OBJECT_FIT } from "../../inventory/photo-thumb";
+import { PhotoLightbox, ThumbPreview, THUMB_OBJECT_FIT } from "../../inventory/photo-thumb";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import { AddAttachmentDialog } from "./add-attachment-dialog";
 import {
@@ -268,7 +268,12 @@ function PlanPreview({
                 <DragGrip label="Drag to change the upload order" />
               </span>
             )}
-            <Tooltip content="View full size" style={{ flexShrink: 0 }}>
+            <ThumbPreview
+              src={photoUrl(collectionId, image.photoId, "full")}
+              thumbSrc={photoUrl(collectionId, image.photoId, "thumb")}
+              label={imageTitle(image)}
+              style={{ flexShrink: 0 }}
+            >
               <button
                 type="button"
                 onClick={() => setLightbox(index)}
@@ -291,7 +296,7 @@ function PlanPreview({
                   style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
                 />
               </button>
-            </Tooltip>
+            </ThumbPreview>
 
             <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
               <span
@@ -478,8 +483,10 @@ function PlanSequence({
               <span aria-hidden style={{ width: "1.25rem" }} />
             )}
             {image.previewPhotoId ? (
-              <Tooltip
-                content={
+              <ThumbPreview
+                src={photoUrl(collectionId, image.previewPhotoId, "full")}
+                thumbSrc={photoUrl(collectionId, image.previewPhotoId, "thumb")}
+                label={
                   image.generatedPhotoId
                     ? "The image generated for this entry"
                     : "Not generated yet — showing what it will be made from"
@@ -501,7 +508,7 @@ function PlanSequence({
                       : "1px dashed var(--color-border-strong)",
                   }}
                 />
-              </Tooltip>
+              </ThumbPreview>
             ) : (
               <span aria-hidden style={{ width: "2.5rem" }} />
             )}

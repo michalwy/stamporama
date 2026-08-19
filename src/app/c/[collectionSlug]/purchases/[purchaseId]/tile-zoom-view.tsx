@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { Icon } from "@/app/icons";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
@@ -356,9 +357,11 @@ function IdentifiedPieceGrid({
         {pieces.map((piece) => {
           const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
           return (
-            <Tooltip
+            <ThumbPreview
               key={piece.tileId}
-              content={`Tile ${piece.position + 1} — click to look at it closely`}
+              src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
+              thumbSrc={`/api/collections/${collectionId}/photos/${front.photoId}/thumb`}
+              label={`Tile ${piece.position + 1} — click to look at it closely`}
               style={{ display: "block" }}
             >
             <button
@@ -394,7 +397,7 @@ function IdentifiedPieceGrid({
               />
               <span style={{ fontSize: "0.6875rem" }}>{piece.position + 1}</span>
             </button>
-            </Tooltip>
+            </ThumbPreview>
           );
         })}
       </div>

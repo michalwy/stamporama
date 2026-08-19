@@ -13,7 +13,7 @@ import type { ItemListItem } from "@/lib/items";
 import { formatBytes } from "@/lib/format-bytes";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
-import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { ThumbPreview, THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -202,6 +202,14 @@ export function AddAttachmentDialog({
       ? `/api/collections/${collectionId}/photos/${tile.photoId}/thumb`
       : staged.find((s) => s.id === tile.uploadId)?.previewUrl ?? "";
 
+  /** The same tile at full size, for the hover preview (#632). A staged upload has no served
+   * variants yet, so its local object URL — the whole file — is both the thumbnail and the
+   * enlargement; nothing extra is fetched for it. */
+  const tileFull = (tile: CollageTilePick): string =>
+    tile.kind === "copy_photo"
+      ? `/api/collections/${collectionId}/photos/${tile.photoId}/full`
+      : staged.find((s) => s.id === tile.uploadId)?.previewUrl ?? "";
+
   return (
     <DialogShell
       title="Add attachments"
@@ -310,9 +318,11 @@ export function AddAttachmentDialog({
             }}
           >
             {collageTiles.map((tile, index) => (
-              <Tooltip
+              <ThumbPreview
                 key={tile.kind === "copy_photo" ? tile.photoId : tile.uploadId}
-                content={`Tile ${index + 1}`}
+                src={tileFull(tile)}
+                thumbSrc={tileThumb(tile)}
+                label={`Tile ${index + 1}`}
               >
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -344,7 +354,7 @@ export function AddAttachmentDialog({
                     {index + 1}
                   </span>
                 </span>
-              </Tooltip>
+              </ThumbPreview>
             ))}
           </div>
         )}
@@ -413,9 +423,11 @@ export function AddAttachmentDialog({
                     {item.photos.map((photo, index) => {
                       const selected = picked.has(photo.id);
                       return (
-                        <Tooltip
+                        <ThumbPreview
                           key={photo.id}
-                          content={photo.title ?? photoLabel(photo.role, index)}
+                          src={`/api/collections/${collectionId}/photos/${photo.id}/full`}
+                          thumbSrc={`/api/collections/${collectionId}/photos/${photo.id}/thumb`}
+                          label={photo.title ?? photoLabel(photo.role, index)}
                         >
                           <button
                             type="button"
@@ -472,7 +484,7 @@ export function AddAttachmentDialog({
                               {photoLabel(photo.role, index)}
                             </span>
                           </button>
-                        </Tooltip>
+                        </ThumbPreview>
                       );
                     })}
                   </div>

@@ -1018,6 +1018,13 @@ Thumbnails everywhere in the app show the **whole** image, scaled to fit inside 
 its longest edge — never cropped to fill the box. A tall stamp leaves a little space at the sides, a
 wide one above and below, and nothing of the stamp itself is cut off.
 
+**Rest the pointer on any thumbnail** and an enlarged preview of that photo opens beside it, with
+the photo's label underneath. It appears after a short pause, so running the pointer across a list
+of thumbnails on the way somewhere else pops nothing up. This works wherever thumbnails are shown —
+copy and stamp rows, the read-only photo strip, an offer's photos and its attachment picker, the
+listing workspace, and the scan tiles of a purchase. Clicking still opens the full-size lightbox;
+the preview is for a quick look without leaving the list.
+
 Photos upload **as soon as you drop them** — each thumbnail shows its own upload progress bar,
 and an overall bar above the strip tracks all in-flight uploads together — but nothing is
 attached to the copy until you **Save** the dialog. The Save button waits while an upload is

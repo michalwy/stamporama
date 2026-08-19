@@ -33,6 +33,104 @@ function fullUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/full`;
 }
 
+/** How long the pointer rests on a thumbnail before the enlarged preview opens (#632). Long enough
+ * that running down a list of forty thumbnails on the way somewhere else pops up nothing at all,
+ * short enough that stopping on one reads as an answer rather than a wait. */
+const PREVIEW_DELAY_MS = 400;
+
+/** Edge of the preview box. Square, and the picture **fits** inside it exactly as the thumbnail it
+ * came from does ({@link THUMB_OBJECT_FIT}) — this is the same image, larger, so a wide stamp
+ * letterboxing here is the shape it already had on the row. Fixed rather than following the image:
+ * a popup that changed size with every photo would jump around the screen as the pointer moves
+ * along a strip. */
+const PREVIEW_SIZE = "20rem";
+
+/**
+ * Hover a thumbnail, see it big (#632).
+ *
+ * Wraps a thumbnail so that resting on it opens an enlarged preview beside it, captioned with the
+ * same label the plain hint used to carry. It **complements** the click, which still opens the
+ * lightbox: the preview answers *what is this one* without leaving the list, and the lightbox is
+ * for looking properly.
+ *
+ * It is the shared {@link Tooltip} with a picture in it rather than a second hover mechanism —
+ * placement, viewport clamping and the rule that an inner hint silences the outer one are the hard
+ * parts and are already right there. Every thumbnail that carried a `Tooltip` for its label swaps
+ * that wrapper for this one, so the label is not lost and no site grows a second hover surface.
+ *
+ * Where there is nothing to enlarge (an empty slot, an upload whose bytes are not on the server
+ * yet) it degrades to exactly the plain hint it replaced, immediately and with no picture.
+ */
+export function ThumbPreview({
+  src,
+  thumbSrc,
+  label,
+  style,
+  children,
+}: {
+  /** Full-size image to show in the popup. Empty/absent falls back to a plain label hint. */
+  src?: string | null;
+  /** The thumbnail already on screen. Drawn behind `src` while it loads, so the popup opens with
+   * the picture — upscaled and soft — instead of an empty box that fills in a moment later. */
+  thumbSrc?: string | null;
+  /** Caption under the preview, and the whole hint when there is no image. */
+  label: React.ReactNode;
+  /** Trigger wrapper styles, forwarded to `Tooltip` — see its note on why they belong there. */
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (!src) {
+    return (
+      <Tooltip content={label} style={style}>
+        {children}
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip
+      content={
+        <span style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          <span
+            style={{
+              position: "relative",
+              display: "block",
+              width: PREVIEW_SIZE,
+              height: PREVIEW_SIZE,
+              borderRadius: "0.375rem",
+              overflow: "hidden",
+              background: "var(--color-bg-page)",
+              backgroundImage: thumbSrc ? `url("${thumbSrc}")` : undefined,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center",
+              backgroundSize: "contain",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt=""
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: THUMB_OBJECT_FIT,
+                display: "block",
+              }}
+            />
+          </span>
+          {label ? <span style={{ textAlign: "center" }}>{label}</span> : null}
+        </span>
+      }
+      maxWidth="none"
+      delay={PREVIEW_DELAY_MS}
+      style={style}
+    >
+      {children}
+    </Tooltip>
+  );
+}
+
 function roleLabel(photo: PhotoSummary): string {
   if (photo.role === "front") return "Front";
   if (photo.role === "back") return "Back";
@@ -122,7 +220,12 @@ export function PhotoThumb({
           background: "var(--color-bg-page)",
         }}
       >
-        <Tooltip content={roleLabel(current)} style={{ width: "100%", height: "100%" }}>
+        <ThumbPreview
+          src={fullUrl(collectionId, current.id)}
+          thumbSrc={thumbUrl(collectionId, current.id)}
+          label={roleLabel(current)}
+          style={{ width: "100%", height: "100%" }}
+        >
           <button
             type="button"
             onClick={() => setLightbox(true)}
@@ -144,7 +247,7 @@ export function PhotoThumb({
               style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
             />
           </button>
-        </Tooltip>
+        </ThumbPreview>
 
         {/* Reserved-slot marker: a corner badge instead of a coloured frame. */}
         {slotMeta && (
@@ -233,7 +336,13 @@ export function PhotoStrip({
       {photos.map((p, i) => {
         const slotMeta = isSlotRole(p.role) ? SLOT_ROLE_META[p.role] : null;
         return (
-          <Tooltip key={p.id} content={roleLabel(p)} style={{ flexShrink: 0 }}>
+          <ThumbPreview
+            key={p.id}
+            src={fullUrl(collectionId, p.id)}
+            thumbSrc={thumbUrl(collectionId, p.id)}
+            label={roleLabel(p)}
+            style={{ flexShrink: 0 }}
+          >
             <button
               type="button"
               onClick={() => setLightboxIndex(i)}
@@ -283,7 +392,7 @@ export function PhotoStrip({
                 </span>
               )}
             </button>
-          </Tooltip>
+          </ThumbPreview>
         );
       })}
       {lightboxIndex !== null && (

@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -50,6 +51,16 @@ interface TooltipProps {
    * would be a second mechanism to keep in step with this one.
    */
   maxWidth?: string;
+  /**
+   * How long the pointer must rest on the trigger before the bubble appears, in milliseconds.
+   * Zero (the default) is a hint: it costs nothing to have been shown, so it is shown at once.
+   *
+   * Raise it where the bubble is **heavy** — the thumbnail preview of #632 is a 20rem picture, and
+   * one of those flashing up for every thumbnail a pointer crosses on its way down a list is the
+   * flicker the delay exists to prevent. The wait is per hover and is cancelled on leave, so
+   * crossing a row of thumbnails opens none of them.
+   */
+  delay?: number;
 }
 
 /** Gap between the trigger and the tooltip, in pixels (~0.4rem). */
@@ -84,18 +95,41 @@ export function Tooltip({
   align = "center",
   style,
   maxWidth = "16rem",
+  delay = 0,
 }: TooltipProps) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [innerCount, setInnerCount] = useState(0);
   const outer = useContext(NestedTooltip);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function show() {
+  // The pending open is cleared on leave and on unmount: a bubble that arrived after its trigger
+  // left the screen — a row scrolled away, a dialog closed — would be a bubble about nothing.
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  function open() {
     const r = triggerRef.current?.getBoundingClientRect();
     if (r) setRect(r);
+  }
+  function show() {
+    // The ancestor stands down the moment the pointer is here, delay or not: the point of the
+    // nesting rule is that only one bubble is ever on screen, and waiting to say so would let the
+    // outer one sit over the inner one's trigger for the length of the delay.
     outer?.enter();
+    if (delay <= 0) {
+      open();
+      return;
+    }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(open, delay);
   }
   function hide() {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
     setRect(null);
     outer?.leave();
   }
