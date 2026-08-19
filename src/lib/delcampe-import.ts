@@ -113,7 +113,7 @@ export async function importDelcampeActiveItems(
 ): Promise<DelcampeImportOutcome> {
   const collection = await prisma.collection.findFirst({
     where: { id: collectionId, ownerId },
-    select: { slug: true },
+    select: { id: true },
   });
   if (!collection) throw new DelcampeImportError("Collection not found.");
 
@@ -132,7 +132,7 @@ export async function importDelcampeActiveItems(
   });
   const fileCurrency = contact?.platformCurrency ?? null;
 
-  const read = readDelcampeActiveItems(text, collection.slug);
+  const read = readDelcampeActiveItems(text);
   if (!read.ok) throw new DelcampeImportError(read.message);
   if (read.rows.length === 0) {
     throw new DelcampeImportError(

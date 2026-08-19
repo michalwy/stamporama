@@ -118,3 +118,91 @@ export function textLengthState(
   const length = listingTextLength(text);
   return { length, limit, over: Math.max(0, length - limit) };
 }
+
+// ── The gate (#636) ───────────────────────────────────────────────────────────────────────────
+
+/** Which text ran over. One code per text, so a surface keying a list on it states all three. */
+export type ListingTextLimitCode =
+  | "title-too-long"
+  | "description-too-long"
+  | "private-note-too-long";
+
+/**
+ * One text over its platform's cap, in the shape every listing gate reports in
+ * (`ListingBlocker`, `PhotoReadinessBlocker`) — so the ready gate's hover hint, the workspace card
+ * and the server's own refusal render one list rather than three.
+ *
+ * No `subjects` and no `stampIds`: what is at fault is a text on this offer, not a copy in it.
+ */
+export interface ListingTextLimitBlocker {
+  code: ListingTextLimitCode;
+  title: string;
+  message: string;
+  subjects: string[];
+  stampIds: string[];
+}
+
+/** The three texts an offer states, as they are stored (#209/#266/#267). */
+export interface ListingTexts {
+  name: string | null;
+  description: string | null;
+  privateNote: string | null;
+}
+
+const TEXTS = [
+  { code: "title-too-long", field: "name", limit: "maxTitleLength", what: "listing title" },
+  {
+    code: "description-too-long",
+    field: "description",
+    limit: "maxDescriptionLength",
+    what: "description",
+  },
+  {
+    code: "private-note-too-long",
+    field: "privateNote",
+    limit: "maxPrivateNoteLength",
+    what: "private note",
+  },
+] as const satisfies readonly {
+  code: ListingTextLimitCode;
+  field: keyof ListingTexts;
+  limit: keyof PlatformTextLimits;
+  what: string;
+}[];
+
+/**
+ * Which of this offer's texts the platform will refuse on length — empty when none will, which stays
+ * the normal case (most platforms state no cap at all).
+ *
+ * **This is a gate, not a counter** (#636). #403 deliberately left the caps as a *report*: a
+ * Colnect or Allegro form refuses one over-long text in front of the collector, so learning about it
+ * there costs one paste. Delcampe changed the arithmetic — its listings are created from a CSV
+ * (#610), and Easy Uploader refuses the **whole file**, after a batch of forty was assembled, marked
+ * ready and exported. A limit discovered then is discovered too late, which is the sentence this
+ * module has carried in its own header since #403.
+ *
+ * **Nothing is truncated**, here or anywhere: the text is the collector's, and an app that cut it to
+ * fit would publish a listing nobody proofread. Both numbers are stated and the text is named, since
+ * a count with no target is not actionable in a batch of forty.
+ */
+export function evaluateListingTextLimits(
+  texts: ListingTexts,
+  limits: PlatformTextLimits
+): ListingTextLimitBlocker[] {
+  const blockers: ListingTextLimitBlocker[] = [];
+  for (const entry of TEXTS) {
+    const limit = limits[entry.limit];
+    if (limit == null) continue;
+    const length = listingTextLength(texts[entry.field]);
+    if (length <= limit) continue;
+    const over = length - limit;
+    blockers.push({
+      code: entry.code,
+      title: `The ${entry.what} is ${over} ${over === 1 ? "character" : "characters"} over this platform's ${limit}`,
+      message: `The ${entry.what} is ${length} characters, ${over} over this platform's ${limit}. Shorten it on the offer's own screen — nothing is shortened for you.`,
+      subjects: [],
+      stampIds: [],
+    });
+  }
+  return blockers;
+}

@@ -143,10 +143,11 @@ export interface DelcampeOrderImportResult extends DelcampeOrderSaleMatch {
  *   1. **Delcampe's own id.** `Offer.delcampeItemId` is what #611 wrote from the active-items export,
  *      so this is an exact match on the marketplace's own key — the strongest kind there is, and the
  *      reason this issue waited for that one.
- *   2. **The reference the row prints.** After #610 that is the offer's own short URL, read back by
- *      `offerNoFromPersonalReference` — the *path* decides which offer and the slug must be this
- *      collection's, which is #611's rule unchanged. A listing put up before the export existed
- *      carries whatever the collector typed and simply matches nothing.
+ *   2. **The reference the row prints.** Since #635 that is the offer's own **number**, read back by
+ *      `offerNoFromPersonalReference` — Delcampe caps the column at 20 characters, so the short URL
+ *      #610 wrote there does not fit. The screen is already this collection's, so the number is the
+ *      only thing left to say. A listing put up before the export existed carries whatever the
+ *      collector typed and simply matches nothing.
  *
  * The two are asked in that order and never averaged: an id is a fact and a reference is a label,
  * and a label that disagrees with the id it sits beside is worth nothing.
@@ -198,7 +199,7 @@ export async function importDelcampeOrder(
     );
   }
 
-  const candidates = await matchOrderItems(ownerId, collectionId, collection.slug, platform.id, order);
+  const candidates = await matchOrderItems(ownerId, collectionId, platform.id, order);
   const plan = planDelcampeOrderSale(order, { currency, candidates });
   if (!plan.ok) {
     throw new DelcampeOrderError(describeDelcampeOrderProblems(plan.problems), plan.problems);
@@ -286,7 +287,6 @@ export async function importDelcampeOrder(
 async function matchOrderItems(
   ownerId: string,
   collectionId: string,
-  collectionSlug: string,
   platformId: string,
   order: DelcampeOrderInput
 ): Promise<DelcampeOrderCandidate[]> {
@@ -294,7 +294,7 @@ async function matchOrderItems(
   const referencedOfferNos = [
     ...new Set(
       order.lines.flatMap((line) => {
-        const offerNo = offerNoFromPersonalReference(line.reference, collectionSlug);
+        const offerNo = offerNoFromPersonalReference(line.reference);
         return offerNo === null ? [] : [offerNo];
       })
     ),
@@ -323,7 +323,7 @@ async function matchOrderItems(
   const setsByOffer = new Map(sellable.map((offer) => [offer.offerId, offer.sets]));
 
   return order.lines.map((line) => {
-    const referencedNo = offerNoFromPersonalReference(line.reference, collectionSlug);
+    const referencedNo = offerNoFromPersonalReference(line.reference);
     const hit = itemIndex.get(line.itemId);
     const viaReference = referencedNo === null ? undefined : offerNoIndex.get(referencedNo);
     const offer = hit ?? viaReference;

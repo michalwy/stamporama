@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 ADR-0036 built the Easy Uploader export (#610): a batch of `ready` offers leaves the app as one CSV
-and the pictures it names, and `personal_reference` carries each offer's own short URL. Nothing came
+and the pictures it names, and `personal_reference` carries each offer's own number (#635). Nothing came
 back. An exported offer stayed `ready` for ever, carried no listing URL, and therefore had none of
 what a URL is the foundation of — the *Sold on platform* flag, listing drift (#542), and every link
 from a record here to the listing it is up as.
@@ -62,26 +62,38 @@ carry one reference on two different `id_auction` values. Exported references ar
 construction, so a duplicate is a fault to go and fix, and both rows are refused: neither is applied,
 the offer is left exactly as it was, and both are reported with the offer number they name.
 
+A row that matched on its own `id_auction` (§4) is outside this count: it never asked the reference,
+so a reference it happens to carry cannot make another row ambiguous.
+
 The same rule covers an offer already up as a *different* listing that is **also** in this file: both
 are live, and that is the same contradiction. Where the id the offer names is **absent** from the
 file, that listing has come down and this one is its replacement — a relist, which is the ordinary
 way a Delcampe listing is put back up by hand, and taking it over is the only reading that is not a
 guess.
 
-### 4. The read direction ignores the origin, where the write direction needs it
+### 4. The listing id leads, and the reference answers only for first contact
 
-ADR-0036 §2 puts the offer's **absolute** URL in `personal_reference` because a bare `collectionSlug`
-plus `offerNo` cannot tell a production instance from a development one restored from its dump: every
-value inside the database is identical in both, and the origin is the only discriminator that a dump
-does not carry.
+**Amended by #635.** This section originally read `personal_reference` as an *address*: the path
+decided which offer, the collection slug in it had to be this collection's, and the origin was
+deliberately not compared. Delcampe caps the column at 20 characters, so the address is gone
+(ADR-0036 §2) and it now carries the offer number alone.
 
-Reading a file back narrows that: the **path decides which offer** — the collection slug must be this
-collection's — and the origin is not compared. The trade is deliberate and runs the other way from
-#417's rule for pages the extension reads, where an origin is what tells our own page from a
-stranger's. A file is not a page: the collector picked it, from their own selling account, and fed it
-to their own instance. Against that, comparing origins means that moving the instance from a LAN
-address to a domain name silently orphans **every listing already up**, permanently, because those
-listings carry the old address on somebody else's server and can only be corrected one at a time.
+That makes the **order** of the two matches the decision rather than the spelling of one of them. A
+row whose `id_auction` an offer already carries *is* that offer's listing — the id is globally
+unique, Delcampe issued it, and this app wrote it down from a previous import of this same file — so
+the reference is not read at all, including a reference that names some other offer. Only a listing
+this collection is seeing for the **first time** falls through to the number, which is the one moment
+there is nothing else to go on. Every import after it matches on something nobody can duplicate by
+accident.
+
+The reference is also read strictly: digits and nothing else. A listing put up before this feature
+existed carries whatever the collector typed — a storage `ref`, a note — and reading a number out of
+the middle of one would claim a listing nobody pointed at that offer.
+
+What is given up is the slug check. A bare number cannot say which collection it belongs to, so two
+Stamporama collections served by **one** Delcampe account could claim each other's new listings; the
+import is already scoped to the collection the collector picked, and `id_auction` leading confines
+even that to first contact. Stated as a limit rather than engineered against.
 
 ### 5. What the file says about money reaches an offer only where the offer is an auction
 

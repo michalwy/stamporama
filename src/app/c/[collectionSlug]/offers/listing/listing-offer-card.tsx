@@ -15,7 +15,7 @@ import {
 import { formatBytes } from "@/lib/format-bytes";
 import { normalizeDescriptionFormat } from "@/lib/description-format";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
-import type { ListingBlocker } from "@/lib/listing-preconditions";
+import type { ListingCardBlocker } from "@/lib/offer-photo-readiness";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
 import { useOfferDetail, useOfferPhotoPlan, useInvalidateOffers } from "../use-offers-query";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
@@ -271,7 +271,7 @@ export function ListingOfferCard({
             </span>
             {offer.blockers.length > 0 && (
               <Tooltip
-                content="The Assistant cannot post this offer yet — expand the card for what to fix"
+                content="This offer cannot be listed as it stands — expand the card for what to fix"
                 style={{ flexShrink: 0 }}
               >
                 <span
@@ -386,7 +386,7 @@ function PostingKit({
   collectionId: string;
   collectionSlug: string;
   offerId: string;
-  blockers: ListingBlocker[];
+  blockers: ListingCardBlocker[];
 }) {
   const { data: offer, isLoading, isError } = useOfferDetail(collectionId, offerId);
   const { data: plan, isLoading: planLoading } = useOfferPhotoPlan(collectionId, offerId);
@@ -644,7 +644,7 @@ function ListingBlockers({
   collectionId,
   inset,
 }: {
-  blockers: ListingBlocker[];
+  blockers: ListingCardBlocker[];
   collectionId: string;
   inset?: boolean;
 }) {
@@ -666,9 +666,11 @@ function ListingBlockers({
         gap: "0.25rem",
       }}
     >
-      <span style={{ ...FIELD_LABEL, color: "var(--color-error)" }}>
-        Cannot be listed by the Assistant
-      </span>
+      {/* Neutral about *who* is refusing (#636): the Assistant's own preconditions land here on a
+          platform that has a module, and a text over the platform's cap lands here on every platform
+          — including Delcampe, where nothing is posted by an Assistant at all and the refusal is an
+          upload file the marketplace rejects whole. Each reason names where it is fixed. */}
+      <span style={{ ...FIELD_LABEL, color: "var(--color-error)" }}>Cannot be listed yet</span>
       <ul
         style={{
           listStyle: "disc",
@@ -698,7 +700,9 @@ function ListingBlockers({
             </span>
             {/* The one reason with a screen here to go and fix it on (#617): the umbrella's own page
                 carries both its catalog prices and its variants. */}
-            {blocker.code === "no-variant-price" && (blocker.stampSubjects ?? []).length > 0 && (
+            {blocker.code === "no-variant-price" &&
+              "stampSubjects" in blocker &&
+              (blocker.stampSubjects ?? []).length > 0 && (
               <span style={{ display: "block", marginTop: "0.125rem" }}>
                 {(blocker.stampSubjects ?? []).map((stamp, index) => (
                   <span key={stamp.stampId}>

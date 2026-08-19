@@ -1,4 +1,5 @@
 import type { ListingBlocker } from "./listing-preconditions";
+import type { ListingTextLimitBlocker } from "./listing-text-limits";
 import type { OfferPhotoGenerationStatus } from "./offer-photo-generation";
 
 // Whether an offer's listing photos are in a state that lets it be marked **Ready** — pure, no
@@ -31,9 +32,16 @@ export interface PhotoReadinessBlocker {
   stampIds: string[];
 }
 
+/** What a **listing** surface reports about one offer: the Assistant's own preconditions (#406) and
+ *  the platform's listing-text caps (#636). The bulk workspace's card and the offer's own screen ask
+ *  for exactly this pair — a photo gap is a different question, answered by the photo chip beside
+ *  it. */
+export type ListingCardBlocker = ListingBlocker | ListingTextLimitBlocker;
+
 /** Everything the ready gate reports, whatever it is about: the Assistant's listing preconditions
- *  (#406/#418) and the photo plan's own state. Same shape, so a surface renders one list. */
-export type ReadyBlocker = ListingBlocker | PhotoReadinessBlocker;
+ *  (#406/#418), the platform's text caps (#636) and the photo plan's own state. Same shape, so a
+ *  surface renders one list. */
+export type ReadyBlocker = ListingCardBlocker | PhotoReadinessBlocker;
 
 export interface PhotoReadinessInput {
   status: OfferPhotoGenerationStatus;

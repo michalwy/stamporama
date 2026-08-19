@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
 import { zip, type ZipEntry } from "./zip";
-import { offerScreenUrl } from "./app-url";
 import { DELCAMPE_PLATFORM_MODULE } from "./platform-modules";
 import { readOfferUploadSet } from "./offer-photo-generation";
 import { resolveDelcampeListingProfileForOffer } from "./delcampe-listing-profile";
@@ -66,7 +65,7 @@ export type DelcampeExportResult =
   | { ok: false; message: string; refusals: DelcampeExportRefusal[] };
 
 /** A refusal about the export rather than about a listing — an unowned collection, a batch that is
- *  not Delcampe's, an instance with no address. Thrown, because none of them is something the
+ *  not Delcampe's, a batch that is not ready. Thrown, because none of them is something the
  *  collector fixes offer by offer. */
 export class DelcampeExportError extends Error {}
 
@@ -116,7 +115,7 @@ export async function buildDelcampeUploadBundle(
 ): Promise<DelcampeExportResult> {
   const collection = await prisma.collection.findFirst({
     where: { id: collectionId, ownerId },
-    select: { slug: true },
+    select: { id: true },
   });
   if (!collection) throw new DelcampeExportError("Collection not found.");
 
@@ -155,16 +154,6 @@ export async function buildDelcampeUploadBundle(
     );
   }
 
-  // `personal_reference` carries the offer's own address (#154's decision, #415's token), which is
-  // what makes the reconciliation coming back exact (#611). An instance that does not know its own
-  // address cannot write one, and that is one sentence about the deployment rather than forty about
-  // the listings.
-  if (!offerScreenUrl(collection.slug, offers[0].offerNo)) {
-    throw new DelcampeExportError(
-      "This instance does not know its own address (BETTER_AUTH_URL), so no row could carry a personal_reference back to its offer."
-    );
-  }
-
   // Each offer's own two reads, in parallel across the batch: the profile that applies to it, and
   // the upload set the photo plan produced for it.
   const assembled = await Promise.all(
@@ -196,7 +185,11 @@ export async function buildDelcampeUploadBundle(
     // number the listing kit reports for every other platform (#405) — one set is what one buyer
     // takes.
     const quantity = offer.sets.filter((set) => set.items.length > 0).length;
-    const personalReference = offerScreenUrl(collection.slug, offer.offerNo);
+    // `personal_reference` carries the offer's **own number** and nothing else (#635): Delcampe caps
+    // the column at 20 characters, which no absolute URL fits inside, and the file is imported into
+    // a collection the collector chose — so the instance and the collection are known by
+    // construction and a few digits say the rest.
+    const personalReference = String(offer.offerNo);
 
     const reasons = delcampeRowRefusals(
       {
@@ -209,7 +202,6 @@ export async function buildDelcampeUploadBundle(
         imageCount: images.length,
         hasProfile: profile !== null,
         auctionProfileGaps: profile ? delcampeAuctionGaps(profile) : [],
-        personalReference,
       },
       {
         maxTitleLength: offer.platform.maxTitleLength,
@@ -221,7 +213,7 @@ export async function buildDelcampeUploadBundle(
     if ("reason" in uploadSet) reasons.push(uploadSet.reason.toLowerCase().replace(/\.$/, ""));
     if (quantity === 0) reasons.push("no sets — there is nothing to sell");
 
-    if (reasons.length > 0 || !profile || !personalReference || !upload || listedPrice === null) {
+    if (reasons.length > 0 || !profile || !upload || listedPrice === null) {
       refusals.push({
         offerId: offer.id,
         offerNo: offer.offerNo,

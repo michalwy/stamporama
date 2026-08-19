@@ -33,19 +33,40 @@ this bundle is byte-identical to and named exactly as the same picture downloade
 its own. The single case flat cannot cover — two offers whose titles slug the same — is suffixed
 **per offer**, not per file, so one listing's pictures stay a run of one stem.
 
-### 2. `personal_reference` carries the offer's own URL
+### 2. `personal_reference` carries the offer's own number
 
-Decided in #154 and recorded here because the export is what writes it. A bare `offerNo` is a
-per-collection sequence starting at 1, so offer 42 exists in *every* instance and the reference would
-resolve confidently to the wrong one; `collectionSlug/offerNo` does not fix it either, since a dev
-instance is normally a dump of production and **every** value taken from inside the database is
-identical in both. The origin is the only discriminator a database dump does not carry.
+**Amended by #635, on first real use.** This section originally decided the offer's *absolute short
+URL*, and Delcampe refused it: the column is capped at **20 characters**, no URL fits inside one, and
+Easy Uploader rejects the whole file. It now carries `Offer.offerNo` as a bare number.
 
-The cost is accepted: moving the instance to another domain leaves stale addresses in live listings.
-That failure is visible and harmless, while ambiguity is silent and wrong. It is safe because
-`personal_reference` is seller-visible only, confirmed on the platform, and it is what makes #611's
-reconciliation exact. An instance with no `BETTER_AUTH_URL` refuses the export outright rather than
-writing rows nothing could match back.
+The original reasoning is kept because #635 had to answer it rather than ignore it. A bare `offerNo`
+is a per-collection sequence starting at 1, so offer 42 exists in *every* instance;
+`collectionSlug/offerNo` does not fix that either, since a development instance is normally a dump of
+production and **every** value taken from inside the database is identical in both. The origin was
+the only discriminator a database dump does not carry.
+
+What answered it is #611, not a shorter spelling of the same address. The reference has two jobs, and
+each now has a better source than this column:
+
+- **Matching a returning batch back to offers (#611).** The file is imported *into* a collection the
+  collector chose, so the instance and the collection are known by construction.
+- **Telling the extension which offer a Delcampe row is (#612).** After the first reconciliation the
+  offer carries its `id_auction`, which is globally unique and printed on the page — #466's split
+  exactly: the page states which listing it is, the instance states whether it is ours.
+
+So the reconciliation matches on `id_auction` **first** and consults the reference only for a listing
+seen for the first time (ADR-0037 §4). The reference's whole exposure is that first contact, and a
+few digits against a 20-character cap is headroom that cannot be exhausted.
+
+Two things follow. The export stops needing to know the instance's own address at all, so
+`BETTER_AUTH_URL` leaves this path and a refusal a collector could not act on goes with it. And the
+column becomes readable again in Delcampe's own seller UI, which is what the collector had before
+this feature existed, when they typed a storage `ref` into it by hand.
+
+What is given up is the slug check the path carried: a bare number cannot say which collection it
+belongs to. The import is already scoped to the collection the collector picked, so a wrong match now
+requires **one Delcampe account serving two Stamporama collections**, and only on a listing's first
+contact. That is a limit worth stating rather than engineering against speculatively.
 
 ### 3. A refusal is the whole batch, and it is a refusal rather than a repair
 
@@ -98,8 +119,9 @@ buy would be the export deciding how something sells.
   without hand-editing.
 - What the file cannot state is stated *before* it exists, one line per offer, each naming the screen
   it is fixed on.
-- `personal_reference` round-trips, so #611 can match a returning active-items export back to offers
-  exactly rather than by URL.
+- `personal_reference` round-trips inside Delcampe's 20-character cap, so #611 can match a returning
+  active-items export back to offers — on `id_auction` where it can, on the offer number where the
+  listing is new.
 - The bundle is buffered in memory and capped at 100 offers, the rail the batch photo archive already
   carries; past it the answer is to narrow the session with the area or year filter.
 - Two numbers in the file remain observations rather than facts — the bid-step threshold and the

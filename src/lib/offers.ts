@@ -86,6 +86,7 @@ import {
 } from "./delcampe-offer-listing";
 import {
   evaluatePhotoReadiness,
+  type ListingCardBlocker,
   type PhotoReadinessBlocker,
   type ReadyBlocker,
 } from "./offer-photo-readiness";
@@ -118,7 +119,7 @@ import {
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
 import { normalizeCollageGridMode } from "./collage-template-rules";
-import type { PlatformTextLimits } from "./listing-text-limits";
+import { evaluateListingTextLimits, type PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
   readOfferPhotoReadiness,
@@ -2792,10 +2793,11 @@ const LISTING_SETS_SELECT = {
   saleLines: { select: { id: true }, take: 1 },
 } as const;
 
-/** One `ready` offer as the bulk listing workspace lists it: enough for the collapsed line and for
- * grouping, and nothing more. The posting kit itself — the listing texts and the photos — is read per
- * card through the offer detail (#266/#267) and photo-plan (#311) endpoints when the card is
- * expanded, so opening the screen on a big batch does not pay for texts nobody has looked at. */
+/** One `ready` offer as the bulk listing workspace lists it: enough for the collapsed line, for
+ * grouping, and for the caps the platform will refuse on (#636). The posting kit itself — the texts
+ * as they are *rendered*, and the photos — is still read per card through the offer detail
+ * (#266/#267) and photo-plan (#311) endpoints when the card is expanded, so opening the screen on a
+ * big batch does not pay for a kit nobody has looked at. */
 export interface ListingWorkspaceOffer {
   id: string;
   name: string | null;
@@ -2817,12 +2819,14 @@ export interface ListingWorkspaceOffer {
   /** The distinct (area, year) pairs across the offer's copies, for the grouping and the rail
    * (`listing-groups.ts`). One entry when every copy agrees. */
   areaYears: OfferAreaYear[];
-  /** Why this offer cannot be handed to the Assistant to post (#406), empty when it can. The same
-   * evaluation the listing-kit endpoint refuses on (#405), so the card and the endpoint can never
-   * disagree about whether an offer is postable or why it is not. It says nothing about posting the
-   * listing **by hand** — Publish stays open, because a collector typing the form in themselves is
-   * exactly who fills a gap the Assistant cannot. */
-  blockers: ListingBlocker[];
+  /** Why this offer cannot be listed as it stands: the Assistant's own preconditions (#406) — the
+   * same evaluation the listing-kit endpoint refuses on (#405), so the card and the endpoint can
+   * never disagree — and the platform's listing-text caps (#636), which apply on every platform,
+   * Assistant or not. The preconditions say nothing about posting the listing **by hand**, and
+   * Publish stays open for them, because a collector typing the form in themselves is exactly who
+   * fills a gap the Assistant cannot. A text over the cap is not that kind of gap: the platform
+   * refuses it whoever types it, and on Delcampe it refuses the whole uploaded batch with it. */
+  blockers: ListingCardBlocker[];
 }
 
 /**
@@ -2847,15 +2851,33 @@ export async function listReadyOffersForListing(
   // item-ID" on a Delcampe batch is noise about a form nobody is going to fill from here.
   const platform = await prisma.contact.findFirst({
     where: { id: platformId, collectionId },
-    select: { platformModule: true },
+    select: {
+      platformModule: true,
+      // The platform's own listing-text caps (#403), read live like every other surface that counts
+      // against them (#310) — which is what makes a cap tightened in Settings reach a batch that was
+      // marked ready under the old one (#636).
+      maxTitleLength: true,
+      maxDescriptionLength: true,
+      maxPrivateNoteLength: true,
+    },
   });
   const platformModule = platform?.platformModule ?? null;
+  const textLimits: PlatformTextLimits = {
+    maxTitleLength: platform?.maxTitleLength ?? null,
+    maxDescriptionLength: platform?.maxDescriptionLength ?? null,
+    maxPrivateNoteLength: platform?.maxPrivateNoteLength ?? null,
+  };
   const rows = await prisma.offer.findMany({
     where: { collectionId, platformId, state: "ready" },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
       name: true,
+      // The two long texts are read for the **batch** (#636) — against the note above, and for its
+      // own reason: what the caps refuse has to be known before a file is assembled from forty
+      // offers, not when the card carrying one of them is expanded.
+      description: true,
+      privateNote: true,
       url: true,
       price: true,
       currency: true,
@@ -2896,14 +2918,10 @@ export async function listReadyOffersForListing(
     photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
     url: row.url,
     areaYears: distinctAreaYears(row.sets),
-    blockers: listingBlockersFor(
-      row.sets,
-      platformModule,
-      labeller,
-      conditionMap,
-      catalogIds,
-      "ready"
-    ),
+    blockers: [
+      ...listingBlockersFor(row.sets, platformModule, labeller, conditionMap, catalogIds, "ready"),
+      ...evaluateListingTextLimits(row, textLimits),
+    ],
   }));
 
   await attachBasePrices(collectionId, baseCurrency, items);
@@ -3034,12 +3052,29 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {
-      platform: { select: { platformModule: true } },
+      name: true,
+      description: true,
+      privateNote: true,
+      platform: {
+        select: {
+          platformModule: true,
+          maxTitleLength: true,
+          maxDescriptionLength: true,
+          maxPrivateNoteLength: true,
+        },
+      },
       sets: { select: LISTING_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
     },
   });
   if (!offer) return [];
   const platformModule = offer.platform.platformModule;
+  // The platform's text caps (#636), read live from the contact rather than from anything seeded on
+  // the offer (#310) — so a cap tightened in Settings is asked of this transition immediately.
+  const textBlockers = evaluateListingTextLimits(offer, {
+    maxTitleLength: offer.platform.maxTitleLength,
+    maxDescriptionLength: offer.platform.maxDescriptionLength,
+    maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
+  });
   const [preconditions, photos] = await Promise.all([
     (async (): Promise<ListingBlocker[]> => {
       if (!hasListingModule(platformModule)) return [];
@@ -3066,7 +3101,7 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
     })(),
     readOfferPhotoBlockers(offerId),
   ]);
-  return [...preconditions, ...photos];
+  return [...preconditions, ...textBlockers, ...photos];
 }
 
 /** The photo half of the ready gate (#311) for one offer: the plan's state, judged by the pure
@@ -3339,12 +3374,12 @@ export interface OfferDetail {
    * platform with no module — the same evaluation the workspace row and the listing-kit endpoint
    * (#405) use. Note it is evaluated at the offer's **own** state, so anything not Ready reports
    * `not-ready` alone. */
-  listingBlockers: ListingBlocker[];
+  listingBlockers: ListingCardBlocker[];
   /** Why the Assistant cannot **update** the listing this offer is already live as (#462) — the same
    * evaluation asked about the other act, and empty when it can. Anything not Active reports
    * `not-active` alone, and an Active offer with no listing URL reports `no-listing-url`: both are
    * why **⟳ Update via Assistant** is absent rather than refused. */
-  listingUpdateBlockers: ListingBlocker[];
+  listingUpdateBlockers: ListingCardBlocker[];
   /** Why this offer cannot be marked **Ready** (#418) — the listing preconditions judged at the state
    * it is about to reach rather than at the one it is in, plus the state of its listing photos
    * (#311): a listing whose images do not exist, or were rendered from a composition it no longer
@@ -3730,6 +3765,18 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // past `preparing` has no **Mark ready** to disable, and this re-derives the whole photo plan.
   const readyPhotoBlockers = state === "preparing" ? await readOfferPhotoBlockers(offerId) : [];
 
+  // The platform's listing-text caps (#403), read live (#310) — one read, three readers: the
+  // counters this screen draws beside each text, and the caps the ready gate and the listing acts
+  // refuse on (#636). Asked at **every** state, unlike the photo half above: an offer that is
+  // already Ready when a cap is tightened in Settings has to report as blocked the next time
+  // anything asks whether it can be listed.
+  const textLimits: PlatformTextLimits = {
+    maxTitleLength: offer.platform.maxTitleLength,
+    maxDescriptionLength: offer.platform.maxDescriptionLength,
+    maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
+  };
+  const textBlockers = evaluateListingTextLimits(offer, textLimits);
+
   // The list's *Sold on Allegro* flag, on this offer's own screen (#505). Narrowed to this one
   // offer — the comparison is the same one the list makes, asked about a single listing — and read
   // through `unrecordedPlatformSales` rather than restated here, which is the rule the worklist and
@@ -3824,34 +3871,29 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       maxPhotoEdge: offer.platform.maxPhotoEdge,
       maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
     },
-    platformTextLimits: {
-      maxTitleLength: offer.platform.maxTitleLength,
-      maxDescriptionLength: offer.platform.maxDescriptionLength,
-      maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
-    },
+    platformTextLimits: textLimits,
     platformModule,
-    listingBlockers: listingBlockersFor(
-      offer.sets,
-      platformModule,
-      labeller,
-      conditionMap,
-      catalogIds,
-      state
-    ),
+    listingBlockers: [
+      ...listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, catalogIds, state),
+      ...textBlockers,
+    ],
     // The same evaluation asked as an **update** (#462). Its own field rather than a mode on the one
     // above, because the two answer about different acts and are read by two different controls: an
     // Active offer reports `not-ready` to the first — correctly, there is nothing to post — while the
     // second is asking whether the listing that exists can be corrected.
-    listingUpdateBlockers: listingBlockersFor(
-      offer.sets,
-      platformModule,
-      labeller,
-      conditionMap,
-      catalogIds,
-      state,
-      "update",
-      offer.url
-    ),
+    listingUpdateBlockers: [
+      ...listingBlockersFor(
+        offer.sets,
+        platformModule,
+        labeller,
+        conditionMap,
+        catalogIds,
+        state,
+        "update",
+        offer.url
+      ),
+      ...textBlockers,
+    ],
     // The same evaluation at the target state (#418), so the header can disable **Mark ready** with
     // the reasons rather than let the collector press it and be refused. The preconditions reuse this
     // screen's own sets and condition map — a second read would be the same answer at twice the cost;
@@ -3867,6 +3909,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
               catalogIds,
               "ready"
             ),
+            ...textBlockers,
             ...readyPhotoBlockers,
           ]
         : [],

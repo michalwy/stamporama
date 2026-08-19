@@ -18,19 +18,17 @@ import {
 // is the whole feature, and every one of those conclusions is asserted here rather than against a
 // marketplace.
 
-const SLUG = "michal-stamps";
-
 /** Delcampe's own sample, verbatim in shape: the header it publishes, one row of a real listing. */
 const SAMPLE = [
   "id_auction,title,personal_reference,description,id_category,shipping_model,weight,visits_number,end_date,GMT,present_price,quantity,bids_number,best_bidder",
-  `2508054797,"Saar, Mi:275, Yv:284, ** (MNH)",https://stamps.example.test/o/${SLUG}/412,,24678,"Fee template",,4,"2026-08-28 14:53:00","GMT +1.0",17.44,1,0,`,
+  `2508054797,"Saar, Mi:275, Yv:284, ** (MNH)",412,,24678,"Fee template",,4,"2026-08-28 14:53:00","GMT +1.0",17.44,1,0,`,
 ].join("\r\n");
 
 function row(overrides: Partial<DelcampeActiveItemRow> = {}): DelcampeActiveItemRow {
   return {
     itemId: "1",
     title: "A listing",
-    personalReference: `https://stamps.example.test/o/${SLUG}/1`,
+    personalReference: "1",
     referenceOfferNo: 1,
     categoryId: "7945",
     presentPrice: 1,
@@ -50,7 +48,7 @@ function offer(overrides: Partial<ReconcilableOffer> = {}): ReconcilableOffer {
 
 describe("Delcampe export reader (#611)", () => {
   it("reads Delcampe's own sample row", () => {
-    const read = readDelcampeActiveItems(SAMPLE, SLUG);
+    const read = readDelcampeActiveItems(SAMPLE);
     assert.ok(read.ok, JSON.stringify(read));
     assert.equal(read.rows.length, 1);
     const [entry] = read.rows;
@@ -72,9 +70,9 @@ describe("Delcampe export reader (#611)", () => {
   it("reads by column name, so a reordered or extended export still reads", () => {
     const text = [
       "personal_reference,extra_column,id_auction,present_price",
-      `https://stamps.example.test/o/${SLUG}/7,something,999,3.50`,
+      "7,something,999,3.50",
     ].join("\n");
-    const read = readDelcampeActiveItems(text, SLUG);
+    const read = readDelcampeActiveItems(text);
     assert.ok(read.ok);
     assert.equal(read.rows[0].itemId, "999");
     assert.equal(read.rows[0].referenceOfferNo, 7);
@@ -84,20 +82,20 @@ describe("Delcampe export reader (#611)", () => {
   it("refuses a file that is not an active-items export, by name", () => {
     // The likeliest wrong pick is the *sold*-items export, which is #612's file and carries neither
     // column. A reader that counted commas would import it under the wrong ids and never fail.
-    const read = readDelcampeActiveItems("buyer_name,buyer_email,item_title\nA,b@c.d,Something", SLUG);
+    const read = readDelcampeActiveItems("buyer_name,buyer_email,item_title\nA,b@c.d,Something");
     assert.ok(!read.ok);
     assert.match(read.message, /id_auction/);
   });
 
   it("skips a spreadsheet's leftovers rather than refusing the file over them", () => {
     const text = `${SAMPLE}\r\n\r\n,,,,,,,,,,,,,\r\n`;
-    const read = readDelcampeActiveItems(text, SLUG);
+    const read = readDelcampeActiveItems(text);
     assert.ok(read.ok);
     assert.equal(read.rows.length, 1);
   });
 
   it("survives a byte-order mark, which would otherwise rename the first column", () => {
-    const read = readDelcampeActiveItems(`﻿${SAMPLE}`, SLUG);
+    const read = readDelcampeActiveItems(`﻿${SAMPLE}`);
     assert.ok(read.ok, JSON.stringify(read));
     assert.equal(read.rows[0].itemId, "2508054797");
   });
@@ -158,29 +156,24 @@ describe("the two figures the file spells its own way (#611)", () => {
   });
 });
 
-describe("the reference back to an offer (#611)", () => {
-  it("reads the offer number out of the address #610 wrote", () => {
-    assert.equal(
-      offerNoFromPersonalReference(`https://stamps.example.test/o/${SLUG}/412`, SLUG),
-      412
-    );
-    assert.equal(offerNoFromPersonalReference(` https://x.test/o/${SLUG}/7/ `, SLUG), 7);
+describe("the reference back to an offer (#611, #635)", () => {
+  it("reads the offer number the column now carries", () => {
+    assert.equal(offerNoFromPersonalReference("412"), 412);
+    assert.equal(offerNoFromPersonalReference(" 7 "), 7);
   });
 
-  it("ignores the origin, so moving the instance does not orphan every live listing", () => {
-    // The listings already up carry whatever address the instance had when they were exported, and
-    // that address is on somebody else's server for as long as they stay up.
-    assert.equal(offerNoFromPersonalReference(`http://192.168.1.9:3000/o/${SLUG}/9`, SLUG), 9);
+  it("refuses the short URL #610 used to write, which no longer fits Delcampe's 20 characters", () => {
+    assert.equal(offerNoFromPersonalReference("https://stamps.example.test/o/michal-stamps/412"), null);
   });
 
-  it("refuses a reference belonging to another collection on the same instance", () => {
-    assert.equal(offerNoFromPersonalReference(`https://x.test/o/other-collection/9`, SLUG), null);
-  });
-
-  it("refuses anything that is not one of these addresses", () => {
-    assert.equal(offerNoFromPersonalReference("my own note", SLUG), null);
-    assert.equal(offerNoFromPersonalReference(null, SLUG), null);
-    assert.equal(offerNoFromPersonalReference(`https://x.test/c/${SLUG}/offers/abc`, SLUG), null);
+  it("refuses a reference the collector typed by hand", () => {
+    // A storage ref or a note is not an offer number, and reading a number out of the middle of one
+    // would claim a listing nobody pointed at this offer.
+    assert.equal(offerNoFromPersonalReference("my own note"), null);
+    assert.equal(offerNoFromPersonalReference("K-412"), null);
+    assert.equal(offerNoFromPersonalReference("412a"), null);
+    assert.equal(offerNoFromPersonalReference(null), null);
+    assert.equal(offerNoFromPersonalReference("0"), null);
   });
 
   it("composes the item address from the id, rather than storing it twice", () => {
@@ -191,7 +184,7 @@ describe("the reference back to an offer (#611)", () => {
   });
 });
 
-describe("reconciling a file against this collection's offers (#611)", () => {
+describe("reconciling a file against this collection's offers (#611, #635)", () => {
   it("activates a ready offer the platform now carries", () => {
     const plan = reconcileDelcampeListings({
       rows: [row({ itemId: "500", referenceOfferNo: 1 })],
@@ -243,8 +236,48 @@ describe("reconciling a file against this collection's offers (#611)", () => {
       offers: [offer({ state: "active", delcampeItemId: "500" })],
       known: [],
     });
-    assert.equal(plan.matched.length, 0);
+    // The listing the offer already names matches on its id and is confirmed; the row claiming the
+    // same offer through the reference is the contradiction, and it is the one refused.
+    assert.equal(plan.unmatched.length, 1);
     assert.equal(plan.unmatched[0].problem, "offer-already-listed");
+    assert.equal(plan.matched.length, 1);
+    assert.equal(plan.matched[0].row.itemId, "500");
+  });
+
+  it("matches on the listing id first, and does not consult the reference at all (#635)", () => {
+    // The id is Delcampe's own and globally unique; the reference is a label. A row whose id this
+    // collection already carries is that offer's listing whatever the label says — which is what
+    // narrows a bare offer number's exposure to a listing's very first contact.
+    const plan = reconcileDelcampeListings({
+      rows: [row({ itemId: "500", personalReference: "77", referenceOfferNo: 77 })],
+      offers: [
+        offer({ id: "o1", offerNo: 1, state: "active", delcampeItemId: "500" }),
+        offer({ id: "o77", offerNo: 77, state: "ready" }),
+      ],
+      known: [],
+    });
+    assert.equal(plan.matched.length, 1);
+    assert.equal(plan.matched[0].offerId, "o1");
+    assert.equal(plan.matched[0].action, "confirm");
+  });
+
+  it("lets a row matched on its id out of the duplicate-reference count (#635)", () => {
+    // Two rows carrying one reference is a fault only where the reference is what decides. The row
+    // that matched on its own id never asked it.
+    const plan = reconcileDelcampeListings({
+      rows: [row({ itemId: "500" }), row({ itemId: "501", line: 3 })],
+      offers: [
+        offer({ id: "o1", offerNo: 1, state: "ready" }),
+        offer({ id: "o9", offerNo: 9, state: "active", delcampeItemId: "500" }),
+      ],
+      known: [],
+    });
+    assert.equal(plan.unmatched.length, 0);
+    assert.equal(plan.matched.length, 2);
+    assert.deepEqual(
+      plan.matched.map((entry) => entry.offerId),
+      ["o9", "o1"]
+    );
   });
 
   it("takes over where the listing the offer named has itself come down — a relist", () => {

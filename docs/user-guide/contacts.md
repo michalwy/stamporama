@@ -456,7 +456,12 @@ copied — beside the title in the offer's header, on its
 [bulk listing kit](offers.md#the-posting-kit) — turning amber and saying by how much once a text runs
 over.
 
-The title cap does one thing more, on [Delcampe](delcampe.md#the-title-cap): its listings are created
+A cap is also **enforced at the Ready step**: an offer whose text runs over
+[cannot be marked Ready](offers.md#a-text-over-the-platforms-cap) until it is shortened. Nothing is
+ever shortened for you. Because caps are read live, tightening one here reaches offers that were
+already Ready — they stay Ready, and the bulk listing screen reports them.
+
+On [Delcampe](delcampe.md#the-title-cap) the title cap does one thing more: its listings are created
 from a file Stamporama builds, and a title over the cap **refuses the export** rather than being
 discovered when Delcampe rejects the upload.
 

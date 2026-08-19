@@ -161,9 +161,11 @@ cut a session down, and the button exports that, not the whole platform.
 Each row carries the offer's title and description, its price and quantity, the category on its
 **On Delcampe** card, and the shipping model, renewal and promotion settings of the profile that
 applies to it. An offer recorded as an auction goes out as one: its starting price, the profile's
-[auction settings](#auctions), and the bid step for the figure it opens at. `personal_reference` carries the offer's own [short address](offers.md#offer-number-and-short-link)
-— only you can see it on Delcampe, and it is what lets Stamporama match the listing back to this
-offer when you [read your listings back](#reading-your-listings-back).
+[auction settings](#auctions), and the bid step for the figure it opens at. `personal_reference` carries the offer's own
+[number](offers.md#offer-number-and-short-link) — only you can see it on Delcampe, it is short enough
+to read at a glance in your own seller pages, and it is what lets Stamporama match the listing back
+to this offer the first time you [read your listings back](#reading-your-listings-back). After that
+the listing's own Delcampe id does the matching, so the reference is only ever needed once.
 
 ### Nothing is exported until every row can be written
 
@@ -182,11 +184,14 @@ title is one nobody proofread.
 ### The title cap
 
 Delcampe refuses a title past a certain length. Type that length into **Max title (characters)** on
-the Delcampe platform contact (see [Contacts](contacts.md#listing-text-limits)), and from then on a
-counter appears wherever a title is written, and the export refuses an over-long one before building
+the Delcampe platform contact (see [Contacts](contacts.md#listing-text-limits)). From then on a
+counter appears wherever a title is written, an over-long title **cannot be marked Ready** — the
+button says which text is over and by how much — and the export refuses one before building
 anything.
 
-Leave it blank if you do not know the number; nothing checks it until you do.
+Nothing is ever shortened for you. The wording is yours; cut it where you want it cut.
+
+Leave the field blank if you do not know the number; nothing checks it until you do.
 
 ### How many listings you may have running
 
@@ -225,11 +230,20 @@ A listing missing from the export has come down: it sold, it ran out, or you pul
 does not say which, so **Stamporama changes nothing about the offer** — it shows you the row and the
 date the listing was last seen up, and recording the sale (or withdrawing the offer) stays yours.
 
+### How a listing finds its offer
+
+A listing Stamporama has already seen is matched on **Delcampe's own listing id**, which is unique
+and never repeats — nothing else is consulted for it. A listing it is seeing for the first time is
+matched on the **personal reference**, which is the offer's own number.
+
+That reference has to be a number and nothing else. A listing you put up before you started
+exporting from here carries whatever you typed into the field — a shelf reference, a note — and it
+simply matches nothing, which is reported rather than guessed at.
+
 ### When two listings carry the same reference
 
-Every row in the export carries the offer's [short address](offers.md#offer-number-and-short-link) as
-its personal reference, and that is how a listing finds its offer. Delcampe does not stop two
-listings carrying the same one — uploading the same batch twice will do it.
+Delcampe does not stop two listings carrying the same personal reference — uploading the same batch
+twice will do it.
 
 When that happens, **neither** listing is attached to the offer and both are reported. Nothing is
 guessed: end or correct one of them on Delcampe, then import again.

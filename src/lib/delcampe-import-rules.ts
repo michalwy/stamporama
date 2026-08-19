@@ -241,34 +241,29 @@ export function parseDelcampeEndDate(
 /**
  * Which offer a `personal_reference` names, or null.
  *
- * #610 writes the offer's own short URL into that column (`https://…/o/<slug>/<offerNo>`, #415/#416),
- * so the reference is read back as an address: the **path** decides which offer, and the collection
- * slug in it has to be this collection's. That last check is what keeps two collections on one
- * instance from claiming each other's listings.
+ * The column carries the offer's **own number** and nothing else (#635). #610 wrote the offer's
+ * absolute short URL there, on #154's reasoning that `offerNo` is a per-collection sequence starting
+ * at 1 — so offer 42 exists in every instance, and a development instance restored from a production
+ * dump shares every value taken from *inside* the database, the origin being the only discriminator
+ * a dump does not carry. Delcampe caps this column at **20 characters** and no URL fits, so that
+ * argument had to be answered rather than paid for, and it was answered by what #611 had already
+ * changed: the file is imported *into* a collection the collector picked, so the instance and the
+ * collection are known by construction, and a listing seen before is matched on its globally unique
+ * `id_auction` (see {@link reconcileDelcampeListings}) rather than on this column at all.
  *
- * The **origin is deliberately not checked**, which is where this parts company with #417's rule for
- * pages the extension reads. There, an origin is what tells our own page from somebody else's; here
- * the file is one the collector downloaded from their own selling account, and the only thing a
- * strict origin would achieve is that every listing stops matching the day the instance moves from
- * a LAN address to a domain name — with the listings already up carrying the old one for ever.
+ * What remains is the narrowing this cannot check: the slug in the old URL stopped two collections
+ * on one instance from claiming each other's listings, and a bare number carries no such thing. It
+ * takes **one Delcampe account serving two Stamporama collections** to bite, and only on a listing's
+ * first contact, which is a limit worth stating rather than engineering against.
+ *
+ * Strictly digits: a reference the collector typed by hand — a storage `ref`, a note — is not an
+ * offer number, and reading a number out of the middle of one would claim a listing nobody pointed
+ * at this offer.
  */
-export function offerNoFromPersonalReference(
-  reference: string | null | undefined,
-  collectionSlug: string
-): number | null {
+export function offerNoFromPersonalReference(reference: string | null | undefined): number | null {
   const text = (reference ?? "").trim();
-  if (!text) return null;
-  const match = /(?:^|\/)o\/([^/\s]+)\/(\d+)\/?$/.exec(text);
-  if (!match) return null;
-  const [, slug, offerNo] = match;
-  let decoded = slug;
-  try {
-    decoded = decodeURIComponent(slug);
-  } catch {
-    // A reference somebody re-typed by hand may not be valid percent-encoding; compare it raw.
-  }
-  if (decoded !== collectionSlug) return null;
-  const value = Number(offerNo);
+  if (!/^\d+$/.test(text)) return null;
+  const value = Number(text);
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
@@ -281,7 +276,7 @@ export function offerNoFromPersonalReference(
  * `id_auction` and `personal_reference` is refused whole and by name — it is almost always the
  * *sold*-items export, which is a different file for a different job (#612).
  */
-export function readDelcampeActiveItems(text: string, collectionSlug: string): DelcampeExportRead {
+export function readDelcampeActiveItems(text: string): DelcampeExportRead {
   const rows = parseCsvRows(text);
   if (rows.length === 0) return { ok: false, message: "That file is empty." };
 
@@ -316,7 +311,7 @@ export function readDelcampeActiveItems(text: string, collectionSlug: string): D
       itemId,
       title: cell(row, "title") ?? "",
       personalReference,
-      referenceOfferNo: offerNoFromPersonalReference(personalReference, collectionSlug),
+      referenceOfferNo: offerNoFromPersonalReference(personalReference),
       categoryId: cell(row, "id_category"),
       presentPrice: parseDelcampeDecimal(cell(row, "present_price")),
       quantity: parseDelcampeInteger(cell(row, "quantity")),
@@ -398,10 +393,23 @@ export interface DelcampeReconciliation {
   cameDown: CameDownListing[];
 }
 
+/** What a matched row does to the offer behind it, from the state that offer is in. */
+function actionFor(state: OfferState): DelcampeMatchAction {
+  return state === "ready" ? "activate" : state === "active" ? "confirm" : "record";
+}
+
 /**
  * Match a file's rows to this collection's offers, and work out what has come down.
  *
- * Three rules, and all three are about refusing to be clever:
+ * Four rules, and all four are about refusing to be clever:
+ *
+ *  • **The listing id leads and the reference is the fallback** (#635). A row whose `id_auction`
+ *    an offer already carries *is* that offer's listing — the id is globally unique, Delcampe issued
+ *    it, and it was written here by a previous import of this same file. `personal_reference` is
+ *    only consulted for a listing this collection is seeing for the **first time**, which is the one
+ *    moment there is nothing else to go on. That ordering is what makes a bare offer number safe to
+ *    carry in the column at all: the reference's whole exposure is first contact, and every import
+ *    after it matches on something nobody can duplicate by accident.
  *
  *  • **A reference names one offer, and one offer has one listing.** Two rows resolving to the same
  *    offer are *both* refused (`duplicate-reference`) — neither is applied and the offer is left
@@ -426,17 +434,39 @@ export function reconcileDelcampeListings(input: {
 }): DelcampeReconciliation {
   const { rows, offers, known } = input;
   const byOfferNo = new Map(offers.map((offer) => [offer.offerNo, offer]));
+  // The offers that already name a listing, by the id they name (#635). Unique per collection, so
+  // there is never a choice to make here.
+  const byItemId = new Map(
+    offers.flatMap((offer) => (offer.delcampeItemId ? [[offer.delcampeItemId, offer] as const] : []))
+  );
   const idsInFile = new Set(rows.map((row) => row.itemId));
 
   // Which offer numbers this file names more than once. Counted over the whole file first, because
   // the second row is what makes the *first* one a duplicate — a single pass would have applied it.
+  // Rows that matched on their listing id are left out of the count: they never asked the reference,
+  // so a reference they happen to carry cannot make another row ambiguous.
   const claims = new Map<number, number>();
   for (const row of rows) {
+    if (byItemId.has(row.itemId)) continue;
     if (row.referenceOfferNo === null) continue;
     claims.set(row.referenceOfferNo, (claims.get(row.referenceOfferNo) ?? 0) + 1);
   }
 
   const reconciled: ReconciledRow[] = rows.map((row) => {
+    // Already ours, on Delcampe's own id. Nothing about the reference is read, including a reference
+    // that names some other offer: the id is the thing the marketplace guarantees.
+    const byId = byItemId.get(row.itemId);
+    if (byId) {
+      return {
+        row,
+        offerId: byId.id,
+        offerNo: byId.offerNo,
+        offerState: byId.state,
+        action: actionFor(byId.state),
+        problem: null,
+      };
+    }
+
     const base = { row, offerId: null, offerNo: row.referenceOfferNo, offerState: null, action: null };
     if (row.referenceOfferNo === null) return { ...base, problem: "no-reference" as const };
 
@@ -453,14 +483,12 @@ export function reconcileDelcampeListings(input: {
       return { ...base, offerState: offer.state, problem: "offer-already-listed" as const };
     }
 
-    const action: DelcampeMatchAction =
-      offer.state === "ready" ? "activate" : offer.state === "active" ? "confirm" : "record";
     return {
       row,
       offerId: offer.id,
       offerNo: offer.offerNo,
       offerState: offer.state,
-      action,
+      action: actionFor(offer.state),
       problem: null,
     };
   });

@@ -151,7 +151,8 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    it on the **Photos** card. An offer whose plan renders nothing at all (no collage configured and no
    attachments) is asked nothing about photos. On the platform named as Colnect it also needs to pass the
    [listing preconditions](#what-the-assistant-cant-post) — every stamp matched, every condition
-   mapped, the sets interchangeable — before it can be marked ready. For the same reason you cannot clear the price of an offer that is already **Ready**
+   mapped, the sets interchangeable — before it can be marked ready. On **every** platform, none of
+   its texts may be [over the platform's cap](#how-long-the-text-may-be). For the same reason you cannot clear the price of an offer that is already **Ready**
    or **Active**; step it back to **Preparing** first. You can step a **Ready** offer back to
    **Preparing** at any time (from the **⋮** menu) to keep editing.
    On the platform named as **Allegro**, a Ready offer can skip all of this and be posted through
@@ -314,10 +315,18 @@ and 100 for the private note. Record the cap once on the platform
 that field's label: `72 / 100`, counting up as you type. Past the limit it turns amber and says by how
 much — `104 / 100 · over by 4`.
 
-The counter is a **report, never a cut**: nothing is truncated, shortened or refused for you, and an
-over-long offer can still be marked Ready and published. The text is yours; the app only makes sure
-you find out about the limit here rather than in the platform's own form, with the listing half
-posted.
+Nothing is ever **cut**: no text is truncated or shortened for you. The text is yours, and a listing
+shortened to fit is one nobody proofread.
+
+An over-long text does stop the offer being marked **Ready**. The button greys out and says which
+text is over and by how much, the same way a missing catalogue match or a missing photo does — the
+platform will refuse the text whoever types it, and on a platform whose listings are created from an
+uploaded file ([Delcampe](delcampe.md)) it refuses the *whole batch* once it is assembled, which is
+far too late to find out. Shorten the text and the button comes back.
+
+If a cap is tightened after offers were already marked Ready, those offers are not moved. They are
+reported on the [bulk listing screen](#bulk-listing--posting-a-prepared-batch), whose card says the same thing, and the
+Delcampe export refuses them by name.
 
 It counts the **stored** text — the source, which is what **⧉** puts on your clipboard — so an HTML or
 Markdown description is counted with its tags, exactly as the platform's field will hold it. While the
@@ -1022,8 +1031,8 @@ all and nothing is checked anywhere.
 
 For the platform that is named, letting the [Assistant](assistant.md) fill its sale form needs
 three things to be true of the offer, and the card says so when one of them isn't — a **Can't list**
-chip on the line, and the reasons spelled out when you expand it. You find out here rather than
-half-way through a filled form.
+chip on the line, and the reasons spelled out under **Cannot be listed yet** when you expand it. You
+find out here rather than half-way through a filled form.
 
 - **Every stamp needs the platform's catalog item-ID.** The form is opened *on* the catalog items
   being sold, so a stamp the platform doesn't know is a form with nothing to point at. Match the named
@@ -1052,10 +1061,25 @@ the listing card; marking it ready from the Offers list or the **⋮**
 menu is refused with the same wording. Only that one step is gated — an offer already live can still
 be paused, withdrawn or sold, and a platform naming no Assistant module is not checked at all.
 
-This gates the Assistant only. **Publish stays available**, and so does everything else on the card:
-posting the form yourself is exactly what you do about a gap the Assistant can't fill. A description
-that is [over the platform's limit](#how-long-the-text-may-be) is *not* one of these — the platform's
-own field will refuse a long paste, and nothing about the stamps is misstated.
+These three gate the Assistant only. **Publish stays available**, and so does everything else on the
+card: posting the form yourself is exactly what you do about a gap the Assistant can't fill.
+
+### A text over the platform's cap
+
+One more thing lands in the same place, on **every** platform rather than only the one named as
+Colnect: a title, description or private note
+[over the platform's cap](#how-long-the-text-may-be). It is reported on the card and it blocks
+**Mark ready**, naming the text and by how much it is over.
+
+It is not a fault in the stamps, so it is listed under the same neutral heading rather than as
+something the Assistant can't do. The platform refuses the text whoever types it in, and where
+listings are created from an uploaded file — [Delcampe](delcampe.md) — it refuses the *whole batch*
+once it has been assembled. Nothing is shortened for you.
+
+Because caps are read live, tightening one under
+[Listing text limits](contacts.md#listing-text-limits) reaches offers that were marked Ready under
+the old number. They stay Ready; the bulk listing card reports them, and the Delcampe export refuses
+them by name.
 
 ### List via Assistant
 

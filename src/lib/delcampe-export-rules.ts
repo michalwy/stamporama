@@ -156,8 +156,11 @@ export interface DelcampeUploadRowInput {
   /** `Offer.name` (#209) — the listing's own title, never the derived label: the label is a screen
    *  fallback and was not written for a marketplace. */
   title: string;
-  /** The offer's short URL (#415/#416), which is what `personal_reference` carries so #611's
-   *  reconciliation can match a listing back to an offer exactly. */
+  /** `Offer.offerNo` as text, which is what `personal_reference` carries so #611's reconciliation
+   *  can match a listing back to an offer. A **bare number** since #635: Delcampe caps the column at
+   *  20 characters, which the offer's short URL does not fit inside, and the file is imported into a
+   *  collection the collector chose — so the instance and the collection are known by construction
+   *  and the number is the only thing left to say. */
   personalReference: string;
   /** `Offer.description` (#266) as stored, empty where there is none — Delcampe accepts a listing
    *  without one, which is what the collector's live listings are. */
@@ -256,7 +259,6 @@ export interface DelcampeRowCandidate {
    *  empty on a quick buy, which asks nothing of that group. Handed in rather than derived here so
    *  this module keeps knowing a profile only through the values it was given. */
   auctionProfileGaps: readonly string[];
-  personalReference: string | null;
 }
 
 /** The platform's own caps (#403/#610), null where it states none. */
@@ -328,10 +330,6 @@ export function delcampeRowRefusals(
   if (candidate.imageCount === 0) {
     refusals.push("no photos to upload — generate them first");
   }
-  if (!candidate.personalReference) {
-    refusals.push("no offer address for personal_reference");
-  }
-
   return refusals;
 }
 

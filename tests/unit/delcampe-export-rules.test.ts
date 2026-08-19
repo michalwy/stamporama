@@ -34,7 +34,7 @@ const AUCTION_PROFILE: DelcampeListingProfileValues = {
 
 const ROW_INPUT = {
   title: "Poland (1921) - Sowing Man - Mi:158 / Fi:125I / Yt:224 - Used",
-  personalReference: "https://stamps.example.test/o/main/1242",
+  personalReference: "1242",
   description: "",
   categoryId: "7945",
   listingType: "fixed" as const,
@@ -81,6 +81,14 @@ describe("delcampeUploadRow", () => {
     assert.equal(row.has_renewable_options, "N");
     assert.equal(row.option_strong_title, "N");
     assert.equal(row.option_homepage_promotion, "N");
+  });
+
+  it("carries the offer's own number as the reference, inside Delcampe's 20 characters (#635)", () => {
+    // The column is capped at 20, which is what took the offer's short URL out of it: the file is
+    // imported into a collection the collector chose, so the number says the rest.
+    const row = delcampeUploadRow(ROW_INPUT);
+    assert.equal(row.personal_reference, "1242");
+    assert.ok(row.personal_reference.length <= 20);
   });
 
   it("pipes the picture names in plan order", () => {
@@ -219,7 +227,6 @@ describe("delcampeRowRefusals", () => {
     imageCount: 2,
     hasProfile: true,
     auctionProfileGaps: [],
-    personalReference: "https://stamps.example.test/o/main/1242",
   };
   /** The same offer sold the other way: an auction that opened at 1.00, on a profile that describes
    *  auctions. */
@@ -269,10 +276,6 @@ describe("delcampeRowRefusals", () => {
     assert.match(delcampeRowRefusals({ ...candidate, hasProfile: false }, noLimits)[0], /profile/);
     assert.match(delcampeRowRefusals({ ...candidate, price: 0 }, noLimits)[0], /no price/);
     assert.match(delcampeRowRefusals({ ...candidate, imageCount: 0 }, noLimits)[0], /no photos/);
-    assert.match(
-      delcampeRowRefusals({ ...candidate, personalReference: null }, noLimits)[0],
-      /personal_reference/
-    );
   });
 
   it("passes an auction that has a starting price and a profile describing auctions", () => {
