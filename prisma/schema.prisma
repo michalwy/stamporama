@@ -109,6 +109,10 @@ model Collection {
   nextPurchaseNo Int    @default(1)
   nextSaleNo     Int    @default(1)
   nextAuctionLotNo Int  @default(1)
+  // And once more for `Trade.tradeNo` (#646). A trade number is quoted *to somebody else* — it is
+  // what the partner's copy of the list is headed with — so reuse would be worse here than
+  // anywhere: two different exchanges answering to "trade 7" is an argument waiting to happen.
+  nextTradeNo    Int    @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -137,6 +141,7 @@ model Collection {
   shippingMethods ShippingMethod[]
   carriers        Carrier[]
   auctionSales    AuctionSale[]
+  trades          Trade[]
   colnectCatalogMappings ColnectCatalogMapping[]
   colnectConditionMappings ColnectConditionMapping[]
   assistantTokens AssistantToken[]
@@ -177,6 +182,7 @@ model StampCondition {
   /** The condition half of a hand-picked listing variant — the cheapest variant is a per-condition
    *  answer, so overriding it is too. See {@link OfferListedVariant}. */
   offerListedVariants OfferListedVariant[]
+  tradeLines        TradeLine[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -215,6 +221,7 @@ model StampFormat {
   auctionLotLines AuctionLotLine[]
   wantAcceptance WantFormat[]
   profileAcceptance AcceptanceProfileFormat[]
+  tradeLines    TradeLine[]
 
   @@index([collectionId])
   @@map("stamp_format")
@@ -315,6 +322,7 @@ model CertificateStatus {
   translations  CertificateStatusTranslation[]
   wantAcceptance WantCertificateStatus[]
   profileAcceptance AcceptanceProfileCertificateStatus[]
+  tradeLines    TradeLine[]
 
   @@index([collectionId])
   @@map("certificate_status")
@@ -477,6 +485,9 @@ model CatalogVendor {
   issueCatalogPrefixes  IssueCatalogPrefix[]
   collectionAreaVendors CollectionAreaVendor[]
   colnectCatalogMappings ColnectCatalogMapping[]
+  /** Trades that named this vendor as the catalog both sides speak in (#646). A vendor rather than
+   *  a `CatalogName`: one book covers one part of the world, and a trade routinely spans several. */
+  agreedInTrades        Trade[]                @relation("TradeAgreedCatalog")
 
   @@map("catalog_vendor")
 }
@@ -1477,6 +1488,8 @@ model Stamp {
    *  under, and offers that named this stamp as that variant. See {@link OfferListedVariant}. */
   listedVariantUmbrellas OfferListedVariant[] @relation("OfferListedVariantUmbrella")
   listedVariantChoices   OfferListedVariant[] @relation("OfferListedVariantChoice")
+  /** Receive-side trade lines naming this stamp (#646). */
+  tradeLines             TradeLine[]          @relation("TradeLineStamp")
 
   @@index([subtypeId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
@@ -1615,6 +1628,9 @@ model Item {
    * tiles of the same piece — a front card and a back card cut as separate batches — were both
    * assigned to it. */
   scanTiles ScanTile[]
+  /** Give-side trade lines naming this copy (#646). `onDelete: Restrict` — a copy promised to a
+   * partner must not vanish from under the agreement. */
+  tradeLines TradeLine[] @relation("TradeLineItem")
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -3160,6 +3176,183 @@ model SaleLineItem {
   @@map("sale_line_item")
 }
 
+// ── Trades (#646; ADR-0039) ──────────────────────────────────────────────────────────────────────
+//
+// An exchange with another collector: what leaves on one side, what arrives on the other, and the
+// lifecycle the whole thing moves through. It reuses three anchors rather than duplicating them —
+// `Item.forTrade` (the disposition), `Contact.exchangePartner` (the role), and the
+// `stamp x condition x certificate x format` key `Want` already carries, which is exactly the shape
+// a receive-side line needs.
+//
+// A trade is **not** modelled as a purchase with a negative price, nor as a sale paid in stamps.
+// Both sides are goods, only one of them is in anyone's inventory, and the whole negotiation happens
+// before either parcel moves. See ADR-0039 for the reasoning, and `docs/agents/trades.md` for the
+// rules the rest of the track extends.
+model Trade {
+  id           String @id @default(cuid())
+  collectionId String
+  // Short per-collection trade number (#646) — allocated exactly as `Item.itemNo` and
+  // `Offer.offerNo` are, from a counter on `Collection`, and never reused. What the quick-jump box
+  // takes after `t`, and what the partner's copy of the list is headed with.
+  tradeNo      Int
+  // The other collector. **Required**, unlike a purchase's optional supplier: a purchase can be a
+  // parcel bought at a fair from nobody in particular, while an exchange is by definition with
+  // somebody. `onDelete: Restrict`, the guard every other counterparty FK carries (ADR-0008 §4).
+  partnerId    String
+  // preparing | shared | agreed | closed, with cancelled reachable from anywhere. The vocabulary
+  // and the legal transitions live in `trade-rules.ts`, never in this column's spelling.
+  //
+  // *Partner has responded* is deliberately **not** a status: a round of negotiation would otherwise
+  // mean clicking a state back and forth by hand. It is a derived badge, from partner feedback
+  // (#641).
+  status       String @default("preparing")
+  // The currency the partner's figures are expressed in (#638). The collector's own valuation stays
+  // in the collection's base currency, and the two are labelled apart everywhere they meet.
+  currency     String
+  notes        String?
+  // Shipping is **two timestamps, not two states**. The parcels cross in the post and arrive in
+  // either order, so folding them into the linear status would force an ordering the world does not
+  // have — the same split `Purchase` makes between its delivery status and its lot lifecycle.
+  sentAt       DateTime?
+  receivedAt   DateTime?
+  // ── Balancing (#638 reads these; they land here because they are terms of the agreement) ───────
+  // The catalog both sides agreed to speak in, or null when the trade names none. That StampWorld
+  // says something different from Fischer is a property of the negotiation, not a discrepancy to
+  // reconcile. Independent of `balanceByValue`: a trade balanced 1:1 on pieces may still name a
+  // catalog, which drives what the partner is shown (#640) without gating anything.
+  //
+  // A **vendor** (Michel, StampWorld, Fischer), never a `CatalogName`. A catalog name is one book
+  // covering one part of the world — *Michel Deutschland* prices nothing Polish — while a trade
+  // routinely spans several areas, so naming one book would leave half the lines unvaluable. The
+  // vendor is what the two collectors actually agree on ("we go by Michel"), and the book to read a
+  // given line in then follows from the stamp's area exactly as it does everywhere else in the app
+  // (`CollectionAreaCatalog`, the area's primary catalog for that vendor).
+  catalogVendorId   String?
+  // Value balancing (true) or piece-count balancing (false, the default — the way most exchanges
+  // between collectors are actually struck).
+  balanceByValue    Boolean @default(false)
+  // Tolerance in **pieces** for count mode, and in **percent** for value mode. Two columns rather
+  // than one: they are measured in different units, and a single number would mean "2 stamps" in
+  // one mode and "2%" in the other with nothing on the row to say which.
+  countTolerance    Int     @default(0)
+  valueTolerancePct Decimal @default(0) @db.Decimal(5, 2)
+  // The skew, in percent, past which the collector's **own** valuation raises a warning — the "am I
+  // giving away 1000 EUR for 10 EUR" guard. A warning and never a block: a deliberately uneven trade
+  // is a normal thing and the app has no business forbidding it.
+  ownValueWarnPct   Decimal @default(25) @db.Decimal(5, 2)
+  createdAt         DateTime @default(now())
+
+  collection    Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  partner       Contact        @relation("TradePartner", fields: [partnerId], references: [id], onDelete: Restrict)
+  catalogVendor CatalogVendor? @relation("TradeAgreedCatalog", fields: [catalogVendorId], references: [id], onDelete: Restrict)
+  sections      TradeSection[]
+  lines         TradeLine[]
+
+  @@unique([collectionId, tradeNo])
+  @@index([collectionId])
+  // Every list read narrows to a status, so it is indexed with the scope rather than on its own —
+  // `Want`'s `[collectionId, closedAt]` for the same reason.
+  @@index([collectionId, status])
+  @@index([partnerId])
+  @@index([catalogVendorId])
+  @@map("trade")
+}
+
+// A named part of a trade — "mint", "used", "the Polish material". A name, a position, and
+// optionally a balance rule of its own.
+//
+// A section either **inherits the trade's rule whole or states its own**. The four override columns
+// are therefore written and cleared as a unit, and `balanceByValue` is the one that says which: null
+// means inherit everything, non-null means this section states the lot. Two half-inherited settings
+// would be two things to keep in step for no gain.
+//
+// Every trade has at least one section, created with it: `TradeLine.sectionId` is required, so a
+// trade with no sections would be a trade nothing can be put into. Deleting the last one is refused
+// for the same reason.
+model TradeSection {
+  id       String @id @default(cuid())
+  tradeId  String
+  name     String
+  // Hand-ordered, dragged rather than typed — the dictionaries' idiom. Gaplessness is not promised.
+  position Int    @default(0)
+
+  /** Null = inherit the trade's rule whole. Non-null = this section states its own, and the three
+   *  columns below are written and cleared with it. */
+  balanceByValue    Boolean?
+  countTolerance    Int?
+  valueTolerancePct Decimal? @db.Decimal(5, 2)
+  ownValueWarnPct   Decimal? @db.Decimal(5, 2)
+
+  trade Trade       @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  lines TradeLine[]
+
+  @@index([tradeId])
+  @@map("trade_section")
+}
+
+// One line of a trade, on one side of it.
+//
+// **The two sides are not symmetric, and that asymmetry is the whole reason `side` is an axis rather
+// than two optional FKs on one row.** The give side names a concrete copy — an `Item` — because the
+// stamps are in the collection and a copy is a copy. The receive side cannot: the partner's stamps
+// are in nobody's inventory, so it names the `stamp x condition x certificate x format` key that
+// `Want` already uses, plus a quantity.
+//
+// **There is no pairing between the sides.** They are two independent bags, the only structure over
+// them is the section, and the counts routinely differ — ten cheap ones for two good ones is a
+// normal value trade. Nothing anywhere matches a give line to a receive line.
+//
+// A give line's `quantity` is always 1: a multiple is **one copy in one format**, never N singles
+// (the `StampFormat` invariant holds here as everywhere).
+model TradeLine {
+  id        String @id @default(cuid())
+  tradeId   String
+  sectionId String
+  /** give | receive. See `trade-rules.ts`. */
+  side      String
+  position  Int    @default(0)
+
+  /** Give side: the copy leaving. Null on a receive line. */
+  itemId              String?
+
+  /** Receive side: the key of what is coming, exactly `Want`'s. All null on a give line — but note
+   *  that on a receive line a null `certificateStatusId` **is a value** ("no certificate",
+   *  ADR-0006 §2) and a null `formatId` **means single**, so only `stampId` / `conditionId` say
+   *  which side a row is on. */
+  stampId             String?
+  conditionId         String?
+  certificateStatusId String?
+  formatId            String?
+  /** How many. Always 1 on the give side (a CHECK enforces it, and so does the domain). */
+  quantity            Int     @default(1)
+
+  notes     String?
+  createdAt DateTime @default(now())
+
+  trade             Trade              @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  section           TradeSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  item              Item?              @relation("TradeLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  stamp             Stamp?             @relation("TradeLineStamp", fields: [stampId], references: [id], onDelete: Cascade)
+  condition         StampCondition?    @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  format            StampFormat?       @relation(fields: [formatId], references: [id], onDelete: Restrict)
+
+  // One copy cannot be on the same trade twice. Nulls are distinct in Postgres, so this constrains
+  // the give side only and leaves the receive side alone — which is right: two receive lines for the
+  // same stamp in the same condition are a perfectly ordinary way to write "two of these", and the
+  // quantity column is the other way. Collisions *across* trades are #639's job, not a constraint.
+  @@unique([tradeId, itemId])
+  @@index([tradeId])
+  @@index([sectionId])
+  @@index([tradeId, side])
+  @@index([itemId])
+  @@index([stampId])
+  @@index([conditionId])
+  @@index([certificateStatusId])
+  @@index([formatId])
+  @@map("trade_line")
+}
+
 model Contact {
   id               String   @id @default(cuid())
   collectionId     String
@@ -3350,6 +3543,10 @@ model Contact {
   // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
   auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
   auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
+  // Exchanges with this contact as the partner (#646; ADR-0039). `onDelete: Restrict` from
+  // `Trade.partnerId`, the same detach-before-delete guard purchases and sales carry — a trade is a
+  // record of something that happened *with a person*, and a nameless one records half of it.
+  trades               Trade[]       @relation("TradePartner")
   // Copies deliberately never listed on this platform (#506). Cascades on delete — a preference
   // about a platform that no longer exists is not a record worth keeping.
   itemExclusions       ItemPlatformExclusion[] @relation("PlatformItemExclusion")

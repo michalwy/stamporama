@@ -12,7 +12,7 @@ the same address book serves both.
 A contact can carry any combination of **roles**, or none at all:
 
 - **Seller** / **Buyer** — someone you buy from or sell to.
-- **Exchange partner** — someone you swap stamps with.
+- **Exchange partner** — someone you swap stamps with; the partner a [trade](trades.md) is made with.
 - **Auction house** — e.g. Cherrystone, David Feldman.
 - **Platform** — an online marketplace a purchase, offer, or sale is routed through. Some platforms
   have settings of their own beyond the contact form: see [Allegro](allegro.md) and

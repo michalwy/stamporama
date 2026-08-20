@@ -256,6 +256,7 @@ const ENTITY_NUMBER_COUNTERS = {
   purchase: "nextPurchaseNo",
   sale: "nextSaleNo",
   auctionLot: "nextAuctionLotNo",
+  trade: "nextTradeNo",
 } as const;
 
 export type NumberedEntity = keyof typeof ENTITY_NUMBER_COUNTERS;

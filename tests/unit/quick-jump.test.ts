@@ -26,6 +26,9 @@ describe("parseQuickJump (#431)", () => {
     assert.deepEqual(parseQuickJump("iss 12"), { entity: "issue", no: 12 });
     assert.deepEqual(parseQuickJump("lot 3"), { entity: "auctionLot", no: 3 });
     assert.deepEqual(parseQuickJump("lot3"), { entity: "auctionLot", no: 3 });
+    // `t` is the trade (#646) and stays itself — there is no longer prefix starting with it.
+    assert.deepEqual(parseQuickJump("t 7"), { entity: "trade", no: 7 });
+    assert.deepEqual(parseQuickJump("t#7"), { entity: "trade", no: 7 });
   });
 
   it("ignores case and surrounding space", () => {

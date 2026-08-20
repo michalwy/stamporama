@@ -46,6 +46,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | Auction sales and lots, bid anchors, bid recommendations, auction screens | [`docs/agents/auctions.md`](docs/agents/auctions.md) |
 | Market value, catalogue value, the Valuation dialog | [`docs/agents/valuation.md`](docs/agents/valuation.md) |
 | Purchases, intake, scan-sheet ingest, delivery/disposal, sorting, storing, ROI | [`docs/agents/purchases-and-intake.md`](docs/agents/purchases-and-intake.md) |
+| Trades, trade sections and lines, balancing, the trade lifecycle | [`docs/agents/trades.md`](docs/agents/trades.md) |
 | Stamps, issues, formats, subtypes, catalog numbers, checklists, wants | [`docs/agents/catalog-and-stamps.md`](docs/agents/catalog-and-stamps.md) |
 | Copies list, grouping, duplicates, copy counts, detail pages | [`docs/agents/inventory-lists.md`](docs/agents/inventory-lists.md) |
 | Dialogs, escape handling, sidebar, settings placement, notifications | [`docs/agents/ui-shell.md`](docs/agents/ui-shell.md) |
@@ -64,6 +65,7 @@ These hold on every task, whatever you are building. Each is stated in full — 
 - `collectionId` scopes all collection data; authorization is checked **server-side**, never in the client. Collection URLs are `/c/[collectionSlug]/...` and the slug resolves to an internal `collectionId`. → `platform.md`
 - Keep domain logic out of UI components. Respect the explicit module boundaries under `src/`. → `platform.md`
 - Treat Prisma schema changes as product decisions. Write migration SQL **by hand**; never run `prisma migrate dev`, `prisma migrate reset`, or `prisma db push`. → `platform.md`
+- **Never edit a migration that has been written — correct it with a new one.** Applies even to one written minutes ago in the same session and not yet committed. → `platform.md`
 - A migration that **renumbers a column covered by a unique index must drop that index first**. → `platform.md`
 - A **server component must not import a value from a `"use client"` module** — under RSC those exports arrive as client references, and nothing warns. → `platform.md`
 - Binary assets go through the `src/lib/storage/` interface, never straight to the filesystem. → `storage-and-jobs.md`

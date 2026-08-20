@@ -19,6 +19,9 @@ import { quickJumpLabel, type QuickJumpTarget } from "./quick-jump";
 //     canonical URL: this is the same address a marketplace note carries, so a jump and a followed
 //     link are the same journey.
 //   • purchase, sale → their own detail screens.
+//   • trade → the trade list, filtered to that number, for the reason a copy and an issue land
+//     there: it has no screen of its own yet (#637 builds one), and the filtered list already
+//     reads correctly.
 //   • auction lot → its **sale's** screen with the lot highlighted, which is exactly what clicking
 //     the lot on the watchlist does (#374). A lot is read in the company of its parcel.
 
@@ -92,6 +95,17 @@ export async function resolveQuickJump(
       });
       if (!issue) return null;
       return { href: `${base}/issues?search=${encodeURIComponent(`#${no}`)}` };
+    }
+
+    case "trade": {
+      const trade = await prisma.trade.findUnique({
+        where: { collectionId_tradeNo: { collectionId, tradeNo: no } },
+        select: { id: true },
+      });
+      if (!trade) return null;
+      // The list filtered to that number, as a copy and an issue are: a trade has no screen of its
+      // own until #637, and the filtered list is the one place the number already reads correctly.
+      return { href: `${base}/trades?search=${encodeURIComponent(`#${no}`)}` };
     }
 
     case "auctionLot": {

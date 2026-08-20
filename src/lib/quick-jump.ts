@@ -18,7 +18,8 @@ export type QuickJumpEntity =
   | "purchase"
   | "sale"
   | "issue"
-  | "auctionLot";
+  | "auctionLot"
+  | "trade";
 
 export interface QuickJumpPrefix {
   /** What the collector types. Lower-case; input is lower-cased before matching. */
@@ -44,6 +45,7 @@ export const QUICK_JUMP_PREFIXES: readonly QuickJumpPrefix[] = [
   { prefix: "s", entity: "sale", label: "sale" },
   { prefix: "iss", entity: "issue", label: "issue" },
   { prefix: "lot", entity: "auctionLot", label: "auction lot" },
+  { prefix: "t", entity: "trade", label: "trade" },
 ];
 
 export interface QuickJumpTarget {

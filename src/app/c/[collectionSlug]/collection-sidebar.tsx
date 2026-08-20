@@ -380,15 +380,24 @@ export function CollectionSidebar({
           />
         </NavGroup>
 
-        {/* Contacts serves both directions — the same address book holds the house you bid with and
-            the marketplace you list on — so it sits under neither heading, set apart by spacing
-            instead of taking a one-item section of its own. */}
+        {/* Two entries that serve **both** directions, so they sit under neither heading and are set
+            apart by spacing instead of taking a section label each (#646). A trade is the one part
+            of the hobby where the two directions are the same act — material leaves and material
+            arrives in one agreement — so filing it under Selling or Buying would have been picking
+            one half of it. Contacts is the same kind of entry: one address book holds the house you
+            bid with, the marketplace you list on and the collector you swap with. */}
+        <NavItem
+          href={`${base}/trades`}
+          icon={<Icon name="trades" />}
+          label="Trades"
+          active={isActive(`${base}/trades`)}
+          spacedAbove
+        />
         <NavItem
           href={`${base}/contacts`}
           icon={<Icon name="contacts" />}
           label="Contacts"
           active={isActive(`${base}/contacts`)}
-          spacedAbove
         />
       </nav>
 

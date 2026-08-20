@@ -68,6 +68,7 @@ import {
   GripVertical,
   Group,
   HandCoins,
+  Handshake,
   House,
   ImageOff,
   Layers,
@@ -141,6 +142,9 @@ const GLYPHS = {
    *  thing being *aimed at*. */
   wants: Crosshair,
   auctions: Gavel,
+  /** An exchange with another collector (#646). A handshake, not the `move` arrows: those name a
+   *  thing being relocated, while a trade is an agreement between two people. */
+  trades: Handshake,
   contacts: Users,
   settings: Settings,
   signOut: LogOut,
