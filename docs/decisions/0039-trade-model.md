@@ -96,7 +96,9 @@ shape**, never an edit made quietly to the thing both sides shook hands on.
 
 A negotiation goes back and forth several times. Were "responded" a status, every round would mean
 clicking a state back and forth by hand, and the column would record the collector's diligence rather
-than the trade. It is derived from partner feedback instead.
+than the trade. It is derived from partner feedback instead. Concretely (§10): it is on while the trade has
+feedback nobody has accepted or dismissed, so it clears itself as the collector works through the
+inbox and comes back when the partner answers again.
 
 ### 7. Two valuations, never merged — and the agreed catalog is a **vendor**
 
@@ -197,10 +199,40 @@ the trade's, each named. #640's issue asked for both totals converted into `Trad
 written before §7 existed, and re-converting an own total would invent a third figure nobody could
 check. What the issue was after — a rate note — is printed from `TradeFxRate`.
 
-**The page is server-rendered whole, with no client bundle**, because its second job is to be printed
-and a list that prints only what has been scrolled to is not a list. The one interactive thing on it,
-how the material is arranged, is therefore links rather than state: the partner gets the trade screen's
-own grouping levels, and an arrangement is a different address for the same page.
+**The page is server-rendered whole**, because its second job is to be printed and a list that prints
+only what has been scrolled to is not a list. How the material is arranged is therefore links rather
+than state: the partner gets the trade screen's own grouping levels, and an arrangement is a different
+address for the same page. The page carried **no client bundle at all** until #641 gave it something
+to say back; see §10, which revises that half of this sentence and leaves the rest of it standing —
+the *list* is still one server render, and what prints is still all of it.
+
+### 10. Partner feedback is feedback, never an edit — and *responded* falls out of it
+
+The partner needs a way to answer (#641), and the shape of that answer is decided by one thing: **a
+list must not rearrange itself under the person who agreed it**. So feedback is a separate record —
+`TradeFeedback`, one row per line the partner marked or wrote on plus at most one about the whole
+exchange — and the collector accepts or ignores each item. Accepting a rejection deletes the line, and
+that is the collector's act, subject to the same lock every other line write obeys (§5): while the
+trade is `agreed` the removal is refused **by name**, with the step that would unfreeze it. Past
+`agreed` partner input is therefore a *request to reopen* rather than a change, which is exactly what
+the lock means; `closed` takes nothing more.
+
+**One row per line, replaced rather than appended.** There are no accounts on that page and no
+per-person attribution: one trade, one partner, one link (§9), so a second row for the same line would
+be the same person talking over themselves. `lineId` is unique for that, and the whole-trade row is
+held to one by a partial unique index. Saying nothing — no mark, no words — deletes the row, because
+an empty row would sit in the inbox reading as feedback and containing none.
+
+**Unresolved is unread**, and there is no separate read marker. An item is in the collector's inbox
+until it is accepted or dismissed, and an edit by the partner clears the resolution and puts it back.
+That is what §6's derived badge is read off: *Partner has responded* is `open > 0` on the trade's own
+screen and on its list row, so working through the inbox is what clears it.
+
+**The controls are the page's first client code, and only the controls.** An answer is given one line
+at a time, and a Send button under two hundred rows is a button somebody forgets to press — so each
+control saves its own line the moment it is given, through a `POST` route of the token's own beside
+the photo route, rate-limited like everything else reachable without a session. The list around them
+is still one server render, and on paper the boxes disappear while what was typed into them stays.
 
 ## Consequences
 
@@ -229,6 +261,10 @@ own grouping levels, and an arrangement is a different address for the same page
   kind of caller taught to the collection-scoped one — a mistake in that route would be a mistake
   about a whole collection instead of about one list. It also added `rate-limit.ts`, in-process and
   coarse, because a bearer token in a URL is the one thing here an account is not.
+- #641 shipped `trade_feedback`, one `POST /api/t/[token]/feedback` route, and the partner page's
+  first client code — the per-line control and the note box, and nothing else. It also lifted the
+  line labeller out of the balancing engine into `trade-line-label.ts`, so a line named in a
+  valuation refusal and the same line named in the feedback inbox are recognisably the same line.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

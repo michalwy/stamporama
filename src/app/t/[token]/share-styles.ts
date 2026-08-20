@@ -163,8 +163,63 @@ export const SHARE_STYLESHEET = `
 
 .ts-refusal { max-width: 32rem; margin: 6rem auto; text-align: center; }
 
+/* **What the partner says back** (#641). The one part of this page that is client code, and it is
+   kept visually quiet: a list is for reading, and a control per line that shouted would turn a
+   hundred stamps into a hundred forms. On paper the boxes go and the words stay. */
+.ts-fb {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.ts-fb-toggle { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; cursor: pointer; }
+.ts-fb-input {
+  flex: 1;
+  min-width: 8rem;
+  font: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.35rem;
+}
+.ts-fb-textarea {
+  width: 100%;
+  max-width: 40rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.5rem;
+  box-sizing: border-box;
+  margin-top: 0.4rem;
+}
+.ts-fb-state { white-space: nowrap; }
+.ts-fb-bad { color: var(--color-error); }
+.ts-fb-said { display: inline-flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
+.ts-fb-mark {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.25rem;
+  padding: 0 0.3rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ts-fb-quote { font-style: italic; }
+.ts-fb-box { margin: 2rem 0 0; }
+.ts-fb-heading { font-size: 1.0625rem; font-weight: 600; margin: 0; }
+/* Shown only on paper: the boxes above cannot be read there, but what was typed into them can. */
+.ts-print-only { display: none; }
+
 @media print {
   .ts-print-hide { display: none !important; }
+  .ts-print-only { display: inline; }
+  .ts-fb { color: #000; }
+  .ts-fb-mark { border-color: #999; }
   .ts-page { max-width: none; padding: 0; font-size: 0.75rem; color: #000; }
   .ts-row, .ts-side-head, .ts-totals, .ts-rule, .ts-thumb { border-color: #999; }
   .ts-parties, .ts-note, .ts-side-count, .ts-line2, .ts-group-detail, .ts-group-count,

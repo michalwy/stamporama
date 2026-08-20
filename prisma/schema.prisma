@@ -3254,6 +3254,9 @@ model Trade {
   fxRates       TradeFxRate[]
   /** The partner's read-only link (#640), or none. At most one — see {@link TradeShareToken}. */
   shareToken    TradeShareToken?
+  /** What the partner said back through that link (#641). One row per line they marked or wrote on,
+   *  plus at most one about the whole trade. See {@link TradeFeedback}. */
+  feedback      TradeFeedback[]
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3367,6 +3370,9 @@ model TradeLine {
   /** What this line was worth the day the trade was agreed (#638). Empty while the trade is still
    *  editable — a live trade is valued live — and written on the move to `agreed`. */
   valuations        TradeLineValuation[]
+  /** What the partner said about this line (#641). At most one — one trade, one partner, one link,
+   *  so a second row would be the same person talking over themselves. */
+  feedback          TradeFeedback?
 
   // One copy cannot be on the same trade twice. Nulls are distinct in Postgres, so this constrains
   // the give side only and leaves the receive side alone — which is right: two receive lines for the
@@ -3502,6 +3508,56 @@ model TradeShareToken {
   trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@map("trade_share_token")
+}
+
+// **What the partner said back** (#641; ADR-0039 §10).
+//
+// One row is one thing the partner has to say: a note on a line, a line struck out, a note about the
+// whole exchange. Feedback **never edits the list** — it lands here and the collector accepts or
+// ignores it. A list that rearranged itself under the person who agreed it would be worse than no
+// feedback at all, and past `agreed` the list is locked anyway, so partner input there is a request
+// to reopen rather than a change.
+//
+// **One row per line, and at most one about the trade.** There are no accounts here and no
+// per-person attribution: one trade, one partner, one link, so a second row for the same line would
+// be the same person talking over themselves. Saying something again replaces what was said —
+// `lineId` is unique for that, and the whole-trade row (`lineId` null) is held to one by a partial
+// unique index the migration carries, which Prisma's schema language cannot express.
+//
+// **Unresolved is unread.** There is no separate read marker: an item sits in the collector's inbox
+// until it is accepted or dismissed, and a partner who edits it afterwards clears `resolvedAt` and
+// puts it back. That is what *Partner has responded* is derived from (ADR-0039 §6) — a badge, never
+// a status the collector has to maintain.
+model TradeFeedback {
+  id         String    @id @default(cuid())
+  tradeId    String
+  /** The line this is about, or null when it is about the whole trade. */
+  lineId     String?   @unique
+  /** The partner's own words. Null when striking the line out is all they did. */
+  note       String?
+  /** The partner does not want this line. **Never** true on the whole-trade row: there is no such
+   *  thing as rejecting an entire exchange through a note box, and a CHECK says so. What the word
+   *  means depends on the side and is worded per side on screen — *not wanted* of the collector's
+   *  material, *cannot send* of the partner's own. */
+  rejected   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  /** Bumped on every edit by the partner, which is also what puts a resolved item back in the inbox. */
+  updatedAt  DateTime  @updatedAt
+  /** Null while it is still in the inbox. */
+  resolvedAt DateTime?
+  /** `applied` | `dismissed`, and null while unresolved. What the collector did about it — kept
+   *  because *I removed the line* and *I decided to keep it* are different answers to give a
+   *  partner who asks again. */
+  resolution String?
+
+  trade Trade      @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  /** CASCADE: accepting a rejection deletes the line, and the request goes with the thing it was
+   *  about. The inbox states what is outstanding; it is not an archive of a list that has moved on. */
+  line  TradeLine? @relation(fields: [lineId], references: [id], onDelete: Cascade)
+
+  // Every read is "this trade's feedback", and the inbox narrows to the unresolved.
+  @@index([tradeId, resolvedAt])
+  @@map("trade_feedback")
 }
 
 model Contact {

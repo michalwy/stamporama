@@ -44,6 +44,7 @@ import { TradeBalanceSummary } from "./trade-balance-panel";
 import { TradeSectionCard } from "./trade-section-card";
 import { TradeSectionDialog } from "./trade-section-dialog";
 import { TradeShareDialog } from "./trade-share-dialog";
+import { TradeFeedbackPanel } from "./trade-feedback-panel";
 import { Icon } from "@/app/icons";
 
 // The trade's own screen (#637; ADR-0039): the terms at the top, then one card per section with the
@@ -369,6 +370,17 @@ export function TradeDetailPanel({
               <span style={CHIP}>Shared link</span>
             </Tooltip>
           )}
+          {/* **Partner has responded** — derived, never a status (ADR-0039 §6). It is on while the
+              inbox below has something in it, so working through the feedback is what clears it: a
+              negotiation goes back and forth several times, and a flag the collector had to set and
+              unset would record their diligence rather than the trade. */}
+          {(data?.feedback?.open ?? 0) > 0 && (
+            <Tooltip content="Your partner has left comments on this list. They are under the figures below.">
+              <span style={{ ...CHIP, color: "var(--color-accent)" }}>
+                <Icon name="feedback" size="sm" /> Partner has responded
+              </span>
+            </Tooltip>
+          )}
           <span style={{ flex: 1 }} />
           <RowActionsMenu actions={headerActions} ariaLabel="Trade actions" />
         </div>
@@ -437,6 +449,12 @@ export function TradeDetailPanel({
           reservation={data?.reservation}
           collectionSlug={collectionSlug}
         />
+
+        {/* **What the partner said back** (#641). Under the reservation for the same reason it is
+            under the balance: these are the things a collector reads before deciding the trade is
+            settled. Nothing here has changed the list — accepting a rejection is what takes a line
+            off it, and that is a decision made here. */}
+        <TradeFeedbackPanel feedback={data?.feedback} isPending={isPending} onRun={run} />
 
         {/* The lock, stated where it bites. A locked screen with no explanation reads as broken. */}
         {!editable && (

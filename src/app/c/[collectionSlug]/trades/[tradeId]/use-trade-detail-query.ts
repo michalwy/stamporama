@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import type { ItemListItem } from "@/lib/items";
 import type { TradeData } from "@/lib/trades";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
+import type { TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -20,6 +21,9 @@ export interface TradeDetailData {
    *  queries over the give side's ids, and because it is what the screen states so that the refusal
    *  on **Agree** is met before the button rather than by it. */
   reservation: TradeReservationRead;
+  /** What the partner said back through the shared link (#641), open items first. The badge on this
+   *  screen and on the list row is `open > 0` — derived, never a status (ADR-0039 §6). */
+  feedback: TradeFeedbackRead;
 }
 
 /** What one column is showing: its own arrangement, search and filters. Two columns hold two of

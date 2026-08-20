@@ -84,6 +84,7 @@ import {
   Maximize,
   Menu,
   Merge,
+  MessageSquare,
   Minus,
   Package,
   Pause,
@@ -233,6 +234,9 @@ const GLYPHS = {
   suggestion: Lightbulb,
   date: Calendar,
   notes: StickyNote,
+  /** What the partner said back through the shared link (#641). Told apart from `notes`, which is
+   *  the collector's own writing about their own record: this is somebody else talking. */
+  feedback: MessageSquare,
   location: MapPin,
   shipping: Truck,
   parcel: Package,

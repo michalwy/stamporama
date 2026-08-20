@@ -169,6 +169,17 @@ export function TradeRow({
               </span>
             </Tooltip>
           )}
+          {/* **Partner has responded** (#641). Derived from feedback nobody has dealt with yet, and
+              so it clears itself as the collector works through the inbox on the trade's own screen
+              — a status would have recorded how diligent they were rather than where the trade is
+              (ADR-0039 §6). */}
+          {t.hasPartnerFeedback && (
+            <Tooltip content="Your partner has left comments on this list">
+              <span style={{ ...CHIP, color: "var(--color-accent)" }}>
+                <Icon name="feedback" size="sm" /> responded
+              </span>
+            </Tooltip>
+          )}
         </div>
 
         {/* Line 3: what is on each side, and how the trade is balanced. */}

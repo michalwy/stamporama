@@ -322,6 +322,33 @@ Your partner can arrange the page themselves with the same **Group by** chips yo
 screen, and it is laid out to print: the whole list is on the page, not just what has been scrolled
 to, and printing it drops everything that is not the list.
 
+## What your partner can say back
+
+Your partner answers on the same page. Under each line there is a tick and a note box: the tick means
+*not wanted* on your side of the list and *cannot send* on theirs, and the note is for anything else —
+*already have this*, *is it the 1938 printing?*. At the foot of the page there is one more box for
+anything about the exchange as a whole. Each one saves on its own, the moment they leave it; there is
+no Send button to forget.
+
+**None of it changes your list.** A note or a tick lands as feedback, and what happens next is your
+decision. A list that rearranged itself under the person who agreed it would be worse than no feedback
+at all.
+
+Feedback comes back to you on the trade's own screen, in a panel under the figures: what the line is,
+which section it is in, what your partner said, and two buttons. On a line they have ticked, **Remove
+the line** takes it off the exchange and **Keep it** leaves it where it is. On a note there is nothing
+to apply, so it is **Done** or **Ignore** — both simply clear the item. Handled items stay, folded
+away behind *Show N handled*, because a remark you half remember is worth finding again.
+
+While there is anything you have not dealt with, the trade shows **Partner has responded** — on its
+own screen and on the trades list. It is worked out from the feedback itself, so it clears as you work
+through the panel; there is no flag to set or unset.
+
+Your partner can still comment once the exchange is *Agreed*. The list is locked at that point, so
+what they leave is a request to reopen rather than a change — and **Remove the line** is refused until
+you step the trade back to *Shared*. A closed exchange takes nothing more: the page still shows
+everything that was said, but the boxes are gone.
+
 ## Sending and receiving
 
 Sending and receiving are **two separate marks**, not stages. Parcels cross in the post, and the one

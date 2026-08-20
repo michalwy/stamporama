@@ -135,6 +135,10 @@ export interface TradeListItem {
   receiveCount: number;
   /** Pieces on the receive side — the sum of the lines' quantities, which is not their count. */
   receiveQuantity: number;
+  /** **Partner has responded** — derived from feedback nobody has dealt with yet (#641), never a
+   *  status (ADR-0039 §6). A boolean rather than a count: a row has room to say that there is
+   *  something to read, and how much there is, is the trade's own screen's business. */
+  hasPartnerFeedback: boolean;
   createdAt: Date;
 }
 
@@ -301,6 +305,9 @@ export async function listTradesPaginated(
       // thousands, and the page is 50 rows — the same call `listPurchasesPaginated` makes for its
       // lot and expense totals.
       lines: { select: { side: true, quantity: true } },
+      // One row is enough: the badge says *there is something to read*, and reading it is the trade
+      // screen's job.
+      feedback: { where: { resolvedAt: null }, select: { id: true }, take: 1 },
       _count: { select: { sections: true } },
     },
   });
@@ -330,6 +337,7 @@ export async function listTradesPaginated(
     receiveQuantity: row.lines
       .filter((l) => l.side === "receive")
       .reduce((sum, l) => sum + l.quantity, 0),
+    hasPartnerFeedback: row.feedback.length > 0,
     createdAt: row.createdAt,
   }));
 

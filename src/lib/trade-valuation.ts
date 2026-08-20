@@ -7,9 +7,12 @@ import type { CopyValuation } from "./valuation";
 import { buildVendorCatalogMap, getCollectionBaseCurrency } from "./pricing";
 import { getOrFetchRate } from "./exchange-rates";
 import { readCollectionAreas } from "./areas";
-import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
-import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { isUnknownVariantStamp } from "./variant-classification";
+import {
+  LABEL_STAMP_SELECT,
+  makeTradeLineLabeller,
+} from "./trade-line-label";
 import {
   judgeTradeBalance,
   summariseTradeSide,
@@ -129,16 +132,6 @@ export interface TradeBalanceRead {
   blockers: TradeGateBlocker[];
 }
 
-/** What naming a line takes: the catalogue number and everything needed to prefix it the way every
- *  other stamp surface does (#357/#377), plus the variant flags the valuation key reads. */
-const LABEL_STAMP_SELECT = {
-  name: true,
-  catalogNumbers: { select: { catalogVendorId: true, number: true } },
-  stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-  issueMemberships: { select: { issueId: true }, take: 1 },
-  variants: { select: VARIANT_FLAG_SELECT },
-} satisfies Prisma.StampSelect;
-
 const LINE_SELECT = {
   id: true,
   sectionId: true,
@@ -196,56 +189,6 @@ function valuationKeyOf(row: LineRow): ValuationRow | null {
     certificateStatusId: source.certificateStatusId,
     formatId: source.formatId,
     unknownVariant: stamp ? isUnknownVariantStamp(stamp) : false,
-  };
-}
-
-type LabelStamp = Prisma.StampGetPayload<{ select: typeof LABEL_STAMP_SELECT }>;
-
-/**
- * How a line is named in a refusal (#418's shape).
- *
- * **The catalogue number leads, not the name.** A stamp's `name` is optional and in practice is
- * usually blank — a collector files by `Mi·PL 200`, not by *Chopin* — so a gate that named lines by
- * name would report "8 lines have no value yet: Unnamed stamp, Unnamed stamp, …" and send the
- * collector hunting through both sides of every section, which is the exact failure naming them was
- * meant to prevent. The leading number is the **primary** vendor's for the stamp's area, prefixed
- * exactly as every other stamp surface prints it (`formatStampCN`, #357/#377), so what the refusal
- * says and what the row shows are the same string. The name is the fallback, and a stamp with
- * neither is still worth naming badly rather than not at all.
- *
- * **Both sides read the same**, and deliberately so: the copy number a give line could also carry is
- * an internal handle, and putting it in front would make the two sides of one refusal look like two
- * different kinds of thing while adding nothing a collector reads a line by.
- */
-function makeLineLabeller(
-  areas: Awaited<ReturnType<typeof readCollectionAreas>>,
-  issuePrefixes: Awaited<ReturnType<typeof loadIssuePrefixMap>>
-): (row: LineRow) => string {
-  const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
-
-  const nameStamp = (stamp: LabelStamp | null): string => {
-    if (!stamp) return "Unidentified stamp";
-    const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
-    const areaId = link?.collectionAreaId ?? null;
-    const primaryVendorId = areaId ? (primaryVendorByArea.get(areaId) ?? null) : null;
-    const leading =
-      stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ??
-      stamp.catalogNumbers[0] ??
-      null;
-    if (leading) {
-      const issueId = stamp.issueMemberships[0]?.issueId ?? null;
-      return formatStampCN(
-        leading.number,
-        vendorMapFor(areaId, issueId).get(leading.catalogVendorId)
-      );
-    }
-    return stamp.name || "Unidentified stamp";
-  };
-
-  return (row) => {
-    const source = row.item ?? row;
-    const cond = source.condition?.abbreviation || source.condition?.name || "";
-    return `${nameStamp(source.stamp)}${cond ? ` (${cond})` : ""}`;
   };
 }
 
@@ -578,7 +521,7 @@ async function valueTrade(trade: TradeForBalance): Promise<{
     readCollectionAreas(trade.collectionId),
     loadIssuePrefixMap(trade.collectionId),
   ]);
-  const label = makeLineLabeller(areas, issuePrefixes);
+  const label = makeTradeLineLabeller(areas, issuePrefixes);
   const status = trade.status as TradeStatus;
   const editable = isTradeContentEditable(status);
   const hasSnapshot = trade.lines.some((l) => l.valuations.length > 0);

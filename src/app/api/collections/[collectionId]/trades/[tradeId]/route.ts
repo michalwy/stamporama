@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getTrade } from "@/lib/trades";
 import { readTradeReservation } from "@/lib/trade-reservations";
+import { readTradeFeedback } from "@/lib/trade-feedback";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -15,7 +16,12 @@ import { readTradeReservation } from "@/lib/trade-reservations";
  * which have left the collection since. Here rather than on the balance read because it costs two
  * light queries over the give side's ids, and because the screen has to be able to say why **Agree**
  * would be refused before anyone presses it — the same reason the valuation gate's blockers ride
- * along with the figures they are computed from. */
+ * along with the figures they are computed from.
+ *
+ * And it carries the **partner's feedback** (#641), for the third time the same reason: it is one
+ * small read over the trade's own rows, and *Partner has responded* is derived from it rather than
+ * being a status somebody keeps up to date — a badge that arrived on a second fetch would be a badge
+ * the screen renders once without. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string; tradeId: string }> }
@@ -32,8 +38,11 @@ export async function GET(
     if (!trade || trade.collectionId !== collectionId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const reservation = await readTradeReservation(tradeId);
-    return NextResponse.json({ trade, reservation });
+    const [reservation, feedback] = await Promise.all([
+      readTradeReservation(tradeId),
+      readTradeFeedback(session.user.id, tradeId),
+    ]);
+    return NextResponse.json({ trade, reservation, feedback });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

@@ -4,13 +4,20 @@ import type {
   TradeShareSideView,
   TradeShareTotalsView,
 } from "@/lib/trade-share";
+import type { TradeFeedbackEntry } from "@/lib/trade-feedback";
+import type { TradeSide } from "@/lib/trade-rules";
+import { LineFeedback } from "./feedback-controls";
 
 // One side of one section, on the partner's page (#640).
 //
-// A **server** component with no state and no client bundle. The collector's own column is a
-// TanStack-backed client list with filters, an endless scroll and a row menu on every line; none of
-// that has any business here. The partner is reading a list, possibly on paper, quite possibly on a
-// phone in a post office, and the whole list is already in the HTML by the time it arrives.
+// A **server** component. The collector's own column is a TanStack-backed client list with filters,
+// an endless scroll and a row menu on every line; none of that has any business here. The partner is
+// reading a list, possibly on paper, quite possibly on a phone in a post office, and the whole list
+// is already in the HTML by the time it arrives.
+//
+// The one piece of client code on the page hangs off each row — the feedback control (#641), which
+// saves one line's answer the moment it is given. The list around it is still one server render, so
+// what prints is still the whole list.
 //
 // The two sides are drawn by **one** component, unlike on the collector's screen where the give side
 // is a copy row and the receive side is its own. That asymmetry exists there because the two really
@@ -27,7 +34,20 @@ export function money(value: number, currency: string): string {
  *  thumbnail on a printed line is ink for no information. */
 const MAX_THUMBS = 3;
 
-export function ShareSide({ side, token }: { side: TradeShareSideView; token: string }) {
+export function ShareSide({
+  side,
+  token,
+  feedback,
+  canLeave,
+}: {
+  side: TradeShareSideView;
+  token: string;
+  /** What the partner has already said, by line id (#641). Rendered from the server's copy, so a
+   *  reload shows what was typed rather than an empty box. */
+  feedback: Record<string, TradeFeedbackEntry>;
+  /** Whether this exchange still takes comments. When it does not, what was said still shows. */
+  canLeave: boolean;
+}) {
   return (
     <div className="ts-side">
       <div className="ts-side-head">
@@ -62,7 +82,13 @@ export function ShareSide({ side, token }: { side: TradeShareSideView; token: st
                   </div>
                 );
               })}
-              <ShareLineRow line={line} token={token} />
+              <ShareLineRow
+                line={line}
+                token={token}
+                side={side.side}
+                feedback={feedback[line.lineId] ?? null}
+                canLeave={canLeave}
+              />
             </div>
           );
         })
@@ -84,7 +110,19 @@ export function countText(totals: TradeShareTotalsView): string {
   return `${totals.pieces} stamps (${totals.lines} lines)`;
 }
 
-function ShareLineRow({ line, token }: { line: TradeShareLineView; token: string }) {
+function ShareLineRow({
+  line,
+  token,
+  side,
+  feedback,
+  canLeave,
+}: {
+  line: TradeShareLineView;
+  token: string;
+  side: TradeSide;
+  feedback: TradeFeedbackEntry | null;
+  canLeave: boolean;
+}) {
   const issued = formatIssuedDate(line.issuedDay, line.issuedMonth, line.issuedYear);
   return (
     <div className="ts-row">
@@ -122,6 +160,17 @@ function ShareLineRow({ line, token }: { line: TradeShareLineView; token: string
           {line.issueLabel && <span>{line.issueLabel}</span>}
           {issued && <span>{issued}</span>}
         </div>
+
+        {/* What the partner has to say about this one line (#641). Under the stamp it is about,
+            because that is the only place a note about it can be read without a second reference —
+            and it changes nothing on the list, which is the whole bargain. */}
+        <LineFeedback
+          token={token}
+          lineId={line.lineId}
+          side={side}
+          initial={feedback}
+          disabled={!canLeave}
+        />
       </div>
 
       <div className="ts-right">

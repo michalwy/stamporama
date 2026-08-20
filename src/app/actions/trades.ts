@@ -35,6 +35,7 @@ import {
   revokeTradeShareToken,
   setTradeShareOptions,
 } from "@/lib/trade-share";
+import { resolveTradeFeedback } from "@/lib/trade-feedback";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -525,5 +526,28 @@ export async function revokeTradeShareLinkAction(tradeId: string): Promise<Trade
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to withdraw the link. Please try again.") };
+  }
+}
+
+// ── The partner's answers (#641) ─────────────────────────────────────────────────────────────────
+
+/**
+ * Deal with one thing the partner said: act on it, or decide against it.
+ *
+ * Accepting a **rejection** is the one act here that touches the list — the line comes off it — and
+ * it is refused by name while the list is locked, with the step that would unlock it. Everything else
+ * only records what the collector decided, which is what empties the inbox and, with it, clears the
+ * derived *Partner has responded* badge.
+ */
+export async function resolveTradeFeedbackAction(
+  feedbackId: string,
+  action: "accept" | "dismiss"
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await resolveTradeFeedback(session.user.id, feedbackId, action);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to update the feedback. Please try again.") };
   }
 }

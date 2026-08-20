@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
 import { readTradeShareView, verifyTradeShareToken, type TradeShareView } from "@/lib/trade-share";
+import { readPartnerTradeFeedback } from "@/lib/trade-feedback";
 import { TRADE_SHARE_REFUSAL_MESSAGE, type TradeShareRefusal } from "@/lib/trade-share-rules";
 import {
   TRADE_GROUP_LABEL,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/trade-grouping";
 import { SHARE_STYLESHEET } from "./share-styles";
 import { ShareSide, countText, money } from "./share-side";
+import { TradeNoteFeedback } from "./feedback-controls";
 
 // **The partner's copy of the trade** (#640; ADR-0039 §9): a read-only page addressed by a secret
 // link, for someone with no account and no session.
@@ -25,10 +27,15 @@ import { ShareSide, countText, money } from "./share-side";
 // names. This file resolves a token and lays out what comes back; it asks no questions of its own,
 // so there is no query here that could be widened by accident.
 //
-// **Server-rendered whole, with no client bundle.** A partner will print this, and a list that only
-// prints what has been scrolled to is not a list. The one interactive thing on it — how the material
-// is arranged — is therefore links rather than state: a different arrangement is a different address
-// for the same page, which also means the partner can bookmark or forward the view they were reading.
+// **Server-rendered whole.** A partner will print this, and a list that only prints what has been
+// scrolled to is not a list — so every row is in the HTML on arrival, and how the material is
+// arranged is links rather than state: a different arrangement is a different address for the same
+// page, which also means the partner can bookmark or forward the view they were reading.
+//
+// The page took **no client code at all** until it began taking answers back (#641). It still takes
+// none for the list; what is client code is the feedback control on a row and the note box at the
+// foot, because an answer is given one line at a time and a Send button under two hundred rows is a
+// button somebody forgets to press. On paper they disappear and what was typed into them stays.
 
 export const metadata: Metadata = {
   title: "Exchange list",
@@ -71,7 +78,10 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
     (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).split(",")
   );
 
-  const view = await readTradeShareView(verified.access, levels);
+  const [view, feedback] = await Promise.all([
+    readTradeShareView(verified.access, levels),
+    readPartnerTradeFeedback(verified.access),
+  ]);
   // The token verified against a trade that has gone since. Told the same way a withdrawn link is:
   // the partner has no way to tell the two apart and nothing they could do differently either.
   if (!view) return <Refusal message={TRADE_SHARE_REFUSAL_MESSAGE.unknown} />;
@@ -99,7 +109,13 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
             <h2 className="ts-section-name">{section.name}</h2>
             <div className="ts-sides">
               {section.sides.map((side) => (
-                <ShareSide key={side.side} side={side} token={token} />
+                <ShareSide
+                  key={side.side}
+                  side={side}
+                  token={token}
+                  feedback={feedback.byLine}
+                  canLeave={feedback.canLeave}
+                />
               ))}
             </div>
           </section>
@@ -135,6 +151,19 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
         </div>
 
         <RateNote view={view} />
+
+        {/* **What the partner has to say about the exchange as a whole** (#641). At the foot, after
+            the totals, because that is the order the conversation happens in: the list is read, the
+            two sides are compared, and then somebody says *this is close enough* or *can we add
+            something mint*. Nothing said here changes the list — it lands in the collector's inbox
+            and they decide. */}
+        <TradeNoteFeedback
+          token={token}
+          initial={feedback.trade}
+          disabled={!feedback.canLeave}
+          closedMessage={feedback.closedMessage}
+          collectorName={view.collectorName}
+        />
       </main>
     </>
   );
