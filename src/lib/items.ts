@@ -1303,6 +1303,11 @@ export interface ItemListItem {
    * property of the goods. Ids only: the row resolves the names from the collection's contacts,
    * exactly as it resolves locations. */
   excludedPlatformIds: string[];
+  /** The **agreed** trade this copy is promised in (#639), or null. Not a stored flag: it is read
+   * off the trade, the same way `sold` is read off the sale line, so there is only ever one place
+   * for it to be wrong. A trade still being prepared or shared is deliberately absent — that is a
+   * negotiation, and it reserves nothing. */
+  promisedTo: { tradeId: string; tradeNo: number; partnerName: string } | null;
   /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null. */
   lotId: string | null;
   /** Owning lot's lifecycle status (`open | closed`), or null when the copy has no lot.
@@ -1377,6 +1382,19 @@ const ITEM_LIST_SELECT = {
   // The platforms this copy is kept off (#506) — the same relation the *not offered on X* filter
   // narrows by, so the row's chip and the worklist can never disagree.
   platformExclusions: { select: { platformId: true } },
+  // The agreed trade that has promised this copy away (#639), if any. Read here rather than looked
+  // up per screen because a commitment is a fact about the **copy** — a flag shown on a list is
+  // shown on the thing's own screen too, from the same source — and because the reservation gate
+  // refuses on exactly this relation, so the chip and the refusal cannot come to disagree. At most
+  // one: `@@unique([tradeId, itemId])` stops one trade naming a copy twice, and the gate stops a
+  // second agreed trade naming it at all.
+  tradeLines: {
+    where: { side: "give", trade: { status: "agreed" } },
+    take: 1,
+    select: {
+      trade: { select: { id: true, tradeNo: true, partner: { select: { name: true } } } },
+    },
+  },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
@@ -1460,6 +1478,13 @@ function toItemListItem(
     forSale: row.forSale,
     forTrade: row.forTrade,
     excludedPlatformIds: row.platformExclusions.map((e) => e.platformId),
+    promisedTo: row.tradeLines[0]
+      ? {
+          tradeId: row.tradeLines[0].trade.id,
+          tradeNo: row.tradeLines[0].trade.tradeNo,
+          partnerName: row.tradeLines[0].trade.partner.name,
+        }
+      : null,
     lotId: row.lotId,
     lotStatus: row.lot?.status ?? null,
     purchase: row.lot?.purchase

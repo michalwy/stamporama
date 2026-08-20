@@ -244,6 +244,30 @@ genuinely need to change what is on it. The trade's own header — the partner, 
 shipping marks — stays editable throughout, because recording that a parcel went out is not a change
 to what was agreed.
 
+## Promised copies and marketplace listings
+
+A copy promised in an **agreed** trade must not also be sold out from under it. Once a trade is
+agreed, the copies on your side of it are **committed**, and two things follow:
+
+- **A committed copy cannot go live on a marketplace.** Activating an offer that holds one is
+  refused, and the refusal names the trade and the partner. So is adding one to an offer that is
+  already live. Preparing such an offer is fine — a draft competes with nothing, and you may well be
+  getting ready for the day the trade falls through.
+- **A copy already live on a marketplace stops the trade being agreed.** The refusal names the
+  listing and the platform. Pause or withdraw it, then agree the trade.
+
+Only *Agreed* commits. While a trade is still *Preparing* or *Shared* you are negotiating, and
+nothing is held back; cancelling a trade, or closing it, releases everything it named.
+
+Where you see it: the copy carries a **Promised** chip on the Copies list and on its own screen,
+naming the trade; the offer says so in its header at every stage, with a link to the trade; and the
+trade states the collision itself, so you meet it while composing rather than when you press
+**Agree**.
+
+**If a promised copy leaves anyway** — it sells elsewhere, or you mark it no longer held — the trade
+says so as a warning. It never blocks anything: the copy has already gone, and refusing to record the
+agreement would not bring it back. What it needs is a decision about the line, not about the trade.
+
 ## The lifecycle
 
 | Status | What it means |
@@ -264,7 +288,8 @@ short, something swapped in — is a separate act, not an edit.
 
 A move that is not allowed is refused and says why, rather than doing nothing. So is a move that is
 allowed but not yet earned: sharing or agreeing a trade with an unvalued line on it is refused, and
-the refusal names the lines.
+the refusal names the lines. Agreeing is also refused while a copy on your side is live on a
+marketplace — see [Promised copies and marketplace listings](#promised-copies-and-marketplace-listings).
 
 ## Sending and receiving
 

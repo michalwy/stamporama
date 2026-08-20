@@ -1,4 +1,4 @@
-import type { TradeBalanceRule, TradeSide } from "./trade-rules";
+import { nameFew, type TradeBalanceRule, type TradeSide } from "./trade-rules";
 
 // **Does this trade balance, and what am I actually giving away?** (#638; ADR-0039 §7.)
 //
@@ -262,16 +262,13 @@ export function unvaluedAgreedLines(
   return values.filter((v) => coveredSectionIds.has(v.sectionId) && v.agreed === null);
 }
 
-/** How many offending lines a refusal names before it starts counting. Five is what fits in a
- *  sentence; past that the count is the useful half and the collector opens the screen anyway. */
-const NAMED_LIMIT = 5;
-
-/** The offending lines, in a sentence: `#00012 Chopin (MNH), #00013 …, and 4 more`. */
+/** The offending lines, in a sentence: `#00012 Chopin (MNH), #00013 …, and 4 more`.
+ *
+ * The counting is `nameFew`'s, in `trade-rules.ts`, because every refusal a trade makes names its
+ * offenders that way — the unvalued lines here, and the collisions reservation reports (#639) — and
+ * two of them cutting the list at different lengths would read as two different kinds of fault. */
 export function describeLines(lines: readonly TradeLineValue[]): string {
-  const named = lines.slice(0, NAMED_LIMIT).map((l) => l.label);
-  const rest = lines.length - named.length;
-  if (rest <= 0) return named.join(", ");
-  return `${named.join(", ")}, and ${rest} more`;
+  return nameFew(lines.map((l) => l.label));
 }
 
 /**

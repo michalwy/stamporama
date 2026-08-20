@@ -126,6 +126,12 @@ import {
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
 import type { OfferAreaYear } from "./listing-groups";
+import {
+  findCommittedCopies,
+  offerCommitmentRefusal,
+  readOfferCommitments,
+} from "./trade-reservations";
+import { describeCommittedCopies, type CommittedCopy } from "./trade-reservation-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -157,7 +163,11 @@ export type OfferBlockReason =
   /** Recording a listing (#412) without the URL that *is* the record. */
   | "no-url"
   /** Marking an offer ready (#418) while a listing precondition (#406) still fails. */
-  | "listing-preconditions";
+  | "listing-preconditions"
+  /** Going live, or adding to a live listing (#639), with a copy promised in an agreed trade. Its
+   *  own reason rather than a second wording of `not-eligible`: what is wrong is not the copy but a
+   *  commitment made elsewhere, and the fix is on the trade's screen. */
+  | "trade-committed";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -3389,6 +3399,12 @@ export interface OfferDetail {
   /** The offer's stamps as the platform's own catalogue knows them (#423), empty for a platform with
    * no module. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
+  /** The copies on this offer that are promised in an **agreed** trade (#639), each with the trade
+   * holding it. Non-empty is what makes **Activate** refuse — stated on the screen so the refusal is
+   * met before the button rather than by it, and reported at every state rather than only where it
+   * blocks: a collector composing a listing around a committed copy wants to know now, not at the
+   * moment they try to post it. */
+  tradeCommitments: CommittedCopy[];
   /** The Allegro listing this offer was published as through the API (#477), where there is one, and
    * the publication state this app last knew it in. Null on every offer published by hand and on
    * every platform that is not Allegro.
@@ -3914,6 +3930,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           ]
         : [],
     platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap, catalogIds),
+    // #639. Read off the sets this screen already has rather than by a query of its own, and asked
+    // of every offer whatever its state: what it says is *true about the copies*, and an offer whose
+    // stock is spoken for is worth knowing about while it is still being assembled.
+    tradeCommitments: await findCommittedCopies(
+      offer.collectionId,
+      offer.sets.flatMap((set) => set.items.map((i) => i.itemId))
+    ),
     allegroPublication:
       offer.allegroOfferId && offer.allegroPublishStatus
         ? { offerId: offer.allegroOfferId, status: offer.allegroPublishStatus }
@@ -4311,6 +4334,13 @@ export async function createOffer(
       "empty",
       `An offer can't start ${targetState} with no sets — compose it first, then advance it.`
     );
+  }
+  // Created straight as `active` (#257) skips the transition the reservation gate sits on, so it is
+  // asked here too (#639). Only for a live status: an offer created `preparing` around a promised
+  // copy is a draft, and drafts compete for nothing.
+  if (targetState === "active") {
+    const refusal = await offerCommitmentRefusal(collectionId, seedIds);
+    if (refusal) throw new OfferActionBlockedError("trade-committed", refusal);
   }
   // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
   // `active` skips the transition, so the same rule applies here.
@@ -5029,6 +5059,16 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       );
     }
   }
+  // Going live is where the trade reservation is asked (#639), and only there: a copy promised in an
+  // agreed trade must not also be sold out from under the promise. `preparing` and `ready` are not
+  // gated on it — an offer being assembled competes for nothing, and a collector may perfectly well
+  // prepare the listing they will post the day the trade falls through.
+  if (to === "active") {
+    const committed = await readOfferCommitments(ref.collectionId, offerId);
+    if (committed.length > 0) {
+      throw new OfferActionBlockedError("trade-committed", describeCommittedCopies(committed));
+    }
+  }
   // The same two targets also need an asking price (#336): an offer with no price is not prepared,
   // and publishing one is never intentional. On an auction the figure that has to exist is the
   // **starting** price (#449) — the current one is an observation, and an auction that is up with
@@ -5233,6 +5273,28 @@ async function nextSetSortOrder(offerId: string): Promise<number> {
   return (last._max.sortOrder ?? -1) + 1;
 }
 
+/** Refuse copies promised in an agreed trade from joining a listing that is **already live** (#639).
+ *
+ * The same collision the going-live gate refuses, arriving through the other door: adding a committed
+ * copy to an active offer puts it in front of buyers just as surely as activating the offer around it
+ * would. Asked only of an `active` offer, because that is the only state that competes for anything —
+ * composing a `preparing` or `ready` listing out of promised copies is how a collector gets ready for
+ * a trade that may yet fall through.
+ *
+ * Refuses the whole add **by name** rather than dropping the offending copies the way
+ * {@link assertAddableCopies} drops sold ones. A copy that has sold is gone and there is nothing to
+ * decide; a copy that is promised is a decision the collector has already made and may want to
+ * unmake, and silently leaving it out would hide the very fact they need. */
+async function assertNotCommittedElsewhere(
+  collectionId: string,
+  offerState: OfferState,
+  itemIds: readonly string[]
+): Promise<void> {
+  if (offerState !== "active") return;
+  const refusal = await offerCommitmentRefusal(collectionId, itemIds);
+  if (refusal) throw new OfferActionBlockedError("trade-committed", refusal);
+}
+
 /** Add one set (holding `itemIds`, sold together) to an offer. A single copy makes a single-item
  * set; several copies make a komplet. Returns the new set id. */
 export async function addOfferSet(
@@ -5250,6 +5312,7 @@ export async function addOfferSet(
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy to the set.");
   }
+  await assertNotCommittedElsewhere(ref.collectionId, ref.state, addable); // #639
   // Set/lot title (#210): an explicit title wins; otherwise pre-fill from the platform's configured
   // template over this set's copies. Null (no template) leaves the label derived from the copies.
   const explicit = title?.trim() || null;
@@ -5298,6 +5361,7 @@ export async function addOfferSetsPerCopy(
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy.");
   }
+  await assertNotCommittedElsewhere(ref.collectionId, ref.state, addable); // #639
   // Pre-fill each single-copy set's title from the platform's configured template (#210), computed
   // per copy so each stands alone. Null (no template) leaves each label derived from its copy.
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
@@ -5352,6 +5416,7 @@ export async function addItemsToOfferSet(
         : "None of those copies can be added — they may have sold or already be in this offer."
     );
   }
+  await assertNotCommittedElsewhere(ref.collectionId, ref.offerState, addable); // #639
   // Where the copies land (#306): a derived set stays derived (they slot into their catalog
   // positions), a hand-corrected one appends them at the end, in the order they were picked.
   const existing = await prisma.offerSetItem.findMany({

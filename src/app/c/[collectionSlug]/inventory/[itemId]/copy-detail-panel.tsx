@@ -139,6 +139,22 @@ export function CopyDetailPanel({
               token="error"
             />
           )}
+          {/* Promised in an agreed trade (#639) — the same fact the Copies list chips, from the same
+              source, because a flag shown on a list is shown on the thing's own screen too. Here it
+              is a link: the collector reading a copy's page and finding it committed wants the trade,
+              and the number alone would leave them to go and search for it. */}
+          {item.promisedTo && (
+            <Tooltip
+              content={`Promised to ${item.promisedTo.partnerName} in an agreed trade. It cannot go live on a marketplace while that stands.`}
+            >
+              <Link
+                href={`/c/${collectionSlug}/trades/${item.promisedTo.tradeId}`}
+                style={{ textDecoration: "none" }}
+              >
+                <StateChip label={`Promised — trade #${item.promisedTo.tradeNo}`} token="accent" />
+              </Link>
+            </Tooltip>
+          )}
         </DetailFullRow>
 
         <DetailColumns>

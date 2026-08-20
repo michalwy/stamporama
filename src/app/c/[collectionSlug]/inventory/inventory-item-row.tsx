@@ -846,6 +846,27 @@ export function InventoryItemRow({
               </span>
             </Tooltip>
           )}
+          {/* Promised in an agreed trade (#639). Chipped whenever it applies, for the disposal
+              chip's reason: a copy already committed to a partner is not a copy to list, and that
+              changes how *For sale* two chips to the left should be read. Accent rather than muted,
+              because it is a live obligation and not a preference — and it names the trade, since
+              what a collector does about it is open that trade. */}
+          {item.promisedTo && (
+            <Tooltip
+              content={`Promised to ${item.promisedTo.partnerName} in trade #${item.promisedTo.tradeNo}, which has been agreed. It cannot go live on a marketplace while that stands.`}
+            >
+              <span
+                style={{
+                  ...CHIP,
+                  color: "var(--color-accent)",
+                  borderColor: "var(--color-accent-border)",
+                  background: "var(--color-accent-soft)",
+                }}
+              >
+                <Icon name="trades" size="sm" /> Promised · #{item.promisedTo.tradeNo}
+              </span>
+            </Tooltip>
+          )}
           {/* Never listed on these platforms (#506). One chip whatever the number of platforms —
               it is a single decision about where this copy is *not* sold, and a chip each would
               grow with a list nobody reads across. Muted, because it says what will not happen. */}

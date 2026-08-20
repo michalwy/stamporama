@@ -180,6 +180,11 @@ exchanges answering to "trade 7" would be worse here than anywhere.
   also lifted the three access guards into `trade-access.ts`, below both halves of the domain, so
   that `trades.ts` calling the engine's gate and the engine calling those guards is not a cycle —
   the same move `item-valuation.ts` made for `items.ts` and `market-values.ts`.
+- #639 shipped **none**, which is the rule holding rather than an exception to it: reservation is a
+  give line on an agreed trade and a live listing is an active offer, so both questions are asked of
+  records that already answer them. A flag on `Item` would be a second place for the truth to live,
+  and the day it disagreed with the trade there would be no way to tell which was right — the same
+  reasoning that makes `SaleLineItem` the record of a sale.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

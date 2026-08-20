@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { TradeSectionData } from "@/lib/trades";
+import type { TradeReservationRead } from "@/lib/trade-reservations";
 import {
   TRADE_STATUS_LABEL,
   TRADE_STATUS_TONE,
@@ -404,6 +405,16 @@ export function TradeDetailPanel({
           onRun={run}
         />
 
+        {/* **The reservation** (#639): what stands between this trade and being agreed, and what has
+            gone wrong with it since. Under the balance, because both are things the collector reads
+            before deciding the trade is settled, and stated here rather than met as a refusal when
+            **Agree** is pressed — a blocker discovered by pressing a button is one discovered at the
+            worst moment. */}
+        <TradeReservationNotice
+          reservation={data?.reservation}
+          collectionSlug={collectionSlug}
+        />
+
         {/* The lock, stated where it bites. A locked screen with no explanation reads as broken. */}
         {!editable && (
           <p
@@ -629,4 +640,84 @@ export function TradeDetailPanel({
       )}
     </>
   );
+}
+
+/**
+ * **The reservation, stated on the trade** (#639).
+ *
+ * Two notices and not one, because they are two different kinds of fact and a collector acts on them
+ * differently:
+ *
+ *  - **A collision blocks.** A give-side copy that is live on a marketplace stops this trade being
+ *    agreed, because promising a partner a stamp a stranger can buy in the next minute is a promise
+ *    that cannot be kept. Drawn in error, and it names the listings, because what resolves it is
+ *    pausing or withdrawing one of them.
+ *  - **A departure warns, and never blocks.** A promised copy that has sold elsewhere or stopped
+ *    being held is already gone; refusing to record the agreement would not bring it back. Drawn in
+ *    warning, and what resolves it is a withdrawal (#642).
+ *
+ * Absent entirely when there is nothing to say — a panel that draws an empty reassurance on every
+ * trade is a panel a collector stops reading.
+ */
+function TradeReservationNotice({
+  reservation,
+  collectionSlug,
+}: {
+  reservation: TradeReservationRead | undefined;
+  collectionSlug: string;
+}) {
+  if (!reservation) return null;
+  const { listed, messages } = reservation;
+  if (!messages.listed && messages.departed.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
+      {messages.listed && (
+        <div style={noticeStyle("error")}>
+          <p style={NOTICE_TEXT}>
+            <Icon name="warning" size="sm" /> {messages.listed}
+          </p>
+          {/* One link per colliding listing. The sentence above already names them; these are what
+              turns "go and find offer #14" into a click, which is the whole difference between a
+              refusal a collector can act on and one they have to work around. */}
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.375rem" }}>
+            {[...new Map(listed.map((c) => [c.offer.offerId, c.offer])).values()].map((offer) => (
+              <Link
+                key={offer.offerId}
+                href={`/c/${collectionSlug}/offers/${offer.offerId}`}
+                style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                <Icon name="sell" size="sm" /> #{offer.offerNo} on {offer.platformName}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      {messages.departed.length > 0 && (
+        <div style={noticeStyle("warning")}>
+          {messages.departed.map((message) => (
+            <p key={message} style={NOTICE_TEXT}>
+              <Icon name="warning" size="sm" /> {message}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const NOTICE_TEXT: React.CSSProperties = {
+  margin: 0,
+  fontSize: "0.8125rem",
+  lineHeight: 1.5,
+  color: "var(--color-text-primary)",
+};
+
+function noticeStyle(token: "error" | "warning"): React.CSSProperties {
+  return {
+    padding: "0.625rem 0.75rem",
+    borderRadius: "0.5rem",
+    border: `1px solid var(--color-${token}-border)`,
+    background: `var(--color-${token}-soft)`,
+  };
 }

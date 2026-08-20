@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useToast } from "@/app/toast-provider";
@@ -56,6 +57,7 @@ import {
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
+import { describeCommittedCopies } from "@/lib/trade-reservation-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -902,6 +904,51 @@ export function OfferDetailPanel({
             more sets below has sold elsewhere. Update the listing on the platform, then remove the
             affected set(s) here (or withdraw the offer).
           </p>
+        )}
+
+        {/* Promised in an agreed trade (#639), stated beside the control that would be refused for
+            it. Drawn at **every** state and not only where it blocks: an offer being assembled out of
+            stock that is already spoken for is worth knowing about while there is still time to
+            compose it differently, and a notice that appeared only on the press of Activate would
+            appear at the worst possible moment. The trades are links, because what resolves this is
+            on their screens — a withdrawal (#642), or calling the trade off. */}
+        {offer.tradeCommitments.length > 0 && (
+          <div
+            style={{
+              margin: "0.75rem 0 0",
+              padding: "0.625rem 0.75rem",
+              borderRadius: "0.5rem",
+              border: "1px solid var(--color-error-border, var(--color-border))",
+              background: "var(--color-error-soft, var(--color-bg-muted))",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              <strong style={{ color: "var(--color-error)" }}>Promised elsewhere:</strong>{" "}
+              {describeCommittedCopies(offer.tradeCommitments)}
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.375rem" }}>
+              {[
+                ...new Map(offer.tradeCommitments.map((c) => [c.trade.tradeId, c.trade])).values(),
+              ].map((trade) => (
+                <Link
+                  key={trade.tradeId}
+                  href={`/c/${collectionSlug}/trades/${trade.tradeId}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                    color: "var(--color-accent)",
+                    textDecoration: "none",
+                    fontWeight: 500,
+                  }}
+                >
+                  <Icon name="trades" size="sm" /> Trade #{trade.tradeNo} — {trade.partnerName}
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* How the Assistant's handoff went (#414), in the header the button that started it lives

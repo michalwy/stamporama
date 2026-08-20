@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ItemListItem } from "@/lib/items";
 import type { TradeData } from "@/lib/trades";
+import type { TradeReservationRead } from "@/lib/trade-reservations";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -14,6 +15,11 @@ import type { TradeSide } from "@/lib/trade-rules";
 
 export interface TradeDetailData {
   trade: TradeData;
+  /** The reservation (#639): promised copies live on a marketplace, and promised copies that have
+   *  since left. Rides with the header rather than with the figures because it costs two light
+   *  queries over the give side's ids, and because it is what the screen states so that the refusal
+   *  on **Agree** is met before the button rather than by it. */
+  reservation: TradeReservationRead;
 }
 
 /** What one column is showing: its own arrangement, search and filters. Two columns hold two of

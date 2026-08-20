@@ -1251,6 +1251,20 @@ that too — see [The same stamp in the same
 condition](inventory.md#the-same-stamp-in-the-same-condition). It is likewise a warning and never a
 block.
 
+## Copies promised in a trade
+
+A copy on the giving side of an **agreed** [trade](trades.md) is committed to your partner, and
+Stamporama will not let it go on sale underneath them. An offer holding one says so in its header —
+naming the trade and the partner, with a link to it — at every stage, so you see it while the listing
+is still being put together.
+
+**Activating** such an offer is refused, and so is adding a committed copy to an offer that is
+already live. Preparing and marking ready are both fine: a draft is not on sale, and getting one
+ready for the day a trade falls through is a reasonable thing to do.
+
+To clear it, deal with the trade — withdraw the line, or cancel the trade — and the offer activates
+normally. A trade that is only *Preparing* or *Shared* commits nothing and never blocks a listing.
+
 ## Listing the same thing on another platform
 
 To offer the same stamps on a second marketplace, you don't re-compose them by hand. From an
@@ -1484,7 +1498,9 @@ reasons a listing gets flagged — a copy sold elsewhere, and a copy under a liv
 The lifecycle is linear but reversible: **Preparing → Ready → Active ↔ Paused**, with **Withdrawn**
 reachable from any live state. The states are **orientational** — they help you sort and filter your
 listings. They don't restrict composing: you can add sets or copies to a Preparing, Ready, Active, or
-Paused offer alike; only Withdrawn and Sold offers are frozen.
+Paused offer alike; only Withdrawn and Sold offers are frozen — with one exception, a copy promised in
+an agreed [trade](trades.md), which cannot join an offer that is already live. See [Copies promised in
+a trade](#copies-promised-in-a-trade).
 
 Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
 currency it was created with as a permanent record; only new offers and sales use the new currency.

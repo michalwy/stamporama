@@ -11,6 +11,7 @@ import {
   type TradeStatus,
 } from "./trade-rules";
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
+import { tradeListingRefusal } from "./trade-reservations";
 import {
   freezeTradeRates,
   freezeTradeValuations,
@@ -500,6 +501,10 @@ export async function updateTrade(
  *     two sides negotiated under, refreshable while the negotiation runs (`refreshTradeRates`).
  *   - **Into `agreed`**: both valuations freeze onto the lines, and back out of it they are
  *     released. One rule: what is editable is not frozen.
+ *
+ * And one more at `agreed` alone (#639): the give side is committed there, so a copy already live on
+ * a marketplace is refused by name. See `trade-reservations.ts` — it is the mirror of the gate the
+ * offer's own move to `active` runs, one collision refused from whichever end it is met at.
  */
 export async function setTradeStatus(
   ownerId: string,
@@ -524,6 +529,18 @@ export async function setTradeStatus(
         `This trade cannot be ${verb} yet. ${blockers.map((b) => b.message).join(" ")}`
       );
     }
+  }
+
+  // Agreeing is the moment the give side is committed (#639), so it is the moment a copy already up
+  // on a marketplace has to be dealt with: promising a partner a stamp a stranger can buy in the
+  // next minute is a promise the collector cannot keep. Refused by name, like every other refusal a
+  // trade makes, and asked **only** at `agreed` — sharing a list is showing someone what you have,
+  // not committing it, and the mirror of this gate on the offer's end refuses at `active` for the
+  // same reason. Re-run on every attempt rather than stamped once: a copy listed the day after a
+  // failed attempt must not slip through on a check that passed then.
+  if (status === "agreed") {
+    const refusal = await tradeListingRefusal(tradeId);
+    if (refusal) throw new Error(`This trade cannot be agreed yet. ${refusal}`);
   }
 
   await prisma.trade.update({ where: { id: tradeId }, data: { status } });

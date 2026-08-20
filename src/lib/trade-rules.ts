@@ -199,3 +199,22 @@ function trimNumber(value: number): string {
 export function isTradeShippingComplete(sentAt: unknown, receivedAt: unknown): boolean {
   return sentAt != null && receivedAt != null;
 }
+
+/**
+ * How a trade names a handful of subjects in one sentence: `#00012 Chopin, #00013 Kopernik, and 4
+ * more`.
+ *
+ * Five is what fits in a sentence; past that the count is the useful half and the collector opens
+ * the screen anyway. One implementation, because every refusal a trade makes names its offenders
+ * this way — the unvalued lines (#638), the copies a listing collides with and the ones that have
+ * left (#639) — and two of them counting differently would read as two different kinds of fault.
+ */
+export function nameFew(labels: readonly string[]): string {
+  const named = labels.slice(0, NAMED_LIMIT);
+  const rest = labels.length - named.length;
+  if (rest <= 0) return named.join(", ");
+  return `${named.join(", ")}, and ${rest} more`;
+}
+
+/** How many subjects {@link nameFew} names before it starts counting. */
+const NAMED_LIMIT = 5;

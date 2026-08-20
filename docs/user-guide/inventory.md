@@ -343,6 +343,16 @@ To see what you have set aside — and to let any of it back in — pick the pla
 listed on…** in the same dropdown that carries the worklist. That list shows exactly the copies
 carrying the marking, whatever their disposition.
 
+### Promised in a trade
+
+A copy on the giving side of an **agreed** [trade](trades.md) carries a **Promised · #⟨trade⟩** chip
+on its row and on its own screen, naming the trade it is committed to. It is not a marking you set:
+it comes from the trade itself, and it goes when the trade closes or is cancelled.
+
+While it stands, that copy cannot go live on a marketplace — activating an offer that holds it is
+refused, naming the trade. Everything else about the copy is unaffected: it stays in your collection,
+keeps its location and its dispositions, and can still be prepared into a draft offer.
+
 If you later delete a platform contact, the markings that named it simply go with it.
 
 ## Viewing copies from the catalog
