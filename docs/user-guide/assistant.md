@@ -195,7 +195,7 @@ Nothing is lost either way: a confirmed write reached your collection the moment
 and the page is read afresh the next time you click the toolbar icon.
 
 **Write auto-matches** closes the window for you. It asks nothing first — the button already names
-exactly what it will do (*Write 8 auto-matches + 3 catalog numbers*), and an auto-match is one the
+exactly what it will do (*Write 8 auto-matches + 3 catalog numbers + 2 dates*), and an auto-match is one the
 matcher had no doubt about — then writes and closes as soon as your collection has answered, leaving
 you back on the page you were reading. It sends only the matches it just named, so writing one match on
 a page of two hundred stamps takes about as long as writing one on a page of one. The two writes that really are a decision still ask: linking one
@@ -217,8 +217,8 @@ Those rows are hidden by default. A row disappears only when **every** stamp it 
 already carries a Colnect ID; if one of the candidates is still free, the row stays, because that
 free stamp is most likely the answer.
 
-When there are hidden rows, a **Show N already linked elsewhere** checkbox appears beside *Fill
-missing catalog numbers* — tick it to bring them back and change one. It only filters what is on
+When there are hidden rows, a **Show N already linked elsewhere** checkbox appears beside the *Fill
+missing…* tick boxes — tick it to bring them back and change one. It only filters what is on
 screen (nothing is re-matched), and the extension remembers the setting.
 
 ## When Colnect's number disagrees with yours
@@ -249,6 +249,40 @@ Two things it will not do:
 - **Quietly create a [duplicate catalog number](duplicate-catalog-numbers.md).** If the new number is
   one another stamp already holds, the collection's own rule decides: under *block* the change is
   refused and the other stamp is named, under *warn* it is made and the collision reported.
+
+## When Colnect knows the date and you don't
+
+Your stamps are usually dated by year — a stamp starts from the year of the issue it was filed under,
+and a variant from the stamp it hangs beneath. A Colnect catalog page normally states the **day**:
+*Issued on: 1945-01-22*.
+
+So a match fills your date in too, for the parts of it you have none of. That is the **Fill missing
+issue dates** tick box beside *Fill missing catalog numbers* — its own switch, because wanting
+Colnect's numbers and wanting its dates are two separate appetites, and it is also in Options. A
+stamp dated `1945` matched against that page gains the month and the day and keeps its year; a stamp
+with no date at all gains all three. Nothing you typed is replaced, and where Colnect knows no more
+than you do — it prints a year, you already have the full date — nothing is proposed at all.
+
+The preview says so per stamp before anything is written, as a chip under the stamp's numbers:
+
+> `+ 22 Jan 1945`
+
+**A date the two sides state differently is only reported**, exactly as a disagreeing catalog number
+is: a match is not evidence that your date is the wrong one. The row shows both and offers the
+change:
+
+> `23 Jan 1945` → `22 Jan 1945`  **Use Colnect's**
+
+Clicking it replaces the stamp's date after a confirmation naming both values, and — like the number
+overwrite — it is offered only where the window knows which stamp it is talking about: a stamp
+already linked to the item, or a row with a single candidate.
+
+It replaces the date **whole**. If Colnect states only a year and you hold a full date whose year
+disagrees, taking Colnect's date leaves you with that year alone: your month and day belonged to a
+year you have just called wrong, and keeping them would store a date neither side ever stated.
+
+Only the matched stamp is dated. The **issue** it belongs to keeps its own year — that record covers
+many stamps, and one Colnect page is about one of them.
 
 ## Filling a sale form for you
 

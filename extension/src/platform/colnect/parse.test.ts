@@ -212,6 +212,46 @@ describe("extractColnect", () => {
   });
 });
 
+// The date of issue (#655) is taken from the card's own "Issued on" row, as far as the row goes.
+const DATED_CARDS = `
+<html><body>
+  <div class="pl-it">
+    <div class="ibox" data-xid="111"></div>
+    <a href="/en/stamps/stamp/111-Day/">Dated to the day</a>
+    <dl>
+      <dt>Issued on:</dt><dd><a href="/en/stamps/countries/year/1945">1945</a>-01-22</dd>
+      <dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 1</dd>
+    </dl>
+  </div>
+  <div class="pl-it">
+    <div class="ibox" data-xid="222"></div>
+    <a href="/en/stamps/stamp/222-Year/">Dated to the year</a>
+    <dl>
+      <dt>Issued on:</dt><dd>1998</dd>
+      <dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 2</dd>
+    </dl>
+  </div>
+  <div class="pl-it">
+    <div class="ibox" data-xid="333"></div>
+    <a href="/en/stamps/stamp/333-None/">Undated</a>
+    <dl><dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 3</dd></dl>
+  </div>
+</body></html>`;
+
+describe("the date of issue on a list page", () => {
+  it("keeps the printed value, as far as the page states it", () => {
+    const items = extractColnect(parseHTML(DATED_CARDS).document as unknown as Document);
+    assert.equal(items[0].issuedOn, "1945-01-22");
+    assert.equal(items[1].issuedOn, "1998");
+    assert.equal(items[2].issuedOn, undefined, "a card with no such row simply has no date");
+  });
+
+  it("does not inherit a neighbouring card's date", () => {
+    const items = extractColnect(doc());
+    assert.ok(items.every((i) => i.issuedOn === undefined));
+  });
+});
+
 describe("extractColnect on a single stamp's page", () => {
   it("extracts the minor variants and skips the main stamp", () => {
     const items = extractColnect(stampPageDoc());
@@ -235,12 +275,13 @@ describe("extractColnect on a single stamp's page", () => {
       ],
       imageUrl: "//i.colnect.net/t/8240/676/V1.jpg",
       country: "Poland",
-      issuedYear: 1945,
+      issuedOn: "1945-01-22",
     });
 
-    // Country and issue year come from the stamp page: a variant states neither of its own.
+    // Country and date of issue come from the stamp page: a variant states neither of its own, and
+    // the date is taken whole (#655) even though Colnect links only the year inside it.
     assert.equal(items[0].country, "Poland");
-    assert.equal(items[0].issuedYear, 1945);
+    assert.equal(items[0].issuedOn, "1945-01-22");
 
     // Unlisted is skipped, and a value containing a space survives intact.
     assert.deepEqual(items[1].catalogRefs, [{ catalog: "Pol", number: "PL 347a B10" }]);
@@ -293,7 +334,7 @@ describe("extractColnect on a search results page", () => {
     assert.equal(items[2].name, "Mother's Day (Dia de la Madre)");
     assert.deepEqual(items[2].catalogRefs, [{ catalog: "Gz", number: "AR 794a-TV" }]);
 
-    // A search result states no issue year.
-    assert.ok(items.every((i) => i.issuedYear === undefined));
+    // A search result states no date of issue.
+    assert.ok(items.every((i) => i.issuedOn === undefined));
   });
 });

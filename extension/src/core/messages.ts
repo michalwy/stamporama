@@ -1,7 +1,7 @@
 import type { ExtractedItem } from "../platform/types";
 import type { ListingFillOutcome, ListingTask } from "../platform/listing";
 import type { CapturedLot, CaptureRefusal } from "../platform/capture";
-import type { BackfillProposal, MatchResult } from "./decisions";
+import type { BackfillProposal, DateProposal, MatchResult } from "./decisions";
 import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
 import type { LotMarkerTarget } from "./lot-marker";
@@ -185,9 +185,12 @@ export interface ConfirmRequest {
   /** What the page printed for this item, so the chosen stamp can be backfilled in the same call
    *  (#280). Whether the backfill actually runs is the extension setting, applied by the worker. */
   catalogRefs?: { catalog: string; number: string }[];
+  /** The page's printed date of issue, travelling with the confirmation for the same reason the
+   *  numbers do (#655). Whether it is used is the extension setting, applied by the worker. */
+  issuedOn?: string;
 }
 export type ConfirmResponse =
-  | { ok: true; backfill: BackfillProposal[] }
+  | { ok: true; backfill: BackfillProposal[]; date: DateProposal | null }
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
 // popup → background: "Colnect is right about this number" (#433). One field of one stamp, taken
@@ -205,7 +208,24 @@ export type OverwriteNumberResponse =
   | { ok: true; label: string; duplicateStampNames?: string[] }
   | { ok: false; error: string };
 
-export type BackgroundRequest = MatchRequest | ConfirmRequest | OverwriteNumberRequest;
+// popup → background: "Colnect is right about when this was issued" (#655). The date the two sides
+// disagree about, settled one stamp at a time — the number overwrite's shape, on the one field a
+// stamp has for it. The value travels as the page printed it, so the instance reads exactly what
+// the matcher read when it reported the disagreement.
+export interface OverwriteDateRequest {
+  type: "overwrite-date";
+  stampId: string;
+  issuedOn: string;
+}
+export type OverwriteDateResponse =
+  | { ok: true; label: string }
+  | { ok: false; error: string };
+
+export type BackgroundRequest =
+  | MatchRequest
+  | ConfirmRequest
+  | OverwriteNumberRequest
+  | OverwriteDateRequest;
 
 // instance content script → background: "the collector handed this offer over" (#409). The worker
 // resolves the module, opens the sale form in a tab of its own and has it filled; the answer is what
@@ -284,6 +304,10 @@ export interface ListedResponse {
 export interface SlimItem {
   platformItemId: string;
   catalogRefs: ExtractedItem["catalogRefs"];
+  /** The printed date of issue (#655). Small enough to carry here, and it must be: the window
+   *  reuses this match as its preview, and a preview that omitted the dates would promise less than
+   *  the write it leads to. */
+  issuedOn?: string;
 }
 
 // content script → background: "this tab holds these items", on page load. The background sets the

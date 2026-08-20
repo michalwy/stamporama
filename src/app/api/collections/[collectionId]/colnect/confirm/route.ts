@@ -23,13 +23,16 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { colnectId, stampId, allowOverwrite, backfill, catalogRefs } = (body ?? {}) as {
-    colnectId?: unknown;
-    stampId?: unknown;
-    allowOverwrite?: unknown;
-    backfill?: unknown;
-    catalogRefs?: unknown;
-  };
+  const { colnectId, stampId, allowOverwrite, backfill, catalogRefs, issueDate, issuedOn } =
+    (body ?? {}) as {
+      colnectId?: unknown;
+      stampId?: unknown;
+      allowOverwrite?: unknown;
+      backfill?: unknown;
+      catalogRefs?: unknown;
+      issueDate?: unknown;
+      issuedOn?: unknown;
+    };
   if (typeof colnectId !== "string" || !colnectId.trim() || typeof stampId !== "string" || !stampId) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -48,14 +51,18 @@ export async function POST(
     : [];
 
   try {
-    const backfilled = await confirmColnectMatch(ownerId, collectionId, {
+    const written = await confirmColnectMatch(ownerId, collectionId, {
       colnectId: colnectId.trim(),
       stampId,
       allowOverwrite: allowOverwrite === true,
       backfill: backfill === true,
       catalogRefs: refs,
+      // The page's "Issued on" travels with the confirmation for the same reason its numbers do
+      // (#655): the chosen stamp is dated in the same call.
+      issueDate: issueDate === true,
+      ...(typeof issuedOn === "string" ? { issuedOn } : {}),
     });
-    return NextResponse.json({ ok: true, backfill: backfilled });
+    return NextResponse.json({ ok: true, backfill: written.backfill, date: written.date });
   } catch (err) {
     if (err instanceof ColnectMatchConflictError) {
       return NextResponse.json(

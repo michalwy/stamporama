@@ -148,26 +148,33 @@ function labelledText(root: Element | Document, label: string): string | undefin
   return (ddFor(root, label)?.textContent ?? "").trim() || undefined;
 }
 
-/** Year of issue from an "Issued on" row ("1945-01-22" → 1945). */
-function issuedYearOf(root: Element | Document): number | undefined {
-  const year = labelledText(root, "issued on")?.match(/\d{4}/)?.[0];
-  return year ? Number(year) : undefined;
+/**
+ * The date of issue printed in an "Issued on" row, verbatim as far as it goes: `"1945-01-22"`,
+ * `"1945-01"` or `"1945"` (#655). Taken as the first date-shaped run in the row rather than the
+ * whole text, because Colnect links the year — `<dd><a …>1945</a>-01-22</dd>` — and a row may carry
+ * a note after the date.
+ *
+ * The value is **not parsed here**: it travels to the instance as printed and is read there, so the
+ * window and the instance cannot disagree about what the page said.
+ */
+function issuedOnOf(root: Element | Document): string | undefined {
+  return labelledText(root, "issued on")?.match(/\d{4}(?:-\d{1,2}(?:-\d{1,2})?)?/)?.[0];
 }
 
 /**
- * Country and year for an item, so the Colnect side can show the same kind of detail as our stamp
- * (year · area). `fallback` is consulted only for variant rows, which state neither themselves —
+ * Country and date for an item, so the Colnect side can show the same kind of detail as our stamp
+ * (date · area). `fallback` is consulted only for variant rows, which state neither themselves —
  * both belong to the stamp whose page they are listed on. A card must never fall back to the
  * document, or it would inherit a neighbouring card's values.
  */
 function itemContext(
   root: Element,
   fallback: Document | null
-): { issuedYear?: number; country?: string } {
-  const issuedYear = issuedYearOf(root) ?? (fallback ? issuedYearOf(fallback) : undefined);
+): { issuedOn?: string; country?: string } {
+  const issuedOn = issuedOnOf(root) ?? (fallback ? issuedOnOf(fallback) : undefined);
   const country = labelledText(root, "country") ?? (fallback ? labelledText(fallback, "country") : undefined);
   return {
-    ...(issuedYear !== undefined ? { issuedYear } : {}),
+    ...(issuedOn ? { issuedOn } : {}),
     ...(country ? { country } : {}),
   };
 }

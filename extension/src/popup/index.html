@@ -257,6 +257,10 @@
           <input type="checkbox" id="backfill" checked />
           Fill missing catalog numbers
         </label>
+        <label class="opt" title="Take the date of issue Colnect prints for the parts of the date your stamp has none of — a stamp dated 1945 gains the month and day. A date the two sides disagree about is never overwritten on its own.">
+          <input type="checkbox" id="issueDate" checked />
+          Fill missing issue dates
+        </label>
         <label id="showLinkedOpt" class="opt" title="Stamps whose every candidate is already linked to another Colnect item. They need no decision unless you want to change one." hidden>
           <input type="checkbox" id="showLinked" />
           <span id="showLinkedLabel">Show already linked elsewhere</span>
@@ -273,6 +277,7 @@
         <span><span class="ref only-mine">Fi 4</span> only on your stamp</span>
         <span><span class="ref unmapped">AFA 5</span> catalog you don't keep</span>
         <span><span class="ref fill">+ Sn·PL 6</span> will be added to your stamp</span>
+        <span><span class="ref fill">+ 22 Jan 1945</span> the date Colnect prints, for a date you lack</span>
       </div>
       <div id="results"></div>
     </div>

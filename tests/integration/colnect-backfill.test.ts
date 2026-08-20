@@ -241,7 +241,7 @@ describe("Colnect catalog-number backfill", () => {
       catalogRefs: item.catalogRefs,
       backfill: true,
     });
-    assert.equal(blocked.find((p) => p.catalog === "Sn")?.status, "duplicate");
+    assert.equal(blocked.backfill.find((p) => p.catalog === "Sn")?.status, "duplicate");
     assert.equal((await numbersOf(s.stamps.dupTarget)).length, 1, "block mode wrote nothing");
 
     await prisma.collection.update({
@@ -254,7 +254,7 @@ describe("Colnect catalog-number backfill", () => {
       catalogRefs: item.catalogRefs,
       backfill: true,
     });
-    const sn = warned.find((p) => p.catalog === "Sn");
+    const sn = warned.backfill.find((p) => p.catalog === "Sn");
     assert.equal(sn?.status, "filled");
     assert.equal(sn?.duplicateWarning, true);
     assert.deepEqual(sn?.duplicateStampNames, ["Dup holder"]);
@@ -293,7 +293,7 @@ describe("Colnect catalog-number backfill", () => {
       catalogRefs: item.catalogRefs,
       backfill: true,
     });
-    assert.equal(applied.find((p) => p.catalog === "Sn")?.status, "filled");
+    assert.equal(applied.backfill.find((p) => p.catalog === "Sn")?.status, "filled");
 
     const picked = await numbersOf(s.stamps.pickA);
     assert.equal(picked.find((r) => r.catalogVendorId === s.sn)?.number, "901");
@@ -310,7 +310,7 @@ describe("Colnect catalog-number backfill", () => {
         { catalog: "Sn", number: "PL 902" },
       ],
     });
-    assert.deepEqual(applied, []);
+    assert.deepEqual(applied, { backfill: [], date: null });
     assert.equal((await numbersOf(s.stamps.pickB)).length, 1);
   });
 });

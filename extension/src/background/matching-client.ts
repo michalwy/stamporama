@@ -1,5 +1,5 @@
 import { normalizeBaseUrl, type Profile } from "../core/profile";
-import type { BackfillProposal, MatchResult } from "../core/decisions";
+import type { BackfillProposal, DateProposal, MatchResult } from "../core/decisions";
 import type { ExtractedItem } from "../platform/types";
 
 // The instance-facing HTTP client, run from the background service worker so host_permissions exempt
@@ -15,12 +15,14 @@ function authHeaders(profile: Profile): HeadersInit {
 }
 
 /** Run a batch through the matcher. `dryRun` computes decisions without persisting; `backfill` asks
- *  for the missing-catalog proposals (#280), which a real run also writes. */
+ *  for the missing-catalog proposals (#280) and `issueDate` for the date ones (#655), both of which
+ *  a real run also writes. */
 export async function callMatch(
   profile: Profile,
   items: ExtractedItem[],
   dryRun: boolean,
-  backfill: boolean
+  backfill: boolean,
+  issueDate: boolean
 ): Promise<MatchResult[]> {
   const res = await fetch(endpoint(profile, "match"), {
     method: "POST",
@@ -28,7 +30,12 @@ export async function callMatch(
     body: JSON.stringify({
       dryRun,
       backfill,
-      items: items.map((i) => ({ colnectId: i.platformItemId, catalogRefs: i.catalogRefs })),
+      issueDate,
+      items: items.map((i) => ({
+        colnectId: i.platformItemId,
+        catalogRefs: i.catalogRefs,
+        issuedOn: i.issuedOn,
+      })),
     }),
   });
   if (res.status === 401) throw new Error("Unauthorized — check the profile token.");
@@ -38,12 +45,13 @@ export async function callMatch(
 }
 
 export type ConfirmOutcome =
-  | { ok: true; backfill: BackfillProposal[] }
+  | { ok: true; backfill: BackfillProposal[]; date: DateProposal | null }
   | { ok: false; conflict: true; existingColnectId?: string }
   | { ok: false; conflict: false; error: string };
 
 /** Commit a chosen match, optionally backfilling the chosen stamp from the item's printed numbers
- *  (#280). A 409 surfaces as a conflict (existing different Colnect ID). */
+ *  (#280) and dating it from its printed date (#655). A 409 surfaces as a conflict (existing
+ *  different Colnect ID). */
 export async function callConfirm(
   profile: Profile,
   colnectId: string,
@@ -52,6 +60,8 @@ export async function callConfirm(
     allowOverwrite?: boolean;
     backfill?: boolean;
     catalogRefs?: { catalog: string; number: string }[];
+    issueDate?: boolean;
+    issuedOn?: string;
   } = {}
 ): Promise<ConfirmOutcome> {
   const res = await fetch(endpoint(profile, "confirm"), {
@@ -63,11 +73,16 @@ export async function callConfirm(
       allowOverwrite: opts.allowOverwrite,
       backfill: opts.backfill,
       catalogRefs: opts.catalogRefs,
+      issueDate: opts.issueDate,
+      issuedOn: opts.issuedOn,
     }),
   });
   if (res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { backfill?: BackfillProposal[] };
-    return { ok: true, backfill: data.backfill ?? [] };
+    const data = (await res.json().catch(() => ({}))) as {
+      backfill?: BackfillProposal[];
+      date?: DateProposal | null;
+    };
+    return { ok: true, backfill: data.backfill ?? [], date: data.date ?? null };
   }
   if (res.status === 409) {
     const data = (await res.json().catch(() => ({}))) as { existingColnectId?: string };
@@ -119,4 +134,30 @@ export async function callOverwriteNumber(
   }
   if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
   return { ok: false, error: `Overwrite request failed (HTTP ${res.status}).` };
+}
+
+export type OverwriteDateOutcome = { ok: true; label: string } | { ok: false; error: string };
+
+/**
+ * Replace a stamp's date of issue with the one the Colnect page prints (#655). The printed value is
+ * sent as the matcher received it and read on the instance, so the window and the instance cannot
+ * disagree about what the page said. One stamp, one field, taken deliberately — the date sync
+ * itself never corrects a date we already state.
+ */
+export async function callOverwriteDate(
+  profile: Profile,
+  stampId: string,
+  issuedOn: string
+): Promise<OverwriteDateOutcome> {
+  const res = await fetch(endpoint(profile, "overwrite-date"), {
+    method: "POST",
+    headers: authHeaders(profile),
+    body: JSON.stringify({ stampId, issuedOn }),
+  });
+  if (res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { label?: string };
+    return { ok: true, label: data.label ?? issuedOn };
+  }
+  if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
+  return { ok: false, error: `Date request failed (HTTP ${res.status}).` };
 }

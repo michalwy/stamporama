@@ -12,8 +12,10 @@ import {
 } from "../core/profile";
 import {
   getCatalogBackfill,
+  getIssueDateSync,
   getMatchOnLoad,
   setCatalogBackfill,
+  setIssueDateSync,
   setMatchOnLoad,
 } from "../core/settings";
 
@@ -30,6 +32,7 @@ const formErrEl = $("formErr");
 const savedEl = $("saved");
 const matchOnLoadEl = $<HTMLInputElement>("matchOnLoad");
 const catalogBackfillEl = $<HTMLInputElement>("catalogBackfill");
+const issueDateSyncEl = $<HTMLInputElement>("issueDateSync");
 
 const fields = {
   name: $<HTMLInputElement>("name"),
@@ -201,6 +204,10 @@ void (async () => {
   matchOnLoadEl.checked = await getMatchOnLoad();
   matchOnLoadEl.addEventListener("change", () => {
     void setMatchOnLoad(matchOnLoadEl.checked).then(flashSaved);
+  });
+  issueDateSyncEl.checked = await getIssueDateSync();
+  issueDateSyncEl.addEventListener("change", () => {
+    void setIssueDateSync(issueDateSyncEl.checked).then(flashSaved);
   });
   catalogBackfillEl.checked = await getCatalogBackfill();
   catalogBackfillEl.addEventListener("change", () => {

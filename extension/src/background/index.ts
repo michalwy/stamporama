@@ -1,5 +1,11 @@
 import { getActiveProfile, getProfileStore } from "../core/profile";
-import { CATALOG_BACKFILL, getCatalogBackfill, getMatchOnLoad } from "../core/settings";
+import {
+  CATALOG_BACKFILL,
+  ISSUE_DATE_SYNC,
+  getCatalogBackfill,
+  getIssueDateSync,
+  getMatchOnLoad,
+} from "../core/settings";
 import type {
   BackgroundMessage,
   BackgroundRequest,
@@ -15,11 +21,12 @@ import type {
   OrderLookupResponse,
   ReportedOrder,
   OpenMatchResponse,
+  OverwriteDateResponse,
   OverwriteNumberResponse,
   SearchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
-import { callConfirm, callMatch, callOverwriteNumber } from "./matching-client";
+import { callConfirm, callMatch, callOverwriteDate, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
 import { callSearch } from "./search-client";
 import { callOfferLookup } from "./offer-lookup-client";
@@ -77,8 +84,15 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
     const items = notice.refs.map((r) => ({
       platformItemId: r.platformItemId,
       catalogRefs: r.catalogRefs,
+      ...(r.issuedOn ? { issuedOn: r.issuedOn } : {}),
     }));
-    const results = await callMatch(profile, items, true, await getCatalogBackfill());
+    const results = await callMatch(
+      profile,
+      items,
+      true,
+      await getCatalogBackfill(),
+      await getIssueDateSync()
+    );
     resultCache.set(tabId, results);
 
     const needsConfirm = results.filter((r) => r.status === "needs-confirm").length;
@@ -92,18 +106,19 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
 
 async function handle(
   msg: BackgroundRequest
-): Promise<MatchResponse | ConfirmResponse | OverwriteNumberResponse> {
+): Promise<MatchResponse | ConfirmResponse | OverwriteNumberResponse | OverwriteDateResponse> {
   const profile = await getActiveProfile();
   if (!profile) {
     return { ok: false, error: "No active profile. Set one in the extension options." };
   }
 
-  // The backfill flag is read here rather than taken from the caller, so the load-time match, the
-  // window's preview and every write all describe the same setting (#280).
+  // Both flags are read here rather than taken from the caller, so the load-time match, the
+  // window's preview and every write all describe the same settings (#280, #655).
   const backfill = await getCatalogBackfill();
+  const issueDate = await getIssueDateSync();
 
   if (msg.type === "match") {
-    const results = await callMatch(profile, msg.items, msg.dryRun, backfill);
+    const results = await callMatch(profile, msg.items, msg.dryRun, backfill, issueDate);
     return { ok: true, results };
   }
 
@@ -114,16 +129,23 @@ async function handle(
     return callOverwriteNumber(profile, msg.stampId, msg.catalogVendorId, msg.number);
   }
 
+  // Correcting a date (#655) is the same kind of act, and stays silent for the same reason.
+  if (msg.type === "overwrite-date") {
+    return callOverwriteDate(profile, msg.stampId, msg.issuedOn);
+  }
+
   const outcome = await callConfirm(profile, msg.colnectId, msg.stampId, {
     allowOverwrite: msg.allowOverwrite,
     backfill,
     catalogRefs: msg.catalogRefs,
+    issueDate,
+    issuedOn: msg.issuedOn,
   });
   if (outcome.ok) {
     // The instance now knows something a screen of it may be showing. Ring the doorbell — not
     // awaited, since the popup's answer must not wait on other tabs.
     void broadcastMatched();
-    return { ok: true, backfill: outcome.backfill };
+    return { ok: true, backfill: outcome.backfill, date: outcome.date };
   }
   if (outcome.conflict) {
     return { ok: false, error: "conflict", conflict: true, existingColnectId: outcome.existingColnectId };
@@ -382,15 +404,21 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // Switching profile (#251) re-points everything: every cached result and every badge was computed
 // against the instance we just left, so they are dropped rather than left to describe the wrong
 // collection. The next page load (or the Assistant window) matches afresh against the new target.
-// Switching the backfill setting (#280) invalidates the cache for the same reason: the cached
-// results were computed with the other setting and would show the wrong proposals.
+// Switching the backfill (#280) or date-sync (#655) setting invalidates the cache for the same
+// reason: the cached results were computed with the other setting and would show the wrong
+// proposals.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   // Which origins the Assistant scripts follows the profile list and nothing else (#409): a profile
   // added by registration, one whose URL was corrected, one deleted after its token was revoked.
   // Hanging it off the store rather than off each call site is what keeps the two from drifting.
   if ("profiles" in changes) void syncInstanceContentScripts();
-  if (!("activeProfileId" in changes) && !("profiles" in changes) && !(CATALOG_BACKFILL in changes)) {
+  if (
+    !("activeProfileId" in changes) &&
+    !("profiles" in changes) &&
+    !(CATALOG_BACKFILL in changes) &&
+    !(ISSUE_DATE_SYNC in changes)
+  ) {
     return;
   }
   for (const tabId of resultCache.keys()) void setBadge(tabId, 0, BADGE_DETECTED);

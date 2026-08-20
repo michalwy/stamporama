@@ -13,8 +13,9 @@ export interface ExtractedItem {
   platformItemId: string;
   name?: string;
   catalogRefs: CatalogRef[];
-  /** Year of issue, when the page states one — shown against our stamp's own year. */
-  issuedYear?: number;
+  /** The date of issue as the page prints it — `"1945-01-22"`, `"1945-01"` or `"1945"` (#655).
+   *  Sent verbatim: the instance parses it and decides what it means for the stamp it matched. */
+  issuedOn?: string;
   /** Issuing country, when stated. The counterpart of our collecting area, near enough to compare. */
   country?: string;
   /** Absolute URL of the card's thumbnail as found in the page, when it has one. */

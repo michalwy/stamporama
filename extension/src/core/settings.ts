@@ -3,6 +3,7 @@
 
 const MATCH_ON_LOAD = "matchOnLoad";
 export const CATALOG_BACKFILL = "catalogBackfill";
+export const ISSUE_DATE_SYNC = "issueDateSync";
 const SHOW_LINKED_DECISIONS = "showLinkedDecisions";
 
 /**
@@ -33,6 +34,23 @@ export async function getCatalogBackfill(): Promise<boolean> {
 
 export async function setCatalogBackfill(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [CATALOG_BACKFILL]: enabled });
+}
+
+/**
+ * Whether a matched stamp should also take the date of issue Colnect prints, for the parts of the
+ * date it has none of (#655). Default on — our stamps are commonly dated by year alone, copied from
+ * their issue, while a Colnect page usually knows the day. Its own switch rather than the backfill's,
+ * because wanting Colnect's numbers and wanting its dates are two separate appetites. The instance
+ * only fills what is *missing*: a date component the two sides state differently is reported and
+ * left alone until you settle it yourself.
+ */
+export async function getIssueDateSync(): Promise<boolean> {
+  const data = await chrome.storage.local.get(ISSUE_DATE_SYNC);
+  return data[ISSUE_DATE_SYNC] !== false;
+}
+
+export async function setIssueDateSync(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [ISSUE_DATE_SYNC]: enabled });
 }
 
 /**

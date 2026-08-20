@@ -584,7 +584,13 @@ if (!window.__stamporamaAssistantLoaded) {
     const notice: DetectedNotice = {
       type: "detected",
       count: items.length,
-      refs: items.map((i) => ({ platformItemId: i.platformItemId, catalogRefs: i.catalogRefs })),
+      refs: items.map((i) => ({
+        platformItemId: i.platformItemId,
+        catalogRefs: i.catalogRefs,
+        // The printed date rides along (#655), so the load-time match — which the window reuses as
+        // its preview — decides the same thing the window's own request would.
+        ...(i.issuedOn ? { issuedOn: i.issuedOn } : {}),
+      })),
     };
     void chrome.runtime.sendMessage(notice).catch(() => {});
   } catch {

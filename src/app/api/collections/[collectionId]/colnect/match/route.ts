@@ -10,19 +10,24 @@ import { matchColnectItems, type ColnectMatchItemInput } from "@/lib/colnect";
 /** Parse and validate the request body into matcher input; returns null on a malformed shape. */
 function parseBody(
   body: unknown
-): { items: ColnectMatchItemInput[]; dryRun: boolean; backfill: boolean } | null {
+): { items: ColnectMatchItemInput[]; dryRun: boolean; backfill: boolean; issueDate: boolean } | null {
   if (typeof body !== "object" || body === null) return null;
-  const { items, dryRun, backfill } = body as {
+  const { items, dryRun, backfill, issueDate } = body as {
     items?: unknown;
     dryRun?: unknown;
     backfill?: unknown;
+    issueDate?: unknown;
   };
   if (!Array.isArray(items)) return null;
 
   const parsed: ColnectMatchItemInput[] = [];
   for (const raw of items) {
     if (typeof raw !== "object" || raw === null) return null;
-    const { colnectId, catalogRefs } = raw as { colnectId?: unknown; catalogRefs?: unknown };
+    const { colnectId, catalogRefs, issuedOn } = raw as {
+      colnectId?: unknown;
+      catalogRefs?: unknown;
+      issuedOn?: unknown;
+    };
     if (typeof colnectId !== "string" || !colnectId.trim()) return null;
     if (!Array.isArray(catalogRefs)) return null;
     const refs: { catalog: string; number: string }[] = [];
@@ -32,11 +37,22 @@ function parseBody(
       if (typeof catalog !== "string" || typeof number !== "string") return null;
       refs.push({ catalog, number });
     }
-    parsed.push({ colnectId: colnectId.trim(), catalogRefs: refs });
+    parsed.push({
+      colnectId: colnectId.trim(),
+      catalogRefs: refs,
+      // What the page printed under "Issued on" (#655), verbatim. Not a hard shape — a value we
+      // cannot read is simply no date, and must not cost the item its match.
+      ...(typeof issuedOn === "string" ? { issuedOn } : {}),
+    });
   }
-  // Backfill is opt-in on the wire (#280): an older client that doesn't know about it never writes
-  // catalog numbers by accident.
-  return { items: parsed, dryRun: dryRun === true, backfill: backfill === true };
+  // Backfill and date sync are both opt-in on the wire (#280, #655): an older client that doesn't
+  // know about them never writes a catalog number or a date by accident.
+  return {
+    items: parsed,
+    dryRun: dryRun === true,
+    backfill: backfill === true,
+    issueDate: issueDate === true,
+  };
 }
 
 export async function POST(
@@ -65,6 +81,7 @@ export async function POST(
     const results = await matchColnectItems(ownerId, collectionId, parsed.items, {
       dryRun: parsed.dryRun,
       backfill: parsed.backfill,
+      issueDate: parsed.issueDate,
     });
     return NextResponse.json({ results });
   } catch {

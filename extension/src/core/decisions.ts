@@ -5,6 +5,9 @@ export interface Candidate {
   stampId: string;
   name: string | null;
   issuedYear: number | null;
+  /** The rest of the stamp's date (#655), so both sides can be read to the day. */
+  issuedMonth: number | null;
+  issuedDay: number | null;
   areaName: string | null;
   /** Issue the stamp belongs to, shown for orientation. */
   issueName: string | null;
@@ -15,7 +18,32 @@ export interface Candidate {
   /** What the item would add to this stamp, and what it disagrees on (#280). Empty when the
    *  backfill is switched off. */
   backfill: BackfillProposal[];
+  /** What the item's printed date of issue would add to this stamp, or disagrees with it about
+   *  (#655). Null when the date sync is switched off, the page states none, or it tells us nothing
+   *  we don't already hold. */
+  dateProposal: DateProposal | null;
   existingColnectId: string | null;
+}
+
+/**
+ * One decided date proposal (#655). `would-fill`/`filled` add the components our stamp lacks and
+ * destroy nothing; `conflict` is a component the two sides state differently, reported and left
+ * alone until the collector settles it.
+ */
+export type DateStatus = "would-fill" | "filled" | "conflict";
+
+export interface DateProposal {
+  status: DateStatus;
+  date: { year: number | null; month: number | null; day: number | null };
+  /** The proposed date formatted — what a fill would store, or what an overwrite would put in
+   *  place of ours. */
+  label: string;
+  /** The stamp's date today, formatted. Null when it carries none. */
+  currentLabel: string | null;
+  /** What Colnect prints, formatted. */
+  colnectLabel: string;
+  /** For `conflict`: which components the two sides disagree about. */
+  conflictingFields?: ("year" | "month" | "day")[];
 }
 
 /**

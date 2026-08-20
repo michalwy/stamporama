@@ -22,6 +22,13 @@ import {
   type BackfillRefInput,
   type ColnectBackfillProposal,
 } from "./colnect-backfill";
+import {
+  formatPartialDate,
+  parseColnectDate,
+  proposeIssuedDate,
+  type ColnectDateProposal,
+  type PartialDate,
+} from "./colnect-date";
 import { colnectGradeFor, isColnectConditionValue } from "./colnect-conditions";
 import { COLNECT_PLATFORM_MODULE } from "./platform-modules";
 import {
@@ -600,10 +607,64 @@ async function applyBackfill(
   await recomputeStampSortKeys(collectionId, [...new Set(rows.map((r) => r.stampId))]);
 }
 
-/** One Colnect item to match: its Colnect ID and the catalog references extracted from the page. */
+// ── Issue-date sync (#655) ───────────────────────────────────────────────────
+//
+// The catalog backfill one field wider. Colnect dates a stamp to the day where it can, ours are
+// commonly dated by year alone (#70/#360), so a matched item usually knows more than we do — and
+// the rule is the backfill's: fill what is missing, report what disagrees. The decision is pure
+// ({@link proposeIssuedDate}); what lives here is the write and the stamp it lands on.
+//
+// The **printed value travels verbatim**, exactly as a catalog number does, and is parsed here. The
+// Assistant says what the page said; deciding what that means is the instance's job, and a client
+// that parsed dates itself would be a second reading of Colnect to keep in step with this one.
+
+/** A date proposal together with the stamp it would land on. */
+interface PendingDate {
+  stampId: string;
+  proposal: ColnectDateProposal;
+}
+
+/** Propose a date for one stamp from what a Colnect item's page printed. */
+function dateProposalFor(current: PartialDate, printed: string | null | undefined) {
+  return proposeIssuedDate(parseColnectDate(printed), current);
+}
+
+/**
+ * Write every still-proposed date fill, flipping its status to `filled`. Deduplicated per stamp —
+ * two Colnect items in one batch can resolve to the same stamp, and the second was decided against
+ * the same pre-write state as the first, so only the first is applied and the other stays a
+ * proposal (`applyBackfill`'s rule for two refs landing on one field).
+ */
+async function applyDateFills(pending: readonly PendingDate[]): Promise<void> {
+  const rows: { stampId: string; date: PartialDate }[] = [];
+  const seen = new Set<string>();
+  for (const { stampId, proposal } of pending) {
+    if (proposal.status !== "would-fill") continue;
+    if (seen.has(stampId)) continue;
+    seen.add(stampId);
+    rows.push({ stampId, date: proposal.date });
+    proposal.status = "filled";
+  }
+  if (rows.length === 0) return;
+
+  // A fill only ever adds components the stamp lacked, so writing all three restores the values it
+  // already held; the merge happened in `proposeIssuedDate`.
+  await prisma.$transaction(
+    rows.map((r) =>
+      prisma.stamp.update({
+        where: { id: r.stampId },
+        data: { issuedYear: r.date.year, issuedMonth: r.date.month, issuedDay: r.date.day },
+      })
+    )
+  );
+}
+
+/** One Colnect item to match: its Colnect ID and what the page printed for it. */
 export interface ColnectMatchItemInput {
   colnectId: string;
   catalogRefs: { catalog: string; number: string }[];
+  /** The page's "Issued on" value, verbatim (#655) — parsed here, not by the client. */
+  issuedOn?: string | null;
 }
 
 /** One of our stamps offered for the user to choose from when a match needs confirmation. */
@@ -611,6 +672,9 @@ export interface ColnectCandidate {
   stampId: string;
   name: string | null;
   issuedYear: number | null;
+  /** The rest of the stamp's date (#655), so both sides can be read to the day. */
+  issuedMonth: number | null;
+  issuedDay: number | null;
   areaName: string | null;
   /** Name of the issue the stamp belongs to, for orientation when picking between siblings. */
   issueName: string | null;
@@ -623,11 +687,15 @@ export interface ColnectCandidate {
   /** What the Colnect item would add to (or disagrees with on) this stamp (#280). Empty unless the
    *  caller asked for the backfill. */
   backfill: ColnectBackfillProposal[];
+  /** What the item's issue date would add to (or disagrees with on) this stamp (#655). Null when
+   *  the caller asked for no date sync, the page states none, or it tells us nothing new. */
+  dateProposal: ColnectDateProposal | null;
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
   existingColnectId: string | null;
 }
 
 export type { ColnectBackfillProposal, ColnectBackfillStatus } from "./colnect-backfill";
+export type { ColnectDateProposal, ColnectDateStatus } from "./colnect-date";
 
 /**
  * What one catalog reference printed on the Colnect page means for us (#284 display):
@@ -695,7 +763,9 @@ export class ColnectMatchConflictError extends Error {
 /** Internal shape for a discovered candidate stamp: decision keys plus display fields. */
 interface CandidateEntry extends CandidateStampRefs {
   /** Everything about the stamp that doesn't depend on which Colnect item it is compared to. */
-  base: Omit<ColnectCandidate, "catalogNumbers" | "backfill">;
+  base: Omit<ColnectCandidate, "catalogNumbers" | "backfill" | "dateProposal">;
+  /** The stamp's own date, for comparing against what the item's page printed (#655). */
+  issuedDate: PartialDate;
   /** Its numbers, carrying the keys needed to compare each against a Colnect item. */
   numbers: { label: string; catalogVendorId: string; key: string }[];
   /** What the backfill (#280) needs: the area whose prefixes apply, and the raw stored numbers. */
@@ -721,11 +791,13 @@ function keysByVendor(refs: readonly ResolvedRef[]): Map<string, Set<string>> {
 function candidateView(
   entry: CandidateEntry,
   itemByVendor: Map<string, Set<string>>,
-  backfill: ColnectBackfillProposal[] = []
+  backfill: ColnectBackfillProposal[] = [],
+  dateProposal: ColnectDateProposal | null = null
 ): ColnectCandidate {
   return {
     ...entry.base,
     backfill,
+    dateProposal,
     catalogNumbers: entry.numbers.map((n) => {
       const theirs = itemByVendor.get(n.catalogVendorId);
       const status: ColnectMineStatus = !theirs
@@ -800,7 +872,7 @@ export async function matchColnectItems(
   ownerId: string,
   collectionId: string,
   items: ColnectMatchItemInput[],
-  opts: { dryRun?: boolean; backfill?: boolean } = {}
+  opts: { dryRun?: boolean; backfill?: boolean; issueDate?: boolean } = {}
 ): Promise<ColnectMatchResult[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -921,6 +993,8 @@ export async function matchColnectItems(
           id: true,
           name: true,
           issuedYear: true,
+          issuedMonth: true,
+          issuedDay: true,
           colnectId: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -958,6 +1032,7 @@ export async function matchColnectItems(
       existingColnectId: s.colnectId,
       refs,
       numbers,
+      issuedDate: { year: s.issuedYear, month: s.issuedMonth, day: s.issuedDay },
       backfillStamp: {
         stampId: s.id,
         areaId,
@@ -968,6 +1043,8 @@ export async function matchColnectItems(
         stampId: s.id,
         name: s.name,
         issuedYear: s.issuedYear,
+        issuedMonth: s.issuedMonth,
+        issuedDay: s.issuedDay,
         areaName: areaId ? (areaNames.get(areaId) ?? null) : null,
         issueName: s.issueMemberships[0]?.issue.name ?? null,
         photoId: pickPhotoId(s.photos),
@@ -982,12 +1059,15 @@ export async function matchColnectItems(
   const writes: { stampId: string; colnectId: string }[] = [];
   const dryRun = opts.dryRun ?? false;
   const wantBackfill = opts.backfill ?? false;
+  const wantDate = opts.issueDate ?? false;
   // Proposals for stamps we are confident about (`auto`), which is what a real run may write. The
   // objects are shared with the results, so marking/applying them updates what the caller sees.
   const autoFills: PendingFill[] = [];
   // Everything proposed anywhere, including the candidates of a `needs-confirm` item: the duplicate
   // check runs over all of it so the preview tells the truth before the user picks.
   const allFills: PendingFill[] = [];
+  /** Date fills for the stamps we are confident about (#655), which a real run writes. */
+  const autoDates: PendingDate[] = [];
 
   const proposalsFor = (entry: CandidateEntry, annotated: ResolvedAnnotation[]) => {
     if (!wantBackfill) return [];
@@ -995,6 +1075,9 @@ export async function matchColnectItems(
     for (const proposal of proposals) allFills.push({ stamp: entry.backfillStamp, proposal });
     return proposals;
   };
+
+  const dateFor = (entry: CandidateEntry, item: ColnectMatchItemInput) =>
+    wantDate ? dateProposalFor(entry.issuedDate, item.issuedOn) : null;
 
   for (const { item, itemRefs, annotated } of resolvedItems) {
     const decision = decideColnectItem(item.colnectId, itemRefs, allCandidates);
@@ -1020,7 +1103,9 @@ export async function matchColnectItems(
         candidates: decision.candidateStampIds
           .map((id) => {
             const entry = candidatesById.get(id);
-            return entry ? candidateView(entry, itemByVendor, proposalsFor(entry, annotated)) : undefined;
+            return entry
+              ? candidateView(entry, itemByVendor, proposalsFor(entry, annotated), dateFor(entry, item))
+              : undefined;
           })
           .filter((c): c is ColnectCandidate => c !== undefined),
         refs: classifyRefs(annotated, only, allCandidates),
@@ -1043,7 +1128,10 @@ export async function matchColnectItems(
           for (const proposal of proposals) {
             autoFills.push({ stamp: entry.backfillStamp, proposal });
           }
-          return candidateView(entry, itemByVendor, proposals);
+          // The date rides on the same confidence, for the same reason (#655).
+          const date = dateFor(entry, item);
+          if (date) autoDates.push({ stampId: entry.stampId, proposal: date });
+          return candidateView(entry, itemByVendor, proposals, date);
         })(),
         refs: classifyRefs(annotated, candidatesById.get(decision.stampId) ?? null, allCandidates),
       });
@@ -1063,6 +1151,7 @@ export async function matchColnectItems(
     await markBackfillDuplicates(collectionId, allFills, ctx);
     if (!dryRun) await applyBackfill(collectionId, autoFills);
   }
+  if (wantDate && !dryRun) await applyDateFills(autoDates);
 
   return results;
 }
@@ -1181,6 +1270,70 @@ export async function overwriteColnectCatalogNumber(
   };
 }
 
+// ── Resolving a conflicting date with Colnect's (#655) ───────────────────────
+//
+// The date sync never corrects a date component the stamp already states, on the number backfill's
+// reasoning: a match is not evidence that our value is the wrong one. This is the collector taking
+// that decision explicitly — "Colnect is right about when this was issued" — and, like #433, it is
+// deliberately not part of confirming a match, because only this one destroys something.
+
+/** What an overwrite stored, for reporting it back. */
+export interface ColnectDateOverwrite {
+  issuedYear: number | null;
+  issuedMonth: number | null;
+  issuedDay: number | null;
+  /** The stored date formatted, e.g. "22 Jan 1945". */
+  label: string;
+}
+
+/**
+ * Replace one stamp's date of issue with the date the Colnect page prints (#655). Owner-authorized
+ * and collection-scoped.
+ *
+ * The **printed value** is sent, exactly as the matcher received it, and parsed here — the window
+ * and the instance cannot then disagree about what the page said. It replaces the date **whole**,
+ * clearing a month or day Colnect does not state: the collector is calling our date wrong, and a
+ * day kept under a year we just abandoned is a date neither side ever stated. A value that parses
+ * to no date at all is refused rather than clearing the stamp's own.
+ */
+export async function overwriteColnectIssuedDate(
+  ownerId: string,
+  collectionId: string,
+  input: { stampId: string; issuedOn: string }
+): Promise<ColnectDateOverwrite> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const parsed = parseColnectDate(input.issuedOn);
+  if (!parsed) throw new Error("That is not a date we can read.");
+
+  const stamp = await prisma.stamp.findFirst({
+    where: { id: input.stampId, collectionId },
+    select: { id: true },
+  });
+  if (!stamp) throw new Error("Stamp not found in this collection.");
+
+  const date: PartialDate = { year: parsed.year, month: parsed.month, day: parsed.day };
+  await prisma.stamp.update({
+    where: { id: stamp.id },
+    data: { issuedYear: date.year, issuedMonth: date.month, issuedDay: date.day },
+  });
+
+  return {
+    issuedYear: date.year,
+    issuedMonth: date.month,
+    issuedDay: date.day,
+    label: formatPartialDate(date) ?? String(parsed.year),
+  };
+}
+
+/** What a confirmed match wrote beyond the Colnect ID: the catalog numbers (#280) and the date
+ *  (#655), each reported so the caller can say what it did. */
+export interface ColnectConfirmResult {
+  backfill: ColnectBackfillProposal[];
+  /** Null when no date sync was asked for, the page stated none, or it told us nothing new. A
+   *  `conflict` here was **not** written — it is the disagreement, reported. */
+  date: ColnectDateProposal | null;
+}
+
 /**
  * Commit a user-chosen Colnect match: set `Stamp.colnectId` for a stamp the user picked from a
  * `needs-confirm` result. Owner-authorized and collection-scoped. Refuses to overwrite a different
@@ -1188,7 +1341,8 @@ export async function overwriteColnectCatalogNumber(
  *
  * When `catalogRefs` are supplied and `backfill` is set, the item's numbers also fill the catalogs
  * the chosen stamp lacks (#280) — the same rules as the batch path, applied to the one stamp the
- * user picked. The applied/skipped proposals are returned so the caller can report them.
+ * user picked. `issuedOn` with `issueDate` does the same for the date (#655). The applied/skipped
+ * proposals are returned so the caller can report them.
  */
 export async function confirmColnectMatch(
   ownerId: string,
@@ -1199,14 +1353,19 @@ export async function confirmColnectMatch(
     allowOverwrite?: boolean;
     catalogRefs?: { catalog: string; number: string }[];
     backfill?: boolean;
+    issuedOn?: string | null;
+    issueDate?: boolean;
   }
-): Promise<ColnectBackfillProposal[]> {
+): Promise<ColnectConfirmResult> {
   await assertCollectionOwner(ownerId, collectionId);
   const stamp = await prisma.stamp.findFirst({
     where: { id: input.stampId, collectionId },
     select: {
       id: true,
       colnectId: true,
+      issuedYear: true,
+      issuedMonth: true,
+      issuedDay: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
       // The issue may override the area's prefix, which the backfill resolves numbers against (#377).
@@ -1226,7 +1385,17 @@ export async function confirmColnectMatch(
     data: { colnectId: input.colnectId },
   });
 
-  if (!input.backfill || !input.catalogRefs?.length) return [];
+  // The date is its own switch and its own field, so it is written whether or not the numbers are
+  // (#655). A conflict is reported and left alone — settling one is `overwriteColnectIssuedDate`.
+  const date = input.issueDate
+    ? dateProposalFor(
+        { year: stamp.issuedYear, month: stamp.issuedMonth, day: stamp.issuedDay },
+        input.issuedOn
+      )
+    : null;
+  if (date) await applyDateFills([{ stampId: stamp.id, proposal: date }]);
+
+  if (!input.backfill || !input.catalogRefs?.length) return { backfill: [], date };
 
   const ctx = await loadColnectContext(collectionId);
   const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
@@ -1248,5 +1417,5 @@ export async function confirmColnectMatch(
   const pending = proposals.map((proposal) => ({ stamp: target, proposal }));
   await markBackfillDuplicates(collectionId, pending, ctx);
   await applyBackfill(collectionId, pending);
-  return proposals;
+  return { backfill: proposals, date };
 }

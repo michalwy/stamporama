@@ -13,18 +13,28 @@ import type {
   ConfirmResponse,
   ExtractResponse,
   MatchResponse,
+  OverwriteDateResponse,
   OverwriteNumberResponse,
 } from "../core/messages";
 import {
   CATALOG_BACKFILL,
+  ISSUE_DATE_SYNC,
   getCatalogBackfill,
+  getIssueDateSync,
   getShowLinkedDecisions,
   setCatalogBackfill,
+  setIssueDateSync,
   setShowLinkedDecisions,
 } from "../core/settings";
 import type { ExtractedItem } from "../platform/types";
 import { isAlreadyLinkedElsewhere } from "../core/decisions";
-import type { BackfillProposal, Candidate, MatchResult, RefView } from "../core/decisions";
+import type {
+  BackfillProposal,
+  Candidate,
+  DateProposal,
+  MatchResult,
+  RefView,
+} from "../core/decisions";
 
 // Popup controller. On open it detects whether the active tab is a page one of our platform modules
 // handles and extracts it straight away — the user only sees "Found N stamps" and decides whether to
@@ -58,6 +68,7 @@ const progressEl = $("progress");
 const barEl = $("bar");
 const writeAutoBtn = $<HTMLButtonElement>("writeAuto");
 const backfillEl = $<HTMLInputElement>("backfill");
+const issueDateEl = $<HTMLInputElement>("issueDate");
 const showLinkedOptEl = $("showLinkedOpt");
 const showLinkedEl = $<HTMLInputElement>("showLinked");
 const showLinkedLabelEl = $("showLinkedLabel");
@@ -263,12 +274,20 @@ $("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage(
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (!ready) return; // the first read may itself migrate #253's key, which writes both keys
-  // The backfill setting is also editable in Options; keep this window's toggle and preview honest.
+  // Both write settings are also editable in Options; keep this window's toggles and preview honest.
   if (CATALOG_BACKFILL in changes) {
     void (async () => {
       const enabled = await getCatalogBackfill();
       if (enabled === backfillEl.checked) return; // our own write
       backfillEl.checked = enabled;
+      if (items.length > 0 && profile) await preview();
+    })();
+  }
+  if (ISSUE_DATE_SYNC in changes) {
+    void (async () => {
+      const enabled = await getIssueDateSync();
+      if (enabled === issueDateEl.checked) return; // our own write
+      issueDateEl.checked = enabled;
       if (items.length > 0 && profile) await preview();
     })();
   }
@@ -311,14 +330,32 @@ function pendingFillCount(): number {
 }
 
 /**
- * The extracted items behind everything the write button offers — the two counts `syncButtons`
- * prints, resolved back to what has to be sent. An already-linked decision is in only when it still
- * has numbers to add: re-sending the rest would ask the instance to re-decide a page for nothing.
+ * Whether the pending write would also date this stamp (#655). Like the catalog fills, an
+ * already-linked stamp counts: the date rides on the match being confident, not on the Colnect ID
+ * being new, and a stamp linked months ago may still be dated by its issue's year alone.
+ */
+function dateFillOf(r: MatchResult): boolean {
+  if (r.status !== "auto" || r.written) return false;
+  return r.stamp?.dateProposal?.status === "would-fill";
+}
+
+function pendingDateCount(): number {
+  return results.filter(dateFillOf).length;
+}
+
+/**
+ * The extracted items behind everything the write button offers — the counts `syncButtons` prints,
+ * resolved back to what has to be sent. An already-linked decision is in only when it still has
+ * numbers or a date to add: re-sending the rest would ask the instance to re-decide a page for
+ * nothing.
  */
 function pendingWriteItems(): ExtractedItem[] {
   const wanted = new Set(
     results
-      .filter((r) => r.status === "auto" && !r.written && (!r.alreadySet || fillsOf(r) > 0))
+      .filter(
+        (r) =>
+          r.status === "auto" && !r.written && (!r.alreadySet || fillsOf(r) > 0 || dateFillOf(r))
+      )
       .map((r) => r.colnectId)
   );
   return items.filter((i) => wanted.has(i.platformItemId));
@@ -333,10 +370,12 @@ function mergeResults(written: MatchResult[]): void {
 function syncButtons(): void {
   const pending = pendingAutoCount();
   const fills = pendingFillCount();
-  writeAutoBtn.disabled = busy || (pending === 0 && fills === 0) || !profile;
+  const dates = pendingDateCount();
+  writeAutoBtn.disabled = busy || (pending === 0 && fills === 0 && dates === 0) || !profile;
   const parts = [
     pending > 0 ? `${pending} auto-match${pending === 1 ? "" : "es"}` : "",
     fills > 0 ? `${fills} catalog number${fills === 1 ? "" : "s"}` : "",
+    dates > 0 ? `${dates} date${dates === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
   writeAutoBtn.textContent = parts.length ? `Write ${parts.join(" + ")}` : "Write auto-matches";
 }
@@ -463,10 +502,12 @@ function renderChips(): void {
   const linked = results.filter((r) => r.status === "auto" && r.alreadySet).length;
   const skipped = results.filter((r) => r.status === "skipped").length;
   const fills = pendingFillCount();
+  const dates = pendingDateCount();
   const parts = [
     auto ? `<span class="chip auto">${auto} auto</span>` : "",
     ask ? `<span class="chip needs">${ask} to confirm</span>` : "",
     fills ? `<span class="chip auto">${fills} number${fills === 1 ? "" : "s"} to add</span>` : "",
+    dates ? `<span class="chip auto">${dates} date${dates === 1 ? "" : "s"} to add</span>` : "",
     linked ? `<span class="chip">${linked} already linked</span>` : "",
     skipped ? `<span class="chip">${skipped} skipped</span>` : "",
   ].filter(Boolean);
@@ -526,16 +567,28 @@ async function writeAuto(): Promise<void> {
       acc + (r.status === "auto" ? (r.stamp?.backfill.filter((p) => p.status === "filled").length ?? 0) : 0),
     0
   );
+  const dated = out.filter(
+    (r) => r.status === "auto" && r.stamp?.dateProposal?.status === "filled"
+  ).length;
+  const extras = [
+    filled ? `${filled} catalog number${filled === 1 ? "" : "s"}` : "",
+    dated ? `${dated} date${dated === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
   setStatus(
     `Wrote ${written} auto-match${written === 1 ? "" : "es"}${
-      filled ? ` and ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
+      extras.length ? ` and ${extras.join(" and ")}` : ""
     } to ${profile.name}.`
   );
   window.close();
 }
 
 /** Swap one item's result in place after an individual write, so it leaves the to-do list. */
-function markWritten(colnectId: string, stamp: Candidate, backfill: BackfillProposal[]): void {
+function markWritten(
+  colnectId: string,
+  stamp: Candidate,
+  backfill: BackfillProposal[],
+  dateProposal: DateProposal | null
+): void {
   const i = results.findIndex((r) => r.colnectId === colnectId);
   if (i === -1) return;
   results[i] = {
@@ -545,7 +598,7 @@ function markWritten(colnectId: string, stamp: Candidate, backfill: BackfillProp
     written: true,
     alreadySet: false,
     // The server reports what it actually filled; before a write we only had proposals.
-    stamp: { ...stamp, backfill, existingColnectId: colnectId },
+    stamp: { ...stamp, backfill, dateProposal, existingColnectId: colnectId },
     // The refs keep their classification: it described this stamp, which is the one just linked.
     refs: results[i].refs,
   };
@@ -559,9 +612,13 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     ? `<div class="warnline">This stamp already has Colnect ID ${esc(stamp.existingColnectId)} — it will be replaced.</div>`
     : "";
   const fills = stamp.backfill.filter((p) => p.status === "would-fill");
-  const fillLine = fills.length
-    ? `<div>Also adds ${fills.map((p) => `<strong>${esc(p.label)}</strong>`).join(", ")}.</div>`
-    : "";
+  const adds = fills.map((p) => `<strong>${esc(p.label)}</strong>`);
+  // A date fill is an addition like a number's, so it is named in the same sentence (#655). A
+  // conflict never is: it is not part of this write.
+  if (stamp.dateProposal?.status === "would-fill") {
+    adds.push(`the issue date <strong>${esc(stamp.dateProposal.label)}</strong>`);
+  }
+  const fillLine = adds.length ? `<div>Also adds ${adds.join(", ")}.</div>` : "";
   const ok = await askConfirm(
     `<div>Link Colnect <strong>#${esc(colnectId)}</strong>${
       src?.name ? ` (${esc(src.name)})` : ""
@@ -576,13 +633,18 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     stampId: stamp.stampId,
     allowOverwrite: overwrite,
     catalogRefs: src?.catalogRefs,
+    issuedOn: src?.issuedOn,
   });
   if (res.ok) {
-    markWritten(colnectId, stamp, res.backfill);
+    markWritten(colnectId, stamp, res.backfill, res.date);
     const filled = res.backfill.filter((p) => p.status === "filled").length;
+    const extras = [
+      filled ? `${filled} catalog number${filled === 1 ? "" : "s"}` : "",
+      res.date?.status === "filled" ? `the date ${res.date.label}` : "",
+    ].filter(Boolean);
     setStatus(
       `Linked #${colnectId} → ${stamp.name || stamp.stampId}${
-        filled ? `, added ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
+        extras.length ? `, added ${extras.join(" and ")}` : ""
       }.`
     );
     return;
@@ -600,9 +662,10 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
       stampId: stamp.stampId,
       allowOverwrite: true,
       catalogRefs: src?.catalogRefs,
+      issuedOn: src?.issuedOn,
     });
     if (retry.ok) {
-      markWritten(colnectId, stamp, retry.backfill);
+      markWritten(colnectId, stamp, retry.backfill, retry.date);
       setStatus(`Overwrote → #${colnectId}.`);
     } else {
       setStatus(retry.error, true);
@@ -673,6 +736,54 @@ function applyOverwrite(pick: OverwritePick, label: string): void {
   proposal.label = label;
   proposal.overwriteNumber = null;
   delete proposal.existingNumber;
+}
+
+/**
+ * Take Colnect's date for a stamp whose own date disagrees with it (#655). The number overwrite's
+ * shape, on the one field a stamp has for a date: confirmed on its own, naming both values, because
+ * the date sync itself only ever fills what is missing.
+ */
+async function overwriteDateOne(pick: DatePick): Promise<void> {
+  if (!profile) return;
+  const { stamp, proposal, issuedOn } = pick;
+  const from = proposal.currentLabel ?? "your date";
+  const ok = await askConfirm(
+    `<div>Date <strong>${esc(stamp.name || "this stamp")}</strong> as Colnect does — ` +
+      `<strong>${esc(proposal.colnectLabel)}</strong> instead of <strong>${esc(from)}</strong>?</div>` +
+      `<div class="warnline">Your current date is replaced, components Colnect doesn't state included.</div>` +
+      targetLine()
+  );
+  if (!ok) return;
+
+  setStatus("Writing…");
+  const res = await sendToBackground<OverwriteDateResponse>({
+    type: "overwrite-date",
+    stampId: stamp.stampId,
+    issuedOn,
+  });
+  if (!res.ok) {
+    setStatus(res.error, true);
+    return;
+  }
+  applyDateOverwrite(pick, res.label);
+  render();
+  setStatus(`${from} → ${res.label}.`);
+}
+
+/**
+ * Fold a written date overwrite into what is on screen. The stamp now carries Colnect's date, so
+ * the two sides no longer disagree and the proposal reads as written rather than as a decision
+ * still owing. The objects belong to `results`, so the next render shows it without a re-match.
+ */
+function applyDateOverwrite(pick: DatePick, label: string): void {
+  const { stamp, proposal } = pick;
+  stamp.issuedYear = proposal.date.year;
+  stamp.issuedMonth = proposal.date.month;
+  stamp.issuedDay = proposal.date.day;
+  proposal.status = "filled";
+  proposal.label = label;
+  proposal.currentLabel = label;
+  delete proposal.conflictingFields;
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -840,6 +951,52 @@ function backfillMarkup(proposals: BackfillProposal[], resolvable: boolean): str
   return `${chips}${fixes}${skipped}`;
 }
 
+// ── Issue date (#655) ────────────────────────────────────────────────────────
+// Under the numbers, in the same two shapes: a chip for what the item would add to our date, and a
+// line with a button for a date the two sides state differently.
+
+const DATE_TITLE: Record<string, string> = {
+  "would-fill": "Colnect dates this more precisely than you do — will be filled in",
+  filled: "Written to your stamp",
+};
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * The stamp's own date, formatted as the app formats it. Read off the candidate rather than out of
+ * the proposal, because a stamp with nothing to propose still has a date worth showing.
+ */
+function stampDate(c: Candidate): string | null {
+  const parts: string[] = [];
+  if (c.issuedDay) parts.push(String(c.issuedDay));
+  if (c.issuedMonth && c.issuedMonth >= 1 && c.issuedMonth <= 12) parts.push(MONTH_ABBR[c.issuedMonth - 1]);
+  if (c.issuedYear) parts.push(String(c.issuedYear));
+  return parts.length ? parts.join(" ") : null;
+}
+
+function dateMarkup(proposal: DateProposal | null, resolvable: boolean): string {
+  if (!proposal) return "";
+  if (proposal.status !== "conflict") {
+    const mark = proposal.status === "filled" ? "✓ " : "+ ";
+    return `<div class="fills"><span class="ref fill${
+      proposal.status === "filled" ? " done" : ""
+    }" title="${esc(DATE_TITLE[proposal.status] ?? "")}">${esc(`${mark}${proposal.label}`)}</span></div>`;
+  }
+  // A conflict means both sides state a component, so our side always has a date to name.
+  const theirs = `<span class="ref missing">${esc(proposal.colnectLabel)}</span>`;
+  const mine = `<span class="ref conflict">${esc(proposal.currentLabel ?? "")}</span>`;
+  if (!resolvable) {
+    return `<div class="fix">${mine}<span class="arrow">→</span>${theirs}</div>`;
+  }
+  datePicks.push(proposal);
+  return (
+    `<div class="fix">${mine}<span class="arrow">→</span>${theirs}` +
+    `<button class="small" data-date="${datePicks.length - 1}" title="${esc(
+      `Replace ${proposal.currentLabel ?? "your date"} with the date Colnect prints. Your current date is overwritten.`
+    )}">Use Colnect's</button></div>`
+  );
+}
+
 /** One of our stamps, with enough detail to tell it from a sibling. */
 function stampBlock(
   c: Candidate,
@@ -847,7 +1004,7 @@ function stampBlock(
   opts: { actionIndex?: number; resolveConflicts?: boolean } = {}
 ): string {
   const { actionIndex, resolveConflicts = false } = opts;
-  const meta = [c.issuedYear ? String(c.issuedYear) : null, c.areaName].filter(Boolean).join(" · ");
+  const meta = [stampDate(c), c.areaName].filter(Boolean).join(" · ");
   const warn = c.existingColnectId
     ? `<div class="warnline">already has Colnect ID ${esc(c.existingColnectId)}</div>`
     : "";
@@ -871,7 +1028,14 @@ function stampBlock(
             )
             .join(" ")
         : undefined,
-      meta: [backfillMarkup(c.backfill, resolveConflicts), meta, warn].filter(Boolean).join(""),
+      meta: [
+        backfillMarkup(c.backfill, resolveConflicts),
+        dateMarkup(c.dateProposal, resolveConflicts),
+        meta,
+        warn,
+      ]
+        .filter(Boolean)
+        .join(""),
     },
     thumb,
     { action, label: esc(label) }
@@ -895,6 +1059,19 @@ let overwrites: BackfillProposal[] = [];
 let overwritePicks: OverwritePick[] = [];
 
 /**
+ * Click targets for "Use Colnect's date" (#655), registered the same way: the proposal while the
+ * card renders, the stamp and the page's printed value when the card closes the loop. The printed
+ * value is what the instance is sent — the same string the matcher read.
+ */
+interface DatePick {
+  stamp: Candidate;
+  proposal: DateProposal;
+  issuedOn: string;
+}
+let datePicks: DateProposal[] = [];
+let dateOverwritePicks: DatePick[] = [];
+
+/**
  * Turn the proposals registered while one card rendered into full click targets. Rendering a card
  * cannot do this itself — `backfillMarkup` is handed proposals, not the stamp or the item — so the
  * card closes the loop for whatever its own stamp block just pushed.
@@ -902,6 +1079,13 @@ let overwritePicks: OverwritePick[] = [];
 function claimOverwrites(from: number, stamp: Candidate, refs: RefView[]): void {
   for (let i = from; i < overwrites.length; i++) {
     overwritePicks[i] = { stamp, proposal: overwrites[i], refs };
+  }
+}
+
+/** The same for the date proposals a card just registered (#655). */
+function claimDates(from: number, stamp: Candidate, issuedOn: string | undefined): void {
+  for (let i = from; i < datePicks.length; i++) {
+    if (issuedOn) dateOverwritePicks[i] = { stamp, proposal: datePicks[i], issuedOn };
   }
 }
 
@@ -921,10 +1105,14 @@ function itemCard(r: MatchResult): string {
     tag = `<span class="tag auto">${state}</span>`;
     matchLabel = "Your stamp";
     const from = overwrites.length;
+    const fromDate = datePicks.length;
     matchBody = r.stamp
       ? stampBlock(r.stamp, matchLabel, { resolveConflicts })
       : labelledNote(matchLabel, `stamp ${esc(r.stampId)}`);
-    if (r.stamp) claimOverwrites(from, r.stamp, r.refs);
+    if (r.stamp) {
+      claimOverwrites(from, r.stamp, r.refs);
+      claimDates(fromDate, r.stamp, src?.issuedOn);
+    }
   } else if (r.status === "needs-confirm") {
     tag = `<span class="tag needs">${esc(REASON_LABEL[r.reason] || r.reason)}</span>`;
     matchLabel = r.candidates.length > 1 ? "Pick the right stamp" : "Your stamp";
@@ -933,8 +1121,10 @@ function itemCard(r: MatchResult): string {
       .map((c) => {
         picks.push({ colnectId: r.colnectId, stamp: c, overwrite });
         const from = overwrites.length;
+        const fromDate = datePicks.length;
         const block = stampBlock(c, matchLabel, { actionIndex: picks.length - 1, resolveConflicts });
         claimOverwrites(from, c, r.refs);
+        claimDates(fromDate, c, src?.issuedOn);
         return block;
       })
       .join("");
@@ -957,7 +1147,7 @@ function itemCard(r: MatchResult): string {
       {
         name: esc(src?.name || "(unnamed)"),
         cats: refsMarkup(r.refs, src),
-        meta: [src?.issuedYear ? String(src.issuedYear) : null, src?.country]
+        meta: [src?.issuedOn ?? null, src?.country]
           .filter(Boolean)
           .map((v) => esc(String(v)))
           .join(" · "),
@@ -985,12 +1175,15 @@ function section(
   if (rows.length === 0) return "";
   const body = rows.map(itemCard).join("");
   const fills = rows.reduce((n, r) => n + fillsOf(r), 0);
+  const dates = rows.filter(dateFillOf).length;
   // Say what a folded section is hiding, so a section worth opening announces itself.
+  const adds = [
+    fills > 0 ? `${fills} catalog number${fills === 1 ? "" : "s"}` : "",
+    dates > 0 ? `${dates} date${dates === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
   const heading =
     `<span class="ttl">${esc(title)}</span><span class="cnt">${rows.length}</span>` +
-    (fills > 0
-      ? `<span class="add">+${fills} catalog number${fills === 1 ? "" : "s"}</span>`
-      : "");
+    (adds.length ? `<span class="add">+${adds.join(", +")}</span>` : "");
   return collapsible
     ? `<details class="sec ${kind}"${open ? " open" : ""}><summary>${heading}</summary>${body}</details>`
     : `<div class="sec ${kind}"><div class="hdr">${heading}</div>${body}</div>`;
@@ -1000,6 +1193,8 @@ function render(): void {
   picks = [];
   overwrites = [];
   overwritePicks = [];
+  datePicks = [];
+  dateOverwritePicks = [];
   // Decisions already taken elsewhere (#305) leave the list unless asked for. The control lives in
   // the toolbar row rather than in the section heading: with every such row hidden the section is
   // gone, and a toggle inside it would take the only way back with it.
@@ -1018,7 +1213,7 @@ function render(): void {
     section("Will link automatically", willWrite, "will", false) +
     // "Already linked" normally folds away as noise — but a stamp that is linked *and* still gains
     // catalog numbers (#280) is about to be written to, so that section opens itself.
-    section("Already linked", done, "done", true, done.some((r) => fillsOf(r) > 0)) +
+    section("Already linked", done, "done", true, done.some((r) => fillsOf(r) > 0 || dateFillOf(r))) +
     section("Skipped", skipped, "skip", true);
 
   resultsEl.querySelectorAll<HTMLButtonElement>("button[data-pick]").forEach((btn) => {
@@ -1029,6 +1224,11 @@ function render(): void {
   resultsEl.querySelectorAll<HTMLButtonElement>("button[data-overwrite]").forEach((btn) => {
     const pick = overwritePicks[Number(btn.dataset.overwrite)];
     if (pick) btn.addEventListener("click", () => overwriteOne(pick));
+  });
+
+  resultsEl.querySelectorAll<HTMLButtonElement>("button[data-date]").forEach((btn) => {
+    const pick = dateOverwritePicks[Number(btn.dataset.date)];
+    if (pick) btn.addEventListener("click", () => overwriteDateOne(pick));
   });
 
   renderChips();
@@ -1087,6 +1287,14 @@ backfillEl.addEventListener("change", () => {
   })();
 });
 
+// The date sync is a second write the preview has to describe honestly, so it re-previews too.
+issueDateEl.addEventListener("change", () => {
+  void (async () => {
+    await setIssueDateSync(issueDateEl.checked);
+    if (items.length > 0 && profile) await preview();
+  })();
+});
+
 // Purely a view filter over results already in hand — no re-match, so it costs nothing to flip back
 // and forth while reading the list.
 showLinkedEl.addEventListener("change", () => {
@@ -1097,6 +1305,7 @@ showLinkedEl.addEventListener("change", () => {
 
 void (async () => {
   backfillEl.checked = await getCatalogBackfill();
+  issueDateEl.checked = await getIssueDateSync();
   showLinked = await getShowLinkedDecisions();
   showLinkedEl.checked = showLinked;
   await refreshProfile();
