@@ -17,6 +17,7 @@ import {
   parkTilesAction,
   removeTileCandidateAction,
   returnTilesToQueueAction,
+  unpairTileBackAction,
 } from "@/app/actions/scans";
 import type { CollectionAreaData } from "@/lib/areas";
 import { formatItemNo } from "@/lib/item-number";
@@ -114,6 +115,12 @@ import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copie
  * in front of that picker: a narrowing can be wrong, so *Identify as a new copy* stays exactly where
  * it is for every tile. See {@link CandidateShortlist}, and `tile-candidates.ts` for the one case in
  * which a shortlist is the wrong answer altogether.
+ *
+ * **The back can also be taken off here** (#648), which is the one repair this surface owes the
+ * pairing: a back on the wrong stamp is seen at this size and nowhere else, and until this existed
+ * the only way to undo one was deleting the whole batch. *Unpair back* returns it to the batch's
+ * unpaired backs, where the same drag that mis-placed it places it again — it is not a fourth
+ * outcome, so it sits at the end of the row rather than among the three ends.
  *
  * **A consumed tile can be identified again from here**, which is the one thing #584 left out.
  * Settling a tile here rather than navigating to its copy was right, but it left the *wrong* answer
@@ -580,6 +587,36 @@ export function TileIdentifyDialog({
     </DialogSecondaryButton>
   );
 
+  /**
+   * *Unpair back* (#648) — take the back off this tile and stand it back up among the batch's
+   * unpaired backs, where the drag that placed it wrongly places it again.
+   *
+   * **Here because here is where the mis-pairing is seen.** The strip shows a 5.5 rem square; a back
+   * on the wrong stamp is noticed when the piece is on screen at the size this dialog gives it, with
+   * its front and its back one flip apart. Before this, that observation had nowhere to go — the
+   * only undo was deleting the batch, taking every identified tile beside it.
+   *
+   * **Last in the row and not among the three ends**, because it is not one: identify, discard and
+   * set aside are what becomes of the piece, and this is a repair of the cut that leaves the tile
+   * exactly where it was, still waiting to be identified. Which is also why it needs no
+   * confirmation — the back is one drag from being back, and it is what the strip is showing.
+   *
+   * Only on a tile that has a back of **its own**: a consumed tile's pictures went with the copy,
+   * and a settled tile takes no action from this footer anyway.
+   */
+  const unpairBack =
+    tile && tile.backPhotoId != null && !settled ? (
+      <DialogSecondaryButton
+        // `keepOpen`: the collector is not done with this tile — the back came off so that the
+        // right one can go on, and the piece is still to be identified. The strip behind refreshes
+        // and the picture here loses its back side, both from the same re-read.
+        onClick={() => run(() => unpairTileBackAction(tile.id), false, true)}
+        disabled={pending}
+      >
+        <Icon name="unlink" size="sm" /> Unpair back
+      </DialogSecondaryButton>
+    ) : null;
+
   /** *Same as the last* (#595), beside *Identify as a new copy* in both footers, because it is that
    * answer with its first question already answered — and offered under the same `canIdentify`, since
    * an order whose every lot is closed takes no new copy however it is asked for. It names the stamp
@@ -777,6 +814,7 @@ export function TileIdentifyDialog({
             {repeat}
             {parked ? putBack : park}
             {discard}
+            {unpairBack}
           </div>
           <DialogSecondaryButton onClick={onClose} disabled={pending}>
             Cancel
@@ -807,6 +845,7 @@ export function TileIdentifyDialog({
                   <Icon name="link" size="sm" /> Assign to a copy on this order
                 </DialogSecondaryButton>
               )}
+              {unpairBack}
             </>
           }
         />

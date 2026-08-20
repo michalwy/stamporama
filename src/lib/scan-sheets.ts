@@ -19,7 +19,13 @@ import {
   isBatchLabelTooLong,
   normalizeBatchLabel,
 } from "./scan-batch-label";
-import { normalizeBox, pairByPosition, readingOrder, type Box } from "./scan-boxes";
+import {
+  normalizeBox,
+  pairByPosition,
+  readingOrder,
+  type Box,
+  type PairingMode,
+} from "./scan-boxes";
 import { detectSheetBoxes } from "./scan-detect";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
@@ -373,6 +379,10 @@ export interface CutReport {
   frontCount: number;
   /** Back boxes in this cut. Zero on a front commit. */
   backCount: number;
+  /** Which path the back cut took (#647): `positional` when the two sides held the same number of
+   * boxes and the card was paired by position, `manual` when they did not and every back was left
+   * to be dropped onto its tile by hand. `positional` on a front commit, which pairs nothing. */
+  pairingMode: PairingMode;
   /** Backs paired onto an existing front tile. */
   paired: number;
   /** Reading-order positions of front tiles still carrying no back. */
@@ -391,9 +401,11 @@ export interface CutReport {
  *
  * On a **back** sheet the boxes are paired to the batch's front tiles **by position** — each stamp
  * having been turned over in place, so a back sits where its front sat. Mutual-nearest, no
- * mirroring, nothing forced (`scan-boxes.ts` carries the reasoning). A back that finds no front
- * becomes a **back-only tile**, which is what the collector drags onto a front tile in the sparse
- * case; a front that finds no back simply keeps having none.
+ * mirroring, nothing forced (`scan-boxes.ts` carries the reasoning), and **only when the two sides
+ * hold the same number of boxes** (#647): a back sheet covering a subset pairs by hand instead,
+ * because mutual-nearest goes on matching across the gaps and lands the backs one square off. A
+ * back that finds no front — or every back, on a mismatch — becomes a **back-only tile**, which is
+ * what the collector drags onto a front tile; a front that finds no back simply keeps having none.
  */
 export async function commitCut(
   ownerId: string,
@@ -502,6 +514,7 @@ async function commitFrontCut(args: {
     created: rows.length,
     frontCount: rows.length,
     backCount: 0,
+    pairingMode: "positional",
     paired: 0,
     frontWithoutBack: rows.map((r) => r.position),
     backOnly: 0,
@@ -610,6 +623,7 @@ async function commitBackCut(args: {
     created: rows.filter((r) => r.isNewTile).length,
     frontCount,
     backCount: ordered.length,
+    pairingMode: pairing.mode,
     paired: pairing.pairs.length,
     frontWithoutBack: pairing.frontUnmatched.map((i) => frontTiles[i].position),
     backOnly: pairing.backUnmatched.length,
@@ -813,12 +827,93 @@ export async function pairTilesManually(
   });
 }
 
+/**
+ * Take a back off the tile it is paired to, and stand it back up as a **back-only tile** (#648).
+ *
+ * The inverse of {@link pairTilesManually} and deliberately its exact shape in reverse: the back
+ * lands where an unpaired back lands — the strip under the batch — so reassigning it is the drag
+ * that was already there rather than a second vocabulary for the same move. Nothing is deleted and
+ * nothing is re-cut; one `Photo` row changes owner and the box columns move with it.
+ *
+ * **Why this has to exist at all**: before it, a back on the wrong tile could only be undone by
+ * deleting the batch, which throws away every correctly identified tile beside it — a whole card's
+ * work for one mis-pairing. Re-cutting is no better: it is refused the moment a tile has become a
+ * copy, which on a card being worked through is most of them.
+ *
+ * **Only from a tile still being worked.** A `consumed` tile's images belong to the copy it became
+ * (#567 re-owned the rows), so there is nothing here to take back — the copy's own screens are
+ * where its photographs are changed. A `discarded` tile is refused for the same reason the pairing
+ * path refuses it: *Put back in the queue* is one press away in the same dialog, and one rule about
+ * which tiles are still workable is better than two that can drift.
+ */
+export async function unpairTileBack(ownerId: string, tileId: string): Promise<void> {
+  const tile = await loadTile(tileId);
+  await assertPurchaseOwner(ownerId, tile.purchaseId);
+
+  if (tile.backSheetId == null) {
+    throw new ScanValidationError("That tile has no back image to unpair.");
+  }
+  if (tile.frontSheetId == null) {
+    throw new ScanValidationError("That back is not paired to anything.");
+  }
+  if (!isOpenTileState(tile.state)) {
+    throw new ScanValidationError("That tile has already been dealt with.");
+  }
+
+  // Appended after everything in the batch, exactly as an unmatched back is at commit: a position
+  // is what the collector reads off the strip to find a piece in the tray, so nothing already on
+  // screen may shift because a back was taken off one square.
+  const maxPosition = await prisma.scanTile.aggregate({
+    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo },
+    _max: { position: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    const freed = await tx.scanTile.create({
+      data: {
+        purchaseId: tile.purchaseId,
+        batchNo: tile.batchNo,
+        position: (maxPosition._max.position ?? -1) + 1,
+        backSheetId: tile.backSheetId,
+        backX: tile.backX,
+        backY: tile.backY,
+        backW: tile.backW,
+        backH: tile.backH,
+      },
+      select: { id: true },
+    });
+    const moved = await tx.photo.updateMany({
+      where: { tileId, role: "back" },
+      data: { tileId: freed.id },
+    });
+    // A tile carrying back columns and no back picture is a state nothing here can produce, and
+    // standing an empty square up on the strip would be worse than refusing: the collector would
+    // be dragging a blank onto a stamp.
+    if (moved.count === 0) {
+      throw new ScanValidationError("That tile's back image is no longer there.");
+    }
+    await tx.scanTile.update({
+      where: { id: tileId },
+      data: { backSheetId: null, backX: null, backY: null, backW: null, backH: null },
+    });
+  });
+
+  // The batch has an unpaired back waiting to be placed, so it is not finished with — and #578
+  // sweeps the retained scan of a batch that is. Same clearing `returnTilesToQueue` does, for the
+  // same reason: the card must still be there for the piece the collector is coming back to.
+  await prisma.scanSheet.updateMany({
+    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
+    data: { batchDoneAt: null },
+  });
+}
+
 async function loadTile(tileId: string) {
   const tile = await prisma.scanTile.findUnique({
     where: { id: tileId },
     select: {
       id: true,
       purchaseId: true,
+      batchNo: true,
       state: true,
       frontSheetId: true,
       backSheetId: true,

@@ -1212,9 +1212,13 @@ function BatchSection({
 
       {expanded && backOnly.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          {/* Deliberately says nothing about *why* a back is here. Three routes lead to this strip
+              — a back that found no front, a whole card the counts sent to manual pairing (#647),
+              and a back taken off a tile it did not belong to (#648) — and the one instruction is
+              the same for all three. The report banner above says which route it was, on the one
+              occasion that is news. */}
           <span style={{ fontSize: "0.8125rem", color: "var(--color-warning)" }}>
-            These backs found no front in the same position. Drag each one onto the tile it belongs
-            to.
+            These backs are not on a tile yet. Drag each one onto the tile it belongs to.
           </span>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             {backOnly.map((tile) => (
@@ -2032,9 +2036,13 @@ function CutReportBanner({
   onDismiss: () => void;
 }) {
   // A count mismatch is a signal, not a failure: it means a stamp fell out, two were drawn as one,
-  // or the wrong file was uploaded. Which fronts found no back is named, because that is what turns
-  // the number into something to look at.
+  // backs were scanned for only some of the stamps, or the wrong file was uploaded. Which fronts
+  // found no back is named, because that is what turns the number into something to look at.
   const mismatch = report.side === "back" && report.frontCount !== report.backCount;
+  // It also decides how the cut paired (#647). On `manual` nothing was paired by position at all,
+  // so naming the fronts that "found no back" would be describing a search that never ran — the
+  // one thing to say is that the whole card is waiting to be paired by hand.
+  const byHand = report.side === "back" && report.pairingMode === "manual";
   return (
     <Banner tone={mismatch || report.backOnly > 0 ? "warning" : "info"}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
@@ -2043,6 +2051,14 @@ function CutReportBanner({
             <>
               Cut into <strong>{report.created}</strong>{" "}
               {report.created === 1 ? "tile" : "tiles"}.
+            </>
+          ) : byHand ? (
+            <>
+              Front {report.frontCount}, back {report.backCount} — the two sides hold different
+              numbers of pieces, so <strong>nothing was paired by position</strong>: matching across
+              the gaps would have put most backs on the wrong stamp. Drag each of the{" "}
+              {report.backCount} {report.backCount === 1 ? "back" : "backs"} below onto the tile it
+              belongs to.
             </>
           ) : (
             <>

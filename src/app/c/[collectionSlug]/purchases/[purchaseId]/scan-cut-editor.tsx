@@ -479,6 +479,10 @@ export function ScanCutEditor({
   // ── Render ─────────────────────────────────────────────────────────────────────────────────
 
   const drawing = drag?.kind === "draw" ? drag.current : null;
+  // Since #647 this is not only a signal to look at but the thing that **decides** how the commit
+  // pairs: equal counts pair by position, anything else pairs by hand. So it is said before the
+  // commit rather than only in the report — the collector can still fix the cut here, and a card
+  // whose two sides genuinely hold different numbers of pieces is one they meant to pair by hand.
   const countMismatch =
     sheet.side === "back" && frontTileCount != null && frontTileCount !== regions.length;
 
@@ -528,8 +532,10 @@ export function ScanCutEditor({
                 <strong>
                   Front {frontTileCount}, back {regions.length}.
                 </strong>{" "}
-                A stamp fell out, two were drawn as one, or this is the wrong file. Committing is
-                allowed — what pairs, pairs; the rest is reported.
+                A stamp fell out, two were drawn as one, backs were scanned for only some of the
+                stamps, or this is the wrong file. Committing is allowed — but with the counts
+                differing <strong>nothing is paired by position</strong>: every back lands in
+                the unpaired backs below the tiles, to be dragged onto the stamp it belongs to.
               </>
             )}
           </div>

@@ -74,6 +74,7 @@ import {
   Layers,
   Lightbulb,
   Link2,
+  Unlink2,
   List,
   Lock,
   LockOpen,
@@ -176,6 +177,8 @@ const GLYPHS = {
   externalLink: ExternalLink,
   /** Ties two records together here. */
   link: Link2,
+  /** Unties two records tied together here — a tile's back taken off it (#648). */
+  unlink: Unlink2,
   copy: Copy,
   /** Makes a second one — the same offer on another platform. */
   duplicate: CopyPlus,

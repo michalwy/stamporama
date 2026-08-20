@@ -321,13 +321,32 @@ Backs are matched to fronts **by position**, not by order: each back goes to the
 the same spot, and the match has to agree both ways. Nothing is mirrored, because turning each
 stamp in place is what keeps the positions lined up in the first place.
 
-If the two sides do not have the same number of boxes, that is reported rather than hidden — *Front
-12, back 11*, naming which fronts found no back. It usually means a stamp fell out, two were drawn
-as one, or the wrong file was uploaded.
+**This only happens when the two sides hold the same number of boxes.** If they do not — *Front 12,
+back 9* — nothing is paired automatically and every back lands in the **unpaired backs** strip below
+the tiles, to be dragged onto the stamp it belongs to. That is deliberate: on a card where you
+scanned backs for only some of the stamps, position matching goes on matching across the gaps and
+puts most of the backs one stamp off, and a back on the wrong stamp is invisible afterwards. A
+missing back is not.
 
-A back that finds no front appears in an **unpaired backs** strip below the tiles. Drag it onto the
-tile it belongs to. That is also how you handle a card where you only scanned backs for some of the
-stamps, or where the layout was not reproduced.
+The counts are also compared **in the cut editor**, before you commit, so a stray box or a missed
+one can be fixed there rather than found out about afterwards. A mismatch usually means a stamp fell
+out, two were drawn as one, or the wrong file was uploaded — or simply that you turned over only
+some of the stamps.
+
+Drag each unpaired back onto its tile. A back that found no front on a card that *did* pair by
+position lands in the same strip and is placed the same way.
+
+#### Taking a back off a tile
+
+If a back ends up on the wrong stamp — or you paired one by hand and then saw it was the neighbour's
+— open the tile and press **Unpair back**. The back goes back into the unpaired backs strip, where
+the same drag puts it on the right tile. Nothing else about the batch changes, and tiles already
+identified beside it are untouched.
+
+It is offered on a tile that is still to be identified, parked ones included. A tile that has already
+become a copy is not one of them: its pictures belong to that copy now, and they are changed from the
+copy's own screen. For a discarded tile, put it back in the queue first — the button is in the same
+dialog.
 
 #### Re-cutting
 

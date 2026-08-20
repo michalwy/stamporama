@@ -147,6 +147,7 @@ describe("pairByPosition", () => {
       { frontIndex: 1, backIndex: 1 },
       { frontIndex: 2, backIndex: 2 },
     ]);
+    assert.equal(result.mode, "positional");
     assert.deepEqual(result.frontUnmatched, []);
     assert.deepEqual(result.backUnmatched, []);
   });
@@ -165,22 +166,23 @@ describe("pairByPosition", () => {
     ]);
   });
 
-  it("reports what found no partner instead of forcing a pairing", () => {
-    // Backs scanned for the first and last stamp only — the sparse case. The middle front stays
-    // unmatched rather than stealing a neighbour's back.
+  it("pairs nothing when the back sheet covers only some of the stamps (#647)", () => {
+    // Backs scanned for the first and last stamp only — the sparse case, and the one mutuality
+    // does **not** carry: box 2's back is missing, so front 2 and back 2 (the last stamp's) are
+    // each other's nearest and the match is mutual, one square off. Two of the three would be
+    // wrong and nothing downstream could tell. So the count decides, and the whole card is paired
+    // by hand.
     const back = [box(104, 98, 80, 100), box(502, 101, 80, 100)];
     const result = pairByPosition(front, sheet(1000, 400), back, sheet(1000, 400));
-    assert.deepEqual(result.pairs, [
-      { frontIndex: 0, backIndex: 0 },
-      { frontIndex: 2, backIndex: 1 },
-    ]);
-    assert.deepEqual(result.frontUnmatched, [1]);
-    assert.deepEqual(result.backUnmatched, []);
+    assert.equal(result.mode, "manual");
+    assert.deepEqual(result.pairs, []);
+    assert.deepEqual(result.frontUnmatched, [0, 1, 2]);
+    assert.deepEqual(result.backUnmatched, [0, 1]);
   });
 
-  it("leaves a back with no front over, for manual pairing", () => {
-    // Four backs against three fronts — a region drawn split, or a stamp that fell out of the
-    // front scan. The extra is reported, and becomes a back-only tile to be dragged onto a front.
+  it("pairs nothing with a back over, either — a stamp fell out or a region was drawn split", () => {
+    // Four backs against three fronts. Three of them would pair, but the count says the two cards
+    // are not the same layout, and which three is exactly what cannot be trusted.
     const back = [
       box(104, 98, 80, 100),
       box(297, 103, 80, 100),
@@ -188,19 +190,21 @@ describe("pairByPosition", () => {
       box(700, 100, 80, 100),
     ];
     const result = pairByPosition(front, sheet(1000, 400), back, sheet(1000, 400));
-    assert.equal(result.pairs.length, 3);
-    assert.deepEqual(result.backUnmatched, [3]);
-    assert.deepEqual(result.frontUnmatched, []);
+    assert.equal(result.mode, "manual");
+    assert.deepEqual(result.pairs, []);
+    assert.deepEqual(result.backUnmatched, [0, 1, 2, 3]);
   });
 
   it("mutuality stops two fronts sharing one back", () => {
-    // Two fronts, one back sitting nearer the second. Both fronts call it their nearest; only the
-    // one it calls back gets it.
+    // Two fronts and two backs, both backs sitting over the second stamp — the first was turned
+    // over onto its neighbour, or a shadow was boxed. The nearer one wins the front it calls back,
+    // and the other is left over rather than forced onto the front that has none.
     const twoFronts = [box(100, 100, 80, 100), box(300, 100, 80, 100)];
-    const back = [box(290, 100, 80, 100)];
+    const back = [box(290, 100, 80, 100), box(295, 100, 80, 100)];
     const result = pairByPosition(twoFronts, sheet(1000, 400), back, sheet(1000, 400));
-    assert.deepEqual(result.pairs, [{ frontIndex: 1, backIndex: 0 }]);
+    assert.deepEqual(result.pairs, [{ frontIndex: 1, backIndex: 1 }]);
     assert.deepEqual(result.frontUnmatched, [0]);
+    assert.deepEqual(result.backUnmatched, [0]);
   });
 
   it("compares in fractional coordinates, so a back scanned at another size still lines up", () => {

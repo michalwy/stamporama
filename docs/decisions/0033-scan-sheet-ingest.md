@@ -144,10 +144,29 @@ A differing count is a **signal, not a failure to hide**: the commit reports *fr
 names which fronts found no back, because it means a stamp fell out, two were drawn as one, or the
 wrong file was uploaded.
 
+**Equal counts are the precondition for pairing at all** (#647). Mutuality was expected to carry the
+sparse case — backs scanned for only some of the stamps — and it does not: with a subset on the
+second card, the missing stamps' neighbours become each other's nearest, the match is mutual, and
+most backs land one square off. So a mismatch pairs **nothing** and every back goes to the manual
+path. A count is a weak signal for *the same card turned over*, and deliberately so: it is the one
+signal that is cheap, exact and impossible to be subtly wrong about, and the two errors are not
+symmetric — being wrongly turned away from the fast path costs a drag per stamp, while being wrongly
+admitted to it costs a mis-paired card nobody notices. `CutReport.pairingMode` carries which path was
+taken, because on the manual one *no back found for tile 3, 5, 9* would describe a search that never
+ran.
+
 An unmatched **back** becomes a **back-only tile**, shown in an unpaired strip and dragged onto a
-front tile. That is the sparse case — backs scanned for only some stamps — handled with the same
-entity and the same images rather than a third mode. Dropping it re-owns the `Photo` row and deletes
-the emptied tile.
+front tile. That is the sparse case handled with the same entity and the same images rather than a
+third mode. Dropping it re-owns the `Photo` row and deletes the emptied tile.
+
+**A paired back can be taken off again** (#648, `unpairTileBack`) — the same move in reverse: the
+back becomes a back-only tile appended to the batch and is placed by the same drag. Without it the
+only undo for a mis-pairing was deleting the batch, which throws away every tile identified beside
+it, and re-cutting is refused as soon as one of them has become a copy. Unpairing clears the batch's
+`batchDoneAt` for the reason returning a tile to the queue does: a card with a back still to be
+placed is not finished with, and #578 sweeps the retained scans of ones that are. It is refused on a
+settled tile — a consumed tile's images belong to its copy, and a discarded one is one press from
+being back in the queue.
 
 ### 6. The review editor is the primitive, not a fallback
 
@@ -206,7 +225,14 @@ between correcting a cut and drawing one again.
 - A back scan of the **wrong card** with the same number of stamps in roughly the same places will
   pair silently. Mutual-nearest with no distance cap cannot tell that apart from a card laid out
   again, and a cap tight enough to catch it would break the case it exists for. The count report is
-  the only signal, and it is one the collector reads rather than one the system acts on.
+  the only signal, and it is one the collector reads rather than one the system acts on. Since #647
+  an unequal count is acted on — nothing pairs — but an equal one is still only a count, so this
+  case stands.
+- Pairing a sparse back sheet is **a drag per stamp** (#647), including the card where the positions
+  *were* reproduced and only some stamps were turned. That is the accepted cost of not pairing
+  across gaps: the fast path is bought with a signal that cannot be subtly wrong, and unpairing
+  (#648) is what makes the alternative — pairing optimistically and correcting afterwards —
+  unnecessary rather than merely survivable.
 - Colour correction stays in Photoshop and is deliberately out of scope. Sheet scanning already drops
   it from once per stamp to once per card, which is the whole win. If it is ever built it must not
   port Camera Raw's numbers (*Blacks 2012*, *Texture*, *Clarity*, *Vibrance* are proprietary and not

@@ -203,7 +203,12 @@ export interface BoxPair {
   backIndex: number;
 }
 
+/** Which of the two paths a back sheet took. `positional` is the fast path of a card turned over
+ * in place; `manual` is every back left to the collector to drop onto its tile. */
+export type PairingMode = "positional" | "manual";
+
 export interface PairingResult {
+  mode: PairingMode;
   pairs: BoxPair[];
   /** Front boxes that found no mutual back — the tiles that will have no back image. */
   frontUnmatched: number[];
@@ -227,9 +232,20 @@ export interface PairingResult {
  *
  * The match must be **mutual** — nearest back to a front *and* nearest front to that back. That
  * mutuality is the whole guard, and there is deliberately no distance cap beside it: a cap is one
- * more constant to be wrong about, and a genuinely absurd pairing needs a stamp to be both sides'
- * nearest neighbour, which a sparse back scan does not produce. What is left over is reported, not
- * forced.
+ * more constant to be wrong about. What is left over is reported, not forced.
+ *
+ * **Equal counts are the precondition, not a detail of the report** (#647). Mutuality was expected
+ * to carry the sparse case on its own — backs scanned for only some of the stamps — and it does not:
+ * with a subset on the second card the missing stamps' neighbours become each other's nearest, the
+ * match is mutual, and most backs land one square off. Nothing downstream can catch that. A wrong
+ * back is worse than no back — it is the picture the copy keeps, and it is silent, where an absent
+ * one is visible on the strip — so a mismatch pairs **nothing** and every back becomes a back-only
+ * tile for the collector to drop onto its own front.
+ *
+ * Counts are a weak signal for "the same card turned over", and deliberately so: it is the one
+ * signal that is cheap, exact and impossible to be subtly wrong about, and being turned away from
+ * the fast path costs a drag per stamp while being wrongly admitted to it costs a mis-paired card
+ * nobody notices.
  *
  * Centres are compared in **fractional sheet coordinates**, so a back scanned at a slightly
  * different size or crop than its front still lines up.
@@ -240,6 +256,15 @@ export function pairByPosition(
   back: readonly Box[],
   backSheet: SheetSize
 ): PairingResult {
+  if (front.length !== back.length) {
+    return {
+      mode: "manual",
+      pairs: [],
+      frontUnmatched: front.map((_, i) => i),
+      backUnmatched: back.map((_, i) => i),
+    };
+  }
+
   const frontPts = front.map((b) => fractionalCenter(b, frontSheet));
   const backPts = back.map((b) => fractionalCenter(b, backSheet));
 
@@ -258,6 +283,7 @@ export function pairByPosition(
 
   const paired = new Set(pairs.map((p) => p.frontIndex));
   return {
+    mode: "positional",
     pairs,
     frontUnmatched: front.map((_, i) => i).filter((i) => !paired.has(i)),
     backUnmatched: back.map((_, i) => i).filter((i) => !pairedBack.has(i)),

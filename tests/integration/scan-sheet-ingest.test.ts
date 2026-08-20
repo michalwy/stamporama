@@ -19,6 +19,7 @@ import {
   listPurchaseScans,
   setBatchLabel,
   pairTilesManually,
+  unpairTileBack,
   proposeCut,
   recutBatch,
   renderSheetRegion,
@@ -42,7 +43,11 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //   - the sheet is **retained**, and a batch can be re-cut from it;
 //   - a back scan pairs **by position** onto the batch's front tiles, with the leftovers on both
 //     sides reported rather than forced;
-//   - an unmatched back becomes a back-only tile that can be dragged onto a front by hand;
+//   - two sides holding different numbers of boxes pair **nothing** by position (#647), because a
+//     back sheet covering a subset would otherwise be matched across the gaps and land one stamp
+//     off;
+//   - an unmatched back becomes a back-only tile that can be dragged onto a front by hand, and a
+//     back on the wrong tile can be taken off it again and dragged onto another (#648);
 //   - re-cutting is refused once a tile has become a copy;
 //   - a card belongs to the **order** (#586), so deleting one of its lots leaves it standing while
 //     deleting the purchase takes it, and batch numbers are unique across the whole parcel;
@@ -342,7 +347,7 @@ describe("scan sheet ingest (#566)", () => {
     await deletePurchase(userId, purchaseId);
   });
 
-  it("reports a count mismatch instead of forcing a pairing", async () => {
+  it("pairs nothing when the two sides hold different counts (#647)", async () => {
     const purchaseId = await newOrder();
     const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
@@ -364,19 +369,35 @@ describe("scan sheet ingest (#566)", () => {
 
     assert.equal(report.frontCount, 3);
     assert.equal(report.backCount, 2);
-    assert.equal(report.paired, 1);
-    // The two middle/right fronts are named, so the collector is told which ones to look at.
-    assert.deepEqual(report.frontWithoutBack, [1, 2]);
-    assert.equal(report.backOnly, 1);
-    assert.equal(report.created, 1, "the unmatched back becomes a back-only tile");
+    // The red back sits exactly over front 0 and mutual-nearest would happily take it. It is
+    // refused anyway: on a card whose two sides differ, *which* of the matches is the real one is
+    // precisely what cannot be told, and a back on the wrong stamp is silent afterwards.
+    assert.equal(report.pairingMode, "manual");
+    assert.equal(report.paired, 0);
+    assert.deepEqual(report.frontWithoutBack, [0, 1, 2]);
+    assert.equal(report.backOnly, 2);
+    assert.equal(report.created, 2, "every back becomes a back-only tile to be placed by hand");
 
-    const backOnly = await prisma.scanTile.findFirstOrThrow({
-      where: { purchaseId, frontSheetId: null },
+    const tiles = await prisma.scanTile.findMany({
+      where: { purchaseId },
+      orderBy: { position: "asc" },
       include: { photos: true },
     });
-    assert.equal(backOnly.position, 3, "appended, so no existing tile's position shifts");
-    assert.equal(backOnly.photos.length, 1);
-    assert.equal(backOnly.photos[0].role, "back");
+    assert.equal(tiles.length, 5);
+    for (const tile of tiles.slice(0, 3)) {
+      assert.equal(tile.backSheetId, null, "no front tile was given a back");
+      assert.equal(tile.photos.length, 1);
+    }
+    // Appended after the fronts, so no existing tile's position shifts under the collector.
+    assert.deepEqual(
+      tiles.slice(3).map((t) => t.position),
+      [3, 4]
+    );
+    for (const tile of tiles.slice(3)) {
+      assert.equal(tile.frontSheetId, null);
+      assert.equal(tile.photos.length, 1);
+      assert.equal(tile.photos[0].role, "back");
+    }
 
     await deletePurchase(userId, purchaseId);
   });
@@ -386,9 +407,9 @@ describe("scan sheet ingest (#566)", () => {
     const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
-    // A sparse back scan: the leftmost stamp turned over in place, plus one region low on the card
-    // that sits under no front box. The first pairs; the second is nobody's mutual nearest and so
-    // arrives as a back-only tile — which is the thing manual pairing exists to place.
+    // The same sparse back scan: the leftmost stamp turned over in place, plus one region low on
+    // the card that sits under no front box. Neither is paired for the collector (#647), so both
+    // arrive as back-only tiles — which is the thing manual pairing exists to place.
     const strayBox: Box = { x: 200, y: 1200, w: 300, h: 300 };
     const backBytes = await card(SHEET_W, SHEET_H, [
       { box: FRONT_BOXES[0], colour: RED },
@@ -402,11 +423,15 @@ describe("scan sheet ingest (#566)", () => {
     });
     await commitCut(userId, back.id, [FRONT_BOXES[0], strayBox]);
 
-    const tiles = await prisma.scanTile.findMany({ where: { purchaseId }, orderBy: { position: "asc" } });
-    const paired = tiles.find((t) => t.position === 0)!;
-    const target = tiles.find((t) => t.position === 1)!;
+    const tiles = await prisma.scanTile.findMany({
+      where: { purchaseId },
+      orderBy: { position: "asc" },
+    });
+    const target = tiles.find((t) => t.position === 0)!;
+    const other = tiles.find((t) => t.position === 1)!;
+    // Reading order, so the stamp's own back comes before the stray one lower down the card.
     const backOnly = tiles.filter((t) => t.frontSheetId == null);
-    assert.equal(backOnly.length, 1);
+    assert.equal(backOnly.length, 2);
 
     await pairTilesManually(userId, backOnly[0].id, target.id);
 
@@ -417,8 +442,8 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(merged.photos.length, 2);
     assert.equal(merged.backSheetId, back.id);
     // The image the collector dragged is the one that landed — re-owned, not re-cut.
-    assert.deepEqual(await centreColour(merged.photos.find((p) => p.role === "back")!), GREEN);
-    assert.deepEqual(merged.backX, strayBox.x);
+    assert.deepEqual(await centreColour(merged.photos.find((p) => p.role === "back")!), RED);
+    assert.deepEqual(merged.backX, FRONT_BOXES[0].x);
     // The emptied tile is gone rather than lingering as a tile of nothing.
     assert.equal(await prisma.scanTile.count({ where: { id: backOnly[0].id } }), 0);
     assert.ok(await photoBytesExist(merged.photos.find((p) => p.role === "back")!));
@@ -426,9 +451,102 @@ describe("scan sheet ingest (#566)", () => {
     // A tile that already has a back does not take a second, and a tile with a front of its own is
     // not something that can be dragged onto another.
     await assert.rejects(
-      () => pairTilesManually(userId, target.id, paired.id),
+      () => pairTilesManually(userId, backOnly[1].id, target.id),
       ScanValidationError
     );
+    await assert.rejects(
+      () => pairTilesManually(userId, target.id, other.id),
+      ScanValidationError
+    );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("takes a back off the tile it was paired to, and lets it be placed on another (#648)", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
+    await commitCut(userId, front.id, FRONT_BOXES);
+
+    // The card turned over in place — every back pairs, which is the state a mis-pairing has to be
+    // undone *from*: nothing is left over on screen and the batch is one step from being finished.
+    const backBytes = await card(
+      SHEET_W,
+      SHEET_H,
+      FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
+    );
+    const back = await uploadSheet(userId, purchaseId, {
+      source: backBytes,
+      mime: "image/png",
+      side: "back",
+      batchNo: front.batchNo,
+    });
+    assert.equal((await commitCut(userId, back.id, FRONT_BOXES)).paired, 3);
+
+    const tiles = await prisma.scanTile.findMany({
+      where: { purchaseId },
+      orderBy: { position: "asc" },
+    });
+    // A batch already stamped as finished with: unpairing puts work back into it, and #578 sweeps
+    // the retained card of a batch that is done.
+    await prisma.scanSheet.updateMany({
+      where: { purchaseId, batchNo: front.batchNo },
+      data: { batchDoneAt: new Date() },
+    });
+
+    await unpairTileBack(userId, tiles[0].id);
+    await unpairTileBack(userId, tiles[1].id);
+
+    const stripped = await prisma.scanTile.findUniqueOrThrow({
+      where: { id: tiles[0].id },
+      include: { photos: true },
+    });
+    assert.equal(stripped.backSheetId, null);
+    assert.equal(stripped.backX, null);
+    assert.deepEqual(stripped.photos.map((p) => p.role), ["front"]);
+    assert.equal(stripped.state, "unidentified", "the tile is untouched apart from its back");
+
+    const freed = await prisma.scanTile.findMany({
+      where: { purchaseId, frontSheetId: null },
+      orderBy: { position: "asc" },
+      include: { photos: true },
+    });
+    assert.equal(freed.length, 2);
+    assert.deepEqual(
+      freed.map((t) => t.position),
+      [3, 4],
+      "appended, so no square already on screen moves"
+    );
+    assert.equal(freed[0].backSheetId, back.id);
+    assert.equal(freed[0].backX, FRONT_BOXES[0].x);
+    assert.deepEqual(await centreColour(freed[0].photos[0]), RED);
+    assert.ok(await photoBytesExist(freed[0].photos[0]), "the bytes are re-owned, never re-cut");
+
+    const sheets = await prisma.scanSheet.findMany({ where: { purchaseId, batchNo: front.batchNo } });
+    assert.ok(
+      sheets.every((sh) => sh.batchDoneAt == null),
+      "a batch with a back waiting to be placed is not finished with"
+    );
+
+    // The point of the whole thing: the back goes onto a *different* tile than it came off.
+    await pairTilesManually(userId, freed[0].id, tiles[1].id);
+    const reassigned = await prisma.scanTile.findUniqueOrThrow({
+      where: { id: tiles[1].id },
+      include: { photos: true },
+    });
+    assert.deepEqual(
+      await centreColour(reassigned.photos.find((p) => p.role === "back")!),
+      RED,
+      "tile 1 now carries the back that was on tile 0"
+    );
+    assert.equal(reassigned.backX, FRONT_BOXES[0].x);
+
+    // Nothing to take off a tile that has no back, and a back-only tile is not paired to anything.
+    await assert.rejects(() => unpairTileBack(userId, tiles[0].id), ScanValidationError);
+    await assert.rejects(() => unpairTileBack(userId, freed[1].id), ScanValidationError);
+    // A settled tile is refused, exactly as it is refused a dragged back: the way back into the
+    // queue is one press away in the same dialog.
+    await prisma.scanTile.update({ where: { id: tiles[2].id }, data: { state: "discarded" } });
+    await assert.rejects(() => unpairTileBack(userId, tiles[2].id), ScanValidationError);
 
     await deletePurchase(userId, purchaseId);
   });

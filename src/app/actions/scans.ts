@@ -10,6 +10,7 @@ import {
   proposeCut,
   recutBatch,
   setBatchLabel,
+  unpairTileBack,
   type CutReport,
 } from "@/lib/scan-sheets";
 import {
@@ -95,6 +96,26 @@ export async function pairTilesAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to pair the tiles. Please try again.",
+    };
+  }
+}
+
+/**
+ * Take a back off the tile it is paired to (#648) — it goes back to the batch's unpaired backs,
+ * where the same drag puts it on the right tile.
+ *
+ * The way out of a mis-pairing that used to cost the whole batch: nothing else about the card
+ * moves, and every tile already identified beside it stays exactly as it is.
+ */
+export async function unpairTileBackAction(tileId: string): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await unpairTileBack(session.user.id, tileId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to unpair the back. Please try again.",
     };
   }
 }
