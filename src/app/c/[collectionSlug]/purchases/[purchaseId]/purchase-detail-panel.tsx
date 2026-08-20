@@ -102,6 +102,11 @@ import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  STUCK_SHADOW,
+  useMeasuredHeight,
+  useStuck,
+} from "@/app/c/[collectionSlug]/shared/sticky-header";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
@@ -2062,46 +2067,9 @@ function CopyRow({
   );
 }
 
-// Drop shadow shown under a sticky header once it is pinned (not at rest), so it reads as
-// floating above the copies scrolling beneath it (#172). Downward-only so `overflow: clip` on
-// the card doesn't cut it and it doesn't bleed over the row above.
-const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
-
-/** Track whether a sticky header is currently pinned. A zero-height sentinel is rendered just
- * above the sticky element; once it scrolls past the pin line (`topOffset` from the viewport
- * top) the header is stuck. Returns the sentinel ref to place and the `stuck` flag. */
-function useStuck(topOffset: number) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const [stuck, setStuck] = useState(false);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { rootMargin: `-${Math.max(0, Math.round(topOffset))}px 0px 0px 0px`, threshold: 0 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [topOffset]);
-  return { sentinelRef, stuck };
-}
-
-/** Measure an element's rendered height (kept current across resizes/content changes), so a
- * nested sticky header can pin right below the one above it (#172). */
-function useMeasuredHeight<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setHeight(el.offsetHeight);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, height] as const;
-}
+// The pinned-header helpers this screen's cards use now live in `shared/sticky-header.ts` (#637):
+// the trade screen pins its sections and their group headings the same way, and two copies of "am I
+// stuck yet" would drift.
 
 /** A copy's live cost-basis estimate for an open lot: its share of the base-currency pool by
  * catalog-price weight, using the whole-lot weight denominator from the summary (#172). Never

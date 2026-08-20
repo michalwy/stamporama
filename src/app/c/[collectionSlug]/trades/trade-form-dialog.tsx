@@ -41,6 +41,21 @@ export interface TradeCatalogVendor {
   abbreviation: string;
 }
 
+/** The header fields this form fills from — the intersection of the list row and the trade's own
+ * record, which is exactly the set the form writes back. */
+export type TradeFormValues = Pick<
+  TradeListItem,
+  | "partnerId"
+  | "partnerName"
+  | "currency"
+  | "notes"
+  | "catalogVendorId"
+  | "balanceByValue"
+  | "countTolerance"
+  | "valueTolerancePct"
+  | "ownValueWarnPct"
+>;
+
 export interface TradeFormDialogProps {
   mode: "add" | "edit";
   collectionId: string;
@@ -49,9 +64,11 @@ export interface TradeFormDialogProps {
   baseCurrency: string;
   /** The catalog vendors this collection knows, for the "agreed catalog" field. */
   catalogVendors: TradeCatalogVendor[];
-  /** The row being edited; add mode leaves it undefined. Every field below is already on the loaded
-   * list row, so editing needs no extra fetch. */
-  trade?: TradeListItem;
+  /** The trade being edited; add mode leaves it undefined. Typed as the header fields alone rather
+   * than as a list row, because the trade's own screen (#637) opens this too and carries the same
+   * fields in a different shape — and because every one of them is already loaded wherever this is
+   * opened from, so editing needs no extra fetch either way. */
+  trade?: TradeFormValues;
   isPending: boolean;
   error?: string;
   onClose: () => void;

@@ -11,11 +11,20 @@ import {
   deleteTrade,
   createTradeSection,
   updateTradeSection,
+  renameTradeSection,
   reorderTradeSections,
   deleteTradeSection,
   type TradeCreateInput,
   type TradeSectionInput,
 } from "@/lib/trades";
+import {
+  addTradeGiveLines,
+  addTradeReceiveLines,
+  updateTradeReceiveLine,
+  deleteTradeLine,
+  type GiveLineRefusal,
+  type TradeReceiveLineInput,
+} from "@/lib/trade-lines";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -239,6 +248,21 @@ export async function updateTradeSectionAction(
   }
 }
 
+/** In-place rename from the section's own heading. Deliberately not `updateTradeSectionAction`:
+ *  that one rewrites the balance override as a unit, and a rename must not touch it. */
+export async function renameTradeSectionAction(
+  sectionId: string,
+  name: string
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await renameTradeSection(session.user.id, sectionId, name);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to rename section. Please try again.") };
+  }
+}
+
 export async function reorderTradeSectionsAction(
   tradeId: string,
   orderedIds: string[]
@@ -259,5 +283,117 @@ export async function deleteTradeSectionAction(sectionId: string): Promise<Trade
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to delete section. Please try again.") };
+  }
+}
+
+// ── Lines (#637) ─────────────────────────────────────────────────────────────────────────────────
+//
+// Two shapes, because the sides are two shapes: the give side takes a list of copy ids from a
+// checkbox picker, the receive side takes `Want`'s key from a form. Everything they appear to
+// enforce — the `agreed` lock, what may be promised, which side may be restated — lives in
+// `lib/trade-lines.ts`.
+
+/** What a bulk add of copies came to. Refusals are **named, not counted**: "already promised to
+ *  trade #4" is something the collector can act on, where "3 skipped" is not. */
+export type AddGiveLinesActionState =
+  | { status: "success"; added: number; refused: GiveLineRefusal[] }
+  | { status: "error"; message: string };
+
+export async function addTradeGiveLinesAction(
+  sectionId: string,
+  itemIds: string[]
+): Promise<AddGiveLinesActionState> {
+  const session = await getSession();
+  try {
+    const result = await addTradeGiveLines(session.user.id, sectionId, itemIds);
+    return { status: "success", ...result };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to add copies. Please try again.") };
+  }
+}
+
+/** The receive line as its dialog submits it — the auction lot line's shape, because it is the same
+ *  question asked of the same kind of material: a blank certificate is *no certificate* (ADR-0006
+ *  §2) and a blank format is the single (ADR-0020). */
+export interface TradeReceiveLineRaw {
+  stampId: string;
+  /** A **whole checklist** picked instead of a single stamp, as the auction lot line offers: it
+   *  expands into one line per stamp on it. Blank for a plain pick, and never set when editing — an
+   *  edit that turned one line into twelve is not an edit. */
+  checklistId?: string;
+  conditionId: string;
+  certificateStatusId: string;
+  formatId: string;
+  quantity: string;
+}
+
+function parseReceiveLine(
+  raw: TradeReceiveLineRaw
+): { data: TradeReceiveLineInput & { checklistId?: string }; error?: string } {
+  const stampId = raw.stampId.trim();
+  const checklistId = raw.checklistId?.trim() ?? "";
+  if (!stampId && !checklistId) {
+    return { data: {} as TradeReceiveLineInput, error: "Pick the stamp this line is about." };
+  }
+  if (!raw.conditionId.trim()) {
+    return {
+      data: {} as TradeReceiveLineInput,
+      error: "Pick the condition this line is described in.",
+    };
+  }
+  const quantity = Number(raw.quantity);
+  if (!Number.isFinite(quantity) || quantity < 1) {
+    return { data: {} as TradeReceiveLineInput, error: "Quantity must be at least 1." };
+  }
+  return {
+    data: {
+      stampId,
+      ...(checklistId ? { checklistId } : {}),
+      conditionId: raw.conditionId.trim(),
+      certificateStatusId: raw.certificateStatusId.trim() || null,
+      formatId: raw.formatId.trim() || null,
+      quantity: Math.trunc(quantity),
+    },
+  };
+}
+
+/** One stamp gives one line; a whole checklist gives one per stamp on it. */
+export async function addTradeReceiveLineAction(
+  sectionId: string,
+  raw: TradeReceiveLineRaw
+): Promise<TradeActionState> {
+  const session = await getSession();
+  const { data, error } = parseReceiveLine(raw);
+  if (error) return { status: "error", message: error };
+  try {
+    await addTradeReceiveLines(session.user.id, sectionId, data);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to add line. Please try again.") };
+  }
+}
+
+export async function updateTradeReceiveLineAction(
+  lineId: string,
+  raw: TradeReceiveLineRaw
+): Promise<TradeActionState> {
+  const session = await getSession();
+  const { data, error } = parseReceiveLine(raw);
+  if (error) return { status: "error", message: error };
+  try {
+    await updateTradeReceiveLine(session.user.id, lineId, data);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to save line. Please try again.") };
+  }
+}
+
+export async function deleteTradeLineAction(lineId: string): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await deleteTradeLine(session.user.id, lineId);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to remove line. Please try again.") };
   }
 }

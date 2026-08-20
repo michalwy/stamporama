@@ -256,6 +256,7 @@ export function TradesListPanel({
               <TradeRow
                 key={t.id}
                 trade={t}
+                collectionSlug={collectionSlug}
                 isLast={idx === rows.length - 1 && !hasNextPage}
                 onEdit={(row) => setDialog({ kind: "edit", trade: row })}
                 onSetStatus={setStatus}
@@ -288,9 +289,10 @@ export function TradesListPanel({
                 const result = await createTradeAction(collectionId, fd);
                 if (result.status === "success") {
                   handleSuccess();
-                  // No navigation yet: the trade's own screen is #637. Until it exists, the new row
-                  // appearing at the top of the list is the confirmation, so this one gets a toast.
-                  toast({ message: "Trade created" });
+                  // Straight to the new trade (#637): a trade is created in order to be filled in,
+                  // and the empty section waiting for its first line is the next thing to do. No
+                  // toast — the screen arriving *is* the confirmation.
+                  router.push(`/c/${collectionSlug}/trades/${result.id}`);
                 } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateTradeAction } = await import("@/app/actions/trades");

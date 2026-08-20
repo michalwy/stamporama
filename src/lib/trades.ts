@@ -30,8 +30,11 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
   }
 }
 
-/** Resolve the owning collection of a trade, asserting ownership. */
-async function assertTradeOwner(
+/** Resolve the owning collection of a trade, asserting ownership.
+ *
+ * Exported for `trade-lines.ts` (#637), which edits the lines this module deliberately does not
+ * own: the two halves of the same domain must ask the same question about who may touch a trade. */
+export async function assertTradeOwner(
   ownerId: string,
   tradeId: string
 ): Promise<{ collectionId: string; status: TradeStatus }> {
@@ -67,9 +70,11 @@ export interface TradeSectionData {
   ownValueWarnPct: number | null;
   giveCount: number;
   receiveCount: number;
+  /** Pieces on the receive side, which is not its line count — three lines can be thirty stamps. */
+  receiveQuantity: number;
 }
 
-/** A trade with its sections, for the header dialog and (later) its own screen. */
+/** A trade with its sections, for the header dialog and the trade's own screen. */
 export interface TradeData {
   id: string;
   collectionId: string;
@@ -208,7 +213,7 @@ const SECTION_SELECT = {
   countTolerance: true,
   valueTolerancePct: true,
   ownValueWarnPct: true,
-  lines: { select: { side: true } },
+  lines: { select: { side: true, quantity: true } },
 } satisfies Prisma.TradeSectionSelect;
 
 function toSectionData(row: {
@@ -219,7 +224,7 @@ function toSectionData(row: {
   countTolerance: number | null;
   valueTolerancePct: Prisma.Decimal | null;
   ownValueWarnPct: Prisma.Decimal | null;
-  lines: { side: string }[];
+  lines: { side: string; quantity: number }[];
 }): TradeSectionData {
   return {
     id: row.id,
@@ -231,6 +236,9 @@ function toSectionData(row: {
     ownValueWarnPct: decimalToNumber(row.ownValueWarnPct),
     giveCount: row.lines.filter((l) => l.side === "give").length,
     receiveCount: row.lines.filter((l) => l.side === "receive").length,
+    receiveQuantity: row.lines
+      .filter((l) => l.side === "receive")
+      .reduce((sum, l) => sum + l.quantity, 0),
   };
 }
 
@@ -562,15 +570,20 @@ function sectionOverrideData(data: TradeSectionInput) {
 }
 
 /** Refuse to touch the contents of a trade that has been agreed: the partner holds a copy of the
- * list (#637). Recording that reality diverged is a different act (#642). */
-function assertContentEditable(status: TradeStatus): void {
+ * list (#637). Recording that reality diverged is a different act (#642).
+ *
+ * Exported for the same reason `assertTradeOwner` is: the lock is one rule, and the module that
+ * edits lines enforces it by calling this rather than by restating the two open statuses. */
+export function assertContentEditable(status: TradeStatus): void {
   if (status === "preparing" || status === "shared") return;
   throw new Error(
     `A ${TRADE_STATUS_LABEL[status].toLowerCase()} trade's list cannot be changed.`
   );
 }
 
-async function assertSectionOwner(
+/** Resolve the owning trade of a section, asserting ownership. Exported for `trade-lines.ts`
+ *  (#637), whose lines hang off a section rather than off the trade. */
+export async function assertSectionOwner(
   ownerId: string,
   sectionId: string
 ): Promise<{ tradeId: string; status: TradeStatus }> {
@@ -635,6 +648,26 @@ export async function updateTradeSection(
     select: SECTION_SELECT,
   });
   return toSectionData(updated);
+}
+
+/**
+ * Rename a section, touching **nothing else** (#637).
+ *
+ * Separate from `updateTradeSection` because that one writes the balance override as a unit — which
+ * is right when the rule is what is being edited, and wrong when a name is being corrected in place:
+ * a rename would have to restate all four columns to keep them, and a caller that forgot one would
+ * silently drop a section's own rule.
+ */
+export async function renameTradeSection(
+  ownerId: string,
+  sectionId: string,
+  name: string
+): Promise<void> {
+  const { status } = await assertSectionOwner(ownerId, sectionId);
+  assertContentEditable(status);
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A section name is required.");
+  await prisma.tradeSection.update({ where: { id: sectionId }, data: { name: trimmed } });
 }
 
 /** Hand-ordered sections, dragged rather than typed. Ids not belonging to the trade are ignored. */

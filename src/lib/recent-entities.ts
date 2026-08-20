@@ -29,7 +29,8 @@ export type RecentEntityKind =
   | "offer"
   | "purchase"
   | "sale"
-  | "auctionSale";
+  | "auctionSale"
+  | "trade";
 
 /** How a kind is named above its entries in the panel. */
 export const RECENT_ENTITY_LABELS: Record<RecentEntityKind, string> = {
@@ -40,6 +41,7 @@ export const RECENT_ENTITY_LABELS: Record<RecentEntityKind, string> = {
   purchase: "Purchase",
   sale: "Sale",
   auctionSale: "Auction sale",
+  trade: "Trade",
 };
 
 /** One visited record.

@@ -27,8 +27,9 @@ material leaves and material arrives in one agreement.
   one-for-one on piece count may still be discussed in Michel numbers.
 - How the trade is **balanced** — see below.
 
-Every new trade starts with one **section** so there is always somewhere for a line to go. Rename it,
-or add more, when your material asks for it — *mint* apart from *used* is the usual reason.
+Every new trade starts with one **section** so there is always somewhere for a line to go, and saving
+takes you straight to the trade's own screen to fill it in. Rename that section, or add more, when
+your material asks for it — *mint* apart from *used* is the usual reason.
 
 ## Balancing
 
@@ -56,6 +57,119 @@ certificate status and a format, and **how many**.
 The two sides are **not paired**. Nothing lines a copy you give up against a stamp you get back —
 they are two lists, and the counts are usually different. Ten common ones for two good ones is an
 ordinary trade.
+
+## The trade's own screen
+
+Click any row on the trades list — or jump straight to it with `t 7` — to open the trade itself. It
+opens on its terms: the partner, how it is balanced, the agreed catalog, and the two shipping marks.
+Below them sits one card per section, with **both sides side by side inside it**, because the trade
+*is* the difference between the two and you read them against each other.
+
+### Sections
+
+**Add section** puts another one below the last. Rename one by clicking its name; its `⋮` menu holds
+its balance rule. Nothing is ever filed into a section automatically — a section is a name and a
+rule, and what goes in it is your decision.
+
+A section can be deleted only when it is **empty**, and never when it is the last one. Emptying it
+first is deliberate: moving its lines somewhere by implication is exactly the silent reshuffle a
+list both of you are reading must never do.
+
+### Adding what you give
+
+**Add copies** opens the copy picker — the same area tree, year facets and search the Copies screen
+uses, with a checkbox on every row. It opens on the copies you have marked **for trade**, because
+that is where you file what you are willing to part with; tick **Any held copy** to widen it to
+everything you hold, for the piece a partner asks for by name.
+
+Copies that are **not** offerable never appear: one that is sold, no longer held, not yet arrived,
+or already promised to another live trade. If something becomes unavailable between opening the
+picker and pressing the button — someone else's tab, a sale recorded in between — the ones that went
+on go on, and the rest come back named with the reason.
+
+Listing a copy in a trade is a **plan, not a claim**: the copy is untouched, stays in your
+collection, and removing the line leaves it exactly as it was.
+
+### Adding what you receive
+
+**Add line** opens the stamp picker first, then asks for the condition, certificate status, format
+and quantity. You can **create the issue and the stamp right there**, without leaving the trade —
+which matters, because a partner's material routinely comes from an area you have never collected,
+and stopping to file a stamp halfway through writing down someone's offer is where a list gets
+abandoned.
+
+You can also pick a **whole set** instead of a single stamp. A partner offering "Michel 1–12,
+complete" is offering twelve stamps, and the picker's set button writes all twelve down at once, each
+on the terms you set below. It is a shortcut for *entering* only: what ends up on the trade is twelve
+lines, because every figure that follows — the piece count you balance on, your partner's copy of the
+list, identifying the material when it arrives — works stamp by stamp.
+
+Nothing on this side creates anything in your collection. It records what is being offered; the
+material arrives, and is identified, later.
+
+### Finding things in a long list
+
+**Each column is its own list**, with its own search box and its own filters. That is deliberate: the
+two sides hold different numbers of different things, and a question asked of one is usually not a
+question about the other.
+
+They **share one scroll** — the page's, the same way a purchase order's lots do. Reading an exchange
+list means running your eye down both sides together, and a box scrolling inside itself breaks
+exactly that. Instead the section's header and both columns' toolbars **pin** to the top as you
+scroll past them, so which section you are in, which column is which, and how to narrow either stay
+on screen however far down you go. Group headings pin underneath them, one level under another — with area and year both switched on,
+the area stays put while its years scroll past. Long lists load as you
+scroll.
+
+Search matches the stamp, the issue and the catalogue number — and on the give side the copy's own
+number and where it is filed, so you can pull a piece off the shelf, type its ref, and find it.
+Beside it:
+
+- **Condition** — one or several. "The mint grades" is the usual reading, not one grade.
+- **No photo**, on the give side only. What to go and photograph before the parcel leaves. There is
+  no such filter on the receive side: you have never held that material, so the answer would always
+  be "all of it".
+- **No catalog value** — nothing priced at that exact condition, certificate and format. On your side
+  it is a pricing gap to fill; on the partner's it is the line whose worth cannot be argued.
+
+A narrowed column says so: the count reads **12 of 40** rather than presenting a filtered list as the
+whole thing.
+
+### Grouping
+
+**Group by** above the sections breaks both sides up by **area**, **year**, **issue** and
+**condition** — each switched on or off on its own. They always nest in that order, which is the
+order the material contains itself: an issue belongs to a year belongs to an area, and condition
+comes last because it describes the piece rather than the stamp.
+
+With none switched on the lists are **flat**, which is the default — most trades are small enough
+that a heading over three lines is furniture.
+
+Both columns of every section are grouped the same way. That is the point of the side-by-side layout:
+one side broken up by issue beside another broken up by year would be two lists rather than two halves
+of one. Each heading counts what is under it across the whole side, not just the part you have
+scrolled to.
+
+There is deliberately **no way to drag lines into an order of your own**. A hand-made order is a fact
+nobody else can see: your partner reading their copy of the list learns nothing from it, it means
+nothing a week later, and it is out of date the moment you add a line. Grouping says the same thing
+out loud, and stays true.
+
+### Totals
+
+Each column counts its side, and so does the foot of the screen: copies given, and **pieces** received
+with the number of lines beside it when the two differ. The totals at the foot count the whole trade,
+whatever a column happens to be filtered to. Neither side is netted against the other — that
+difference is the trade.
+
+### Once it is agreed
+
+**Agreed locks all of this.** The sections, the lines and both `Add` buttons disappear, and the
+screen says why: the partner is holding a copy of the list. Searching, filtering and grouping keep
+working — reading the list is exactly what a locked one is for. Step the trade back to *Shared* if you
+genuinely need to change what is on it. The trade's own header — the partner, the notes, and both
+shipping marks — stays editable throughout, because recording that a parcel went out is not a change
+to what was agreed.
 
 ## The lifecycle
 
@@ -90,7 +204,8 @@ been marked, the count on each side, and how the trade is balanced. The receive 
 with the number of lines beside it when the two differ — three lines can be thirty stamps.
 
 Filter by status, and search by the partner's name. The search box also takes a trade number: type
-`#7`, or jump straight there from anywhere with `t 7` in the [quick-jump box](quick-jump.md).
+`#7` to narrow the list to it, or jump straight to the trade's own screen from anywhere with `t 7`
+in the [quick-jump box](quick-jump.md).
 
 Deleting a trade removes it, its sections and both sides' lines. **The copies it named stay in your
 collection** — listing a copy in a trade is a plan, never a claim on it. For the same reason, a copy

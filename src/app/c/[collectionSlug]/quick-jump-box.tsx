@@ -44,6 +44,7 @@ const KIND_ICON: Record<RecentEntityKind, IconName> = {
   purchase: "purchases",
   sale: "sales",
   auctionSale: "auctions",
+  trade: "trades",
 };
 
 export function QuickJumpBox({ collectionId }: { collectionId: string }) {

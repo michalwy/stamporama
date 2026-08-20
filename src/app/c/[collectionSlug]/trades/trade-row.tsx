@@ -12,6 +12,7 @@ import type { TradeStatus } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -53,6 +54,7 @@ function shortDate(iso: string): string {
 
 interface TradeRowProps {
   trade: TradeListItem;
+  collectionSlug: string;
   isLast: boolean;
   onEdit: (trade: TradeListItem) => void;
   onSetStatus: (trade: TradeListItem, status: TradeStatus) => void;
@@ -67,11 +69,18 @@ interface TradeRowProps {
  * list is opened to see. The receive side shows its piece count when it differs from its line count
  * — three lines can be thirty stamps.
  *
- * The row does not open anything yet: the trade's own screen is #637. Until then everything the row
- * can do is in its `⋮` menu, including the lifecycle, whose legal moves come from the transition
- * table rather than from a list retyped here.
+ * The whole row opens the trade's own screen (#637), as a real link (#557) rather than a click
+ * handler. Everything else it can do is in its `⋮` menu, including the lifecycle, whose legal moves
+ * come from the transition table rather than from a list retyped here.
  */
-export function TradeRow({ trade: t, isLast, onEdit, onSetStatus, onDelete }: TradeRowProps) {
+export function TradeRow({
+  trade: t,
+  collectionSlug,
+  isLast,
+  onEdit,
+  onSetStatus,
+  onDelete,
+}: TradeRowProps) {
   const [hovered, setHovered] = useState(false);
   const status = statusChip(t.status);
 
@@ -104,8 +113,11 @@ export function TradeRow({ trade: t, isLast, onEdit, onSetStatus, onDelete }: Tr
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          cursor: "pointer",
         }}
       >
+        <RowLink href={`/c/${collectionSlug}/trades/${t.id}`} label={t.partnerName} />
+
         {/* Line 1: the partner + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
@@ -122,13 +134,16 @@ export function TradeRow({ trade: t, isLast, onEdit, onSetStatus, onDelete }: Tr
             {t.partnerName}
           </span>
           <span style={{ flex: 1 }} />
-          <RowActionsMenu actions={menuActions} ariaLabel="Trade actions" />
+          <span style={ROW_LINK_ABOVE}>
+            <RowActionsMenu actions={menuActions} ariaLabel="Trade actions" />
+          </span>
         </div>
 
         {/* Line 2: number, status, and the two shipping marks. Two timestamps rather than two
             states, so they are shown as two independent marks and either can stand alone. */}
         <div
           style={{
+            ...ROW_LINK_ABOVE,
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
@@ -159,6 +174,7 @@ export function TradeRow({ trade: t, isLast, onEdit, onSetStatus, onDelete }: Tr
         {/* Line 3: what is on each side, and how the trade is balanced. */}
         <div
           style={{
+            ...ROW_LINK_ABOVE,
             display: "flex",
             alignItems: "center",
             gap: "0.375rem",

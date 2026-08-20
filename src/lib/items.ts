@@ -1520,6 +1520,35 @@ async function enrichItemRows(
 /** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
  * condition, and certificate status; sorts by added or acquired date; offset-paginated
  * to feed the shared infinite-scroll primitive (mirrors `listStampsPaginated`). */
+/**
+ * Which copies match these filters — **ids only, nothing enriched** (#637).
+ *
+ * The same `where` the list read builds, run for its ids. It exists because a caller that has to
+ * *arrange* a set before paging it needs to know the whole matching set first, and enriching two
+ * thousand copies to find out which fifty go on the page is the cost the trade screen's two columns
+ * would otherwise pay on every scroll. Ordering is `createdAt`, so a caller that does not rearrange
+ * gets the list's own order.
+ */
+export async function filterItemIds(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+  const rows = await prisma.item.findMany({
+    where,
+    orderBy: [{ createdAt: filters.sortDir ?? "asc" }],
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 export async function listItemsPaginated(
   ownerId: string,
   collectionId: string,

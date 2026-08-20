@@ -18,10 +18,7 @@ import { quickJumpLabel, type QuickJumpTarget } from "./quick-jump";
 //   • offer → `/o/<slug>/<no>`, the short redirect that already exists (#416). Deliberately not the
 //     canonical URL: this is the same address a marketplace note carries, so a jump and a followed
 //     link are the same journey.
-//   • purchase, sale → their own detail screens.
-//   • trade → the trade list, filtered to that number, for the reason a copy and an issue land
-//     there: it has no screen of its own yet (#637 builds one), and the filtered list already
-//     reads correctly.
+//   • purchase, sale, trade → their own detail screens.
 //   • auction lot → its **sale's** screen with the lot highlighted, which is exactly what clicking
 //     the lot on the watchlist does (#374). A lot is read in the company of its parcel.
 
@@ -103,9 +100,7 @@ export async function resolveQuickJump(
         select: { id: true },
       });
       if (!trade) return null;
-      // The list filtered to that number, as a copy and an issue are: a trade has no screen of its
-      // own until #637, and the filtered list is the one place the number already reads correctly.
-      return { href: `${base}/trades?search=${encodeURIComponent(`#${no}`)}` };
+      return { href: `${base}/trades/${trade.id}` };
     }
 
     case "auctionLot": {

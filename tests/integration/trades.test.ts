@@ -15,6 +15,14 @@ import {
   deleteTradeSection,
   DEFAULT_TRADE_SECTION_NAME,
 } from "../../src/lib/trades";
+import {
+  listTradeLinePage,
+  listOfferableCopies,
+  addTradeGiveLines,
+  addTradeReceiveLines,
+  updateTradeReceiveLine,
+  deleteTradeLine,
+} from "../../src/lib/trade-lines";
 import { createItem } from "../../src/lib/items";
 import { resolveQuickJump } from "../../src/lib/quick-jump-server";
 
@@ -445,9 +453,10 @@ describe("trade list and quick jump (#646)", () => {
     );
   });
 
-  it("lands a `t 2` jump on the list, filtered to that number", async () => {
+  it("lands a `t 2` jump on the trade's own screen (#637)", async () => {
+    const { items } = await listTradesPaginated(f.userId, f.collectionId, { tradeNo: 2 });
     const hit = await resolveQuickJump(f.userId, f.collectionId, { entity: "trade", no: 2 });
-    assert.equal(hit?.href, `/c/${f.collectionSlug}/trades?search=%232`);
+    assert.equal(hit?.href, `/c/${f.collectionSlug}/trades/${items[0].id}`);
     assert.equal(await resolveQuickJump(f.userId, f.collectionId, { entity: "trade", no: 99 }), null);
   });
 
@@ -471,5 +480,287 @@ describe("trade list and quick jump (#646)", () => {
 
   it("will not let a partner be deleted while a trade names them", async () => {
     await assert.rejects(() => prisma.contact.delete({ where: { id: f.partnerId } }));
+  });
+});
+
+describe("trade lines — composing both sides (#637)", () => {
+  let f: Fixtures;
+  let tradeId: string;
+  let sectionId: string;
+  /** A second copy, marked for trade, which is what the picker opens on. */
+  let markedItemId: string;
+
+  /** One page of one side, with the defaults the screen uses. */
+  const give = (opts: Parameters<typeof listTradeLinePage>[2]["filters"] = {}) =>
+    listTradeLinePage(f.userId, tradeId, { sectionId, side: "give", filters: opts });
+  const receive = (opts: Parameters<typeof listTradeLinePage>[2]["filters"] = {}) =>
+    listTradeLinePage(f.userId, tradeId, { sectionId, side: "receive", filters: opts });
+
+  before(async () => {
+    f = await seedFixtures(`compose-${Date.now()}`);
+    const trade = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+    });
+    tradeId = trade.id;
+    sectionId = trade.sections[0].id;
+    markedItemId = (
+      await createItem(f.userId, f.collectionId, {
+        stampId: f.stampId,
+        conditionId: f.conditionId,
+        forTrade: true,
+      })
+    ).id;
+  });
+  // The trade goes first: `TradeLine.itemId` is `Restrict`, so a copy cannot be deleted while a
+  // trade still names it — which is the guard #646 put there, and it applies to the teardown too.
+  after(async () => {
+    await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
+    await cleanup(f.userId);
+  });
+
+  it("opens on the for-trade copies and widens to everything held", async () => {
+    const marked = await listOfferableCopies(f.userId, tradeId, { forTradeOnly: true });
+    assert.deepEqual(
+      marked.map((i) => i.id),
+      [markedItemId]
+    );
+    // The disposition is a default, not a rule: a partner asks by name for things never marked.
+    const all = await listOfferableCopies(f.userId, tradeId, { forTradeOnly: false });
+    assert.equal(all.length, 2);
+    assert.ok(all.some((i) => i.id === f.itemId));
+  });
+
+  it("promises copies in bulk and stops offering them afterwards", async () => {
+    const result = await addTradeGiveLines(f.userId, sectionId, [markedItemId, f.itemId]);
+    assert.equal(result.added, 2);
+    assert.deepEqual(result.refused, []);
+
+    const page = await give();
+    assert.equal(page.total, 2);
+    assert.equal(page.items.length, 2);
+    // The page carries the copies enriched, so the screen draws them as copy rows.
+    assert.ok(page.items.every((i) => i.side === "give" && !!i.copy.itemNo));
+
+    assert.deepEqual(await listOfferableCopies(f.userId, tradeId, { forTradeOnly: false }), []);
+  });
+
+  it("treats a copy already on this trade as a no-op, not a refusal", async () => {
+    const result = await addTradeGiveLines(f.userId, sectionId, [markedItemId]);
+    assert.equal(result.added, 0);
+    assert.deepEqual(result.refused, []);
+    assert.equal((await give()).total, 2);
+  });
+
+  it("refuses a copy already promised to another live trade, by name", async () => {
+    const other = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+    });
+    const result = await addTradeGiveLines(f.userId, other.sections[0].id, [markedItemId]);
+    assert.equal(result.added, 0);
+    assert.equal(result.refused.length, 1);
+    assert.match(result.refused[0].reason, /already promised to trade #1/);
+    await deleteTrade(f.userId, other.id);
+  });
+
+  it("refuses a copy that has not arrived", async () => {
+    const inTransit = await createItem(f.userId, f.collectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      deliveryState: "in_transit",
+    });
+    // Not offered in the first place…
+    const offerable = await listOfferableCopies(f.userId, tradeId, { forTradeOnly: false });
+    assert.ok(!offerable.some((i) => i.id === inTransit.id));
+    // …and refused by name if one is submitted anyway.
+    const result = await addTradeGiveLines(f.userId, sectionId, [inTransit.id]);
+    assert.equal(result.added, 0);
+    assert.match(result.refused[0].reason, /has not arrived/);
+  });
+
+  it("takes a receive line at the want key, and reads its stamp identity back", async () => {
+    await addTradeReceiveLines(f.userId, sectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      // Null on both is a **value** on each axis: no certificate, and a single.
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 3,
+    });
+    const page = await receive();
+    assert.equal(page.total, 1);
+    // Three stamps on one line — the piece count is not the line count.
+    assert.equal(page.pieces, 3);
+    const [item] = page.items;
+    assert.ok(item.side === "receive");
+    assert.equal(item.line.stampName, "Stamp 309");
+    assert.equal(item.line.conditionAbbreviation, "U");
+    assert.equal(item.line.certificateStatusId, null);
+    assert.equal(item.line.formatId, null);
+  });
+
+  it("expands a whole checklist into one line per stamp on it", async () => {
+    const second = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 310" },
+    });
+    const checklist = await prisma.checklist.create({
+      data: {
+        collectionId: f.collectionId,
+        name: "Complete set",
+        stamps: { create: [{ stampId: f.stampId }, { stampId: second.id }] },
+      },
+    });
+
+    const before = (await receive()).total;
+    const added = await addTradeReceiveLines(f.userId, sectionId, {
+      checklistId: checklist.id,
+      stampId: "",
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 1,
+    });
+    assert.equal(added, 2);
+    assert.equal((await receive()).total, before + 2);
+
+    // A shortcut for *entering*, never a thing that is stored: what came out is stamps.
+    const stored = await prisma.tradeLine.findMany({
+      where: { sectionId, side: "receive", stampId: second.id },
+      select: { stampId: true },
+    });
+    assert.equal(stored.length, 1);
+  });
+
+  it("restates a receive line whole, and refuses to restate a give one", async () => {
+    const receiveLine = (await receive()).items[0];
+    const giveLine = (await give()).items[0];
+    await updateTradeReceiveLine(f.userId, receiveLine.lineId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 7,
+    });
+    const after = (await receive()).items.find((i) => i.lineId === receiveLine.lineId);
+    assert.ok(after?.side === "receive");
+    assert.equal(after.line.quantity, 7);
+
+    await assert.rejects(
+      () =>
+        updateTradeReceiveLine(f.userId, giveLine.lineId, {
+          stampId: f.stampId,
+          conditionId: f.conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          quantity: 1,
+        }),
+      /names a copy/
+    );
+  });
+
+  it("searches a side without touching the other, and says what it narrowed from", async () => {
+    const hit = await receive({ search: "Stamp 310" });
+    assert.equal(hit.total, 1);
+    // The unfiltered figure is what lets the column read "1 of 4" rather than pretending to be whole.
+    assert.ok(hit.unfiltered > hit.total);
+
+    const miss = await receive({ search: "nothing like this" });
+    assert.equal(miss.total, 0);
+    assert.equal(miss.items.length, 0);
+
+    // The give side is a separate list and a search on one says nothing about the other.
+    assert.equal((await give()).total, 2);
+  });
+
+  it("filters a side by condition, and the give side by having no photo", async () => {
+    const other = await prisma.stampCondition.create({
+      data: { collectionId: f.collectionId, name: "Mint", abbreviation: "**", sortOrder: 1 },
+    });
+    assert.equal((await give({ conditionIds: [f.conditionId] })).total, 2);
+    assert.equal((await give({ conditionIds: [other.id] })).total, 0);
+    // Nothing in these fixtures has a photograph, so the filter is the whole side — what matters is
+    // that it is asked of the give side at all, which is where copies actually exist.
+    assert.equal((await give({ noPhotos: true })).total, 2);
+  });
+
+  it("arranges a side by the levels it is given, counting over the whole side", async () => {
+    const flat = await give();
+    assert.deepEqual(flat.items[0].path, []);
+    assert.deepEqual(flat.headings, {});
+
+    const byCondition = await listTradeLinePage(f.userId, tradeId, {
+      sectionId,
+      side: "give",
+      levels: ["condition"],
+    });
+    // Both copies are Used, so one heading over the pair — and it counts the pair, not the page.
+    const headings = Object.values(byCondition.headings);
+    assert.equal(headings.length, 1);
+    assert.equal(headings[0].label, "U");
+    assert.equal(headings[0].count, 2);
+    assert.ok(byCondition.items.every((i) => i.path.length === 1));
+  });
+
+  it("pages a side, and the next page carries on where the last left off", async () => {
+    const first = await listTradeLinePage(f.userId, tradeId, {
+      sectionId,
+      side: "give",
+      pageSize: 1,
+    });
+    assert.equal(first.items.length, 1);
+    assert.equal(first.total, 2);
+    assert.equal(first.nextCursor, "1");
+
+    const second = await listTradeLinePage(f.userId, tradeId, {
+      sectionId,
+      side: "give",
+      pageSize: 1,
+      offset: 1,
+    });
+    assert.equal(second.items.length, 1);
+    assert.equal(second.nextCursor, null);
+    assert.notEqual(first.items[0].lineId, second.items[0].lineId);
+  });
+
+  it("takes a line off and leaves the copy where it was", async () => {
+    const item = (await give()).items[0];
+    assert.ok(item.side === "give");
+    const itemId = item.copy.id;
+    await deleteTradeLine(f.userId, item.lineId);
+    assert.equal((await give()).total, 1);
+    assert.ok(await prisma.item.findUnique({ where: { id: itemId } }));
+    // Released, so it is offerable again: a give line is a promise, never a claim.
+    const offerable = await listOfferableCopies(f.userId, tradeId, { forTradeOnly: false });
+    assert.ok(offerable.some((i) => i.id === itemId));
+  });
+
+  it("locks every line write once the trade is agreed", async () => {
+    const giveLine = (await give()).items[0];
+    await setTradeStatus(f.userId, tradeId, "shared");
+    await setTradeStatus(f.userId, tradeId, "agreed");
+
+    await assert.rejects(() => addTradeGiveLines(f.userId, sectionId, [f.itemId]), /cannot be changed/);
+    await assert.rejects(
+      () =>
+        addTradeReceiveLines(f.userId, sectionId, {
+          stampId: f.stampId,
+          conditionId: f.conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          quantity: 1,
+        }),
+      /cannot be changed/
+    );
+    await assert.rejects(() => deleteTradeLine(f.userId, giveLine.lineId), /cannot be changed/);
+    // Reading it is untouched — the partner's copy of the list is exactly what is being shown.
+    assert.equal((await give()).total, 1);
+  });
+
+  it("refuses a trade that is not the caller's", async () => {
+    await assert.rejects(() =>
+      listTradeLinePage("someone-else", tradeId, { sectionId, side: "give" })
+    );
+    await assert.rejects(() => listOfferableCopies("someone-else", tradeId));
   });
 });

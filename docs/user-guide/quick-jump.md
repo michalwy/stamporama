@@ -54,11 +54,11 @@ field on the screen itself ([Inventory](inventory.md#searching-and-filtering),
 
 ## Where each jump lands
 
-- **Copy**, **issue** and **trade** open their list screen, filtered to that one number. None has a
-  screen of its own, and the filtered list shows it in the company of the rows around it.
+- **Copy** and **issue** open their list screen, filtered to that one number. Neither has a screen
+  of its own, and the filtered list shows it in the company of the rows around it.
 - **Offer** opens the offer's short address (`/o/<collection>/<number>`) — the same link a
   marketplace private note carries, so following a link and jumping are the same journey.
-- **Purchase** and **sale** open their own detail screen.
+- **Purchase**, **sale** and **trade** open their own detail screen.
 - **Auction lot** opens the **sale** it belongs to, with that lot highlighted — the same thing
   clicking the lot on the watchlist does.
 
