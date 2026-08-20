@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import { parseCatalogSearch } from "@/lib/catalog-number";
@@ -148,6 +149,25 @@ export function StampPickerBrowser({
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { invalidatePickerData } = useInvalidateInventory();
+  const router = useRouter();
+
+  // **Opening the picker is what makes its answer current** (#654). Its two halves go stale in
+  // different ways and both read to the collector as *the thing I just created is not here*: the
+  // area tree arrives as a **server prop**, so nothing short of a navigation ever replaces it, and
+  // the issue rows are the issues list's own client query under the shared 30s stale time. Neither
+  // notices an area or an Issue created anywhere else — another tab, most often, which is exactly
+  // how a country first met halfway through identifying a scan sheet gets added. So refresh both
+  // here rather than on a timer or on window focus: the open is the collector's own act and the one
+  // moment the tree has to be right, and it is bounded (a picker is opened, used, closed), where a
+  // focus handler would fire on every alt-tab through a sitting. `router.refresh()` re-pulls the
+  // server tree the areas ride on — every write on these screens already pays that — and the
+  // invalidation refetches the issue caches **behind the rows already drawn**, so nothing blanks.
+  useEffect(() => {
+    router.refresh();
+    invalidatePickerData(collectionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on open, not on every render
+  }, []);
+
   // Only for the inline create dialogs' catalog-number labels: an issue may override its area's
   // prefix (#377), and the input a number is typed into should be labelled with the prefix that
   // number will carry. The list below resolves its own for the rows it renders.
