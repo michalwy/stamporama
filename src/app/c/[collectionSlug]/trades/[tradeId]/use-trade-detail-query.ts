@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ItemListItem } from "@/lib/items";
 import type { TradeData } from "@/lib/trades";
+import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
 import type { TradeSide } from "@/lib/trade-rules";
@@ -31,6 +32,8 @@ export const tradeDetailKeys = {
     ["trades", collectionId, "lines", tradeId, query] as const,
   offerable: (collectionId: string, tradeId: string, areaIds: string[] | null, forTrade: boolean) =>
     ["trades", collectionId, "offerable", tradeId, areaIds, forTrade] as const,
+  balance: (collectionId: string, tradeId: string) =>
+    ["trades", collectionId, "balance", tradeId] as const,
 };
 
 /** The trade and its sections. The lines are **not** here — each side pages on its own. */
@@ -40,6 +43,29 @@ export function useTradeDetail(collectionId: string, tradeId: string) {
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/trades/${tradeId}`);
       if (!res.ok) throw new Error("Failed to load trade");
+      return res.json();
+    },
+  });
+}
+
+/**
+ * What both sides are worth and whether the trade balances (#638).
+ *
+ * Its **own** query, not part of the header's, because it costs more: valuing every line of both
+ * sides against two catalogs is a heavier question than "what are the terms and how many lines",
+ * and the terms card should not wait on it. One query for the whole trade, though — the sections'
+ * verdicts and the trade's are read off one set of figures at one moment, and assembling them from
+ * a call per section would let a screen show every section balanced and the trade not.
+ *
+ * Under the same `trades` key as everything else, so adding a line refreshes the figures too. A
+ * balance that still described the list as it was two edits ago is worse than no balance at all.
+ */
+export function useTradeBalance(collectionId: string, tradeId: string) {
+  return useQuery<{ balance: TradeBalanceRead }>({
+    queryKey: tradeDetailKeys.balance(collectionId, tradeId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/trades/${tradeId}/balance`);
+      if (!res.ok) throw new Error("Failed to load balance");
       return res.json();
     },
   });

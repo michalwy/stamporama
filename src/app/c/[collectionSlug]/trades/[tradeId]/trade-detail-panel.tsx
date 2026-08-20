@@ -38,7 +38,8 @@ import {
 } from "@/app/actions/trades";
 import { TradeFormDialog, type TradeCatalogVendor } from "../trade-form-dialog";
 import { useInvalidateTrades } from "../use-trades-query";
-import { useTradeDetail, useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { useTradeBalance, useTradeDetail, useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { TradeBalanceSummary } from "./trade-balance-panel";
 import { TradeSectionCard } from "./trade-section-card";
 import { TradeSectionDialog } from "./trade-section-dialog";
 import { Icon } from "@/app/icons";
@@ -200,6 +201,12 @@ export function TradeDetailPanel({
   const { invalidateTrade } = useInvalidateTradeDetail();
   const { invalidatePartners } = useInvalidateTrades();
   const { data, isLoading } = useTradeDetail(collectionId, tradeId);
+  // **Its own query, deliberately.** Valuing every line of both sides against two catalogues is a
+  // heavier question than "what are the terms", and the header has no business waiting on it — so
+  // the figures arrive under the card rather than holding it back. Same `trades` key, so a line
+  // added anywhere on the screen refreshes them.
+  const { data: balanceData, isLoading: balanceLoading } = useTradeBalance(collectionId, tradeId);
+  const balance = balanceData?.balance;
   // Catalog-number formatting for both sides' rows, resolved once for the screen (#357).
   const vendorMaps = useAreaVendorMaps(areas, collectionId);
 
@@ -385,6 +392,18 @@ export function TradeDetailPanel({
           </div>
         )}
 
+        {/* **What both sides are worth, and whether that balances** (#638). Under the terms rather
+            than beside them, because it is what the terms above *produce*: the balance rule, the
+            agreed catalogue and the partner's currency are all read off this block. The gates it
+            carries are stated here too, so a refusal is met while the list is being composed rather
+            than at the moment Share is pressed. */}
+        <TradeBalanceSummary
+          tradeId={tradeId}
+          balance={balance}
+          isLoading={balanceLoading}
+          onRun={run}
+        />
+
         {/* The lock, stated where it bites. A locked screen with no explanation reads as broken. */}
         {!editable && (
           <p
@@ -466,6 +485,11 @@ export function TradeDetailPanel({
             tradeId={tradeId}
             section={section}
             rule={resolveBalanceRule(rule, section)}
+            balance={balance?.sections.find((b) => b.sectionId === section.id)}
+            lineValues={balance?.lines}
+            tradeCurrency={balance?.tradeCurrency ?? trade.currency}
+            agreedVendorName={balance?.agreedCatalogVendorName ?? trade.catalogVendorName}
+            catalogVendors={catalogVendors}
             editable={editable}
             isPending={isPending}
             areas={areas}

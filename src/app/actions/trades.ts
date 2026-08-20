@@ -25,6 +25,11 @@ import {
   type GiveLineRefusal,
   type TradeReceiveLineInput,
 } from "@/lib/trade-lines";
+import {
+  refreshTradeRates,
+  setTradeLineValue,
+  type TradeLineValueInput,
+} from "@/lib/trade-valuation";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -395,5 +400,54 @@ export async function deleteTradeLineAction(lineId: string): Promise<TradeAction
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to remove line. Please try again.") };
+  }
+}
+
+// ── The line's own figure (#638) ─────────────────────────────────────────────────────────────────
+
+/** What the value dialog sends. Both fields are **explicitly optional**, so that "clear the manual
+ *  value" (`null`) and "leave it alone" (absent) stay different instructions — the split
+ *  `setTradeShipping` makes for the same reason. */
+export interface TradeLineValueRaw {
+  manualValue?: string | null;
+  catalogVendorId?: string | null;
+}
+
+export async function setTradeLineValueAction(
+  lineId: string,
+  raw: TradeLineValueRaw
+): Promise<TradeActionState> {
+  const session = await getSession();
+  const input: TradeLineValueInput = {};
+  if (raw.manualValue !== undefined) {
+    const typed = normalizeDecimalInput(raw.manualValue ?? "");
+    if (!typed) {
+      input.manualValue = null;
+    } else {
+      const value = Number(typed);
+      if (!Number.isFinite(value)) {
+        return { status: "error", message: "That is not a number I can read as a value." };
+      }
+      input.manualValue = value;
+    }
+  }
+  if (raw.catalogVendorId !== undefined) input.catalogVendorId = raw.catalogVendorId;
+  try {
+    await setTradeLineValue(session.user.id, lineId, input);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to save the value. Please try again.") };
+  }
+}
+
+/** Take today's rates for a trade still being negotiated. Refused by name anywhere else in the
+ *  lifecycle — see `refreshTradeRates`. */
+export async function refreshTradeRatesAction(tradeId: string): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await refreshTradeRates(session.user.id, tradeId);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to refresh rates. Please try again.") };
   }
 }

@@ -47,6 +47,71 @@ will stop you making one.
 A section can either follow the trade's rule or state a rule of its own. It is one or the other,
 never a mix of the two, so a section that states its own says everything about how it is judged.
 
+### The two valuations
+
+Every trade carries **two** figures for the same stamps, and the app never adds them together or
+turns one into the other:
+
+- **My valuation** — what the material is worth to *you*, read from each area's primary catalogue at
+  its latest edition, in your collection's base currency. It is the same figure this app quotes for
+  those stamps on every other screen, and there is no way to override it: if the trade screen and
+  the copies list disagreed about a stamp, one of them would be lying. This is what the skew warning
+  is measured on.
+- **Agreed catalogue** — what the catalogue you and your partner agreed on says, in **your partner's
+  currency**. Optional. You agree on a **publisher** ("we go by Michel"), never on one particular
+  volume of it: a trade routinely spans several countries and no single book prices all of them, so
+  which volume each line is read in follows from that stamp's area, exactly as it does everywhere
+  else. That Michel and Fischer say different things about the same stamp is part of the
+  negotiation, not a mistake to fix.
+
+The two are **independent of the mode**: a trade balanced one-for-one on pieces may still name the
+catalogue you both speak in, and it will show what that catalogue says without deciding anything.
+
+The balance block on the trade's screen shows both, on their own rows, in their own currencies, with
+both sides beside each other and the verdict at the end of the line. Pieces are on it in both modes,
+and so is the skew warning — a trade struck evenly on piece count can be just as lopsided in what it
+is actually giving away, which is the whole point of the guard.
+
+### Every line needs a value
+
+**A trade cannot be shared, or agreed, while any line on either side has no value at all.** Not
+because the app insists on precision, but because a total that quietly counted an unpriced line as
+zero would be a total that lies about the trade. The refusal names the lines by their **catalogue
+number and condition** — `Mi·PL 412 (U)` — the same way both sides of the list already read, so you
+know which ones to go and fix, and the same list is on the screen while you are still composing: you meet
+it before you press anything, not after.
+
+Two things count as a value:
+
+- **An estimate.** A stamp whose exact variant is unknown is valued at the cheapest variant it could
+  be, marked `~`. That is an estimate and is shown as one, but it is a perfectly good figure to
+  negotiate with — refusing it would throw every umbrella stamp out of every trade.
+- **A figure of your own.** Each line's ⋮ menu has **Set value**: type a number in your base
+  currency for material no catalogue of yours prices. It is always shown as *your* figure, never
+  dressed up as a catalogue's, and it stands in for both valuations on that line.
+
+  Prefer typing the price on the **stamp** where you can. That is a fact about the stamp, it is there
+  for good, and every screen in the app will use it — where a value typed on a line describes one
+  line of one trade and nothing else. Every line shows its catalogue value on the right, and an
+  unpriced one shows **+ catalog value** instead: click it and you can price the stamp on the spot,
+  without leaving the trade. It is the same control the purchase-order intake screen has, and it
+  works on both sides — the stamps coming in are usually the ones nothing prices yet.
+
+The same dialog lets one line name a **different publisher** from the trade's: "this one we look up
+in Fischer instead." Only the agreed valuation changes; what the stamps are worth to you is always
+read from your own primary catalogue.
+
+### Currencies and rates
+
+Your own valuation is in your collection's **base currency**; the agreed one is in the **trade's**
+currency — the one your partner's figures are in. They are labelled apart everywhere they appear,
+because two numbers in one column is how somebody eventually adds 340 to 78.
+
+Conversions are frozen with the trade. While you are preparing it they are today's rates; **sharing
+it freezes them**, so the figures stop moving under a negotiation that runs three weeks. You can take
+today's rates again at any point while it is shared — there is a link under the balance block. Once
+the trade is **agreed**, they are fixed for good.
+
 ## The two sides
 
 The give side names **copies** — actual pieces from your inventory, each one a specific copy with its
@@ -164,6 +229,14 @@ difference is the trade.
 
 ### Once it is agreed
 
+**Agreeing freezes both valuations onto every line** — the amounts, the catalogues they came from,
+their editions, the currencies and the rates. A catalogue edition you load next week will not change
+what the two of you shook hands on, and it should not: your partner is holding a printout of it. The
+balance block says *Frozen* and gives the date.
+
+Step the trade back to *Shared* and the freeze is released — a list you can edit is a list valued
+live, and agreeing again takes a fresh snapshot.
+
 **Agreed locks all of this.** The sections, the lines and both `Add` buttons disappear, and the
 screen says why: the partner is holding a copy of the list. Searching, filtering and grouping keep
 working — reading the list is exactly what a locked one is for. Step the trade back to *Shared* if you
@@ -189,7 +262,9 @@ the partner is holding a copy of the list, and quietly changing what was agreed 
 into an argument. Recording that reality turned out differently — something withdrawn, something
 short, something swapped in — is a separate act, not an edit.
 
-A move that is not allowed is refused and says why, rather than doing nothing.
+A move that is not allowed is refused and says why, rather than doing nothing. So is a move that is
+allowed but not yet earned: sharing or agreeing a trade with an unvalued line on it is refused, and
+the refusal names the lines.
 
 ## Sending and receiving
 

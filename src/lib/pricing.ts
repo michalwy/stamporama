@@ -55,6 +55,66 @@ export async function buildEffectivePrimaryCatalogMap(
 }
 
 /**
+ * Effective catalog **name** per area for one named vendor, inheriting from ancestors exactly as
+ * {@link buildEffectivePrimaryCatalogMap} does.
+ *
+ * The area → book resolution for a catalog the collector has *named* rather than the one the area
+ * calls primary — which is what a trade's agreed catalog is (#638; ADR-0039 §7). Two collectors
+ * agree on a publisher ("we go by Michel"), never on one of its books: *Michel Deutschland* prices
+ * nothing Polish, and a trade routinely spans several areas. So the vendor is the agreed fact and
+ * the volume each line is read in follows from its stamp's area, through the same
+ * `CollectionAreaCatalog` links every other valuation already walks.
+ *
+ * An area declaring several of one vendor's books resolves to the first by name — deterministic, so
+ * that a line cannot be valued from one volume today and another tomorrow. Areas the vendor covers
+ * nowhere up their chain map to null, and a line under one of them has no agreed valuation rather
+ * than a wrong one.
+ */
+export async function buildVendorCatalogMap(
+  collectionId: string,
+  vendorId: string
+): Promise<Map<string, string | null>> {
+  const [areas, links] = await Promise.all([
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: { id: true, parentId: true },
+    }),
+    prisma.collectionAreaCatalog.findMany({
+      where: {
+        collectionArea: { collectionId },
+        catalogName: { vendorId, vendor: { collectionId } },
+      },
+      select: { collectionAreaId: true, catalogNameId: true, catalogName: { select: { name: true } } },
+      orderBy: [{ catalogName: { name: "asc" } }, { catalogNameId: "asc" }],
+    }),
+  ]);
+
+  const ownName = new Map<string, string>();
+  for (const l of links) {
+    if (!ownName.has(l.collectionAreaId)) ownName.set(l.collectionAreaId, l.catalogNameId);
+  }
+
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const result = new Map<string, string | null>();
+  for (const a of areas) {
+    let current: (typeof areas)[number] | undefined = a;
+    let depth = 0;
+    let found: string | null = null;
+    while (current && depth < 50) {
+      const name = ownName.get(current.id);
+      if (name) {
+        found = name;
+        break;
+      }
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+      depth++;
+    }
+    result.set(a.id, found);
+  }
+  return result;
+}
+
+/**
  * Effective primary *vendor* per area: the vendor that owns each area's effective primary catalog
  * name (inherited from ancestors just like {@link buildEffectivePrimaryCatalogMap}). Areas with no
  * primary catalog — or whose primary catalog name no longer exists — map to null. Used to resolve

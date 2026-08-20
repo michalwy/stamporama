@@ -23,6 +23,11 @@ import {
   updateTradeReceiveLine,
   deleteTradeLine,
 } from "../../src/lib/trade-lines";
+import {
+  readTradeBalance,
+  refreshTradeRates,
+  setTradeLineValue,
+} from "../../src/lib/trade-valuation";
 import { createItem } from "../../src/lib/items";
 import { resolveQuickJump } from "../../src/lib/quick-jump-server";
 
@@ -38,6 +43,11 @@ interface Fixtures {
   stampId: string;
   conditionId: string;
   itemId: string;
+  /** The area the stamp is filed under, and the publisher whose book prices it (#638). */
+  areaId: string;
+  vendorId: string;
+  catalogNameId: string;
+  editionId: string;
 }
 
 async function seedFixtures(suffix: string): Promise<Fixtures> {
@@ -64,12 +74,50 @@ async function seedFixtures(suffix: string): Promise<Fixtures> {
     data: { collectionId, name: `Karel ${suffix}`, exchangePartner: true },
   });
   const stamp = await prisma.stamp.create({ data: { collectionId, name: "Stamp 309" } });
+
   const condition = await prisma.stampCondition.create({
     data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
   });
   const item = await createItem(user.id, collectionId, {
     stampId: stamp.id,
     conditionId: condition.id,
+  });
+
+  // A priced stamp, filed in an area with a primary catalogue (#638). Every trade in this file has
+  // valued lines by construction, because that is the ordinary case — a trade whose lines cannot be
+  // valued is refused at `preparing → shared`, and a fixture that could not get past it would be
+  // testing the gate rather than everything else.
+  const area = await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } });
+  const vendor = await prisma.catalogVendor.create({
+    data: { collectionId, name: "Michel", abbreviation: "Mi" },
+  });
+  const catalogName = await prisma.catalogName.create({
+    data: { vendorId: vendor.id, name: "Michel Europa", currency: "EUR" },
+  });
+  const edition = await prisma.catalogEdition.create({
+    data: { catalogNameId: catalogName.id, year: 2026 },
+  });
+  await prisma.collectionArea.update({
+    where: { id: area.id },
+    data: { primaryCatalogNameId: catalogName.id },
+  });
+  await prisma.collectionAreaCatalog.create({
+    data: { collectionAreaId: area.id, catalogNameId: catalogName.id },
+  });
+  await prisma.stampCollectionArea.create({
+    data: { stampId: stamp.id, collectionAreaId: area.id, isPrimary: true },
+  });
+  await prisma.stampCatalogNumber.create({
+    data: { stampId: stamp.id, catalogVendorId: vendor.id, number: "309" },
+  });
+  await prisma.stampCatalogPrice.create({
+    data: {
+      stampId: stamp.id,
+      catalogEditionId: edition.id,
+      conditionId: condition.id,
+      price: "10.00",
+      currency: "EUR",
+    },
   });
 
   return {
@@ -80,6 +128,10 @@ async function seedFixtures(suffix: string): Promise<Fixtures> {
     stampId: stamp.id,
     conditionId: condition.id,
     itemId: item.id,
+    areaId: area.id,
+    vendorId: vendor.id,
+    catalogNameId: catalogName.id,
+    editionId: edition.id,
   };
 }
 
@@ -600,6 +652,18 @@ describe("trade lines — composing both sides (#637)", () => {
     assert.equal(item.line.formatId, null);
   });
 
+  it("values a receive line at its own key, so both columns carry the same figure (#638)", async () => {
+    const page = await receive();
+    const line = page.items.find(
+      (i) => i.side === "receive" && i.line.stampId === f.stampId
+    );
+    // The same `CopyValuation` a give line carries, per piece — the quantity is on the row beside
+    // it, and a figure silently multiplied by it would not be the catalogue's.
+    assert.equal(line?.side, "receive");
+    assert.equal(line!.side === "receive" ? line!.line.value.unpriced : true, false);
+    assert.equal(line!.side === "receive" ? line!.line.value.baseAmount : null, 10);
+  });
+
   it("expands a whole checklist into one line per stamp on it", async () => {
     const second = await prisma.stamp.create({
       data: { collectionId: f.collectionId, name: "Stamp 310" },
@@ -737,6 +801,11 @@ describe("trade lines — composing both sides (#637)", () => {
 
   it("locks every line write once the trade is agreed", async () => {
     const giveLine = (await give()).items[0];
+    // The lifecycle gate (#638) is not what this test is about: this trade holds receive lines for
+    // stamps nothing prices, so give every line a figure of its own and get on with the lock.
+    for (const line of await prisma.tradeLine.findMany({ where: { tradeId }, select: { id: true } })) {
+      await setTradeLineValue(f.userId, line.id, { manualValue: 1 });
+    }
     await setTradeStatus(f.userId, tradeId, "shared");
     await setTradeStatus(f.userId, tradeId, "agreed");
 
@@ -762,5 +831,227 @@ describe("trade lines — composing both sides (#637)", () => {
       listTradeLinePage("someone-else", tradeId, { sectionId, side: "give" })
     );
     await assert.rejects(() => listOfferableCopies("someone-else", tradeId));
+  });
+});
+
+describe("balancing — the two valuations (#638)", () => {
+  let f: Fixtures;
+  let tradeId: string;
+  let sectionId: string;
+
+  before(async () => {
+    f = await seedFixtures(`balance-${Date.now()}`);
+    const trade = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+      catalogVendorId: f.vendorId,
+    });
+    tradeId = trade.id;
+    sectionId = trade.sections[0].id;
+  });
+  // The trades go first: `TradeLine.itemId` is `Restrict`, so a copy cannot be deleted while one
+  // still names it — the guard applies to the teardown as much as to the app.
+  after(async () => {
+    await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
+    await cleanup(f.userId);
+  });
+
+  /** A second copy of the priced stamp, so a side can be given weight without new fixtures. */
+  async function addGiveCopy(): Promise<string> {
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+    });
+    await addTradeGiveLines(f.userId, sectionId, [item.id]);
+    return item.id;
+  }
+
+  it("values both sides from the catalogue, and keeps the two valuations apart", async () => {
+    await addGiveCopy();
+    await addTradeReceiveLines(f.userId, sectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 3,
+    });
+
+    const balance = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(balance.baseCurrency, "EUR");
+    assert.equal(balance.tradeCurrency, "EUR");
+    // One copy out at 10, three stamps in at 10 each — pieces are counted, not lines.
+    assert.equal(balance.trade.give.pieces, 1);
+    assert.equal(balance.trade.receive.pieces, 3);
+    assert.equal(balance.trade.give.own, 10);
+    assert.equal(balance.trade.receive.own, 30);
+    // The agreed catalogue is the same publisher here, so it agrees — but it is its own figure,
+    // summed in the trade's currency, never folded into the one above.
+    assert.equal(balance.trade.give.agreed, 10);
+    assert.equal(balance.trade.receive.agreed, 30);
+    assert.equal(balance.blockers.length, 0);
+  });
+
+  it("counts a line no catalogue prices as unvalued, and refuses to share while it is", async () => {
+    // Numbered rather than named, which is how stamps actually arrive: a name is optional and
+    // usually blank, so the gate has to name a line by its catalogue number or say nothing useful.
+    const unpriced = await prisma.stamp.create({
+      data: {
+        collectionId: f.collectionId,
+        catalogNumbers: {
+          create: { catalogVendorId: f.vendorId, number: "412" },
+        },
+        stampAreaLinks: { create: { collectionAreaId: f.areaId, isPrimary: true } },
+      },
+    });
+    await addTradeReceiveLines(f.userId, sectionId, {
+      stampId: unpriced.id,
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 1,
+    });
+    const line = (await prisma.tradeLine.findFirstOrThrow({
+      where: { tradeId, stampId: unpriced.id },
+      select: { id: true },
+    })).id;
+
+    const blocked = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(blocked.trade.receive.ownMissing, 1);
+    assert.equal(blocked.blockers[0].kind, "own-unvalued");
+    // Named by its **catalogue number**, never merely counted: a refusal that says "1 line" — or
+    // "Unnamed stamp" eight times — sends the collector hunting through both sides of every section.
+    assert.match(blocked.blockers[0].message, /Mi 412 \(U\)/);
+    await assert.rejects(() => setTradeStatus(f.userId, tradeId, "shared"), /Mi 412/);
+
+    // The escape hatch: the collector's own figure, in the base currency, marked as theirs.
+    await setTradeLineValue(f.userId, line, { manualValue: 4.5 });
+    const rescued = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(rescued.blockers.length, 0);
+    assert.equal(rescued.trade.receive.ownMissing, 0);
+    assert.equal(rescued.trade.receive.ownManual, 1);
+    assert.equal(rescued.trade.receive.own, 34.5);
+  });
+
+  it("names both sides the same way — the catalogue number, and nothing else", async () => {
+    const balance = (await readTradeBalance(f.userId, tradeId))!;
+    // No copy number in front of the give side: that is an internal handle, and it would make the
+    // two sides of one refusal look like two different kinds of thing.
+    assert.equal(balance.lines.find((l) => l.side === "give")!.label, "Mi 309 (U)");
+    assert.equal(
+      balance.lines.find((l) => l.side === "receive" && l.label.startsWith("Mi 309"))!.label,
+      "Mi 309 (U)"
+    );
+  });
+
+  it("refuses a negative manual value rather than clamping it", async () => {
+    const line = await prisma.tradeLine.findFirstOrThrow({
+      where: { tradeId },
+      select: { id: true },
+    });
+    await assert.rejects(
+      () => setTradeLineValue(f.userId, line.id, { manualValue: -5 }),
+      /cannot be negative/
+    );
+  });
+
+  it("warns on the own-value skew without ever blocking on it", async () => {
+    await updateTrade(f.userId, tradeId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+      catalogVendorId: f.vendorId,
+      ownValueWarnPct: 5,
+    });
+    const balance = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(balance.trade.ownWarn, true);
+    // And it still shares: an uneven trade is a normal thing.
+    await setTradeStatus(f.userId, tradeId, "shared");
+    assert.equal((await getTrade(f.userId, tradeId))!.status, "shared");
+  });
+
+  it("freezes the rates at the first share, and refuses to refresh them once agreed", async () => {
+    const shared = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(shared.ratesFrozen, true);
+    // Refreshing is the deliberate act, and it is allowed exactly while the negotiation runs.
+    await refreshTradeRates(f.userId, tradeId);
+
+    await setTradeStatus(f.userId, tradeId, "agreed");
+    await assert.rejects(() => refreshTradeRates(f.userId, tradeId), /frozen/);
+  });
+
+  it("snapshots both valuations onto the lines when both sides commit", async () => {
+    const frozen = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(frozen.frozen, true);
+    const rows = await prisma.tradeLineValuation.findMany({
+      where: { line: { tradeId } },
+      select: { kind: true, targetCurrency: true, value: true, manual: true },
+    });
+    // Two per line and never one: the two valuations are the same shape asked of two books.
+    const lineCount = await prisma.tradeLine.count({ where: { tradeId } });
+    assert.equal(rows.length, lineCount * 2);
+    assert.deepEqual([...new Set(rows.map((r) => r.kind))].sort(), ["agreed", "own"]);
+    assert.equal(rows.some((r) => r.manual), true);
+  });
+
+  it("keeps the frozen figure when the catalogue moves under it", async () => {
+    const before = (await readTradeBalance(f.userId, tradeId))!.trade.give.own;
+    const edition = await prisma.catalogEdition.create({
+      data: { catalogNameId: f.catalogNameId, year: 2027 },
+    });
+    await prisma.stampCatalogPrice.create({
+      data: {
+        stampId: f.stampId,
+        catalogEditionId: edition.id,
+        conditionId: f.conditionId,
+        price: "99.00",
+        currency: "EUR",
+      },
+    });
+    // The partner is holding a printout: a new edition loaded now must not restate the agreement.
+    assert.equal((await readTradeBalance(f.userId, tradeId))!.trade.give.own, before);
+  });
+
+  it("releases the freeze when the trade goes back to a status its list can be edited in", async () => {
+    await setTradeStatus(f.userId, tradeId, "shared");
+    assert.equal(await prisma.tradeLineValuation.count({ where: { line: { tradeId } } }), 0);
+    // And the live read now sees the new edition, because a list being edited is valued live.
+    const live = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(live.frozen, false);
+    assert.equal(live.trade.give.own, 99);
+  });
+
+  it("asks for the agreed figure only where value balancing decides", async () => {
+    const bare = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+      balanceByValue: true,
+      valueTolerancePct: 5,
+    });
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+    });
+    await addTradeGiveLines(f.userId, bare.sections[0].id, [item.id]);
+
+    // Balanced by value with no agreed catalogue named: refused as the one fault it is — the
+    // missing catalogue — rather than as every line being blamed for a figure nothing was asked for.
+    const balance = (await readTradeBalance(f.userId, bare.id))!;
+    assert.equal(balance.trade.byValue, true);
+    assert.deepEqual(balance.blockers.map((b) => b.kind), ["agreed-no-catalog"]);
+    assert.deepEqual(balance.blockers[0].lines, []);
+    await assert.rejects(
+      () => setTradeStatus(f.userId, bare.id, "shared"),
+      /names no agreed catalogue/
+    );
+
+    // Naming one is all it needed — the lines were priced the whole time.
+    await updateTrade(f.userId, bare.id, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+      balanceByValue: true,
+      valueTolerancePct: 5,
+      catalogVendorId: f.vendorId,
+    });
+    assert.equal((await readTradeBalance(f.userId, bare.id))!.blockers.length, 0);
+    await setTradeStatus(f.userId, bare.id, "shared");
   });
 });

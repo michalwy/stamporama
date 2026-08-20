@@ -48,6 +48,20 @@ const VALUATION_PRICE_SELECT = {
   catalogEdition: { select: { year: true, catalogNameId: true } },
 } as const;
 
+/** Which book each area is read in, when it is not the area's own primary catalog.
+ *
+ * The one thing a caller may swap out, and only because a trade's **agreed** catalog is a real
+ * second answer rather than an override of the first (#638; ADR-0039 §7): the collector's own
+ * valuation is always the area's primary catalog with no override of any kind, or the trade screen
+ * would quote a different figure for a stamp than the copies list does. Everything else about the
+ * rule — the rollup, the format factors, the edition selection, the strict certificate match — is
+ * the same rule, which is exactly why this is a map handed in rather than a second valuator.
+ *
+ * `areaId → catalogNameId | null`; see `buildVendorCatalogMap`. */
+export interface ValuationCatalogOverride {
+  catalogNameByArea: Map<string, string | null>;
+}
+
 /** Value a set of {@link ValuationRow}s. Loads the stamp prices, area primary catalogs, descendant
  * variant prices, format factors and currency rates **once** for the whole set, then applies the
  * pure `valuateCopy` rule — which is why every caller batches rather than valuing row by row.
@@ -58,12 +72,15 @@ const VALUATION_PRICE_SELECT = {
  * copies of ADR-0020 and #238 to keep in step. */
 export async function valuateItemRows(
   collectionId: string,
-  rows: ValuationRow[]
+  rows: ValuationRow[],
+  override?: ValuationCatalogOverride
 ): Promise<Map<string, CopyValuation>> {
   if (rows.length === 0) return new Map();
 
   const [primaryCatalogByArea, baseCurrency] = await Promise.all([
-    buildEffectivePrimaryCatalogMap(collectionId),
+    override
+      ? Promise.resolve(override.catalogNameByArea)
+      : buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
   ]);
 

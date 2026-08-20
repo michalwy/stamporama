@@ -79,6 +79,16 @@ export interface CopyValuation {
   baseAmount: number | null;
   /** Base-currency value as a 2-dp string, or null. */
   baseAmountDisplay: string | null;
+  /** The **book** this figure was read in, and the edition it was read at — null whenever the copy
+   *  is unpriced. The same answer read a third way, beside {@link sourceStampId}: what the copy is
+   *  worth, which catalogue entry the figure describes, and which volume of which year said so.
+   *
+   *  Kept because a figure can outlive the catalogue it came from. A trade freezes both its
+   *  valuations onto its lines the moment both sides commit (#638), and a snapshot that recorded an
+   *  amount but not the book and edition behind it would be a number the partner's printout could
+   *  never be checked against. Every other reader ignores it. */
+  catalogNameId: string | null;
+  editionYear: number | null;
   /** True when the copy's variant is unknown → value is a lowest-variant estimate. */
   uncertain: boolean;
   /** True when no catalog price matched (condition/cert/catalog). */
@@ -168,6 +178,8 @@ function toValuation(
       currency: null,
       baseAmount: null,
       baseAmountDisplay: null,
+      catalogNameId: null,
+      editionYear: null,
       uncertain,
       unpriced: true,
       sourceStampId: null,
@@ -180,6 +192,8 @@ function toValuation(
     currency: picked.currency,
     baseAmount,
     baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    catalogNameId: picked.catalogNameId,
+    editionYear: picked.editionYear,
     uncertain,
     unpriced: false,
     sourceStampId,

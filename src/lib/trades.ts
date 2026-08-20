@@ -5,10 +5,24 @@ import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import {
   canTransitionTrade,
+  isTradeContentEditable,
   isTradeStatus,
   TRADE_STATUS_LABEL,
   type TradeStatus,
 } from "./trade-rules";
+import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
+import {
+  freezeTradeRates,
+  freezeTradeValuations,
+  readTradeGateBlockers,
+  releaseTradeValuations,
+} from "./trade-valuation";
+
+/** The access guards live one module down (`trade-access.ts`), below both this module and the
+ *  balancing engine that also asks them — see that file's header. Re-exported here because
+ *  `trade-lines.ts` and the routes have always asked this module for them, and where a guard is
+ *  defined is not their business. */
+export { assertContentEditable, assertSectionOwner, assertTradeOwner };
 
 // Server-side domain for trades (#646; ADR-0039): exchanges with another collector, their sections,
 // and the lifecycle they move through. The vocabulary — statuses, transitions, sides, balance rules
@@ -28,27 +42,6 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
   if (!col || col.ownerId !== ownerId) {
     throw new Error("Collection not found or access denied.");
   }
-}
-
-/** Resolve the owning collection of a trade, asserting ownership.
- *
- * Exported for `trade-lines.ts` (#637), which edits the lines this module deliberately does not
- * own: the two halves of the same domain must ask the same question about who may touch a trade. */
-export async function assertTradeOwner(
-  ownerId: string,
-  tradeId: string
-): Promise<{ collectionId: string; status: TradeStatus }> {
-  const trade = await prisma.trade.findUnique({
-    where: { id: tradeId },
-    select: { collectionId: true, status: true, collection: { select: { ownerId: true } } },
-  });
-  if (!trade || trade.collection.ownerId !== ownerId) {
-    throw new Error("Trade not found or access denied.");
-  }
-  return {
-    collectionId: trade.collectionId,
-    status: isTradeStatus(trade.status) ? trade.status : "preparing",
-  };
 }
 
 /** The section a trade is created with, so that `TradeLine.sectionId` always has somewhere to
@@ -493,6 +486,20 @@ export async function updateTrade(
  * The transition table is the authority (`trade-rules.ts`), and an illegal move is refused by name
  * rather than silently ignored: "Cannot move a closed trade back to preparing" is something the
  * collector can act on, where a no-op looks like a broken button.
+ *
+ * Three of the transitions do more than write a column (#638), and all three are here rather than in
+ * the engine because they are things that happen to a *trade* when its status changes:
+ *
+ *   - **Into `shared` or `agreed`**: the valuation gates. A trade may not be sent to a partner, nor
+ *     agreed, while a line on either side has no value at all — a total resting on an unspoken zero
+ *     is a total that lies. Re-run on every attempt rather than stamped once, so a line added while
+ *     the trade was `shared` cannot slip through on a check that passed last week, and refused
+ *     **by name** (#418's shape): "3 lines are unvalued" and nothing more sends the collector
+ *     hunting through both sides of every section.
+ *   - **Into `shared`**: the rates freeze. From here the trade's figures are read at the rates the
+ *     two sides negotiated under, refreshable while the negotiation runs (`refreshTradeRates`).
+ *   - **Into `agreed`**: both valuations freeze onto the lines, and back out of it they are
+ *     released. One rule: what is editable is not frozen.
  */
 export async function setTradeStatus(
   ownerId: string,
@@ -508,7 +515,25 @@ export async function setTradeStatus(
       ].toLowerCase()}.`
     );
   }
+
+  if (status === "shared" || status === "agreed") {
+    const blockers = await readTradeGateBlockers(tradeId);
+    if (blockers.length > 0) {
+      const verb = status === "shared" ? "shared with your partner" : "agreed";
+      throw new Error(
+        `This trade cannot be ${verb} yet. ${blockers.map((b) => b.message).join(" ")}`
+      );
+    }
+  }
+
   await prisma.trade.update({ where: { id: tradeId }, data: { status } });
+
+  // After the write, so a trade that failed to move is never left carrying the new state's
+  // snapshot. Each of the three is idempotent, and none of them is reached by a transition that
+  // does not call for it.
+  if (status === "shared") await freezeTradeRates(tradeId);
+  if (status === "agreed") await freezeTradeValuations(tradeId);
+  if (isTradeContentEditable(status)) await releaseTradeValuations(tradeId);
 }
 
 /**
@@ -567,37 +592,6 @@ function sectionOverrideData(data: TradeSectionInput) {
         ? null
         : decimal(Math.max(0, data.ownValueWarnPct)),
   };
-}
-
-/** Refuse to touch the contents of a trade that has been agreed: the partner holds a copy of the
- * list (#637). Recording that reality diverged is a different act (#642).
- *
- * Exported for the same reason `assertTradeOwner` is: the lock is one rule, and the module that
- * edits lines enforces it by calling this rather than by restating the two open statuses. */
-export function assertContentEditable(status: TradeStatus): void {
-  if (status === "preparing" || status === "shared") return;
-  throw new Error(
-    `A ${TRADE_STATUS_LABEL[status].toLowerCase()} trade's list cannot be changed.`
-  );
-}
-
-/** Resolve the owning trade of a section, asserting ownership. Exported for `trade-lines.ts`
- *  (#637), whose lines hang off a section rather than off the trade. */
-export async function assertSectionOwner(
-  ownerId: string,
-  sectionId: string
-): Promise<{ tradeId: string; status: TradeStatus }> {
-  const section = await prisma.tradeSection.findUnique({
-    where: { id: sectionId },
-    select: {
-      tradeId: true,
-      trade: { select: { status: true, collection: { select: { ownerId: true } } } },
-    },
-  });
-  if (!section || section.trade.collection.ownerId !== ownerId) {
-    throw new Error("Trade section not found or access denied.");
-  }
-  return { tradeId: section.tradeId, status: readStatus(section.trade.status) };
 }
 
 /** Add a section, appended after the existing ones. */

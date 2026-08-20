@@ -104,8 +104,45 @@ A trade carries an optional **agreed catalog** alongside the collector's own val
 comes from the area's primary catalog exactly as everywhere else in the app. They answer different
 questions: what the two sides are negotiating in, and what the collector is actually giving away.
 That StampWorld says something different from Fischer is a property of the negotiation, not a
-discrepancy to reconcile. The engine that computes them is a separate change; the columns that name
-them live on the trade because they are terms of the agreement.
+discrepancy to reconcile. The columns that name them live on the trade because they are terms of the
+agreement.
+
+**Revised in place by #638**, which built the engine this section anticipated, on the ADR-0029 §8
+precedent — the decision below is unchanged and what follows is the shape it took rather than a
+contradiction of it.
+
+Own valuation is `valuateItemRows` **called, not restated**: the identical function the copies list
+prices a copy with, with no override of any kind, so the trade screen cannot quote a different figure
+for a stamp than the rest of the app does. Agreed valuation is the same call against a different
+book, through one swapped input — the area → catalogue map (`buildVendorCatalogMap`) — because the
+rollup, the format factors, the edition selection and the strict certificate match are the *same*
+rule asked of a different publisher, and a second valuator would be two copies of ADR-0020 and #238
+to keep in step. A **per-line** vendor may override the trade's ("this one we look up in Fischer");
+it is one more map and one more pass, never a second rule, and it touches the agreed valuation only.
+
+Three things follow from "never merged". They are summed apart (`trade-balance.ts` keeps two fields
+of two units rather than one field and a flag), they are printed apart in two named currencies, and
+a **missing figure is counted, never assumed to be zero** — which is what the gate is. A trade may
+not leave `preparing`, nor reach `agreed`, while any line on either side has no own valuation at all;
+the check is re-run on every attempt rather than stamped once, and it refuses **by name** (#418's
+shape). An unknown-variant rollup (#238) satisfies it, flagged as the estimate it is: blocking on one
+would throw every umbrella stamp out of every trade, and a negotiating figure claims nothing of what
+a listing claims (#617). `TradeLine.manualValue` satisfies it too, in the base currency and marked as
+the collector's own figure wherever it is shown — material no catalog prices must not deadlock a
+trade, and that is categorically different from the zero the app refuses to assume. The agreed gate
+applies only where value balancing decides, and a value-balanced trade naming *no* catalog is refused
+as the one fault it is rather than as every line being blamed for a figure nothing was asked for.
+
+**Freezing is by status, and there are three regimes.** `preparing` reads live catalogs at live
+rates. The first move to `shared` writes `TradeFxRate` — `ExchangeRate`'s own shape with the
+collection swapped for a trade, keyed on `(tradeId, fromCurrency, toCurrency)` because a trade
+converts toward two targets and one row cannot mean both — refreshable while the negotiation runs and
+hard-frozen at `agreed`. `agreed` writes `TradeLineValuation`, one row per `(line, kind)`: `kind` is
+an axis for §1's reason, and the catalogue's name and currency are stored as **text** rather than as
+foreign keys, because the whole point is that a catalog renamed or deleted next week cannot restate
+what two people shook hands on. The snapshot is **released** whenever the trade returns to a status
+its list can be edited in — what is editable is not frozen, and a snapshot shadowing a live edit is
+the one way that table could lie.
 
 `Trade.catalogVendorId` points at a **`CatalogVendor`** — Michel, StampWorld, Fischer — and
 deliberately **not** at a `CatalogName`. A catalog name is one book covering one part of the world:
@@ -138,3 +175,11 @@ exchanges answering to "trade 7" would be worse here than anywhere.
   link, partner feedback, realisation, the packing list, closing into a purchase, and the Colnect
   list import — all build on this model rather than extending it. Columns those changes read ship
   with them, not here.
+- #638 shipped its own, per that rule: `trade_line.manualValue` and `trade_line.catalogVendorId`
+  (the two escape hatches), `trade_line_valuation` (the freeze) and `trade_fx_rate` (the rates). It
+  also lifted the three access guards into `trade-access.ts`, below both halves of the domain, so
+  that `trades.ts` calling the engine's gate and the engine calling those guards is not a cycle —
+  the same move `item-valuation.ts` made for `items.ts` and `market-values.ts`.
+- `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
+  freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
+  a number the partner's printout can never be checked against.

@@ -488,6 +488,8 @@ model CatalogVendor {
   /** Trades that named this vendor as the catalog both sides speak in (#646). A vendor rather than
    *  a `CatalogName`: one book covers one part of the world, and a trade routinely spans several. */
   agreedInTrades        Trade[]                @relation("TradeAgreedCatalog")
+  /** Lines that read this vendor's book instead of their trade's agreed one (#638). */
+  agreedOnTradeLines    TradeLine[]            @relation("TradeLineAgreedCatalog")
 
   @@map("catalog_vendor")
 }
@@ -3247,6 +3249,9 @@ model Trade {
   catalogVendor CatalogVendor? @relation("TradeAgreedCatalog", fields: [catalogVendorId], references: [id], onDelete: Restrict)
   sections      TradeSection[]
   lines         TradeLine[]
+  /** The conversion rates this trade's figures are read through (#638), frozen at the first share.
+   *  See {@link TradeFxRate}. */
+  fxRates       TradeFxRate[]
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3327,6 +3332,26 @@ model TradeLine {
   quantity            Int     @default(1)
 
   notes     String?
+
+  /** The collector's **own** figure for this line, in the collection's **base** currency (#638).
+   *
+   *  The escape hatch, and deliberately a narrow one: the default reflex must stay "type the price
+   *  on the stamp", because a price is a property of the stamp and once entered it is there for
+   *  good, while a figure here describes one line of one trade. But material that no catalog in the
+   *  collection prices must not deadlock a trade, and this is categorically different from the zero
+   *  the app refuses to assume — it is marked as the collector's own figure everywhere it is shown
+   *  and never dressed up as a catalog one. It satisfies **both** gates: a line the collector has
+   *  put a number on is not an unvalued line. */
+  manualValue Decimal? @db.Decimal(12, 2)
+
+  /** Per-line rescue for the agreed catalog (#638): "this one line we look up in Fischer instead".
+   *
+   *  A **vendor**, for `Trade.catalogVendorId`'s reason — which volume this line is read in still
+   *  follows from its stamp's area through `CollectionAreaCatalog`. Null is the ordinary case and
+   *  means the trade's own agreed catalog. Read only where the trade names an agreed catalog at
+   *  all; on a trade that names none there is no second valuation for it to redirect. */
+  catalogVendorId String?
+
   createdAt DateTime @default(now())
 
   trade             Trade              @relation(fields: [tradeId], references: [id], onDelete: Cascade)
@@ -3336,6 +3361,10 @@ model TradeLine {
   condition         StampCondition?    @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   format            StampFormat?       @relation(fields: [formatId], references: [id], onDelete: Restrict)
+  catalogVendor     CatalogVendor?     @relation("TradeLineAgreedCatalog", fields: [catalogVendorId], references: [id], onDelete: Restrict)
+  /** What this line was worth the day the trade was agreed (#638). Empty while the trade is still
+   *  editable — a live trade is valued live — and written on the move to `agreed`. */
+  valuations        TradeLineValuation[]
 
   // One copy cannot be on the same trade twice. Nulls are distinct in Postgres, so this constrains
   // the give side only and leaves the receive side alone — which is right: two receive lines for the
@@ -3350,7 +3379,93 @@ model TradeLine {
   @@index([conditionId])
   @@index([certificateStatusId])
   @@index([formatId])
+  @@index([catalogVendorId])
   @@map("trade_line")
+}
+
+// What one trade line was worth on the day the trade was agreed (#638; ADR-0039 §7).
+//
+// **Two valuations, never merged**, and they are the same shape because they ask the same question
+// of two different books — which is exactly the argument that made `side` an axis of `TradeLine`
+// rather than two sets of columns on one row (ADR-0039 §1). So `kind` is the axis here too, and
+// neither valuation can quietly acquire a field the other lacks.
+//
+// Rows exist **only for a frozen trade**. One still being composed is valued live, from the catalogs
+// as they stand this minute; the freeze happens on the move to `agreed` and is released the moment
+// the trade goes back to a status its list can be edited in — what is editable is not frozen, and a
+// snapshot shadowing a live edit is the one way this table could lie.
+//
+// The catalog's **name and currency are text, not foreign keys**. That is the whole point: a catalog
+// renamed, re-priced or deleted next week must not rewrite a figure two people have shaken hands on,
+// and the partner is holding a printout of it.
+model TradeLineValuation {
+  id     String @id @default(cuid())
+  lineId String
+  /// own | agreed. The vocabulary lives in `trade-rules.ts`; nothing reads this spelling.
+  kind   String
+
+  /// The picked catalog price in the currency that catalog prints, or null where the line carries no
+  /// catalog figure at all (a manual value, or nothing).
+  amount      Decimal? @db.Decimal(12, 2)
+  currency    String?
+  /// The book the figure was read in and the edition it was read at, as they read that day.
+  catalogName String?
+  editionYear Int?
+
+  /// `currency` → `targetCurrency`, frozen with everything else. Null when the two agree, and null
+  /// when no rate could be had — in which case `value` is null too, a converted figure nobody can
+  /// reproduce being worse than none.
+  rate           Decimal? @db.Decimal(65, 30)
+  /// What this valuation is expressed in: the collection's **base** currency for `own`, the
+  /// **trade's** currency for `agreed`. Stored rather than derived, because the base currency is a
+  /// setting and a trade agreed under the old one still means what it meant.
+  targetCurrency String
+  /// The figure in `targetCurrency` — what the totals are summed from.
+  value          Decimal? @db.Decimal(12, 2)
+
+  /// An unknown-variant rollup (#238): the lowest priced descendant, an estimate and flagged as one
+  /// wherever it is printed. It still **counts as a value** for both gates — blocking on it would
+  /// throw every umbrella stamp out of every trade, and a negotiating figure claims nothing of what
+  /// a listing claims (#617).
+  uncertain Boolean  @default(false)
+  /// The figure is the collector's own (`TradeLine.manualValue`), never a catalog one. Carried into
+  /// the freeze so a printed list cannot present a typed number as a published price.
+  manual    Boolean  @default(false)
+  frozenAt  DateTime @default(now())
+
+  line TradeLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+
+  @@unique([lineId, kind])
+  @@index([lineId])
+  @@map("trade_line_valuation")
+}
+
+// The conversion rates one trade's figures are read through (#638).
+//
+// The `ExchangeRate` mechanism (#20) with the collection swapped for a trade, because that is the
+// difference that matters: a collection's rate is *today's*, and a trade's is **the one both sides
+// negotiated under**. Frozen at the first share, refreshable while `shared` (a negotiation that runs
+// three weeks deserves current money), and hard-frozen at `agreed` — after which loading a new rate
+// would silently restate a total the partner has a printout of.
+//
+// `toCurrency` is in the key because a trade converts toward **two** targets: the collector's own
+// valuation lands in the collection's base currency and the agreed one in the trade's currency, and
+// one row cannot mean both.
+model TradeFxRate {
+  id           String   @id @default(cuid())
+  tradeId      String
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(65, 30)
+  /// When this rate was taken — printed beside the figures, because a rate with no date is a number
+  /// nobody can check.
+  fetchedAt    DateTime
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, fromCurrency, toCurrency])
+  @@index([tradeId])
+  @@map("trade_fx_rate")
 }
 
 model Contact {

@@ -10,6 +10,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { CopyValue } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -70,8 +71,11 @@ export function TradeReceiveLineRow({
   areas,
   vendorMaps,
   isLast,
+  baseCurrency,
   editable,
   onEdit,
+  onEditValue,
+  onSetCatalogPrice,
   onRemove,
 }: {
   /** For the collection-scoped photo route. */
@@ -80,8 +84,19 @@ export function TradeReceiveLineRow({
   areas: CollectionAreaData[];
   vendorMaps: AreaVendorMaps;
   isLast: boolean;
+  baseCurrency: string;
   editable: boolean;
   onEdit: () => void;
+  /** The line's value (#638): a figure of the collector's own, and which publisher this one line is
+   *  read in. Separate from *Edit line*, which is about **what** is coming — the stamp, the
+   *  condition, how many — where this is about what it is worth. */
+  onEditValue: () => void;
+  /** Price this stamp on the primary catalogue without leaving the trade (#638), the affordance the
+   *  purchase-order intake row already carries. Absent on a locked list — but note this writes a
+   *  price on the **stamp**, not on the trade, which is why it is offered at all: a receive line
+   *  routinely names material from an area the collection has never touched, and the collector is
+   *  standing there with the partner's list and a catalogue open. */
+  onSetCatalogPrice?: () => void;
   onRemove: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -103,6 +118,13 @@ export function TradeReceiveLineRow({
 
   const actions: RowAction[] = [
     { key: "edit", label: "Edit line", icon: "edit", onSelect: onEdit },
+    {
+      key: "value",
+      label: "Set value",
+      icon: "prices",
+      hint: "A figure of my own for this line, and which publisher it is read in.",
+      onSelect: onEditValue,
+    },
     {
       key: "remove",
       label: "Remove from trade",
@@ -212,6 +234,16 @@ export function TradeReceiveLineRow({
               </span>
             </Tooltip>
           )}
+          {/* At the end of the catalogue-number line, which is exactly where `InventoryItemRow` puts
+              it — so the two columns of a section carry the figure at the same height and can be
+              read across. Per piece; the quantity is chipped on the line below. */}
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+            <CopyValue
+              value={line.value}
+              baseCurrency={baseCurrency}
+              onSetPrice={onSetCatalogPrice}
+            />
+          </span>
         </div>
 
         <div

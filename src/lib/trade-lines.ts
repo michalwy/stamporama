@@ -17,6 +17,7 @@ import {
   type TradeGroupSubject,
 } from "./trade-grouping";
 import type { PhotoSummary } from "./photos";
+import type { CopyValuation } from "./valuation";
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps } from "./area-vendor";
@@ -229,6 +230,20 @@ export interface TradeReceiveLineData {
   formatName: string | null;
   formatAbbreviation: string | null;
   quantity: number;
+  /**
+   * The catalogue value at this line's exact key, **per piece** (#638).
+   *
+   * The same `CopyValuation` a give line carries and drawn with the same `CopyValue` component, so
+   * the two columns line up on the one figure a collector reads across them — and so that the
+   * *"+ catalog value"* affordance is the same affordance on both sides. That matters more here than
+   * on the give side: a receive line describes material from an area the collection may never have
+   * touched, which is precisely where a price is missing and where the collector is standing with
+   * the partner's list in front of them.
+   *
+   * Per piece rather than per line: `quantity` is on the row beside it, and a figure silently
+   * multiplied by it would not be the catalogue's.
+   */
+  value: CopyValuation;
 }
 
 const RECEIVE_SELECT = {
@@ -264,6 +279,22 @@ const RECEIVE_SELECT = {
   },
 } satisfies Prisma.TradeLineSelect;
 
+/** A line whose key could not be assembled at all — a `receive` row missing its stamp or condition,
+ *  which the CHECK constraints make impossible but which a read must not crash on. Unpriced rather
+ *  than absent: the row still draws, and the value slot says what it says everywhere else. */
+const UNPRICED: CopyValuation = {
+  amount: null,
+  currency: null,
+  baseAmount: null,
+  baseAmountDisplay: null,
+  catalogNameId: null,
+  editionYear: null,
+  uncertain: false,
+  unpriced: true,
+  sourceStampId: null,
+  unpricedVariantIds: [],
+};
+
 /** Photo roles a stamp uses (#137): the single `main` slot, plus the two a copy scan carries.
  *  Anything else is carried as unroled rather than dropped — the picture exists either way. */
 function toPhotoSummary(photo: {
@@ -290,9 +321,28 @@ async function enrichReceiveLines(
 ): Promise<TradeReceiveLineData[]> {
   if (rows.length === 0) return [];
 
-  const [areas, issuePrefixes] = await Promise.all([
+  const [areas, issuePrefixes, valuations] = await Promise.all([
     readCollectionAreas(collectionId),
     loadIssuePrefixMap(collectionId),
+    // Valued for the **page** alone, exactly as the give side's copies are by `listItemsPaginated`:
+    // fifty rows, one batched read, and the same `valuateItemRows` rule the whole app prices by.
+    valuateItemRows(
+      collectionId,
+      rows.flatMap<ValuationRow>((row) =>
+        row.stampId && row.conditionId
+          ? [
+              {
+                id: row.id,
+                stampId: row.stampId,
+                conditionId: row.conditionId,
+                certificateStatusId: row.certificateStatusId,
+                formatId: row.formatId,
+                unknownVariant: row.stamp ? isUnknownVariantStamp(row.stamp) : false,
+              },
+            ]
+          : []
+      )
+    ),
   ]);
   const { primaryVendorByArea } = buildAreaVendorMaps(areas, issuePrefixes);
 
@@ -338,6 +388,7 @@ async function enrichReceiveLines(
       formatName: row.format?.name ?? null,
       formatAbbreviation: row.format?.abbreviation ?? null,
       quantity: row.quantity,
+      value: valuations.get(row.id) ?? UNPRICED,
     };
   });
 }

@@ -336,6 +336,8 @@ describe("aggregateHoldings", () => {
     currency: unpriced ? null : "EUR",
     baseAmount,
     baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    catalogNameId: unpriced ? null : "michel",
+    editionYear: unpriced ? null : 2026,
     uncertain: false,
     unpriced,
     sourceStampId: null,

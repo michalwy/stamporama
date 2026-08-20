@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { TradeSectionData } from "@/lib/trades";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
+import type { TradeLineValueRead, TradeSectionBalance } from "@/lib/trade-valuation";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
 import { describeBalanceRule, type TradeBalanceRule } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -20,6 +21,12 @@ import { renameTradeSectionAction, type TradeActionState } from "@/app/actions/t
 import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-column";
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
+import { TradeLineValueDialog } from "./trade-line-value-dialog";
+import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import type { QuickPriceTarget } from "./trade-quick-price";
+import { useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { TradeSectionBalanceStrip } from "./trade-balance-panel";
+import type { TradeCatalogVendor } from "../trade-form-dialog";
 
 // One section of a trade, with **both sides inside it** (#637).
 //
@@ -75,18 +82,25 @@ type SectionDialog =
   | { kind: "none" }
   | { kind: "addCopies" }
   | { kind: "addReceive" }
-  | { kind: "editReceive"; line: TradeReceiveLineData };
+  | { kind: "editReceive"; line: TradeReceiveLineData }
+  | { kind: "lineValue"; line: TradeLineValueRead }
+  | { kind: "quickPrice"; target: QuickPriceTarget };
 
 export function TradeSectionCard({
   collectionId,
   tradeId,
   section,
   rule,
+  balance,
+  lineValues,
   editable,
   isPending,
   areas,
   locations,
   baseCurrency,
+  tradeCurrency,
+  agreedVendorName,
+  catalogVendors,
   vendorMaps,
   levels,
   onRun,
@@ -99,6 +113,13 @@ export function TradeSectionCard({
   /** The rule **in force** here, already resolved against the trade's — `inherited` says which of
    *  the two stated it, which is the only thing the chip has to add. */
   rule: TradeBalanceRule & { inherited: boolean };
+  /** This section's figures and verdict (#638), absent while they are still being worked out. The
+   *  strip is then simply not drawn — a row of dashes where numbers belong reads as an answer. */
+  balance: TradeSectionBalance | undefined;
+  /** Every line's two figures, for the whole trade — the value dialog opens on the one it is about.
+   *  Passed whole rather than filtered per section because it arrives as one read: the balance is
+   *  judged over the trade at one moment, and slicing it per card would invite two moments. */
+  lineValues: TradeLineValueRead[] | undefined;
   /** False once the trade is agreed: the partner holds a copy of the list. Every affordance that
    *  would change it is then simply absent — a disabled row of buttons says the same thing more
    *  slowly. Reading, searching and grouping stay live, which is what a locked list is for. */
@@ -107,6 +128,13 @@ export function TradeSectionCard({
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
+  /** The partner's currency — what the agreed valuation is expressed in, labelled apart from the
+   *  base currency everywhere the two meet. */
+  tradeCurrency: string;
+  /** The catalogue both sides agreed on, or null where the trade names none — in which case a line
+   *  has no second valuation and the dialog's publisher field is absent entirely. */
+  agreedVendorName: string | null;
+  catalogVendors: TradeCatalogVendor[];
   vendorMaps: AreaVendorMaps;
   levels: readonly TradeGroupLevel[];
   onRun: (action: () => Promise<TradeActionState>) => void;
@@ -114,6 +142,10 @@ export function TradeSectionCard({
   onDeleteSection: () => void;
 }) {
   const [dialog, setDialog] = useState<SectionDialog>({ kind: "none" });
+  const [quickPriceError, setQuickPriceError] = useState<string | undefined>();
+  const { invalidateTrade } = useInvalidateTradeDetail();
+  // The dialog names the area it is pricing in; the screen already has the areas for the rows.
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   const giveSide = useTradeSide(collectionId, tradeId, section.id, "give", levels);
   const receiveSide = useTradeSide(collectionId, tradeId, section.id, "receive", levels);
@@ -208,6 +240,15 @@ export function TradeSectionCard({
               {rule.inherited ? "" : " · own rule"}
             </span>
           </Tooltip>
+          {/* **Does this part balance** (#638) — beside the rule it is judged against, because the
+              two are one fact. A section is the unit a collector reasons in (mint against mint),
+              which is the whole reason sections exist, so the verdict belongs on the section rather
+              than only on the trade. */}
+          <TradeSectionBalanceStrip
+            section={balance}
+            baseCurrency={baseCurrency}
+            tradeCurrency={tradeCurrency}
+          />
           <span style={{ flex: 1 }} />
           {editable && <RowActionsMenu actions={sectionActions} ariaLabel="Section actions" />}
         </div>
@@ -246,6 +287,11 @@ export function TradeSectionCard({
             editable={editable}
             stickyTop={bandHeight}
             onEditReceiveLine={() => undefined}
+            onEditLineValue={(lineId) => {
+              const line = lineValues?.find((l) => l.lineId === lineId);
+              if (line) setDialog({ kind: "lineValue", line });
+            }}
+            onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
             onRun={onRun}
           />
         </div>
@@ -260,6 +306,11 @@ export function TradeSectionCard({
             editable={editable}
             stickyTop={bandHeight}
             onEditReceiveLine={(line) => setDialog({ kind: "editReceive", line })}
+            onEditLineValue={(lineId) => {
+              const line = lineValues?.find((l) => l.lineId === lineId);
+              if (line) setDialog({ kind: "lineValue", line });
+            }}
+            onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
             onRun={onRun}
           />
         </div>
@@ -274,6 +325,67 @@ export function TradeSectionCard({
           areas={areas}
           locations={locations}
           baseCurrency={baseCurrency}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+
+      {/* **Pricing the stamp, not the trade** (#638). One dialog per card remembering which row
+          opened it, never one per row — a hook cannot be called in a loop (#531), and this is the
+          shape the purchase-order intake screen already uses. Both sides reach it: what it writes is
+          a catalogue price on a stamp, and a receive line names a stamp like any other. */}
+      {dialog.kind === "quickPrice" && (
+        <QuickPriceDialog
+          subject={dialog.target.subject}
+          collectionId={collectionId}
+          areaName={dialog.target.areaId ? (areaNameById.get(dialog.target.areaId) ?? null) : null}
+          primaryVendorId={
+            dialog.target.areaId
+              ? (vendorMaps.primaryVendorByArea.get(dialog.target.areaId) ?? null)
+              : null
+          }
+          vendorMap={vendorMaps.vendorMapFor(dialog.target.areaId, dialog.target.issueId)}
+          isPending={isPending}
+          error={quickPriceError}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setQuickPriceError(undefined);
+            }
+          }}
+          onSubmit={(entries) => {
+            const { subject } = dialog.target;
+            setQuickPriceError(undefined);
+            onRun(async () => {
+              const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              const result = await quickSetCatalogPricesAction(
+                subject.stampId,
+                subject.conditionId,
+                subject.certificateStatusId,
+                entries
+              );
+              if (result.status === "error") {
+                setQuickPriceError(result.message);
+                return result;
+              }
+              // A price on the stamp moves both valuations, both sides' totals and possibly whether
+              // the trade can be shared at all — so the whole screen refreshes, not just this row.
+              // `idle` — nothing typed in any field — closes just the same: it is a cancel.
+              setDialog({ kind: "none" });
+              invalidateTrade(collectionId);
+              return { status: "success" };
+            });
+          }}
+        />
+      )}
+
+      {dialog.kind === "lineValue" && (
+        <TradeLineValueDialog
+          collectionId={collectionId}
+          line={dialog.line}
+          baseCurrency={baseCurrency}
+          tradeCurrency={tradeCurrency}
+          agreedVendorName={agreedVendorName}
+          catalogVendors={catalogVendors}
           onClose={() => setDialog({ kind: "none" })}
         />
       )}

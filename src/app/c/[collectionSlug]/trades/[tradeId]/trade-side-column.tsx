@@ -22,6 +22,8 @@ import { deleteTradeLineAction, type TradeActionState } from "@/app/actions/trad
 import { TradeReceiveLineRow } from "./trade-receive-line-row";
 import { useTradeLines } from "./use-trade-detail-query";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
+import type { QuickPriceTarget } from "./trade-quick-price";
+import { giveQuickPriceTarget, receiveQuickPriceTarget } from "./trade-quick-price";
 import { Icon } from "@/app/icons";
 
 // **One side of one section is one list** (#637), and it is a real one: its own search, its own
@@ -314,6 +316,8 @@ export function TradeSideRows({
   editable,
   stickyTop,
   onEditReceiveLine,
+  onEditLineValue,
+  onQuickPrice,
   onRun,
 }: {
   state: TradeSideState;
@@ -326,6 +330,15 @@ export function TradeSideRows({
   /** Where a group heading pins — right under the section's own band, measured rather than assumed. */
   stickyTop: number;
   onEditReceiveLine: (line: TradeReceiveLineData) => void;
+  /** Open the line's value dialog (#638) — the manual figure and the per-line publisher. Both sides
+   *  offer it, because both sides have to carry a value before the trade can leave `preparing`, and
+   *  a receive line is exactly the one most likely to have nothing priced behind it. */
+  onEditLineValue: (lineId: string) => void;
+  /** Price the row's stamp on the primary catalogue in place (#638) — the purchase-order intake's
+   *  own affordance, offered here for the reason it is offered there: the gap is discovered while
+   *  the list is being read, and sending the collector to the stamp editor to fix it loses their
+   *  place. It writes a price on the **stamp**, which is why both sides get it. */
+  onQuickPrice: (target: QuickPriceTarget) => void;
   onRun: (action: () => Promise<TradeActionState>) => void;
 }) {
   const { items, headings } = state;
@@ -392,7 +405,17 @@ export function TradeSideRows({
                 isLast={isLast}
                 readOnly={!editable}
                 showCostBasis
+                onSetCatalogPrice={
+                  editable ? () => onQuickPrice(giveQuickPriceTarget(item.copy)) : undefined
+                }
                 actionsOverride={[
+                  {
+                    key: "value",
+                    label: "Set value",
+                    icon: "prices",
+                    hint: "A figure of my own for this line, and which publisher it is read in.",
+                    onSelect: () => onEditLineValue(item.lineId),
+                  },
                   {
                     key: "remove",
                     label: "Remove from trade",
@@ -410,9 +433,14 @@ export function TradeSideRows({
                 line={item.line}
                 areas={areas}
                 vendorMaps={vendorMaps}
+                baseCurrency={baseCurrency}
                 isLast={isLast}
                 editable={editable}
                 onEdit={() => onEditReceiveLine(item.line)}
+                onEditValue={() => onEditLineValue(item.lineId)}
+                onSetCatalogPrice={
+                  editable ? () => onQuickPrice(receiveQuickPriceTarget(item.line)) : undefined
+                }
                 onRemove={() => onRemove(item.lineId)}
               />
             )}
