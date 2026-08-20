@@ -87,7 +87,19 @@ export interface TradeData {
   valueTolerancePct: number;
   ownValueWarnPct: number;
   createdAt: Date;
+  /** The partner's read-only link (#640), or null when the trade has none. Metadata only — the raw
+   *  token exists for the one response that minted it. Here rather than behind a second fetch so the
+   *  header can say a list is out there without the collector opening a dialog to find out. */
+  share: TradeShareState | null;
   sections: TradeSectionData[];
+}
+
+/** What the trade screen knows about its share link without asking `trade-share.ts` for it. */
+export interface TradeShareState {
+  showValues: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 /**
@@ -347,6 +359,12 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
       collection: { select: { ownerId: true } },
       partner: { select: { name: true } },
       catalogVendor: { select: { abbreviation: true } },
+      // Read here rather than through `trade-share.ts`: it is one nullable row hanging off the trade
+      // this query already has, and importing that module — which reads the lines and values them —
+      // to fetch four columns would be the tail wagging the dog.
+      shareToken: {
+        select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+      },
       sections: { select: SECTION_SELECT, orderBy: [{ position: "asc" }, { name: "asc" }] },
     },
   });
@@ -370,6 +388,14 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
     valueTolerancePct: decimalToNumber(row.valueTolerancePct) ?? 0,
     ownValueWarnPct: decimalToNumber(row.ownValueWarnPct) ?? 0,
     createdAt: row.createdAt,
+    share: row.shareToken
+      ? {
+          showValues: row.shareToken.showValues,
+          expiresAt: isoOrNull(row.shareToken.expiresAt),
+          createdAt: row.shareToken.createdAt.toISOString(),
+          lastUsedAt: isoOrNull(row.shareToken.lastUsedAt),
+        }
+      : null,
     sections: row.sections.map(toSectionData),
   };
 }

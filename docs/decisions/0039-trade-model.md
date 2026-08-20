@@ -163,6 +163,45 @@ normal thing between collectors and the app has no business forbidding it.
 number uses, and is quoted to somebody else — it heads the partner's copy of the list. Two different
 exchanges answering to "trade 7" would be worse here than anywhere.
 
+### 9. The partner's link names one trade, and only its hash is stored
+
+A trade is shown to the partner through a secret link (#640) rather than by giving them an account:
+the other collector is not a user of this instance and never will be, and an exchange runs on two
+people reading the same list.
+
+**One `TradeShareToken` per trade**, `AssistantToken`'s shape with the collection swapped for a single
+trade — and that swap is the whole security argument. An Assistant token acts as the collection's
+owner across the collection; this one names one trade, and every read it authorises (the page, the
+figures, the scans) is scoped to that trade's own lines. A leaked link therefore exposes exactly the
+list the collector chose to hand over. One row per trade, because a second live link is a second thing
+to remember to revoke and no way to tell which is in whose hands; regenerating replaces the row, which
+is what revoking means. Only the SHA-256 hash is persisted, so the address is shown once and cannot be
+recovered — a collector who loses it regenerates.
+
+**Every live status serves, and `cancelled` does not.** A link is an address for a list, not a stage
+of the negotiation, so a collector who generates one while still composing did so on purpose. Minting
+is deliberately **not** the `preparing → shared` transition: that move is the collector's own act and
+is gated on the valuation check, and a button doing both would be a button doing two things. `closed`
+still serves — the partner is entitled to the list of what was actually exchanged. `cancelled`
+refuses by name, because a partner refreshing an old link should be told the exchange is off rather
+than shown a list nobody intends to honour.
+
+**`showValues` is the only thing that lets a figure out**, and it is off by default. With an agreed
+catalog every line is priced in it, in one currency, and the book is named once in the header. Without
+one the page falls back to the collector's **own** valuation with per-line attribution (`Fischer
+Polska 2026`), because a column of numbers out of different books with nothing to say so cannot be
+read — and that fallback is the collector's own valuation reaching the partner, which is exactly why
+the switch exists and why a default that disclosed would not be a choice. The two valuations are
+**still never merged** (§7): own figures print in the collection's base currency and agreed ones in
+the trade's, each named. #640's issue asked for both totals converted into `Trade.currency`; that was
+written before §7 existed, and re-converting an own total would invent a third figure nobody could
+check. What the issue was after — a rate note — is printed from `TradeFxRate`.
+
+**The page is server-rendered whole, with no client bundle**, because its second job is to be printed
+and a list that prints only what has been scrolled to is not a list. The one interactive thing on it,
+how the material is arranged, is therefore links rather than state: the partner gets the trade screen's
+own grouping levels, and an arrangement is a different address for the same page.
+
 ## Consequences
 
 - A new module: `trade`, `trade_section`, `trade_line`, plus `collection.nextTradeNo`.
@@ -185,6 +224,11 @@ exchanges answering to "trade 7" would be worse here than anywhere.
   records that already answer them. A flag on `Item` would be a second place for the truth to live,
   and the day it disagreed with the trade there would be no way to tell which was right — the same
   reasoning that makes `SaleLineItem` the record of a sale.
+- #640 shipped `trade_share_token` and one new surface: `/t/[token]`, the app's first page reachable
+  without a session, with a photo route beside it (`/api/t/[token]/photos/…`) rather than a second
+  kind of caller taught to the collection-scoped one — a mistake in that route would be a mistake
+  about a whole collection instead of about one list. It also added `rate-limit.ts`, in-process and
+  coarse, because a bearer token in a URL is the one thing here an account is not.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

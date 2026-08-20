@@ -3252,6 +3252,8 @@ model Trade {
   /** The conversion rates this trade's figures are read through (#638), frozen at the first share.
    *  See {@link TradeFxRate}. */
   fxRates       TradeFxRate[]
+  /** The partner's read-only link (#640), or none. At most one — see {@link TradeShareToken}. */
+  shareToken    TradeShareToken?
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3466,6 +3468,40 @@ model TradeFxRate {
   @@unique([tradeId, fromCurrency, toCurrency])
   @@index([tradeId])
   @@map("trade_fx_rate")
+}
+
+// The partner's read-only link to one trade (#640; ADR-0039 §9).
+//
+// `AssistantToken`'s pattern, with the collection swapped for a single trade — and that swap is the
+// whole security argument. An Assistant token acts as the collection's owner across the collection;
+// this one names **one trade** and every read it authorises is scoped to that trade's own lines, so
+// a leaked link exposes exactly the list the collector chose to hand over and nothing beside it.
+//
+// **One per trade** (`tradeId` unique), because a second live link is a second thing to remember to
+// revoke. Regenerating replaces the row: the old link stops working, which is what revocation means.
+//
+// Only the SHA-256 hash is stored. The raw value is shown once, on the dialog that minted it, and
+// cannot be recovered — a collector who loses it regenerates, exactly as with an Assistant token.
+model TradeShareToken {
+  id         String    @id @default(cuid())
+  tradeId    String    @unique
+  // SHA-256 hex of the raw token; the raw value (prefix "stmpx_") is never stored.
+  tokenHash  String    @unique
+  // Whether the page prints figures at all, or counts only. The collector's **explicit** choice: the
+  // fallback valuation is the collector's own, so this is what decides whether that reaches the
+  // partner. Off by default, because a default that discloses is not a choice.
+  showValues Boolean   @default(false)
+  // Optional. Null is a link that stays live until it is revoked, which is the common case — an
+  // exchange runs for weeks and a link that dies mid-negotiation is a support call.
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  // When the partner last opened it. The one signal the collector has that the list was actually
+  // read, and the reason the page bumps it on every serve.
+  lastUsedAt DateTime?
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@map("trade_share_token")
 }
 
 model Contact {

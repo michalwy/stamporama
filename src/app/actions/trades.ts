@@ -30,6 +30,11 @@ import {
   setTradeLineValue,
   type TradeLineValueInput,
 } from "@/lib/trade-valuation";
+import {
+  createTradeShareToken,
+  revokeTradeShareToken,
+  setTradeShareOptions,
+} from "@/lib/trade-share";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -449,5 +454,76 @@ export async function refreshTradeRatesAction(tradeId: string): Promise<TradeAct
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to refresh rates. Please try again.") };
+  }
+}
+
+// ── The partner's link (#640) ────────────────────────────────────────────────────────────────────
+
+/** Minting is the one action that returns something the collector must act on immediately: the raw
+ *  token, which is not stored and cannot be shown a second time. */
+export type TradeShareLinkActionState =
+  | { status: "success"; token: string }
+  | { status: "error"; message: string };
+
+/**
+ * A day from a date input → the moment that day ends.
+ *
+ * End of the day rather than its start, because a collector who types a date means "good through
+ * then". Blank means no expiry, which is the default and the common case.
+ */
+function parseExpiry(raw: string): Date | null {
+  if (!raw) return null;
+  const parsed = new Date(`${raw}T23:59:59.999Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseShareOptions(formData: FormData) {
+  return {
+    showValues: str(formData, "showValues") === "true",
+    expiresAt: parseExpiry(str(formData, "expiresAt")),
+  };
+}
+
+/** Generate the trade's link, replacing any it had. Regeneration is the same act, because a trade has
+ *  one link and asking for a new one is asking for the old one to stop working. */
+export async function createTradeShareLinkAction(
+  tradeId: string,
+  formData: FormData
+): Promise<TradeShareLinkActionState> {
+  const session = await getSession();
+  try {
+    const { token } = await createTradeShareToken(
+      session.user.id,
+      tradeId,
+      parseShareOptions(formData)
+    );
+    return { status: "success", token };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to create the link. Please try again.") };
+  }
+}
+
+/** Change what the existing link shows without changing the address — turning the figures off on a
+ *  list the partner is already reading must not break their link. */
+export async function setTradeShareOptionsAction(
+  tradeId: string,
+  formData: FormData
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await setTradeShareOptions(session.user.id, tradeId, parseShareOptions(formData));
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to update the link. Please try again.") };
+  }
+}
+
+export async function revokeTradeShareLinkAction(tradeId: string): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await revokeTradeShareToken(session.user.id, tradeId);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to withdraw the link. Please try again.") };
   }
 }

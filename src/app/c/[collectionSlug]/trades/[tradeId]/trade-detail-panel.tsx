@@ -43,6 +43,7 @@ import { useTradeBalance, useTradeDetail, useInvalidateTradeDetail } from "./use
 import { TradeBalanceSummary } from "./trade-balance-panel";
 import { TradeSectionCard } from "./trade-section-card";
 import { TradeSectionDialog } from "./trade-section-dialog";
+import { TradeShareDialog } from "./trade-share-dialog";
 import { Icon } from "@/app/icons";
 
 // The trade's own screen (#637; ADR-0039): the terms at the top, then one card per section with the
@@ -118,6 +119,7 @@ type DialogState =
   | { kind: "none" }
   | { kind: "editTrade" }
   | { kind: "deleteTrade" }
+  | { kind: "share" }
   | { kind: "addSection" }
   | { kind: "editSection"; section: TradeSectionData }
   | { kind: "deleteSection"; section: TradeSectionData };
@@ -281,6 +283,13 @@ export function TradeDetailPanel({
 
   const headerActions: RowAction[] = [
     { key: "edit", label: "Edit trade", icon: "edit", onSelect: () => setDialog({ kind: "editTrade" }) },
+    {
+      key: "share",
+      label: trade.share ? "Partner link…" : "Share with partner…",
+      icon: "share",
+      hint: "A read-only page of this list your partner can open without an account.",
+      onSelect: () => setDialog({ kind: "share" }),
+    },
     ...TRADE_STATUS_TRANSITIONS[trade.status].map((next, index) => ({
       key: `status-${next}`,
       label: `Mark ${TRADE_STATUS_LABEL[next].toLowerCase()}`,
@@ -346,6 +355,20 @@ export function TradeDetailPanel({
           <Tooltip content="Trade status">
             <span style={statusChipStyle(trade.status)}>{TRADE_STATUS_LABEL[trade.status]}</span>
           </Tooltip>
+          {/* A live link is a fact about this trade that the collector should not have to open a
+              dialog to learn — someone out there can read this list. Shown where the flag lives, from
+              the same source the dialog edits. */}
+          {trade.share && (
+            <Tooltip
+              content={
+                trade.share.lastUsedAt
+                  ? `Your partner can read this list. Last opened ${new Date(trade.share.lastUsedAt).toLocaleDateString()}.`
+                  : "Your partner can read this list. Not opened yet."
+              }
+            >
+              <span style={CHIP}>Shared link</span>
+            </Tooltip>
+          )}
           <span style={{ flex: 1 }} />
           <RowActionsMenu actions={headerActions} ariaLabel="Trade actions" />
         </div>
@@ -573,6 +596,17 @@ export function TradeDetailPanel({
               }
             })
           }
+        />
+      )}
+
+      {dialog.kind === "share" && (
+        <TradeShareDialog
+          tradeId={tradeId}
+          share={trade.share}
+          onClose={closeDialog}
+          // Refresh without closing: a minted address is on screen and is the only copy of it there
+          // will ever be.
+          onChanged={() => invalidateTrade(collectionId)}
         />
       )}
 

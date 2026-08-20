@@ -74,6 +74,7 @@ import {
   Layers,
   Lightbulb,
   Link2,
+  Share2,
   Unlink2,
   List,
   Lock,
@@ -175,6 +176,10 @@ const GLYPHS = {
   open: ArrowUpRight,
   /** Leaves the app — a listing on its marketplace, a transaction on its platform. */
   externalLink: ExternalLink,
+  /** Hands something to someone outside the app — the read-only link a trade partner opens (#640).
+   *  Told apart from `link`, which ties two of our own records together, and from `externalLink`,
+   *  which goes somewhere already published: this one is about giving a stranger a way in. */
+  share: Share2,
   /** Ties two records together here. */
   link: Link2,
   /** Unties two records tied together here — a tile's back taken off it (#648). */

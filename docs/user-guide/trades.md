@@ -291,6 +291,37 @@ allowed but not yet earned: sharing or agreeing a trade with an unvalued line on
 the refusal names the lines. Agreeing is also refused while a copy on your side is live on a
 marketplace — see [Promised copies and marketplace listings](#promised-copies-and-marketplace-listings).
 
+## Showing the trade to your partner
+
+Your partner does not need an account here. **Share with partner…** on the trade's ⋮ menu generates a
+secret link to a read-only page of this exchange: both sides, section by section, with your scans and
+— if you say so — the figures. There is nothing else on it and nothing to click into: the link opens
+that one list and reaches no other part of your collection.
+
+The link is shown **once**, when you generate it. Only a fingerprint of it is stored, so it cannot be
+shown to you again — copy it there and then. If you lose it, generate a new one; the old address stops
+working, which is also how you withdraw a link you have changed your mind about.
+
+**Show values** decides whether any figure crosses. With a catalogue agreed for the exchange, every
+line is priced in it and the catalogue is named at the top of the page. Without one, the page falls
+back to **your own** valuation and says beside each line which catalogue and edition it was read in —
+so leaving this off is what keeps your own figures to yourself. It is off unless you turn it on, and
+you can turn it on or off later without changing the address.
+
+**Expires** is optional and blank by default: the link stays live until you withdraw it. An exchange
+runs for weeks, and a link that dies mid-negotiation is a phone call.
+
+The link works at every stage of the exchange except a cancelled one — including while you are still
+composing, and after it is closed, when it is the record of what was actually exchanged. Generating a
+link does **not** move the trade to *Shared*; that stays your own decision on the ⋮ menu.
+
+While a link is out there, the trade's screen says **Shared link**, with the date your partner last
+opened it.
+
+Your partner can arrange the page themselves with the same **Group by** chips you have on your own
+screen, and it is laid out to print: the whole list is on the page, not just what has been scrolled
+to, and printing it drops everything that is not the list.
+
 ## Sending and receiving
 
 Sending and receiving are **two separate marks**, not stages. Parcels cross in the post, and the one
