@@ -54,9 +54,14 @@ export function colnectMarketUrl(
 // ── Searching for a stamp we have not matched ────────────────────────────────
 //
 // An unmatched stamp (#247) has no item-ID and therefore no page and no market search of its own —
-// but the collector still has to find it, and Colnect's own search takes a catalog number. So a row
-// that cannot link *to* the stamp links to the search that finds it, which is also the first step of
+// but the collector still has to find it, and Colnect can be asked by catalog number. So a row that
+// cannot link *to* the stamp links to the search that finds it, which is also the first step of
 // recording the ID that would make the real links appear.
+//
+// The address is Colnect's **catalog-code list** (`/en/stamps/list/catalog_code/<code>`) rather than
+// its site-wide search box: the question here is always "which stamp carries this number", which is
+// the one question that page answers, and it answers it with the ordinary stamp-list cards the
+// Assistant's matcher already reads (`div.pl-it`) instead of the search page's own result shape.
 //
 // The query is the catalog number as the copy chips give it (#420): the **area prefix and the
 // number**, the vendor abbreviation dropped — `RU-CH 35`, not `Mi·RU-CH 35`. Colnect indexes numbers
@@ -64,11 +69,11 @@ export function colnectMarketUrl(
 // beside it puts on the clipboard is not a coincidence: it is the string that finds this stamp on
 // somebody else's site.
 
-const COLNECT_SEARCH_BASE = "https://colnect.com/en/search/list/collectibles/stamps/q/";
+const COLNECT_SEARCH_BASE = "https://colnect.com/en/stamps/list/catalog_code/";
 
 /**
- * The Colnect catalogue search for a catalog number, or null when there is nothing to search for.
- * Spaces travel as `+`, the form Colnect's own search box produces.
+ * The Colnect catalog-code list for a catalog number, or null when there is nothing to search for.
+ * Spaces travel as `+`, the form Colnect's own links use.
  */
 export function colnectSearchUrl(query: string | null | undefined): string | null {
   const q = query?.trim();

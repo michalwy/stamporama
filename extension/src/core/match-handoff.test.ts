@@ -6,7 +6,7 @@ import { parseMatchHandoff } from "./match-handoff";
 // nothing yet. Plus one this one owns — the URL is handed to `chrome.tabs.create`, so a scheme we
 // would not want opened must not survive parsing.
 
-const url = "https://colnect.com/en/search/list/collectibles/stamps/q/PL+865";
+const url = "https://colnect.com/en/stamps/list/catalog_code/PL+865";
 const handoff = { v: 1, requestId: "req_1", task: { url, label: "Mi·PL 865" } };
 
 describe("parseMatchHandoff", () => {

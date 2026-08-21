@@ -57,17 +57,17 @@ describe("colnectMarketUrl", () => {
 });
 
 describe("colnectSearchUrl", () => {
-  it("searches Colnect's catalogue for a number, spaces travelling as +", () => {
+  it("lists Colnect's catalogue by catalog code, spaces travelling as +", () => {
     assert.equal(
       colnectSearchUrl("RU-CH 35"),
-      "https://colnect.com/en/search/list/collectibles/stamps/q/RU-CH+35"
+      "https://colnect.com/en/stamps/list/catalog_code/RU-CH+35"
     );
   });
 
   it("escapes what a catalog number may otherwise carry", () => {
     assert.equal(
       colnectSearchUrl("PL 12/56"),
-      "https://colnect.com/en/search/list/collectibles/stamps/q/PL+12%2F56"
+      "https://colnect.com/en/stamps/list/catalog_code/PL+12%2F56"
     );
   });
 
