@@ -61,8 +61,8 @@ export function tradeFeedbackRejectLabel(side: TradeSide): string {
   return side === "give" ? "Not wanted" : "Cannot send";
 }
 
-/** The same distinction as a sentence, for the collector's inbox, where the line is being read out
- *  of the column that would otherwise say which side it is on. */
+/** The same distinction as a sentence, for the places a line is read **out of** its column — the
+ *  hover on the row's own mark, and anywhere the item is named away from the side it sits on. */
 export function tradeFeedbackRejectSentence(side: TradeSide): string {
   return side === "give"
     ? "Does not want this line."
@@ -70,7 +70,8 @@ export function tradeFeedbackRejectSentence(side: TradeSide): string {
 }
 
 /**
- * What the two buttons on an inbox item say.
+ * What answering a piece of feedback is called — the two entries on the row's `⋮` (#662), and the
+ * two buttons on the note about the whole exchange, which has no row.
  *
  * A rejection has something to *apply* — the line comes off the list — so its accept is named after
  * what it does. A note has nothing mechanical behind it: the collector reads it, does whatever it
@@ -100,8 +101,8 @@ export type TradeFeedbackParse =
  * Read one submission.
  *
  * **Clearing is saying nothing, and saying nothing deletes the row.** A partner who unticks the mark
- * and empties the box has withdrawn what they said; leaving an empty row behind would keep an item
- * in the collector's inbox that reads as feedback and contains none.
+ * and empties the box has withdrawn what they said; leaving an empty row behind would keep a mark on
+ * the collector's line that reads as feedback and says none.
  *
  * `allowReject` is false for the whole-trade note: there is no such thing as rejecting an entire
  * exchange through a note box, and the database says so too.

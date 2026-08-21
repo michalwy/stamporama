@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { TradeSectionData } from "@/lib/trades";
-import type { TradeReservationRead } from "@/lib/trade-reservations";
+import { indexTradeLineSignals } from "@/lib/trade-line-signals";
 import {
   TRADE_STATUS_LABEL,
   TRADE_STATUS_TONE,
@@ -44,7 +44,7 @@ import { TradeBalanceSummary } from "./trade-balance-panel";
 import { TradeSectionCard } from "./trade-section-card";
 import { TradeSectionDialog } from "./trade-section-dialog";
 import { TradeShareDialog } from "./trade-share-dialog";
-import { TradeFeedbackPanel } from "./trade-feedback-panel";
+import { TradeSignalsSummary } from "./trade-signals-summary";
 import { Icon } from "@/app/icons";
 
 // The trade's own screen (#637; ADR-0039): the terms at the top, then one card per section with the
@@ -223,6 +223,13 @@ export function TradeDetailPanel({
     `stamporama:trades:groupLevels:${collectionId}`
   );
   const levels = useMemo(() => readTradeGroupLevels(storedLevels), [storedLevels]);
+  // **Every signal, indexed by the line it is about** (#662). Built once here, from the two reads
+  // the header already makes, and asked per row — a row must not go looking through a payload that
+  // describes the whole trade.
+  const signals = useMemo(
+    () => indexTradeLineSignals({ feedback: data?.feedback, reservation: data?.reservation }),
+    [data?.feedback, data?.reservation]
+  );
 
   const trade = data?.trade;
   const sections = trade?.sections ?? [];
@@ -370,12 +377,12 @@ export function TradeDetailPanel({
               <span style={CHIP}>Shared link</span>
             </Tooltip>
           )}
-          {/* **Partner has responded** — derived, never a status (ADR-0039 §6). It is on while the
-              inbox below has something in it, so working through the feedback is what clears it: a
-              negotiation goes back and forth several times, and a flag the collector had to set and
-              unset would record their diligence rather than the trade. */}
+          {/* **Partner has responded** — derived, never a status (ADR-0039 §6). It is on while any
+              remark is unanswered, so dealing with the marked rows is what clears it: a negotiation
+              goes back and forth several times, and a flag the collector had to set and unset would
+              record their diligence rather than the trade. */}
           {(data?.feedback?.open ?? 0) > 0 && (
-            <Tooltip content="Your partner has left comments on this list. They are under the figures below.">
+            <Tooltip content="Your partner has left comments on this list. Each is marked on the line it is about, and counted under the figures below.">
               <span style={{ ...CHIP, color: "var(--color-accent)" }}>
                 <Icon name="feedback" size="sm" /> Partner has responded
               </span>
@@ -440,21 +447,19 @@ export function TradeDetailPanel({
           onRun={run}
         />
 
-        {/* **The reservation** (#639): what stands between this trade and being agreed, and what has
-            gone wrong with it since. Under the balance, because both are things the collector reads
-            before deciding the trade is settled, and stated here rather than met as a refusal when
-            **Agree** is pressed — a blocker discovered by pressing a button is one discovered at the
-            worst moment. */}
-        <TradeReservationNotice
+        {/* **What is left above the columns** (#662). The partner's note about the whole exchange,
+            because there is no line to put it on, and a count of what is still unhandled with a way
+            into it. Everything that is about *a line* — a remark, a rejection, a marketplace
+            collision, a copy that has gone — is now a mark on that line, which is where the
+            collector is already looking. The count is what keeps #639's argument intact: the
+            refusal on **Agree** is met while the list is being read rather than by pressing the
+            button. */}
+        <TradeSignalsSummary
+          feedback={data?.feedback}
           reservation={data?.reservation}
-          collectionSlug={collectionSlug}
+          isPending={isPending}
+          onRun={run}
         />
-
-        {/* **What the partner said back** (#641). Under the reservation for the same reason it is
-            under the balance: these are the things a collector reads before deciding the trade is
-            settled. Nothing here has changed the list — accepting a rejection is what takes a line
-            off it, and that is a decision made here. */}
-        <TradeFeedbackPanel feedback={data?.feedback} isPending={isPending} onRun={run} />
 
         {/* The lock, stated where it bites. A locked screen with no explanation reads as broken. */}
         {!editable && (
@@ -534,8 +539,10 @@ export function TradeDetailPanel({
           <TradeSectionCard
             key={section.id}
             collectionId={collectionId}
+            collectionSlug={collectionSlug}
             tradeId={tradeId}
             section={section}
+            signals={signals}
             rule={resolveBalanceRule(rule, section)}
             balance={balance?.sections.find((b) => b.sectionId === section.id)}
             lineValues={balance?.lines}
@@ -694,82 +701,3 @@ export function TradeDetailPanel({
   );
 }
 
-/**
- * **The reservation, stated on the trade** (#639).
- *
- * Two notices and not one, because they are two different kinds of fact and a collector acts on them
- * differently:
- *
- *  - **A collision blocks.** A give-side copy that is live on a marketplace stops this trade being
- *    agreed, because promising a partner a stamp a stranger can buy in the next minute is a promise
- *    that cannot be kept. Drawn in error, and it names the listings, because what resolves it is
- *    pausing or withdrawing one of them.
- *  - **A departure warns, and never blocks.** A promised copy that has sold elsewhere or stopped
- *    being held is already gone; refusing to record the agreement would not bring it back. Drawn in
- *    warning, and what resolves it is a withdrawal (#642).
- *
- * Absent entirely when there is nothing to say — a panel that draws an empty reassurance on every
- * trade is a panel a collector stops reading.
- */
-function TradeReservationNotice({
-  reservation,
-  collectionSlug,
-}: {
-  reservation: TradeReservationRead | undefined;
-  collectionSlug: string;
-}) {
-  if (!reservation) return null;
-  const { listed, messages } = reservation;
-  if (!messages.listed && messages.departed.length === 0) return null;
-
-  return (
-    <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
-      {messages.listed && (
-        <div style={noticeStyle("error")}>
-          <p style={NOTICE_TEXT}>
-            <Icon name="warning" size="sm" /> {messages.listed}
-          </p>
-          {/* One link per colliding listing. The sentence above already names them; these are what
-              turns "go and find offer #14" into a click, which is the whole difference between a
-              refusal a collector can act on and one they have to work around. */}
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.375rem" }}>
-            {[...new Map(listed.map((c) => [c.offer.offerId, c.offer])).values()].map((offer) => (
-              <Link
-                key={offer.offerId}
-                href={`/c/${collectionSlug}/offers/${offer.offerId}`}
-                style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
-              >
-                <Icon name="sell" size="sm" /> #{offer.offerNo} on {offer.platformName}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-      {messages.departed.length > 0 && (
-        <div style={noticeStyle("warning")}>
-          {messages.departed.map((message) => (
-            <p key={message} style={NOTICE_TEXT}>
-              <Icon name="warning" size="sm" /> {message}
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const NOTICE_TEXT: React.CSSProperties = {
-  margin: 0,
-  fontSize: "0.8125rem",
-  lineHeight: 1.5,
-  color: "var(--color-text-primary)",
-};
-
-function noticeStyle(token: "error" | "warning"): React.CSSProperties {
-  return {
-    padding: "0.625rem 0.75rem",
-    borderRadius: "0.5rem",
-    border: `1px solid var(--color-${token}-border)`,
-    background: `var(--color-${token}-soft)`,
-  };
-}

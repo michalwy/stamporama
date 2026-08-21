@@ -260,13 +260,15 @@ Only *Agreed* commits. While a trade is still *Preparing* or *Shared* you are ne
 nothing is held back; cancelling a trade, or closing it, releases everything it named.
 
 Where you see it: the copy carries a **Promised** chip on the Copies list and on its own screen,
-naming the trade; the offer says so in its header at every stage, with a link to the trade; and the
-trade states the collision itself, so you meet it while composing rather than when you press
-**Agree**.
+naming the trade; the offer says so in its header at every stage, with a link to the trade; and on
+the trade the collision is marked **on the line itself** — a red *Listed · #14* chip on the copy it
+is about, with the platform in its hover and *Open offer #14* in the row's ⋮ menu. Above the columns
+you get the count, so you meet the blocker while composing rather than when you press **Agree**.
 
-**If a promised copy leaves anyway** — it sells elsewhere, or you mark it no longer held — the trade
-says so as a warning. It never blocks anything: the copy has already gone, and refusing to record the
-agreement would not bring it back. What it needs is a decision about the line, not about the trade.
+**If a promised copy leaves anyway** — it sells elsewhere, or you mark it no longer held — its line is
+marked *Sold elsewhere* or *No longer held* as a warning. It never blocks anything: the copy has
+already gone, and refusing to record the agreement would not bring it back. What it needs is a
+decision about the line, not about the trade.
 
 ## The lifecycle
 
@@ -334,15 +336,22 @@ no Send button to forget.
 decision. A list that rearranged itself under the person who agreed it would be worse than no feedback
 at all.
 
-Feedback comes back to you on the trade's own screen, in a panel under the figures: what the line is,
-which section it is in, what your partner said, and two buttons. On a line they have ticked, **Remove
-the line** takes it off the exchange and **Keep it** leaves it where it is. On a note there is nothing
-to apply, so it is **Done** or **Ignore** — both simply clear the item. Handled items stay, folded
-away behind *Show N handled*, because a remark you half remember is worth finding again.
+Feedback comes back to you **on the line it is about**. A line your partner ticked carries a *Not
+wanted* chip (or *Cannot send*, on their side of the list); a line they wrote on carries a *Partner
+note* chip, and what they said is in its hover. What to do about it is in that row's ⋮ menu: on a
+ticked line, **Remove the line** takes it off the exchange and **Keep it** leaves it where it is; on a
+note there is nothing to apply, so it is **Done** or **Ignore**. Handled remarks stay on their line,
+drawn quietly, with what you decided and when in the hover — a remark you half remember is worth
+finding again.
+
+Above the columns there are only two things: your partner's note about **the whole exchange**, which
+has no line to sit on, and a line saying how many things still need looking at, with **Go to the
+first** to jump to one. The count covers marketplace collisions and departed copies too, so one
+sentence tells you what stands between the list and being agreed.
 
 While there is anything you have not dealt with, the trade shows **Partner has responded** — on its
-own screen and on the trades list. It is worked out from the feedback itself, so it clears as you work
-through the panel; there is no flag to set or unset.
+own screen and on the trades list. It is worked out from the feedback itself, so it clears as you deal
+with the marked rows; there is no flag to set or unset.
 
 Your partner can still comment once the exchange is *Agreed*. The list is locked at that point, so
 what they leave is a request to reopen rather than a change — and **Remove the line** is refused until

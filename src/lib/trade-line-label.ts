@@ -9,9 +9,9 @@ import { VARIANT_FLAG_SELECT } from "./variant-classification";
 // #641).
 //
 // It was the balancing engine's, because the valuation gate was the first thing that had to name a
-// line it could not draw. The partner's feedback inbox is the second: an item there is read out of
+// line it could not draw. The partner's feedback is the second: an item is read out of
 // the column that would otherwise say what it is about, so it has to carry the same string the row
-// says. One labeller, so a line named in a refusal and the same line named in the inbox are
+// says. One labeller, so a line named in a refusal and the same line named in a remark are
 // recognisably the same line.
 //
 // **The catalogue number leads, not the name.** A stamp's `name` is optional and in practice usually

@@ -170,7 +170,7 @@ export function TradeRow({
             </Tooltip>
           )}
           {/* **Partner has responded** (#641). Derived from feedback nobody has dealt with yet, and
-              so it clears itself as the collector works through the inbox on the trade's own screen
+              so it clears itself as the collector works through the marked rows on the trade's own screen
               — a status would have recorded how diligent they were rather than where the trade is
               (ADR-0039 §6). */}
           {t.hasPartnerFeedback && (

@@ -16,6 +16,8 @@ import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import type { TradeLineSignals } from "@/lib/trade-line-signals";
+import { TradeLineSignalMarks, withTradeLineSignalActions } from "./trade-line-signal-marks";
 
 // One line of the **receive** side (#637), in the same visual language as the auction composition
 // line — catalog chips, the stamp's name, where and when it is from, then the condition line.
@@ -73,6 +75,8 @@ export function TradeReceiveLineRow({
   isLast,
   baseCurrency,
   editable,
+  signals,
+  signalActions,
   onEdit,
   onEditValue,
   onSetCatalogPrice,
@@ -86,6 +90,13 @@ export function TradeReceiveLineRow({
   isLast: boolean;
   baseCurrency: string;
   editable: boolean;
+  /** What the partner said about this line (#662). Drawn on the row, in the same chips the give
+   *  side draws it in — a receive line names no copy, so a marketplace collision cannot be true of
+   *  it and only a remark ever is. */
+  signals: TradeLineSignals;
+  /** The same signal's entries for this row's `⋮`. Offered **whatever the lock**: a locked list
+   *  still takes a decision about what the partner asked for. */
+  signalActions: RowAction[];
   onEdit: () => void;
   /** The line's value (#638): a figure of the collector's own, and which publisher this one line is
    *  read in. Separate from *Edit line*, which is about **what** is coming — the stamp, the
@@ -116,24 +127,29 @@ export function TradeReceiveLineRow({
   const dateStr = formatIssuedDate(line.issuedDay, line.issuedMonth, line.issuedYear);
   const hasIssue = !!(line.issueName || line.issueYear);
 
-  const actions: RowAction[] = [
-    { key: "edit", label: "Edit line", icon: "edit", onSelect: onEdit },
-    {
-      key: "value",
-      label: "Set value",
-      icon: "prices",
-      hint: "A figure of my own for this line, and which publisher it is read in.",
-      onSelect: onEditValue,
-    },
-    {
-      key: "remove",
-      label: "Remove from trade",
-      icon: "remove",
-      danger: true,
-      separatorBefore: true,
-      onSelect: onRemove,
-    },
-  ];
+  const actions: RowAction[] = withTradeLineSignalActions(
+    editable
+      ? ([
+          { key: "edit", label: "Edit line", icon: "edit", onSelect: onEdit },
+          {
+            key: "value",
+            label: "Set value",
+            icon: "prices",
+            hint: "A figure of my own for this line, and which publisher it is read in.",
+            onSelect: onEditValue,
+          },
+          {
+            key: "remove",
+            label: "Remove from trade",
+            icon: "remove",
+            danger: true,
+            separatorBefore: true,
+            onSelect: onRemove,
+          },
+        ] satisfies RowAction[])
+      : [],
+    signalActions
+  );
 
   const body = (
     <div
@@ -167,7 +183,7 @@ export function TradeReceiveLineRow({
           >
             {line.stampName || "(unnamed stamp)"}
           </span>
-          {editable && <RowActionsMenu actions={actions} ariaLabel="Line actions" />}
+          {actions.length > 0 && <RowActionsMenu actions={actions} ariaLabel="Line actions" />}
         </div>
 
         {(areaPath || dateStr || hasIssue) && (
@@ -275,6 +291,10 @@ export function TradeReceiveLineRow({
               <span style={{ ...CHIP, fontVariantNumeric: "tabular-nums" }}>×{line.quantity}</span>
             </Tooltip>
           )}
+          {/* What the partner said about **this** line (#662), at the end of the row's state line —
+              the same place the give side's copy row carries its own marks, so the two columns say
+              one thing in one way. */}
+          <TradeLineSignalMarks signals={signals} side="receive" />
         </div>
       </div>
     </div>

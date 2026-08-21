@@ -27,7 +27,7 @@ import {
 // **The collector's half takes an owner and asserts it**, like every other domain function here.
 //
 // **Feedback never edits the list.** Writing a note or striking a line out changes nothing about the
-// trade; it puts an item in the collector's inbox. The one act that touches the list is the
+// trade; it puts a mark on the collector's line (#662). The one act that touches the list is the
 // collector *accepting* a rejection, which deletes the line — through the same editability rule
 // every other line write obeys, so a locked list stays locked and the collector is told to step the
 // trade back rather than having it stepped back for them.
@@ -37,7 +37,7 @@ export interface TradeFeedbackEntry {
   note: string | null;
   rejected: boolean;
   updatedAt: string;
-  /** What the collector did about it, or null while it is still in their inbox. Shown to the partner
+  /** What the collector did about it, or null while it is still outstanding. Shown to the partner
    *  too: an answer to *did they see this* that costs nothing and saves an email. */
   resolution: TradeFeedbackResolution | null;
 }
@@ -83,7 +83,7 @@ export async function readPartnerTradeFeedback(
  * Write one thing the partner has to say — about a line, or about the whole exchange.
  *
  * **Saying nothing deletes the row.** A partner who unticks the mark and empties the box has
- * withdrawn what they said, and an empty row left behind would sit in the collector's inbox reading
+ * withdrawn what they said, and an empty row left behind would mark the collector's line reading
  * as feedback while containing none.
  *
  * **An edit puts a handled item back.** `resolvedAt` and `resolution` are cleared on every write, so
@@ -154,7 +154,8 @@ export async function savePartnerTradeFeedback(
 
 // ── The collector's half ────────────────────────────────────────────────────────────────────────
 
-/** One item in the collector's inbox, carrying enough to read it out of the column it came from. */
+/** One thing the partner said, carrying enough to read it out of the column it came from — the row
+ *  it is drawn on has the rest (#662). */
 export interface TradeFeedbackItem {
   id: string;
   /** Null on the note about the whole exchange. */
@@ -237,8 +238,8 @@ export async function readTradeFeedback(
 
   // Open first, and the note about the whole exchange ahead of the lines it is about — it is the
   // sentence that frames them. Under that, the order the trade itself is in: section, then side,
-  // then where the line sits in its column, so an inbox reads in the same order as the screen behind
-  // it rather than in the order the partner happened to click.
+  // then where the line sits in its column, so *the first one to look at* is the topmost row rather
+  // than the one the partner happened to click first.
   const position = new Map(rows.map((row) => [row.id, row.line?.position ?? 0]));
   const sectionPosition = new Map(rows.map((row) => [row.id, row.line?.section.position ?? 0]));
   items.sort((a, b) => {
@@ -262,7 +263,7 @@ export async function readTradeFeedback(
  * write obeys: while the list is frozen the removal is refused **by name**, with the step that would
  * unfreeze it, rather than being applied to a list the partner is holding a printout of. The
  * feedback row goes with the line (`ON DELETE CASCADE`): the request and the thing it was about
- * leave together, because the inbox states what is outstanding rather than archiving a list that has
+ * leave together, because what is shown is what is outstanding rather than an archive of a list that has
  * moved on.
  *
  * Accepting anything else, and dismissing anything at all, only records what the collector decided.

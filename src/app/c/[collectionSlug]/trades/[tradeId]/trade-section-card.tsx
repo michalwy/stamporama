@@ -7,6 +7,7 @@ import type { TradeSectionData } from "@/lib/trades";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
 import type { TradeLineValueRead, TradeSectionBalance } from "@/lib/trade-valuation";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
+import type { TradeLineSignalIndex } from "@/lib/trade-line-signals";
 import { describeBalanceRule, type TradeBalanceRule } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -88,8 +89,10 @@ type SectionDialog =
 
 export function TradeSectionCard({
   collectionId,
+  collectionSlug,
   tradeId,
   section,
+  signals,
   rule,
   balance,
   lineValues,
@@ -108,8 +111,14 @@ export function TradeSectionCard({
   onDeleteSection,
 }: {
   collectionId: string;
+  /** For the addresses a row's menu offers — the listing a promised copy is live on (#662). */
+  collectionSlug: string;
   tradeId: string;
   section: TradeSectionData;
+  /** Every signal about this trade, indexed by line and by copy (#662). Passed whole rather than
+   *  sliced per section, for `lineValues`' reason: it arrives as one read about one trade, and
+   *  cutting it up per card would invite two readings of it. */
+  signals: TradeLineSignalIndex;
   /** The rule **in force** here, already resolved against the trade's — `inherited` says which of
    *  the two stated it, which is the only thing the chip has to add. */
   rule: TradeBalanceRule & { inherited: boolean };
@@ -280,6 +289,9 @@ export function TradeSectionCard({
           <TradeSideRows
             state={giveSide}
             collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            signals={signals}
+            isPending={isPending}
             areas={areas}
             locations={locations}
             baseCurrency={baseCurrency}
@@ -299,6 +311,9 @@ export function TradeSectionCard({
           <TradeSideRows
             state={receiveSide}
             collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            signals={signals}
+            isPending={isPending}
             areas={areas}
             locations={locations}
             baseCurrency={baseCurrency}

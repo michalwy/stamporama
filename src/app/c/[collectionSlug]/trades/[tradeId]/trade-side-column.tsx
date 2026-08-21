@@ -24,6 +24,18 @@ import { useTradeLines } from "./use-trade-detail-query";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
 import type { QuickPriceTarget } from "./trade-quick-price";
 import { giveQuickPriceTarget, receiveQuickPriceTarget } from "./trade-quick-price";
+import {
+  TRADE_COPY_ATTR,
+  hasTradeLineSignals,
+  tradeLineAnchorId,
+  tradeLineSignals,
+  type TradeLineSignalIndex,
+} from "@/lib/trade-line-signals";
+import {
+  TradeLineSignalMarks,
+  tradeLineSignalActions,
+  withTradeLineSignalActions,
+} from "./trade-line-signal-marks";
 import { Icon } from "@/app/icons";
 
 // **One side of one section is one list** (#637), and it is a real one: its own search, its own
@@ -309,6 +321,9 @@ export function TradeSideHeader({
 export function TradeSideRows({
   state,
   collectionId,
+  collectionSlug,
+  signals: signalIndex,
+  isPending,
   areas,
   locations,
   baseCurrency,
@@ -322,6 +337,13 @@ export function TradeSideRows({
 }: {
   state: TradeSideState;
   collectionId: string;
+  /** For the addresses a row's menu offers — the marketplace listing a promised copy is live on. */
+  collectionSlug: string;
+  /** Every signal about this trade, indexed by the line and the copy it is about (#662). Built once
+   *  for the screen from reads the header already makes, and asked per row: a signal about a line
+   *  is drawn **on that line**, never in a banner over the list. */
+  signals: TradeLineSignalIndex;
+  isPending: boolean;
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
@@ -369,6 +391,17 @@ export function TradeSideRows({
         const opening = item.path.filter((key, depth) => previous[depth] !== key);
         const openingFrom = item.path.length - opening.length;
         const isLast = index === items.length - 1;
+        // What is true of **this** line, asked once and answered once (#662). The give side is
+        // known by its copy as well as by its line, because the reservation read is asked of the
+        // copies; the receive side names no copy and so can only ever carry a remark.
+        const itemId = item.side === "give" ? item.copy.id : null;
+        const signals = tradeLineSignals(signalIndex, item.lineId, itemId);
+        const signalActions = tradeLineSignalActions({
+          signals,
+          collectionSlug,
+          isPending,
+          onRun,
+        });
         return (
           <Fragment key={item.lineId}>
             {opening.map((key, i) => {
@@ -389,61 +422,89 @@ export function TradeSideRows({
                 />
               );
             })}
-            {item.side === "give" ? (
-              <InventoryItemRow
-                collectionId={collectionId}
-                item={item.copy}
-                areas={areas}
-                locations={locations}
-                baseCurrency={baseCurrency}
-                primaryVendorId={
-                  item.copy.areaId
-                    ? (vendorMaps.primaryVendorByArea.get(item.copy.areaId) ?? null)
-                    : null
-                }
-                vendorMap={vendorMaps.vendorMapFor(item.copy.areaId, item.copy.issueId)}
-                isLast={isLast}
-                readOnly={!editable}
-                showCostBasis
-                onSetCatalogPrice={
-                  editable ? () => onQuickPrice(giveQuickPriceTarget(item.copy)) : undefined
-                }
-                actionsOverride={[
-                  {
-                    key: "value",
-                    label: "Set value",
-                    icon: "prices",
-                    hint: "A figure of my own for this line, and which publisher it is read in.",
-                    onSelect: () => onEditLineValue(item.lineId),
-                  },
-                  {
-                    key: "remove",
-                    label: "Remove from trade",
-                    icon: "delete",
-                    danger: true,
-                    // The copy is untouched: a give line is a promise about it, never a claim.
-                    hint: "The copy stays in your collection.",
-                    onSelect: () => onRemove(item.lineId),
-                  },
-                ]}
-              />
-            ) : (
-              <TradeReceiveLineRow
-                collectionId={collectionId}
-                line={item.line}
-                areas={areas}
-                vendorMaps={vendorMaps}
-                baseCurrency={baseCurrency}
-                isLast={isLast}
-                editable={editable}
-                onEdit={() => onEditReceiveLine(item.line)}
-                onEditValue={() => onEditLineValue(item.lineId)}
-                onSetCatalogPrice={
-                  editable ? () => onQuickPrice(receiveQuickPriceTarget(item.line)) : undefined
-                }
-                onRemove={() => onRemove(item.lineId)}
-              />
-            )}
+            {/* **The row is the anchor** (#662): the strip above jumps to a line by its id, and to a
+                promised copy by the copy's own, because the reservation read knows a give line by
+                nothing else. `scrollMarginTop` clears the section's pinned band, or the row it
+                lands on would arrive underneath it. */}
+            <div
+              id={tradeLineAnchorId(item.lineId)}
+              {...(itemId ? { [TRADE_COPY_ATTR]: itemId } : {})}
+              style={{ scrollMarginTop: `${stickyTop + 8}px` }}
+            >
+              {item.side === "give" ? (
+                <InventoryItemRow
+                  collectionId={collectionId}
+                  item={item.copy}
+                  areas={areas}
+                  locations={locations}
+                  baseCurrency={baseCurrency}
+                  primaryVendorId={
+                    item.copy.areaId
+                      ? (vendorMaps.primaryVendorByArea.get(item.copy.areaId) ?? null)
+                      : null
+                  }
+                  vendorMap={vendorMaps.vendorMapFor(item.copy.areaId, item.copy.issueId)}
+                  isLast={isLast}
+                  // A locked list still takes a decision about what the partner asked for, so the
+                  // menu survives the lock when the row has a signal to act on — and offers only
+                  // that. Editing the line is what the lock is about; answering a remark is not.
+                  readOnly={!editable && signalActions.length === 0}
+                  showCostBasis
+                  onSetCatalogPrice={
+                    editable ? () => onQuickPrice(giveQuickPriceTarget(item.copy)) : undefined
+                  }
+                  actionsOverride={withTradeLineSignalActions(
+                    editable
+                      ? [
+                          {
+                            key: "value",
+                            label: "Set value",
+                            icon: "prices" as const,
+                            hint: "A figure of my own for this line, and which publisher it is read in.",
+                            onSelect: () => onEditLineValue(item.lineId),
+                          },
+                          {
+                            key: "remove",
+                            label: "Remove from trade",
+                            icon: "delete" as const,
+                            danger: true,
+                            // The copy is untouched: a give line is a promise about it, never a claim.
+                            hint: "The copy stays in your collection.",
+                            onSelect: () => onRemove(item.lineId),
+                          },
+                        ]
+                      : [],
+                    signalActions
+                  )}
+                  // The row's own chip line, where it already says *Sold*, *No longer held* and
+                  // *Promised* — a signal about this line lands among its states rather than beside
+                  // them (#662).
+                  trailingChips={
+                    hasTradeLineSignals(signals) ? (
+                      <TradeLineSignalMarks signals={signals} side="give" />
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <TradeReceiveLineRow
+                  collectionId={collectionId}
+                  line={item.line}
+                  areas={areas}
+                  vendorMaps={vendorMaps}
+                  baseCurrency={baseCurrency}
+                  isLast={isLast}
+                  editable={editable}
+                  signals={signals}
+                  signalActions={signalActions}
+                  onEdit={() => onEditReceiveLine(item.line)}
+                  onEditValue={() => onEditLineValue(item.lineId)}
+                  onSetCatalogPrice={
+                    editable ? () => onQuickPrice(receiveQuickPriceTarget(item.line)) : undefined
+                  }
+                  onRemove={() => onRemove(item.lineId)}
+                />
+              )}
+            </div>
           </Fragment>
         );
       })}

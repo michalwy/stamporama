@@ -97,8 +97,8 @@ shape**, never an edit made quietly to the thing both sides shook hands on.
 A negotiation goes back and forth several times. Were "responded" a status, every round would mean
 clicking a state back and forth by hand, and the column would record the collector's diligence rather
 than the trade. It is derived from partner feedback instead. Concretely (§10): it is on while the trade has
-feedback nobody has accepted or dismissed, so it clears itself as the collector works through the
-inbox and comes back when the partner answers again.
+feedback nobody has accepted or dismissed, so it clears itself as the collector works through what was
+said and comes back when the partner answers again.
 
 ### 7. Two valuations, never merged — and the agreed catalog is a **vendor**
 
@@ -221,12 +221,28 @@ the lock means; `closed` takes nothing more.
 per-person attribution: one trade, one partner, one link (§9), so a second row for the same line would
 be the same person talking over themselves. `lineId` is unique for that, and the whole-trade row is
 held to one by a partial unique index. Saying nothing — no mark, no words — deletes the row, because
-an empty row would sit in the inbox reading as feedback and containing none.
+an empty row would stand as an outstanding item reading as feedback and containing none.
 
-**Unresolved is unread**, and there is no separate read marker. An item is in the collector's inbox
-until it is accepted or dismissed, and an edit by the partner clears the resolution and puts it back.
-That is what §6's derived badge is read off: *Partner has responded* is `open > 0` on the trade's own
-screen and on its list row, so working through the inbox is what clears it.
+**Unresolved is unread**, and there is no separate read marker. An item stays outstanding until it is
+accepted or dismissed, and an edit by the partner clears the resolution and puts it back. That is what
+§6's derived badge is read off: *Partner has responded* is `open > 0` on the trade's own screen and on
+its list row, so dealing with what the partner said is what clears it.
+
+**A signal about a line belongs on that line** — revised in place (#662), replacing the *inbox above
+the columns* this section originally argued for. The first shape gathered the partner's answers into
+a panel over the two columns, on the reasoning that what a collector does with feedback is work
+through it, so gathering beats scattering. In use the opposite holds: a banner that says something
+about eight lines is eight lines to go and find in four section cards, and the row is where the
+collector is already looking — the one place where *this one* needs no explaining. So each remark, and
+each of #639's per-copy notices with it, is a **mark on its own row**, drawn in the chip vocabulary
+the copy row already uses for row-level state, with the words in the shared tooltip and the decision
+in the row's single `⋮`. Nothing about the record changed: the same rows, the same resolutions, the
+same lock, and a handled remark still stays — muted, on the line it was about, which is #641's
+disclosure re-homed rather than dropped. What stays above the columns is what has **no row to hang
+on**: the partner's note about the whole exchange, and a count of what is still unhandled with a jump
+to the first of it. The count is deliberate rather than decorative — it is what keeps the refusal on
+**Agree** something met while the list is being read rather than by pressing the button, which is the
+argument #639 made for stating the collision on the trade at all.
 
 **The controls are the page's first client code, and only the controls.** An answer is given one line
 at a time, and a Send button under two hundred rows is a button somebody forgets to press — so each
@@ -264,7 +280,7 @@ is still one server render, and on paper the boxes disappear while what was type
 - #641 shipped `trade_feedback`, one `POST /api/t/[token]/feedback` route, and the partner page's
   first client code — the per-line control and the note box, and nothing else. It also lifted the
   line labeller out of the balancing engine into `trade-line-label.ts`, so a line named in a
-  valuation refusal and the same line named in the feedback inbox are recognisably the same line.
+  valuation refusal and the same line named in a piece of feedback are recognisably the same line.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.
