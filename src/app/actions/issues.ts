@@ -13,6 +13,7 @@ import {
   removeStampFromIssue,
   reorderIssueMembers,
   moveStampNode,
+  reparentStampNode,
   moveIssueToArea,
   mergeIssues,
   previewIssueMerge,
@@ -569,6 +570,34 @@ export async function moveStampNodeAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to move stamp. Please try again." };
+  }
+}
+
+/**
+ * Reassign a stamp to a different parent within its issue (#656).
+ *
+ * An empty `parentStampId` is the top level, and is a real answer rather than a missing one — which
+ * is why this action does not refuse a blank the way {@link moveStampNodeAction} refuses a target
+ * issue: "under no stamp at all" is exactly what the collector picks to undo a misfiling.
+ */
+export async function reparentStampNodeAction(
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  formData: FormData
+): Promise<IssueActionState> {
+  const session = await getSession();
+  const parentStampId = ((formData.get("parentStampId") as string | null) ?? "").trim() || null;
+  try {
+    await reparentStampNode(session.user.id, collectionId, issueId, stampId, parentStampId);
+    return { status: "success" };
+  } catch (e) {
+    // The refusals here name the thing the collector picked — a stamp under its own variant, a
+    // parent from another issue — so they are worth saying rather than flattening into "try again".
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to reassign the stamp. Please try again.",
+    };
   }
 }
 

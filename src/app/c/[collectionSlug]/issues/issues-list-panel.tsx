@@ -16,6 +16,7 @@ import {
   addStampToIssueAction,
   addStampRangeToIssueAction,
   moveStampNodeAction,
+  reparentStampNodeAction,
   moveIssueToAreaAction,
   mergeIssuesAction,
   getIssueRangeSuggestionsAction,
@@ -27,6 +28,7 @@ import { AddStampRangeDialog } from "./add-stamp-range-dialog";
 import { MergeIssueDialog } from "./merge-issue-dialog";
 import { useToast } from "@/app/toast-provider";
 import { RangeExtendedDialog } from "./range-extended-dialog";
+import { ReparentStampDialog } from "./reparent-stamp-dialog";
 import type { IssueListItem, IssueSortBy, StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -113,6 +115,7 @@ type DialogState =
       suggestions: IssueRangeSuggestion[];
     }
   | { kind: "move-stamp"; issueId: string; stampId: string }
+  | { kind: "reparent-stamp"; issueId: string; stampId: string }
   | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
 
 interface IssuesListPanelProps {
@@ -443,6 +446,8 @@ export function IssuesListPanel({
       openDialog({ kind: "delete-stamp", issueId, stampId, stampName }),
     onMoveStamp: (issueId, stampId) =>
       openDialog({ kind: "move-stamp", issueId, stampId }),
+    onReparentStamp: (issueId, stampId) =>
+      openDialog({ kind: "reparent-stamp", issueId, stampId }),
   };
 
   return (
@@ -997,6 +1002,36 @@ export function IssuesListPanel({
             </DialogShell>
           );
         })()}
+
+      {/* Where the stamp hangs *within* the issue (#656) — the same correction as the move above it,
+          one level down. Its own dialog because the choice is over a tree rather than a flat list of
+          issues, and because the answer may be "no parent at all". */}
+      {dialog.kind === "reparent-stamp" && (
+        <ReparentStampDialog
+          collectionId={collectionId}
+          issueId={dialog.issueId}
+          stampId={dialog.stampId}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            const { issueId, stampId } = dialog;
+            startTransition(async () => {
+              const result = await reparentStampNodeAction(
+                collectionId,
+                issueId,
+                stampId,
+                fd
+              );
+              setActionState(result);
+              // The tree's own shape changed, so the issue's members are re-read — and the list with
+              // them, since a stamp that has just become a variant changes what its new parent's row
+              // says about itself (#238/#239).
+              if (result.status === "success") handleStampSuccess(issueId);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

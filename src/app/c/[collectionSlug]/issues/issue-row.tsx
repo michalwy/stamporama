@@ -114,6 +114,8 @@ interface StampTreeNodeProps {
   onAddChild: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
   onMove: (stampId: string) => void;
+  /** Refile this stamp under a different stamp of the same issue, or at its top level (#656). */
+  onReparent: (stampId: string) => void;
   /** True when the active list filter narrowed this tree (#631) — everything left is a match or
    *  the numbering one hangs under, so a node with children starts open rather than collapsed. */
   narrowed: boolean;
@@ -144,6 +146,7 @@ function StampTreeNode({
   onAddChild,
   onDelete,
   onMove,
+  onReparent,
   narrowed,
   reorder,
   drag,
@@ -245,6 +248,14 @@ function StampTreeNode({
     detailPage,
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
     { key: "move", label: "Move to another issue…", icon: "move", onSelect: () => onMove(node.stampId) },
+    // Beside the move, because the two are the same correction at two scales (#656): one says this
+    // stamp belongs to another issue, the other that it belongs *under another stamp* of this one.
+    {
+      key: "reparent",
+      label: "Reassign to another parent…",
+      icon: "variant",
+      onSelect: () => onReparent(node.stampId),
+    },
     addCopy.action,
     addWant.action,
     copies.action,
@@ -388,6 +399,7 @@ function StampTreeNode({
               onAddChild={onAddChild}
               onDelete={onDelete}
               onMove={onMove}
+              onReparent={onReparent}
               narrowed={narrowed}
               reorder={reorder}
               drag={childDrag}
@@ -420,6 +432,7 @@ export interface IssueRowCallbacks {
   onEditStamp: (issueId: string, stamp: StampNodeData) => void;
   onDeleteStamp: (issueId: string, stampId: string, stampName: string) => void;
   onMoveStamp: (issueId: string, stampId: string) => void;
+  onReparentStamp: (issueId: string, stampId: string) => void;
 }
 
 interface IssueRowProps {
@@ -1017,6 +1030,9 @@ export function IssueRow({
                   }
                   onMove={(stampId) =>
                     callbacks.onMoveStamp(issue.id, stampId)
+                  }
+                  onReparent={(stampId) =>
+                    callbacks.onReparentStamp(issue.id, stampId)
                   }
                   narrowed={!!effectiveMatchedIds}
                   reorder={treeReorder.reorder}

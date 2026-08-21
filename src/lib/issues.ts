@@ -2173,6 +2173,107 @@ export async function moveStampNode(
   });
 }
 
+/**
+ * Reassign a stamp to a different **parent** within its issue (#656) — or to no parent at all.
+ *
+ * #54 already moves a node between issues; this is the finer-grained correction beside it: a stamp
+ * filed at the top level that turns out to be a sub-variant of another, or one filed under the wrong
+ * base. Only its position in the tree changes. Its catalog numbers, its name and its subtype are
+ * facts about the stamp, not about where it hangs, and its copies point at `stampId` — so every copy,
+ * want, offer line and checklist entry it is named on stays exactly as it was.
+ *
+ * **Within one issue**, because that is the rule a parent already obeys: `addStampToIssue` refuses a
+ * parent that is not a member of the issue, and `buildStampTree` makes a root of any member whose
+ * parent is absent from it — so a cross-issue parent would leave the child rendering as a root in a
+ * tree whose shape no longer said what the data does. Moving a node to another issue first, then
+ * reparenting it there, is the two-step way to say that; each step is one intelligible change.
+ *
+ * The **subtree comes along**: children of the moved stamp are still its children, and reparenting is
+ * a statement about one edge. Nothing is written to them.
+ *
+ * Everything derived from the tree — unknown-variant detection (#239), the headline-price rollup
+ * (#238), checklist completeness (#133/#661) — is computed on **read**, off the very `parentId` this
+ * writes. There is nothing to recompute afterwards: both the old parent and the new one answer
+ * differently the moment the row lands, which is exactly why the derivations were never cached.
+ */
+export async function reparentStampNode(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  /** The stamp to file this one under, or null to take it back to the issue's top level. */
+  parentStampId: string | null
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  if (parentStampId === stampId) throw new Error("A stamp cannot be its own parent.");
+
+  const members = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: { stampId: true, stamp: { select: { parentId: true, subtypeId: true } } },
+  });
+  const byId = new Map(members.map((m) => [m.stampId, m.stamp]));
+  const moving = byId.get(stampId);
+  if (!moving) throw new Error("Stamp is not a member of this issue.");
+  if (parentStampId && !byId.has(parentStampId)) {
+    throw new Error("Parent stamp is not a member of this issue.");
+  }
+  if (moving.parentId === parentStampId) return;
+
+  // The cycle guard, walked **upwards** from the proposed parent: a parent that has this stamp
+  // somewhere above it would be filed under its own descendant, and the tree would close into a ring
+  // no reader could get out of. Climbing the ancestry answers it in one pass whatever the depth, and
+  // it climbs through stamps outside the issue too — a chain leaving the issue and coming back is
+  // still a chain. `seen` is the belt to that braces: a ring already in the data must not hang here.
+  const seen = new Set<string>();
+  let ancestorId = parentStampId;
+  while (ancestorId) {
+    if (ancestorId === stampId) throw new Error("A stamp cannot be moved under its own variant.");
+    if (seen.has(ancestorId)) break;
+    seen.add(ancestorId);
+    const known = byId.get(ancestorId);
+    ancestorId =
+      known !== undefined
+        ? known.parentId
+        : ((
+            await prisma.stamp.findFirst({
+              where: { id: ancestorId, collectionId },
+              select: { parentId: true },
+            })
+          )?.parentId ?? null);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // A child carries a subtype and a top-level stamp does not (ADR-0010 §2a, the rule
+    // `addStampToIssue` writes by). So a stamp arriving at a parent with none takes the collection
+    // default, and one keeping the subtype it already has keeps it: that subtype is the collector's
+    // own classification of this stamp, and re-deriving it would quietly discard it.
+    let subtypeId = moving.subtypeId;
+    if (parentStampId && !subtypeId) {
+      subtypeId =
+        (
+          await tx.stampSubtype.findFirst({
+            where: { collectionId, isDefault: true },
+            select: { id: true },
+          })
+        )?.id ?? null;
+    }
+    await tx.stamp.update({
+      where: { id: stampId },
+      data: { parentId: parentStampId, subtypeId },
+    });
+    // It lands at the end of its new sibling group, the way an arriving stamp does (#549): the
+    // position it held among its old siblings was a statement about that group, and there is no
+    // reading of it that carries over to this one.
+    await tx.issueMember.update({
+      where: { issueId_stampId: { issueId, stampId } },
+      data: { sortOrder: await nextIssueSortOrder(tx, issueId) },
+    });
+  });
+}
+
 /** A catalog identity that both the source and target issue's stamps already carry —
  *  merging would place two stamps with the same number under one issue (#218, #85). */
 export interface IssueMergeConflict {

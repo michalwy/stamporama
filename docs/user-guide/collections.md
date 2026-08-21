@@ -209,7 +209,7 @@ To add a **single** stamp instead, expand an issue row on the **Issues** list (t
 
 The stamps in an issue are listed in the order they were added, and you can change it by hand. At the foot of the stamp tree — next to **+ Add stamp** on the **Issues** list, and at the bottom of the **Stamps** card on the issue's [detail page](detail-pages.md) — is a **Reorder** button. (A stamp's own [detail page](detail-pages.md#the-stamp-page) carries one too, over the variants under it.) Click it and every stamp grows a **grip** on its left; drag a stamp by its grip to a new place and a line shows where it will land. Click **Done reordering** to go back to the normal tree.
 
-A stamp only moves **among its own siblings**: a root stamp among the issue's other root stamps, a variant among the variants of the same parent. Dragging a stamp carries its variants with it. Moving a stamp *out* of its parent is a different thing — use **Move to another issue…** in its **⋮** menu for that.
+A stamp only moves **among its own siblings**: a root stamp among the issue's other root stamps, a variant among the variants of the same parent. Dragging a stamp carries its variants with it. Moving a stamp *out* of its parent is a different thing — see [Filing a stamp under a different one](#filing-a-stamp-under-a-different-one) below.
 
 Two things to know:
 
@@ -218,7 +218,19 @@ Two things to know:
 
 While **Reorder** is on, the **Checklist** filter is put away: dragging inside a tree that is only showing some of its stamps would move one past a sibling you cannot see.
 
-To nest a stamp **under an existing one**, use **Add child stamp** in that stamp's **⋮** menu — or **Add variant** on the stamp's own [detail page](detail-pages.md#the-stamp-page), which opens the same dialog. The dialog starts from the parent: its catalog numbers are copied in as a starting point, and the **Year** is pre-filled from the **parent stamp's own year** rather than the issue's — a variant or reprint is usually dated from the node it hangs under. (A root-level stamp still starts from the issue's year.) After you save, the parent node **opens by itself** so the new child is visible instead of hiding behind a collapsed arrow.
+#### Filing a stamp under a different one
+
+Sometimes a stamp turns out to be filed in the wrong place: it sits at the top level of its issue but is really a sub-variant of another stamp there, or it hangs under the wrong base. **Reassign to another parent…** in the stamp's **⋮** menu on the **Issues** list fixes that. Pick the stamp it should hang under from the issue's own tree — indented, so you can see the shape you are joining — or **No parent (top level)** to bring it back out.
+
+Only where the stamp sits changes. It keeps its catalog numbers, its name and its subtype, and every copy, want, offer and checklist entry that names it is untouched. Its own sub-stamps come with it, and it lands at the end of its new level, where you can drag it into place with **Reorder**.
+
+Two things it will not offer you: the stamp itself, and anything already hanging below it — a stamp cannot be filed under its own variant. A stamp with no subtype yet gets the collection's default one when it becomes a variant, since that is what any child stamp carries; one that already has a subtype keeps it.
+
+The parent must be a stamp of the **same issue**. To file a stamp under one in a *different* issue, first **Move to another issue…**, then reassign it there — two steps, each of which you can see the result of.
+
+Everything the tree decides follows immediately: which stamp counts as a variant of which, what a [checklist](#checklists) counts as held, and which catalog value rolls up to the parent. Both the old parent and the new one are right the next time you look at them.
+
+To nest a *new* stamp **under an existing one**, use **Add child stamp** in that stamp's **⋮** menu — or **Add variant** on the stamp's own [detail page](detail-pages.md#the-stamp-page), which opens the same dialog. The dialog starts from the parent: its catalog numbers are copied in as a starting point, and the **Year** is pre-filled from the **parent stamp's own year** rather than the issue's — a variant or reprint is usually dated from the node it hangs under. (A root-level stamp still starts from the issue's year.) After you save, the parent node **opens by itself** so the new child is visible instead of hiding behind a collapsed arrow.
 
 ### Issue and stamp names in other languages
 
