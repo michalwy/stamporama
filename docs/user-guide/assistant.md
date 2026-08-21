@@ -197,7 +197,9 @@ and the page is read afresh the next time you click the toolbar icon.
 **Write auto-matches** closes the window for you. It asks nothing first — the button already names
 exactly what it will do (*Write 8 auto-matches + 3 catalog numbers + 2 dates*), and an auto-match is one the
 matcher had no doubt about — then writes and closes as soon as your collection has answered, leaving
-you back on the page you were reading. It sends only the matches it just named, so writing one match on
+you back on the page you were reading. The one exception is a
+[date you already hold being replaced](#when-colnect-knows-the-date-and-you-dont), which is confirmed
+once for the whole page before the write. It sends only the matches it just named, so writing one match on
 a page of two hundred stamps takes about as long as writing one on a page of one. The two writes that really are a decision still ask: linking one
 of several candidate stamps, and [replacing a catalog number](#when-colnects-number-disagrees-with-yours)
 you already hold.
@@ -263,18 +265,27 @@ stamp dated `1945` matched against that page gains the month and the day and kee
 with no date at all gains all three. Nothing you typed is replaced, and where Colnect knows no more
 than you do — it prints a year, you already have the full date — nothing is proposed at all.
 
-The preview says so per stamp before anything is written, as a chip under the stamp's numbers:
+The preview says so per stamp before anything is written, as a ticked box and a chip under the
+stamp's numbers:
 
-> `+ 22 Jan 1945`
+> ☑ `+ 22 Jan 1945`
 
 **A date the two sides state differently is only reported**, exactly as a disagreeing catalog number
-is: a match is not evidence that your date is the wrong one. The row shows both and offers the
-change:
+is: a match is not evidence that your date is the wrong one. The row shows both, also ticked:
 
-> `23 Jan 1945` → `22 Jan 1945`  **Use Colnect's**
+> ☑ `23 Jan 1945` → `22 Jan 1945`
 
-Clicking it replaces the stamp's date after a confirmation naming both values, and — like the number
-overwrite — it is offered only where the window knows which stamp it is talking about: a stamp
+Both kinds of date row are **ticked when you open the window**, and **Write** does all of them at
+once — its label counts them (*Write 8 auto-matches + 3 catalog numbers + 2 dates + 1 date change*).
+Untick any row you want left alone: an unticked fill leaves the stamp's date exactly as it is, and an
+unticked disagreement keeps your date. Because replacing a date destroys something you typed, the
+ticked replacements are confirmed **once** before the write, naming how many stamps are about to be
+re-dated — one confirmation for the page, not one per stamp.
+
+Unticking is for the page in front of you and is forgotten when the window closes; the standing
+answer is the **Fill missing issue dates** tick box above the list.
+
+A disagreement is offered only where the window knows which stamp it is talking about: a stamp
 already linked to the item, or a row with a single candidate.
 
 It replaces the date **whole**. If Colnect states only a year and you hold a full date whose year

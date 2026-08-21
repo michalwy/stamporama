@@ -209,6 +209,11 @@
         font-size: 12px; color: var(--muted);
       }
       .fix .arrow { color: var(--muted); }
+      /* The tick that decides whether a date row is written (#668). It leads the line — the answer
+         is read before the values, and every row's box lines up down the card. */
+      .tick { display: inline-flex; align-items: center; }
+      .tick input { margin: 0; cursor: pointer; }
+      .fills { align-items: center; }
       .opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
       .opt input { margin: 0; }
 
@@ -257,7 +262,7 @@
           <input type="checkbox" id="backfill" checked />
           Fill missing catalog numbers
         </label>
-        <label class="opt" title="Take the date of issue Colnect prints for the parts of the date your stamp has none of — a stamp dated 1945 gains the month and day. A date the two sides disagree about is never overwritten on its own.">
+        <label class="opt" title="Take the date of issue Colnect prints for the parts of the date your stamp has none of — a stamp dated 1945 gains the month and day. Dates the two sides disagree about are listed with a tick of their own, so replacing one is always your decision.">
           <input type="checkbox" id="issueDate" checked />
           Fill missing issue dates
         </label>
@@ -278,6 +283,7 @@
         <span><span class="ref unmapped">AFA 5</span> catalog you don't keep</span>
         <span><span class="ref fill">+ Sn·PL 6</span> will be added to your stamp</span>
         <span><span class="ref fill">+ 22 Jan 1945</span> the date Colnect prints, for a date you lack</span>
+        <span>a ticked date is written by <strong>Write</strong> — untick to leave that stamp alone</span>
       </div>
       <div id="results"></div>
     </div>

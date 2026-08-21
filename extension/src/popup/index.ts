@@ -251,7 +251,7 @@ async function switchTarget(): Promise<void> {
   for (const url of photoUrls.values()) if (url) URL.revokeObjectURL(url);
   photoUrls.clear();
   results = [];
-  picks = [];
+  resetPicks();
   resultsEl.replaceChildren();
   chipsEl.hidden = true;
   setStatus("");
@@ -330,17 +330,51 @@ function pendingFillCount(): number {
 }
 
 /**
+ * Date rows the collector has **unticked** (#668), by `colnectId|stampId`.
+ *
+ * The dates are opt-*out*: every row that has one to write is ticked when it is drawn, and this
+ * holds the exceptions. Keyed rather than indexed because the list is rebuilt on every render and an
+ * index would move under a tick; keyed on the pair because a `needs-confirm` row draws the same
+ * Colnect item against several of our stamps, each with a date question of its own.
+ *
+ * Deliberately not persisted. It says "not this stamp, on this page, this time" — the standing
+ * answer is the **Fill missing issue dates** toggle, which is remembered.
+ */
+const skippedDates = new Set<string>();
+
+const dateKey = (colnectId: string, stampId: string): string => `${colnectId}|${stampId}`;
+
+const dateTicked = (colnectId: string, stampId: string): boolean =>
+  !skippedDates.has(dateKey(colnectId, stampId));
+
+/**
  * Whether the pending write would also date this stamp (#655). Like the catalog fills, an
  * already-linked stamp counts: the date rides on the match being confident, not on the Colnect ID
  * being new, and a stamp linked months ago may still be dated by its issue's year alone.
+ *
+ * An unticked row (#668) is not pending: the button must not count what it will not write.
  */
 function dateFillOf(r: MatchResult): boolean {
   if (r.status !== "auto" || r.written) return false;
-  return r.stamp?.dateProposal?.status === "would-fill";
+  if (r.stamp?.dateProposal?.status !== "would-fill") return false;
+  return dateTicked(r.colnectId, r.stampId);
 }
 
 function pendingDateCount(): number {
   return results.filter(dateFillOf).length;
+}
+
+/**
+ * The date **changes** the write would make (#668) — the conflicts still ticked.
+ *
+ * A different act from the fills above and counted separately, because it is the one that destroys
+ * something: a date we already state, replaced by Colnect's. The rows are registered as the list
+ * renders, so this reads whatever is currently on screen.
+ */
+function pendingDateChanges(): DatePick[] {
+  return dateOverwritePicks.filter(
+    (pick) => pick && dateTicked(pick.colnectId, pick.stamp.stampId)
+  );
 }
 
 /**
@@ -358,7 +392,29 @@ function pendingWriteItems(): ExtractedItem[] {
       )
       .map((r) => r.colnectId)
   );
-  return items.filter((i) => wanted.has(i.platformItemId));
+  // A fill the collector unticked (#668) goes without the page's printed date. The instance fills
+  // from `issuedOn` and from nothing else, so withholding it *is* "leave this stamp's date alone" —
+  // no second flag to add, and nothing else about the item changes. Only a `would-fill` row is
+  // stripped: withholding the date on an unticked **disagreement** would take the disagreement off
+  // the screen with it, which is not what unticking one says.
+  const undated = new Set(
+    results
+      .filter(
+        (r) =>
+          r.status === "auto" &&
+          r.stamp?.dateProposal?.status === "would-fill" &&
+          !dateTicked(r.colnectId, r.stampId)
+      )
+      .map((r) => r.colnectId)
+  );
+  return items
+    .filter((i) => wanted.has(i.platformItemId))
+    .map((i) => {
+      if (!undated.has(i.platformItemId)) return i;
+      const stripped: ExtractedItem = { ...i };
+      delete stripped.issuedOn;
+      return stripped;
+    });
 }
 
 /** Fold the outcome of a partial run into what is on screen, leaving untouched decisions alone. */
@@ -371,11 +427,16 @@ function syncButtons(): void {
   const pending = pendingAutoCount();
   const fills = pendingFillCount();
   const dates = pendingDateCount();
-  writeAutoBtn.disabled = busy || (pending === 0 && fills === 0 && dates === 0) || !profile;
+  // The ticked disagreements (#668) are counted apart from the fills and named apart in the label:
+  // one adds what we lack, the other replaces what we hold, and a single "dates" would hide which.
+  const changes = pendingDateChanges().length;
+  writeAutoBtn.disabled =
+    busy || (pending === 0 && fills === 0 && dates === 0 && changes === 0) || !profile;
   const parts = [
     pending > 0 ? `${pending} auto-match${pending === 1 ? "" : "es"}` : "",
     fills > 0 ? `${fills} catalog number${fills === 1 ? "" : "s"}` : "",
     dates > 0 ? `${dates} date${dates === 1 ? "" : "s"}` : "",
+    changes > 0 ? `${changes} date change${changes === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
   writeAutoBtn.textContent = parts.length ? `Write ${parts.join(" + ")}` : "Write auto-matches";
 }
@@ -388,6 +449,10 @@ function setFound(text: string, hasItems: boolean): void {
 async function scanPage(): Promise<void> {
   items = [];
   results = [];
+  resetPicks();
+  // A rescan is a different page: the ticks named stamps on the old one (#668), so the exceptions
+  // the collector made there mean nothing here.
+  skippedDates.clear();
   resultsEl.innerHTML = "";
   chipsEl.hidden = true;
   setStatus("");
@@ -552,11 +617,54 @@ async function preview(): Promise<void> {
  * pending auto-matches and the pending fills. This concedes nothing to the client, which still only
  * says *which items to consider* — the instance decides each one again and writes nothing it does
  * not rule `auto` itself.
+ *
+ * **The ticked date changes go with it** (#668). They are a separate write per stamp — a date we
+ * hold, replaced by Colnect's — and they are taken first, so the match that follows sees the dates
+ * the collector has just settled rather than re-reporting them as disagreements. They are the one
+ * thing here that destroys something, so they are the one thing confirmed: once, naming how many
+ * dates are about to be replaced, rather than once per row as they used to be.
  */
 async function writeAuto(): Promise<void> {
   if (!profile) return;
+  const changes = pendingDateChanges();
+  if (changes.length > 0) {
+    const ok = await askConfirm(
+      `<div>Date <strong>${changes.length} stamp${changes.length === 1 ? "" : "s"}</strong> as ` +
+        `Colnect does?</div>` +
+        `<div class="warnline">The date each of them carries now is replaced, components Colnect ` +
+        `doesn't state included.</div>${targetLine()}`
+    );
+    if (!ok) return;
+    setStatus("Writing…");
+    for (const pick of changes) {
+      const res = await sendToBackground<OverwriteDateResponse>({
+        type: "overwrite-date",
+        stampId: pick.stamp.stampId,
+        issuedOn: pick.issuedOn,
+      });
+      // One failure stops the run rather than pressing on: the rest are the same call to the same
+      // instance, and a list of them failing one by one says nothing the first one did not.
+      if (!res.ok) {
+        render();
+        setStatus(res.error, true);
+        return;
+      }
+      applyDateOverwrite(pick, res.label);
+    }
+  }
+
   const batch = pendingWriteItems();
-  if (batch.length === 0) return;
+  if (batch.length === 0) {
+    // Nothing left to match — the dates were the whole of it. Report them and go, exactly as a
+    // batch write does.
+    if (changes.length === 0) return;
+    render();
+    setStatus(
+      `Changed ${changes.length} date${changes.length === 1 ? "" : "s"} on ${profile.name}.`
+    );
+    window.close();
+    return;
+  }
   const out = await runMatch(batch, false);
   if (!out) return;
   mergeResults(out);
@@ -573,6 +681,7 @@ async function writeAuto(): Promise<void> {
   const extras = [
     filled ? `${filled} catalog number${filled === 1 ? "" : "s"}` : "",
     dated ? `${dated} date${dated === 1 ? "" : "s"}` : "",
+    changes.length ? `${changes.length} date change${changes.length === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
   setStatus(
     `Wrote ${written} auto-match${written === 1 ? "" : "es"}${
@@ -613,9 +722,13 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     : "";
   const fills = stamp.backfill.filter((p) => p.status === "would-fill");
   const adds = fills.map((p) => `<strong>${esc(p.label)}</strong>`);
+  // The row's date tick decides whether this write carries the date at all (#668) — the same rule
+  // the batch write follows, and for the same reason: the instance dates from `issuedOn`, so an
+  // unticked row simply sends none.
+  const dating = stamp.dateProposal?.status === "would-fill" && dateTicked(colnectId, stamp.stampId);
   // A date fill is an addition like a number's, so it is named in the same sentence (#655). A
   // conflict never is: it is not part of this write.
-  if (stamp.dateProposal?.status === "would-fill") {
+  if (dating && stamp.dateProposal) {
     adds.push(`the issue date <strong>${esc(stamp.dateProposal.label)}</strong>`);
   }
   const fillLine = adds.length ? `<div>Also adds ${adds.join(", ")}.</div>` : "";
@@ -633,7 +746,7 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     stampId: stamp.stampId,
     allowOverwrite: overwrite,
     catalogRefs: src?.catalogRefs,
-    issuedOn: src?.issuedOn,
+    issuedOn: dating ? src?.issuedOn : undefined,
   });
   if (res.ok) {
     markWritten(colnectId, stamp, res.backfill, res.date);
@@ -662,7 +775,7 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
       stampId: stamp.stampId,
       allowOverwrite: true,
       catalogRefs: src?.catalogRefs,
-      issuedOn: src?.issuedOn,
+      issuedOn: dating ? src?.issuedOn : undefined,
     });
     if (retry.ok) {
       markWritten(colnectId, stamp, retry.backfill, retry.date);
@@ -739,41 +852,10 @@ function applyOverwrite(pick: OverwritePick, label: string): void {
 }
 
 /**
- * Take Colnect's date for a stamp whose own date disagrees with it (#655). The number overwrite's
- * shape, on the one field a stamp has for a date: confirmed on its own, naming both values, because
- * the date sync itself only ever fills what is missing.
- */
-async function overwriteDateOne(pick: DatePick): Promise<void> {
-  if (!profile) return;
-  const { stamp, proposal, issuedOn } = pick;
-  const from = proposal.currentLabel ?? "your date";
-  const ok = await askConfirm(
-    `<div>Date <strong>${esc(stamp.name || "this stamp")}</strong> as Colnect does — ` +
-      `<strong>${esc(proposal.colnectLabel)}</strong> instead of <strong>${esc(from)}</strong>?</div>` +
-      `<div class="warnline">Your current date is replaced, components Colnect doesn't state included.</div>` +
-      targetLine()
-  );
-  if (!ok) return;
-
-  setStatus("Writing…");
-  const res = await sendToBackground<OverwriteDateResponse>({
-    type: "overwrite-date",
-    stampId: stamp.stampId,
-    issuedOn,
-  });
-  if (!res.ok) {
-    setStatus(res.error, true);
-    return;
-  }
-  applyDateOverwrite(pick, res.label);
-  render();
-  setStatus(`${from} → ${res.label}.`);
-}
-
-/**
- * Fold a written date overwrite into what is on screen. The stamp now carries Colnect's date, so
- * the two sides no longer disagree and the proposal reads as written rather than as a decision
- * still owing. The objects belong to `results`, so the next render shows it without a re-match.
+ * Fold a written date overwrite into what is on screen (#655). The stamp now carries Colnect's date,
+ * so the two sides no longer disagree and the proposal reads as written rather than as a decision
+ * still owing. The objects belong to `results`, so the next render shows it without a re-match —
+ * which is what lets the batch (#668) redraw once at the end rather than after every stamp.
  */
 function applyDateOverwrite(pick: DatePick, label: string): void {
   const { stamp, proposal } = pick;
@@ -953,12 +1035,33 @@ function backfillMarkup(proposals: BackfillProposal[], resolvable: boolean): str
 
 // ── Issue date (#655) ────────────────────────────────────────────────────────
 // Under the numbers, in the same two shapes: a chip for what the item would add to our date, and a
-// line with a button for a date the two sides state differently.
+// line for a date the two sides state differently.
+//
+// Both carry a **tick** rather than a button (#668), and both are ticked when they are drawn. A page
+// is dozens of matches, the answer is "yes" on nearly all of them, and settling that one row at a
+// time — a click and a confirm each — was the slowest thing in the window. So the list states what
+// it is about to do, the collector unticks the exceptions, and one press of **Write** commits the
+// lot behind a single confirm. Unticking is per stamp and lasts as long as the window; the standing
+// answer is the **Fill missing issue dates** toggle above the list.
 
 const DATE_TITLE: Record<string, string> = {
   "would-fill": "Colnect dates this more precisely than you do — will be filled in",
   filled: "Written to your stamp",
 };
+
+const TICK_TITLE = {
+  fill: "Write this date to your stamp with the match. Untick to leave the stamp's date alone.",
+  change: "Replace your date with the one Colnect prints, when you press Write. Untick to keep yours.",
+} as const;
+
+/** One date row's tick, remembered by `key` across renders — see {@link skippedDates}. */
+function dateTick(key: string, kind: keyof typeof TICK_TITLE): string {
+  return (
+    `<label class="tick" title="${esc(TICK_TITLE[kind])}">` +
+    `<input type="checkbox" data-date-key="${esc(key)}"${skippedDates.has(key) ? "" : " checked"} />` +
+    `</label>`
+  );
+}
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -974,26 +1077,34 @@ function stampDate(c: Candidate): string | null {
   return parts.length ? parts.join(" ") : null;
 }
 
-function dateMarkup(proposal: DateProposal | null, resolvable: boolean): string {
+/**
+ * @param key       what this row's tick is remembered by (#668), or null where the row has nothing
+ *                  left to decide — a date already written, or a candidate this item may not be.
+ * @param resolvable whether a disagreement may be settled from this row at all: only a row naming a
+ *                  single stamp may, since correcting the wrong sibling is a change nobody would
+ *                  think to look for (#433).
+ */
+function dateMarkup(proposal: DateProposal | null, resolvable: boolean, key: string | null): string {
   if (!proposal) return "";
   if (proposal.status !== "conflict") {
     const mark = proposal.status === "filled" ? "✓ " : "+ ";
-    return `<div class="fills"><span class="ref fill${
+    const chip = `<span class="ref fill${
       proposal.status === "filled" ? " done" : ""
-    }" title="${esc(DATE_TITLE[proposal.status] ?? "")}">${esc(`${mark}${proposal.label}`)}</span></div>`;
+    }" title="${esc(DATE_TITLE[proposal.status] ?? "")}">${esc(`${mark}${proposal.label}`)}</span>`;
+    // The tick belongs on the one that has not happened yet; a written date is a fact, not a plan.
+    const tick = key && proposal.status === "would-fill" ? dateTick(key, "fill") : "";
+    return `<div class="fills">${tick}${chip}</div>`;
   }
   // A conflict means both sides state a component, so our side always has a date to name.
   const theirs = `<span class="ref missing">${esc(proposal.colnectLabel)}</span>`;
   const mine = `<span class="ref conflict">${esc(proposal.currentLabel ?? "")}</span>`;
-  if (!resolvable) {
+  if (!resolvable || !key) {
     return `<div class="fix">${mine}<span class="arrow">→</span>${theirs}</div>`;
   }
   datePicks.push(proposal);
   return (
-    `<div class="fix">${mine}<span class="arrow">→</span>${theirs}` +
-    `<button class="small" data-date="${datePicks.length - 1}" title="${esc(
-      `Replace ${proposal.currentLabel ?? "your date"} with the date Colnect prints. Your current date is overwritten.`
-    )}">Use Colnect's</button></div>`
+    `<div class="fix">${dateTick(key, "change")}${mine}` +
+    `<span class="arrow">→</span>${theirs}</div>`
   );
 }
 
@@ -1001,9 +1112,9 @@ function dateMarkup(proposal: DateProposal | null, resolvable: boolean): string 
 function stampBlock(
   c: Candidate,
   label: string,
-  opts: { actionIndex?: number; resolveConflicts?: boolean } = {}
+  opts: { actionIndex?: number; resolveConflicts?: boolean; dateKey?: string | null } = {}
 ): string {
-  const { actionIndex, resolveConflicts = false } = opts;
+  const { actionIndex, resolveConflicts = false, dateKey: key = null } = opts;
   const meta = [stampDate(c), c.areaName].filter(Boolean).join(" · ");
   const warn = c.existingColnectId
     ? `<div class="warnline">already has Colnect ID ${esc(c.existingColnectId)}</div>`
@@ -1030,7 +1141,7 @@ function stampBlock(
         : undefined,
       meta: [
         backfillMarkup(c.backfill, resolveConflicts),
-        dateMarkup(c.dateProposal, resolveConflicts),
+        dateMarkup(c.dateProposal, resolveConflicts, key),
         meta,
         warn,
       ]
@@ -1064,6 +1175,9 @@ let overwritePicks: OverwritePick[] = [];
  * value is what the instance is sent — the same string the matcher read.
  */
 interface DatePick {
+  /** Which Colnect item's row this tick belongs to — half of the key the tick is remembered by
+   *  (#668), since one stamp can face two items on a page. */
+  colnectId: string;
   stamp: Candidate;
   proposal: DateProposal;
   issuedOn: string;
@@ -1083,9 +1197,14 @@ function claimOverwrites(from: number, stamp: Candidate, refs: RefView[]): void 
 }
 
 /** The same for the date proposals a card just registered (#655). */
-function claimDates(from: number, stamp: Candidate, issuedOn: string | undefined): void {
+function claimDates(
+  from: number,
+  colnectId: string,
+  stamp: Candidate,
+  issuedOn: string | undefined
+): void {
   for (let i = from; i < datePicks.length; i++) {
-    if (issuedOn) dateOverwritePicks[i] = { stamp, proposal: datePicks[i], issuedOn };
+    if (issuedOn) dateOverwritePicks[i] = { colnectId, stamp, proposal: datePicks[i], issuedOn };
   }
 }
 
@@ -1107,11 +1226,15 @@ function itemCard(r: MatchResult): string {
     const from = overwrites.length;
     const fromDate = datePicks.length;
     matchBody = r.stamp
-      ? stampBlock(r.stamp, matchLabel, { resolveConflicts })
+      ? stampBlock(r.stamp, matchLabel, {
+          resolveConflicts,
+          // Nothing left to tick on a row already written — its dates are facts now (#668).
+          dateKey: r.written ? null : dateKey(r.colnectId, r.stampId),
+        })
       : labelledNote(matchLabel, `stamp ${esc(r.stampId)}`);
     if (r.stamp) {
       claimOverwrites(from, r.stamp, r.refs);
-      claimDates(fromDate, r.stamp, src?.issuedOn);
+      claimDates(fromDate, r.colnectId, r.stamp, src?.issuedOn);
     }
   } else if (r.status === "needs-confirm") {
     tag = `<span class="tag needs">${esc(REASON_LABEL[r.reason] || r.reason)}</span>`;
@@ -1122,9 +1245,15 @@ function itemCard(r: MatchResult): string {
         picks.push({ colnectId: r.colnectId, stamp: c, overwrite });
         const from = overwrites.length;
         const fromDate = datePicks.length;
-        const block = stampBlock(c, matchLabel, { actionIndex: picks.length - 1, resolveConflicts });
+        const block = stampBlock(c, matchLabel, {
+          actionIndex: picks.length - 1,
+          resolveConflicts,
+          // Only where this row names a single stamp: a tick on one of several candidates would be
+          // a decision about a stamp the collector has not chosen yet.
+          dateKey: resolveConflicts ? dateKey(r.colnectId, c.stampId) : null,
+        });
         claimOverwrites(from, c, r.refs);
-        claimDates(fromDate, c, src?.issuedOn);
+        claimDates(fromDate, r.colnectId, c, src?.issuedOn);
         return block;
       })
       .join("");
@@ -1189,12 +1318,24 @@ function section(
     : `<div class="sec ${kind}"><div class="hdr">${heading}</div>${body}</div>`;
 }
 
-function render(): void {
+/**
+ * Drop every click target registered by the last render.
+ *
+ * Called before a render fills them again, and by everything that throws the list away without
+ * rendering one — a rescan, a change of target. That second case matters since #668: the date
+ * changes are counted off `dateOverwritePicks` rather than off the DOM, so picks left over from a
+ * page that is no longer on screen would have the Write button promising them.
+ */
+function resetPicks(): void {
   picks = [];
   overwrites = [];
   overwritePicks = [];
   datePicks = [];
   dateOverwritePicks = [];
+}
+
+function render(): void {
+  resetPicks();
   // Decisions already taken elsewhere (#305) leave the list unless asked for. The control lives in
   // the toolbar row rather than in the section heading: with every such row hidden the section is
   // gone, and a toggle inside it would take the only way back with it.
@@ -1226,9 +1367,17 @@ function render(): void {
     if (pick) btn.addEventListener("click", () => overwriteOne(pick));
   });
 
-  resultsEl.querySelectorAll<HTMLButtonElement>("button[data-date]").forEach((btn) => {
-    const pick = dateOverwritePicks[Number(btn.dataset.date)];
-    if (pick) btn.addEventListener("click", () => overwriteDateOne(pick));
+  // The date ticks (#668). Unticking never re-renders: the list would fold its own `<details>`
+  // sections shut under the collector's cursor. It changes what **Write** promises, and that is the
+  // whole of what has to be redrawn.
+  resultsEl.querySelectorAll<HTMLInputElement>("input[data-date-key]").forEach((box) => {
+    box.addEventListener("change", () => {
+      const key = box.dataset.dateKey!;
+      if (box.checked) skippedDates.delete(key);
+      else skippedDates.add(key);
+      renderChips();
+      syncButtons();
+    });
   });
 
   renderChips();
