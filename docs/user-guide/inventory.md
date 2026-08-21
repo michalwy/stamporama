@@ -738,6 +738,12 @@ amber line says how many copies are affected, and beside it is **Add to #12 inst
 put the selection into that existing offer rather than creating a second listing for the same
 stamps. The tooltip on the warning lists every conflicting offer when there is more than one.
 
+While that warning is up, the bar's **＋ New offer** buttons and **Add selected to offer** turn amber
+too — the warning is easy to read past, and those are the buttons that would create the duplicate.
+They still do exactly what they say: it is a colour, not a block, and you may well know what you are
+doing. They go back to normal as soon as the conflict does — when you change the selection, or use
+**Add to #12 instead**.
+
 The shortcut opens the ordinary **Add to offer** picker with that offer already picked as the
 destination (as a **＋ New set** on it) **and the Same stamp + condition facet already on**, so the
 list shows the conflicting offers and nothing else. You can still change your mind — drop the copies

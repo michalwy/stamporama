@@ -147,6 +147,29 @@ const CONTROL_STYLE: React.CSSProperties = {
   minHeight: "2rem",
 };
 
+/**
+ * The listing buttons while the selection **collides** with a live offer (#660).
+ *
+ * The banner beside them already says so, and per real use it is still possible to read past it and
+ * create the duplicate anyway — so the warning is repeated on the two controls that would create it,
+ * in the same amber the banner and the rest of the app mark work-to-do with. Nothing else changes:
+ * both buttons still do exactly what they say, because the collector may know precisely what they
+ * are doing (#513's rule — a warning beside the buttons, never a disabled button).
+ *
+ * Two of them, because the pair is not one shape: the ＋ New offer shortcuts are outlined and the
+ * Add-to-offer button is filled, and a single override would flatten one into the other.
+ */
+const COLLIDING_OUTLINE: React.CSSProperties = {
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning)",
+  background: "var(--color-warning-soft)",
+};
+
+const COLLIDING_FILLED: React.CSSProperties = {
+  color: "#fff",
+  background: "var(--color-warning)",
+};
+
 /** A comma-separated multi-select filter read off the URL (#425, #427), memoised so the filter
  * objects it feeds stay referentially stable and do not refetch every render. An absent or
  * all-blank parameter is the empty list — the absence of the filter, never an empty set. */
@@ -1122,6 +1145,8 @@ export function InventoryListPanel({
                             borderColor: "var(--color-accent)",
                             background: "var(--color-bg-elevated)",
                             padding: "0.375rem 0.75rem",
+                            // Amber while this selection already has a live offer (#660).
+                            ...(collisionOffer ? COLLIDING_OUTLINE : {}),
                           }}
                         >
                           <Icon name="add" size="sm" /> {label}
@@ -1139,6 +1164,8 @@ export function InventoryListPanel({
                         background: "var(--color-action-primary)",
                         border: "none",
                         padding: "0.375rem 0.875rem",
+                        // Amber while this selection already has a live offer (#660).
+                        ...(collisionOffer ? COLLIDING_FILLED : {}),
                       }}
                     >
                       <Icon name="addToOffer" size="sm" /> Add selected to offer
