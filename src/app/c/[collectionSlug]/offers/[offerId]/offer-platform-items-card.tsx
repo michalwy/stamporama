@@ -18,11 +18,19 @@ import {
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { usesPlatformCatalogue } from "@/lib/platform-modules";
 import { Icon } from "@/app/icons";
 
-// The offer's stamps as the **platform's own catalogue** knows them (#423), each with the two pages
-// a seller actually opens while pricing a listing: what the stamp *is* (its catalog page, #290) and
+// The offer's stamps and what **Colnect** knows each of them as (#423), each with the two pages a
+// seller actually opens while pricing a listing: what the stamp *is* (its catalog page, #290) and
 // what it is currently being *asked for* (the marketplace search at that grade).
+//
+// Drawn on an offer for **any** platform (#669), and headed *Items* rather than after the offer's own
+// marketplace. It was Colnect-only at first, and #471 narrowed it to that after it turned up over an
+// Allegro listing headed "On Allegro" with Colnect's buttons under it — a heading claiming the wrong
+// catalogue, not rows nobody wanted. Linking a stamp to its Colnect entry is how its numbers and its
+// date get filled in (#280/#655), which a stamp needs whatever it is being sold on; so only what a
+// link *does* names Colnect, and the heading names nothing.
 //
 // It exists because reaching either meant expanding every set and clicking through copy after copy —
 // a komplet is dozens of copies over a handful of stamps, and the pages are keyed on
@@ -174,7 +182,7 @@ const HEADER_CHIP: React.CSSProperties = {
 export function OfferPlatformItemsCard({
   items,
   offerId,
-  platformName,
+  platformModule,
   offerState,
   collectionId,
   copies,
@@ -184,8 +192,10 @@ export function OfferPlatformItemsCard({
   /** Whose listing the hand-picked variants belong to — a choice is recorded on the offer, not on
    *  the stamp, so the picker is opened for this offer's row and no other. */
   offerId: string;
-  /** Named in the heading, so the card says whose catalogue these links go to. */
-  platformName: string;
+  /** The offer's platform module (#406), read for one question only: whether a missing Colnect
+   *  item-ID is what stops *this* listing being posted, or merely a gap in the stamp's own data.
+   *  The card is drawn either way (#669). */
+  platformModule: string | null;
   /** Where the offer is in its lifecycle: the card is the working surface only while `preparing`. */
   offerState: string;
   /** Whose offers to re-read when the Assistant reports a match. */
@@ -196,6 +206,11 @@ export function OfferPlatformItemsCard({
   /** For the vendor maps that dialog prices against. */
   areas: CollectionAreaData[];
 }) {
+  // Whether an unmatched stamp is what stops *this* offer being posted (#493), or only a gap in the
+  // stamp's own data. The rows are identical either way; the one thing that changes is how loudly
+  // the missing item-ID is phrased, because on a platform listed by category it stops nothing (#669).
+  const catalogued = usesPlatformCatalogue(platformModule);
+
   // One key for the card rather than one per offer — the habit is about the step, not the listing —
   // but a separate one, open by default, while the offer is still `preparing`: the two habits are
   // genuinely different, exactly as the photos card's are.
@@ -303,7 +318,7 @@ export function OfferPlatformItemsCard({
       {/* The whole heading is the toggle, as it is on the photos card, so the count and the
           not-matched chip are all clickable and the header carries no separate button. */}
       <Tooltip
-        content={expanded ? "Collapse" : `Show these stamps on ${platformName}`}
+        content={expanded ? "Collapse" : "Show what Colnect knows about these stamps"}
         align="start"
       >
         <button
@@ -336,13 +351,21 @@ export function OfferPlatformItemsCard({
           <h3
             style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
           >
-            On {platformName} ({items.length})
+            Items ({items.length})
           </h3>
-          {/* Amber, and stated in the heading, because it is the one thing that stops the offer being
-              posted at all — and it is readable with the card shut, which is where a collector who
-              has not opened it yet is looking. */}
+          {/* Amber, and stated in the heading, because on a Colnect listing it is the one thing that
+              stops the offer being posted at all — and it is readable with the card shut, which is
+              where a collector who has not opened it yet is looking. Elsewhere the chip says the same
+              gap without the claim: an Allegro listing posts perfectly well unmatched, it just leaves
+              the stamp's own numbers and date unfillable (#669). */}
           {linkable < items.length && (
-            <Tooltip content={`These stamps carry no ${platformName} item-ID, so the listing cannot be posted yet. Link them from the rows below.`}>
+            <Tooltip
+              content={
+                catalogued
+                  ? "These stamps carry no Colnect item-ID, so the listing cannot be posted yet. Link them from the rows below."
+                  : "These stamps carry no Colnect item-ID, so nothing can be looked up for them — and their catalog numbers and dates cannot be filled in from it. Link them from the rows below."
+              }
+            >
               <span style={{ ...HEADER_CHIP, ...ATTENTION }}>
                 {items.length - linkable} not matched
               </span>
@@ -358,7 +381,7 @@ export function OfferPlatformItemsCard({
             content={
               walking
                 ? "Stop after this one — the matches already made are kept."
-                : `Open each unmatched stamp's ${platformName} search in turn and match it in the Assistant, without leaving this offer.`
+                : "Open each unmatched stamp's Colnect search in turn and match it in the Assistant, without leaving this offer."
             }
           >
             <button
@@ -455,7 +478,7 @@ export function OfferPlatformItemsCard({
                         steps they would then take by hand, which is why it sits beside it rather
                         than replacing it — a browser without the Assistant still has Search. */}
                     <Tooltip
-                      content={`No item-ID recorded for this ${subject} yet — search ${platformName} for its catalog number and match it there.`}
+                      content={`No Colnect item-ID recorded for this ${subject} yet — search Colnect for its catalog number and match it there.`}
                     >
                       <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                         Search
@@ -484,7 +507,7 @@ export function OfferPlatformItemsCard({
                   </>
                 ) : (
                   <Tooltip
-                    content={`This ${subject} has no item-ID recorded for this platform yet, and no catalog number to search by.`}
+                    content={`This ${subject} has no Colnect item-ID recorded yet, and no catalog number to search by.`}
                   >
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
                   </Tooltip>
@@ -505,7 +528,7 @@ export function OfferPlatformItemsCard({
                   </Tooltip>
                 ) : (
                   item.catalogUrl && (
-                    <Tooltip content="This condition is not mapped to the platform's own grades, so a market search would ask a different question. Map it in Settings → Colnect.">
+                    <Tooltip content="This condition is not mapped to Colnect's own grades, so a market search would ask a different question. Map it in Settings → Colnect.">
                       <span style={{ ...LINK, opacity: 0.5 }}>Market</span>
                     </Tooltip>
                   )

@@ -741,9 +741,14 @@ Pricing a listing means two questions about each stamp in it: what it *is*, and 
 currently asking for one. Both live on the marketplace, and reaching them meant expanding every set
 and clicking through copy after copy.
 
-An offer on the platform you have named as Colnect (under
-[**Settings → Colnect**](collections.md#colnect-platform)) therefore carries an **On Colnect** card,
-between the photos and the sets. It lists the offer's stamps — one row per **stamp and condition**,
+Every offer therefore carries an **Items** card, between the photos and the sets — whatever platform
+it is being sold on. The links in it are Colnect's, because that is the catalogue this app reads, and
+they are worth having on an Allegro or Delcampe listing too: linking a stamp to its Colnect entry is
+also how its [catalog numbers](assistant.md#when-colnects-number-disagrees-with-yours) and its
+[date of issue](assistant.md#when-colnect-knows-the-date-and-you-dont) get filled in, which is about
+the stamp itself and not about where it is being sold.
+
+The card lists the offer's stamps — one row per **stamp and condition**,
 since that is what the marketplace pages are keyed on, with a `×3` where several copies of the offer
 share a row. A row names the stamp, says which condition it is in, then carries two links and the
 stamp's catalog value — each lined up in a column of its own, so a batch of them is worked straight
@@ -772,7 +777,9 @@ nothing: this card shows gaps, never figures.
 Both gaps are marked in **amber**: the *N not matched* count in the heading, and the **⚡ Link** and
 **+ CV** buttons in the rows. Amber is always something to *do* — Search is left plain, being a link
 to a page like Catalog and Market. A row with no amber on it is ready. The heading's count is
-readable with the card collapsed, which is where you are looking before you have opened it.
+readable with the card collapsed, which is where you are looking before you have opened it. On an offer
+for the platform you have named as Colnect, *N not matched* is also what stops the offer being
+posted; anywhere else it is simply a gap in those stamps' own records, and the chip says so.
 
 A stamp with **no Colnect item-ID** and no variant to fall back on cannot have a page of its own
 here, so its **Catalog** link becomes **Search** — Colnect's own catalogue search for that stamp's
@@ -866,7 +873,7 @@ different screens:
 - **The cheapest variant has no item-ID of its own.** Every variant being priced, the cheapest one is
   known and simply is not matched on the platform. The offer is blocked, and what is named is *that
   variant* — it is the stamp to go and match, and matching it lists the copy straight away. The
-  On Colnect card names it on the row's own line and puts **Search** and **⚡ Link** right there, so
+  Items card names it on the row's own line and puts **Search** and **⚡ Link** right there, so
   it is matched from the offer rather than hunted down through the base stamp; the search runs on the
   **variant's** number, since that is the entry the item-ID belongs on. The next-cheapest variant is
   not quietly used instead, since that would be selling under a different claim — though you may

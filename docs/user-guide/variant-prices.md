@@ -56,7 +56,7 @@ puts the rolled-up figure back on screen.
   Colnect* card, or on a listing blocker naming an unpriced variant. Opening it over any
   stamp of a tree shows the **whole tree**, since that is what the value is read from.
 
-Opened **from an offer** — the *On Colnect* card or a listing blocker — the grid is narrowed
+Opened **from an offer** — the *Items* card or a listing blocker — the grid is narrowed
 to the copy being listed: its condition alone, at its certificate and its format. Those two
 controls are gone, and a line above the grid names what it is scoped to; the catalog edition
 is still yours to choose. It is one cell per row, because that is the one cell the listing is

@@ -57,7 +57,7 @@ export interface ListedVariantOption {
   automatic: boolean;
 }
 
-/** Everything the picker draws for one row of the On Colnect card. */
+/** Everything the picker draws for one row of the Items card. */
 export interface ListedVariantChoice {
   offerId: string;
   stampId: string;

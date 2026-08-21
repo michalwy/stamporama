@@ -2951,14 +2951,21 @@ type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SEL
  * its own. It is only *derived* where the module lists against a catalogue of its own (#493) — a
  * platform filed by category has no entry for a variant to be an entry of, and the flag being false
  * is what keeps the read from happening at all.
+ *
+ * `derive` overrides that judgement for the one caller whose question is not about listing: an
+ * offer's own screen draws the item list on **every** platform now (#669), and a row there stands
+ * under a variant for the same reason it does on a Colnect offer — the Colnect entry is the stamp's,
+ * not the marketplace's. Left to the module, an Allegro offer's umbrella rows would carry a
+ * **Listed as…** button whose choice the derivation then ignored.
  */
 async function resolveSetCatalogItemIds(
   collectionId: string,
   sets: readonly ListingSetRow[],
   platformModule: string | null,
-  labeller: OfferLabeller
+  labeller: OfferLabeller,
+  derive?: boolean
 ): Promise<Map<string, ResolvedCatalogItemId>> {
-  const catalogued = usesPlatformCatalogue(platformModule);
+  const catalogued = derive ?? usesPlatformCatalogue(platformModule);
   // What the offers themselves say to list under, where the collector has said anything. One query
   // for the whole batch, and none at all for a platform listing against no catalogue — a choice
   // about a catalogue entry has nothing to say where there is no catalogue.
@@ -3396,8 +3403,8 @@ export interface OfferDetail {
    * has, is not assembled. Non-empty only while `preparing`, which is the one transition the gate
    * sits on; every other state reports nothing, because there is no such step to take from it. */
   readyBlockers: ReadyBlocker[];
-  /** The offer's stamps as the platform's own catalogue knows them (#423), empty for a platform with
-   * no module. See {@link OfferPlatformItem}. */
+  /** The offer's stamps as Colnect's catalogue knows them (#423), on every platform (#669) — empty
+   * only for an offer holding no copies yet. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
   /** The copies on this offer that are promised in an **agreed** trade (#639), each with the trade
    * holding it. Non-empty is what makes **Activate** refuse — stated on the screen so the refusal is
@@ -3431,8 +3438,8 @@ export interface OfferDetail {
 }
 
 /**
- * One of an offer's stamps as the **platform's** catalogue knows it (#423) — the compact list that
- * puts the marketplace one click from the listing being priced.
+ * One of an offer's stamps as **Colnect** knows it (#423) — the compact list that puts the
+ * marketplace one click from the listing being priced, on an offer for any platform (#669).
  *
  * Keyed on `stamp × condition`, not on the copy: a komplet is dozens of copies over a handful of
  * stamps, and two copies of one stamp in one grade are the same catalogue page and the same market
@@ -3643,8 +3650,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // the whole offer. The holdings pair is the same one the summary bars show (#134/#179), read
   // through `getHoldingsValuationByGroup` so every copy is fetched and valued **once** even though
   // the sets are asked about one by one.
-  // The condition map is read only where a module asks for it (#404/#406) — a platform listed by
-  // hand pays for none of the precondition machinery, exactly as in the batch read.
+  // The condition map is read on **every** platform here, unlike in the batch read: the item list
+  // (#669) is now drawn whatever the offer is being sold on, and the grade is what its market link
+  // asks the question at. One small per-collection read for a screen that draws it either way.
   const platformModule = offer.platform.platformModule;
   const [labeller, holdingsBySet, conditionMap] = await Promise.all([
     makeOfferLabeller(offer.collectionId),
@@ -3652,18 +3660,18 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       offer.collectionId,
       offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
     ),
-    usesPlatformConditions(platformModule)
-      ? loadColnectConditionMap(offer.collectionId)
-      : new Map<string, string>(),
+    loadColnectConditionMap(offer.collectionId),
   ]);
   // What each copy is listed under (#616), resolved once for the screen and read by all four
-  // surfaces below — the two blocker lists, the ready gate and the **On Colnect** card — so the page
-  // cannot say a stamp is unmatched in one place and link its variant's catalogue page in another.
+  // surfaces below — the two blocker lists, the ready gate and the item list — so the page cannot
+  // say a stamp is unmatched in one place and link its variant's catalogue page in another. Derived
+  // on every platform, because that last surface is now drawn on every platform (#669).
   const catalogIds = await resolveSetCatalogItemIds(
     offer.collectionId,
     offer.sets,
     platformModule,
-    labeller
+    labeller,
+    true
   );
 
   // The base → offer-currency rate, fetched **once** for the whole screen: every set's two figures
@@ -3929,7 +3937,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
             ...readyPhotoBlockers,
           ]
         : [],
-    platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap, catalogIds),
+    platformItems: platformItemsFor(offer.sets, labeller, conditionMap, catalogIds),
     // #639. Read off the sets this screen already has rather than by a query of its own, and asked
     // of every offer whatever its state: what it says is *true about the copies*, and an offer whose
     // stock is spoken for is worth knowing about while it is still being assembled.
@@ -3952,30 +3960,31 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
 }
 
 /**
- * The offer's stamps as the platform's catalogue knows them (#423), one row per `stamp × condition`
+ * The offer's stamps and what Colnect knows each of them as (#423), one row per `stamp × condition`
  * in the order the sets list them.
  *
- * Empty for a platform whose module does not list against a **catalogue of its own** (#493): every
- * URL below is Colnect's, this is one marketplace's catalogue rather than a general fact about an
- * offer, and a Delcampe listing has no such pages to link to. Naming *a* module is not enough
- * (#471), and neither is having a sale form: an Allegro listing is filed under a category (#488),
- * so there is no catalogue page for a stamp and no market page at a grade. It is deliberately
- * **not** gated on the preconditions, unlike the listing kit
- * (#405): the collector is checking what the market is asking, which is a question about an offer at
- * any stage and one an unmatched stamp does not spoil — that row simply carries no links, which is
- * how the gap gets noticed.
+ * Drawn for an offer on **any** platform (#669). It was Colnect-only at first, and #471 narrowed it
+ * to that after it appeared over Allegro listings headed "On Allegro" — the complaint there was that
+ * the box *claimed* to be the offer's own marketplace while every link in it was Colnect's, which is
+ * a naming fault, not a reason the rows are useless. They turned out not to be: linking a stamp to
+ * its Colnect entry is how its catalogue numbers and its date get filled in (#280/#655), and a stamp
+ * needs that whatever it is being sold on. So the box stays, the heading no longer names the offer's
+ * platform, and only what a link *does* names Colnect.
+ *
+ * It is deliberately **not** gated on the preconditions, unlike the listing kit (#405): the
+ * collector is checking what the market is asking, which is a question about an offer at any stage
+ * and one an unmatched stamp does not spoil — that row simply carries no links, which is how the gap
+ * gets noticed.
  *
  * Reads nothing of its own: the item-IDs come off the same set select the screen already loads, and
  * the grades off the condition map already read once for the whole offer (#404).
  */
 function platformItemsFor(
   sets: readonly ListingSetRow[],
-  platformModule: string | null,
   labeller: OfferLabeller,
   conditionMap: Map<string, string>,
   catalogIds: Map<string, ResolvedCatalogItemId>
 ): OfferPlatformItem[] {
-  if (!usesPlatformCatalogue(platformModule)) return [];
   const rows = new Map<string, OfferPlatformItem>();
   for (const set of sets) {
     for (const { itemId, item } of orderedItems(set.items)) {

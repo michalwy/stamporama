@@ -1009,14 +1009,16 @@ export function OfferDetailPanel({
         offerState={offer.state}
       />
 
-      {/* The offer's stamps on the platform's own catalogue (#423), between the images and the sets:
+      {/* The offer's stamps and what Colnect knows them as (#423), between the images and the sets:
           it is the last thing consulted before posting and the first place one leaves the screen
           from, and it is keyed on `stamp × condition` rather than on the copy, so it belongs beside
-          the sets rather than inside them. Renders nothing for a platform with no module. */}
+          the sets rather than inside them. Drawn on every platform (#669) — Colnect linking is how a
+          stamp's own numbers and date get filled in, wherever it is being sold — so it renders
+          nothing only for an offer that holds no copies yet. */}
       <OfferPlatformItemsCard
         items={offer.platformItems}
         offerId={offer.id}
-        platformName={offer.platformName}
+        platformModule={offer.platformModule}
         offerState={offer.state}
         collectionId={collectionId}
         copies={copies}

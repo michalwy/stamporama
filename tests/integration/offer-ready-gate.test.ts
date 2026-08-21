@@ -247,16 +247,29 @@ describe("marking an offer ready (#418)", () => {
 
   it("asks nothing of a platform whose module cannot list either (#471)", async () => {
     // Allegro names a module, but nothing here posts a sale form to it — so an offer of its own is
-    // neither gated on Colnect's item-IDs nor shown a card of Colnect links.
+    // not gated on Colnect's item-IDs. The item list is a different question and is drawn anyway;
+    // see the case below.
     const offerId = await preparingOffer(
       [[await copy(await stamp("PL allegro", null), usedId)]],
       allegroId
     );
     const detail = await getOfferDetail(userId, offerId);
     assert.deepEqual(detail?.readyBlockers, []);
-    assert.deepEqual(detail?.platformItems, [], "no Colnect catalogue card on an Allegro offer");
     await setOfferState(userId, offerId, "ready");
     assert.equal(await stateOf(offerId), "ready");
+  });
+
+  it("draws the item list on a platform that is not Colnect (#669)", async () => {
+    // What #471 took away and #669 gives back — with the heading no longer claiming to be the
+    // offer's own marketplace. A stamp matched on Colnect keeps its links whatever it is sold on,
+    // because those links are about the stamp's own data, not about this listing.
+    const offerId = await preparingOffer(
+      [[await copy(await stamp("PL allegro card", "2102"))]],
+      allegroId
+    );
+    const detail = await getOfferDetail(userId, offerId);
+    assert.equal(detail?.platformItems.length, 1);
+    assert.ok(detail?.platformItems[0].catalogUrl, "the Colnect catalog link is there either way");
   });
 
   it("still draws the catalogue card for the platform that is Colnect (#423)", async () => {

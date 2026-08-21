@@ -67,7 +67,7 @@ import type { CatalogRollupGap } from "./listing-preconditions";
 // Which is also why {@link ResolvedCatalogItemId.sourceChosen} exists: a surface that marks a derived
 // variant `~` for *inferred* must not mark a recorded decision the same way.
 
-/** The key one hand-picked variant is recorded under — the On Colnect card's own row. */
+/** The key one hand-picked variant is recorded under — the Items card's own row. */
 export function listedVariantKey(
   offerId: string,
   stampId: string,
