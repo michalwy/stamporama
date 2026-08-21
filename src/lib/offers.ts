@@ -4091,7 +4091,7 @@ export async function listComposableCopies(
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     forSale: true,
     deliveryStates: ["delivered"],
-    excludeSold: true,
+    excludeGone: true,
     notInOfferId: opts.offerId,
     areaIds: opts.areaIds,
     search: opts.search,

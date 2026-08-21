@@ -122,6 +122,10 @@ async function seed(): Promise<Fixtures> {
 }
 
 async function cleanup(): Promise<void> {
+  // A closed trade turns into an order (#644), and `Purchase.tradeId` is `Restrict` — so the orders
+  // this fixture's closings created go first. The guard is the point: a trade already turned into
+  // inventory must not vanish from under the purchase holding its carried-over cost.
+  await prisma.purchase.deleteMany({ where: { collection: { ownerId: f.userId } } });
   await prisma.trade.deleteMany({ where: { collection: { ownerId: f.userId } } });
   await prisma.collection.deleteMany({ where: { ownerId: f.userId } });
   await prisma.user.deleteMany({ where: { id: f.userId } });

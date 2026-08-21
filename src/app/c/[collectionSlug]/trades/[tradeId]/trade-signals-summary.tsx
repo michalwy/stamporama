@@ -6,6 +6,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { resolveTradeFeedbackAction } from "@/app/actions/trades";
 import type { TradeFeedbackItem, TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
+import type { TradeIntakeRead } from "@/lib/trade-intake";
 import { tradeFeedbackActionLabels } from "@/lib/trade-feedback-rules";
 import {
   countTradeAttention,
@@ -73,18 +74,23 @@ function noticeStyle(token: "error" | "warning" | "accent"): React.CSSProperties
 export function TradeSignalsSummary({
   feedback,
   reservation,
+  intake,
   isPending,
   onRun,
 }: {
   feedback: TradeFeedbackRead | undefined;
   reservation: TradeReservationRead | undefined;
+  /** The intake read (#644) — only its substitutions are about a line, and only those are counted
+   *  here. Where the incoming material *is* belongs to the panel above, not to a count of what still
+   *  wants looking at. */
+  intake: TradeIntakeRead | undefined;
   isPending: boolean;
   onRun: (
     action: () => Promise<{ status: "success" } | { status: "error"; message: string }>
   ) => void;
 }) {
   const [missed, setMissed] = useState(false);
-  const sources = { feedback, reservation };
+  const sources = { feedback, reservation, intake };
   const counts = countTradeAttention(sources);
   const summary = describeTradeAttention(counts);
   // The whole-exchange note, open or handled. At most one exists — a partial unique index says so.

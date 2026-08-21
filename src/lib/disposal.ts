@@ -72,11 +72,12 @@ export interface HeldInput {
  * form (`not_delivered` / `damaged`, `UNAVAILABLE_DELIVERY_STATES`). The in-flight states
  * (`ordered`, `in_transit`, `to_sort`) pass — those copies are on their way in, not gone.
  *
- * **Soldness is deliberately not part of this.** #394 sketched the predicate as
- * `!disposedAt && !sold`, but "sold" already has one established mechanism at every reader (the
- * `saleLineItems: { none: {} }` guard behind the `excludeSold` filter, #207), and folding it in
- * would need a sale join in what is otherwise a pure field test — two mechanisms for one rule.
- * This answers **possession**; soldness stays the separate axis it already is.
+ * **Soldness is deliberately not part of this**, and neither is having been traded away (#644).
+ * #394 sketched the predicate as `!disposedAt && !sold`, but each of those already has one
+ * established mechanism at every reader — `saleLineItems: { none: {} }` and `NOT_TRADED_AWAY`, both
+ * behind the `excludeGone` filter (#207) — and folding either in would need a join in what is
+ * otherwise a pure field test. This answers **possession**; the two departures stay the separate
+ * axes they already are.
  */
 export function isHeld(item: HeldInput): boolean {
   if (item.disposedAt != null) return false;

@@ -234,7 +234,7 @@ describe("duplicate groups", () => {
       conditionIds: [mnhId],
       forSale: true,
       deliveryStates: ["delivered"],
-      excludeSold: true,
+      excludeGone: true,
     });
     assert.equal(items.length, top.count);
     const platformId = (

@@ -6,6 +6,7 @@ import type { TradeData } from "@/lib/trades";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
 import type { TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeRealisationRead } from "@/lib/trade-realisation";
+import type { TradeIntakeRead } from "@/lib/trade-intake";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -29,6 +30,10 @@ export interface TradeDetailData {
    *  cannot be closed yet. Rides here for the reservation's reason — one light read over the trade's
    *  own lines, and the row draws its mark from it without a query of its own. */
   realisation: TradeRealisationRead;
+  /** What closing turned this trade into (#644): the purchase holding the incoming material, which
+   *  line came as something else, and why the carried-over cost is not settled yet. Rides here for
+   *  the same reason as the three above — the screen is where the collector is when they wonder. */
+  intake: TradeIntakeRead;
 }
 
 /** What one column is showing: its own arrangement, search and filters. Two columns hold two of

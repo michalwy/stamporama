@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
 import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
@@ -84,6 +85,8 @@ function forSaleStockWhere(collectionId: string, stampIds: string[]) {
     stampId: { in: stampIds },
     forSale: true,
     saleLineItems: { none: {} },
+    // …nor one already given to a partner (#644): it is not stock, whatever its disposition says.
+    ...NOT_TRADED_AWAY,
     disposedAt: null,
     deliveryState: { in: [...IN_HAND_DELIVERY_STATES] },
   };

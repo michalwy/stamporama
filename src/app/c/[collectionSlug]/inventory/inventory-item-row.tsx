@@ -826,6 +826,19 @@ export function InventoryItemRow({
               </span>
             </Tooltip>
           )}
+          {/* Given to a partner (#644) — the third way a copy leaves, beside a sale and a disposal.
+              Hidden under the same toggle as a sold one, chipped for the same reason, and tinted
+              like it: an exchange is an outcome a collector chose, not an alarm. It names the trade,
+              because what a collector does with this row is open that trade. */}
+          {item.tradedAway && (
+            <Tooltip
+              content={`Traded to ${item.tradedAway.partnerName} in trade #${item.tradedAway.tradeNo}, which is closed. It left the collection with no sale and no proceeds — what it cost was carried over into what came back.`}
+            >
+              <span style={soldChipStyle()}>
+                <Icon name="trades" size="sm" /> Traded away · #{item.tradedAway.tradeNo}
+              </span>
+            </Tooltip>
+          )}
           {/* Sold (#393). A sold copy is hidden until *Include sold* is on (#207), so the chip only
               ever appears in the mixed view it exists for — where a row that has left the
               collection is otherwise indistinguishable from one still in it. Chipped whenever it

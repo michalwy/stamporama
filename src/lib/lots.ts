@@ -24,6 +24,7 @@ import {
   type LotItem,
   type DeliveryState,
 } from "./purchase-allocation";
+import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -134,6 +135,10 @@ export interface PurchaseDetail {
    * link is worth carrying because the bidding record is where the lots' figures came from, and it
    * survives this purchase being deleted. */
   auctionSale: { id: string; name: string } | null;
+  /** The trade this order is the incoming half of (#644), or null. There is no money on such an
+   *  order: its lot prices are the carried-over cost basis of the copies that went the other way, so
+   *  the link is not a nicety — it is where the figures came from. */
+  trade: { id: string; tradeNo: number; partnerName: string } | null;
   /** Scan tiles on this **order** still waiting to become something (#566, re-parented by #586).
    * What the order header counts and what a lot close warns about — a **warning, never a block**,
    * matching the existing `N to sort`: a tile has no stamp, so no catalogue price, so no weight in
@@ -189,6 +194,7 @@ export async function getPurchaseDetail(
       platform: { select: { name: true } },
       // The auction settlement this purchase was transcribed from (#28), when it came from one.
       auctionSale: { select: { id: true, name: true } },
+      trade: { select: { id: true, tradeNo: true, partner: { select: { name: true } } } },
       // The card scans and what is still waiting on them (#586). Counted through filtered
       // relations rather than by loading the tiles: a carton is fifty cards, and the header has no
       // other use for the rows.
@@ -267,6 +273,9 @@ export async function getPurchaseDetail(
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
     auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
+    trade: row.trade
+      ? { id: row.trade.id, tradeNo: row.trade.tradeNo, partnerName: row.trade.partner.name }
+      : null,
     unidentifiedTileCount: tilesInState("unidentified"),
     parkedTileCount: tilesInState("parked"),
     scanSheetCount: row._count.scanSheets,
@@ -721,10 +730,18 @@ export async function intakeStamps(
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-/** Outcome of a close attempt. On block, `itemIds` names the copies to fix. */
+/** Outcome of a close attempt. On block, `itemIds` names the copies to fix — except for
+ * `trade-cost-pending`, whose subject is somebody else's order entirely and which therefore carries
+ * its own sentence instead (#644). */
 export type CloseLotResult =
   | { ok: true; snapshotCount: number }
-  | { ok: false; reason: "missing-price" | "zero-weight" | "empty"; itemIds: string[] };
+  | {
+      ok: false;
+      reason: "missing-price" | "zero-weight" | "empty" | "trade-cost-pending";
+      itemIds: string[];
+      /** Set where the block is about something the copies on this lot cannot explain. */
+      message?: string;
+    };
 
 /** Close a lot: resolve its pool from the whole-purchase costs, distribute it across its
  * copies by catalog-price weight (ADR-0009 §3), and freeze each copy's base-currency
@@ -737,6 +754,18 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
     // Idempotent-ish: closing an already-closed lot is a no-op success.
     return { ok: true, snapshotCount: 0 };
   }
+
+  // A lot that came from a trade (#644) has no price of its own: its pool is the cost basis of the
+  // copies that went the other way, and those may still be waiting on lots of their own — a large
+  // auction lot is intaken over weeks and its copies are tradeable long before it closes. So the
+  // trigger changes and nothing else does: this lot stays open while any source copy is `pending`,
+  // its copies report `pending` of their own accord meanwhile, and the refusal names the orders to
+  // go and close. Null for every ordinary purchase, which is nearly all of them.
+  const carryOver = await tradeLotCarryOverBlocker(lotId);
+  if (carryOver) return { ok: false, reason: "trade-cost-pending", itemIds: [], message: carryOver };
+  // Past the gate every source basis is frozen, so this is the moment the provisional price written
+  // at closing becomes the real one — read just before it is distributed, and never again after.
+  await syncTradePurchasePool(purchaseId);
 
   // Value the lot's copies from reference data (catalog prices, FX rates) — data the close
   // itself never mutates, so it stays outside the write transaction. Copies added or removed

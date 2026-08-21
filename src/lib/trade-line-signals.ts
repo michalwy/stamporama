@@ -21,6 +21,7 @@
 // than by pressing the button.
 
 import type { TradeFeedbackItem } from "./trade-feedback";
+import type { TradeSubstitution } from "./trade-intake";
 import type { TradeLineRealisation } from "./trade-realisation";
 import type { DepartedCopy, ListedCopy } from "./trade-reservation-rules";
 import { hasTradeVerdict } from "./trade-realisation-rules";
@@ -45,6 +46,11 @@ export interface TradeLineSignals {
    *  at all. Drawn on the row for the same reason as everything else here — the row is where the
    *  collector is already looking, and it is the only place where *this one* needs no explaining. */
   realisation: TradeLineRealisation | null;
+  /** **What came instead of what was promised** (#642, shipped with #644). Receive side only, and
+   *  derived rather than stored: the line says what was agreed and the copy identified from the scan
+   *  tile says what turned up, so this is those two disagreeing. Shown for confirmation — the
+   *  collector either meant it, or has a copy filed under the wrong stamp. */
+  substituted: TradeSubstitution | null;
 }
 
 const NO_SIGNALS: TradeLineSignals = {
@@ -52,6 +58,7 @@ const NO_SIGNALS: TradeLineSignals = {
   listed: [],
   departed: null,
   realisation: null,
+  substituted: null,
 };
 
 /** The three reads, indexed by the thing each is about. Built once for the screen and asked per
@@ -63,6 +70,10 @@ export interface TradeLineSignalIndex {
   /** Only the lines somebody has answered for. A `pending` line is the ordinary state of a freshly
    *  agreed trade, and a mark on every row of one would be a mark that says nothing. */
   realisationByLine: Map<string, TradeLineRealisation>;
+  /** At most one per line: a substitution is *this line came as something else*, and where a line of
+   *  quantity three brought three different stamps the first is what the row says — the collector
+   *  opens the lot for the rest, which is the one place the whole list of them is. */
+  substitutionByLine: Map<string, TradeSubstitution>;
 }
 
 export interface TradeSignalSources {
@@ -73,6 +84,9 @@ export interface TradeSignalSources {
   /** The realisation read (#642). `recordable` is not indexed here — it is a fact about the *trade*,
    *  not about a line, and what it governs is whether the row's menu offers the verdict at all. */
   realisation?: { lines: readonly TradeLineRealisation[] } | undefined;
+  /** The intake read (#644). Only its substitutions are about a line; the purchase and the cost gate
+   *  are facts about the *trade* and belong to the panel above. */
+  intake?: { substitutions: readonly TradeSubstitution[] } | undefined;
 }
 
 export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSignalIndex {
@@ -100,7 +114,14 @@ export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSig
     if (hasTradeVerdict(line.fulfillment)) realisationByLine.set(line.lineId, line);
   }
 
-  return { feedbackByLine, listedByItem, departedByItem, realisationByLine };
+  const substitutionByLine = new Map<string, TradeSubstitution>();
+  for (const substitution of sources.intake?.substitutions ?? []) {
+    if (!substitutionByLine.has(substitution.lineId)) {
+      substitutionByLine.set(substitution.lineId, substitution);
+    }
+  }
+
+  return { feedbackByLine, listedByItem, departedByItem, realisationByLine, substitutionByLine };
 }
 
 /** What is true of one row. `itemId` is the give side's copy and null on the receive side. */
@@ -113,8 +134,11 @@ export function tradeLineSignals(
   const listed = (itemId ? index.listedByItem.get(itemId) : undefined) ?? [];
   const departed = (itemId ? index.departedByItem.get(itemId) : undefined) ?? null;
   const realisation = index.realisationByLine.get(lineId) ?? null;
-  if (!feedback && listed.length === 0 && !departed && !realisation) return NO_SIGNALS;
-  return { feedback, listed, departed, realisation };
+  const substituted = index.substitutionByLine.get(lineId) ?? null;
+  if (!feedback && listed.length === 0 && !departed && !realisation && !substituted) {
+    return NO_SIGNALS;
+  }
+  return { feedback, listed, departed, realisation, substituted };
 }
 
 export function hasTradeLineSignals(signals: TradeLineSignals): boolean {
@@ -122,7 +146,8 @@ export function hasTradeLineSignals(signals: TradeLineSignals): boolean {
     !!signals.feedback ||
     signals.listed.length > 0 ||
     !!signals.departed ||
-    !!signals.realisation
+    !!signals.realisation ||
+    !!signals.substituted
   );
 }
 
@@ -141,6 +166,10 @@ export interface TradeAttentionCounts {
   listed: number;
   /** Copies that have left the collection. These warn and never block. */
   departed: number;
+  /** Receive lines that came as a different stamp (#644). Like a departure it is already true and
+   *  blocks nothing; unlike one, nothing else on the screen would say so — the row's mark is the
+   *  only place it is said, and a closed trade's rows are the ones nobody scrolls through again. */
+  substituted: number;
   total: number;
 }
 
@@ -152,7 +181,17 @@ export function countTradeAttention(sources: TradeSignalSources): TradeAttention
   // they are on is one row.
   const listed = new Set((sources.reservation?.listed ?? []).map((c) => c.itemId)).size;
   const departed = new Set((sources.reservation?.departed ?? []).map((c) => c.itemId)).size;
-  return { remarks, listed, departed, total: remarks + listed + departed };
+  // Lines, not copies: a line of three that brought three different stamps is one row to look at.
+  const substituted = new Set(
+    (sources.intake?.substitutions ?? []).map((s) => s.lineId)
+  ).size;
+  return {
+    remarks,
+    listed,
+    departed,
+    substituted,
+    total: remarks + listed + departed + substituted,
+  };
 }
 
 /** The counts as the strip reads them out. Null when there is nothing to say — a strip that draws
@@ -170,6 +209,13 @@ export function describeTradeAttention(counts: TradeAttentionCounts): string | n
   if (counts.departed > 0) {
     parts.push(
       counts.departed === 1 ? "1 promised copy gone" : `${counts.departed} promised copies gone`
+    );
+  }
+  if (counts.substituted > 0) {
+    parts.push(
+      counts.substituted === 1
+        ? "1 line came as something else"
+        : `${counts.substituted} lines came as something else`
     );
   }
   return parts.length > 0 ? parts.join(" · ") : null;
@@ -198,6 +244,8 @@ export function firstTradeAttention(sources: TradeSignalSources): TradeAttention
   if (remark?.lineId) return { kind: "line", lineId: remark.lineId };
   const departed = sources.reservation?.departed ?? [];
   if (departed.length > 0) return { kind: "copy", itemId: departed[0].itemId };
+  const substituted = sources.intake?.substitutions ?? [];
+  if (substituted.length > 0) return { kind: "line", lineId: substituted[0].lineId };
   return null;
 }
 

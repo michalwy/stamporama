@@ -305,6 +305,57 @@ catalogue value, so extra material simply lowers the unit cost of everything els
 case, a line that never arrived, raises it. Both rest on a tile → line → copy binding a trade does not
 have until #644 gives it a purchase, so both ship there.
 
+### 12. Closing carries the cost over; it recognises nothing
+
+*(#644.)*
+
+**Fair value was rejected.** Treating an exchange as a purchase *and* a sale at the agreed figure
+balances in cash — X in, X out — but not in the result. Copies whose cost basis is 30 "sold" for 300
+book 270 of profit that never reached an account; the incoming material then enters at 300, and its
+eventual real sale at 200 books a loss of 100 despite a total gain of 170. The result is invented in
+both directions and displaced in time, and #168 would read it literally at exactly the moment it
+matters.
+
+**Carry-over is what happens.** The outgoing copies leave at their cost basis, and the sum of those
+becomes the cost pool of the incoming material. No revenue, no profit, no cash: value changes form —
+the same money now sits in different stamps — and the profit appears, truthfully, on a real sale
+later. This is also the standard treatment of a non-monetary exchange: at carrying amount, with no
+gain recognised.
+
+**A `Purchase`, yes; a `Sale`, no.** The incoming half becomes a purchase with the partner as
+supplier and `Purchase.tradeId` saying where it came from — exactly as `Purchase.auctionSale` marks
+one transcribed from an auction settlement (ADR-0021). That inherits the whole intake apparatus: scan
+sheets, tiles, the pool split, ROI. A sale, by contrast, is a named buyer, an amount, a platform, a
+shipment and the cycle `ordered → paid → packed → sent → received`, in which `paid` would be a lie and
+the amount fiction. **The record of the exit is the give line of a closed trade** — a third path
+beside `SaleLineItem` and `disposedAt`, each with its own meaning and none impersonating another, and
+read rather than written, for §"Consequences"'s reason about a second place for the truth to live.
+
+**One lot per receive line**, and not one lot for the whole trade. That is what gives the intake
+apparatus a line to bind a tile to: a tile becomes a copy, the copy sits on a lot, the lot names the
+line — which is exactly the chain §11 parked the substituted variant and the bonus on. The pool is
+split across those lots pro-rata by the **frozen own valuation** (§7) times quantity, and each lot is
+then split across its copies by catalogue price, which is the split `PurchaseLot` has always
+performed. Two levels of one rule, both reconciling to the cent through one apportionment.
+
+**Everything that left carries its cost, and only a withdrawal did not leave.** `missing` — it went in
+the envelope and never arrived — carries, because dropping it would make value evaporate from the
+books with no loss recorded anywhere and the app has no loss concept. `withdrawn` carries nothing:
+that copy is still on the shelf, which is the same judgement §11 releases a commitment on.
+
+**Pending cost basis is not a blocker, it is a gate on the lot.** A large auction lot is intaken over
+weeks and its copies are tradeable long before it closes, so a source copy may itself be `pending`.
+Only the trigger changes: the incoming lot stays `open` while any source copy is, its close is refused
+**by name** — naming the orders to go and close — and the incoming copies report `pending` of their
+own accord meanwhile. Chains resolve themselves, because a copy that has been given away cannot be
+given away again, so the dependencies always point into the past. Closing the *trade* is independent
+of the money maturing: `closed` is about physical facts and the agreement, exactly as a parcel is
+`arrived` while its lot is still `open`.
+
+**Postage is the only real cash** and has a home already: `Purchase.shippingCost`, distributed over
+the incoming copies by the engine that distributes every other shared cost. Cash adjustments in
+either direction are out of scope by decision.
+
 ## Consequences
 
 - A new module: `trade`, `trade_section`, `trade_line`, plus `collection.nextTradeNo`.
@@ -341,6 +392,15 @@ have until #644 gives it a purchase, so both ship there.
   for the same answer to live. It also lifted the per-line access guard into `trade-access.ts` beside
   the other three, for #638's reason: `trades.ts` asks the realisation half whether a trade may close,
   so the realisation half reaching back into `trade-lines.ts` for that guard would be a cycle.
+- #644 shipped two columns and no table: `purchase.tradeId` and `purchase_lot.tradeLineId`, both
+  `UNIQUE` and both `RESTRICT`. A trade already turned into inventory must not vanish from under the
+  purchase holding its carried-over cost, so deleting a closed trade is refused by name, with the
+  order to delete first. The outgoing side gained **nothing** — §11's rule holding again: a copy has
+  left when a give line of a closed trade names it, so `trade-exit.ts` is one `where` fragment spread
+  wherever the sold guard already sits (the copies list and its chip, the copy counts, the wants, the
+  two completeness reads, the purchase-cost section, the give-side picker and the reservation read).
+  The Copies list's *include sold* toggle became *include sold & traded* rather than growing a second
+  one beside it: to a collector, gone is gone.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

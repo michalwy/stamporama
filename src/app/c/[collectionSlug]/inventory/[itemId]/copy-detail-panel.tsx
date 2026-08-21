@@ -155,6 +155,21 @@ export function CopyDetailPanel({
               </Link>
             </Tooltip>
           )}
+          {/* Gone to a partner (#644). The same source and the same link as the promise above, one
+              stage further on: this copy is not in the collection any more, and the page it left
+              through is the one that says what it was exchanged for. */}
+          {item.tradedAway && (
+            <Tooltip
+              content={`Traded to ${item.tradedAway.partnerName} in a closed trade. It left the collection with no sale and no proceeds — what it cost was carried over into what came back.`}
+            >
+              <Link
+                href={`/c/${collectionSlug}/trades/${item.tradedAway.tradeId}`}
+                style={{ textDecoration: "none" }}
+              >
+                <StateChip label={`Traded away — trade #${item.tradedAway.tradeNo}`} token="success" />
+              </Link>
+            </Tooltip>
+          )}
         </DetailFullRow>
 
         <DetailColumns>

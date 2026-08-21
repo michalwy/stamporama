@@ -45,6 +45,17 @@ back to the sale it came from, beside the supplier in the header. From that poin
 purchase: the same sorting, the same lot closing, the same cost basis. Deleting it is also how a
 settlement is undone — the bidding record stays, only the link goes.
 
+The other order you never create by hand comes from **closing a trade**
+([Trades](trades.md#closing-what-it-does-to-your-books)). The partner is the supplier, there is one
+lot per line that actually arrived, and it too carries a link back — *Traded with Karel · #7*, beside
+the supplier. **No money was spent on it.** Each lot is priced at what the copies you sent cost you,
+carried over so that exchanging stamps records no profit and no loss; the currency is your
+collection's base one, and the only real cash you can add is the postage. Otherwise it is an ordinary
+order: scan the partner's cards, identify the pieces, close the lots. The one difference is that a
+lot may refuse to close for a while — if a copy you sent is still sitting on an open order of its
+own, what it cost is not settled, so neither is what came back. The refusal names the orders to close
+first.
+
 All amounts on a purchase — the shipping cost and, once added, the lots and expenses — are
 in the one transaction currency you pick. If that currency differs from your collection's
 base currency, the exchange rate as of the purchase date is captured and stored with the

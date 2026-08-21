@@ -11,11 +11,17 @@ import { nameFew, type TradeSide, type TradeStatus } from "./trade-rules";
 // is recorded beside them, the realised balance is the agreement minus what was struck off, and the
 // difference between the two is what the collector decides on — go back to the partner, or let it go.
 //
-// What is deliberately **not** here: a substituted variant, which needs no field at all (the receive
-// line says what was promised, the copy created from the scan tile says what came, and the difference
-// is derived), and a bonus, which is a copy with no line and whose arithmetic is already right — the
-// pool splits pro-rata by catalogue value, so extra material simply lowers the unit cost of
-// everything else. Both wait on #644, which is what gives a trade a purchase for tiles to hang on.
+// What is deliberately **not** here, and never became a field: a substituted variant (the receive
+// line says what was promised, the copy created from the scan tile says what came, and the
+// difference is derived — `trade-intake-rules.ts`), and a bonus, which is a copy with no line and
+// whose arithmetic is already right, the pool splitting pro-rata by catalogue value so extra
+// material simply lowers the unit cost of everything else. Both shipped with #644, which is what
+// gave a trade the purchase those tiles hang on.
+//
+// One judgement here is read from outside the realisation story: `hasLeftInTrade`, the third exit
+// path a copy can take out of the collection (#644). It belongs here because what it turns on is a
+// verdict, and the same rule that decides whether a copy is back on the shelf decides whether it
+// ever left.
 
 /**
  * What became of one line.
@@ -171,6 +177,35 @@ export const RELEASED_FULFILLMENTS: readonly TradeFulfillment[] = TRADE_FULFILLM
 export const COMMITTING_FULFILLMENTS: readonly TradeFulfillment[] = TRADE_FULFILLMENTS.filter(
   isCommittingFulfillment
 );
+
+/**
+ * Whether this give line has taken its copy **out of the collection** (#644).
+ *
+ * The third exit path, beside a `SaleLineItem` and a `disposedAt` — and, like the other two, a fact
+ * read off a record rather than a flag somebody remembers to set. A copy has left when a give line of
+ * a **closed** trade names it and that line still commits it: `closed` is the point at which the
+ * agreement stopped being a plan, and a withdrawn line's copy never went anywhere.
+ *
+ * It is deliberately narrower than {@link isCommittingFulfillment} on its own, which answers a
+ * different question — *is this copy free to be promised elsewhere* — and wider than nothing at all,
+ * which is what an exit written on the copy would have cost: a column to keep in step with a verdict
+ * that can still be edited right up to the close.
+ */
+export function hasLeftInTrade(status: TradeStatus, fulfillment: TradeFulfillment): boolean {
+  return status === "closed" && isCommittingFulfillment(fulfillment);
+}
+
+/**
+ * Whether this give line has **promised** its copy away without its having gone yet (#639).
+ *
+ * The twin of {@link hasLeftInTrade}, one status earlier: at `agreed` the copy is committed and may
+ * not go live on a marketplace, at `closed` it is gone. Named beside it rather than left as two
+ * comparisons at each reader, because the pair is what a row is drawn from — *Promised · #7* and
+ * *Traded away · #7* are the same sentence in two tenses, and they must never both be true.
+ */
+export function isPromisedInTrade(status: TradeStatus, fulfillment: TradeFulfillment): boolean {
+  return status === "agreed" && isCommittingFulfillment(fulfillment);
+}
 
 /**
  * Whether a verdict may be recorded at all, given where the trade is.

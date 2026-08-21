@@ -1820,6 +1820,15 @@ model Purchase {
   shippingCost Decimal? @db.Decimal(10, 2)
   // Physical delivery status of the shipment: preparing | in_transit | arrived.
   status       String   @default("preparing")
+  // The trade this purchase carries the incoming half of, when it came from one (#644). Nullable
+  // and 1:1, exactly as `Purchase.auctionSale` marks a purchase transcribed from an auction
+  // settlement (ADR-0021): the record says where the material came from, and nothing pretends the
+  // collector bought anything. There is no money on it — the lot prices are the **carried-over cost
+  // basis** of the copies that went the other way, so the pool changes form rather than being spent.
+  //
+  // `onDelete: Restrict`, the guard every provenance FK carries: a trade already turned into
+  // inventory must not vanish from under the purchase holding its cost.
+  tradeId      String?  @unique
   // Per-purchase batch sequence for scan ingest (#566, re-parented by #586). Per **purchase**
   // rather than per lot: a batch number names the physical card on the desk, and one card of a
   // settled auction routinely holds pieces belonging to a dozen of the purchase's lots. Per lot it
@@ -1839,6 +1848,8 @@ model Purchase {
   scanUploads ScanUpload[]
   // The auction settlement this purchase was transcribed from, when it came from one (ADR-0021).
   auctionSale AuctionSale?
+  // The trade this purchase is the incoming half of (#644), or none.
+  trade       Trade?            @relation("TradePurchase", fields: [tradeId], references: [id], onDelete: Restrict)
 
   @@unique([collectionId, purchaseNo])
   @@index([collectionId])
@@ -1862,11 +1873,22 @@ model PurchaseLot {
   // Intake status: open (items still being identified, cost pending) | closed
   // (pool allocated to items, cost-basis frozen). See ADR-0009 §3/§5.
   status     String  @default("open")
+  // The receive line of a closed trade this lot holds the material of (#644). One lot per line
+  // rather than one lot for the whole trade, and that is what makes the intake apparatus answer for
+  // a trade at all: a scan tile becomes a copy, the copy sits on a lot, and the lot names the line —
+  // so *what was promised here* and *what actually came* are two ends of one chain. A **substituted
+  // variant** is that chain read out (`item.stampId != line.stampId`) and a **bonus** is a copy on
+  // the lot a tile was identified into that no line asked for; neither is stored.
+  //
+  // `onDelete: Restrict`: the line is what says what this lot was for.
+  tradeLineId String? @unique
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   items    Item[]
   // The won auction lot this line was transcribed from, when it came from one (ADR-0021).
   auctionLot AuctionLot?
+  // The trade's receive line this lot holds the material of (#644), or none.
+  tradeLine  TradeLine? @relation("TradeLinePurchaseLot", fields: [tradeLineId], references: [id], onDelete: Restrict)
 
   @@index([purchaseId])
   @@map("purchase_lot")
@@ -3257,6 +3279,9 @@ model Trade {
   /** What the partner said back through that link (#641). One row per line they marked or wrote on,
    *  plus at most one about the whole trade. See {@link TradeFeedback}. */
   feedback      TradeFeedback[]
+  /** The purchase closing this trade created (#644), or none — the incoming half, carrying the cost
+   *  basis of what went the other way. At most one; the FK lives on `Purchase`. */
+  purchase      Purchase?      @relation("TradePurchase")
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3395,6 +3420,10 @@ model TradeLine {
   /** What the partner said about this line (#641). At most one — one trade, one partner, one link,
    *  so a second row would be the same person talking over themselves. */
   feedback          TradeFeedback?
+  /** The purchase lot holding what this receive line actually brought (#644), or none. A give line
+   *  never has one, and neither does a receive line that never arrived. The FK lives on
+   *  `PurchaseLot`, beside the auction lot's own link to the line it was transcribed from. */
+  purchaseLot       PurchaseLot?       @relation("TradeLinePurchaseLot")
 
   // One copy cannot be on the same trade twice. Nulls are distinct in Postgres, so this constrains
   // the give side only and leaves the receive side alone — which is right: two receive lines for the

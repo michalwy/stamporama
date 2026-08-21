@@ -142,6 +142,12 @@ async function seedFixtures(suffix: string): Promise<Fixtures> {
 }
 
 async function cleanup(userId: string) {
+  // A closed trade turns into an order (#644), and `Purchase.tradeId` is `Restrict` — so the orders
+  // this fixture's closings created go first. The guard is the point: a trade already turned into
+  // inventory must not vanish from under the purchase holding its carried-over cost.
+  await prisma.item.updateMany({ where: { collection: { ownerId: userId } }, data: { lotId: null } });
+  await prisma.purchase.deleteMany({ where: { collection: { ownerId: userId } } });
+  await prisma.trade.deleteMany({ where: { collection: { ownerId: userId } } });
   await prisma.collection.deleteMany({ where: { ownerId: userId } });
   await prisma.user.delete({ where: { id: userId } });
 }
@@ -573,6 +579,10 @@ describe("trade lines — composing both sides (#637)", () => {
   // The trade goes first: `TradeLine.itemId` is `Restrict`, so a copy cannot be deleted while a
   // trade still names it — which is the guard #646 put there, and it applies to the teardown too.
   after(async () => {
+    // The orders closing produced (#644) hold these trades down — `Purchase.tradeId` is `Restrict`
+    // — so they go first, and the copies come off their lots before the orders do.
+    await prisma.item.updateMany({ where: { collectionId: f.collectionId }, data: { lotId: null } });
+    await prisma.purchase.deleteMany({ where: { collectionId: f.collectionId } });
     await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
     await cleanup(f.userId);
   });
@@ -889,6 +899,10 @@ describe("balancing — the two valuations (#638)", () => {
   // The trades go first: `TradeLine.itemId` is `Restrict`, so a copy cannot be deleted while one
   // still names it — the guard applies to the teardown as much as to the app.
   after(async () => {
+    // The orders closing produced (#644) hold these trades down — `Purchase.tradeId` is `Restrict`
+    // — so they go first, and the copies come off their lots before the orders do.
+    await prisma.item.updateMany({ where: { collectionId: f.collectionId }, data: { lotId: null } });
+    await prisma.purchase.deleteMany({ where: { collectionId: f.collectionId } });
     await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
     await cleanup(f.userId);
   });
@@ -1143,6 +1157,10 @@ describe("realisation — verdicts, the closing gate and release (#642)", () => 
   });
 
   after(async () => {
+    // The orders closing produced (#644) hold these trades down — `Purchase.tradeId` is `Restrict`
+    // — so they go first, and the copies come off their lots before the orders do.
+    await prisma.item.updateMany({ where: { collectionId: f.collectionId }, data: { lotId: null } });
+    await prisma.purchase.deleteMany({ where: { collectionId: f.collectionId } });
     await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
     await cleanup(f.userId);
   });

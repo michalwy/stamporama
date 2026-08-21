@@ -303,7 +303,7 @@ export function InventoryListPanel({
   // sort" is one question: what is still on its way).
   const deliveryStates = useCsvParam(searchParams, "deliveryStates");
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
-  const includeSold = searchParams.get("includeSold") === "true";
+  const includeGone = searchParams.get("includeGone") === "true";
   // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
   const includeDisposed = searchParams.get("includeDisposed") === "true";
   // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
@@ -406,12 +406,12 @@ export function InventoryListPanel({
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
-      includeSold: includeSold || undefined,
+      includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -435,10 +435,10 @@ export function InventoryListPanel({
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
-      includeSold: includeSold || undefined,
+      includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -505,7 +505,7 @@ export function InventoryListPanel({
             ...filters,
             forSale: true,
             deliveryStates: ["delivered"],
-            includeSold: undefined,
+            includeGone: undefined,
             includeDisposed: undefined,
           }
         : filters,
@@ -842,7 +842,7 @@ export function InventoryListPanel({
     !!notOfferedPlatformId ||
     !!excludedPlatformId ||
     deliveryStates.length > 0 ||
-    includeSold ||
+    includeGone ||
     includeDisposed ||
     activeDispositions.size > 0;
 
@@ -1242,30 +1242,30 @@ export function InventoryListPanel({
                 <Tooltip
                   content={
                     groupDuplicates
-                      ? "Duplicate groups only cover copies you can still list, so sold ones stay out."
-                      : "Also show copies that have already sold (hidden by default)"
+                      ? "Duplicate groups only cover copies you can still list, so ones that have left stay out."
+                      : "Also show copies that have left — sold, or given to a partner in a closed trade (hidden by default)"
                   }
                 >
                   <button
                     type="button"
                     disabled={groupDuplicates}
-                    onClick={() => updateParams({ includeSold: includeSold ? "" : "true" })}
+                    onClick={() => updateParams({ includeGone: includeGone ? "" : "true" })}
                     style={{
                       ...CONTROL_STYLE,
                       cursor: groupDuplicates ? "default" : "pointer",
                       opacity: groupDuplicates ? 0.5 : 1,
-                      fontWeight: includeSold ? 600 : 400,
-                      color: includeSold ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: includeSold ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: includeSold ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      fontWeight: includeGone ? 600 : 400,
+                      color: includeGone ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: includeGone ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: includeGone ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
                     }}
                   >
-                    Include sold
+                    Include sold &amp; traded
                   </button>
                 </Tooltip>
-                {/* Copies no longer held (#394/#395), beside the sold toggle: the two are the
-                    ways a copy leaves the shelf, one with proceeds and one without. Hidden by
-                    default for the same reason — the list answers "what do I have". */}
+                {/* Copies no longer held (#394/#395), beside the one above: between them these are
+                    the ways a copy leaves the shelf — sold, given to a partner (#644), or lost.
+                    Hidden by default for the same reason — the list answers "what do I have". */}
                 <Tooltip
                   content={
                     groupDuplicates

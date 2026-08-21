@@ -5,6 +5,7 @@ import { getTrade } from "@/lib/trades";
 import { readTradeReservation } from "@/lib/trade-reservations";
 import { readTradeFeedback } from "@/lib/trade-feedback";
 import { readTradeRealisation } from "@/lib/trade-realisation";
+import { readTradeIntake } from "@/lib/trade-intake";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -26,7 +27,12 @@ import { readTradeRealisation } from "@/lib/trade-realisation";
  *
  * And the **realisation** (#642), for the same reason a fourth time: one light read over the trade's
  * own lines, and it is what the row draws its verdict from and what says why **Close** would be
- * refused — met while the list is being read rather than by pressing the button. */
+ * refused — met while the list is being read rather than by pressing the button.
+ *
+ * And the **intake** (#644), a fifth: where the incoming material is being identified, which line
+ * came as something else, and why the cost is not settled yet. All three are things about *this
+ * trade* that a collector wonders about while looking at it, and a screen that had to be left to
+ * find them would be a screen that never says them. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string; tradeId: string }> }
@@ -43,12 +49,13 @@ export async function GET(
     if (!trade || trade.collectionId !== collectionId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const [reservation, feedback, realisation] = await Promise.all([
+    const [reservation, feedback, realisation, intake] = await Promise.all([
       readTradeReservation(tradeId),
       readTradeFeedback(session.user.id, tradeId),
       readTradeRealisation(tradeId),
+      readTradeIntake(tradeId),
     ]);
-    return NextResponse.json({ trade, reservation, feedback, realisation });
+    return NextResponse.json({ trade, reservation, feedback, realisation, intake });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

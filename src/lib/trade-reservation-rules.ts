@@ -58,10 +58,11 @@ export interface ListedCopy {
   offer: CollidingOffer;
 }
 
-/** Why a promise no longer rests on anything: the copy sold elsewhere, or stopped being held. Two
- *  kinds and not one, because they are two different things to have happened and the collector
- *  resolves them differently — a sale is money that arrived, a disposal is a piece that is gone. */
-export type DepartedReason = "sold" | "disposed";
+/** Why a promise no longer rests on anything: the copy sold elsewhere, went to another partner
+ *  (#644), or stopped being held. Three kinds and not one, because they are three different things
+ *  to have happened and the collector resolves them differently — a sale is money that arrived, a
+ *  trade is material that arrived, and a disposal is a piece that is simply gone. */
+export type DepartedReason = "sold" | "traded" | "disposed";
 
 /** One promised copy that has left the collection. A warning, never a block. */
 export interface DepartedCopy {
@@ -114,11 +115,19 @@ export function describeListedCopies(copies: readonly ListedCopy[]): string {
 export function describeDepartedCopies(copies: readonly DepartedCopy[]): string[] {
   const out: string[] = [];
   const sold = copies.filter((c) => c.reason === "sold");
+  const traded = copies.filter((c) => c.reason === "traded");
   const disposed = copies.filter((c) => c.reason === "disposed");
   if (sold.length > 0) {
     out.push(
       `${sold.length === 1 ? "A copy promised here has" : `${sold.length} copies promised here have`} since sold elsewhere: ${nameFew(
         sold.map((c) => c.label)
+      )}.`
+    );
+  }
+  if (traded.length > 0) {
+    out.push(
+      `${traded.length === 1 ? "A copy promised here has" : `${traded.length} copies promised here have`} since gone to another partner: ${nameFew(
+        traded.map((c) => c.label)
       )}.`
     );
   }

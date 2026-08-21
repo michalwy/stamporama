@@ -129,8 +129,12 @@ function toCents(amount: number): number {
  * - A positive `total` with a non-positive weight base throws — the caller decides how to
  *   surface that; there is no meaningful proportional split.
  * - Negative weights are treated as zero.
+ *
+ * Exported because a trade's carried-over pool is split across its receive lines before this
+ * engine splits each lot across its copies (#644): two levels of the same pro-rata rule, and a
+ * second implementation of "reconcile to the cent" would be a second one to keep in step.
  */
-function apportion(total: number, weights: number[]): number[] {
+export function apportionMoney(total: number, weights: number[]): number[] {
   const totalCents = toCents(total);
   if (totalCents === 0) return weights.map(() => 0);
 
@@ -163,7 +167,7 @@ function apportion(total: number, weights: number[]): number[] {
  */
 export function distributeSharedCost(costs: PurchaseCosts): LineShare[] {
   const lines = [...costs.lots, ...costs.expenses];
-  const shares = apportion(costs.shippingCost, lines.map((l) => l.price));
+  const shares = apportionMoney(costs.shippingCost, lines.map((l) => l.price));
   return lines.map((l, i) => ({ id: l.id, price: l.price, sharedCost: shares[i] }));
 }
 
@@ -216,7 +220,7 @@ export function allocateLot(poolBase: number, items: LotItem[]): LotAllocation {
     );
   }
 
-  const shares = apportion(poolBase, weights);
+  const shares = apportionMoney(poolBase, weights);
   return {
     snapshots: staying.map((it, i) => ({ itemId: it.id, costBasis: shares[i] })),
     notDeliveredItemIds,
@@ -243,7 +247,7 @@ export function estimateLot(poolBase: number, items: LotItem[]): ItemCostEstimat
   const weights = items.map((it, i) => (included[i] ? (it.catalogPrice as number) : 0));
   const base = weights.reduce((sum, w) => sum + w, 0);
   if (base <= 0) return items.map((it) => ({ itemId: it.id, costBasis: null }));
-  const shares = apportion(poolBase, weights);
+  const shares = apportionMoney(poolBase, weights);
   return items.map((it, i) => ({ itemId: it.id, costBasis: included[i] ? shares[i] : null }));
 }
 

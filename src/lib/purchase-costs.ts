@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { getCollectionBaseCurrency } from "./pricing";
 import {
@@ -96,6 +97,8 @@ export async function getStampPurchaseCosts(
       // Held and unsold: the same three guards the copies-held badge narrows by, so the section and
       // the badge can never describe different copies.
       saleLineItems: { none: {} },
+      // The fourth guard is the third exit (#644): a copy given to a partner is gone the same way.
+      ...NOT_TRADED_AWAY,
       disposedAt: null,
       deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
     },

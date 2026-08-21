@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
@@ -38,6 +39,8 @@ function heldCopiesWhere(collectionId: string, stampIds: string[]) {
     collectionId,
     stampId: { in: stampIds },
     saleLineItems: { none: {} },
+    // …and given to a partner, which is the third way (#644).
+    ...NOT_TRADED_AWAY,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };

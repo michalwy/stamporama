@@ -710,6 +710,21 @@ export function PurchaseDetailPanel({
               </Link>
             </Tooltip>
           )}
+          {/* …and where it came from when it came from an exchange (#644). Worth saying more loudly
+              than the auction link, because it changes how every figure below should be read: no
+              money was spent here. The lot prices are the cost basis of the copies that went the
+              other way, carried over rather than paid, so the trade is where they came from. */}
+          {purchase.trade && (
+            <Tooltip content="This order is the incoming half of a trade. No money was spent: each lot is priced at the cost basis of the copies that went the other way, carried over so nothing is invented as profit.">
+              <Link
+                href={`/c/${collectionSlug}/trades/${purchase.trade.id}`}
+                style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                <Icon name="trades" size="sm" /> Traded with {purchase.trade.partnerName} · #
+                {purchase.trade.tradeNo}
+              </Link>
+            </Tooltip>
+          )}
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {(() => {
               const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };

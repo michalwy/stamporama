@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import {
   computeChecklistCompleteness,
@@ -83,6 +84,8 @@ export async function getIssueCompleteness(
             collectionId,
             stampId: { in: rollup.countingStampIds },
             saleLineItems: { none: {} },
+            // …nor one given to a partner (#644).
+            ...NOT_TRADED_AWAY,
             disposedAt: null,
             deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
           },

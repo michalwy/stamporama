@@ -283,7 +283,7 @@ decision about the line, not about the trade.
 | **Preparing** | You are composing the list. Nothing has left the building. |
 | **Shared** | The partner has the list and can see it. |
 | **Agreed** | Both sides have committed. The list locks. |
-| **Closed** | Both parcels have arrived and the incoming material is in the collection. |
+| **Closed** | Both parcels have arrived. The outgoing copies leave the collection and the incoming material becomes an order to identify — see [Closing](#closing-what-it-does-to-your-books). |
 
 You can step a trade back one stage while nothing is settled — un-share a list, or undo an agreement
 you have both reconsidered — and you can **cancel** a trade at any point before it closes, and revive
@@ -409,6 +409,39 @@ that never arrived is marked as such, right on the line; everything else is left
 unanswered, and names the ones outstanding by catalogue number. The panel says so while you are still
 reading the list, so you meet it before the button rather than by pressing it.
 
+## Closing: what it does to your books
+
+Closing a trade is what turns it into inventory. Two things happen, and neither of them involves
+money.
+
+**The copies you sent leave the collection.** No sale is recorded, because nothing was sold, and no
+disposal either, because nothing was lost. They stop counting towards what you hold, they stop being
+offered by any picker, and each of them reads **Traded away · #7** wherever it is shown. The Copies
+list hides them by default, like sold ones — turn on **Include sold & traded** to see them again.
+
+**What came in becomes an order.** You will find a link to it on the trade, and the trade named on
+the order: the partner is the supplier, and there is one lot for each line that actually arrived.
+Identify the material against that order exactly as you would a parcel you bought — scan the cards,
+cut them into tiles, name each piece. If a line arrived as a different variant from the one you were
+promised, the trade's row says so: *Came as Mi·PL 402*, for you to confirm or to correct.
+
+**What the incoming material cost is what the outgoing material cost.** Your copies leave at what
+you paid for them, and the sum of that becomes the pool of what came back, split across the lots by
+catalogue value. Nothing is recorded as profit: you did not earn anything by exchanging stamps, you
+changed what your money is sitting in, and the profit — or the loss — shows up honestly when you
+eventually sell. A copy you withdrew carries nothing, since it never left; one that vanished in the
+post carries its cost all the same, since it did.
+
+**Postage is the one real cost.** Type it into the order's shipping field and it is spread over the
+incoming copies like any other shared cost.
+
+**A lot may have to wait.** If one of the copies you sent is itself still on an open order — bought
+in a big lot you have not finished intaking — then what it cost is not settled yet, and neither is
+what the incoming material cost. Closing the incoming lot is refused until then, and says which
+orders it is waiting on. Everything else about the trade is finished; only the arithmetic is queued.
+
+Closing does not create an order when nothing arrived at all.
+
 ## The list
 
 The trades list shows, per trade: the partner, the trade number, the status, whichever parcels have
@@ -422,4 +455,5 @@ in the [quick-jump box](quick-jump.md).
 Deleting a trade removes it, its sections and both sides' lines. **The copies it named stay in your
 collection** — listing a copy in a trade is a plan, never a claim on it. For the same reason, a copy
 that appears in a trade cannot be deleted, and neither can a contact who is a partner on one: detach
-them first.
+them first. A **closed** trade that created an order cannot be deleted either, since that order's
+figures are this trade's outgoing copies; delete the order first if you really mean to.

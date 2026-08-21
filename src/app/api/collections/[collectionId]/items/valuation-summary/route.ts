@@ -47,9 +47,9 @@ export async function GET(
       notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
       excludedPlatformId: sp.get("excludedPlatformId") || undefined,
       deliveryStates: readDeliveryStates(sp),
-      // Match the list: sold copies are excluded unless includeSold=true (#207), so the total
-      // tracks exactly what is shown.
-      excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
+      // Match the list: copies that have left — sold (#207) or traded away (#644) — are excluded
+      // unless includeGone=true, so the total tracks exactly what is shown.
+      excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
     });
     return NextResponse.json(total);
   } catch {

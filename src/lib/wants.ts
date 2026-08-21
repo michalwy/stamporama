@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
@@ -274,6 +275,9 @@ function countedCopiesWhere(collectionId: string, stampIds: string[]): Prisma.It
     collectionId,
     stampId: { in: stampIds },
     saleLineItems: { none: {} },
+    // Given to a partner is a third way of no longer having it (#644), read off the trade rather
+    // than written on the copy — so the want list and the copies list cannot disagree about it.
+    ...NOT_TRADED_AWAY,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };

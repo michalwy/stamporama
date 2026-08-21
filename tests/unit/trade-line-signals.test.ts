@@ -85,6 +85,35 @@ describe("indexTradeLineSignals", () => {
   });
 });
 
+describe("a substitution (#644)", () => {
+  const substitution = {
+    lineId: "l7",
+    itemId: "i7",
+    promisedStampId: "s1",
+    arrivedStampId: "s2",
+    promisedLabel: "Mi 401",
+    arrivedLabel: "Mi 402",
+  };
+
+  it("lands on the line it is about, and makes that line worth marking", () => {
+    const index = indexTradeLineSignals({ intake: { substitutions: [substitution] } });
+    const signals = tradeLineSignals(index, "l7", null);
+    assert.equal(signals.substituted?.arrivedLabel, "Mi 402");
+    assert.ok(hasTradeLineSignals(signals));
+    assert.equal(tradeLineSignals(index, "l8", null).substituted, null);
+  });
+
+  it("is one row to look at however many pieces came as something else", () => {
+    const counts = countTradeAttention({
+      intake: {
+        substitutions: [substitution, { ...substitution, itemId: "i8", arrivedLabel: "Mi 403" }],
+      },
+    });
+    assert.equal(counts.substituted, 1);
+    assert.equal(describeTradeAttention(counts), "1 line came as something else");
+  });
+});
+
 describe("countTradeAttention", () => {
   const sources: TradeSignalSources = {
     feedback: {

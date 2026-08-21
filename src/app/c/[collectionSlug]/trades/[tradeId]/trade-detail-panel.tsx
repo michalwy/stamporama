@@ -48,6 +48,7 @@ import { TradeSectionCard } from "./trade-section-card";
 import { TradeSectionDialog } from "./trade-section-dialog";
 import { TradeShareDialog } from "./trade-share-dialog";
 import { TradeSignalsSummary } from "./trade-signals-summary";
+import { TradeIntakeCard } from "./trade-intake-card";
 import { Icon } from "@/app/icons";
 
 // The trade's own screen (#637; ADR-0039): the terms at the top, then one card per section with the
@@ -235,8 +236,9 @@ export function TradeDetailPanel({
         feedback: data?.feedback,
         reservation: data?.reservation,
         realisation: data?.realisation,
+        intake: data?.intake,
       }),
-    [data?.feedback, data?.reservation, data?.realisation]
+    [data?.feedback, data?.reservation, data?.realisation, data?.intake]
   );
 
   const trade = data?.trade;
@@ -477,9 +479,16 @@ export function TradeDetailPanel({
             collector is already looking. The count is what keeps #639's argument intact: the
             refusal on **Agree** is met while the list is being read rather than by pressing the
             button. */}
+        {/* **Where the incoming material went** (#644). Under the balance rather than above it: the
+            balance is what was agreed and what moved, and this is what became of it afterwards. Only
+            on a closed trade that brought something in, which is the only time it has anything to
+            say. */}
+        <TradeIntakeCard collectionSlug={collectionSlug} intake={data?.intake} />
+
         <TradeSignalsSummary
           feedback={data?.feedback}
           reservation={data?.reservation}
+          intake={data?.intake}
           isPending={isPending}
           onRun={run}
         />

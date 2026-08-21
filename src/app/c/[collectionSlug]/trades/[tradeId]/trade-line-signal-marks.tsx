@@ -14,6 +14,7 @@ import {
   tradeFulfillmentLabel,
   tradeFulfillmentSentence,
 } from "@/lib/trade-realisation-rules";
+import type { DepartedReason } from "@/lib/trade-reservation-rules";
 import type { TradeSide } from "@/lib/trade-rules";
 import { Icon } from "@/app/icons";
 
@@ -65,6 +66,27 @@ function toneChip(token: "error" | "warning" | "accent"): React.CSSProperties {
   };
 }
 
+/** The three ways a promised copy can already be gone (#639, widened by #644). A table rather than
+ *  a chain of ternaries: each departure is a different thing to have happened, and the word, the
+ *  icon and the sentence have to agree about which one it was. */
+const DEPARTED_LABEL: Record<DepartedReason, string> = {
+  sold: "Sold elsewhere",
+  traded: "Traded away",
+  disposed: "No longer held",
+};
+
+const DEPARTED_ICON: Record<DepartedReason, "sell" | "trades" | "disposed"> = {
+  sold: "sell",
+  traded: "trades",
+  disposed: "disposed",
+};
+
+const DEPARTED_HINT: Record<DepartedReason, string> = {
+  sold: "This copy has since sold elsewhere, so the promise no longer rests on anything.",
+  traded: "This copy has since gone to another partner in a closed trade, so the promise no longer rests on anything.",
+  disposed: "This copy is no longer held, so the promise no longer rests on anything.",
+};
+
 const HANDLED_CHIP: React.CSSProperties = {
   ...CHIP,
   color: "var(--color-text-muted)",
@@ -113,7 +135,7 @@ export function TradeLineSignalMarks({
    *  would be wrong on one side of every list. */
   side: TradeSide;
 }) {
-  const { feedback, listed, departed, realisation } = signals;
+  const { feedback, listed, departed, realisation, substituted } = signals;
   return (
     <>
       {/* **What became of this line** (#642). A struck-off line warns — it is the difference between
@@ -169,16 +191,25 @@ export function TradeLineSignalMarks({
           agreement would not bring it back, and what resolves it is a withdrawal (#642). Sold is
           told apart from no-longer-held because the two are answered in different places. */}
       {departed && (
-        <Tooltip
-          content={
-            departed.reason === "sold"
-              ? "This copy has since sold elsewhere, so the promise no longer rests on anything."
-              : "This copy is no longer held, so the promise no longer rests on anything."
-          }
-        >
+        <Tooltip content={DEPARTED_HINT[departed.reason]}>
           <span style={toneChip("warning")}>
-            <Icon name={departed.reason === "sold" ? "sell" : "disposed"} size="sm" />{" "}
-            {departed.reason === "sold" ? "Sold elsewhere" : "No longer held"}
+            <Icon name={DEPARTED_ICON[departed.reason]} size="sm" />{" "}
+            {DEPARTED_LABEL[departed.reason]}
+          </span>
+        </Tooltip>
+      )}
+
+      {/* Came as something else (#642, shipped with #644). Derived from the line and the copy the
+          scan tile became, never stored: it is the two disagreeing, and a column saying so would be
+          a third version of the same fact that goes stale the first time a copy is reassigned to
+          another variant. Shown for confirmation rather than as a fault — a partner substituting a
+          near-enough piece is ordinary, and the collector either meant it or has a copy filed wrong. */}
+      {substituted && (
+        <Tooltip
+          content={`This line asked for ${substituted.promisedLabel} and what arrived was identified as ${substituted.arrivedLabel}. Either the partner sent something else, or the copy is filed under the wrong stamp.`}
+        >
+          <span style={toneChip("accent")}>
+            <Icon name="variant" size="sm" /> Came as {substituted.arrivedLabel}
           </span>
         </Tooltip>
       )}

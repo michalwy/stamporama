@@ -73,9 +73,10 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
     // The review read (#506): the copies set aside on this platform.
     excludedPlatformId: sp.get("excludedPlatformId") || undefined,
-    // Sold copies are hidden from the inventory list by default (#207); an explicit
-    // `includeSold=true` shows them again.
-    excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
+    // Copies that have **left** are hidden from the inventory list by default — sold (#207), and
+    // given to a partner in a closed trade (#644) — and one `includeGone=true` shows both again:
+    // two toggles for one question would be a second thing to remember to press.
+    excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
     // Copies no longer held are hidden the same way (#395) — the list answers "what do I have".
     includeDisposed: boolParam(sp.get("includeDisposed")),
   };

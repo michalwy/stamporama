@@ -751,7 +751,7 @@ export async function listOfferableCopies(
     year: filters.year,
     ...(filters.forTradeOnly ? { forTrade: true } : {}),
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
-    excludeSold: true,
+    excludeGone: true,
     excludeIds: committed,
     sortDir: "asc",
     pageSize: 1000,
@@ -853,9 +853,9 @@ export async function addTradeGiveLines(
         // **Not** narrowed by fulfillment here, unlike the picker's own read: a line withdrawn from
         // *this* trade still exists, and re-adding the copy has to stay the no-op it has always been
         // rather than a unique-constraint violation the collector reaches through a reopened list.
-        // Which of these lines still *holds* the copy is judged below, where the two questions can
-        // be told apart.
-        where: { trade: { status: { in: [...LIVE_TRADE_STATUSES] } } },
+        // Which of these lines still *holds* the copy is judged below, where the three questions —
+        // this trade, another live one, and one that has already taken it (#644) — are told apart.
+        where: { trade: { status: { in: [...LIVE_TRADE_STATUSES, "closed"] } } },
         select: {
           tradeId: true,
           fulfillment: true,
@@ -879,10 +879,22 @@ export async function addTradeGiveLines(
     // not fail, exactly as re-attaching a copy to its own lot does not.
     if (item.tradeLines.some((l) => l.tradeId === tradeId)) continue;
     // A copy another trade has **withdrawn** is back on the shelf and may be promised here (#642),
-    // so only a line that still holds it refuses.
-    const elsewhere = item.tradeLines.find((l) =>
+    // so only a line that still holds it counts here at all.
+    const holding = item.tradeLines.filter((l) =>
       isCommittingFulfillment(readTradeFulfillment(l.fulfillment))
     );
+    // Gone is gone (#644): a closed trade's give line is one of the three ways a copy leaves the
+    // collection, so this refusal is the same kind of thing as *has already been sold* below rather
+    // than a scheduling clash with another negotiation.
+    const gone = holding.find((l) => l.trade.status === "closed");
+    if (gone) {
+      refused.push({
+        itemId: id,
+        reason: `${label} has already gone to a partner in trade #${gone.trade.tradeNo}.`,
+      });
+      continue;
+    }
+    const elsewhere = holding[0];
     if (elsewhere) {
       refused.push({
         itemId: id,

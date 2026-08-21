@@ -97,7 +97,7 @@ export interface InventoryItemFilters {
   deliveryStates?: string[];
   /** Show copies that have already sold (#207). Sold copies are hidden by default; set true to
    * include them. */
-  includeSold?: boolean;
+  includeGone?: boolean;
   /** Show copies no longer held (#394/#395) — lost, damaged in storage, discarded. Hidden by
    * default, since the list answers "what do I have". */
   includeDisposed?: boolean;
@@ -131,7 +131,7 @@ export interface InventoryYearFacetFilters {
    * state, so "everything still on its way to me" is one filter rather than three passes. */
   deliveryStates?: string[];
   /** Include already-sold copies in the facet counts (#207); hidden by default. */
-  includeSold?: boolean;
+  includeGone?: boolean;
   /** Include copies no longer held in the facet counts (#395); hidden by default. */
   includeDisposed?: boolean;
 }
@@ -194,7 +194,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("excludedPlatformId", filters.excludedPlatformId);
   if (filters.deliveryStates && filters.deliveryStates.length > 0)
     params.set("deliveryStates", filters.deliveryStates.join(","));
-  if (filters.includeSold) params.set("includeSold", "true");
+  if (filters.includeGone) params.set("includeGone", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
   return params;
 }
@@ -371,7 +371,7 @@ export function useHoldingsValuation(
       notOfferedPlatformId: filters.notOfferedPlatformId,
       excludedPlatformId: filters.excludedPlatformId,
       deliveryStates: filters.deliveryStates,
-      includeSold: filters.includeSold,
+      includeGone: filters.includeGone,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -401,7 +401,7 @@ export function useHoldingsValuation(
         params.set("excludedPlatformId", filters.excludedPlatformId);
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
-      if (filters.includeSold) params.set("includeSold", "true");
+      if (filters.includeGone) params.set("includeGone", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -448,7 +448,7 @@ export function useItemYears(
         params.set("excludedPlatformId", filters.excludedPlatformId);
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
-      if (filters.includeSold) params.set("includeSold", "true");
+      if (filters.includeGone) params.set("includeGone", "true");
       if (filters.includeDisposed) params.set("includeDisposed", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`

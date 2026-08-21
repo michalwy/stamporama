@@ -113,11 +113,12 @@ Stamps, Copies, Offers, Sales and Purchases.
   above it makes no assumption about disposition: it shows exactly what carries the marking. This
   one is **not** remembered between visits — it is somewhere you go to look, not the list you work
   from.
-- **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
-  shows only what you still hold. Toggle this on to bring sold copies back into view (for example
-  to look up what a piece went for); each one then carries a **Sold** chip, so a copy that has
-  left the collection is never mistaken for one still in it. The holdings totals and year panel
-  follow this filter too.
+- **Include sold & traded** — copies that have [sold](sales.md), and copies you gave to a partner in
+  a closed [trade](trades.md), are **hidden by default**, so the list shows only what you still hold.
+  Toggle this on to bring them back into view (for example to look up what a piece went for); each
+  one then carries a **Sold** or **Traded away · #7** chip, so a copy that has left the collection is
+  never mistaken for one still in it. One toggle covers both, because gone is gone. The holdings
+  totals and year panel follow this filter too.
 - **Include no longer held** — copies you have marked as [no longer held](#copies-you-no-longer-hold)
   are **hidden by default**, for the same reason sold ones are: the list answers *what do I have*.
   Toggle this on to bring them back into view. The year panel follows this filter too; the holdings
@@ -874,7 +875,7 @@ groups.
 Grouping and filtering are **different questions** and both apply. The sidebar and toolbar filters
 decide *which copies you are looking at*; the toggles decide *what counts as the same item*. On top
 of that, grouping only ever covers copies you can still list — **For sale**, **delivered**, and
-unsold — so the *Include sold* and delivery-state controls grey out while it is on, and the sort
+unsold — so the *Include sold & traded* and delivery-state controls grey out while it is on, and the sort
 control is replaced: groups are ordered by **how many copies each holds**, largest first.
 
 Each toggle is remembered per collection, so the list opens the way you left it.
@@ -924,7 +925,7 @@ A few things worth knowing:
 - Copies **filed nowhere** are the last row, and copies with **no ref** are the last row within their
   location. There is nothing to walk to, so they sort last.
 - Unlike duplicate grouping, this covers **whatever the list is showing**. Every filter still applies
-  — including *Include sold* and *Include no longer held* — because "where is it?" is a fair question
+  — including *Include sold & traded* and *Include no longer held* — because "where is it?" is a fair question
   about a copy you have already sold but not yet posted.
 - The **checkbox** in front of a group row ticks the copies filed there that can be listed (for sale
   and in hand), exactly as it does on a duplicate group.
@@ -940,7 +941,7 @@ number, then by name. An issue with no year comes after the dated ones, and the 
 belongs to **no issue** are the last row of all.
 
 Like the filing groupings and unlike duplicate grouping, this covers **whatever the list is
-showing** — every filter still applies, *Include sold* and *Include no longer held* among them,
+showing** — every filter still applies, *Include sold & traded* and *Include no longer held* among them,
 because "what have I got of this set" includes the piece you have already sold. The **checkbox** in
 front of a group row ticks the copies of that issue that can be listed, and the grouping is computed
 on the server, so a group is never split in half by scrolling.

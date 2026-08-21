@@ -12,6 +12,7 @@ import {
 // go, and reading that judgement from the vocabulary module keeps this file's no-imports-upward rule
 // intact.
 import { COMMITTING_FULFILLMENTS } from "./trade-realisation-rules";
+import { TRADED_AWAY, TRADED_AWAY_LINE } from "./trade-exit";
 
 // Reservation of committed copies against marketplace collisions (#639) — the database half. The
 // vocabulary, and every sentence a refusal is made in, is the pure `trade-reservation-rules.ts`.
@@ -259,29 +260,37 @@ export async function tradeListingRefusal(tradeId: string): Promise<string | nul
 }
 
 /**
- * Which of these promised copies have left the collection — sold on a sale line, or disposed of.
+ * Which of these promised copies have left the collection — sold on a sale line, given to another
+ * partner on a closed trade (#644), or disposed of.
  *
- * A copy that has done both is reported as **sold**: that is the specific thing that happened to it,
- * and a disposal recorded alongside a sale is usually the same event written down twice.
+ * A copy that has done more than one is reported by the most specific thing that happened to it, in
+ * that order: a disposal recorded alongside a sale is usually the same event written down twice, and
+ * a departure into another exchange says where the piece actually went.
  */
 async function findDepartedCopies(itemIds: readonly string[]): Promise<DepartedCopy[]> {
   if (itemIds.length === 0) return [];
   const rows = await prisma.item.findMany({
     where: {
       id: { in: [...itemIds] },
-      OR: [{ disposedAt: { not: null } }, { saleLineItems: { some: {} } }],
+      OR: [{ disposedAt: { not: null } }, { saleLineItems: { some: {} } }, TRADED_AWAY],
     },
     select: {
       id: true,
       itemNo: true,
       disposedAt: true,
       saleLineItems: { select: { itemId: true }, take: 1 },
+      tradeLines: { where: TRADED_AWAY_LINE, select: { id: true }, take: 1 },
     },
     orderBy: { itemNo: "asc" },
   });
   return rows.map((row) => ({
     itemId: row.id,
     label: copyLabel(row.itemNo),
-    reason: row.saleLineItems.length > 0 ? "sold" : "disposed",
+    reason:
+      row.saleLineItems.length > 0
+        ? "sold"
+        : row.tradeLines.length > 0
+          ? "traded"
+          : "disposed",
   }));
 }

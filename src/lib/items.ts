@@ -2,6 +2,14 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma } from "./db";
+import { NOT_TRADED_AWAY } from "./trade-exit";
+import {
+  COMMITTING_FULFILLMENTS,
+  hasLeftInTrade,
+  isPromisedInTrade,
+  readTradeFulfillment,
+} from "./trade-realisation-rules";
+import { isTradeStatus } from "./trade-rules";
 import { getCollectionBaseCurrency } from "./pricing";
 import {
   aggregateHoldings,
@@ -944,9 +952,11 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * question; a caller pinning one state (the sale-lot composition picker, #164, which only offers
    * copies actually in hand) passes a single-entry list through the same field. */
   deliveryStates?: string[];
-  /** Exclude copies that have already left on a sale line (the no-double-sale guard,
-   * ADR-0013). Used by the offer composition picker. */
-  excludeSold?: boolean;
+  /** Exclude copies that have **left**, whichever way. Two mechanisms and one question: a sale
+   * line naming the copy (the no-double-sale guard, ADR-0013) and a give line of a closed trade
+   * naming it (#644). One filter over both because to a collector gone is gone, and a second toggle
+   * beside the first would be a second thing to remember to press. */
+  excludeGone?: boolean;
   /** Include copies disposed of after delivery (#394/#395). The list answers "what do I have",
    * so they are **hidden by default** — exactly as sold copies are (#207) — and this brings them
    * back. Mirrored on the years and valuation reads so the panel, its facets and its total never
@@ -1180,7 +1190,7 @@ function buildItemWhere(
     ...(filters.deliveryStates && filters.deliveryStates.length > 0
       ? { deliveryState: { in: filters.deliveryStates } }
       : {}),
-    ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
+    ...(filters.excludeGone ? { saleLineItems: { none: {} }, ...NOT_TRADED_AWAY } : {}),
     // Disposed copies are hidden unless asked for (#395) — `disposedAt` doubles as the flag, so
     // this stays a plain `where` rather than a derived narrowing.
     ...(filters.includeDisposed ? {} : { disposedAt: null }),
@@ -1251,6 +1261,15 @@ async function withMissingCatalogFilter(
   return { AND: [baseWhere, { id: { in: ids } }] };
 }
 
+/** A trade a copy is marked by on the row — the promise that commits it or the departure that has
+ *  already taken it. One shape for both, because what the collector is shown is the same sentence
+ *  about the same partner, and only the tense differs. */
+export interface ItemTradeMark {
+  tradeId: string;
+  tradeNo: number;
+  partnerName: string;
+}
+
 /** A copy enriched with the display data the list screen needs: the linked stamp's
  * identity (catalog numbers, name, issued date, owning issue), condition and
  * certificate labels, disposition flags, and acquisition/purchase fields. */
@@ -1308,7 +1327,11 @@ export interface ItemListItem {
    * off the trade, the same way `sold` is read off the sale line, so there is only ever one place
    * for it to be wrong. A trade still being prepared or shared is deliberately absent — that is a
    * negotiation, and it reserves nothing. */
-  promisedTo: { tradeId: string; tradeNo: number; partnerName: string } | null;
+  promisedTo: ItemTradeMark | null;
+  /** The **closed** trade this copy went out on (#644), or null. A copy carrying one has left the
+   *  collection: no sale, no proceeds, no disposal reason — the give line of a closed trade is the
+   *  record, and every held read is narrowed by the same relation this is drawn from. */
+  tradedAway: ItemTradeMark | null;
   /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null. */
   lotId: string | null;
   /** Owning lot's lifecycle status (`open | closed`), or null when the copy has no lot.
@@ -1378,7 +1401,7 @@ const ITEM_LIST_SELECT = {
   locationRef: true,
   createdAt: true,
   // `variantHistory` drives the "refined" marker; `saleLineItems` is the copy's soldness (#393) —
-  // the very relation `excludeSold` filters on (#207), so the chip and the filter cannot disagree.
+  // the very relation `excludeGone` filters on (#207), so the chip and the filter cannot disagree.
   _count: { select: { variantHistory: true, saleLineItems: true } },
   // The platforms this copy is kept off (#506) — the same relation the *not offered on X* filter
   // narrows by, so the row's chip and the worklist can never disagree.
@@ -1389,11 +1412,30 @@ const ITEM_LIST_SELECT = {
   // refuses on exactly this relation, so the chip and the refusal cannot come to disagree. At most
   // one: `@@unique([tradeId, itemId])` stops one trade naming a copy twice, and the gate stops a
   // second agreed trade naming it at all.
+  // …and the closed one that has taken it away (#644), read through the same relation for the same
+  // reason: the exit is not written on the copy, so the chip and the guard that hides the copy from
+  // every held read are the same fact asked twice. Two, because a copy could in principle carry both
+  // an agreed promise and a closed departure; which is which is judged below rather than by order.
   tradeLines: {
-    where: { side: "give", trade: { status: "agreed" } },
-    take: 1,
+    // Narrowed to the lines that still hold the copy, so at most two rows can match — one agreed
+    // promise and one closed departure — and neither can be crowded out by lines withdrawn from
+    // older trades, which say nothing about where this copy is.
+    where: {
+      side: "give",
+      trade: { status: { in: ["agreed", "closed"] } },
+      fulfillment: { in: [...COMMITTING_FULFILLMENTS] },
+    },
+    take: 2,
     select: {
-      trade: { select: { id: true, tradeNo: true, partner: { select: { name: true } } } },
+      fulfillment: true,
+      trade: {
+        select: {
+          id: true,
+          tradeNo: true,
+          status: true,
+          partner: { select: { name: true } },
+        },
+      },
     },
   },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
@@ -1434,6 +1476,25 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
     formatId: row.format?.id ?? null,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
+  };
+}
+
+/** The trade a copy is marked by, at one status: **agreed** is the promise that commits it (#639),
+ *  **closed** is the departure that has already taken it (#644). One relation, two questions, and a
+ *  withdrawn line answers neither — it promises nothing and it took nothing. Both judgements come
+ *  from `trade-realisation-rules.ts`, the same pair the guards that hide the copy read. */
+function tradeMark(row: ItemListRow, tense: "promised" | "left"): ItemTradeMark | null {
+  const judge = tense === "left" ? hasLeftInTrade : isPromisedInTrade;
+  const line = row.tradeLines.find(
+    (l) =>
+      isTradeStatus(l.trade.status) &&
+      judge(l.trade.status, readTradeFulfillment(l.fulfillment))
+  );
+  if (!line) return null;
+  return {
+    tradeId: line.trade.id,
+    tradeNo: line.trade.tradeNo,
+    partnerName: line.trade.partner.name,
   };
 }
 
@@ -1479,13 +1540,11 @@ function toItemListItem(
     forSale: row.forSale,
     forTrade: row.forTrade,
     excludedPlatformIds: row.platformExclusions.map((e) => e.platformId),
-    promisedTo: row.tradeLines[0]
-      ? {
-          tradeId: row.tradeLines[0].trade.id,
-          tradeNo: row.tradeLines[0].trade.tradeNo,
-          partnerName: row.tradeLines[0].trade.partner.name,
-        }
-      : null,
+    promisedTo: tradeMark(row, "promised"),
+    // The third exit path (#644), read off the very line that hides this copy from every held count
+    // — so *Traded away* on the row and *not in the collection any more* in the arithmetic are one
+    // fact, never two that can drift.
+    tradedAway: tradeMark(row, "left"),
     lotId: row.lotId,
     lotStatus: row.lot?.status ?? null,
     purchase: row.lot?.purchase
@@ -1618,7 +1677,7 @@ export async function listItemsPaginated(
 const GROUP_ELIGIBILITY = {
   forSale: true,
   deliveryStates: ["delivered"],
-  excludeSold: true,
+  excludeGone: true,
 } as const satisfies Partial<ItemListFiltersPaginated>;
 
 /** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for
@@ -2961,7 +3020,7 @@ export async function getHoldingsValuation(
   // The disposal exclusion is deliberately lifted here (#396). Disposed copies are hidden from the
   // list by default, so a write-off summed over the *visible* set would read 0.00 in exactly the
   // case it exists for. The bar still sums one scope — it just partitions it into held and gone,
-  // which is what the write-off line makes legible. Everything else, `excludeSold` included, is
+  // which is what the write-off line makes legible. Everything else, `excludeGone` included, is
   // taken as the list left it: a realised sale is not a write-off (#168 is where it belongs).
   const where = await withMissingCatalogFilter(
     collectionId,

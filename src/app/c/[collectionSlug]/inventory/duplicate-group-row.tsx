@@ -403,6 +403,6 @@ export function groupMemberFilters(
       : {}),
     forSale: true,
     deliveryStates: ["delivered"],
-    includeSold: undefined,
+    includeGone: undefined,
   };
 }

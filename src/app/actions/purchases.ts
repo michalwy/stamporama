@@ -51,7 +51,12 @@ export type CreatePurchaseActionState =
 export type CloseLotActionState =
   | { status: "success" }
   | { status: "error"; message: string }
-  | { status: "blocked"; reason: "missing-price" | "zero-weight" | "empty"; itemIds: string[]; message: string };
+  | {
+      status: "blocked";
+      reason: "missing-price" | "zero-weight" | "empty" | "trade-cost-pending";
+      itemIds: string[];
+      message: string;
+    };
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -375,12 +380,15 @@ export async function closeLotAction(lotId: string): Promise<CloseLotActionState
   try {
     const result = await closeLot(session.user.id, lotId);
     if (result.ok) return { status: "success" };
+    // A trade lot's block is about somebody else's order, so the domain names it (#644) — there is
+    // nothing this layer could add that would not be a second wording of the same refusal.
     const message =
-      result.reason === "missing-price"
+      result.message ??
+      (result.reason === "missing-price"
         ? `Cannot close: ${result.itemIds.length} cop${result.itemIds.length === 1 ? "y lacks" : "ies lack"} a primary-catalog price for their condition. Add the catalog price, or fix the copy.`
         : result.reason === "zero-weight"
           ? "Cannot close: the lot has a cost to split but every copy has a zero catalog price."
-          : "Cannot close an empty lot. Identify at least one copy first.";
+          : "Cannot close an empty lot. Identify at least one copy first.");
     return { status: "blocked", reason: result.reason, itemIds: result.itemIds, message };
   } catch (e) {
     return {

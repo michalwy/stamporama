@@ -13,6 +13,7 @@ import {
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
 import { tradeListingRefusal } from "./trade-reservations";
 import { tradeClosingRefusal } from "./trade-realisation";
+import { createTradePurchase } from "./trade-intake";
 import {
   freezeTradeRates,
   freezeTradeValuations,
@@ -544,6 +545,12 @@ export async function updateTrade(
  * And one at `closed` (#642): every line must have been answered for — sent, arrived, withdrawn or
  * never arrived. `trade-realisation.ts` refuses by name, with the same labeller the valuation gate
  * uses, because the verdicts are what #644 reads to decide what actually left and what arrived.
+ *
+ * And one thing `closed` *does* (#644): it turns the exchange into inventory. The incoming material
+ * becomes a `Purchase` carrying `tradeId`, its lots priced at the cost basis of the copies that went
+ * the other way — carried over, not recognised, so no revenue and no profit is invented at a moment
+ * when no money moved. The outgoing side needs nothing written: a copy has left because a give line
+ * of a closed trade names it. See `trade-intake.ts`.
  */
 export async function setTradeStatus(
   ownerId: string,
@@ -600,6 +607,10 @@ export async function setTradeStatus(
   if (status === "shared") await freezeTradeRates(tradeId);
   if (status === "agreed") await freezeTradeValuations(tradeId);
   if (isTradeContentEditable(status)) await releaseTradeValuations(tradeId);
+  // Closing is the moment the material becomes inventory (#644). Idempotent like the three above: a
+  // trade that already has its purchase keeps the one it has, so nothing about reaching `closed`
+  // twice can grow a second parcel.
+  if (status === "closed") await createTradePurchase(tradeId);
 }
 
 /**
@@ -626,9 +637,23 @@ export async function setTradeShipping(
 
 /** Delete a trade with its sections and lines (cascade). The copies it named are untouched — a
  * `give` line is a promise about a copy, never a claim on it, and `onDelete: Restrict` runs the
- * other way (a copy cannot be deleted while a trade names it). */
+ * other way (a copy cannot be deleted while a trade names it).
+ *
+ * A **closed** trade that turned into inventory is refused, by name (#644). `Purchase.tradeId` is
+ * `Restrict`, and rightly: the order's lot prices are the cost basis of the copies this trade sent,
+ * so a trade deleted out from under it would leave figures nothing on the screen could explain. The
+ * order is deleted first, or the record is kept. */
 export async function deleteTrade(ownerId: string, tradeId: string): Promise<void> {
   await assertTradeOwner(ownerId, tradeId);
+  const purchase = await prisma.purchase.findUnique({
+    where: { tradeId },
+    select: { purchaseNo: true },
+  });
+  if (purchase) {
+    throw new Error(
+      `Closing this trade created order #${purchase.purchaseNo}, which holds what came in and is priced from what went out. Delete that order first, or keep the record.`
+    );
+  }
   await prisma.trade.delete({ where: { id: tradeId } });
 }
 
