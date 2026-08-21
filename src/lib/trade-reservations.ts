@@ -8,6 +8,10 @@ import {
   type DepartedCopy,
   type ListedCopy,
 } from "./trade-reservation-rules";
+// The pure half of #642, and only the pure half: a withdrawn line is the one thing that lets a copy
+// go, and reading that judgement from the vocabulary module keeps this file's no-imports-upward rule
+// intact.
+import { COMMITTING_FULFILLMENTS } from "./trade-realisation-rules";
 
 // Reservation of committed copies against marketplace collisions (#639) — the database half. The
 // vocabulary, and every sentence a refusal is made in, is the pure `trade-reservation-rules.ts`.
@@ -26,6 +30,16 @@ import {
 /** The trade statuses that actually commit a copy. Only `agreed` — see the header of
  *  `trade-reservation-rules.ts` for why the negotiation statuses deliberately do not. */
 const COMMITTED_TRADE_STATUSES = ["agreed"] as const;
+
+/**
+ * A give line only holds its copy while it is still going to happen (#642).
+ *
+ * **A withdrawal is what releases it**, and that is the whole use of the verdict from this module's
+ * end: a copy the collector decided not to send is back on the shelf, free to be listed, and the
+ * departure warning it may have been raising is answered. A `fulfilled` line's copy went in the
+ * envelope and a `missing` one's went too — neither is back, so neither releases anything.
+ */
+const COMMITTING_LINE = { fulfillment: { in: [...COMMITTING_FULFILLMENTS] } };
 
 /** The trade statuses that still hold a promise worth warning about when the copy behind it leaves.
  *  Wider than the set above on purpose: a copy sold out from under a trade being *composed* is worth
@@ -55,6 +69,7 @@ export async function findCommittedCopies(
     where: {
       side: "give",
       itemId: { in: [...itemIds] },
+      ...COMMITTING_LINE,
       trade: { collectionId, status: { in: [...COMMITTED_TRADE_STATUSES] } },
     },
     select: {
@@ -171,10 +186,12 @@ export async function offerCommitmentRefusal(
 
 // ── The trade's end ─────────────────────────────────────────────────────────────────────────────
 
-/** Every copy this trade promises — its give lines, in line order. */
+/** Every copy this trade **still** promises — its give lines, in line order, minus the ones
+ *  withdrawn (#642). A copy the collector has said they are not sending is not promised to anybody,
+ *  so it neither blocks a listing nor earns a warning when it leaves. */
 async function tradeGiveItemIds(tradeId: string): Promise<string[]> {
   const rows = await prisma.tradeLine.findMany({
-    where: { tradeId, side: "give", itemId: { not: null } },
+    where: { tradeId, side: "give", itemId: { not: null }, ...COMMITTING_LINE },
     select: { itemId: true },
     orderBy: { position: "asc" },
   });
@@ -189,8 +206,9 @@ async function tradeGiveItemIds(tradeId: string): Promise<string[]> {
  *  - `listed` **blocks** the move to `agreed`. Promising a partner a stamp that is up for sale is
  *    promising something a stranger can buy in the next minute.
  *  - `departed` **warns and never blocks**. The copy has already gone — refusing to record the
- *    agreement would not bring it back, and what resolves it is a withdrawal (#642). Told on the
- *    trade because that is where the promise lives.
+ *    agreement would not bring it back, and what resolves it is a withdrawal (#642), which is
+ *    literally true here: marking the line withdrawn takes it out of `tradeGiveItemIds` and the
+ *    warning with it. Told on the trade because that is where the promise lives.
  */
 export interface TradeReservationRead {
   listed: ListedCopy[];

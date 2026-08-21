@@ -329,10 +329,12 @@ export function TradeSideRows({
   baseCurrency,
   vendorMaps,
   editable,
+  canRecordRealisation,
   stickyTop,
   onEditReceiveLine,
   onEditLineValue,
   onQuickPrice,
+  onRecordRealisation,
   onRun,
 }: {
   state: TradeSideState;
@@ -349,6 +351,10 @@ export function TradeSideRows({
   baseCurrency: string;
   vendorMaps: AreaVendorMaps;
   editable: boolean;
+  /** The trade is `agreed`, the one status a verdict may be written in (#642). The mirror image of
+   *  `editable`: what the lock forbids is changing the agreement, and what this allows is saying what
+   *  became of it. */
+  canRecordRealisation: boolean;
   /** Where a group heading pins — right under the section's own band, measured rather than assumed. */
   stickyTop: number;
   onEditReceiveLine: (line: TradeReceiveLineData) => void;
@@ -361,6 +367,10 @@ export function TradeSideRows({
    *  the list is being read, and sending the collector to the stamp editor to fix it loses their
    *  place. It writes a price on the **stamp**, which is why both sides get it. */
   onQuickPrice: (target: QuickPriceTarget) => void;
+  /** Open the line's realisation dialog (#642) — what became of it, and why. Both sides offer it: a
+   *  verdict is about the line rather than about a copy, which is what lets a receive line have one
+   *  at all. The side travels with the id because half the wording inverts across the table. */
+  onRecordRealisation: (lineId: string, side: TradeSide) => void;
   onRun: (action: () => Promise<TradeActionState>) => void;
 }) {
   const { items, headings } = state;
@@ -400,6 +410,8 @@ export function TradeSideRows({
           signals,
           collectionSlug,
           isPending,
+          canRecordRealisation,
+          onRecordRealisation: () => onRecordRealisation(item.lineId, state.side),
           onRun,
         });
         return (

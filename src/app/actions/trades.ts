@@ -36,6 +36,7 @@ import {
   setTradeShareOptions,
 } from "@/lib/trade-share";
 import { resolveTradeFeedback } from "@/lib/trade-feedback";
+import { setTradeLineFulfillment } from "@/lib/trade-realisation";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
@@ -443,6 +444,33 @@ export async function setTradeLineValueAction(
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to save the value. Please try again.") };
+  }
+}
+
+// ── What actually happened (#642) ────────────────────────────────────────────────────────────────
+
+/**
+ * Record what became of one line — sent, arrived, withdrawn or never arrived, with the collector's
+ * own words for why.
+ *
+ * The verdict and the note travel **together**, always both, which is the opposite of the value
+ * action above: a note is why a line was struck off, so leaving one in place while the verdict
+ * changed would be an explanation of something nobody is claiming any more.
+ */
+export async function setTradeLineFulfillmentAction(
+  lineId: string,
+  fulfillment: string,
+  note: string | null
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await setTradeLineFulfillment(session.user.id, lineId, { fulfillment, note });
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: message(e, "Failed to record what happened. Please try again."),
+    };
   }
 }
 

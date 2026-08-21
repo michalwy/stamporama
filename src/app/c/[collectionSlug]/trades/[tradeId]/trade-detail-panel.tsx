@@ -14,7 +14,10 @@ import {
   TRADE_STATUS_TRANSITIONS,
   describeBalanceRule,
   isTradeContentEditable,
+  isTradeReopen,
   resolveBalanceRule,
+  tradeTransitionHint,
+  tradeTransitionLabel,
   type TradeStatus,
 } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -227,8 +230,13 @@ export function TradeDetailPanel({
   // the header already makes, and asked per row — a row must not go looking through a payload that
   // describes the whole trade.
   const signals = useMemo(
-    () => indexTradeLineSignals({ feedback: data?.feedback, reservation: data?.reservation }),
-    [data?.feedback, data?.reservation]
+    () =>
+      indexTradeLineSignals({
+        feedback: data?.feedback,
+        reservation: data?.reservation,
+        realisation: data?.realisation,
+      }),
+    [data?.feedback, data?.reservation, data?.realisation]
   );
 
   const trade = data?.trade;
@@ -259,6 +267,11 @@ export function TradeDetailPanel({
   }
 
   const editable = isTradeContentEditable(trade.status);
+  // **The mirror image of the lock** (#642). What `editable` forbids is changing what was agreed;
+  // what this allows is recording that reality diverged from it, which is a different act with its
+  // own window — `agreed` and nothing else. Read from the server rather than re-derived here, so the
+  // menu entry and the refusal behind it cannot come to disagree.
+  const canRecordRealisation = data?.realisation?.recordable ?? false;
   const rule = { ...trade };
 
   // **The publisher's full name here, not just its abbreviation.** The list row prints `Mi` because
@@ -298,10 +311,19 @@ export function TradeDetailPanel({
       hint: "A read-only page of this list your partner can open without an account.",
       onSelect: () => setDialog({ kind: "share" }),
     },
+    // **Two different moves** (#642). Recording a fact leaves the trade `agreed` and lives on the
+    // row; deciding to renegotiate is this, and only this, so the one transition that reopens a
+    // settled list is named for what it does rather than for the column it writes. Everything else
+    // keeps the plain wording — a menu of paraphrases would be a menu nobody trusts.
     ...TRADE_STATUS_TRANSITIONS[trade.status].map((next, index) => ({
       key: `status-${next}`,
-      label: `Mark ${TRADE_STATUS_LABEL[next].toLowerCase()}`,
-      icon: (next === "cancelled" ? "reject" : "check") as RowAction["icon"],
+      label: tradeTransitionLabel(trade.status, next),
+      icon: (next === "cancelled"
+        ? "reject"
+        : isTradeReopen(trade.status, next)
+          ? "revert"
+          : "check") as RowAction["icon"],
+      hint: tradeTransitionHint(trade.status, next),
       separatorBefore: index === 0,
       onSelect: () => run(() => setTradeStatusAction(tradeId, next)),
     })),
@@ -443,6 +465,7 @@ export function TradeDetailPanel({
         <TradeBalanceSummary
           tradeId={tradeId}
           balance={balance}
+          realisation={data?.realisation}
           isLoading={balanceLoading}
           onRun={run}
         />
@@ -550,6 +573,7 @@ export function TradeDetailPanel({
             agreedVendorName={balance?.agreedCatalogVendorName ?? trade.catalogVendorName}
             catalogVendors={catalogVendors}
             editable={editable}
+            canRecordRealisation={canRecordRealisation}
             isPending={isPending}
             areas={areas}
             locations={locations}

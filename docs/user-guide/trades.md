@@ -292,12 +292,15 @@ a cancelled one later if the partner comes back. A closed trade stays closed.
 **Agreed locks the list.** Once both of you have committed, the sections and lines cannot be edited:
 the partner is holding a copy of the list, and quietly changing what was agreed is how a trade turns
 into an argument. Recording that reality turned out differently — something withdrawn, something
-short, something swapped in — is a separate act, not an edit.
+short — is a separate act, not an edit: see
+[What actually happened](#what-actually-happened).
 
 A move that is not allowed is refused and says why, rather than doing nothing. So is a move that is
 allowed but not yet earned: sharing or agreeing a trade with an unvalued line on it is refused, and
 the refusal names the lines. Agreeing is also refused while a copy on your side is live on a
-marketplace — see [Promised copies and marketplace listings](#promised-copies-and-marketplace-listings).
+marketplace — see [Promised copies and marketplace listings](#promised-copies-and-marketplace-listings)
+— and closing is refused while any line still has no verdict on it, see
+[What actually happened](#what-actually-happened).
 
 ## Showing the trade to your partner
 
@@ -369,6 +372,42 @@ everything that was said, but the boxes are gone.
 Sending and receiving are **two separate marks**, not stages. Parcels cross in the post, and the one
 coming to you routinely arrives weeks before or after the one you sent — so you can record either
 first, either alone, and take a mark back if you set it by mistake.
+
+## What actually happened
+
+A trade list is a plan. Stamps get pulled while packing, parcels arrive short, and none of that is a
+reason to rewrite what the two of you agreed — your partner is holding a copy of it.
+
+So once the trade is **Agreed**, every line takes a verdict of its own, from **Record what
+happened…** on the row's ⋮ menu:
+
+| Verdict | On my side | On my partner's side |
+| --- | --- | --- |
+| **Sent / Arrived** | It went in the parcel | It arrived as agreed |
+| **I withdrew it / Partner withdrew it** | I did not send it after all | They did not send it after all |
+| **Never arrived** | My parcel got there without it | Their parcel got here without it |
+
+You can add a note saying why — *gum toned, kept it back*. Taking a verdict back clears the note with
+it. Nothing about the agreement moves: the quantities, the conditions and both frozen figures stay
+exactly as your partner has them. What is recorded is recorded *beside* them.
+
+**Two balances.** From *Agreed* onwards the balance panel shows what you agreed and what actually
+moved, one under the other, with the difference on each line in its own unit — so many pieces, so much
+in your own valuation, so much in the agreed catalogue. Nothing is netted across them. That difference
+is what you decide on: take it up with your partner, or let it go.
+
+**A withdrawn copy is yours again.** Marking one of your own lines withdrawn releases the copy: it can
+go on a marketplace listing again, and any warning about it having been promised goes with it. A line
+that went in the parcel or vanished in the post is not released, because the copy is not back.
+
+**Recording a fact is not renegotiating.** A verdict leaves the trade *Agreed*. If you decide the
+difference is worth settling again, use **Reopen the negotiation** on the trade's ⋮ menu — that
+unlocks the list and shows your partner that it has changed. On their page, a line you withdrew or one
+that never arrived is marked as such, right on the line; everything else is left as it was.
+
+**Closing needs a verdict on every line.** *Mark closed* is refused while any line is still
+unanswered, and names the ones outstanding by catalogue number. The panel says so while you are still
+reading the list, so you meet it before the button rather than by pressing it.
 
 ## The list
 

@@ -143,6 +143,20 @@ export const SHARE_STYLESHEET = `
   padding: 0 0.3rem;
   white-space: nowrap;
 }
+/* **What changed since the handshake** (#642) — a line that will not happen. Drawn on the row and
+   nowhere else, and only where there is something to say; the figures beside it are the agreed ones
+   and are untouched. It keeps its border in print (see the print block below) because the colour is
+   the only thing carrying it on screen, and a printed list must not lose the one mark that says a
+   piece is not coming. */
+.ts-struck {
+  border: 1px solid var(--color-warning-border, var(--color-border));
+  background: var(--color-warning-soft, transparent);
+  color: var(--color-warning);
+  border-radius: 0.25rem;
+  padding: 0 0.3rem;
+  white-space: nowrap;
+  font-weight: 600;
+}
 .ts-right { text-align: right; white-space: nowrap; flex: 0 0 auto; }
 .ts-qty { font-weight: 600; }
 .ts-value { font-size: 0.8125rem; }
@@ -225,6 +239,8 @@ export const SHARE_STYLESHEET = `
   .ts-parties, .ts-note, .ts-side-count, .ts-line2, .ts-group-detail, .ts-group-count,
   .ts-value-note { color: #333; }
   .ts-status, .ts-tag { border-color: #999; background: none; color: #000; }
+  /* Kept, and kept bold: on paper it is the one mark that says a piece is not coming. */
+  .ts-struck { border-color: #000; background: none; color: #000; }
   .ts-section { break-inside: auto; }
   a { color: inherit; text-decoration: none; }
 }

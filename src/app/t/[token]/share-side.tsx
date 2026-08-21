@@ -150,6 +150,11 @@ function ShareLineRow({
           )}
         </div>
         <div className="ts-line2">
+          {/* **What has changed since we agreed** (#642). First on the line, ahead of the condition,
+              because it is the one thing about this row that is no longer what the printout in the
+              partner's hand says. Neutral wording: the two sides are headed by name above, so
+              *Withdrawn* needs no *by whom*. */}
+          {line.realisation && <span className="ts-struck">{line.realisation}</span>}
           <span className="ts-tag">{line.condition}</span>
           {line.certificate && <span className="ts-tag">{line.certificate}</span>}
           {line.format && <span className="ts-tag">{line.format}</span>}

@@ -21,7 +21,9 @@
 // than by pressing the button.
 
 import type { TradeFeedbackItem } from "./trade-feedback";
+import type { TradeLineRealisation } from "./trade-realisation";
 import type { DepartedCopy, ListedCopy } from "./trade-reservation-rules";
+import { hasTradeVerdict } from "./trade-realisation-rules";
 
 /** Everything there is to say about one line, from the row's point of view. A give line asks with
  *  both keys, a receive line with its line id alone — the partner's material is in nobody's
@@ -38,9 +40,19 @@ export interface TradeLineSignals {
   /** The copy has left the collection out from under the promise — sold elsewhere, or no longer
    *  held. Give side only, and a warning rather than a block: it is already gone. */
   departed: DepartedCopy | null;
+  /** **What became of this line** (#642), or null while nobody has said. Both sides carry it: a
+   *  verdict is about the line rather than about a copy, which is what lets the receive side have one
+   *  at all. Drawn on the row for the same reason as everything else here — the row is where the
+   *  collector is already looking, and it is the only place where *this one* needs no explaining. */
+  realisation: TradeLineRealisation | null;
 }
 
-const NO_SIGNALS: TradeLineSignals = { feedback: null, listed: [], departed: null };
+const NO_SIGNALS: TradeLineSignals = {
+  feedback: null,
+  listed: [],
+  departed: null,
+  realisation: null,
+};
 
 /** The three reads, indexed by the thing each is about. Built once for the screen and asked per
  *  row, because both reads describe the whole trade and a row must not go looking through them. */
@@ -48,6 +60,9 @@ export interface TradeLineSignalIndex {
   feedbackByLine: Map<string, TradeFeedbackItem>;
   listedByItem: Map<string, ListedCopy[]>;
   departedByItem: Map<string, DepartedCopy>;
+  /** Only the lines somebody has answered for. A `pending` line is the ordinary state of a freshly
+   *  agreed trade, and a mark on every row of one would be a mark that says nothing. */
+  realisationByLine: Map<string, TradeLineRealisation>;
 }
 
 export interface TradeSignalSources {
@@ -55,6 +70,9 @@ export interface TradeSignalSources {
    *  indexed here: they belong to the strip above, which is the only thing left up there. */
   feedback?: { items: readonly TradeFeedbackItem[] } | undefined;
   reservation?: { listed: readonly ListedCopy[]; departed: readonly DepartedCopy[] } | undefined;
+  /** The realisation read (#642). `recordable` is not indexed here — it is a fact about the *trade*,
+   *  not about a line, and what it governs is whether the row's menu offers the verdict at all. */
+  realisation?: { lines: readonly TradeLineRealisation[] } | undefined;
 }
 
 export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSignalIndex {
@@ -77,7 +95,12 @@ export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSig
     departedByItem.set(copy.itemId, copy);
   }
 
-  return { feedbackByLine, listedByItem, departedByItem };
+  const realisationByLine = new Map<string, TradeLineRealisation>();
+  for (const line of sources.realisation?.lines ?? []) {
+    if (hasTradeVerdict(line.fulfillment)) realisationByLine.set(line.lineId, line);
+  }
+
+  return { feedbackByLine, listedByItem, departedByItem, realisationByLine };
 }
 
 /** What is true of one row. `itemId` is the give side's copy and null on the receive side. */
@@ -89,17 +112,28 @@ export function tradeLineSignals(
   const feedback = index.feedbackByLine.get(lineId) ?? null;
   const listed = (itemId ? index.listedByItem.get(itemId) : undefined) ?? [];
   const departed = (itemId ? index.departedByItem.get(itemId) : undefined) ?? null;
-  if (!feedback && listed.length === 0 && !departed) return NO_SIGNALS;
-  return { feedback, listed, departed };
+  const realisation = index.realisationByLine.get(lineId) ?? null;
+  if (!feedback && listed.length === 0 && !departed && !realisation) return NO_SIGNALS;
+  return { feedback, listed, departed, realisation };
 }
 
 export function hasTradeLineSignals(signals: TradeLineSignals): boolean {
-  return !!signals.feedback || signals.listed.length > 0 || !!signals.departed;
+  return (
+    !!signals.feedback ||
+    signals.listed.length > 0 ||
+    !!signals.departed ||
+    !!signals.realisation
+  );
 }
 
 /** What is still outstanding on this trade, by kind. Kinds and not one number, because the three
  *  are resolved in three different places — a listing is withdrawn, a remark is answered, a
- *  departure is written off (#642) — and "5 things to look at" says which of them none. */
+ *  departure is written off (#642) — and "5 things to look at" says which of them none.
+ *
+ *  A line with **no verdict yet** is deliberately not a fourth kind. Every line of a freshly agreed
+ *  trade is pending, so counting them here would put *40 things to look at* over every agreement the
+ *  minute it was struck. What that is really outstanding *for* is closing, so it is stated as the
+ *  closing gate, on the balance panel, beside the other gates. */
 export interface TradeAttentionCounts {
   /** Partner remarks nobody has dealt with yet. **This is the badge** (ADR-0039 §6). */
   remarks: number;

@@ -3338,6 +3338,28 @@ model TradeLine {
 
   notes     String?
 
+  /** **What actually happened to this line** (#642; ADR-0039 §11) — `pending | fulfilled | missing |
+   *  withdrawn`, the vocabulary in `trade-realisation-rules.ts` and never in this column's spelling.
+   *
+   *  A **second layer**, never an edit to the first. The agreement freezes at `agreed` and the partner
+   *  is holding a copy of it, so what was shaken hands on stays exactly as it is: the quantity, the
+   *  key, `manualValue` and the frozen `TradeLineValuation` rows are all untouched by a verdict. What
+   *  moves is the *realised* balance, which is the agreement minus what was struck off, and the
+   *  difference between the two is what the collector decides on — go back to the partner, or let it
+   *  go.
+   *
+   *  **One flag with two words on top**, `TradeFeedback.rejected`'s shape: `withdrawn` reads *I
+   *  withdrew it* of the collector's material and *Partner withdrew it* of the partner's, and one
+   *  label would be wrong on one side of every list.
+   *
+   *  Recorded only while the trade is `agreed`: before it nothing has happened yet, and `closed` is
+   *  history. `closed` in turn requires a verdict on every line — a trade closed with lines nobody
+   *  ever answered for is a record that says nothing about the parcel. */
+  fulfillment     String  @default("pending")
+  /** Why, in the collector's own words — found damaged, could not be located, the parcel arrived two
+   *  short. Free text, because the reason is a memory of one parcel and no list of causes would fit. */
+  fulfillmentNote String?
+
   /** The collector's **own** figure for this line, in the collection's **base** currency (#638).
    *
    *  The escape hatch, and deliberately a narrow one: the default reflex must stay "type the price
@@ -3378,6 +3400,9 @@ model TradeLine {
   // the give side only and leaves the receive side alone — which is right: two receive lines for the
   // same stamp in the same condition are a perfectly ordinary way to write "two of these", and the
   // quantity column is the other way. Collisions *across* trades are #639's job, not a constraint.
+  // The realisation read asks "what on this trade has a verdict", and on nearly every trade the
+  // answer is none — so its index is **partial**, on the rows that say something, and is declared in
+  // the migration because Prisma's schema language cannot express a `WHERE`.
   @@unique([tradeId, itemId])
   @@index([tradeId])
   @@index([sectionId])

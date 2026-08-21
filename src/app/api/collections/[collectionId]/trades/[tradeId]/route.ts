@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTrade } from "@/lib/trades";
 import { readTradeReservation } from "@/lib/trade-reservations";
 import { readTradeFeedback } from "@/lib/trade-feedback";
+import { readTradeRealisation } from "@/lib/trade-realisation";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -21,7 +22,11 @@ import { readTradeFeedback } from "@/lib/trade-feedback";
  * And it carries the **partner's feedback** (#641), for the third time the same reason: it is one
  * small read over the trade's own rows, and *Partner has responded* is derived from it rather than
  * being a status somebody keeps up to date — a badge that arrived on a second fetch would be a badge
- * the screen renders once without. */
+ * the screen renders once without.
+ *
+ * And the **realisation** (#642), for the same reason a fourth time: one light read over the trade's
+ * own lines, and it is what the row draws its verdict from and what says why **Close** would be
+ * refused — met while the list is being read rather than by pressing the button. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string; tradeId: string }> }
@@ -38,11 +43,12 @@ export async function GET(
     if (!trade || trade.collectionId !== collectionId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const [reservation, feedback] = await Promise.all([
+    const [reservation, feedback, realisation] = await Promise.all([
       readTradeReservation(tradeId),
       readTradeFeedback(session.user.id, tradeId),
+      readTradeRealisation(tradeId),
     ]);
-    return NextResponse.json({ trade, reservation, feedback });
+    return NextResponse.json({ trade, reservation, feedback, realisation });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

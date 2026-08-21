@@ -250,6 +250,61 @@ control saves its own line the moment it is given, through a `POST` route of the
 the photo route, rate-limited like everything else reachable without a session. The list around them
 is still one server render, and on paper the boxes disappear while what was typed into them stays.
 
+### 11. Realisation is a second layer on the line, never an edit to the first
+
+A trade list is a **plan, not a fact** (#642). Pieces are withdrawn while packing, pieces never
+arrive, and the collector has to record that — but §5's lock exists precisely because the partner is
+holding a copy of the agreed list, so what actually happened cannot be written by editing what was
+agreed. Two layers on one line, then: `TradeLine.fulfillment` (`pending | fulfilled | missing |
+withdrawn`) with a note beside it, and the quantity, the key, `manualValue` and both frozen
+`TradeLineValuation` rows untouched by it.
+
+**The window is the mirror image of the lock.** Every other write on a line is refused at `agreed`; a
+verdict is refused *everywhere but* `agreed`. Before the agreement nothing has happened — a list being
+composed describes a parcel nobody has packed — and after `closed` it is history. That inversion is
+the decision, not an accident of where the check landed: the lock and the verdict are two different
+acts with two different windows, which is exactly what makes recording a divergence not an edit.
+
+**One flag with two words on top**, §10's shape. `withdrawn` reads *I withdrew it* of the collector's
+material and *Partner withdrew it* of the partner's; `missing` reads *never arrived* from either end,
+because inventing a second phrasing there would suggest a distinction that is not there. Both are
+offered on **both** sides: a parcel that arrives two short is as ordinary going out as coming in.
+
+**Two balances, and the difference is the point.** From `agreed` the screen shows what was struck and
+what actually moved, computed from the same lines and the same figures — the realised one is simply
+the agreed one *minus what was struck off*, which is why nothing above it changes and why the two can
+be read against each other at all. `pending` counts as realised, deliberately: at the moment a trade
+is agreed every line is pending, and a realised total that counted only the `fulfilled` ones would
+start at zero and report the whole trade as its own difference. The difference is reported per side
+and per measure, each in its own unit, and never as one number — pieces, the base currency and the
+trade's do not add, which is §7's rule holding here too.
+
+**A withdrawal is what releases a copy** (§ #639). Only a withdrawal: a fulfilled line's copy went in
+the envelope and a missing one's went too, so neither is back on the shelf. That closes the loop #639
+left open — the departure warning it raises on a copy that has sold out from under a promise says the
+resolution is a withdrawal, and now it literally is, because a withdrawn line drops out of the read
+the warning is computed from.
+
+**Two different moves.** Recording a fact leaves the trade `agreed` and lives on the row. Deciding to
+renegotiate is an explicit `agreed → shared`, which unlocks the list and shows the partner the change
+— the verdicts are marked on the shared page too, neutrally worded, since the collector's own
+per-side words would be a lie read from the other end of the table. The lifecycle already allowed
+that step; what this adds is that it is **named** for what it does rather than for the column it
+writes, because *Mark shared* makes undoing a handshake read like a filing action.
+
+**`closed` requires a verdict on every line**, refused by name through the same labeller §7's gate
+names its lines with. A trade closed with lines nobody ever answered for is a record that says
+nothing about the parcel — and #644 reads exactly these verdicts to decide what actually left and
+what actually arrived.
+
+**Two things #642 asked for are deliberately not here.** A **substituted variant** needs no field:
+the receive line says what was promised, the copy created from the scan tile says what came, and the
+difference is derived rather than stored as a second version of the truth. A **bonus** needs nothing
+either: a tile bound to no line becomes a copy in the same lot, and the pool splits pro-rata by
+catalogue value, so extra material simply lowers the unit cost of everything else — and the opposite
+case, a line that never arrived, raises it. Both rest on a tile → line → copy binding a trade does not
+have until #644 gives it a purchase, so both ship there.
+
 ## Consequences
 
 - A new module: `trade`, `trade_section`, `trade_line`, plus `collection.nextTradeNo`.
@@ -281,6 +336,11 @@ is still one server render, and on paper the boxes disappear while what was type
   first client code — the per-line control and the note box, and nothing else. It also lifted the
   line labeller out of the balancing engine into `trade-line-label.ts`, so a line named in a
   valuation refusal and the same line named in a piece of feedback are recognisably the same line.
+- #642 shipped two columns — `trade_line.fulfillment` and `trade_line.fulfillmentNote` — and no
+  table, because a verdict is one fact about one line and a row of its own would be a second place
+  for the same answer to live. It also lifted the per-line access guard into `trade-access.ts` beside
+  the other three, for #638's reason: `trades.ts` asks the realisation half whether a trade may close,
+  so the realisation half reaching back into `trade-lines.ts` for that guard would be a cycle.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

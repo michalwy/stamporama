@@ -5,7 +5,8 @@ import type {
   TradeBalanceRead,
   TradeSectionBalance,
 } from "@/lib/trade-valuation";
-import type { TradeBalanceVerdict } from "@/lib/trade-balance";
+import type { TradeBalanceVerdict, TradeRealisedBalance, TradeSideShortfall } from "@/lib/trade-balance";
+import type { TradeRealisationRead } from "@/lib/trade-realisation";
 import { TRADE_SIDE_LABEL } from "@/lib/trade-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { refreshTradeRatesAction } from "@/app/actions/trades";
@@ -31,6 +32,17 @@ import { Icon } from "@/app/icons";
 // collectors and the app has no business forbidding it. What *does* block is a line with no figure
 // at all, and those are named here rather than being met as a refusal when Share is pressed — a
 // blocker a collector discovers by pressing the button is a blocker discovered at the worst moment.
+//
+// **From `agreed` on there are two balances rather than one** (#642; ADR-0039 §11): what was struck,
+// and what actually moved. They are the same measures over the same lines — the second one simply
+// without the lines that were struck off — so they are drawn in one grid, one block under the other,
+// with each measure stating its own difference in its own unit. Never one number for the difference:
+// pieces, the base currency and the trade's currency do not add, which is the failure this whole
+// panel is arranged to prevent.
+//
+// The second block is drawn **only once something has actually been struck off.** Two identical
+// columns of figures under two different headings is not a comparison, and on a trade where
+// everything is still going to happen the honest thing to print is the sentence saying so.
 
 const LABEL: React.CSSProperties = {
   fontSize: "0.6875rem",
@@ -189,6 +201,54 @@ function ownVerdict(v: TradeBalanceVerdict): React.ReactNode {
   );
 }
 
+/** A block heading inside the measures grid — *As agreed*, *Actually exchanged*. Spans the whole
+ *  row, because it introduces the three measures under it rather than labelling one of them. */
+function BlockHead({ label, note }: { label: string; note?: string | null }) {
+  return (
+    <span
+      style={{
+        gridColumn: "1 / -1",
+        display: "flex",
+        alignItems: "baseline",
+        gap: "0.5rem",
+        flexWrap: "wrap",
+        marginTop: "0.25rem",
+        paddingTop: "0.5rem",
+        borderTop: "1px solid var(--color-border)",
+      }}
+    >
+      <span style={LABEL}>{label}</span>
+      {note && <span style={NOTE}>{note}</span>}
+    </span>
+  );
+}
+
+/**
+ * How far one measure fell short of the agreement, both sides in one phrase.
+ *
+ * Silent when nothing is missing on that side, so a line that lost two pieces on the receive side
+ * says exactly that rather than *0 fewer leaving · 2 fewer arriving*. Null when neither side moved,
+ * which is what keeps the fulfilled rows quiet.
+ */
+function shortfallNote(
+  give: TradeSideShortfall,
+  receive: TradeSideShortfall,
+  read: (side: TradeSideShortfall) => number,
+  format: (value: number) => string
+): string | null {
+  const parts: string[] = [];
+  const giveShort = read(give);
+  const receiveShort = read(receive);
+  if (giveShort !== 0) parts.push(`${format(Math.abs(giveShort))} less leaving`);
+  if (receiveShort !== 0) parts.push(`${format(Math.abs(receiveShort))} less arriving`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** The realised block's own verdict column: what actually moved, judged against the same rule. */
+function realisedVerdict(realised: TradeRealisedBalance, measure: "count" | "agreed"): React.ReactNode {
+  return measure === "count" ? countVerdict(realised.verdict) : agreedVerdict(realised.verdict);
+}
+
 /**
  * The whole trade's figures, for the terms card.
  *
@@ -198,11 +258,16 @@ function ownVerdict(v: TradeBalanceVerdict): React.ReactNode {
 export function TradeBalanceSummary({
   tradeId,
   balance,
+  realisation,
   isLoading,
   onRun,
 }: {
   tradeId: string;
   balance: TradeBalanceRead | undefined;
+  /** What has been recorded about the parcels (#642), and why the trade cannot be closed yet. From
+   *  the header's read rather than this one: it is a fact about lines, not about figures, and the
+   *  closing gate has to be met while the list is being read rather than by pressing the button. */
+  realisation: TradeRealisationRead | undefined;
   isLoading: boolean;
   onRun: (action: () => Promise<{ status: "success" } | { status: "error"; message: string }>) => void;
 }) {
@@ -218,6 +283,11 @@ export function TradeBalanceSummary({
 
   const v = balance.trade;
   const agreedName = balance.agreedCatalogVendorName;
+  const realised = balance.realised;
+  // Only where something has actually been struck off. Two identical columns of figures under two
+  // different headings is not a comparison; where nothing has diverged the honest thing to print is
+  // the sentence saying so, which is what the note under the heading does.
+  const diverged = !!realised && realised.counts.withdrawn + realised.counts.missing > 0;
 
   return (
     <div style={{ marginTop: "1.25rem" }}>
@@ -231,6 +301,13 @@ export function TradeBalanceSummary({
         }}
       >
         <span style={LABEL}>Balance</span>
+        {realisation?.struckOff && (
+          <Tooltip content="Lines that will not happen. What was agreed is unchanged — this is what has been recorded against it.">
+            <span style={{ ...CHIP, color: "var(--color-warning)" }}>
+              <Icon name="parcel" size="sm" /> {realisation.struckOff}
+            </span>
+          </Tooltip>
+        )}
         {balance.frozen && (
           <Tooltip content="Both sides have committed, so these figures are the ones they agreed under. A new catalogue edition loaded now will not change them.">
             <span style={CHIP}>
@@ -256,6 +333,16 @@ export function TradeBalanceSummary({
         <span style={{ ...LABEL, textAlign: "right" }}>{TRADE_SIDE_LABEL.give}</span>
         <span style={{ ...LABEL, textAlign: "right" }}>{TRADE_SIDE_LABEL.receive}</span>
         <span />
+
+        {/* Named only once there is a second block to tell it apart from. On a trade still being
+            composed these figures are simply *the* balance, and heading them *as agreed* would
+            promise a comparison that is not there. */}
+        {realised && (
+          <BlockHead
+            label="As agreed"
+            note="What both sides committed to. Nothing recorded about the parcels changes it."
+          />
+        )}
 
         <MeasureRow
           label="Pieces"
@@ -302,6 +389,67 @@ export function TradeBalanceSummary({
             </span>
           </>
         ) : null}
+
+        {/* **What actually moved** (#642), in the same grid and the same measures, so the two can be
+            read straight down against each other. Each row carries its own difference in its own
+            unit — never one number, since pieces and two currencies do not add. */}
+        {realised && diverged && (
+          <>
+            <BlockHead
+              label="Actually exchanged"
+              note="The same figures without the lines that will not happen."
+            />
+            <MeasureRow
+              label="Pieces"
+              hint="Stamps that actually moved, or are still going to. A line withdrawn or never arrived is simply not in this count."
+              give={String(realised.verdict.give.pieces)}
+              receive={String(realised.verdict.receive.pieces)}
+              note={shortfallNote(
+                realised.give,
+                realised.receive,
+                (side) => side.pieces,
+                (n) => `${n} piece${n === 1 ? "" : "s"}`
+              )}
+              verdict={realisedVerdict(realised, "count")}
+            />
+            <MeasureRow
+              label="My valuation"
+              hint={`What actually moved, at my own valuation, in ${balance.baseCurrency}. The guard reads the same way it does above — it warns and never blocks.`}
+              give={money(realised.verdict.give.own, balance.baseCurrency)}
+              receive={money(realised.verdict.receive.own, balance.baseCurrency)}
+              note={shortfallNote(
+                realised.give,
+                realised.receive,
+                (side) => side.own,
+                (n) => money(n, balance.baseCurrency)
+              )}
+              verdict={ownVerdict(realised.verdict)}
+            />
+            {agreedName && (
+              <MeasureRow
+                label={`Agreed catalog · ${agreedName}`}
+                hint={`What actually moved, in the catalogue you both agreed on, in ${balance.tradeCurrency}. The difference between this and the row above it is what you decide on: take it up with your partner, or let it go.`}
+                give={money(realised.verdict.give.agreed, balance.tradeCurrency)}
+                receive={money(realised.verdict.receive.agreed, balance.tradeCurrency)}
+                note={shortfallNote(
+                  realised.give,
+                  realised.receive,
+                  (side) => side.agreed,
+                  (n) => money(n, balance.tradeCurrency)
+                )}
+                verdict={realisedVerdict(realised, "agreed")}
+              />
+            )}
+          </>
+        )}
+
+        {realised && !diverged && (
+          <span style={{ gridColumn: "1 / -1", ...NOTE }}>
+            {realised.counts.pending > 0
+              ? `Nothing has been struck off, so what is happening is what was agreed. ${realised.counts.pending} line${realised.counts.pending === 1 ? " has" : "s have"} no verdict yet.`
+              : "Every line went as agreed, so the two balances are the same figures."}
+          </span>
+        )}
       </div>
 
       {/* Where the money came from. A converted figure with no rate and no date behind it is one
@@ -313,6 +461,33 @@ export function TradeBalanceSummary({
         isRefreshing={isRefreshing}
         onRefresh={() => startRefresh(() => onRun(() => refreshTradeRatesAction(tradeId)))}
       />
+
+      {/* **The closing gate** (#642), met here for the reason every other gate is: a refusal a
+          collector discovers by pressing the button is a refusal discovered at the worst moment.
+          Separate from the valuation blockers below because it bites at a different transition and
+          is answered in a different place — on the rows, one verdict at a time. */}
+      {realisation?.blocker && (
+        <div
+          style={{
+            marginTop: "0.75rem",
+            padding: "0.625rem 0.75rem",
+            borderRadius: "0.5rem",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-page)",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.8125rem",
+              lineHeight: 1.5,
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <Icon name="parcel" size="sm" /> {realisation.blocker}
+          </p>
+        </div>
+      )}
 
       {/* The gates, met here rather than as a refusal when Share is pressed. */}
       {balance.blockers.length > 0 && (
@@ -419,6 +594,8 @@ export function TradeSectionBalanceStrip({
 }) {
   if (!section) return null;
   const v = section.verdict;
+  const realised = section.realised;
+  const struck = realised ? realised.counts.withdrawn + realised.counts.missing : 0;
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -436,6 +613,22 @@ export function TradeSectionBalanceStrip({
         </Tooltip>
       )}
       {v.byValue ? agreedVerdict(v) : countVerdict(v)}
+      {/* **What actually moved in this section** (#642), and only where it differs from what was
+          agreed. A section is the unit a collector reasons in — mint against mint — so a shortfall
+          belongs on it as much as the verdict does; but a second pair of identical figures on every
+          section would be the noise the skew below is kept silent to avoid. */}
+      {struck > 0 && realised && (
+        <Tooltip
+          content={`What is actually happening in this section, with ${struck} line${struck === 1 ? "" : "s"} struck off. What was agreed is unchanged — it is the row above.`}
+        >
+          <span style={{ ...CHIP, color: "var(--color-warning)" }}>
+            <Icon name="parcel" size="sm" />{" "}
+            {v.byValue
+              ? `${money(realised.verdict.give.agreed, tradeCurrency)} / ${money(realised.verdict.receive.agreed, tradeCurrency)}`
+              : `${realised.verdict.give.pieces} / ${realised.verdict.receive.pieces}`}
+          </span>
+        </Tooltip>
+      )}
       {/* Silent unless it is actually warning: the skew is a guard, and a guard that speaks on every
           section is one nobody reads. */}
       {v.ownWarn && (

@@ -2,7 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   describeLines,
+  hasShortfall,
   judgeTradeBalance,
+  judgeTradeRealisation,
+  realisedValues,
   skewPct,
   summariseTradeSide,
   tradeGateBlockers,
@@ -37,6 +40,7 @@ function line(over: Partial<TradeLineValue> = {}): TradeLineValue {
     agreed: 12,
     agreedUncertain: false,
     agreedManual: false,
+    fulfillment: "pending",
     ...over,
   };
 }
@@ -195,5 +199,93 @@ describe("describeLines", () => {
   it("names a few and counts the rest", () => {
     const many = Array.from({ length: 8 }, (_, i) => line({ lineId: `l${i}`, label: `#${i}` }));
     assert.equal(describeLines(many), "#0, #1, #2, #3, #4, and 3 more");
+  });
+});
+
+// ── Agreed against realised (#642; ADR-0039 §11) ────────────────────────────────────────────────
+
+describe("realisedValues", () => {
+  it("keeps a pending line, so a fresh agreement is not its own difference", () => {
+    // Every line of a trade the moment it is agreed is pending. A realised total that counted only
+    // the fulfilled ones would start at zero and report the whole trade as struck off.
+    const values = [line({ lineId: "a" }), line({ lineId: "b", fulfillment: "fulfilled" })];
+    assert.deepEqual(realisedValues(values).map((l) => l.lineId), ["a", "b"]);
+  });
+
+  it("drops what will not happen, whichever end pulled it", () => {
+    const values = [
+      line({ lineId: "a" }),
+      line({ lineId: "b", fulfillment: "withdrawn" }),
+      line({ lineId: "c", fulfillment: "missing" }),
+    ];
+    assert.deepEqual(realisedValues(values).map((l) => l.lineId), ["a"]);
+  });
+});
+
+describe("judgeTradeRealisation", () => {
+  const give = (over: Partial<TradeLineValue>) => line({ side: "give", ...over });
+  const receive = (over: Partial<TradeLineValue>) => line({ side: "receive", ...over });
+
+  it("is the agreement itself while nothing has been struck off", () => {
+    const values = [give({ lineId: "g1" }), receive({ lineId: "r1" })];
+    const agreed = judgeTradeBalance(
+      RULE,
+      summariseTradeSide(values.filter((v) => v.side === "give")),
+      summariseTradeSide(values.filter((v) => v.side === "receive"))
+    );
+    const realised = judgeTradeRealisation(RULE, values, agreed);
+    assert.deepEqual(realised.verdict.give, agreed.give);
+    assert.deepEqual(realised.verdict.receive, agreed.receive);
+    assert.equal(hasShortfall(realised.give), false);
+    assert.equal(hasShortfall(realised.receive), false);
+  });
+
+  it("drops a withdrawn line out of the side it was on, and nothing else", () => {
+    const values = [
+      give({ lineId: "g1", own: 10, agreed: 12 }),
+      give({ lineId: "g2", own: 40, agreed: 48, fulfillment: "withdrawn" }),
+      receive({ lineId: "r1", own: 30, agreed: 36 }),
+    ];
+    const agreed = judgeTradeBalance(
+      RULE,
+      summariseTradeSide(values.filter((v) => v.side === "give")),
+      summariseTradeSide(values.filter((v) => v.side === "receive"))
+    );
+    const realised = judgeTradeRealisation(RULE, values, agreed);
+
+    assert.equal(agreed.give.own, 50);
+    assert.equal(realised.verdict.give.own, 10);
+    // The shortfall is stated per measure in its own unit — pieces, base currency, trade currency —
+    // and never as one number, because the three do not add.
+    assert.deepEqual(realised.give, { lines: 1, pieces: 1, own: 40, agreed: 48 });
+    assert.deepEqual(realised.receive, { lines: 0, pieces: 0, own: 0, agreed: 0 });
+    assert.deepEqual(realised.counts, { pending: 2, fulfilled: 0, withdrawn: 1, missing: 0 });
+  });
+
+  it("counts pieces, not lines, on a receive line that is thirty stamps", () => {
+    const values = [receive({ lineId: "r1", quantity: 30, fulfillment: "missing" })];
+    const agreed = judgeTradeBalance(RULE, summariseTradeSide([]), summariseTradeSide(values));
+    const realised = judgeTradeRealisation(RULE, values, agreed);
+    assert.equal(realised.receive.pieces, 30);
+    assert.equal(realised.receive.lines, 1);
+  });
+
+  it("judges what actually moved against the same rule the plan was judged against", () => {
+    // Two out, two in, balanced on count — and then one of mine never arrives at the far end.
+    const values = [
+      give({ lineId: "g1" }),
+      give({ lineId: "g2", fulfillment: "missing" }),
+      receive({ lineId: "r1" }),
+      receive({ lineId: "r2" }),
+    ];
+    const agreed = judgeTradeBalance(
+      RULE,
+      summariseTradeSide(values.filter((v) => v.side === "give")),
+      summariseTradeSide(values.filter((v) => v.side === "receive"))
+    );
+    assert.equal(agreed.countBalanced, true);
+    const realised = judgeTradeRealisation(RULE, values, agreed);
+    assert.equal(realised.verdict.countBalanced, false);
+    assert.equal(realised.verdict.countDiff, -1);
   });
 });

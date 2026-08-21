@@ -12,6 +12,7 @@ import {
 } from "../../src/lib/trade-line-signals";
 import type { TradeFeedbackItem } from "../../src/lib/trade-feedback";
 import type { DepartedCopy, ListedCopy } from "../../src/lib/trade-reservation-rules";
+import type { TradeLineRealisation } from "../../src/lib/trade-realisation";
 
 // Every signal about a line, resolved to the line (#662). What matters here: a row asks once and
 // gets one answer, a handled remark stays on its line rather than disappearing, the strip above
@@ -139,5 +140,52 @@ describe("firstTradeAttention", () => {
       itemId: "i9",
     });
     assert.equal(firstTradeAttention({}), null);
+  });
+});
+
+// ── The verdict, indexed like every other signal (#642) ─────────────────────────────────────────
+
+function verdict(
+  lineId: string,
+  fulfillment: TradeLineRealisation["fulfillment"],
+  note: string | null = null
+): TradeLineRealisation {
+  return { lineId, side: "give", fulfillment, note };
+}
+
+describe("the realisation index (#642)", () => {
+  it("carries a verdict to the row it is about, on either side", () => {
+    const index = indexTradeLineSignals({
+      realisation: { lines: [verdict("l1", "withdrawn", "gum toned")] },
+    });
+    const signals = tradeLineSignals(index, "l1", null);
+    assert.equal(signals.realisation?.fulfillment, "withdrawn");
+    assert.equal(signals.realisation?.note, "gum toned");
+    assert.equal(hasTradeLineSignals(signals), true);
+  });
+
+  it("says nothing about a line nobody has answered for", () => {
+    // Every line of a freshly agreed trade is pending, and a mark on all of them would be a mark
+    // that says nothing.
+    const index = indexTradeLineSignals({ realisation: { lines: [verdict("l1", "pending")] } });
+    const signals = tradeLineSignals(index, "l1", null);
+    assert.equal(signals.realisation, null);
+    assert.equal(hasTradeLineSignals(signals), false);
+  });
+
+  it("keeps a fulfilled line's mark — it is progress toward closing", () => {
+    const index = indexTradeLineSignals({ realisation: { lines: [verdict("l1", "fulfilled")] } });
+    assert.equal(tradeLineSignals(index, "l1", null).realisation?.fulfillment, "fulfilled");
+  });
+
+  it("is not a fourth kind of attention", () => {
+    // What an unanswered line is outstanding *for* is closing, and that is stated as the closing
+    // gate on the balance panel rather than counted in the strip above the columns.
+    const sources: TradeSignalSources = {
+      realisation: { lines: [verdict("l1", "pending"), verdict("l2", "withdrawn")] },
+    };
+    assert.equal(countTradeAttention(sources).total, 0);
+    assert.equal(describeTradeAttention(countTradeAttention(sources)), null);
+    assert.equal(firstTradeAttention(sources), null);
   });
 });

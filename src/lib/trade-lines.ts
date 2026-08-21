@@ -2,6 +2,9 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { assertSectionOwner, assertTradeOwner, assertContentEditable } from "./trades";
+// The per-line guard lives a level down (`trade-access.ts`) since #642: the realisation half asks the
+// identical question and cannot ask this module for it without closing a loop through `trades.ts`.
+import { assertLineOwner } from "./trade-access";
 import {
   filterItemIds,
   listItemsPaginated,
@@ -30,6 +33,13 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
+// The pure half of #642: a line the collector has withdrawn promises nothing, so the copy behind it
+// is offerable again — the same judgement `trade-reservations.ts` releases the marketplace gate on.
+import {
+  COMMITTING_FULFILLMENTS,
+  isCommittingFulfillment,
+  readTradeFulfillment,
+} from "./trade-realisation-rules";
 
 
 // **What is on a trade, line by line** (#637; ADR-0039 §1/§2). The database half of the trade
@@ -684,6 +694,13 @@ async function enrichReceivePage(
  *  trade releases them: the exchange is off, or it happened and the copy has left by other means. */
 const LIVE_TRADE_STATUSES: readonly TradeStatus[] = ["preparing", "shared", "agreed"];
 
+/** …and a **line** still holds one only while it is still going to happen (#642). A copy withdrawn
+ *  from an agreed trade is back on the shelf and may be promised elsewhere, which is the same
+ *  release `trade-reservations.ts` gives the marketplace gate — the two must not disagree, or a
+ *  collector would be free to list a copy the picker still refuses to offer. Before `agreed` every
+ *  line is `pending` by construction, so this narrows nothing on a trade being negotiated. */
+const COMMITTING_LINE = { fulfillment: { in: [...COMMITTING_FULFILLMENTS] } };
+
 export interface OfferableCopyFilters {
   /** The selected area and its descendants, already resolved by the caller — the picker's sidebar. */
   areaIds?: string[] | null;
@@ -705,8 +722,10 @@ export interface OfferableCopyFilters {
  *
  * What is left out, and why:
  *
- *  - **Already on a live trade**, this one included. A copy cannot be promised to two partners, and
- *    `@@unique([tradeId, itemId])` only stops the same trade naming it twice. The reservation rules
+ *  - **Already on a live trade**, this one included — unless that trade's line has been **withdrawn**
+ *    (#642), in which case the copy is back on the shelf and is offerable again. A copy cannot be
+ *    promised to two partners, and `@@unique([tradeId, itemId])` only stops the same trade naming it
+ *    twice. The reservation rules
  *    proper are #639's — collisions with marketplace listings, and what happens when one is found —
  *    and this filter is deliberately the plain reading that will not fight them.
  *  - **Sold.** It has left on a sale line; promising it is promising something gone.
@@ -724,7 +743,7 @@ export async function listOfferableCopies(
   filters: OfferableCopyFilters = {}
 ): Promise<ItemListItem[]> {
   const { collectionId } = await assertTradeOwner(ownerId, tradeId);
-  const committed = await committedItemIds(collectionId);
+  const committed = await committedItemIds(collectionId, tradeId);
 
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     areaIds: filters.areaIds ?? undefined,
@@ -740,15 +759,31 @@ export async function listOfferableCopies(
   return items;
 }
 
-/** Every copy promised to a live trade in this collection. Read as a list of ids rather than as a
- *  relation filter because the picker's query already speaks `excludeIds`, and a trade holds tens
- *  of lines — not the tens of thousands that would make this the wrong shape. */
-async function committedItemIds(collectionId: string): Promise<string[]> {
+/**
+ * Every copy the picker must not offer. Read as a list of ids rather than as a relation filter
+ * because the picker's query already speaks `excludeIds`, and a trade holds tens of lines — not the
+ * tens of thousands that would make this the wrong shape.
+ *
+ * **Two clauses, because a withdrawal makes them two different questions** (#642):
+ *
+ *  - promised to a **live** trade on a line that is still going to happen — a withdrawn line
+ *    promises nothing, so its copy is free to go on another trade;
+ *  - already named by **this** trade at all, whatever became of it. That line still exists, and
+ *    `@@unique([tradeId, itemId])` says a copy is on a trade once — so offering it here would be
+ *    offering a tick that could not do anything.
+ */
+async function committedItemIds(collectionId: string, tradeId: string): Promise<string[]> {
   const rows = await prisma.tradeLine.findMany({
     where: {
       side: "give",
       itemId: { not: null },
-      trade: { collectionId, status: { in: [...LIVE_TRADE_STATUSES] } },
+      OR: [
+        {
+          ...COMMITTING_LINE,
+          trade: { collectionId, status: { in: [...LIVE_TRADE_STATUSES] } },
+        },
+        { tradeId },
+      ],
     },
     select: { itemId: true },
   });
@@ -815,8 +850,17 @@ export async function addTradeGiveLines(
       disposedAt: true,
       saleLineItems: { select: { itemId: true }, take: 1 },
       tradeLines: {
+        // **Not** narrowed by fulfillment here, unlike the picker's own read: a line withdrawn from
+        // *this* trade still exists, and re-adding the copy has to stay the no-op it has always been
+        // rather than a unique-constraint violation the collector reaches through a reopened list.
+        // Which of these lines still *holds* the copy is judged below, where the two questions can
+        // be told apart.
         where: { trade: { status: { in: [...LIVE_TRADE_STATUSES] } } },
-        select: { tradeId: true, trade: { select: { tradeNo: true, status: true } } },
+        select: {
+          tradeId: true,
+          fulfillment: true,
+          trade: { select: { tradeNo: true, status: true } },
+        },
       },
     },
   });
@@ -834,7 +878,11 @@ export async function addTradeGiveLines(
     // Already on *this* trade is a no-op rather than a refusal: re-confirming a selection should
     // not fail, exactly as re-attaching a copy to its own lot does not.
     if (item.tradeLines.some((l) => l.tradeId === tradeId)) continue;
-    const elsewhere = item.tradeLines[0];
+    // A copy another trade has **withdrawn** is back on the shelf and may be promised here (#642),
+    // so only a line that still holds it refuses.
+    const elsewhere = item.tradeLines.find((l) =>
+      isCommittingFulfillment(readTradeFulfillment(l.fulfillment))
+    );
     if (elsewhere) {
       refused.push({
         itemId: id,
@@ -1026,28 +1074,4 @@ export async function deleteTradeLine(ownerId: string, lineId: string): Promise<
   const { status } = await assertLineOwner(ownerId, lineId);
   assertContentEditable(status);
   await prisma.tradeLine.delete({ where: { id: lineId } });
-}
-
-/** Resolve a line's trade, asserting ownership — the per-line twin of `assertSectionOwner`. */
-async function assertLineOwner(
-  ownerId: string,
-  lineId: string
-): Promise<{ collectionId: string; status: TradeStatus; side: string }> {
-  const line = await prisma.tradeLine.findUnique({
-    where: { id: lineId },
-    select: {
-      side: true,
-      trade: {
-        select: { collectionId: true, status: true, collection: { select: { ownerId: true } } },
-      },
-    },
-  });
-  if (!line || line.trade.collection.ownerId !== ownerId) {
-    throw new Error("Trade line not found or access denied.");
-  }
-  return {
-    collectionId: line.trade.collectionId,
-    status: (line.trade.status as TradeStatus) ?? "preparing",
-    side: line.side,
-  };
 }

@@ -8,7 +8,7 @@ import type { TradeReceiveLineData } from "@/lib/trade-lines";
 import type { TradeLineValueRead, TradeSectionBalance } from "@/lib/trade-valuation";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
 import type { TradeLineSignalIndex } from "@/lib/trade-line-signals";
-import { describeBalanceRule, type TradeBalanceRule } from "@/lib/trade-rules";
+import { describeBalanceRule, type TradeBalanceRule, type TradeSide } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -23,6 +23,10 @@ import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-colum
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
 import { TradeLineValueDialog } from "./trade-line-value-dialog";
+import {
+  TradeFulfillmentDialog,
+  type TradeFulfillmentSubject,
+} from "./trade-fulfillment-dialog";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import type { QuickPriceTarget } from "./trade-quick-price";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
@@ -85,6 +89,7 @@ type SectionDialog =
   | { kind: "addReceive" }
   | { kind: "editReceive"; line: TradeReceiveLineData }
   | { kind: "lineValue"; line: TradeLineValueRead }
+  | { kind: "fulfillment"; subject: TradeFulfillmentSubject }
   | { kind: "quickPrice"; target: QuickPriceTarget };
 
 export function TradeSectionCard({
@@ -97,6 +102,7 @@ export function TradeSectionCard({
   balance,
   lineValues,
   editable,
+  canRecordRealisation,
   isPending,
   areas,
   locations,
@@ -133,6 +139,9 @@ export function TradeSectionCard({
    *  would change it is then simply absent — a disabled row of buttons says the same thing more
    *  slowly. Reading, searching and grouping stay live, which is what a locked list is for. */
   editable: boolean;
+  /** The trade is `agreed` (#642) — the one status a verdict may be written in, and the mirror image
+   *  of `editable`: the lock forbids changing what was agreed, this allows saying what became of it. */
+  canRecordRealisation: boolean;
   isPending: boolean;
   areas: CollectionAreaData[];
   locations: LocationData[];
@@ -158,6 +167,24 @@ export function TradeSectionCard({
 
   const giveSide = useTradeSide(collectionId, tradeId, section.id, "give", levels);
   const receiveSide = useTradeSide(collectionId, tradeId, section.id, "receive", levels);
+
+  /** Open the realisation dialog on one row. The line is named exactly as every refusal names it —
+   *  the balance read's own label, through `trade-line-label.ts` — so a line spoken about here and
+   *  the same line spoken about in a closing refusal are recognisably the same line. What is
+   *  currently recorded comes from the signal index, which is where the row's own mark comes from. */
+  function openFulfillment(lineId: string, side: TradeSide) {
+    const current = signals.realisationByLine.get(lineId) ?? null;
+    setDialog({
+      kind: "fulfillment",
+      subject: {
+        lineId,
+        side,
+        label: lineValues?.find((l) => l.lineId === lineId)?.label ?? "this line",
+        fulfillment: current?.fulfillment ?? "pending",
+        note: current?.note ?? null,
+      },
+    });
+  }
 
   // The band pins at the top of the viewport; the group headings pin at its foot. Measured rather
   // than assumed — the toolbars wrap on a narrow window, and a hard-coded offset is a heading that
@@ -297,6 +324,7 @@ export function TradeSectionCard({
             baseCurrency={baseCurrency}
             vendorMaps={vendorMaps}
             editable={editable}
+            canRecordRealisation={canRecordRealisation}
             stickyTop={bandHeight}
             onEditReceiveLine={() => undefined}
             onEditLineValue={(lineId) => {
@@ -304,6 +332,7 @@ export function TradeSectionCard({
               if (line) setDialog({ kind: "lineValue", line });
             }}
             onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
+            onRecordRealisation={openFulfillment}
             onRun={onRun}
           />
         </div>
@@ -319,6 +348,7 @@ export function TradeSectionCard({
             baseCurrency={baseCurrency}
             vendorMaps={vendorMaps}
             editable={editable}
+            canRecordRealisation={canRecordRealisation}
             stickyTop={bandHeight}
             onEditReceiveLine={(line) => setDialog({ kind: "editReceive", line })}
             onEditLineValue={(lineId) => {
@@ -326,6 +356,7 @@ export function TradeSectionCard({
               if (line) setDialog({ kind: "lineValue", line });
             }}
             onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
+            onRecordRealisation={openFulfillment}
             onRun={onRun}
           />
         </div>
@@ -401,6 +432,17 @@ export function TradeSectionCard({
           tradeCurrency={tradeCurrency}
           agreedVendorName={agreedVendorName}
           catalogVendors={catalogVendors}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+
+      {/* **What actually happened to this line** (#642). One dialog per card remembering which row
+          opened it, never one per row (#531) — the shape the value dialog beside it already uses. It
+          writes two columns and touches nothing that was agreed. */}
+      {dialog.kind === "fulfillment" && (
+        <TradeFulfillmentDialog
+          collectionId={collectionId}
+          subject={dialog.subject}
           onClose={() => setDialog({ kind: "none" })}
         />
       )}

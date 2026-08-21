@@ -1,4 +1,10 @@
 import { nameFew, type TradeBalanceRule, type TradeSide } from "./trade-rules";
+import {
+  countTradeRealisation,
+  isRealisedFulfillment,
+  type TradeFulfillment,
+  type TradeRealisationCounts,
+} from "./trade-realisation-rules";
 
 // **Does this trade balance, and what am I actually giving away?** (#638; ADR-0039 §7.)
 //
@@ -68,6 +74,9 @@ export interface TradeLineValue {
   agreed: number | null;
   agreedUncertain: boolean;
   agreedManual: boolean;
+  /** What became of this line (#642). It changes **no figure above it**: the agreement is what it is,
+   *  and a struck-off line simply drops out of the realised sums below. */
+  fulfillment: TradeFulfillment;
 }
 
 /** One side of one section — or of the whole trade, which is the same sum over more lines. */
@@ -224,6 +233,91 @@ export function skewPct(a: number, b: number): number {
   const larger = Math.max(Math.abs(a), Math.abs(b));
   if (larger === 0) return 0;
   return round2((Math.abs(a - b) / larger) * 100);
+}
+
+// ── Agreed against realised ──────────────────────────────────────────────────────────────────────
+//
+// **A trade list is a plan, not a fact** (#642; ADR-0039 §11), so after the agreement there are two
+// balances rather than one: what was struck, and what actually moved. They are computed from the same
+// lines and the same figures — the realised one is simply the agreed one **minus what was struck
+// off**, which is why nothing above changes and why the two can be read against each other at all.
+//
+// The difference is the point. It is what the collector decides on: go back to the partner about it,
+// or let it go. So it is reported per side and per measure, in each measure's own unit, and never as
+// one number — a "you are 40 out" that silently mixed pieces, the base currency and the trade's would
+// be the same failure the two valuations are kept apart to prevent.
+
+/** The lines that still count once the verdicts are in. `pending` counts — see
+ *  `isRealisedFulfillment` for why a realised total must not start at zero. */
+export function realisedValues(values: readonly TradeLineValue[]): TradeLineValue[] {
+  return values.filter((v) => isRealisedFulfillment(v.fulfillment));
+}
+
+export function countRealisation(values: readonly TradeLineValue[]): TradeRealisationCounts {
+  return countTradeRealisation(values.map((v) => v.fulfillment));
+}
+
+/**
+ * How far one side fell short of what was agreed — agreed **minus** realised, per measure.
+ *
+ * Never negative by construction (the realised lines are a subset), and stated as a positive shortfall
+ * rather than a signed delta because that is how it reads: *three fewer pieces than we agreed*.
+ */
+export interface TradeSideShortfall {
+  lines: number;
+  pieces: number;
+  /** Base currency, like the own totals it is taken from. */
+  own: number;
+  /** The trade's currency, like the agreed totals it is taken from. */
+  agreed: number;
+}
+
+export function sideShortfall(
+  agreed: TradeSideTotals,
+  realised: TradeSideTotals
+): TradeSideShortfall {
+  return {
+    lines: agreed.lines - realised.lines,
+    pieces: agreed.pieces - realised.pieces,
+    own: round2(agreed.own - realised.own),
+    agreed: round2(agreed.agreed - realised.agreed),
+  };
+}
+
+export function hasShortfall(shortfall: TradeSideShortfall): boolean {
+  return shortfall.lines !== 0 || shortfall.pieces !== 0;
+}
+
+/** What actually happened, judged against the same rule the agreement was. */
+export interface TradeRealisedBalance {
+  /** The realised lines, judged against the rule in force — so *does what actually moved still
+   *  balance* is answered by the same arithmetic that answered it of the plan. */
+  verdict: TradeBalanceVerdict;
+  give: TradeSideShortfall;
+  receive: TradeSideShortfall;
+  counts: TradeRealisationCounts;
+}
+
+/**
+ * The realised balance for one section, or for the whole trade.
+ *
+ * @param agreed The verdict already computed over **every** line — passed in rather than recomputed,
+ * so the two balances a screen prints side by side are read off one set of figures at one moment.
+ */
+export function judgeTradeRealisation(
+  rule: TradeBalanceRule,
+  values: readonly TradeLineValue[],
+  agreed: TradeBalanceVerdict
+): TradeRealisedBalance {
+  const kept = realisedValues(values);
+  const give = summariseTradeSide(kept.filter((v) => v.side === "give"));
+  const receive = summariseTradeSide(kept.filter((v) => v.side === "receive"));
+  return {
+    verdict: judgeTradeBalance(rule, give, receive),
+    give: sideShortfall(agreed.give, give),
+    receive: sideShortfall(agreed.receive, receive),
+    counts: countRealisation(values),
+  };
 }
 
 // ── The gates ────────────────────────────────────────────────────────────────────────────────────

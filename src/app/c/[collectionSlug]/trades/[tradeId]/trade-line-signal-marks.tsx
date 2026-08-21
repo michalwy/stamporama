@@ -9,6 +9,11 @@ import {
   tradeFeedbackRejectLabel,
   tradeFeedbackRejectSentence,
 } from "@/lib/trade-feedback-rules";
+import {
+  TRADE_FULFILLMENT_TONE,
+  tradeFulfillmentLabel,
+  tradeFulfillmentSentence,
+} from "@/lib/trade-realisation-rules";
 import type { TradeSide } from "@/lib/trade-rules";
 import { Icon } from "@/app/icons";
 
@@ -31,6 +36,11 @@ import { Icon } from "@/app/icons";
 // A **handled** remark stays, muted. It is still what the partner said, and a collector who
 // half-remembers one should find it where they left it rather than reopening the link to read their
 // own trade from the outside — #641's disclosure, re-homed onto the line it was about.
+//
+// #642's verdict joins them here rather than getting a surface of its own, and for the same argument:
+// *this line did not go in the parcel* is a fact about one row, and the row is where it belongs. It
+// is drawn only once somebody has answered — every line of a freshly agreed trade is pending, and a
+// mark on all of them would be a mark that says nothing.
 
 const CHIP: React.CSSProperties = {
   display: "inline-flex",
@@ -59,6 +69,13 @@ const HANDLED_CHIP: React.CSSProperties = {
   ...CHIP,
   color: "var(--color-text-muted)",
   fontStyle: "italic",
+};
+
+/** Muted but not italic — the italic is #641's *this was said and dealt with*, and a line that simply
+ *  went in the parcel is not a quotation of anybody. */
+const QUIET_CHIP: React.CSSProperties = {
+  ...CHIP,
+  color: "var(--color-text-muted)",
 };
 
 /** What the partner said, in one hover. The mark itself carries the verdict; this carries the words
@@ -96,9 +113,43 @@ export function TradeLineSignalMarks({
    *  would be wrong on one side of every list. */
   side: TradeSide;
 }) {
-  const { feedback, listed, departed } = signals;
+  const { feedback, listed, departed, realisation } = signals;
   return (
     <>
+      {/* **What became of this line** (#642). A struck-off line warns — it is the difference between
+          the plan and the parcel, and what the realised balance under the terms is missing. A
+          fulfilled one is muted: the ordinary outcome has nothing to announce, and a row of ticks
+          down a finished trade is a row nobody reads. Nothing at all while it is `pending`, which is
+          what the index already guarantees. */}
+      {realisation && (
+        <Tooltip
+          content={
+            tradeFulfillmentSentence(realisation.fulfillment, side) +
+            (realisation.note ? ` “${realisation.note}”` : "")
+          }
+        >
+          <span
+            style={
+              TRADE_FULFILLMENT_TONE[realisation.fulfillment] === "warning"
+                ? toneChip("warning")
+                : QUIET_CHIP
+            }
+          >
+            <Icon
+              name={
+                realisation.fulfillment === "withdrawn"
+                  ? "withdraw"
+                  : realisation.fulfillment === "missing"
+                    ? "parcel"
+                    : "check"
+              }
+              size="sm"
+            />{" "}
+            {tradeFulfillmentLabel(realisation.fulfillment, side)}
+          </span>
+        </Tooltip>
+      )}
+
       {/* **The collision, on the copy it is about** (#639). It blocks: promising a partner a stamp a
           stranger can buy in the next minute is a promise that cannot be kept, so it draws in error
           and names the listing — what resolves it is pausing or withdrawing that one. Getting there
@@ -159,19 +210,43 @@ export function TradeLineSignalMarks({
  * a chip is the thing that home exists to prevent. They are offered **whatever the lock** — a locked
  * list still takes a decision about what the partner asked for, and accepting a rejection while the
  * trade is `agreed` is refused by name, by the server, with the step that would unfreeze it.
+ *
+ * Recording what happened (#642) is the same kind of entry for the same reason, and its window is the
+ * mirror image of the lock's: it is offered **only** while the trade is agreed, because before then
+ * nothing has happened and after `closed` it is history.
  */
 export function tradeLineSignalActions({
   signals,
   collectionSlug,
   isPending,
+  canRecordRealisation,
+  onRecordRealisation,
   onRun,
 }: {
   signals: TradeLineSignals;
   collectionSlug: string;
   isPending: boolean;
+  /** The trade is `agreed`, which is the one status a verdict may be written in. A fact about the
+   *  trade rather than about this row, which is why it arrives beside the signals rather than in
+   *  them. */
+  canRecordRealisation: boolean;
+  onRecordRealisation: () => void;
   onRun: (action: () => Promise<TradeActionState>) => void;
 }): RowAction[] {
   const actions: RowAction[] = [];
+
+  // First, because it is the thing a collector opens an agreed trade to do: the parcels have been
+  // packed and opened, and what is left is to say what was in them.
+  if (canRecordRealisation) {
+    actions.push({
+      key: "realisation",
+      label: signals.realisation ? "Change what happened…" : "Record what happened…",
+      icon: "parcel",
+      hint: "Sent, arrived, withdrawn or never arrived. What you agreed is not changed by it.",
+      disabled: isPending,
+      onSelect: onRecordRealisation,
+    });
+  }
 
   // The listing, as an address rather than a navigation (#557): what a collector does about a
   // collision is open the offer and pause it, and an entry that is a real link opens in a tab.

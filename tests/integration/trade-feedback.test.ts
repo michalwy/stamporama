@@ -4,6 +4,7 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createTrade, listTradesPaginated, setTradeStatus } from "../../src/lib/trades";
 import { addTradeGiveLines, addTradeReceiveLines } from "../../src/lib/trade-lines";
+import { setTradeLineFulfillment } from "../../src/lib/trade-realisation";
 import {
   createTradeShareToken,
   verifyTradeShareToken,
@@ -271,6 +272,11 @@ describe("partner feedback (#641)", () => {
     const { tradeId, giveLineId, token } = await trade();
     await setTradeStatus(f.userId, tradeId, "shared");
     await setTradeStatus(f.userId, tradeId, "agreed");
+    // Closing requires a verdict on every line (#642) — the parcels are the point of closing, and a
+    // trade closed with lines nobody ever answered for is a record that says nothing about them.
+    for (const line of await prisma.tradeLine.findMany({ where: { tradeId }, select: { id: true } })) {
+      await setTradeLineFulfillment(f.userId, line.id, { fulfillment: "fulfilled" });
+    }
     await setTradeStatus(f.userId, tradeId, "closed");
     const access = await accessFor(token);
 

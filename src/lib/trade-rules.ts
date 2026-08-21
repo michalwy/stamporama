@@ -74,6 +74,39 @@ export function canTransitionTrade(from: TradeStatus, to: TradeStatus): boolean 
 }
 
 /**
+ * The one transition that takes a settled list apart again: `agreed → shared` (#642).
+ *
+ * It is named apart from the rest because it is a **decision, not a fact**. Recording that a piece
+ * was withdrawn or never arrived leaves the trade agreed — the agreement stands and reality is noted
+ * beside it — while this reopens the negotiation, unlocks the list and shows the partner that it has
+ * moved. Two different moves, and the menu says which is which; calling this one *Mark shared* would
+ * make undoing a handshake read like a filing action.
+ *
+ * Every other backward step (`shared → preparing`, `cancelled → preparing`) is not this: nothing was
+ * settled to reopen.
+ */
+export function isTradeReopen(from: TradeStatus, to: TradeStatus): boolean {
+  return from === "agreed" && to === "shared";
+}
+
+/** What a transition is called on the menu. */
+export function tradeTransitionLabel(from: TradeStatus, to: TradeStatus): string {
+  if (isTradeReopen(from, to)) return "Reopen the negotiation";
+  return `Mark ${TRADE_STATUS_LABEL[to].toLowerCase()}`;
+}
+
+/** What it says it will do, where that is not obvious from the word. */
+export function tradeTransitionHint(from: TradeStatus, to: TradeStatus): string | undefined {
+  if (isTradeReopen(from, to)) {
+    return "Unlocks the list and shows your partner that it has changed. What you have recorded about the parcels stays on the lines.";
+  }
+  if (to === "closed") {
+    return "Both parcels are accounted for. Every line needs a verdict first — sent, arrived, withdrawn or never arrived.";
+  }
+  return undefined;
+}
+
+/**
  * Whether the trade's contents — its sections and its lines — may still be edited (#637).
  *
  * `agreed` locks the list: the partner holds a copy of it. Recording that reality diverged from the

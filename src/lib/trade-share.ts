@@ -5,6 +5,8 @@ import { assertTradeOwner } from "./trade-access";
 import { listTradeLinePage, type TradeLinePageItem } from "./trade-lines";
 import { readTradeBalance, type TradeLineValueRead, type TradeRateRead } from "./trade-valuation";
 import { TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
+import { readTradeLineFulfillments } from "./trade-realisation";
+import { tradeShareFulfillmentLabel } from "./trade-realisation-rules";
 import type { TradeGroupHeading, TradeGroupLevel } from "./trade-grouping";
 import { readCollectionAreas } from "./areas";
 import { buildAreaPath } from "./area-path";
@@ -322,6 +324,19 @@ export interface TradeShareLineView {
   /** Addressed through the token's own photo route; the ids mean nothing without it. */
   photoIds: string[];
   value: TradeShareValueView | null;
+  /**
+   * **What changed since the handshake** (#642), or null for nothing to say.
+   *
+   * A neutral word — *Withdrawn*, *Never arrived* — because the collector's own per-side wording
+   * (*I withdrew it*) would be a lie read from this end of the table, and the two sides are already
+   * headed by name here. A line that went as agreed prints nothing: what a partner opens this page
+   * for after the handshake is what has **changed**, and a mark on every unchanged line would bury
+   * the two that did.
+   *
+   * The figures beside it are untouched. What was agreed is what was agreed, and this is what is
+   * recorded against it.
+   */
+  realisation: string | null;
 }
 
 /** One side's tally. Pieces and lines are counted apart — three lines can be thirty stamps. */
@@ -425,11 +440,20 @@ export async function readTradeShareView(
   const kind: "agreed" | "own" = balance?.agreedCatalogVendorId ? "agreed" : "own";
   const currency = balance ? (kind === "agreed" ? balance.tradeCurrency : balance.baseCurrency) : "";
 
-  const [areas, issuePrefixes] = await Promise.all([
+  const [areas, issuePrefixes, fulfillments] = await Promise.all([
     readCollectionAreas(access.collectionId),
     loadIssuePrefixMap(access.collectionId),
+    // **What the partner is shown to have changed** (#642). One read over the trade's own lines,
+    // beside the figures rather than folded into them: a verdict changes no figure, and the totals
+    // below stay the agreed ones because the agreement is what it is.
+    readTradeLineFulfillments(access.tradeId),
   ]);
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
+
+  function realisationOf(lineId: string): string | null {
+    const line = fulfillments.get(lineId);
+    return line ? tradeShareFulfillmentLabel(line.fulfillment) : null;
+  }
 
   /** The figure a line contributes, in the printed valuation — the same choice `valueOf` makes, so a
    *  total and the rows under it can never disagree about which of the two books they are in. */
@@ -479,7 +503,9 @@ export async function readTradeShareView(
         levels,
         pageSize: TRADE_SHARE_SIDE_LIMIT,
       });
-      const lines = page.items.map((item) => toShareLine(item, maps, areas, valueOf));
+      const lines = page.items.map((item) =>
+        toShareLine(item, maps, areas, valueOf, realisationOf)
+      );
       sides.push({
         side,
         heading: tradeShareSideHeading(side, trade.collection.name, trade.partner.name),
@@ -575,7 +601,8 @@ function toShareLine(
   item: TradeLinePageItem,
   maps: ReturnType<typeof buildAreaVendorMaps>,
   areas: Awaited<ReturnType<typeof readCollectionAreas>>,
-  valueOf: (lineId: string) => TradeShareValueView | null
+  valueOf: (lineId: string) => TradeShareValueView | null,
+  realisationOf: (lineId: string) => string | null
 ): TradeShareLineView {
   const source =
     item.side === "give"
@@ -642,6 +669,7 @@ function toShareLine(
     unknownVariant: source.unknownVariant,
     photoIds: source.photos.map((photo) => photo.id),
     value: valueOf(item.lineId),
+    realisation: realisationOf(item.lineId),
   };
 }
 

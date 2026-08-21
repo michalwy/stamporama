@@ -15,15 +15,21 @@ import {
 } from "./trade-line-label";
 import {
   judgeTradeBalance,
+  judgeTradeRealisation,
   summariseTradeSide,
   tradeGateBlockers,
   TRADE_VALUATION_KINDS,
   type TradeBalanceVerdict,
   type TradeGateBlocker,
   type TradeLineValue,
+  type TradeRealisedBalance,
   type TradeSideTotals,
   type TradeValuationKind,
 } from "./trade-balance";
+import {
+  isTradeRealisationVisible,
+  readTradeFulfillment,
+} from "./trade-realisation-rules";
 import {
   isTradeContentEditable,
   isTradeSide,
@@ -93,6 +99,10 @@ export interface TradeSectionBalance {
   name: string;
   rule: TradeBalanceRule & { inherited: boolean };
   verdict: TradeBalanceVerdict;
+  /** What actually moved in this section (#642), or null before there is anything to have diverged
+   *  from. Judged against the same rule as the verdict beside it, so *does what arrived still
+   *  balance* is answered by the arithmetic that answered it of the plan. */
+  realised: TradeRealisedBalance | null;
 }
 
 /** A rate this trade's figures are read through, with the day it was taken. */
@@ -125,6 +135,15 @@ export interface TradeBalanceRead {
   sections: TradeSectionBalance[];
   /** The whole trade, judged against the trade's own rule. */
   trade: TradeBalanceVerdict;
+  /**
+   * **What actually happened** (#642; ADR-0039 §11), or null while there is nothing to have diverged
+   * from — see `isTradeRealisationVisible`.
+   *
+   * The agreed figures above are untouched by it: this is the same sum over the lines that were not
+   * struck off, plus the shortfall between the two. Two balances side by side, and the difference is
+   * what the collector decides on.
+   */
+  realised: TradeRealisedBalance | null;
   lines: TradeLineValueRead[];
   /** Why this trade cannot be shared or agreed yet, named line by line. Reported on every read
    *  rather than only on the attempt: a refusal a collector meets by pressing the button is a
@@ -137,6 +156,7 @@ const LINE_SELECT = {
   sectionId: true,
   side: true,
   quantity: true,
+  fulfillment: true,
   manualValue: true,
   catalogVendorId: true,
   stampId: true,
@@ -404,6 +424,9 @@ async function valueLinesLive(
       manualValue: manual,
       catalogVendorId: row.catalogVendorId,
       catalogVendorName: row.catalogVendor?.abbreviation ?? row.catalogVendor?.name ?? null,
+      // Carried, never consulted: what became of a line changes no figure on it (#642). It is here
+      // so the realised sums can be taken off the same read the agreed ones are.
+      fulfillment: readTradeFulfillment(row.fulfillment),
     } satisfies TradeLineValueRead;
   });
 }
@@ -438,6 +461,10 @@ function valueLinesFrozen(rows: LineRow[], label: (row: LineRow) => string): Tra
       manualValue: row.manualValue === null ? null : Number(row.manualValue),
       catalogVendorId: row.catalogVendorId,
       catalogVendorName: row.catalogVendor?.abbreviation ?? row.catalogVendor?.name ?? null,
+      // The verdict is **not** part of the snapshot and is read live even here: it is recorded after
+      // the freeze, on the frozen figures, and a copy of it taken at the moment of freezing could
+      // only ever say `pending`.
+      fulfillment: readTradeFulfillment(row.fulfillment),
     } satisfies TradeLineValueRead;
   });
 }
@@ -601,16 +628,27 @@ export async function readTradeBalance(
     else byLineSection.set(line.sectionId, [line]);
   }
 
+  const status = trade.status as TradeStatus;
+  const realisationVisible = isTradeRealisationVisible(status);
+
   const sections: TradeSectionBalance[] = trade.sections.map((section) => {
     const own = byLineSection.get(section.id) ?? [];
     const rule = resolveBalanceRule(base, section2override(section));
+    const verdict = judgeTradeBalance(rule, sideTotals(own, "give"), sideTotals(own, "receive"));
     return {
       sectionId: section.id,
       name: section.name,
       rule,
-      verdict: judgeTradeBalance(rule, sideTotals(own, "give"), sideTotals(own, "receive")),
+      verdict,
+      realised: realisationVisible ? judgeTradeRealisation(rule, own, verdict) : null,
     };
   });
+
+  const tradeVerdict = judgeTradeBalance(
+    base,
+    sideTotals(lines, "give"),
+    sideTotals(lines, "receive")
+  );
 
   const frozenAt = frozen
     ? (trade.lines.flatMap((l) => l.valuations.map((v) => v.frozenAt)).sort((a, b) => a.getTime() - b.getTime())[0]?.toISOString() ?? null)
@@ -619,7 +657,7 @@ export async function readTradeBalance(
   return {
     tradeId: trade.id,
     collectionId: trade.collectionId,
-    status: trade.status as TradeStatus,
+    status,
     baseCurrency,
     tradeCurrency: trade.currency,
     agreedCatalogVendorId: trade.catalogVendorId,
@@ -631,7 +669,10 @@ export async function readTradeBalance(
     sections,
     // Judged against the **trade's** own rule, never a section's — the whole-trade verdict is the
     // one the two collectors struck, and a section stating its own says nothing about the total.
-    trade: judgeTradeBalance(base, sideTotals(lines, "give"), sideTotals(lines, "receive")),
+    trade: tradeVerdict,
+    // Off the same lines and the same moment as the verdict above, so the two balances a screen
+    // prints side by side can never describe two different reads.
+    realised: realisationVisible ? judgeTradeRealisation(base, lines, tradeVerdict) : null,
     lines,
     blockers: tradeGateBlockers(lines, valueBalancedSectionIds(trade), trade.catalogVendorId !== null),
   };

@@ -28,6 +28,11 @@ import {
   refreshTradeRates,
   setTradeLineValue,
 } from "../../src/lib/trade-valuation";
+import {
+  readTradeRealisation,
+  setTradeLineFulfillment,
+} from "../../src/lib/trade-realisation";
+import { findCommittedCopies } from "../../src/lib/trade-reservations";
 import { createItem } from "../../src/lib/items";
 import { closeWant, createWant } from "../../src/lib/wants";
 import { resolveQuickJump } from "../../src/lib/quick-jump-server";
@@ -1085,5 +1090,194 @@ describe("balancing — the two valuations (#638)", () => {
     });
     assert.equal((await readTradeBalance(f.userId, bare.id))!.blockers.length, 0);
     await setTradeStatus(f.userId, bare.id, "shared");
+  });
+});
+
+// ── What actually happened (#642; ADR-0039 §11) ─────────────────────────────────────────────────
+//
+// What only a database can answer here: that a verdict leaves the frozen valuations exactly as they
+// were, that the closing gate names the lines nobody has answered for, and that a withdrawal really
+// does release the copy from the marketplace gate #639 built.
+
+describe("realisation — verdicts, the closing gate and release (#642)", () => {
+  let f: Fixtures;
+  let tradeId: string;
+  let sectionId: string;
+  let giveItemId: string;
+  let giveLineId: string;
+  let receiveLineId: string;
+
+  before(async () => {
+    f = await seedFixtures(`realise-${Date.now()}`);
+    const trade = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+      catalogVendorId: f.vendorId,
+    });
+    tradeId = trade.id;
+    sectionId = trade.sections[0].id;
+
+    // One copy out, one stamp in, both priced — so the trade can pass the valuation gate and be
+    // agreed, which is the only status a verdict may be written in.
+    giveItemId = f.itemId;
+    await addTradeGiveLines(f.userId, sectionId, [giveItemId]);
+    await addTradeReceiveLines(f.userId, sectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 1,
+    });
+    giveLineId = (
+      await prisma.tradeLine.findFirstOrThrow({
+        where: { tradeId, side: "give" },
+        select: { id: true },
+      })
+    ).id;
+    receiveLineId = (
+      await prisma.tradeLine.findFirstOrThrow({
+        where: { tradeId, side: "receive" },
+        select: { id: true },
+      })
+    ).id;
+  });
+
+  after(async () => {
+    await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
+    await cleanup(f.userId);
+  });
+
+  it("refuses a verdict before the two sides have agreed", async () => {
+    // Nothing has happened yet: a list being composed describes a parcel nobody has packed.
+    await assert.rejects(
+      () => setTradeLineFulfillment(f.userId, giveLineId, { fulfillment: "withdrawn" }),
+      /Nothing has happened yet/
+    );
+  });
+
+  it("shows no realised balance while the trade is still a plan", async () => {
+    const balance = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(balance.realised, null);
+  });
+
+  it("records a verdict without touching what was agreed", async () => {
+    await setTradeStatus(f.userId, tradeId, "shared");
+    await setTradeStatus(f.userId, tradeId, "agreed");
+
+    const frozen = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(frozen.frozen, true);
+    const agreedGiveOwn = frozen.trade.give.own;
+    const snapshotBefore = await prisma.tradeLineValuation.findMany({
+      where: { lineId: giveLineId },
+      orderBy: { kind: "asc" },
+      select: { kind: true, value: true },
+    });
+
+    await setTradeLineFulfillment(f.userId, giveLineId, {
+      fulfillment: "withdrawn",
+      note: "  gum toned  ",
+    });
+
+    const line = await prisma.tradeLine.findUniqueOrThrow({
+      where: { id: giveLineId },
+      select: { fulfillment: true, fulfillmentNote: true, quantity: true },
+    });
+    assert.equal(line.fulfillment, "withdrawn");
+    assert.equal(line.fulfillmentNote, "gum toned");
+    assert.equal(line.quantity, 1);
+
+    // The agreement is what both sides shook hands on: the frozen figures are byte-for-byte what
+    // they were, and the agreed totals above are unmoved.
+    const snapshotAfter = await prisma.tradeLineValuation.findMany({
+      where: { lineId: giveLineId },
+      orderBy: { kind: "asc" },
+      select: { kind: true, value: true },
+    });
+    assert.deepEqual(
+      snapshotAfter.map((v) => [v.kind, String(v.value)]),
+      snapshotBefore.map((v) => [v.kind, String(v.value)])
+    );
+
+    const after = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(after.trade.give.own, agreedGiveOwn);
+    // …and the realised balance is the agreement minus what was struck off.
+    assert.equal(after.realised?.verdict.give.pieces, 0);
+    assert.equal(after.realised?.give.pieces, 1);
+    assert.equal(after.realised?.give.own, agreedGiveOwn);
+    assert.deepEqual(after.realised?.counts, {
+      pending: 1,
+      fulfilled: 0,
+      withdrawn: 1,
+      missing: 0,
+    });
+  });
+
+  it("releases the withdrawn copy from the marketplace gate (#639)", async () => {
+    // The copy the collector has said they are not sending is not promised to anybody, so an offer
+    // may go live on it — which is exactly what "a withdrawal is what resolves it" means.
+    const committed = await findCommittedCopies(f.collectionId, [giveItemId]);
+    assert.deepEqual(committed, []);
+  });
+
+  it("offers a withdrawn copy to another trade, and still refuses it to a live one", async () => {
+    // The picker and the marketplace gate have to agree: a copy the collector has said they are not
+    // sending is free everywhere, or nowhere.
+    const other = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+    });
+    const otherSection = other.sections[0].id;
+    const result = await addTradeGiveLines(f.userId, otherSection, [giveItemId]);
+    assert.equal(result.added, 1);
+    assert.deepEqual(result.refused, []);
+
+    // …and now the *other* trade holds it, so this one would be refused it back by name.
+    const back = await addTradeGiveLines(f.userId, otherSection, [giveItemId]);
+    assert.equal(back.added, 0);
+    await prisma.trade.delete({ where: { id: other.id } });
+  });
+
+  it("keeps a withdrawn line out of its own trade's picker — the line is still there", async () => {
+    // `@@unique([tradeId, itemId])` says a copy is on a trade once. Offering it back here would be
+    // offering a tick that could not do anything.
+    await setTradeStatus(f.userId, tradeId, "shared");
+    const offerable = await listOfferableCopies(f.userId, tradeId, { forTradeOnly: false });
+    assert.equal(offerable.some((copy) => copy.id === giveItemId), false);
+    // Re-adding stays the no-op it has always been rather than a constraint violation.
+    const again = await addTradeGiveLines(f.userId, sectionId, [giveItemId]);
+    assert.equal(again.added, 0);
+    assert.deepEqual(again.refused, []);
+    await setTradeStatus(f.userId, tradeId, "agreed");
+    // Reopening does not clear the verdicts — showing the partner the change is the point of it.
+    assert.equal(
+      (await prisma.tradeLine.findUniqueOrThrow({ where: { id: giveLineId } })).fulfillment,
+      "withdrawn"
+    );
+  });
+
+  it("refuses to close while a line has no verdict, naming it", async () => {
+    const realisation = await readTradeRealisation(tradeId);
+    assert.equal(realisation.recordable, true);
+    assert.equal(realisation.struckOff, "1 withdrawn");
+    // Named by catalogue number, through the same labeller every other trade refusal names by.
+    assert.match(realisation.blocker ?? "", /Mi 309 \(U\)/);
+    await assert.rejects(() => setTradeStatus(f.userId, tradeId, "closed"), /no verdict yet/);
+  });
+
+  it("closes once every line has been answered for", async () => {
+    await setTradeLineFulfillment(f.userId, receiveLineId, { fulfillment: "fulfilled" });
+    assert.equal((await readTradeRealisation(tradeId)).blocker, null);
+    await setTradeStatus(f.userId, tradeId, "closed");
+    assert.equal((await getTrade(f.userId, tradeId))!.status, "closed");
+  });
+
+  it("stops taking verdicts once the trade is history, and keeps showing the two balances", async () => {
+    await assert.rejects(
+      () => setTradeLineFulfillment(f.userId, receiveLineId, { fulfillment: "missing" }),
+      /already recorded/
+    );
+    const balance = (await readTradeBalance(f.userId, tradeId))!;
+    assert.equal(balance.realised?.verdict.receive.pieces, 1);
+    assert.equal(balance.realised?.verdict.give.pieces, 0);
   });
 });

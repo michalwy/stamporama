@@ -12,6 +12,7 @@ import {
 } from "./trade-rules";
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
 import { tradeListingRefusal } from "./trade-reservations";
+import { tradeClosingRefusal } from "./trade-realisation";
 import {
   freezeTradeRates,
   freezeTradeValuations,
@@ -539,6 +540,10 @@ export async function updateTrade(
  * And one more at `agreed` alone (#639): the give side is committed there, so a copy already live on
  * a marketplace is refused by name. See `trade-reservations.ts` — it is the mirror of the gate the
  * offer's own move to `active` runs, one collision refused from whichever end it is met at.
+ *
+ * And one at `closed` (#642): every line must have been answered for — sent, arrived, withdrawn or
+ * never arrived. `trade-realisation.ts` refuses by name, with the same labeller the valuation gate
+ * uses, because the verdicts are what #644 reads to decide what actually left and what arrived.
  */
 export async function setTradeStatus(
   ownerId: string,
@@ -575,6 +580,16 @@ export async function setTradeStatus(
   if (status === "agreed") {
     const refusal = await tradeListingRefusal(tradeId);
     if (refusal) throw new Error(`This trade cannot be agreed yet. ${refusal}`);
+  }
+
+  // Closing is the moment the agreement stops being a plan and becomes a record (#642), so it is the
+  // moment every line has to have been answered for: a trade closed with lines nobody ever said
+  // anything about is a record that says nothing about the parcel, and #644 reads exactly these
+  // verdicts to decide what actually left and what actually arrived. Named line by line, by the same
+  // labeller the valuation gate names its lines with, and re-run on every attempt like the rest.
+  if (status === "closed") {
+    const refusal = await tradeClosingRefusal(tradeId);
+    if (refusal) throw new Error(`This trade cannot be closed yet. ${refusal}`);
   }
 
   await prisma.trade.update({ where: { id: tradeId }, data: { status } });
