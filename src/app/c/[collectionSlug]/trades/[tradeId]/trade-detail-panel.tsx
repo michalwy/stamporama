@@ -413,6 +413,26 @@ export function TradeDetailPanel({
             </Tooltip>
           )}
           <span style={{ flex: 1 }} />
+          {/* The trade's two printouts (#643): the checklist you pack from, and the list of contents
+              that goes in the envelope. Real links rather than menu entries, because they are places
+              with addresses — and two of them side by side is the pair a collector reaches for at the
+              same moment, when the parcel is about to be made up. */}
+          <Tooltip content="A print-friendly checklist of the copies you owe, in shelf order. Ticking a line records that it went.">
+            <Link
+              href={`/c/${collectionSlug}/trades/${tradeId}/packing-list`}
+              style={{ ...ADD_BUTTON, textDecoration: "none" }}
+            >
+              <Icon name="print" size="sm" /> Packing list
+            </Link>
+          </Tooltip>
+          <Tooltip content="A print-friendly list of contents for the parcel, with no locations, refs or copy numbers.">
+            <Link
+              href={`/c/${collectionSlug}/trades/${tradeId}/enclosure`}
+              style={{ ...ADD_BUTTON, textDecoration: "none" }}
+            >
+              <Icon name="parcel" size="sm" /> Enclosure
+            </Link>
+          </Tooltip>
           <RowActionsMenu actions={headerActions} ariaLabel="Trade actions" />
         </div>
 

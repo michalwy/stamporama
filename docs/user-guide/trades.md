@@ -409,6 +409,74 @@ that never arrived is marked as such, right on the line; everything else is left
 unanswered, and names the ones outstanding by catalogue number. The panel says so while you are still
 reading the list, so you meet it before the button rather than by pressing it.
 
+## Printing: the packing list and the parcel enclosure
+
+Two printouts hang off the trade header, and they are two different pieces of paper for two different
+people. Both open at any point in the trade's life — pre-packing a list you are still negotiating is a
+normal thing to do — and both print as plain documents: no sidebar, no filters, and always in light
+colours even if you use the dark [theme](appearance.md).
+
+### 🖨 Packing list — the sheet you carry to the cabinet
+
+The copies you owe, laid out as a walk through your shelves:
+
+- One **section per storage [location](locations.md)**, in shelf order, with copies filed nowhere in a
+  trailing **No location** section. The trade's own **section** is a *column* here, not a division of
+  the sheet — grouped by section you would visit the same cabinet three times.
+- Inside a section, lines are ordered by the in-location **ref** — what you read off the shelf — with
+  refs of the usual `prefix + number` shape sorting by prefix first and blanks last, exactly as the
+  sale's [packing list](sales.md#printing-a-packing-list) does.
+- One line per **trade line**, never merged. Two identical copies stay two lines, because each is
+  answered for separately.
+
+**Ticking is recording.** This is where the discoveries actually happen — you are the person pulling
+forty stamps off the shelves, so it is the person who finds the toned one. Pressing a box on screen
+records that line as **sent**; pressing it again takes it back. For the pieces that turn out not to be
+going, the row's ⋮ menu opens the same **Record what happened…** dialog as the trade screen, where you can
+strike a line off with a reason. Both write the line's verdict, so what you record here is what the
+[balance panel](#what-actually-happened) and the closing gate read.
+
+Recording is only possible while the trade is **Agreed**, exactly as it is on the trade screen. Before
+that the sheet still prints — the boxes are simply boxes to tick by hand, and the sheet says why above
+them.
+
+The **Columns** chips pick what prints: **Photo**, **Ref**, **Copy no.**, **Catalog**, **Area**,
+**Series**, **Stamp**, **Condition**, **Certificate**, **Section**, and **What happened**. The tick box
+always stays. Your selection is remembered globally, across every trade and every collection, and is
+kept separately from the sale packing list's — the two sheets are not the same list.
+
+### 📦 Enclosure — the sheet that goes in the envelope
+
+The same list, written for the person opening the parcel. **Every internal identifier comes off**: no
+storage location, no in-location ref, no copy number. Those are your own handles on your own material
+and mean nothing at the other end.
+
+- Divided by the trade's **sections**, in the trade's own order — the divisions your partner already
+  knows from [their page](#showing-the-trade-to-your-partner) — and read by catalogue number inside
+  each one.
+- The **boxes print empty**, for your partner to tick off as they unpack.
+- A line you struck off still prints, marked **Withdrawn** or **Never arrived**, so your partner knows
+  what *not* to look for rather than counting the envelope against a list two lines short. The mark
+  keeps its border on paper: it is the one thing on the sheet saying a piece is not coming.
+
+**The figures follow your partner link.** The **Value** column prints only when the trade's
+[partner link](#showing-the-trade-to-your-partner) is set to show figures. A trade with no partner link
+prints none — you have never made that choice — and the sheet says so, pointing at the **Share with
+partner** dialog where the choice lives.
+
+When figures do print, they are the ones from that page and nothing new: the catalogue you agreed on
+in the trade's currency, or your own valuation in your base currency where you agreed no catalogue,
+with the book named once in the header. A line whose figure is an estimate or your own typed number
+says so under it. Lines nobody could price are **counted, not counted as zero** — the total says
+*+ 2 without a figure* rather than quietly swallowing them. The totals are the **agreed** ones even
+where a line was struck off: what you agreed is what you agreed, and the marks are what is recorded
+against it.
+
+Both sheets carry a line at the foot of every printed page — the trade number, both names, and the
+version, collection and time the sheet was generated in your own timezone — so a page that slips out
+of the stack can be matched back, and two printings of the same trade can be told apart. **Page
+numbers** come from the browser: tick **Headers and footers** in the print dialog.
+
 ## Closing: what it does to your books
 
 Closing a trade is what turns it into inventory. Two things happen, and neither of them involves

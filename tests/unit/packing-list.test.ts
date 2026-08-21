@@ -4,7 +4,13 @@ import type { AreaCatalogEntry, CollectionAreaData } from "../../src/lib/areas";
 import type { LocationData } from "../../src/lib/locations";
 import type { SaleCopyItem } from "../../src/lib/sales";
 import type { AreaVendorMaps } from "../../src/lib/area-vendor";
-import { buildPackingList, NO_LOCATION_LABEL } from "../../src/lib/packing-list";
+import {
+  buildPackingList,
+  NO_LOCATION_LABEL,
+  type PackingCopy,
+  type PackingLine,
+  type PackingValue,
+} from "../../src/lib/packing-list";
 
 const MICHEL_PL = {
   catalogVendorId: "mi",
@@ -33,7 +39,10 @@ const LOCATIONS: LocationData[] = [
 
 let seq = 0;
 
-function copy(over: Partial<SaleCopyItem>): SaleCopyItem {
+/** A sold copy, which is a {@link PackingCopy} by construction (#643) — the return type is the
+ *  projection rather than `SaleCopyItem`, so this fixture is also the assertion that a sale's copies
+ *  still satisfy it. `line` is the trade's half, absent on a sale. */
+function copy(over: Partial<SaleCopyItem> & { line?: PackingLine }): PackingCopy {
   seq += 1;
   return {
     id: `item-${seq}`,
@@ -182,5 +191,155 @@ describe("buildPackingList", () => {
     assert.deepEqual(list.groups, []);
     assert.equal(list.totalCopies, 0);
     assert.equal(list.packedCopies, 0);
+  });
+});
+
+// ── A trade's give side (#643) ────────────────────────────────────────────────
+//
+// The same builder over the same projection, with the transaction's own line carried on each copy.
+// What that changes is stated as three things and tested as three things: a row that carries a line
+// **is** that line, the sheet can be divided by the transaction's own structure instead of the shelf,
+// and figures are summed per division with the priceless rows counted rather than added as zero.
+
+function line(over: Partial<PackingLine> = {}): PackingLine {
+  return {
+    id: `line-${(seq += 1)}`,
+    group: "Poland",
+    verdict: "pending",
+    verdictLabel: null,
+    note: null,
+    value: null,
+    ...over,
+  };
+}
+
+function value(amount: number, over: Partial<PackingValue> = {}): PackingValue {
+  return { amount, currency: "EUR", attribution: null, uncertain: false, manual: false, ...over };
+}
+
+describe("buildPackingList over transaction lines", () => {
+  it("keeps two indistinguishable copies apart when each carries its own line", () => {
+    // The sale's merge would make these one row of two. A verdict is recorded per line, so a merged
+    // row of two could not be answered for one piece at a time.
+    const list = buildPackingList(
+      [copy({ line: line() }), copy({ line: line() })],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    assert.equal(list.groups[0].rows.length, 2);
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.quantity),
+      [1, 1]
+    );
+  });
+
+  it("still merges indistinguishable copies that carry no line", () => {
+    const list = buildPackingList([copy({}), copy({})], AREAS, LOCATIONS, MAPS);
+    assert.equal(list.groups[0].rows.length, 1);
+    assert.equal(list.groups[0].rows[0].quantity, 2);
+  });
+
+  it("divides the sheet by the line's group, in the order the copies came in", () => {
+    const list = buildPackingList(
+      [
+        copy({ line: line({ group: "Zurich duplicates" }) }),
+        copy({ line: line({ group: "Poland" }) }),
+        copy({ line: line({ group: "Zurich duplicates" }) }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "group" }
+    );
+    // Not collated: the section order is the trade's own, and the caller feeds it in that order.
+    assert.deepEqual(
+      list.groups.map((g) => g.location),
+      ["Zurich duplicates", "Poland"]
+    );
+    assert.equal(list.groups[0].copyCount, 2);
+  });
+
+  it("labels rows the grouping does not place", () => {
+    const list = buildPackingList(
+      [copy({ line: line({ group: null }) })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "group", ungroupedLabel: "Other" }
+    );
+    assert.equal(list.groups[0].location, "Other");
+  });
+
+  it("orders rows by catalog number where the sheet prints no refs", () => {
+    const list = buildPackingList(
+      [
+        copy({ catalogNumbers: [{ catalogVendorId: "mi", number: "300" }], locationRef: "A1", line: line() }),
+        copy({ catalogNumbers: [{ catalogVendorId: "mi", number: "200" }], locationRef: "A9", line: line() }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { rowOrder: "catalog" }
+    );
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.catalog),
+      ["Mi·PL 200", "Mi·PL 300"]
+    );
+  });
+
+  it("sums each division's figures and counts the rows without one", () => {
+    const list = buildPackingList(
+      [
+        copy({ line: line({ group: "Poland", value: value(12.5) }) }),
+        copy({ line: line({ group: "Poland", value: value(2.5) }) }),
+        copy({ line: line({ group: "Poland", value: null }) }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "group" }
+    );
+    assert.equal(list.groups[0].value, 15);
+    // Counted, never summed as zero: a total that swallowed the priceless line would be one nobody
+    // could reproduce.
+    assert.equal(list.groups[0].valueMissing, 1);
+    assert.equal(list.totalValue, 15);
+    assert.equal(list.valueMissing, 1);
+    assert.equal(list.currency, "EUR");
+  });
+
+  it("reports no currency for a sheet that carries no figures", () => {
+    const list = buildPackingList([copy({ line: line() })], AREAS, LOCATIONS, MAPS);
+    assert.equal(list.currency, null);
+    assert.equal(list.totalValue, 0);
+  });
+
+  it("counts a ticked line toward the division's packed count", () => {
+    const list = buildPackingList(
+      [copy({ packed: true, line: line({ verdict: "fulfilled" }) }), copy({ line: line() })],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    assert.equal(list.packedCopies, 1);
+    assert.equal(list.groups[0].packedCount, 1);
+  });
+
+  it("carries the line onto the row it stands for", () => {
+    const subject = line({ verdict: "withdrawn", verdictLabel: "I withdrew it", note: "Gum toned" });
+    const list = buildPackingList([copy({ line: subject })], AREAS, LOCATIONS, MAPS);
+    assert.deepEqual(list.groups[0].rows[0].line, subject);
+  });
+
+  it("carries the full location path on the row, for a sheet divided by something else", () => {
+    const list = buildPackingList(
+      [copy({ line: line() })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "group" }
+    );
+    assert.equal(list.groups[0].rows[0].location, "Szafa 1 › Klaser A");
   });
 });

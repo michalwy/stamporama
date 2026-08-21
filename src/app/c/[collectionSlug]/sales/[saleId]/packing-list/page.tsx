@@ -15,7 +15,7 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
-import { PackingSheet } from "./packing-sheet";
+import { SalePackingSheet } from "./sale-packing-sheet";
 import { Icon } from "@/app/icons";
 
 interface PackingListPageProps {
@@ -134,7 +134,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </div>
       </header>
 
-      <PackingSheet collectionId={collection.id} itemNoPad={collection.itemNoPad} list={list} />
+      <SalePackingSheet collectionId={collection.id} itemNoPad={collection.itemNoPad} list={list} />
 
       {/* The legend closes the document — it is read once, after the last row, so it stays in the
           flow rather than repeating at the foot of every page. */}

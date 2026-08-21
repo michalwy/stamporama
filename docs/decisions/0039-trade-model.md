@@ -365,7 +365,7 @@ either direction are out of scope by decision.
 - The disposition flag `Item.forTrade` becomes the default filter of the give-side copy picker; it
   keeps its existing meaning and gains no new one.
 - Downstream work — the trade screen, the balancing engine, copy reservation, the partner's share
-  link, partner feedback, realisation, the packing list, closing into a purchase, and the Colnect
+  link, partner feedback, realisation, the printouts, closing into a purchase, and the Colnect
   list import — all build on this model rather than extending it. Columns those changes read ship
   with them, not here.
 - #638 shipped its own, per that rule: `trade_line.manualValue` and `trade_line.catalogVendorId`
@@ -401,6 +401,15 @@ either direction are out of scope by decision.
   two completeness reads, the purchase-cost section, the give-side picker and the reservation read).
   The Copies list's *include sold* toggle became *include sold & traded* rather than growing a second
   one beside it: to a collector, gone is gone.
+- #643 shipped **no schema at all**, which is §11's rule holding once more: what a printout needs is
+  what the list already records. The give side is copies, the sections are the trade's own, and the
+  tick on the checklist is `fulfillment` — a second *packed* flag beside it (the sale's, #192) would
+  be a second record of one fact, and the two would disagree the first time a collector ticked one
+  and not the other. What it did do is take the sale's packing list apart: `packing-list.ts` was pure
+  and coupled to sales through one thing, its input type, so the input became a structural projection
+  and the shaping now serves three sheets — the sale's list, the trade's checklist, and the parcel
+  enclosure. The sheet component moved to `shared/packing-sheet.tsx` with its column chips and its
+  global preference key intact, and each printout brings its own columns.
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.
