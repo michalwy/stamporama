@@ -202,6 +202,24 @@ Beside it:
   be "all of it".
 - **No catalog value** — nothing priced at that exact condition, certificate and format. On your side
   it is a pricing gap to fill; on the partner's it is the line whose worth cannot be argued.
+- **Needs action** — the answer to *what is waiting for me?*, which on a list of two hundred lines is
+  otherwise found by scrolling past everything that is fine. It narrows the column to the lines that
+  are actually holding something up:
+  - a promised copy still **live on a marketplace** — the one collision that blocks **Agree**;
+  - a **partner remark** you have not dealt with yet, including *not wanted* and *cannot send*;
+  - a promised copy that has **left the collection** — sold, disposed of, or gone in another trade;
+  - a line with **no value yet**, which is what holds the trade in *Preparing*;
+  - once the trade is **Agreed**, a line nobody has said what became of, which is what holds it back
+    from closing.
+
+  The chip **carries its own count**, so you can see how much is waiting before you narrow anything,
+  and it goes amber while there is something on it. The count is for the whole column and does not
+  move as you type in the search box — *what is waiting for me here* is one number, not one per
+  search. Two conditions come and go with the trade: a missing value stops being asked for once the
+  list is locked, because that is when a figure can no longer be typed, and a missing verdict is
+  asked for only while the trade is agreed. Anything on the line that is simply true and has nothing
+  to be done about it — a line that came as a different stamp, for instance — is a mark on the row
+  rather than something waiting.
 
 A narrowed column says so: the count reads **12 of 40** rather than presenting a filtered list as the
 whole thing.

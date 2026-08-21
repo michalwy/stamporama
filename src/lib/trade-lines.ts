@@ -33,6 +33,9 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
+// #663's set, decided once in the domain: what the toggle counts and what this narrows to are one
+// question, and a second reading of it here would be a filter that disagrees with its own count.
+import { readTradeActionLineIds } from "./trade-line-actions";
 // The pure half of #642: a line the collector has withdrawn promises nothing, so the copy behind it
 // is offerable again — the same judgement `trade-reservations.ts` releases the marketplace gate on.
 import {
@@ -99,6 +102,18 @@ export interface TradeLineFilters {
   /** No catalogue price at this stamp's exact condition × certificate × format. On the give side it
    *  is a pricing gap to fill; on the receive side it is the line whose worth cannot be argued. */
   missingCatalogValue?: boolean;
+  /**
+   * **Only the lines with an open call for action** (#663) — the question a collector actually opens
+   * a trade with, which on a list of two hundred lines is otherwise answered by scrolling past
+   * everything that is fine.
+   *
+   * What counts as one is `trade-line-signals.ts`'s to say and is asked of `trade-line-actions.ts` here,
+   * never restated as a `where`: the toggle's count and the list under it are two readings of one
+   * question, and two implementations of it would come to disagree. Both sides take it — a receive
+   * line carries remarks and verdicts and its own missing figure — unlike *no photos*, which is
+   * about a copy the collector holds.
+   */
+  needsAction?: boolean;
 }
 
 export interface TradeLinePageParams {
@@ -446,9 +461,19 @@ export async function listTradeLinePage(
   const levels = params.levels ?? [];
   const filters = params.filters ?? {};
 
-  const [rows, unfiltered] = await (params.side === "give"
+  const [sideRows, unfiltered] = await (params.side === "give"
     ? giveAxisRows(ownerId, collectionId, tradeId, params.sectionId, filters)
     : receiveAxisRows(collectionId, tradeId, params.sectionId, filters));
+
+  // Applied over the whole side, before the arrangement, exactly like the four above it — the
+  // headings, the total and the piece count all have to describe what the filter left. Asked of the
+  // trade rather than of this column because every one of its conditions is: a remark, a collision
+  // and a verdict are read about the exchange, and slicing that read per column would be four reads
+  // of it on a trade of four sections. Only when the toggle is on; the count that offers it rides
+  // with the screen's own header read.
+  const rows = filters.needsAction
+    ? await filterToWaitingLines(ownerId, tradeId, sideRows)
+    : sideRows;
 
   const ctx = await groupContext(collectionId);
   const arranged = arrangeByGroups(
@@ -478,6 +503,18 @@ export async function listTradeLinePage(
     pieces,
     unfiltered,
   };
+}
+
+/** The lines of this side that are waiting for the collector (#663). One membership test against the
+ *  one set the domain decides — see `trade-line-actions.ts`. */
+async function filterToWaitingLines(
+  ownerId: string,
+  tradeId: string,
+  rows: AxisRow[]
+): Promise<AxisRow[]> {
+  if (rows.length === 0) return rows;
+  const waiting = await readTradeActionLineIds(ownerId, tradeId);
+  return rows.filter((row) => waiting.has(row.lineId));
 }
 
 /** The area tree and the condition dictionary, which is everything a heading needs words from. */

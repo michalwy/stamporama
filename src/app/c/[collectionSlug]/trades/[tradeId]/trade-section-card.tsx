@@ -7,7 +7,11 @@ import type { TradeSectionData } from "@/lib/trades";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
 import type { TradeLineValueRead, TradeSectionBalance } from "@/lib/trade-valuation";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
-import type { TradeLineSignalIndex } from "@/lib/trade-line-signals";
+import {
+  tradeSideActionCount,
+  type TradeActionRead,
+  type TradeLineSignalIndex,
+} from "@/lib/trade-line-signals";
 import { describeBalanceRule, type TradeBalanceRule, type TradeSide } from "@/lib/trade-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -98,6 +102,7 @@ export function TradeSectionCard({
   tradeId,
   section,
   signals,
+  actions,
   rule,
   balance,
   lineValues,
@@ -125,6 +130,11 @@ export function TradeSectionCard({
    *  sliced per section, for `lineValues`' reason: it arrives as one read about one trade, and
    *  cutting it up per card would invite two readings of it. */
   signals: TradeLineSignalIndex;
+  /** What is waiting on this trade (#663), counted per column — the number on each side's *Needs
+   *  action* toggle. Passed whole for `signals`' reason: it arrives as one read about one trade, and
+   *  each column simply looks up its own key. Absent while the header read is in flight, which the
+   *  count reads as zero rather than as a blank. */
+  actions: TradeActionRead | undefined;
   /** The rule **in force** here, already resolved against the trade's — `inherited` says which of
    *  the two stated it, which is the only thing the chip has to add. */
   rule: TradeBalanceRule & { inherited: boolean };
@@ -165,8 +175,22 @@ export function TradeSectionCard({
   // The dialog names the area it is pricing in; the screen already has the areas for the rows.
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
-  const giveSide = useTradeSide(collectionId, tradeId, section.id, "give", levels);
-  const receiveSide = useTradeSide(collectionId, tradeId, section.id, "receive", levels);
+  const giveSide = useTradeSide(
+    collectionId,
+    tradeId,
+    section.id,
+    "give",
+    levels,
+    tradeSideActionCount(actions, section.id, "give")
+  );
+  const receiveSide = useTradeSide(
+    collectionId,
+    tradeId,
+    section.id,
+    "receive",
+    levels,
+    tradeSideActionCount(actions, section.id, "receive")
+  );
 
   /** Open the realisation dialog on one row. The line is named exactly as every refusal names it —
    *  the balance read's own label, through `trade-line-label.ts` — so a line spoken about here and

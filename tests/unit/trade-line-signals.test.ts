@@ -5,9 +5,13 @@ import {
   describeTradeAttention,
   firstTradeAttention,
   hasTradeLineSignals,
+  indexTradeLineActions,
   indexTradeLineSignals,
   tradeAttentionSelector,
   tradeLineSignals,
+  tradeSideActionCount,
+  tradeSideActionKey,
+  type TradeActionLine,
   type TradeSignalSources,
 } from "../../src/lib/trade-line-signals";
 import type { TradeFeedbackItem } from "../../src/lib/trade-feedback";
@@ -216,5 +220,139 @@ describe("the realisation index (#642)", () => {
     assert.equal(countTradeAttention(sources).total, 0);
     assert.equal(describeTradeAttention(countTradeAttention(sources)), null);
     assert.equal(firstTradeAttention(sources), null);
+  });
+});
+
+// ── What is waiting for the collector (#663) ────────────────────────────────────────────────────
+//
+// What matters here: the set is the same one the marks are drawn from, an action is only an action
+// while the collector can actually take it, and the count on the toggle is counted per column so the
+// two sides of a section never share one number.
+
+const GIVE_LINE: TradeActionLine = { lineId: "l1", sectionId: "s1", side: "give", itemId: "i1" };
+const RECEIVE_LINE: TradeActionLine = {
+  lineId: "l2",
+  sectionId: "s1",
+  side: "receive",
+  itemId: null,
+};
+
+describe("indexTradeLineActions", () => {
+  it("names what each line is waiting on, blocker first", () => {
+    const read = indexTradeLineActions([GIVE_LINE], {
+      feedback: { items: [feedbackItem()] },
+      reservation: { listed: [listed("i1")], departed: [departed("i1")] },
+      status: "shared",
+    });
+    assert.deepEqual(read.lines.l1, ["listed", "remark", "departed"]);
+    assert.equal(read.total, 1);
+  });
+
+  it("leaves out the lines with nothing waiting", () => {
+    const read = indexTradeLineActions([GIVE_LINE, RECEIVE_LINE], {
+      feedback: { items: [feedbackItem()] },
+      status: "shared",
+    });
+    assert.deepEqual(Object.keys(read.lines), ["l1"]);
+    assert.equal(read.total, 1);
+  });
+
+  it("ignores a remark the collector has already dealt with", () => {
+    const read = indexTradeLineActions([GIVE_LINE], {
+      feedback: { items: [feedbackItem({ resolvedAt: "2026-02-01T00:00:00.000Z" })] },
+      status: "shared",
+    });
+    assert.equal(read.total, 0);
+  });
+
+  it("leaves the note about the whole exchange off every line", () => {
+    const read = indexTradeLineActions([GIVE_LINE], {
+      feedback: { items: [feedbackItem({ id: "f0", lineId: null, side: null })] },
+      status: "shared",
+    });
+    assert.equal(read.total, 0);
+  });
+
+  it("never puts a copy's collision on a receive line", () => {
+    // The reservation read knows a give line by its copy, and the partner's material is in nobody's
+    // inventory: a receive line carries no copy and so nothing about one can be true of it.
+    const read = indexTradeLineActions([RECEIVE_LINE], {
+      reservation: { listed: [listed("i1")], departed: [departed("i1")] },
+      status: "shared",
+    });
+    assert.equal(read.total, 0);
+  });
+
+  it("counts a missing value only while one can still be typed", () => {
+    const sources = { unvaluedLineIds: ["l1", "l2"] };
+    for (const status of ["preparing", "shared"] as const) {
+      const read = indexTradeLineActions([GIVE_LINE, RECEIVE_LINE], { ...sources, status });
+      assert.deepEqual(read.lines.l1, ["unvalued"], status);
+      assert.equal(read.total, 2, status);
+    }
+    // Once the partner holds a copy of the list the figure is refused, so pointing at it would be
+    // pointing at something the collector cannot do.
+    for (const status of ["agreed", "closed", "cancelled"] as const) {
+      const read = indexTradeLineActions([GIVE_LINE, RECEIVE_LINE], { ...sources, status });
+      assert.equal(read.lines.l1, undefined, status);
+    }
+  });
+
+  it("asks for a verdict only on a trade being closed", () => {
+    const sources = {
+      realisation: { lines: [verdict("l1", "pending"), verdict("l2", "fulfilled")] },
+    };
+    const agreed = indexTradeLineActions([GIVE_LINE, RECEIVE_LINE], {
+      ...sources,
+      status: "agreed",
+    });
+    assert.deepEqual(agreed.lines.l1, ["verdict"]);
+    // Answered, so nothing is waiting on it.
+    assert.equal(agreed.lines.l2, undefined);
+    // Before the agreement every line is pending by construction, and after `closed` it is history.
+    for (const status of ["preparing", "shared", "closed"] as const) {
+      assert.equal(indexTradeLineActions([GIVE_LINE], { ...sources, status }).total, 0, status);
+    }
+  });
+
+  it("is not the strip's count — the strip deliberately never counts a pending line", () => {
+    const sources: TradeSignalSources = { realisation: { lines: [verdict("l1", "pending")] } };
+    assert.equal(countTradeAttention(sources).total, 0);
+    assert.equal(
+      indexTradeLineActions([GIVE_LINE], { ...sources, status: "agreed" }).total,
+      1
+    );
+  });
+
+  it("counts each column of each section on its own", () => {
+    const lines: TradeActionLine[] = [
+      GIVE_LINE,
+      RECEIVE_LINE,
+      { lineId: "l3", sectionId: "s2", side: "give", itemId: "i3" },
+    ];
+    const read = indexTradeLineActions(lines, {
+      unvaluedLineIds: ["l1", "l2", "l3"],
+      status: "preparing",
+    });
+    assert.equal(read.counts[tradeSideActionKey("s1", "give")], 1);
+    assert.equal(read.counts[tradeSideActionKey("s1", "receive")], 1);
+    assert.equal(read.counts[tradeSideActionKey("s2", "give")], 1);
+    assert.equal(tradeSideActionCount(read, "s1", "receive"), 1);
+    // A column with nothing waiting says zero rather than a blank, and so does a read still in
+    // flight — a toggle must never render a hole where a number belongs.
+    assert.equal(tradeSideActionCount(read, "s2", "receive"), 0);
+    assert.equal(tradeSideActionCount(undefined, "s1", "give"), 0);
+  });
+
+  it("counts a line once however many things are waiting on it", () => {
+    const read = indexTradeLineActions([GIVE_LINE], {
+      feedback: { items: [feedbackItem()] },
+      reservation: { listed: [listed("i1")], departed: [departed("i1")] },
+      unvaluedLineIds: ["l1"],
+      status: "shared",
+    });
+    assert.equal(read.lines.l1.length, 4);
+    assert.equal(read.counts[tradeSideActionKey("s1", "give")], 1);
+    assert.equal(read.total, 1);
   });
 });

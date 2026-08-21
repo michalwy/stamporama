@@ -108,6 +108,14 @@ const TOOLBAR: React.CSSProperties = {
   padding: "0 0.5rem 0.5rem",
 };
 
+/** What the toggle narrows to, said once. The conditions themselves are the domain's
+ *  (`trade-line-signals.ts`); this is the same list in the collector's words, and the two are kept
+ *  in the same order so a reader can check one against the other. */
+const TRADE_ACTION_HINT =
+  "Lines waiting for you: a copy still live on a marketplace, an unanswered partner remark, " +
+  "a promised copy that has left the collection, a line with no value yet, and — once the trade " +
+  "is agreed — a line nobody has said what became of.";
+
 const EMPTY: React.CSSProperties = {
   padding: "1.5rem 0.75rem",
   textAlign: "center",
@@ -128,6 +136,13 @@ export interface TradeSideState {
   setNoPhotos: (on: boolean) => void;
   noCatalogValue: boolean;
   setNoCatalogValue: (on: boolean) => void;
+  needsAction: boolean;
+  setNeedsAction: (on: boolean) => void;
+  /** How many of this column's lines are waiting (#663), counted over the **whole** side by the
+   *  screen's own header read. Deliberately not recounted against the other filters: *what is
+   *  waiting for me here* is not a different number because the search box has three letters in it,
+   *  and a count that moved as you typed would be a count nobody could act on. */
+  actionCount: number;
   clear: () => void;
   filtersOn: boolean;
   items: TradeLinePageItem[];
@@ -146,13 +161,15 @@ export function useTradeSide(
   tradeId: string,
   sectionId: string,
   side: TradeSide,
-  levels: readonly TradeGroupLevel[]
+  levels: readonly TradeGroupLevel[],
+  actionCount: number
 ): TradeSideState {
   const isGive = side === "give";
   const [search, setSearch] = useState("");
   const [conditionIds, setConditionIds] = useState<string[]>([]);
   const [noPhotos, setNoPhotos] = useState(false);
   const [noCatalogValue, setNoCatalogValue] = useState(false);
+  const [needsAction, setNeedsAction] = useState(false);
   const [searchValue, setSearchValue] = useDebouncedSearch(search, setSearch);
 
   const filters: TradeLineFilters = useMemo(
@@ -163,8 +180,11 @@ export function useTradeSide(
       // has never held, so asking it would only ever answer "all of them".
       noPhotos: isGive ? noPhotos : undefined,
       missingCatalogValue: noCatalogValue || undefined,
+      // Both sides, unlike the photo filter above: a receive line carries the partner's remarks, its
+      // own verdict and its own missing figure, and every one of those is something to go and do.
+      needsAction: needsAction || undefined,
     }),
-    [search, conditionIds, noPhotos, noCatalogValue, isGive]
+    [search, conditionIds, noPhotos, noCatalogValue, needsAction, isGive]
   );
 
   const query = useMemo(
@@ -191,13 +211,18 @@ export function useTradeSide(
     setNoPhotos,
     noCatalogValue,
     setNoCatalogValue,
+    needsAction,
+    setNeedsAction,
+    actionCount,
     clear: () => {
       setSearchValue("");
       setConditionIds([]);
       setNoPhotos(false);
       setNoCatalogValue(false);
+      setNeedsAction(false);
     },
-    filtersOn: !!filters.search || conditionIds.length > 0 || noPhotos || noCatalogValue,
+    filtersOn:
+      !!filters.search || conditionIds.length > 0 || noPhotos || noCatalogValue || needsAction,
     items: pages.flatMap((p) => p.items),
     // Every page carries the same map, computed over the whole side, so merging them is idempotent.
     headings: Object.assign({}, ...pages.map((p) => p.headings)),
@@ -294,6 +319,21 @@ export function TradeSideHeader({
               label="No catalog value"
               active={state.noCatalogValue}
               onClick={() => state.setNoCatalogValue(!state.noCatalogValue)}
+            />
+          </span>
+        </Tooltip>
+        {/* **What is waiting for me on this side** (#663). The count is on the toggle rather than
+            behind it, so the answer is there before the filter is applied — and it takes the alarm
+            tint while it is unapplied, since a line held up by a marketplace collision or an
+            unanswered remark is not something the collector should have to click to notice. */}
+        <Tooltip content={TRADE_ACTION_HINT}>
+          <span>
+            <FilterChip
+              label="Needs action"
+              count={state.actionCount}
+              alarm={state.actionCount > 0}
+              active={state.needsAction}
+              onClick={() => state.setNeedsAction(!state.needsAction)}
             />
           </span>
         </Tooltip>

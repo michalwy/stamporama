@@ -6,6 +6,7 @@ import { readTradeReservation } from "@/lib/trade-reservations";
 import { readTradeFeedback } from "@/lib/trade-feedback";
 import { readTradeRealisation } from "@/lib/trade-realisation";
 import { readTradeIntake } from "@/lib/trade-intake";
+import { readTradeActions } from "@/lib/trade-line-actions";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -32,7 +33,13 @@ import { readTradeIntake } from "@/lib/trade-intake";
  * And the **intake** (#644), a fifth: where the incoming material is being identified, which line
  * came as something else, and why the cost is not settled yet. All three are things about *this
  * trade* that a collector wonders about while looking at it, and a screen that had to be left to
- * find them would be a screen that never says them. */
+ * find them would be a screen that never says them.
+ *
+ * And finally **what is waiting for the collector** (#663), which is a reading *of* the four above
+ * rather than a sixth read: it is counted here, once for the trade, so that each column's toggle can
+ * say how many of its lines are waiting before anyone applies it — a count fetched per column would
+ * be eight reads of the same four answers. Three of those four are handed straight to it, which is
+ * why it costs two queries rather than seven. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ collectionId: string; tradeId: string }> }
@@ -55,7 +62,15 @@ export async function GET(
       readTradeRealisation(tradeId),
       readTradeIntake(tradeId),
     ]);
-    return NextResponse.json({ trade, reservation, feedback, realisation, intake });
+    // Handed the three reads it would otherwise make again: what is waiting is a reading of those
+    // same answers, and reading them twice on one request would be this route disagreeing with
+    // itself the moment a line changed between the two.
+    const actions = await readTradeActions(session.user.id, tradeId, {
+      feedback,
+      reservation,
+      realisation,
+    });
+    return NextResponse.json({ trade, reservation, feedback, realisation, intake, actions });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

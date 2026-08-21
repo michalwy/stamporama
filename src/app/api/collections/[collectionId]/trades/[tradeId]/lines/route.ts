@@ -53,6 +53,9 @@ export async function GET(
         // other column does not offer must still be harmless if it arrives.
         noPhotos: sp.get("noPhotos") === "true",
         missingCatalogValue: sp.get("noCatalogValue") === "true",
+        // #663. Both columns offer it, and the domain decides what "waiting" means — this route
+        // knows only that the collector asked for it.
+        needsAction: sp.get("needsAction") === "true",
       },
     });
     return NextResponse.json(page);

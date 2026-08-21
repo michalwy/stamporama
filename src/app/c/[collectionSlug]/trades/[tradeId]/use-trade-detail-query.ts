@@ -7,6 +7,7 @@ import type { TradeReservationRead } from "@/lib/trade-reservations";
 import type { TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeRealisationRead } from "@/lib/trade-realisation";
 import type { TradeIntakeRead } from "@/lib/trade-intake";
+import type { TradeActionRead } from "@/lib/trade-line-signals";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -34,6 +35,11 @@ export interface TradeDetailData {
    *  line came as something else, and why the carried-over cost is not settled yet. Rides here for
    *  the same reason as the three above — the screen is where the collector is when they wonder. */
   intake: TradeIntakeRead;
+  /** **What is waiting for the collector** (#663), by line and counted per column. Rides with the
+   *  header because it is a reading of the four reads above rather than a fifth: one count for the
+   *  whole trade, so every column's toggle can say how many of its lines are waiting without a
+   *  query of its own. The filter itself is the server's — this is only the number on the chip. */
+  actions: TradeActionRead;
 }
 
 /** What one column is showing: its own arrangement, search and filters. Two columns hold two of
@@ -110,6 +116,7 @@ export function useTradeLines(collectionId: string, tradeId: string, query: Trad
       for (const id of query.filters.conditionIds ?? []) params.append("conditionId", id);
       if (query.filters.noPhotos) params.set("noPhotos", "true");
       if (query.filters.missingCatalogValue) params.set("noCatalogValue", "true");
+      if (query.filters.needsAction) params.set("needsAction", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/trades/${tradeId}/lines?${params.toString()}`
       );

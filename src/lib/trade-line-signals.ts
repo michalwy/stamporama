@@ -24,7 +24,8 @@ import type { TradeFeedbackItem } from "./trade-feedback";
 import type { TradeSubstitution } from "./trade-intake";
 import type { TradeLineRealisation } from "./trade-realisation";
 import type { DepartedCopy, ListedCopy } from "./trade-reservation-rules";
-import { hasTradeVerdict } from "./trade-realisation-rules";
+import { canRecordTradeRealisation, hasTradeVerdict } from "./trade-realisation-rules";
+import { isTradeContentEditable, type TradeSide, type TradeStatus } from "./trade-rules";
 
 /** Everything there is to say about one line, from the row's point of view. A give line asks with
  *  both keys, a receive line with its line id alone — the partner's material is in nobody's
@@ -269,4 +270,140 @@ export function tradeAttentionSelector(target: TradeAttentionTarget): string {
   return target.kind === "line"
     ? `[id="${tradeLineAnchorId(target.lineId)}"]`
     : `[${TRADE_COPY_ATTR}="${target.itemId}"]`;
+}
+
+// ── What is waiting for the collector ───────────────────────────────────────────────────────────
+//
+// **The question a collector opens a trade with is *what is waiting for me?*** (#663). Everything
+// above draws a signal on the row it is about, which is right — and on a trade of two hundred lines
+// it is visible only by scrolling past everything that is fine. So one filter narrows a side to the
+// lines carrying an open call for action.
+//
+// The set is decided **here**, once, rather than per surface: the filter that narrows a side and the
+// count on the toggle that offers it must never disagree, and a second reading of "needs action"
+// living in a `where` clause would drift from this one the first time a condition moved.
+//
+// **An action is something the collector can do now.** That is what governs the two conditions that
+// are not simply true or false about a line: a missing valuation is only waiting while the list is
+// still editable (`setTradeLineValue` refuses once the partner holds a copy of it), and a missing
+// verdict is only waiting while a verdict may be written at all (`agreed`, #642). A line pointing at
+// something the collector is forbidden to change is not a call for action; it is a fact.
+//
+// A **substitution** (#644) is deliberately not in the set for that same reason: it is shown for
+// confirmation — the copy that turned up is not the one that was promised — and there is nothing to
+// go and do about it. It stays a mark on its row.
+
+/** What one line is waiting on. Kinds rather than a boolean, because the collector resolves them in
+ *  four different places — a listing is withdrawn, a remark is answered, a figure is typed, a
+ *  verdict is recorded — and a filter that has narrowed to eleven lines should be able to say what
+ *  it narrowed to. */
+export type TradeLineAction = "listed" | "remark" | "departed" | "unvalued" | "verdict";
+
+/** One line as the rule sees it: enough to be found, and enough to be counted into its column.
+ *  `itemId` is the give side's copy and null on the receive side — the reservation read knows a
+ *  give line by nothing else. */
+export interface TradeActionLine {
+  lineId: string;
+  sectionId: string;
+  side: TradeSide;
+  itemId: string | null;
+}
+
+export interface TradeActionSources extends TradeSignalSources {
+  /**
+   * The lines **#638's gate names**, whichever of its two gaps they fall in.
+   *
+   * Read off the gate rather than re-derived from the figures, so the filter and the refusal on
+   * **Agree** can never come to disagree about which line is unvalued. Both kinds count: the issue's
+   * own reasoning is *what holds the trade in `preparing`*, and on a trade balanced by value a line
+   * with no figure in the agreed catalog holds it exactly as firmly as one with no figure at all.
+   */
+  unvaluedLineIds?: readonly string[];
+  /** Where the trade is. It decides the two conditions that are about the collector's window rather
+   *  than about the line: a value may only be typed while the list is unlocked, and a verdict only
+   *  while it is `agreed`. */
+  status?: TradeStatus;
+}
+
+/** How a `(section, side)` is keyed in the counts. One helper, because the server writes these keys
+ *  and the column reads them, and two template strings in two files stay in step by luck. */
+export function tradeSideActionKey(sectionId: string, side: TradeSide): string {
+  return `${sectionId}:${side}`;
+}
+
+/** What is waiting on this trade, ready to be sent to the browser as it is — plain objects rather
+ *  than the `Map`s the row index uses, because this one crosses the wire. */
+export interface TradeActionRead {
+  /** Only the lines with something waiting, each with what it is waiting on. The filter is
+   *  membership of this; the row draws its marks from the signal index above, as it always has. */
+  lines: Record<string, TradeLineAction[]>;
+  /** `${sectionId}:${side}` → how many of that column's lines are waiting. **This is the count on
+   *  the toggle**, and it is deliberately a fact about the whole column rather than about the column
+   *  as currently searched: *what is waiting for me here* is not a different number because the
+   *  search box has three letters in it. */
+  counts: Record<string, number>;
+  total: number;
+}
+
+/**
+ * Which lines are waiting, and for what.
+ *
+ * The order the kinds are listed in is the order the collector meets them, and it is the strip's
+ * own (`firstTradeAttention`): the blocker leads — a copy live on a marketplace is what stands
+ * between this trade and being agreed — then the conversation, then what is already true.
+ */
+export function indexTradeLineActions(
+  lines: readonly TradeActionLine[],
+  sources: TradeActionSources
+): TradeActionRead {
+  const openRemarks = new Set(
+    (sources.feedback?.items ?? [])
+      .filter((item) => item.lineId !== null && item.resolvedAt === null)
+      .map((item) => item.lineId!)
+  );
+  const listed = new Set((sources.reservation?.listed ?? []).map((c) => c.itemId));
+  const departed = new Set((sources.reservation?.departed ?? []).map((c) => c.itemId));
+  // Only while a figure can still be typed onto the line — see the header.
+  const unvalued = new Set(
+    sources.status && !isTradeContentEditable(sources.status) ? [] : (sources.unvaluedLineIds ?? [])
+  );
+  // Only while a verdict may be written at all. Note that this is the one condition that is about
+  // the *absence* of a record: every line of a freshly agreed trade is in it, which is why the strip
+  // above the columns deliberately does not count it and this filter deliberately does — one is
+  // unbidden and would read as *40 things to look at* on every agreement, and the other is asked for.
+  const awaitingVerdict = new Set(
+    sources.status && canRecordTradeRealisation(sources.status)
+      ? (sources.realisation?.lines ?? [])
+          .filter((line) => !hasTradeVerdict(line.fulfillment))
+          .map((line) => line.lineId)
+      : []
+  );
+
+  const out: Record<string, TradeLineAction[]> = {};
+  const counts: Record<string, number> = {};
+  let total = 0;
+  for (const line of lines) {
+    const actions: TradeLineAction[] = [];
+    if (line.itemId && listed.has(line.itemId)) actions.push("listed");
+    if (openRemarks.has(line.lineId)) actions.push("remark");
+    if (line.itemId && departed.has(line.itemId)) actions.push("departed");
+    if (unvalued.has(line.lineId)) actions.push("unvalued");
+    if (awaitingVerdict.has(line.lineId)) actions.push("verdict");
+    if (actions.length === 0) continue;
+    out[line.lineId] = actions;
+    const key = tradeSideActionKey(line.sectionId, line.side);
+    counts[key] = (counts[key] ?? 0) + 1;
+    total += 1;
+  }
+  return { lines: out, counts, total };
+}
+
+/** How many of one column's lines are waiting, or zero — including while the read is still in
+ *  flight, so a toggle never has to render a blank where a number belongs. */
+export function tradeSideActionCount(
+  read: TradeActionRead | undefined,
+  sectionId: string,
+  side: TradeSide
+): number {
+  return read?.counts[tradeSideActionKey(sectionId, side)] ?? 0;
 }
