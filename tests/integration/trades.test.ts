@@ -29,6 +29,7 @@ import {
   setTradeLineValue,
 } from "../../src/lib/trade-valuation";
 import { createItem } from "../../src/lib/items";
+import { closeWant, createWant } from "../../src/lib/wants";
 import { resolveQuickJump } from "../../src/lib/quick-jump-server";
 
 // The trade model and its lifecycle (#646; ADR-0039). What is checked here is what only a database
@@ -650,6 +651,37 @@ describe("trade lines — composing both sides (#637)", () => {
     assert.equal(item.line.conditionAbbreviation, "U");
     assert.equal(item.line.certificateStatusId, null);
     assert.equal(item.line.formatId, null);
+  });
+
+  it("marks a receive line against the open wants for its stamp, and drops a closed one (#664)", async () => {
+    const {
+      ids: [wantId],
+    } = await createWant(f.userId, f.collectionId, {
+      stampId: f.stampId,
+      conditionIds: [f.conditionId],
+      certificateStatusIds: [],
+      formatIds: [],
+      priority: "high",
+      notes: null,
+    });
+
+    const wanted = (await receive()).items.find(
+      (i) => i.side === "receive" && i.line.stampId === f.stampId
+    );
+    assert.ok(wanted?.side === "receive");
+    // The line names the whole want key by construction, so the row can say more than "this stamp
+    // is wanted" — and the priority is what a want list is for.
+    assert.equal(wanted.line.wants?.openCount, 1);
+    assert.equal(wanted.line.wants?.topPriority, "high");
+    assert.deepEqual(wanted.line.wants?.entries[0].acceptance.conditionIds, [f.conditionId]);
+
+    // **A closed want is not a signal** — the rule every other want reader follows.
+    await closeWant(f.userId, wantId);
+    const after = (await receive()).items.find(
+      (i) => i.side === "receive" && i.line.stampId === f.stampId
+    );
+    assert.ok(after?.side === "receive");
+    assert.equal(after.line.wants, null);
   });
 
   it("values a receive line at its own key, so both columns carry the same figure (#638)", async () => {

@@ -238,10 +238,12 @@ stamp tree:
 Closed wants do not light the chip: it answers what is still being chased.
 
 The same chip is on **auction lot lines**, on **copies** — the Copies list and a purchase
-order's intake — and on grouped copy rows. Everywhere a *concrete* condition, certificate
-and format is named, the chip can say more than "this stamp is wanted": when those would
-satisfy one of the wants it is **ringed** and the popover marks which one. On copies you
-already hold, that ring is the upgrade signal.
+order's intake — on grouped copy rows, and on both sides of a **trade**. Everywhere a
+*concrete* condition, certificate and format is named, the chip can say more than "this
+stamp is wanted": when those would satisfy one of the wants it is **ringed** and the popover
+marks which one. On copies you already hold, that ring is the upgrade signal — and on a
+trade's **receive** side, where the line names material coming *to* you, it is the plain
+one: this is a stamp you have been looking for, in the colour of the want's priority.
 
 ## Taking a copy in
 

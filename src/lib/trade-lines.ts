@@ -17,6 +17,7 @@ import {
   type TradeGroupSubject,
 } from "./trade-grouping";
 import type { PhotoSummary } from "./photos";
+import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import type { CopyValuation } from "./valuation";
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { readCollectionAreas } from "./areas";
@@ -244,6 +245,20 @@ export interface TradeReceiveLineData {
    * multiplied by it would not be the catalogue's.
    */
   value: CopyValuation;
+  /**
+   * The **open** wants recorded for this stamp (#664; #532's summary), or null for none.
+   *
+   * On the receive side this is the sharpest thing the app can say while a trade is being
+   * negotiated — *this is one you have been looking for* — and the line can answer it exactly,
+   * because it carries the whole want key by construction (`stamp × condition × certificate ×
+   * format`, ADR-0032). The give side carries the same chip through `InventoryItemRow` and it means
+   * something different there: holding a copy never closes a want, so on material about to leave it
+   * reads as an upgrade hint.
+   *
+   * Loaded with the page, like the valuations beside it, rather than asked per row in the client:
+   * fifty rows, one batched read.
+   */
+  wants: StampWantSummary | null;
 }
 
 const RECEIVE_SELECT = {
@@ -321,7 +336,7 @@ async function enrichReceiveLines(
 ): Promise<TradeReceiveLineData[]> {
   if (rows.length === 0) return [];
 
-  const [areas, issuePrefixes, valuations] = await Promise.all([
+  const [areas, issuePrefixes, valuations, wantsByStamp] = await Promise.all([
     readCollectionAreas(collectionId),
     loadIssuePrefixMap(collectionId),
     // Valued for the **page** alone, exactly as the give side's copies are by `listItemsPaginated`:
@@ -342,6 +357,14 @@ async function enrichReceiveLines(
             ]
           : []
       )
+    ),
+    // Only open wants come back (`loadStampWantSummaries`), which is every want reader's rule: a
+    // settled want would keep the marker lit for ever, and what this answers is what is still being
+    // chased. Keyed by **stamp** rather than by line — two lines for one stamp in two conditions ask
+    // the same summary, and each judges its own key against it.
+    loadStampWantSummaries(
+      collectionId,
+      rows.flatMap((row) => (row.stampId ? [row.stampId] : []))
     ),
   ]);
   const { primaryVendorByArea } = buildAreaVendorMaps(areas, issuePrefixes);
@@ -389,6 +412,7 @@ async function enrichReceiveLines(
       formatAbbreviation: row.format?.abbreviation ?? null,
       quantity: row.quantity,
       value: valuations.get(row.id) ?? UNPRICED,
+      wants: wantsByStamp.get(row.stampId!) ?? null,
     };
   });
 }

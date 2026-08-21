@@ -17,6 +17,7 @@ import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import type { TradeLineSignals } from "@/lib/trade-line-signals";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { TradeLineSignalMarks, withTradeLineSignalActions } from "./trade-line-signal-marks";
 
 // One line of the **receive** side (#637), in the same visual language as the auction composition
@@ -237,6 +238,24 @@ export function TradeReceiveLineRow({
             />
           ))}
           <SubtypeChip subtype={line.subtype} />
+          {/* **Is this one I am looking for** (#664; #532's chip). On the receive side the question
+              can be answered exactly rather than approximately: the line carries the whole want key
+              — stamp, condition, certificate and format — so the chip marks not merely *this stamp is
+              wanted* but *this line would satisfy it*, and takes the colour of the want's priority,
+              which is what a want list is for. Open wants only, like every other want reader.
+
+              The give side keeps its own chip through `InventoryItemRow`, where it means something
+              else: holding a copy never closes a want, so on material about to leave the collection
+              it reads as an upgrade hint. This adds; it does not move. */}
+          <WantChip
+            wants={line.wants}
+            copy={{
+              stampId: line.stampId,
+              conditionId: line.conditionId,
+              certificateStatusId: line.certificateStatusId,
+              formatId: line.formatId,
+            }}
+          />
           {line.unknownVariant && (
             <Tooltip content="The line points at the base stamp: which variant is coming is not recorded.">
               <span

@@ -172,6 +172,12 @@ list, identifying the material when it arrives — works stamp by stamp.
 Nothing on this side creates anything in your collection. It records what is being offered; the
 material arrives, and is identified, later.
 
+A receive line carries the **want chip** where the stamp is on your want list — ringed, in the
+priority's colour, when *this* line would satisfy one, because the line names the condition,
+certificate and format a want is judged on. It is the most useful thing the app can say while you are
+negotiating: this is one you have been looking for. (The give side carries the chip too, where it
+means the other thing — a copy you already hold never closes a want, so there it reads as an upgrade.)
+
 ### Finding things in a long list
 
 **Each column is its own list**, with its own search box and its own filters. That is deliberate: the
