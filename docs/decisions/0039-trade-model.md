@@ -356,6 +356,51 @@ of the money maturing: `closed` is about physical facts and the agreement, exact
 the incoming copies by the engine that distributes every other shared cost. Cash adjustments in
 either direction are out of scope by decision.
 
+### 13. The alternatives to a give line are derived; blocking is a row
+
+*(#657.)*
+
+A trade is agreed on **stamps** — a catalogue number in a condition — but on the collector's side it
+resolves to a concrete copy. Where the collection holds several copies that answer the same
+requirement, which one travels is not yet decided, and the partner is the one who should decide it
+(#658). What that decision is made over is a **candidate pool**, and this is what it is.
+
+**The pool is derived, never stored.** For a give line its candidates are the copies
+`listOfferableCopies` (#639) would allow — in hand, unsold, not disposed of, not promised to another
+live trade, not already on this one — matched on the line's key. A candidate table would be a table
+that is wrong the first time a copy is sold and nobody re-runs anything, which is the same argument
+that keeps a commitment a give line rather than a flag on `Item` (§"Consequences").
+
+**The line still names a copy.** The alternative — turning a give line into a requirement with copies
+attached at packing time — was rejected. `TradeLine.itemId` is what the reservation gate (#639), the
+balance figures (§7), the packing list (#643) and the closing exit record (§12) all read, and a
+nullable copy would make every one of them grow an exclusion for a state that exists between two
+clicks. The line names a copy; what is added is the set that could take its place.
+
+**The key is matched in full: stamp × condition × certificate × format.** This is the load-bearing
+rule. §7 values a line on exactly that key, so a swap inside it changes neither valuation, neither
+total and neither verdict — the substitution is invisible to every figure on the screen and to the
+snapshots frozen at `agreed`. A pool matched on stamp and condition alone would let a certified copy
+replace an uncertified one, or a block of four replace a single, and silently rewrite a balance both
+sides had shaken hands on. A copy differing in certificate or format is not an alternative to a line;
+it is a different line. It is `copy-groups.ts`'s key with both optional axes joined, which is the same
+key catalogue valuation is computed on — not a fifth grouping rule.
+
+**Blocking is an explicit row, and absence is availability.** Everything eligible is offered by
+default; the collector removes individual copies. `TradeCopyBlock` is one row per `(trade, copy)`,
+following `ItemPlatformExclusion` exactly: the presence of the row is the whole state, so setting it
+twice is a no-op and clearing it is a delete, and there is no reason field, because anything worth
+writing down goes in the trade line's own notes. Both FKs **cascade** — a block records nothing that
+happened, so it follows the trade or the copy out of existence without leaving a trace to guard.
+
+**Scoped to the trade, not to the line.** "This one is not going to this person" is what a collector
+means, and two lines of one trade sharing a key would otherwise need the same decision taken twice.
+
+**The pool is live while the trade is `preparing` or `shared`.** From `agreed` on the choice is
+settled along with everything else the lock covers (§5): blocking there would change what the partner
+is looking at after they agreed to it. So the read returns nothing outside that window rather than
+returning a set nothing may be done with.
+
 ## Consequences
 
 - A new module: `trade`, `trade_section`, `trade_line`, plus `collection.nextTradeNo`.
@@ -368,6 +413,8 @@ either direction are out of scope by decision.
   link, partner feedback, realisation, the printouts, closing into a purchase, and the Colnect
   list import — all build on this model rather than extending it. Columns those changes read ship
   with them, not here.
+- `trade_copy_block` (§13) is the one table added since, and it stores an **exception** rather than a
+  set: the candidate pool itself is derived on every read.
 - #638 shipped its own, per that rule: `trade_line.manualValue` and `trade_line.catalogVendorId`
   (the two escape hatches), `trade_line_valuation` (the freeze) and `trade_fx_rate` (the rates). It
   also lifted the three access guards into `trade-access.ts`, below both halves of the domain, so

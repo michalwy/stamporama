@@ -923,6 +923,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   catalogNumber?: string;
   /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
   stampId?: string;
+  /** Restrict to copies of **any** of these stamps (#657) — the plural of {@link stampId}, for a
+   * caller holding a whole trade side's worth of keys at once and wanting one query rather than one
+   * per stamp. One axis, so a caller passes one field or the other; `stampId` wins if both arrive. */
+  stampIds?: string[];
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
   issueId?: string;
   /** Restrict to copies stored in this location or any of its descendants (#56). The literal
@@ -1170,7 +1174,13 @@ function buildItemWhere(
     ...(filters.conditionIds && filters.conditionIds.length > 0
       ? { conditionId: { in: filters.conditionIds } }
       : {}),
-    ...(filters.stampId ? { stampId: filters.stampId } : {}),
+    // One stamp or a set of them, **one clause** on the axis (#425's shape) — spread as two, the
+    // second would silently overwrite the first.
+    ...(filters.stampId
+      ? { stampId: filters.stampId }
+      : filters.stampIds && filters.stampIds.length > 0
+        ? { stampId: { in: filters.stampIds } }
+        : {}),
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.excludeIds && filters.excludeIds.length > 0
       ? { id: { notIn: filters.excludeIds } }

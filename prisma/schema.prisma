@@ -1626,6 +1626,9 @@ model Item {
   offerPhotoAttachmentTiles OfferPhotoAttachmentTile[]
   /** Platforms this copy is deliberately never listed on (#506). */
   platformExclusions ItemPlatformExclusion[]
+  /** The trades this copy has been taken out of the candidate pool of (#657). See
+   *  {@link TradeCopyBlock}. */
+  tradeCopyBlocks    TradeCopyBlock[]  @relation("TradeCopyBlockItem")
   /** Scan tiles this copy was identified from (#567). Normally none or one; several when two
    * tiles of the same piece — a front card and a back card cut as separate batches — were both
    * assigned to it. */
@@ -3282,6 +3285,9 @@ model Trade {
   /** The purchase closing this trade created (#644), or none — the incoming half, carrying the cost
    *  basis of what went the other way. At most one; the FK lives on `Purchase`. */
   purchase      Purchase?      @relation("TradePurchase")
+  /** The copies the collector has taken out of this trade's candidate pools (#657). See
+   *  {@link TradeCopyBlock}. */
+  copyBlocks    TradeCopyBlock[]
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3612,6 +3618,43 @@ model TradeFeedback {
   // Every read is "this trade's feedback", and the inbox narrows to the unresolved.
   @@index([tradeId, resolvedAt])
   @@map("trade_feedback")
+}
+
+// A copy the collector has taken **out of this trade's candidate pool** (#657; ADR-0039 §13).
+//
+// A give line names one copy, but a collection holding several copies that answer the same
+// requirement — the same stamp, in the same condition, with the same certificate and the same
+// format — leaves the question of *which one travels* open, and the partner is the one who should
+// answer it (#658). The set they choose from is **derived, never stored**: it is what
+// `listOfferableCopies` would allow, matched on that key. There is no candidate table, because a
+// stored pool is a pool that is wrong the first time a copy is sold and nobody re-runs anything.
+//
+// What *is* stored is the collector's exception. Everything eligible is offered by default and this
+// row is "not this one, not to this person" — `ItemPlatformExclusion`'s design exactly, and for the
+// same reasons: the presence of the row is the whole state, so setting it twice is a no-op and
+// clearing it is a delete, and there is no reason field, because anything worth writing down goes in
+// the trade line's own notes.
+//
+// Scoped to the **trade**, not to the line. "This one is not going to this person" is what a
+// collector means, and two lines of the same trade sharing a key would otherwise need the same
+// decision taken twice.
+//
+// Both FKs **cascade**. A block records nothing that happened — unlike a sale line or a give line on
+// a closed trade — so it follows the trade or the copy out of existence without leaving a trace to
+// guard.
+model TradeCopyBlock {
+  id        String   @id @default(cuid())
+  tradeId   String
+  itemId    String
+  createdAt DateTime @default(now())
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  item  Item  @relation("TradeCopyBlockItem", fields: [itemId], references: [id], onDelete: Cascade)
+
+  // One decision per copy per trade; the unique is what lets the write be an upsert-by-absence.
+  @@unique([tradeId, itemId])
+  @@index([itemId])
+  @@map("trade_copy_block")
 }
 
 model Contact {

@@ -155,6 +155,37 @@ on go on, and the rest come back named with the reason.
 Listing a copy in a trade is a **plan, not a claim**: the copy is untouched, stays in your
 collection, and removing the line leaves it exactly as it was.
 
+### When several of your copies would do
+
+You are agreeing on **stamps**, but a line names one particular copy — and if you hold four of the
+same thing, which of them travels is not really decided yet.
+
+A give line whose stamp you hold more than once shows how many **alternatives** it has. The row's
+`⋮` menu opens the list: every copy of yours that answers the line exactly, drawn as a copy row —
+thumbnail, copy number, where it is filed, what it cost — with the promised copy at the head so you
+have something to compare against.
+
+**Exactly** is strict, and deliberately so. An alternative has to match on the **stamp, the
+condition, the certificate and the format**. That is the same key the value of the line is looked up
+on, so sending one instead of another changes no figure and no verdict anywhere on the trade. A
+certified copy is not an alternative to an uncertified one, and a block of four is not an alternative
+to a single — those are different lines, not the same line with a different copy behind it.
+
+The same rules that decide what the picker offers decide what appears here: a copy that is sold, no
+longer held, not yet arrived, or promised to another live trade is never a candidate, and one stops
+being a candidate the moment any of that becomes true.
+
+**Everything eligible is offered by default; you take copies out.** Untick one to hold it back from
+this trade — the copy stays in your collection, stays available to every other trade, and only this
+partner stops being offered it. Tick it again to put it back. There is nowhere to write a reason,
+because the line's own notes are where anything worth writing down goes.
+
+The copy the line already promises has no tick: it is the promise, not an alternative to it. To stop
+offering it, remove the line or swap the copy.
+
+Alternatives are live while the trade is **being prepared** or **shared**, which is when the choice
+is actually made. Once the trade is agreed they are settled along with the rest of the list.
+
 ### Adding what you receive
 
 **Add line** opens the stamp picker first, then asks for the condition, certificate status, format

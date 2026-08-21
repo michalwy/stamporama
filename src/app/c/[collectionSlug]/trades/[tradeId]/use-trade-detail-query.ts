@@ -8,6 +8,7 @@ import type { TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeRealisationRead } from "@/lib/trade-realisation";
 import type { TradeIntakeRead } from "@/lib/trade-intake";
 import type { TradeActionRead } from "@/lib/trade-line-signals";
+import type { TradeCandidateRead, TradeLineCandidateRead } from "@/lib/trade-candidates";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -35,6 +36,12 @@ export interface TradeDetailData {
    *  line came as something else, and why the carried-over cost is not settled yet. Rides here for
    *  the same reason as the three above — the screen is where the collector is when they wonder. */
   intake: TradeIntakeRead;
+  /** **How many other copies would answer each give line exactly** (#657), and how many the collector
+   *  has held back — by line id, with a line that has neither simply absent. Rides with the header
+   *  for the reservation's reason: it is one question about one trade, and asking it per page would
+   *  be one query per column per scroll. Empty from `agreed` on, where the choice is settled with
+   *  everything else the lock covers. */
+  candidates: TradeCandidateRead;
   /** **What is waiting for the collector** (#663), by line and counted per column. Rides with the
    *  header because it is a reading of the four reads above rather than a fifth: one count for the
    *  whole trade, so every column's toggle can say how many of its lines are waiting without a
@@ -58,6 +65,8 @@ export const tradeDetailKeys = {
     ["trades", collectionId, "lines", tradeId, query] as const,
   offerable: (collectionId: string, tradeId: string, areaIds: string[] | null, forTrade: boolean) =>
     ["trades", collectionId, "offerable", tradeId, areaIds, forTrade] as const,
+  candidates: (collectionId: string, tradeId: string, lineId: string) =>
+    ["trades", collectionId, "candidates", tradeId, lineId] as const,
   balance: (collectionId: string, tradeId: string) =>
     ["trades", collectionId, "balance", tradeId] as const,
 };
@@ -153,6 +162,31 @@ export function useOfferableCopies(
       );
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;
+    },
+  });
+}
+
+/**
+ * One give line's alternatives (#657) — the dialog's own read.
+ *
+ * Its own query rather than part of the header's: the header carries the *counts*, which is all a
+ * row needs, and enriching a handful of copy rows is work worth doing only when somebody actually
+ * opens the list. Under the same `trades` key, so blocking a copy refreshes both this and the chip
+ * that led here.
+ */
+export function useTradeLineCandidates(
+  collectionId: string,
+  tradeId: string,
+  lineId: string
+) {
+  return useQuery<TradeLineCandidateRead>({
+    queryKey: tradeDetailKeys.candidates(collectionId, tradeId, lineId),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/trades/${tradeId}/candidates?lineId=${lineId}`
+      );
+      if (!res.ok) throw new Error("Failed to load alternatives");
+      return res.json();
     },
   });
 }

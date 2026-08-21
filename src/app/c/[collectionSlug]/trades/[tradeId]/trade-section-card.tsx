@@ -25,6 +25,8 @@ import {
 import { renameTradeSectionAction, type TradeActionState } from "@/app/actions/trades";
 import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-column";
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
+import { TradeCandidatesDialog } from "./trade-candidates-dialog";
+import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
 import { TradeLineValueDialog } from "./trade-line-value-dialog";
 import {
@@ -94,6 +96,7 @@ type SectionDialog =
   | { kind: "editReceive"; line: TradeReceiveLineData }
   | { kind: "lineValue"; line: TradeLineValueRead }
   | { kind: "fulfillment"; subject: TradeFulfillmentSubject }
+  | { kind: "candidates"; lineId: string }
   | { kind: "quickPrice"; target: QuickPriceTarget };
 
 export function TradeSectionCard({
@@ -102,6 +105,7 @@ export function TradeSectionCard({
   tradeId,
   section,
   signals,
+  candidates,
   actions,
   rule,
   balance,
@@ -130,6 +134,9 @@ export function TradeSectionCard({
    *  sliced per section, for `lineValues`' reason: it arrives as one read about one trade, and
    *  cutting it up per card would invite two readings of it. */
   signals: TradeLineSignalIndex;
+  /** How many other copies would answer each give line exactly (#657), by line id. Passed whole for
+   *  `signals`' reason — one read about one trade, and each row looks up its own key. */
+  candidates: TradeCandidateRead | undefined;
   /** What is waiting on this trade (#663), counted per column — the number on each side's *Needs
    *  action* toggle. Passed whole for `signals`' reason: it arrives as one read about one trade, and
    *  each column simply looks up its own key. Absent while the header read is in flight, which the
@@ -342,6 +349,7 @@ export function TradeSectionCard({
             collectionId={collectionId}
             collectionSlug={collectionSlug}
             signals={signals}
+            candidates={candidates}
             isPending={isPending}
             areas={areas}
             locations={locations}
@@ -357,6 +365,7 @@ export function TradeSectionCard({
             }}
             onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
             onRecordRealisation={openFulfillment}
+            onOpenCandidates={(lineId) => setDialog({ kind: "candidates", lineId })}
             onRun={onRun}
           />
         </div>
@@ -366,6 +375,9 @@ export function TradeSectionCard({
             collectionId={collectionId}
             collectionSlug={collectionSlug}
             signals={signals}
+            // The receive side has none by construction — the partner's material is in nobody's
+            // inventory — and the row asks anyway rather than the prop being made give-only.
+            candidates={candidates}
             isPending={isPending}
             areas={areas}
             locations={locations}
@@ -381,6 +393,7 @@ export function TradeSectionCard({
             }}
             onQuickPrice={(target) => setDialog({ kind: "quickPrice", target })}
             onRecordRealisation={openFulfillment}
+            onOpenCandidates={(lineId) => setDialog({ kind: "candidates", lineId })}
             onRun={onRun}
           />
         </div>
@@ -467,6 +480,22 @@ export function TradeSectionCard({
         <TradeFulfillmentDialog
           collectionId={collectionId}
           subject={dialog.subject}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+
+      {/* **Which of my copies could go instead** (#657). One dialog per card remembering which row
+          opened it, like the two above — and only ever opened from a give row, since the partner's
+          material is in nobody's inventory. */}
+      {dialog.kind === "candidates" && (
+        <TradeCandidatesDialog
+          collectionId={collectionId}
+          tradeId={tradeId}
+          lineId={dialog.lineId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          vendorMaps={vendorMaps}
           onClose={() => setDialog({ kind: "none" })}
         />
       )}

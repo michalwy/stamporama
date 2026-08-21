@@ -36,6 +36,7 @@ import {
   setTradeShareOptions,
 } from "@/lib/trade-share";
 import { resolveTradeFeedback } from "@/lib/trade-feedback";
+import { setTradeCopyBlock } from "@/lib/trade-candidates";
 import { setTradeLineFulfillment } from "@/lib/trade-realisation";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
@@ -470,6 +471,32 @@ export async function setTradeLineFulfillmentAction(
     return {
       status: "error",
       message: message(e, "Failed to record what happened. Please try again."),
+    };
+  }
+}
+
+// ── The alternatives to a give line (#657) ───────────────────────────────────────────────────────
+
+/**
+ * Hold one copy back from this trade's candidate pools, or offer it again.
+ *
+ * A **trade** and a **copy**, not a line: what the collector means is "this one is not going to this
+ * person", and two lines of one trade sharing a key would otherwise need the same decision taken
+ * twice. Idempotent in both directions, so the toggle is a plain write — see `setTradeCopyBlock`.
+ */
+export async function setTradeCopyBlockAction(
+  tradeId: string,
+  itemId: string,
+  blocked: boolean
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await setTradeCopyBlock(session.user.id, tradeId, itemId, blocked);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: message(e, "Failed to change what is offered. Please try again."),
     };
   }
 }

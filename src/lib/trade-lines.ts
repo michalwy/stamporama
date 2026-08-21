@@ -801,6 +801,10 @@ export async function listOfferableCopies(
  * because the picker's query already speaks `excludeIds`, and a trade holds tens of lines — not the
  * tens of thousands that would make this the wrong shape.
  *
+ * Exported since #657: the candidate pool is the same eligibility narrowed to one valuation key, and
+ * a second reading of "already promised" is the one way that pool could offer a copy the picker
+ * refuses. `trade-candidates.ts` imports it and nothing here imports that module back.
+ *
  * **Two clauses, because a withdrawal makes them two different questions** (#642):
  *
  *  - promised to a **live** trade on a line that is still going to happen — a withdrawn line
@@ -809,7 +813,10 @@ export async function listOfferableCopies(
  *    `@@unique([tradeId, itemId])` says a copy is on a trade once — so offering it here would be
  *    offering a tick that could not do anything.
  */
-async function committedItemIds(collectionId: string, tradeId: string): Promise<string[]> {
+export async function committedItemIds(
+  collectionId: string,
+  tradeId: string
+): Promise<string[]> {
   const rows = await prisma.tradeLine.findMany({
     where: {
       side: "give",

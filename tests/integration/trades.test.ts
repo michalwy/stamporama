@@ -33,7 +33,13 @@ import {
   setTradeLineFulfillment,
 } from "../../src/lib/trade-realisation";
 import { findCommittedCopies } from "../../src/lib/trade-reservations";
-import { createItem } from "../../src/lib/items";
+import {
+  readTradeCandidates,
+  readTradeLineCandidates,
+  setTradeCopyBlock,
+} from "../../src/lib/trade-candidates";
+import { NO_CANDIDATES } from "../../src/lib/trade-candidate-rules";
+import { createItem, disposeItem } from "../../src/lib/items";
 import { closeWant, createWant } from "../../src/lib/wants";
 import { resolveQuickJump } from "../../src/lib/quick-jump-server";
 
@@ -1297,5 +1303,160 @@ describe("realisation — verdicts, the closing gate and release (#642)", () => 
     const balance = (await readTradeBalance(f.userId, tradeId))!;
     assert.equal(balance.realised?.verdict.receive.pieces, 1);
     assert.equal(balance.realised?.verdict.give.pieces, 0);
+  });
+});
+
+describe("candidate pools — interchangeable copies on a give line (#657)", () => {
+  let f: Fixtures;
+  let tradeId: string;
+  let sectionId: string;
+  let lineId: string;
+  /** Two copies of the promised piece's own key — the alternatives. */
+  let twinA: string;
+  let twinB: string;
+
+  /** Everything the read says about the trade's one give line. */
+  const count = async () =>
+    (await readTradeCandidates(f.userId, tradeId)).lines[lineId] ?? NO_CANDIDATES;
+
+  const copyOf = async (over: Partial<Parameters<typeof createItem>[2]> = {}) =>
+    (
+      await createItem(f.userId, f.collectionId, {
+        ...over,
+        stampId: f.stampId,
+        conditionId: f.conditionId,
+      })
+    ).id;
+
+  before(async () => {
+    f = await seedFixtures(`candidates-${Date.now()}`);
+    const trade = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+    });
+    tradeId = trade.id;
+    sectionId = trade.sections[0].id;
+    twinA = await copyOf();
+    twinB = await copyOf();
+    await addTradeGiveLines(f.userId, sectionId, [f.itemId]);
+    const page = await listTradeLinePage(f.userId, tradeId, { sectionId, side: "give" });
+    lineId = page.items[0].lineId;
+  });
+  after(async () => {
+    await prisma.item.updateMany({ where: { collectionId: f.collectionId }, data: { lotId: null } });
+    await prisma.purchase.deleteMany({ where: { collectionId: f.collectionId } });
+    await prisma.trade.deleteMany({ where: { collectionId: f.collectionId } });
+    await cleanup(f.userId);
+  });
+
+  it("offers every held copy that answers the line exactly", async () => {
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+    const read = await readTradeLineCandidates(f.userId, lineId);
+    // The promised copy heads the list and is never one of the alternatives — it is the promise.
+    assert.equal(read.promised?.id, f.itemId);
+    assert.deepEqual(
+      read.candidates.map((c) => c.copy.id).sort(),
+      [twinA, twinB].sort()
+    );
+    assert.ok(read.candidates.every((c) => !c.blocked));
+    assert.equal(read.editable, true);
+  });
+
+  it("matches the full valuation key — a certificate or a format makes it a different line", async () => {
+    const certificate = await prisma.certificateStatus.create({
+      data: { collectionId: f.collectionId, name: "Certified", abbreviation: "cert", sortOrder: 0 },
+    });
+    const format = await prisma.stampFormat.create({
+      data: { collectionId: f.collectionId, name: "Block of four", abbreviation: "bl4", sortOrder: 0 },
+    });
+    await copyOf({ certificateStatusId: certificate.id });
+    await copyOf({ formatId: format.id });
+    // Neither joins the pool: #638 values the line on exactly this key, so a swap inside it is
+    // invisible to every figure — and a swap across it would silently rewrite the balance.
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+  });
+
+  it("holds a copy back, and lists it still so the decision can be taken back", async () => {
+    await setTradeCopyBlock(f.userId, tradeId, twinA, true);
+    assert.deepEqual(await count(), { available: 1, blocked: 1 });
+    const read = await readTradeLineCandidates(f.userId, lineId);
+    assert.equal(read.candidates.length, 2);
+    assert.equal(read.candidates.find((c) => c.copy.id === twinA)?.blocked, true);
+    assert.equal(read.candidates.find((c) => c.copy.id === twinB)?.blocked, false);
+  });
+
+  it("is idempotent in both directions — the row's presence is the whole state", async () => {
+    await setTradeCopyBlock(f.userId, tradeId, twinA, true);
+    assert.deepEqual(await count(), { available: 1, blocked: 1 });
+    await setTradeCopyBlock(f.userId, tradeId, twinA, false);
+    await setTradeCopyBlock(f.userId, tradeId, twinA, false);
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+  });
+
+  it("refuses to hold back the copy the trade promises, by name", async () => {
+    const itemNo = (await prisma.item.findUnique({ where: { id: f.itemId } }))!.itemNo;
+    await assert.rejects(
+      () => setTradeCopyBlock(f.userId, tradeId, f.itemId, true),
+      new RegExp(`Copy #${itemNo} is what this trade promises`)
+    );
+  });
+
+  it("drops a candidate the moment it is promised elsewhere, and gives it back on delete", async () => {
+    const other = await createTrade(f.userId, f.collectionId, {
+      partnerId: f.partnerId,
+      currency: "EUR",
+    });
+    await addTradeGiveLines(f.userId, other.sections[0].id, [twinB]);
+    assert.deepEqual(await count(), { available: 1, blocked: 0 });
+    await deleteTrade(f.userId, other.id);
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+  });
+
+  it("drops a candidate that is no longer held, or has not arrived", async () => {
+    const gone = await copyOf();
+    const travelling = await copyOf({ deliveryState: "in_transit" });
+    assert.deepEqual(await count(), { available: 3, blocked: 0 });
+    await disposeItem(f.userId, gone, { reason: "lost" });
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+    // …and the one still in the post was never offered: what is being asked is "can this go in the
+    // envelope".
+    assert.ok(
+      !(await readTradeLineCandidates(f.userId, lineId)).candidates.some(
+        (c) => c.copy.id === travelling
+      )
+    );
+  });
+
+  it("takes the block away with the copy — it records nothing that happened", async () => {
+    const spare = await copyOf();
+    await setTradeCopyBlock(f.userId, tradeId, spare, true);
+    assert.deepEqual(await count(), { available: 2, blocked: 1 });
+    await prisma.item.delete({ where: { id: spare } });
+    assert.equal(await prisma.tradeCopyBlock.count({ where: { itemId: spare } }), 0);
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+  });
+
+  it("settles the pool along with the rest of the list once the trade is agreed", async () => {
+    await addTradeReceiveLines(f.userId, sectionId, {
+      stampId: f.stampId,
+      conditionId: f.conditionId,
+      certificateStatusId: null,
+      formatId: null,
+      quantity: 1,
+    });
+    await setTradeStatus(f.userId, tradeId, "shared");
+    // Still open while the partner is looking at it: this is exactly when the choice is made.
+    assert.deepEqual(await count(), { available: 2, blocked: 0 });
+
+    await setTradeStatus(f.userId, tradeId, "agreed");
+    assert.deepEqual((await readTradeCandidates(f.userId, tradeId)).lines, {});
+    const read = await readTradeLineCandidates(f.userId, lineId);
+    assert.equal(read.editable, false);
+    assert.deepEqual(read.candidates, []);
+    assert.match(read.closedReason ?? "", /agreed trade/);
+    await assert.rejects(
+      () => setTradeCopyBlock(f.userId, tradeId, twinA, true),
+      /agreed trade/
+    );
   });
 });

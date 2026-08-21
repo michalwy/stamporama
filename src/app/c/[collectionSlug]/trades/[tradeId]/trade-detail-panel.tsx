@@ -595,6 +595,7 @@ export function TradeDetailPanel({
             tradeId={tradeId}
             section={section}
             signals={signals}
+            candidates={data?.candidates}
             actions={data?.actions}
             rule={resolveBalanceRule(rule, section)}
             balance={balance?.sections.find((b) => b.sectionId === section.id)}

@@ -7,6 +7,7 @@ import { readTradeFeedback } from "@/lib/trade-feedback";
 import { readTradeRealisation } from "@/lib/trade-realisation";
 import { readTradeIntake } from "@/lib/trade-intake";
 import { readTradeActions } from "@/lib/trade-line-actions";
+import { readTradeCandidates } from "@/lib/trade-candidates";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -35,6 +36,12 @@ import { readTradeActions } from "@/lib/trade-line-actions";
  * trade* that a collector wonders about while looking at it, and a screen that had to be left to
  * find them would be a screen that never says them.
  *
+ * And the **candidate pools** (#657): how many other copies of the collector's own would answer each
+ * give line exactly, and how many they have held back. Here for the same reason as the rest — it is
+ * one question about one trade, and counting it per page would be one query per column per scroll,
+ * each answering about fifty rows out of the same set. It returns nothing at all from `agreed` on,
+ * where the choice is settled with everything else the lock covers.
+ *
  * And finally **what is waiting for the collector** (#663), which is a reading *of* the four above
  * rather than a sixth read: it is counted here, once for the trade, so that each column's toggle can
  * say how many of its lines are waiting before anyone applies it — a count fetched per column would
@@ -56,11 +63,12 @@ export async function GET(
     if (!trade || trade.collectionId !== collectionId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const [reservation, feedback, realisation, intake] = await Promise.all([
+    const [reservation, feedback, realisation, intake, candidates] = await Promise.all([
       readTradeReservation(tradeId),
       readTradeFeedback(session.user.id, tradeId),
       readTradeRealisation(tradeId),
       readTradeIntake(tradeId),
+      readTradeCandidates(session.user.id, tradeId),
     ]);
     // Handed the three reads it would otherwise make again: what is waiting is a reading of those
     // same answers, and reading them twice on one request would be this route disagreeing with
@@ -70,7 +78,15 @@ export async function GET(
       reservation,
       realisation,
     });
-    return NextResponse.json({ trade, reservation, feedback, realisation, intake, actions });
+    return NextResponse.json({
+      trade,
+      reservation,
+      feedback,
+      realisation,
+      intake,
+      candidates,
+      actions,
+    });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

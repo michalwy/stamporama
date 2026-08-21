@@ -36,6 +36,14 @@ import {
   tradeLineSignalActions,
   withTradeLineSignalActions,
 } from "./trade-line-signal-marks";
+import {
+  hasTradeCandidates,
+  tradeCandidateHint,
+  tradeCandidateLabel,
+  NO_CANDIDATES,
+  type TradeCandidateCount,
+} from "@/lib/trade-candidate-rules";
+import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { Icon } from "@/app/icons";
 
 // **One side of one section is one list** (#637), and it is a real one: its own search, its own
@@ -85,6 +93,34 @@ const CHIP: React.CSSProperties = {
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
 };
+
+/** **How many of my copies would do instead** (#657), on the line it is about.
+ *
+ * A count and not a list: which copies they are is what opening the list is for, and a row is not the
+ * place for four copy numbers. It reads muted where every match has been held back — that is a
+ * decision the collector took, not a state of the goods, and it earns no colour.
+ *
+ * Informational, like every other chip on the row: getting to the list is a **row action**, in the
+ * `⋮` with the others, because that is the app's one home for those.
+ */
+function TradeCandidateChip({ count }: { count: TradeCandidateCount }) {
+  return (
+    <Tooltip content={tradeCandidateHint(count)}>
+      <span
+        style={{
+          ...CHIP,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.2rem",
+          ...(count.available === 0 ? { color: "var(--color-text-muted)" } : {}),
+        }}
+      >
+        <Icon name={count.available === 0 ? "excluded" : "duplicate"} size="sm" />{" "}
+        {tradeCandidateLabel(count)}
+      </span>
+    </Tooltip>
+  );
+}
 
 const ADD_BUTTON: React.CSSProperties = {
   display: "inline-flex",
@@ -363,6 +399,7 @@ export function TradeSideRows({
   collectionId,
   collectionSlug,
   signals: signalIndex,
+  candidates,
   isPending,
   areas,
   locations,
@@ -375,6 +412,7 @@ export function TradeSideRows({
   onEditLineValue,
   onQuickPrice,
   onRecordRealisation,
+  onOpenCandidates,
   onRun,
 }: {
   state: TradeSideState;
@@ -385,6 +423,10 @@ export function TradeSideRows({
    *  for the screen from reads the header already makes, and asked per row: a signal about a line
    *  is drawn **on that line**, never in a banner over the list. */
   signals: TradeLineSignalIndex;
+  /** How many other copies would answer each give line exactly (#657), by line id. Passed whole for
+   *  `signals`' reason: it arrives as one read about one trade, and a row simply looks up its own
+   *  key. Absent while the header read is in flight, and empty from `agreed` on. */
+  candidates: TradeCandidateRead | undefined;
   isPending: boolean;
   areas: CollectionAreaData[];
   locations: LocationData[];
@@ -411,6 +453,10 @@ export function TradeSideRows({
    *  verdict is about the line rather than about a copy, which is what lets a receive line have one
    *  at all. The side travels with the id because half the wording inverts across the table. */
   onRecordRealisation: (lineId: string, side: TradeSide) => void;
+  /** Open the line's alternatives (#657) — the copies that would answer it exactly, and which of
+   *  them the partner is offered. Give side only: the partner's material is in nobody's inventory,
+   *  so a receive line has no set of copies to choose from. */
+  onOpenCandidates: (lineId: string) => void;
   onRun: (action: () => Promise<TradeActionState>) => void;
 }) {
   const { items, headings } = state;
@@ -446,6 +492,10 @@ export function TradeSideRows({
         // copies; the receive side names no copy and so can only ever carry a remark.
         const itemId = item.side === "give" ? item.copy.id : null;
         const signals = tradeLineSignals(signalIndex, item.lineId, itemId);
+        // **What else would do instead** (#657). Give side only, and asked of the header's own read
+        // rather than of the page: it is one question about one trade, and a row looks up its key.
+        const candidateCount =
+          (item.side === "give" ? candidates?.lines[item.lineId] : undefined) ?? NO_CANDIDATES;
         const signalActions = tradeLineSignalActions({
           signals,
           collectionSlug,
@@ -508,6 +558,20 @@ export function TradeSideRows({
                   actionsOverride={withTradeLineSignalActions(
                     editable
                       ? [
+                          // Offered only where there is something to open. A line whose stamp the
+                          // collector holds once has no alternatives, and an entry that opened an
+                          // empty list on every such row would be an entry nobody reads.
+                          ...(hasTradeCandidates(candidateCount)
+                            ? [
+                                {
+                                  key: "candidates",
+                                  label: "Alternatives…",
+                                  icon: "duplicate" as const,
+                                  hint: "Which of your copies could go instead, and which of them the partner is offered.",
+                                  onSelect: () => onOpenCandidates(item.lineId),
+                                },
+                              ]
+                            : []),
                           {
                             key: "value",
                             label: "Set value",
@@ -532,8 +596,15 @@ export function TradeSideRows({
                   // *Promised* — a signal about this line lands among its states rather than beside
                   // them (#662).
                   trailingChips={
-                    hasTradeLineSignals(signals) ? (
-                      <TradeLineSignalMarks signals={signals} side="give" />
+                    hasTradeLineSignals(signals) || hasTradeCandidates(candidateCount) ? (
+                      <>
+                        <TradeLineSignalMarks signals={signals} side="give" />
+                        {/* Last, after the signals: what is *wrong* with a line outranks what is
+                            merely true of it, and the alternatives are never a call for action. */}
+                        {hasTradeCandidates(candidateCount) && (
+                          <TradeCandidateChip count={candidateCount} />
+                        )}
+                      </>
                     ) : undefined
                   }
                 />
