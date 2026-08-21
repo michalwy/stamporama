@@ -25,6 +25,7 @@ import {
 import { renameTradeSectionAction, type TradeActionState } from "@/app/actions/trades";
 import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-column";
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
+import { TradeGiveRequirementDialog } from "./trade-give-requirement-dialog";
 import { TradeCandidatesDialog } from "./trade-candidates-dialog";
 import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
@@ -92,6 +93,7 @@ const TWO_COLUMNS: React.CSSProperties = {
 type SectionDialog =
   | { kind: "none" }
   | { kind: "addCopies" }
+  | { kind: "addByStamp" }
   | { kind: "addReceive" }
   | { kind: "editReceive"; line: TradeReceiveLineData }
   | { kind: "lineValue"; line: TradeLineValueRead }
@@ -330,6 +332,7 @@ export function TradeSectionCard({
               editable={editable}
               isPending={isPending}
               onAdd={() => setDialog({ kind: "addCopies" })}
+              onAddByStamp={() => setDialog({ kind: "addByStamp" })}
             />
           </div>
           <TradeSideHeader
@@ -398,6 +401,18 @@ export function TradeSectionCard({
           />
         </div>
       </div>
+
+      {/* The give side's second way in (#659): the partner's own sentence — this stamp, in this
+          condition — resolved to a copy, or reported as a gap. */}
+      {dialog.kind === "addByStamp" && (
+        <TradeGiveRequirementDialog
+          collectionId={collectionId}
+          sectionId={section.id}
+          sectionName={section.name}
+          areas={areas}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
 
       {dialog.kind === "addCopies" && (
         <TradeCopyPickerDialog

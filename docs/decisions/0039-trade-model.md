@@ -401,6 +401,52 @@ settled along with everything else the lock covers (§5): blocking there would c
 is looking at after they agreed to it. So the read returns nothing outside that window rather than
 returning a set nothing may be done with.
 
+### 14. A requirement resolves to a copy by a fixed, stated order
+
+*(#659.)*
+
+A partner's wish list says one thing: *this stamp, in this condition*. It cannot say which of your
+three copies, because it does not know you hold three. Something has to choose, and §13's pool is not
+that choice — it is the set a choice can be made from, and its members are interchangeable by
+construction. Here the candidates are **not** interchangeable: matched on stamp and condition alone,
+they differ on exactly the two axes that carry value.
+
+**The order is fixed, documented and deterministic**, and each step is a decision a collector would
+recognise:
+
+1. **`forTrade` copies first.** The disposition (ADR-0007 §4) is precisely where a collector files
+   what they are willing to part with. Picking past it would offer a partner the album copy while a
+   duplicate sat in the box.
+2. **The plain single next** — no certificate, no format. Handing over a block of four or a certified
+   piece because somebody asked for "this stamp" would be a bad trade *and* a silent change to the
+   balance, which is §13's argument read from the other end.
+3. **A copy that has a photo**, because the partner is going to look at it and the shared page (§9)
+   has nothing to show otherwise.
+4. **Lowest `itemNo`** to settle it — arbitrary but stable, so the same list resolved twice picks the
+   same copies rather than shuffling a list the partner is already reading.
+
+**A quantity of N takes N distinct copies** down that same order, and no copy is served twice across
+a batch: two rows asking for the same thing are two pieces the partner expects. Fewer copies than
+asked for is a **shortfall**, stated with the number served and the number missing, never silently
+rounded down.
+
+**Nothing to serve is information, not an error.** *You do not hold this in this condition* is exactly
+what the collector sends back, and on an imported wish list it is the main output — so a gap is an
+outcome carried out to the report, never a dropped row or an exception.
+
+**The candidate set is §13's**, minus the copies held back on this trade: what `listOfferableCopies`
+allows, matched on the requirement rather than on a copy's own key. Blocked copies are excluded here
+rather than listed, because an automatic pick has no business reaching past a decision the collector
+already took.
+
+**Eligibility is re-checked on write.** The resolver runs over a whole imported file, and a copy can
+be sold in the minutes between resolving it and confirming it — so the write goes through the same
+bulk add the picker uses, which names its refusals per copy, and the report puts a refused copy back
+on the shortfall it came from.
+
+The chosen copy is the **effective** one, written to `TradeLine.itemId` like any other give line:
+§13's pool then exposes the rest, and the partner may still propose a different one (#658).
+
 ## Consequences
 
 - A new module: `trade`, `trade_section`, `trade_line`, plus `collection.nextTradeNo`.

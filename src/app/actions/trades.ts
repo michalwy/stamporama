@@ -37,6 +37,11 @@ import {
 } from "@/lib/trade-share";
 import { resolveTradeFeedback } from "@/lib/trade-feedback";
 import { setTradeCopyBlock } from "@/lib/trade-candidates";
+import {
+  addTradeGiveLinesFromRequirement,
+  type GiveRequirementReport,
+} from "@/lib/trade-give-resolution";
+import { parseGiveAxis, type GiveRequirement } from "@/lib/trade-give-resolution-rules";
 import { setTradeLineFulfillment } from "@/lib/trade-realisation";
 import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
@@ -320,6 +325,75 @@ export async function addTradeGiveLinesAction(
   try {
     const result = await addTradeGiveLines(session.user.id, sectionId, itemIds);
     return { status: "success", ...result };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to add copies. Please try again.") };
+  }
+}
+
+/** A **give** requirement as its dialog submits it (#659): what the partner asked for, not which
+ *  copy answers it. The two optional axes carry three states, not two — see `GIVE_AXIS_ANY` and
+ *  `GIVE_AXIS_NONE`: a wish list says nothing about a certificate, and reading that silence as *no
+ *  certificate* would refuse the collector's only copy over a requirement nobody stated. */
+export interface TradeGiveRequirementRaw {
+  stampId: string;
+  /** A **whole checklist** picked instead of a single stamp, as the receive side offers: it expands
+   *  into one requirement per stamp on it, each resolved or reported as a gap of its own. */
+  checklistId?: string;
+  conditionId: string;
+  certificateStatusId: string;
+  formatId: string;
+  quantity: string;
+}
+
+/** What the resolver came to, for the dialog's report. Gaps are carried, not thrown: *you do not
+ *  hold this in this condition* is what the collector has to send back to the partner. */
+export type AddGiveRequirementActionState =
+  | ({ status: "success" } & GiveRequirementReport)
+  | { status: "error"; message: string };
+
+function parseGiveRequirement(
+  raw: TradeGiveRequirementRaw
+): { data: GiveRequirement & { checklistId?: string }; error?: string } {
+  const stampId = raw.stampId.trim();
+  const checklistId = raw.checklistId?.trim() ?? "";
+  const blank = {} as GiveRequirement;
+  if (!stampId && !checklistId) return { data: blank, error: "Pick the stamp you are giving." };
+  if (!raw.conditionId.trim()) {
+    return { data: blank, error: "Pick the condition the partner asked for." };
+  }
+  const quantity = Number(raw.quantity);
+  if (!Number.isFinite(quantity) || quantity < 1) {
+    return { data: blank, error: "Quantity must be at least 1." };
+  }
+  return {
+    data: {
+      stampId,
+      ...(checklistId ? { checklistId } : {}),
+      conditionId: raw.conditionId.trim(),
+      certificateStatusId: parseGiveAxis(raw.certificateStatusId),
+      formatId: parseGiveAxis(raw.formatId),
+      quantity: Math.trunc(quantity),
+    },
+  };
+}
+
+/**
+ * Add give lines from a requirement (#659) — the resolver's screen half.
+ *
+ * A success can still be a list of gaps: nothing was served, nothing failed, and what the collector
+ * needed to learn is that they do not hold it. Only a request that could not be *understood* — no
+ * stamp, no condition, a locked trade — comes back as an error.
+ */
+export async function addTradeGiveLinesByStampAction(
+  sectionId: string,
+  raw: TradeGiveRequirementRaw
+): Promise<AddGiveRequirementActionState> {
+  const session = await getSession();
+  const { data, error } = parseGiveRequirement(raw);
+  if (error) return { status: "error", message: error };
+  try {
+    const report = await addTradeGiveLinesFromRequirement(session.user.id, sectionId, data);
+    return { status: "success", ...report };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to add copies. Please try again.") };
   }

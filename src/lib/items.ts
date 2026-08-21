@@ -346,8 +346,12 @@ export interface ItemVariantHistoryData {
 }
 
 /** Build a human label for a stamp from its catalog numbers and name, mirroring the
- * client-side `stampNodeLabel`. Kept here so history can be enriched server-side. */
-function stampLabel(stamp: {
+ * client-side `stampNodeLabel`. Kept here so history can be enriched server-side.
+ *
+ * Exported since #659: a requirement that resolved to nothing has to be named in the report, and a
+ * stamp that read one way in the variant history and another in a trade's gap list would be two
+ * spellings of the same piece. */
+export function stampLabel(stamp: {
   name: string | null;
   catalogNumbers: { number: string }[];
 }): string {

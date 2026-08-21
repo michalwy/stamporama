@@ -155,6 +155,37 @@ on go on, and the rest come back named with the reason.
 Listing a copy in a trade is a **plan, not a claim**: the copy is untouched, stays in your
 collection, and removing the line leaves it exactly as it was.
 
+### Adding what you give, by stamp
+
+A partner's wish list never says *your copy #118*. It says a stamp and a condition, and leaves you
+to look. **By stamp** — the second button on the give column — starts from their sentence instead of
+from your shelf: pick the stamp (or a whole set), say which condition they asked for, how many, and
+the copy is chosen for you.
+
+**Certificate** and **format** open on **Any**, because a wish list says nothing about either. Set
+them only if the partner did — asking for *no certificate* or *single* explicitly is a different
+sentence from not mentioning it, and this is where you say so.
+
+Which copy you get is decided in a fixed order, so the same list always comes out the same way:
+
+1. a copy you have marked **for trade**, before one you have not — that is where you file what you
+   are willing to part with, and your album copy should not go out while a duplicate sits in the box;
+2. the **plain single**, before a certified copy or a block — those are worth more, and sending one
+   for a stamp nobody asked a certificate for would quietly change the balance;
+3. a copy that has a **photo**, because your partner is going to look at it on the shared page;
+4. the **lowest copy number**, to settle it.
+
+Ask for three and you get three different copies. If only one answers, you get one line and are told
+plainly that two more were asked for — nothing is quietly rounded down. And if you hold none at all,
+you get **no line and a gap**: *you do not hold this in that condition* is the answer, and it is
+half of what you write back to your partner. Picking a whole set is the same thing many times over —
+the stamps you hold become lines, and the rest come back as the list of what you cannot send.
+
+The copies that are never picked are the ones the picker never offers either: sold, no longer held,
+still in the post, promised to another live trade, or held back on this one (see below). Everything
+is checked again as the lines are written, so a copy that goes in the minutes between is named with
+the reason rather than silently promised.
+
 ### When several of your copies would do
 
 You are agreeing on **stamps**, but a line names one particular copy — and if you hold four of the

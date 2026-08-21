@@ -1057,7 +1057,7 @@ export async function addTradeReceiveLines(
   assertContentEditable(status);
   const { collectionId } = await assertTradeOwner(ownerId, tradeId);
 
-  const stampIds = await resolveReceiveLineStamps(collectionId, input);
+  const stampIds = await resolveTradeLineStamps(collectionId, input);
   const start = await nextPosition(sectionId, "receive");
 
   // Validated once and reused: the condition, certificate and format are the same for every stamp
@@ -1077,10 +1077,14 @@ export async function addTradeReceiveLines(
   return stampIds.length;
 }
 
-/** What a receive line — or a whole checklist — comes to, as stamp ids. Local rather than borrowed
- *  from the auction module: that one throws an auction-specific blocked-action error, and a trade
- *  has no business raising one. */
-async function resolveReceiveLineStamps(
+/** What a line — or a whole checklist — comes to, as stamp ids. Local rather than borrowed from the
+ *  auction module: that one throws an auction-specific blocked-action error, and a trade has no
+ *  business raising one.
+ *
+ *  Exported since #659: the give side's add-by-stamp path offers the same shortcut, and a second
+ *  reading of a checklist would be a second chance for the two sides of one trade to disagree about
+ *  what "the whole set" means. */
+export async function resolveTradeLineStamps(
   collectionId: string,
   target: { stampId?: string; checklistId?: string | null }
 ): Promise<string[]> {

@@ -279,12 +279,17 @@ export function TradeSideHeader({
   editable,
   isPending,
   onAdd,
+  onAddByStamp,
 }: {
   state: TradeSideState;
   collectionId: string;
   editable: boolean;
   isPending: boolean;
   onAdd: () => void;
+  /** The give side's second way in (#659): state what the partner asked for — a stamp in a
+   *  condition — and let the resolver find the copy. Absent on the receive side, where there is no
+   *  copy to find: the partner's material is in nobody's inventory. */
+  onAddByStamp?: () => void;
 }) {
   const { data: conditions = [] } = useCollectionConditions(collectionId);
   const { side, isGive, total, pieces, unfiltered } = state;
@@ -317,6 +322,16 @@ export function TradeSideHeader({
           <button type="button" style={ADD_BUTTON} disabled={isPending} onClick={onAdd}>
             <Icon name="add" size="sm" /> {isGive ? "Add copies" : "Add line"}
           </button>
+        )}
+        {/* Two named acts rather than one button with a mode: browsing your own copies and
+            answering "have you got this one?" are different questions, and a partner's list only
+            ever asks the second (#659). */}
+        {editable && isGive && onAddByStamp && (
+          <Tooltip content="Say which stamp and condition the partner asked for; the best matching copy you hold is chosen for you.">
+            <button type="button" style={ADD_BUTTON} disabled={isPending} onClick={onAddByStamp}>
+              <Icon name="add" size="sm" /> By stamp
+            </button>
+          </Tooltip>
         )}
       </div>
 
