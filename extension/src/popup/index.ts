@@ -15,6 +15,7 @@ import type {
   MatchResponse,
   OverwriteDateResponse,
   OverwriteNumberResponse,
+  ResultsUpdatedNotice,
 } from "../core/messages";
 import {
   CATALOG_BACKFILL,
@@ -85,6 +86,8 @@ let busy = false;
 let showLinked = false;
 /** Bumped on every profile switch, so a match still in flight for the previous target is discarded. */
 let generation = 0;
+/** The address `results` describe, so the badge push can be dropped once the tab has moved on. */
+let scannedUrl: string | null = null;
 
 // The page we operate on. The service worker passes the source tab's id when it opens this window;
 // we must not fall back to "active tab in the current window", because in a separate window that is
@@ -449,6 +452,7 @@ function setFound(text: string, hasItems: boolean): void {
 async function scanPage(): Promise<void> {
   items = [];
   results = [];
+  scannedUrl = null;
   resetPicks();
   // A rescan is a different page: the ticks named stamps on the old one (#668), so the exceptions
   // the collector made there mean nothing here.
@@ -471,6 +475,7 @@ async function scanPage(): Promise<void> {
     syncButtons();
     return;
   }
+  scannedUrl = tab.url;
 
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
@@ -1334,6 +1339,30 @@ function resetPicks(): void {
   dateOverwritePicks = [];
 }
 
+/**
+ * Tell the worker what the results now say, so the toolbar badge stops counting work that has just
+ * been done (#283).
+ *
+ * Hung off the redraw rather than off each write, because what the window shows and what the badge
+ * counts are one fact stated twice — a write path that redraws without publishing would leave the
+ * two disagreeing, which is the bug this exists to fix. It costs nothing when nothing changed: the
+ * worker recomputes the same count and sets the same badge.
+ *
+ * Fire-and-forget, and silent on failure: the badge belongs to a tab the collector is not looking at
+ * while this window is open, and no write may fail on the strength of it.
+ */
+function publishResults(): void {
+  if (sourceTabId === null || scannedUrl === null || results.length === 0) return;
+  void chrome.runtime
+    .sendMessage({
+      type: "results-updated",
+      tabId: sourceTabId,
+      url: scannedUrl,
+      results,
+    } satisfies ResultsUpdatedNotice)
+    .catch(() => {});
+}
+
 function render(): void {
   resetPicks();
   // Decisions already taken elsewhere (#305) leave the list unless asked for. The control lives in
@@ -1383,6 +1412,7 @@ function render(): void {
   renderChips();
   syncButtons();
   hydrateStampPhotos();
+  publishResults();
 }
 
 /**

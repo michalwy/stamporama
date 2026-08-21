@@ -329,6 +329,28 @@ export interface CachedResultsResponse {
   results: MatchResult[] | null;
 }
 
+// popup → background: "this is what the page's results say now" (#283). The badge is set once, off
+// the load-time dry-run, and nothing after that touches it — so a page whose matches have just been
+// written kept advertising work that is done, until a navigation cleared it. The window is where the
+// writing happens and the only place that knows, so it says so.
+//
+// It carries the whole result set rather than a new count: the worker caches those results for the
+// next opening of the window, and a cache left describing the pre-write page would hand the
+// collector back the very rows they just settled. The count is then derived there, by the same
+// function the load-time match uses.
+//
+// Fire-and-forget, no response. The badge is not what the collector is looking at while this window
+// is open, and a write must never fail on the strength of it.
+export interface ResultsUpdatedNotice {
+  type: "results-updated";
+  tabId: number;
+  /** The address the window scanned. The worker drops the update unless the tab is still on it: a
+   *  tab that has navigated had its badge cleared for that navigation, and a late push would
+   *  resurrect a count for a page nobody is looking at. */
+  url: string;
+  results: MatchResult[];
+}
+
 // instance content script → background: "the collector asked for this stamp to be matched". The
 // worker opens the search beside the page that asked and puts the match window in front of it —
 // the two steps the page cannot take itself. It answers as soon as the window is up: what happens in
@@ -364,4 +386,5 @@ export type BackgroundMessage =
   | ListedHereNotice
   | DetectedNotice
   | OpenMatchRequest
-  | CachedResultsRequest;
+  | CachedResultsRequest
+  | ResultsUpdatedNotice;

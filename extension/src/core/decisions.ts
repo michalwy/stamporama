@@ -132,3 +132,23 @@ export function isAlreadyLinkedElsewhere(r: MatchResult): boolean {
     r.candidates.every((c) => c.existingColnectId !== null)
   );
 }
+
+/**
+ * What the toolbar badge counts for a page (#283): the rows that still owe the collector something —
+ * every `needs-confirm`, plus every `auto` whose ID is not on the stamp yet. `needsConfirm` comes
+ * back beside the total because the badge's *colour* says whether a decision is required, which is a
+ * different question from how much is left.
+ *
+ * Shared by the two things that set that badge — the load-time dry-run and the window pushing its
+ * results back after a write — so a page counted before any writing and the same page counted after
+ * are counted the same way. A row already written is excluded here rather than only by the caller:
+ * at load time nothing is written and the distinction is invisible, which is exactly how the badge
+ * came to keep counting work that was already done.
+ */
+export function badgeTodo(results: MatchResult[]): { todo: number; needsConfirm: number } {
+  const needsConfirm = results.filter((r) => r.status === "needs-confirm").length;
+  const pendingAuto = results.filter(
+    (r) => r.status === "auto" && !r.alreadySet && !r.written
+  ).length;
+  return { todo: needsConfirm + pendingAuto, needsConfirm };
+}

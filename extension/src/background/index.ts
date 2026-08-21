@@ -23,9 +23,11 @@ import type {
   OpenMatchResponse,
   OverwriteDateResponse,
   OverwriteNumberResponse,
+  ResultsUpdatedNotice,
   SearchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
+import { badgeTodo } from "../core/decisions";
 import { callConfirm, callMatch, callOverwriteDate, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
 import { callSearch } from "./search-client";
@@ -94,14 +96,51 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
       await getIssueDateSync()
     );
     resultCache.set(tabId, results);
-
-    const needsConfirm = results.filter((r) => r.status === "needs-confirm").length;
-    const pendingAuto = results.filter((r) => r.status === "auto" && !r.alreadySet).length;
-    const todo = needsConfirm + pendingAuto;
-    await setBadge(tabId, todo, needsConfirm > 0 ? BADGE_NEEDS_DECISION : BADGE_AUTO);
+    await showTodoBadge(tabId, results);
   } catch {
     // Leave the detected-count badge in place; browsing offline must stay quiet.
   }
+}
+
+/**
+ * Whether two addresses name the same document, the fragment aside. A fragment moves the collector
+ * about *within* the page the results describe and does not reload it, so a strict comparison would
+ * throw away a perfectly good update for a click on an anchor.
+ */
+function sameDocument(a: string, b: string): boolean {
+  try {
+    const [x, y] = [new URL(a), new URL(b)];
+    x.hash = "";
+    y.hash = "";
+    return x.href === y.href;
+  } catch {
+    return a === b;
+  }
+}
+
+/** Draw a set of results as the badge: how much is left, amber when any of it is a decision. */
+async function showTodoBadge(tabId: number, results: MatchResult[]): Promise<void> {
+  const { todo, needsConfirm } = badgeTodo(results);
+  await setBadge(tabId, todo, needsConfirm > 0 ? BADGE_NEEDS_DECISION : BADGE_AUTO);
+}
+
+/**
+ * Take the window's word for what a page now holds (#283) — cache and badge together, since they
+ * are one answer told twice and the write that outdated one outdated the other.
+ *
+ * The tab is re-read rather than trusted: this arrives after a round trip to the instance, and a
+ * collector who navigated in the meantime has already had the badge cleared for that navigation.
+ * A tab that is gone, or has moved on, is simply left alone.
+ */
+async function applyResultsUpdate(msg: ResultsUpdatedNotice): Promise<void> {
+  try {
+    const tab = await chrome.tabs.get(msg.tabId);
+    if (!tab.url || !sameDocument(tab.url, msg.url)) return;
+  } catch {
+    return;
+  }
+  resultCache.set(msg.tabId, msg.results);
+  await showTodoBadge(msg.tabId, msg.results);
 }
 
 async function handle(
@@ -368,6 +407,14 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     return true;
+  }
+
+  // The window saying what that match now says, a write later (#283). The counterpart of the
+  // question below: one hands the window the worker's answer, the other hands the worker the
+  // window's. No response — the badge must never be something a write waits on.
+  if (msg?.type === "results-updated") {
+    void applyResultsUpdate(msg);
+    return false;
   }
 
   // The window asking for the load-time match of its source tab.

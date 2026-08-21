@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isAlreadyLinkedElsewhere, type Candidate, type MatchResult } from "./decisions";
+import { badgeTodo, isAlreadyLinkedElsewhere, type Candidate, type MatchResult } from "./decisions";
 
 // The filter behind "Show already linked elsewhere" (#305). It decides what disappears from the
 // decision list by default, so the free-candidate case is the one that must never be swallowed.
@@ -61,4 +61,45 @@ test("auto and skipped rows are never filtered — the toggle only governs decis
     isAlreadyLinkedElsewhere({ colnectId: "111", status: "skipped", reason: "no-candidates", refs: [] }),
     false
   );
+});
+
+// ── What the toolbar badge counts (#283) ─────────────────────────────────────
+// The same function draws the badge on page load and again after the window has written, so what
+// these cover is the difference between the two: a row that has just been written is done.
+
+function auto(colnectId: string, written: boolean, alreadySet: boolean): MatchResult {
+  return {
+    colnectId,
+    status: "auto",
+    stampId: "s1",
+    written,
+    alreadySet,
+    stamp: candidate("s1", colnectId),
+    refs: [],
+  };
+}
+
+test("the badge counts every decision and every auto-match still owing a write", () => {
+  assert.deepEqual(
+    badgeTodo([
+      needsConfirm("multiple-candidates", [candidate("s1", null), candidate("s2", null)]),
+      auto("222", false, false),
+      auto("333", false, true),
+      { colnectId: "444", status: "skipped", reason: "no-candidates", refs: [] },
+    ]),
+    { todo: 2, needsConfirm: 1 }
+  );
+});
+
+test("a row written since the page loaded no longer counts", () => {
+  assert.deepEqual(badgeTodo([auto("222", false, false)]), { todo: 1, needsConfirm: 0 });
+  assert.deepEqual(badgeTodo([auto("222", true, false)]), { todo: 0, needsConfirm: 0 });
+});
+
+test("a page with nothing left says so — an empty count, not a missing one", () => {
+  assert.deepEqual(badgeTodo([]), { todo: 0, needsConfirm: 0 });
+  assert.deepEqual(badgeTodo([auto("222", true, false), auto("333", false, true)]), {
+    todo: 0,
+    needsConfirm: 0,
+  });
 });
