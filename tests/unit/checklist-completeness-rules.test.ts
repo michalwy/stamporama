@@ -4,6 +4,7 @@ import {
   computeChecklistCompleteness,
   computeConditionCompleteness,
   computeForSaleSetCompleteness,
+  satisfiedMember,
   type CompletenessCount,
   type CompletenessDisposition,
 } from "../../src/lib/checklist-completeness-rules";
@@ -346,5 +347,29 @@ describe("computeConditionCompleteness (#594)", () => {
     assert.equal(r.requiredCount, 0);
     assert.deepEqual(r.conditions, []);
     assert.deepEqual(r.any, { conditionId: null, owned: 0, completeSets: 0 });
+  });
+});
+
+describe("satisfiedMember (#661)", () => {
+  it("counts a variant copy toward the umbrella the checklist names", () => {
+    assert.equal(satisfiedMember(["226yw", "226"], new Set(["226"])), "226");
+  });
+
+  it("walks the whole variant chain, however deep", () => {
+    assert.equal(
+      satisfiedMember(["309APa", "309AP", "309A", "309"], new Set(["309"])),
+      "309"
+    );
+  });
+
+  it("gives the copy to the nearest member, so one stamp fills one slot", () => {
+    assert.equal(
+      satisfiedMember(["226yw", "226"], new Set(["226", "226yw"])),
+      "226yw"
+    );
+  });
+
+  it("counts nothing for a copy whose chain reaches no member", () => {
+    assert.equal(satisfiedMember(["226 error"], new Set(["226"])), null);
   });
 });

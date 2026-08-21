@@ -9,9 +9,32 @@
 // says whether a duplicate is a spare or the only one. A single missing stamp makes it zero
 // however deep the pile of the others is, and that is the point.
 
+/**
+ * One stamp's rollup chain: the stamp itself, then the ancestors a copy of it also counts as —
+ * upward through **variant** edges only (ADR-0010 §3), nearest first. Built server-side by
+ * `checklist-variant-rollup.ts`; the ordering is what makes {@link satisfiedMember} an answer.
+ */
+export type VariantChain = readonly string[];
+
+/**
+ * Which stamp of `members` a copy carrying this chain satisfies, or null for none (#661).
+ *
+ * **The nearest one wins.** A `226yw` copy on a checklist that names only `226` counts as the
+ * `226` it is a variant of — that is the whole point of the rollup. On a checklist naming both, it
+ * counts as the `226yw` it actually is, and `226` stays missing: one piece of paper cannot fill two
+ * slots of the same set, and a set that reads complete out of fewer stamps than it has entries is
+ * the one figure a completeness reading must never produce.
+ */
+export function satisfiedMember(chain: VariantChain, members: ReadonlySet<string>): string | null {
+  for (const stampId of chain) {
+    if (members.has(stampId)) return stampId;
+  }
+  return null;
+}
+
 /** Which copies a completeness figure counts. Not a partition: a copy can be in the collection
  *  *and* for sale, so the disposition rows overlap and `any` is never their sum. */
-export type CompletenessDisposition = "any" | "in_collection" | "for_sale" | "for_trade";
+export type CompletenessDisposition ="any" | "in_collection" | "for_sale" | "for_trade";
 
 export const COMPLETENESS_DISPOSITIONS: readonly CompletenessDisposition[] = [
   "any",

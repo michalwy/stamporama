@@ -63,6 +63,7 @@ import {
   computeConditionCompleteness,
   type ConditionCompletenessCount,
 } from "./checklist-completeness-rules";
+import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 import { buildLocationPath } from "./location-path";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
@@ -2202,6 +2203,9 @@ export async function listIssueGroupCompleteness(
   // One `groupBy` for every checklist on screen, however many issues they span — the overlap
   // between a basic set and its specialized counterpart must not be counted twice.
   const stampIds = [...new Set(checklists.flatMap((c) => c.stamps.map((s) => s.stampId)))];
+  // A copy filed under a variant of a listed stamp is a copy of it (#661), so the read reaches
+  // below the membership and each row is attributed back to the member it answers for.
+  const rollup = await loadChecklistVariantRollup(collectionId, stampIds);
   const locationIds = await resolveLocationScope(collectionId, filters);
   const where = await withMissingCatalogFilter(
     collectionId,
@@ -2210,13 +2214,13 @@ export async function listIssueGroupCompleteness(
   );
 
   const [rows, conditions] = await Promise.all([
-    stampIds.length === 0
+    rollup.countingStampIds.length === 0
       ? []
       : prisma.item.groupBy({
           by: ["stampId", "conditionId"],
           // AND-ed rather than spread: the filter `where` already carries an `AND` list and an
           // `OR` of its own, and a stray key would silently replace one of them.
-          where: { AND: [where, { stampId: { in: stampIds } }] },
+          where: { AND: [where, { stampId: { in: rollup.countingStampIds } }] },
           _count: { _all: true },
         }),
     prisma.stampCondition.findMany({
@@ -2237,9 +2241,12 @@ export async function listIssueGroupCompleteness(
   for (const checklist of checklists) {
     // A checklist reached through `issueId in ids` always has one; the guard is for the type.
     if (!checklist.issueId) continue;
+    // Attributed per checklist: the same variant copy answers as its umbrella on the basic list
+    // and as itself on the specialized one (#661).
+    const members = new Set(checklist.stamps.map((s) => s.stampId));
     const result = computeConditionCompleteness(
-      checklist.stamps.map((s) => s.stampId),
-      counts,
+      [...members],
+      rollUpCounts(counts, rollup, members),
       conditionIds
     );
     byIssue[checklist.issueId].push({

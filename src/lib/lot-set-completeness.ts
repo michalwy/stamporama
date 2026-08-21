@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
 import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
+import { loadChecklistVariantRollup, rollUpStampIds } from "./checklist-variant-rollup";
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { loadIssuePrefixMap } from "./issue-prefix";
 
@@ -141,19 +142,27 @@ export async function getLotSetCompleteness(
   // overlap between a basic set and its specialized counterpart is exactly the case that must not
   // be counted twice, and `getIssueCompleteness` shares the reasoning.
   const stampIds = [...new Set(checklists.flatMap((c) => c.stamps.map((s) => s.stampId)))];
+  // The stock read reaches below the membership (#661): a `226yw` in the stockbook is a `226` for
+  // the set it completes, and a set is listable out of the copies actually held.
+  const rollup = await loadChecklistVariantRollup(collectionId, stampIds);
+  const counting = rollup.countingStampIds;
   const [stock, fromLot] = await Promise.all([
-    stampsWithStock(forSaleStockWhere(collectionId, stampIds)),
-    stampsWithStock({ ...forSaleStockWhere(collectionId, stampIds), ...scopeWhere(scope) }),
+    stampsWithStock(forSaleStockWhere(collectionId, counting)),
+    stampsWithStock({ ...forSaleStockWhere(collectionId, counting), ...scopeWhere(scope) }),
   ]);
 
-  const computed = checklists.map((c) => ({
-    checklist: c,
-    result: computeForSaleSetCompleteness(
-      c.stamps.map((s) => s.stampId),
-      stock,
-      fromLot
-    ),
-  }));
+  const computed = checklists.map((c) => {
+    // Per checklist, since which member a variant copy answers for depends on what this one names.
+    const members = new Set(c.stamps.map((s) => s.stampId));
+    return {
+      checklist: c,
+      result: computeForSaleSetCompleteness(
+        [...members],
+        rollUpStampIds(stock, rollup, members),
+        rollUpStampIds(fromLot, rollup, members)
+      ),
+    };
+  });
 
   // Only the stamps actually missing are read back for their numbers — on a well-stocked parcel that
   // is nothing at all, and on a thin one it is bounded by the checklists on screen. The area tree and

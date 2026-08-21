@@ -15,6 +15,7 @@ import {
   type SortableIssueGroup,
 } from "./issue-groups";
 import { isUnknownVariantStamp } from "./variant-classification";
+import { loadChecklistVariantRollup } from "./checklist-variant-rollup";
 import {
   wantMatchesCopy,
   acceptanceSetsEqual,
@@ -1310,6 +1311,12 @@ const ANY_ACCEPTANCE: WantAcceptanceInput = {
  *   different intents about one stamp, which ADR-0032 §1 makes a want *per terms* to express.
  *
  * A closed want still skips nothing: the collector closed it, and a gap that is back is real.
+ *
+ * **Held is read the way the completeness card reads it** (#661): a copy filed under a variant of
+ * one of these stamps is a copy of it, so the counting set reaches below `stampIds` and each copy
+ * is attributed back to the stamp it answers for. The button sits on that card and says *add what
+ * is missing*; a gap that disagreed with the fraction above it would want a stamp the card had
+ * just called held.
  */
 async function wantGapForStamps(
   collectionId: string,
@@ -1318,10 +1325,12 @@ async function wantGapForStamps(
 ): Promise<{ missing: string[]; toCreate: string[] }> {
   const ids = [...new Set(stampIds)];
   if (ids.length === 0) return { missing: [], toCreate: [] };
+  const members = new Set(ids);
+  const rollup = await loadChecklistVariantRollup(collectionId, ids);
 
   const [copies, openWants] = await Promise.all([
     prisma.item.findMany({
-      where: countedCopiesWhere(collectionId, ids),
+      where: countedCopiesWhere(collectionId, rollup.countingStampIds),
       select: {
         stampId: true,
         conditionId: true,
@@ -1343,7 +1352,10 @@ async function wantGapForStamps(
   const satisfied = new Set(
     copies
       .filter((c) => wantMatchesCopy({ ...acceptance, stampId: c.stampId }, c))
-      .map((c) => c.stampId)
+      .flatMap((c) => {
+        const member = rollup.memberFor(c.stampId, members);
+        return member === null ? [] : [member];
+      })
   );
   const wantedOnTheseTerms = new Set(
     openWants
@@ -1439,11 +1451,17 @@ export async function previewIssueMissingWants(
 /**
  * The bulk add itself (#548): wants for what the named checklists of one issue are missing.
  *
- * The gap is recomputed here over the **union** of those checklists rather than taken from the
- * preview the collector confirmed — a stamp on two of them must not be wanted twice, and a copy
- * that arrived while the dialog was open is a copy held. Recomputed against the same `acceptance`
- * the preview stated its count for, since on these terms both halves of the gap are different
- * questions than on any other.
+ * The gap is recomputed here rather than taken from the preview the collector confirmed — a copy
+ * that arrived while the dialog was open is a copy held — against the same `acceptance` the preview
+ * stated its count for, since on these terms both halves of the gap are different questions than on
+ * any other.
+ *
+ * Taken **per checklist and unioned**, the preview's own shape, rather than over the merged
+ * membership. Which stamp a variant copy answers for is a question about one checklist's membership
+ * (#661): asked of the union, a `226yw` copy would answer for the specialized list that names it
+ * and leave the basic list's `226` looking missing, wanting a stamp two screens report as held.
+ * Unioning the *gaps* keeps the old property that a stamp on two of them is wanted once — a shared
+ * stamp is one id in either set.
  */
 export async function createWantsForIssue(
   ownerId: string,
@@ -1462,10 +1480,12 @@ export async function createWantsForIssue(
   });
   if (checklists.length === 0) throw new Error("No checklist of this issue was selected.");
 
-  const gap = await wantGapForStamps(
-    collectionId,
-    checklists.flatMap((c) => c.stamps.map((s) => s.stampId)),
-    terms
+  const gaps = await Promise.all(
+    checklists.map((c) => wantGapForStamps(collectionId, c.stamps.map((s) => s.stampId), terms))
   );
+  const gap = {
+    missing: [...new Set(gaps.flatMap((g) => g.missing))],
+    toCreate: [...new Set(gaps.flatMap((g) => g.toCreate))],
+  };
   return writeGeneratedWants(collectionId, gap, terms);
 }

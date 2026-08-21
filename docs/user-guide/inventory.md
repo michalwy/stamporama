@@ -961,6 +961,9 @@ filters to read the whole collection's answer, or open the issue's own page for 
 [completeness grid](detail-pages.md#completeness), which breaks the same question down by disposition and format
 as well.
 
+A copy filed under a **variant** of a stamp on the checklist counts for that stamp, at any depth —
+the same rule the issue's own [completeness grid](detail-pages.md#completeness) states in full.
+
 An issue whose checklists you hold nothing of shows no chips, and so does the **no issue** row: a
 bucket of copies is not a set that can be complete.
 

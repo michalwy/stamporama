@@ -164,6 +164,17 @@ however many duplicates of the others you hold — which is the point of the fig
 Sold, disposed-of and never-usably-delivered copies are not counted, matching the copies-held badge
 on the catalog lists.
 
+A copy filed under a **variant** of a stamp on the checklist counts for that stamp. If the
+checklist asks for `226` and the two copies you hold are a `226xw` and a `226yw` — filed under
+`226` because that is what you eventually identified them as — the set counts them: a variant is
+another way of holding the stamp it hangs under, exactly as it is for
+[catalog value](collections.md#the-valuation-dialog). It works at any depth, so a copy three levels
+down still counts. Children that are **distinct entries** rather than variants — an error, a plate
+flaw, an overprint with its own number — do not: those are their own thing to collect. Which is
+which is the [subtype](collections.md#stamp-subtypes) on the child, the same setting the rest of
+the app reads the variant tree by. If the checklist names *both* a stamp and one of its variants,
+a copy counts for the closer of the two only — one piece of paper cannot fill two slots of one set.
+
 **Formats** are tabs above the grid — *Any format*, *Single*, and one per
 [format](inventory.md#pairs-blocks-and-other-multiples) you hold copies of. They appear only once the checklist is held in
 more than one format, so a set you own singles of shows the plain grid it always did. Picking a
@@ -182,4 +193,5 @@ Each card also carries **Add missing to want list**. It creates one open entry o
 an open want for. The entries it creates accept **anything** — a gap says only that the stamp is
 missing, not on what terms you would buy it — so edit them afterwards to say what you would take.
 It runs once, when you press it: changing the checklist later does not touch the want list, and
-pressing it again adds nothing that is already there.
+pressing it again adds nothing that is already there. *Do not hold* means what the grid above it
+means, variant children and all — a stamp the card counts as held is not wanted again.

@@ -1077,6 +1077,10 @@ An issue with several checklists reports each one **separately**, named — a st
 share is counted for both, because *is the basic set complete?* and *is the specialized set
 complete?* are two questions and one merged figure would answer neither.
 
+A for-sale copy filed under a **variant** of a stamp on the checklist counts for that stamp, at any
+depth — a `226yw` in the stockbook is the `226` the set is short of. The same rule the issue's own
+[completeness grid](detail-pages.md#completeness) states in full.
+
 Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
 disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
 **Prices** tab) — so you can correct a copy or fill in a missing price without leaving the

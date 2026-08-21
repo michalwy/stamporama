@@ -6,6 +6,7 @@ import {
   type CompletenessCount,
   type ChecklistCompletenessGrid,
 } from "./checklist-completeness-rules";
+import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 
 // The I/O half of #519's completeness card, per checklist since #531: one `groupBy` over every
 // stamp on the issue's checklists, split back out into one pure grid each. Deliberately **not** on
@@ -13,6 +14,10 @@ import {
 // (the reasoning #133 wrote down). The format axis rides on the same `groupBy` — one more `by`
 // column, no second query — because a format breakdown is a regrouping of the copies already read,
 // never a different set of them.
+//
+// The `groupBy` reaches **below** the membership (#661): a copy filed under a variant of a listed
+// stamp is a copy of it, so `checklist-variant-rollup.ts` widens the read to those children and
+// says which member each row answers for.
 
 /** One checklist's grid, named so the card can label it. */
 export interface ChecklistCompleteness extends ChecklistCompletenessGrid {
@@ -68,14 +73,15 @@ export async function getIssueCompleteness(
   // One `groupBy` for the whole issue, however many checklists it carries — the overlap between a
   // basic set and its specialized counterpart is exactly the case that must not be counted twice.
   const stampIds = [...new Set(checklists.flatMap((c) => c.stamps.map((s) => s.stampId)))];
+  const rollup = await loadChecklistVariantRollup(collectionId, stampIds);
   const rows =
-    stampIds.length === 0
+    rollup.countingStampIds.length === 0
       ? []
       : await prisma.item.groupBy({
           by: ["stampId", "conditionId", "formatId", "inCollection", "forSale", "forTrade"],
           where: {
             collectionId,
-            stampId: { in: stampIds },
+            stampId: { in: rollup.countingStampIds },
             saleLineItems: { none: {} },
             disposedAt: null,
             deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
@@ -96,16 +102,22 @@ export async function getIssueCompleteness(
   const formatIds = formats.map((f) => f.id);
 
   return {
-    checklists: checklists.map((c) => ({
-      checklistId: c.id,
-      name: c.name,
-      ...computeChecklistCompleteness(
-        c.stamps.map((s) => s.stampId),
-        counts,
-        conditionIds,
-        formatIds
-      ),
-    })),
+    checklists: checklists.map((c) => {
+      // Per checklist, because the member a copy answers for is a question about *this*
+      // membership: the same variant copy is its umbrella on the basic list and itself on the
+      // specialized one (#661).
+      const members = new Set(c.stamps.map((s) => s.stampId));
+      return {
+        checklistId: c.id,
+        name: c.name,
+        ...computeChecklistCompleteness(
+          [...members],
+          rollUpCounts(counts, rollup, members),
+          conditionIds,
+          formatIds
+        ),
+      };
+    }),
     conditions,
     formats,
   };

@@ -290,6 +290,10 @@ This runs **once, when you press it**. Changing the checklist afterwards does no
 the want list, and pressing the button again adds nothing for stamps that already have an
 open want.
 
+*You do not hold* is read the way the card above the button reads it: a copy filed under a
+**variant** of a stamp on the checklist counts as holding that stamp, so it is not wanted
+again. See [Completeness](detail-pages.md#completeness) for the full rule.
+
 ### Straight from the Issue list
 
 The same thing, without opening the issue: an Issue row's ⋮ menu carries **Add missing to
