@@ -20,12 +20,12 @@ import { isTradeContentEditable, isTradeSide, isTradeStatus, type TradeStatus } 
 //
 // **Nothing here is new.** Every condition is read off a record that already answers it — the
 // partner's remarks (`trade-feedback.ts`), the marketplace collision and the departure
-// (`trade-reservations.ts`), the verdict (`trade-realisation.ts`) and the valuation gate
-// (`trade-valuation.ts`) — which is the same move `trade-line-signals.ts` made for the rows. There is
-// no "needs attention" column and there never will be: a flag somebody has to keep up to date is a
-// flag that is wrong the first time nobody does.
+// (`trade-reservations.ts`), the verdict (`trade-realisation.ts`), the partner's copy request (a
+// column on the line, #658) and the valuation gate (`trade-valuation.ts`) — which is the same move
+// `trade-line-signals.ts` made for the rows. There is no "needs attention" column and there never
+// will be: a flag somebody has to keep up to date is a flag that is wrong the first time nobody does.
 //
-// It sits **above** those four and below nothing: `trade-lines.ts` calls it for the filter and the
+// It sits **above** those five and below nothing: `trade-lines.ts` calls it for the filter and the
 // trade's detail read calls it for the count, and neither of them is imported here.
 //
 // Not to be confused with `action-items.ts`, the sidebar bell: that one gathers what is waiting
@@ -33,8 +33,8 @@ import { isTradeContentEditable, isTradeSide, isTradeStatus, type TradeStatus } 
 // only thing it feeds is the toggle above them.
 //
 // **The reads are handed in where the caller already has them.** The trade's screen fetches the
-// feedback, the reservation and the realisation for the rows anyway, so the detail read passes them
-// straight through and this makes two more queries rather than seven. The filter path, which runs
+// feedback, the reservation, the realisation and the copy requests for the rows anyway, so the
+// detail read passes them straight through and this makes two more queries rather than nine. The filter path, which runs
 // only when the toggle is on, has nothing to hand in and reads all of it.
 
 /** What a caller already has in its hands. Anything absent is read here. */
@@ -42,6 +42,25 @@ export interface TradeActionInputs {
   feedback?: TradeActionSources["feedback"];
   reservation?: TradeActionSources["reservation"];
   realisation?: TradeActionSources["realisation"];
+  proposedLineIds?: TradeActionSources["proposedLineIds"];
+}
+
+/**
+ * The lines somebody has asked for a different copy on (#658), as ids.
+ *
+ * Read here rather than through `trade-proposals.ts`, and that is a layering decision rather than a
+ * shortcut: this module sits **below** `trade-lines.ts` (which imports it for the filter), while the
+ * proposal half sits above `trade-candidates.ts`, which imports `trade-lines.ts` — so reaching for it
+ * from here closes a cycle. What is duplicated is nothing: a request is a **column** on the line, so
+ * asking whether it is set is reading the record rather than re-deriving a rule, unlike every other
+ * condition in this file.
+ */
+async function readProposedLineIds(tradeId: string): Promise<string[]> {
+  const rows = await prisma.tradeLine.findMany({
+    where: { tradeId, proposedItemId: { not: null } },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
 }
 
 /** Every line of the trade, light — which column it is in, and the copy a give line promises. The
@@ -83,12 +102,17 @@ export async function readTradeActions(
   if (!trade) return { lines: {}, counts: {}, total: 0 };
   const status: TradeStatus = isTradeStatus(trade.status) ? trade.status : "preparing";
 
-  const [lines, feedback, reservation, realisation, blockers] = await Promise.all([
+  const [lines, feedback, reservation, realisation, proposedLineIds, blockers] = await Promise.all([
     readActionLines(tradeId),
     have.feedback ?? readTradeFeedback(ownerId, tradeId),
     have.reservation ?? readTradeReservation(tradeId),
     have.realisation ??
       readTradeLineFulfillments(tradeId).then((byLine) => ({ lines: [...byLine.values()] })),
+    // The partner's copy requests (#658). One light read over the trade's own lines, and skipped
+    // entirely once the list is locked — accepting a pick is a line write, so past the lock the
+    // answer could no longer be acted on, which is the same reason the gate below is skipped there.
+    have.proposedLineIds ??
+      (isTradeContentEditable(status) ? readProposedLineIds(tradeId) : Promise.resolve([])),
     isTradeContentEditable(status) ? readTradeGateBlockers(tradeId) : Promise.resolve([]),
   ]);
 
@@ -96,6 +120,7 @@ export async function readTradeActions(
     feedback,
     reservation,
     realisation,
+    proposedLineIds,
     // Every line the gate names, in either of its two gaps — deduplicated, since a line balanced by
     // value with no figure at all falls in both.
     unvaluedLineIds: [...new Set(blockers.flatMap((b) => b.lines.map((l) => l.lineId)))],

@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import {
   describeBlockedPromise,
   describeClosedPool,
+  describeLapsedCandidate,
+  describeLockedSwap,
+  TRADE_CANDIDATE_OFFER_HINT,
+  TRADE_CANDIDATE_SEND_HINT,
   hasTradeCandidates,
   tradeCandidateHint,
   tradeCandidateKey,
@@ -102,5 +106,36 @@ describe("the refusals", () => {
 
   it("names the status the pool is closed by", () => {
     assert.match(describeClosedPool("Agreed"), /agreed trade/);
+  });
+});
+
+// The wording a lapsed candidate is refused in (#658). The dialog that offers a swap is a moment old
+// by the time it is clicked, so the refusal has to say **which copy** and what happened to it.
+
+describe("describeLapsedCandidate", () => {
+  it("names the copy first, and always says it cannot take the line", () => {
+    for (const reason of ["sold", "gone", "not-in-hand", "promised", "held-back", "unknown"] as const) {
+      const message = describeLapsedCandidate("Copy #12", reason);
+      assert.match(message, /^Copy #12 /, reason);
+      assert.match(message, /cannot take this line\.$/, reason);
+    }
+  });
+
+  it("tells the sold copy apart from the one promised elsewhere", () => {
+    assert.notEqual(
+      describeLapsedCandidate("Copy #12", "sold"),
+      describeLapsedCandidate("Copy #12", "promised")
+    );
+  });
+
+  it("refuses a locked swap with the step that would unfreeze it, and not otherwise", () => {
+    assert.match(describeLockedSwap("Agreed", true), /Step the trade back to shared/);
+    assert.match(describeLockedSwap("Closed", false), /cannot be changed/);
+  });
+
+  it("says the two controls on a row apart — which one goes, and which may be asked for", () => {
+    assert.notEqual(TRADE_CANDIDATE_SEND_HINT, TRADE_CANDIDATE_OFFER_HINT);
+    assert.match(TRADE_CANDIDATE_SEND_HINT, /promises/);
+    assert.match(TRADE_CANDIDATE_OFFER_HINT, /every other trade/);
   });
 });

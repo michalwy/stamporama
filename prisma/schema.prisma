@@ -1655,6 +1655,10 @@ model Item {
   /** Give-side trade lines naming this copy (#646). `onDelete: Restrict` — a copy promised to a
    * partner must not vanish from under the agreement. */
   tradeLines TradeLine[] @relation("TradeLineItem")
+  /** Give-side trade lines the partner has **suggested** this copy against (#658). Advisory: it is
+   * not a promise, so unlike the line above it guards nothing — `onDelete: SetNull` takes the
+   * suggestion out and leaves the line naming the copy it always named. */
+  proposedTradeLines TradeLine[] @relation("TradeLineProposedItem")
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -3384,8 +3388,41 @@ model TradeLine {
   side      String
   position  Int    @default(0)
 
-  /** Give side: the copy leaving. Null on a receive line. */
+  /** Give side: the copy leaving — the **effective** reference. Null on a receive line.
+   *
+   *  Since #658 this is one of two copy references on the row, and the distinction is who put it
+   *  there. This one is the collector's, and it is the only one every other reader knows about: the
+   *  reservation gate (#639), the balance figures (#638), the packing list (#643) and the exit
+   *  record at closing (#644) all read this and nothing else. */
   itemId              String?
+
+  /** **The partner's suggestion** (#658; ADR-0039 §15) — which of the interchangeable copies behind
+   *  this line they would rather have, chosen from #657's candidate pool through the shared link.
+   *
+   *  It **moves nothing on its own.** Accepting writes it into `itemId` and clears it; dismissing
+   *  clears it alone. That keeps one rule rather than a rule and an exception: everything arriving
+   *  through the share link is advisory and the collector settles it (#641; ADR-0039 §10). The
+   *  copies in the pool have been declared interchangeable in advance, but *interchangeable* is a
+   *  judgement about a set, and the collector may have a reason about one particular piece that the
+   *  pool never encoded — a thin spot noticed on the second look, a copy promised out loud to
+   *  somebody else. A proposal costs one click and keeps that reason expressible.
+   *
+   *  It also puts the eligibility check where it belongs. A candidate can be sold, disposed of or
+   *  promised elsewhere while the partner is looking at it; with a proposal the re-check happens at
+   *  **acceptance**, on the collector's screen, where a refusal is actionable — rather than failing
+   *  in the partner's hands, in a browser with no session and nothing to do about it.
+   *
+   *  `onDelete: SetNull`, which is the whole difference from `itemId`'s `Restrict`: a suggestion
+   *  records nothing that happened and guards nothing, so a copy deleted takes its suggestions with
+   *  it and leaves every line naming exactly what it named before.
+   *
+   *  Give side only, and written with {@link proposedAt} as a unit — a CHECK says both. One
+   *  proposal per copy per trade, said by a **partial** unique index in the migration: two lines
+   *  sharing a key ("two of these") must not both end up proposed the same piece. */
+  proposedItemId      String?
+  /** When the suggestion arrived. Half of one fact with {@link proposedItemId} — written and
+   *  cleared with it, which a CHECK enforces rather than trusting every future writer to. */
+  proposedAt          DateTime?
 
   /** Receive side: the key of what is coming, exactly `Want`'s. All null on a give line — but note
    *  that on a receive line a null `certificateStatusId` **is a value** ("no certificate",
@@ -3446,6 +3483,7 @@ model TradeLine {
   trade             Trade              @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   section           TradeSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   item              Item?              @relation("TradeLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  proposedItem      Item?              @relation("TradeLineProposedItem", fields: [proposedItemId], references: [id], onDelete: SetNull)
   stamp             Stamp?             @relation("TradeLineStamp", fields: [stampId], references: [id], onDelete: Cascade)
   condition         StampCondition?    @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
@@ -3469,11 +3507,16 @@ model TradeLine {
   // The realisation read asks "what on this trade has a verdict", and on nearly every trade the
   // answer is none — so its index is **partial**, on the rows that say something, and is declared in
   // the migration because Prisma's schema language cannot express a `WHERE`.
+  // The partner's suggestion (#658) is held to one copy per trade the same way, and it is a
+  // **partial** unique index for the realisation index's reason above: nearly every line has none,
+  // so only the rows that say something belong in it. Declared in the migration, Prisma's schema
+  // language having no `WHERE`.
   @@unique([tradeId, itemId])
   @@index([tradeId])
   @@index([sectionId])
   @@index([tradeId, side])
   @@index([itemId])
+  @@index([proposedItemId])
   @@index([stampId])
   @@index([conditionId])
   @@index([certificateStatusId])

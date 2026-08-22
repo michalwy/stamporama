@@ -463,7 +463,69 @@ bulk add the picker uses, which names its refusals per copy, and the report puts
 on the shortfall it came from.
 
 The chosen copy is the **effective** one, written to `TradeLine.itemId` like any other give line:
-§13's pool then exposes the rest, and the partner may still propose a different one (#658).
+§13's pool then exposes the rest, and the partner may still propose a different one (§15).
+
+### 15. The partner's pick is a second, advisory reference — never a write into the first
+
+*(#658.)*
+
+§13 derives the set of copies that could take a give line's place and gives the collector control
+over it. This is the partner's answer, and the whole decision is **where that answer lands**.
+
+**Two copy references on the line, and the distinction is who put them there.** `TradeLine.itemId` is
+the **effective** copy — the collector's, and the only one every other reader knows about: the
+reservation gate (#639), the balance figures (§7), the packing list (#643) and the exit record at
+closing (§12) all read it and nothing else. `TradeLine.proposedItemId`, with the moment it arrived
+beside it, is the partner's **suggestion**. It moves nothing on its own: accepting writes it into
+`itemId` and clears it, dismissing clears it alone.
+
+**Why not let the pick write the line directly.** The earlier draft of the issue did exactly that, on
+the argument that copies left in the pool have already been declared interchangeable — §13's whole
+point being that a swap inside the key moves no figure and no verdict. That argument is wrong by one
+step: *interchangeable* is a judgement made in advance about a **set**, and the collector may have a
+reason about one particular piece that the set never encoded — a thin spot noticed on the second
+look, a copy promised out loud to somebody else. A proposal costs one click and keeps that reason
+expressible. It also keeps **one** rule rather than a rule and an exception: everything arriving
+through the shared link is advisory and the collector settles it (§10).
+
+**It puts the eligibility re-check where it belongs.** A candidate can be sold, disposed of or
+promised elsewhere while the partner is looking at it. With a proposal the re-check happens at
+**acceptance**, on the collector's screen, where a refusal is actionable and can be answered another
+way — instead of failing in the partner's hands, in a browser with no session and nothing to do about
+it. The refusal names the copy and the reason, `attachItemsToLot`'s rule, and the suggestion is left
+**standing** rather than cleared with it.
+
+**One proposal per copy per trade**, said by a partial unique index on `(tradeId, proposedItemId)` —
+two lines sharing a key ("two of these") must not both be answered with the same piece. Partial for
+the realisation index's reason: on nearly every trade nobody has proposed anything. The FK is
+`SET NULL`, not `itemId`'s `RESTRICT`, because a suggestion records nothing that happened and guards
+nothing.
+
+**The window is `shared` and nothing else** — narrower than §13's pool (`preparing` or `shared`) and
+narrower than feedback's (§10, which also takes `agreed`). A pick is an answer to a list that has
+been handed over: while the trade is `preparing` the collector is still composing, and from `agreed`
+the list is locked for both sides, the row becomes the statement of which copy was chosen, and a
+request nobody answered is closed out with the trade. Accepting obeys that lock and is refused by
+name with the step that would unfreeze it; **dismissing** is allowed wherever the trade is, since it
+clears advisory data and touches nothing that was agreed.
+
+**Scans of the candidates are token-scoped, as everything else on that page is.** §9 serves the
+photos of the copies *on* the lines; this widens that scope to the copies *offered against* them, and
+not one image further — asked only after the line-scoped check has missed, so an ordinary thumbnail
+costs the query it always did.
+
+**Granting a request and swapping a copy by hand are one write, on one screen.** The first cut of
+this decision put the answer behind the row's `⋮`, beside the other signals (§10, #662) — which was
+wrong for a reason the other signals do not have: the answer to *which copy* is a **picture**, and a
+menu entry naming `Copy #128` had the collector agreeing to a piece they had never seen. It also
+spread one decision over three surfaces: a chip that counted, a menu that decided, and §13's
+alternatives list, which drew every copy and not which one had been asked for. So the decision lives
+where the pictures are. `setTradeGiveLineItem` sits beside `setTradeCopyBlock` — the pool's two
+questions, *which one goes* and *which ones may be asked for*, are two controls on one row — and it
+is the only write that moves the effective reference, whether the collector picked the row themselves
+or granted what was asked. Two entry points for that write would be two places for it to differ. The
+target must be a **candidate**, which is what keeps the swap invisible to every figure; the other
+answer, dropping the request, touches nothing and so is allowed at any status.
 
 ## Consequences
 
@@ -479,6 +541,14 @@ The chosen copy is the **effective** one, written to `TradeLine.itemId` like any
   with them, not here.
 - `trade_copy_block` (§13) is the one table added since, and it stores an **exception** rather than a
   set: the candidate pool itself is derived on every read.
+- #658 shipped two columns and no table — `trade_line.proposedItemId` and `trade_line.proposedAt`,
+  written and cleared as a unit under a CHECK, with a partial unique index holding one proposal per
+  copy per trade and a `SET NULL` FK because a suggestion guards nothing. A row of its own would have
+  been a second place for one fact about one line to live, which is #642's argument for `fulfillment`
+  holding here. The one new surface is `POST /api/t/[token]/proposal`, beside the feedback route and
+  rate limited like it; the photo route gained a second, narrower question rather than a wider
+  `where`. On the collector's side it added **no** surface: §13's alternatives dialog grew the
+  request, the swap and the two answers, because that is the one screen where the copies are drawn.
 - #638 shipped its own, per that rule: `trade_line.manualValue` and `trade_line.catalogVendorId`
   (the two escape hatches), `trade_line_valuation` (the freeze) and `trade_fx_rate` (the rates). It
   also lifted the three access guards into `trade-access.ts`, below both halves of the domain, so

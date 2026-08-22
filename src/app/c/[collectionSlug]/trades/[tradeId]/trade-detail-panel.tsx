@@ -238,8 +238,9 @@ export function TradeDetailPanel({
         reservation: data?.reservation,
         realisation: data?.realisation,
         intake: data?.intake,
+        proposals: data?.proposals,
       }),
-    [data?.feedback, data?.reservation, data?.realisation, data?.intake]
+    [data?.feedback, data?.reservation, data?.realisation, data?.intake, data?.proposals]
   );
 
   const trade = data?.trade;
@@ -521,6 +522,7 @@ export function TradeDetailPanel({
           feedback={data?.feedback}
           reservation={data?.reservation}
           intake={data?.intake}
+          proposals={data?.proposals}
           isPending={isPending}
           onRun={run}
         />

@@ -196,10 +196,16 @@ the reason rather than silently promised.
 You are agreeing on **stamps**, but a line names one particular copy — and if you hold four of the
 same thing, which of them travels is not really decided yet.
 
-A give line whose stamp you hold more than once shows how many **alternatives** it has. The row's
-`⋮` menu opens the list: every copy of yours that answers the line exactly, drawn as a copy row —
-thumbnail, copy number, where it is filed, what it cost — with the promised copy at the head so you
-have something to compare against.
+A give line whose stamp you hold more than once shows how many **alternatives** it has. **Click the
+chip** — or use *Alternatives…* on the row's `⋮` — to open the list: every copy of yours that answers
+the line exactly, drawn as a copy row — thumbnail, copy number, where it is filed, what it cost —
+with the one you are sending at the head so you have something to compare against.
+
+Each row carries **two** buttons, and they answer two different questions. **Send this** is *which
+copy goes*: press it and that copy becomes what this line promises, while the one it replaced drops
+back into the list as an alternative. **Offered** / **Held back** is *whether your partner is shown
+it* at all. The row you are sending shows **Sending** instead of the first button — it is already the
+answer, so there is nothing to press.
 
 **Exactly** is strict, and deliberately so. An alternative has to match on the **stamp, the
 condition, the certificate and the format**. That is the same key the value of the line is looked up
@@ -211,16 +217,44 @@ The same rules that decide what the picker offers decide what appears here: a co
 longer held, not yet arrived, or promised to another live trade is never a candidate, and one stops
 being a candidate the moment any of that becomes true.
 
-**Everything eligible is offered by default; you take copies out.** Untick one to hold it back from
-this trade — the copy stays in your collection, stays available to every other trade, and only this
-partner stops being offered it. Tick it again to put it back. There is nowhere to write a reason,
+**Everything eligible is offered by default; you take copies out.** Press **Offered** to hold a copy
+back from this trade — the copy stays in your collection, stays available to every other trade, and only this
+partner stops being offered it. Press **Held back** to put it back. There is nowhere to write a reason,
 because the line's own notes are where anything worth writing down goes.
 
-The copy the line already promises has no tick: it is the promise, not an alternative to it. To stop
-offering it, remove the line or swap the copy.
+The copy you are sending has no **Offered** button: it is the promise, and holding back the thing you
+are promising is not a state. To stop offering it, send a different one or remove the line.
+
+Swapping never moves a figure. Everything in this list matches the line on stamp, condition,
+certificate and format, so the balance, the totals and every verdict read the same before and after.
+If the copy you click has been sold, disposed of or promised to another trade since the list was
+drawn, the swap is refused by name — *Copy #128 has been sold since, so it cannot take this line*.
 
 Alternatives are live while the trade is **being prepared** or **shared**, which is when the choice
 is actually made. Once the trade is agreed they are settled along with the rest of the list.
+
+### When your partner asks for a different one
+
+While the trade is **shared**, your partner sees those same alternatives on their own page — as
+pictures — and can say which one they would like. What comes back is a **request**, not a change:
+nothing on your list moves until you say so.
+
+A line they have asked about carries a **Partner's pick · Copy #128** chip. Click it and you land in
+the same alternatives list, which is where the whole thing is answered — because the question is
+*which of these pieces*, and that is something you look at rather than read. At the head of the list
+the request is stated with its two answers: **Send Copy #128 instead**, and **Keep the copy I chose**.
+The row they asked for is **highlighted** — the whole row, tinted — in the list itself, so you can compare its scans against the
+one you had picked before deciding either way.
+
+You do not have to take either answer literally. **Send this** on any row sends *that* copy, which is
+useful when their request prompts you to send a third one instead; the request then stays on the row
+until you clear it.
+
+Requests are counted above the columns and by the **Needs action** filter, beside partner remarks: it
+is your partner waiting on an answer, and nobody else is going to give it. Once the trade is
+**agreed** the list is locked, so swapping is refused until you step it back to *Shared*; you can
+still clear a request you are not going to act on, and your partner is told on their own page that
+the exchange was agreed with the copy shown.
 
 ### Adding what you receive
 
@@ -501,6 +535,16 @@ pictures reachable from the overlay and Escape to close. A row shows the front a
 further is behind a **+2** on the second picture. Only photos of copies on this exchange can be
 opened, and only through the link.
 
+**Where you hold several copies that would do, your partner can pick one.** On a give line with
+alternatives behind it, the page shows each copy's scans side by side — the one you have chosen
+marked *Chosen now* — and your partner chooses the one they would rather have. It is a request and it
+is marked as one: nothing on the list changes, and you answer it from the row on your own screen (see
+[When your partner asks for a different one](#when-your-partner-asks-for-a-different-one)). A line
+where only one copy would do shows no picker at all; there would be nothing to choose. Picking is
+open while the exchange is **shared** — before that you are still composing, and after it the list is
+settled — and, like the scans on the rows, only the copies actually offered against this exchange can
+be opened through the link.
+
 The page is a **screen**, not a printout. If you want a trade on paper, it is the [parcel
 enclosure](#printing-the-packing-list-and-the-parcel-enclosure) — the sheet you print from your own
 side and put in the box.
@@ -533,8 +577,8 @@ finding again.
 
 Above the columns there are only two things: your partner's note about **the whole exchange**, which
 has no line to sit on, and a line saying how many things still need looking at, with **Go to the
-first** to jump to one. The count covers marketplace collisions and departed copies too, so one
-sentence tells you what stands between the list and being agreed.
+first** to jump to one. The count covers marketplace collisions, departed copies and requests for a
+different copy too, so one sentence tells you what stands between the list and being agreed.
 
 While there is anything you have not dealt with, the trade shows **Partner has responded** — on its
 own screen and on the trades list. It is worked out from the feedback itself, so it clears as you deal

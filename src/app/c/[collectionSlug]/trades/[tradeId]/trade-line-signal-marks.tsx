@@ -42,6 +42,12 @@ import { Icon } from "@/app/icons";
 // *this line did not go in the parcel* is a fact about one row, and the row is where it belongs. It
 // is drawn only once somebody has answered — every line of a freshly agreed trade is pending, and a
 // mark on all of them would be a mark that says nothing.
+//
+// **The partner's copy request (#658) is deliberately not here.** It is the one signal whose answer
+// cannot be given from a menu entry: deciding between two copies of one stamp means *looking* at
+// them, and a chip naming `Copy #128` with two entries behind a `⋮` had the collector agreeing to a
+// picture they had never seen. Its chip is drawn by the give column as a **button** onto the
+// alternatives list, where the scans, the swap and the two answers are one screen.
 
 const CHIP: React.CSSProperties = {
   display: "inline-flex",

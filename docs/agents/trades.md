@@ -176,5 +176,78 @@ Exchanges with another collector: what leaves, what arrives, the sections over b
   `addTradeGiveLines`'s. Re-offering the same URL updates the row rather than adding a second, since
   the import offers the file's own list every time it reads one.
 
-- **What is deliberately not here yet.** The partner's own pick from that pool (#658) — a second,
-  advisory reference beside `itemId` rather than a write into it.
+- **The partner's answer to that pool is a second reference on the line, never a write into the
+  first** (#658; ADR-0039 §15). `TradeLine.proposedItemId` — with the moment it arrived beside it,
+  written and cleared as a unit and a CHECK saying so — is the partner's **suggestion**; `itemId`
+  stays the **effective** copy and the only one any other reader knows about (the reservation gate,
+  the balance, the packing list, the exit record). Accepting writes the one into the other and clears
+  it; dismissing clears it alone. That keeps **one** rule rather than a rule and an exception —
+  everything arriving through the shared link is advisory and the collector settles it (#641). The
+  copies in the pool are interchangeable by construction, which is exactly the argument an earlier
+  draft used for letting the pick write the line directly; it is wrong, because *interchangeable* is
+  a judgement made in advance about a **set** and the collector may have a reason about one
+  particular piece the set never encoded (a thin spot noticed on the second look, a copy promised out
+  loud to somebody else). It also puts the eligibility re-check at **acceptance**, on the collector's
+  screen, where a refusal is actionable — instead of failing in the partner's hands, in a browser
+  with no session and nothing to do about it. **One proposal per copy per trade**, said by a partial
+  unique index on `(tradeId, proposedItemId)` (partial for the realisation index's reason: nearly
+  every line has none) and refused by name before it. `SetNull`, not `Restrict`: a suggestion guards
+  nothing. The pure half is `trade-proposal-rules.ts` and the database half `trade-proposals.ts`,
+  which sits **above** `trade-candidates.ts` and reads `readTradeCandidatePool` rather than deriving
+  the set a second time — what the partner is offered has to be exactly what the collector's own
+  *Alternatives* list shows.
+
+- **The picker is pictures, and it is only where there is a choice** (#658). On the partner's page a
+  give line with at least one alternative beside the copy it names draws them as **scans** — #666's
+  own thumbnails, enlarging on hover and opening full size — because deciding between two copies of
+  one stamp in one condition means looking at the perforation, the cancel and the gum. A line with a
+  single candidate is drawn exactly as #640 draws it: nothing gains a control that has one option.
+  The radio sits **beside** the pictures rather than around them, or a picture opened for a closer
+  look would answer the question on the way. The copy already chosen is the **first** option and
+  carries its own badge, so the collector's choice and the partner's request are never confused —
+  and picking it again is how a request is taken back, which is one control rather than a group and a
+  clear button that can disagree. **Photos are token-scoped as everything else on that page is**: the
+  route asks #640's question first and, only on the miss, whether the copy is one *offered against*
+  this trade's lines — the eligibility in one `where` and the four-way key compared against the give
+  lines' own keys, which is the same set the page offers and cheap enough to sit on a photo route.
+  **Only while `shared`**: before it the collector is still composing, and from `agreed` the list is
+  locked for both sides — the row becomes the statement of which copy was chosen, and a request
+  nobody answered is said once, on its row, to be closed out with the trade.
+
+- **On the collector's side the whole question is answered on one screen, and that is a correction
+  #658 made to its own first cut.** That cut spread it over three surfaces — a chip on the row naming
+  `Copy #128`, two entries behind the row's `⋮`, and #657's alternatives list, which drew every copy
+  and not which one had been asked for — so a collector could reach *accept* without once seeing the
+  piece they were agreeing to send. The answer to *which copy* is a **picture**, so everything moved
+  to where the pictures are. The row's chip is now a **button** onto the alternatives list (reversing
+  #657's *informational, like every other chip*, which held while the chip only counted and stopped
+  holding the moment the row carried a decision), and **one** chip rather than two: where a request
+  stands it wins, since the count of what else would do is on the screen it opens anyway. The list
+  states the request at its **head** with both answers, marks the copy it names, and carries **two**
+  controls per row — *Send this*, and *Offered* / *Held back*. Both are **worded buttons**, not the
+  bare radio-over-checkbox the first cut used: two unlabelled boxes on a row of duplicates are a
+  puzzle rather than a control, and at a checkbox's own size they were hard to hit besides. The row
+  being sent shows *Sending* as a statement, having nothing to press, and the row the partner asked
+  for is tinted with a rule down its edge — a collector comparing pictures down a column needs to
+  know **which picture** is the one in question before anything else. The `⋮` keeps an *Alternatives…* entry for the
+  collector who reaches for the menu, and drops the two proposal entries entirely.
+
+- **Granting a request and swapping a copy by hand are one write** (#658). `setTradeGiveLineItem`
+  lives in `trade-candidates.ts` beside `setTradeCopyBlock` — the two controls on a row belong
+  together — and it is the only thing that moves the **effective** reference: the target must be a
+  **candidate**, which is what keeps the swap invisible to every figure and to the snapshots frozen
+  at `agreed`, and anything wider is a different line reached by removing this one. Where the copy
+  being sent is the one asked for, the request has been answered and is cleared by the same write;
+  a swap to some third copy leaves it standing, the collector having said nothing about it. What is
+  left in `trade-proposals.ts` is the other answer, `dismissTradeCopyProposal`, which clears advisory
+  data and is therefore allowed wherever the trade is — a locked list still takes a decision about
+  what the partner asked for. The swap itself obeys the lock and is refused by name with the step
+  that unfreezes it (`describeLockedSwap`, kept apart from `describeClosedPool` because holding a
+  copy back and swapping one are different acts and a refusal naming the wrong one sends the
+  collector to the wrong lock). Eligibility is **re-run** at the swap and a lapse named per copy —
+  sold, no longer held, not in hand, promised elsewhere, held back — with the request left standing.
+
+- It counts as a **kind** in the strip above the columns and in the *needs action* filter (#663),
+  beside a remark and for a remark's reason: it is the partner waiting on an answer and nobody else
+  is going to give it. Only while the list is unlocked, which is #663's own rule about what an action
+  is — past the lock the swap is refused, so the request is a fact rather than a call for action.

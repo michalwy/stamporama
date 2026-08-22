@@ -43,6 +43,11 @@ import {
   NO_CANDIDATES,
   type TradeCandidateCount,
 } from "@/lib/trade-candidate-rules";
+import {
+  tradeProposalHint,
+  TRADE_PROPOSAL_CHIP_LABEL,
+} from "@/lib/trade-proposal-rules";
+import type { TradeProposalItem } from "@/lib/trade-proposals";
 import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { Icon } from "@/app/icons";
 
@@ -94,30 +99,59 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** **How many of my copies would do instead** (#657), on the line it is about.
+/** **What this line's other copies have to say** (#657, revised by #658), on the line it is about.
  *
- * A count and not a list: which copies they are is what opening the list is for, and a row is not the
- * place for four copy numbers. It reads muted where every match has been held back — that is a
- * decision the collector took, not a state of the goods, and it earns no colour.
+ * One chip and not two, because both open the same screen and a row carrying *Partner's pick · Copy
+ * #128* beside *2 alternatives* would be saying one thing twice with a comma in it. Where the partner
+ * has asked for something the request **wins**: it is the thing waiting on an answer, and the count
+ * of what else would do is on the screen it opens onto anyway.
  *
- * Informational, like every other chip on the row: getting to the list is a **row action**, in the
- * `⋮` with the others, because that is the app's one home for those.
+ * It is a **button**, which reverses #657's *informational, like every other chip on the row*. That
+ * held while the chip only counted; it stops holding the moment the row carries a decision, because
+ * the answer to *which copy* is a picture and the chip's whole job became getting the collector to
+ * one. The `⋮` entry stays for the collector who reaches for the menu.
  */
-function TradeCandidateChip({ count }: { count: TradeCandidateCount }) {
+function TradeCandidateChip({
+  count,
+  proposal,
+  onOpen,
+}: {
+  count: TradeCandidateCount;
+  proposal: TradeProposalItem | null;
+  onOpen: () => void;
+}) {
+  const asked = proposal !== null;
   return (
-    <Tooltip content={tradeCandidateHint(count)}>
-      <span
+    <Tooltip content={asked ? tradeProposalHint(proposal.copyLabel) : tradeCandidateHint(count)}>
+      <button
+        type="button"
+        onClick={onOpen}
         style={{
           ...CHIP,
           display: "inline-flex",
           alignItems: "center",
           gap: "0.2rem",
-          ...(count.available === 0 ? { color: "var(--color-text-muted)" } : {}),
+          cursor: "pointer",
+          ...(asked
+            ? {
+                color: "var(--color-accent)",
+                borderColor: "var(--color-accent-border)",
+                background: "var(--color-accent-soft)",
+                fontWeight: 600,
+              }
+            : count.available === 0
+              ? { color: "var(--color-text-muted)" }
+              : {}),
         }}
       >
-        <Icon name={count.available === 0 ? "excluded" : "duplicate"} size="sm" />{" "}
-        {tradeCandidateLabel(count)}
-      </span>
+        <Icon
+          name={asked ? "duplicate" : count.available === 0 ? "excluded" : "duplicate"}
+          size="sm"
+        />{" "}
+        {asked
+          ? `${TRADE_PROPOSAL_CHIP_LABEL} · ${proposal.copyLabel}`
+          : tradeCandidateLabel(count)}
+      </button>
     </Tooltip>
   );
 }
@@ -149,8 +183,8 @@ const TOOLBAR: React.CSSProperties = {
  *  in the same order so a reader can check one against the other. */
 const TRADE_ACTION_HINT =
   "Lines waiting for you: a copy still live on a marketplace, an unanswered partner remark, " +
-  "a promised copy that has left the collection, a line with no value yet, and — once the trade " +
-  "is agreed — a line nobody has said what became of.";
+  "a copy your partner asked for instead, a promised copy that has left the collection, a line " +
+  "with no value yet, and — once the trade is agreed — a line nobody has said what became of.";
 
 const EMPTY: React.CSSProperties = {
   padding: "1.5rem 0.75rem",
@@ -509,9 +543,11 @@ export function TradeSideRows({
    *  verdict is about the line rather than about a copy, which is what lets a receive line have one
    *  at all. The side travels with the id because half the wording inverts across the table. */
   onRecordRealisation: (lineId: string, side: TradeSide) => void;
-  /** Open the line's alternatives (#657) — the copies that would answer it exactly, and which of
-   *  them the partner is offered. Give side only: the partner's material is in nobody's inventory,
-   *  so a receive line has no set of copies to choose from. */
+  /** Open the line's alternatives (#657, widened by #658) — the copies that would answer it exactly,
+   *  which of them the partner is offered, which one is being sent, and what the partner asked for.
+   *  Give side only: the partner's material is in nobody's inventory, so a receive line has no set of
+   *  copies to choose from. Reached from the row's chip as well as from its menu, because the answer
+   *  to *which copy* is a picture. */
   onOpenCandidates: (lineId: string) => void;
   onRun: (action: () => Promise<TradeActionState>) => void;
 }) {
@@ -617,13 +653,13 @@ export function TradeSideRows({
                           // Offered only where there is something to open. A line whose stamp the
                           // collector holds once has no alternatives, and an entry that opened an
                           // empty list on every such row would be an entry nobody reads.
-                          ...(hasTradeCandidates(candidateCount)
+                          ...(hasTradeCandidates(candidateCount) || signals.proposal
                             ? [
                                 {
                                   key: "candidates",
                                   label: "Alternatives…",
                                   icon: "duplicate" as const,
-                                  hint: "Which of your copies could go instead, and which of them the partner is offered.",
+                                  hint: "Which of your copies could go instead, which of them the partner is offered, and what they asked for.",
                                   onSelect: () => onOpenCandidates(item.lineId),
                                 },
                               ]
@@ -656,9 +692,15 @@ export function TradeSideRows({
                       <>
                         <TradeLineSignalMarks signals={signals} side="give" />
                         {/* Last, after the signals: what is *wrong* with a line outranks what is
-                            merely true of it, and the alternatives are never a call for action. */}
-                        {hasTradeCandidates(candidateCount) && (
-                          <TradeCandidateChip count={candidateCount} />
+                            merely true of it. Drawn for a standing request even where the pool has
+                            since emptied — otherwise the one thing waiting on an answer would be
+                            the one thing with no way back to it. */}
+                        {(hasTradeCandidates(candidateCount) || signals.proposal) && (
+                          <TradeCandidateChip
+                            count={candidateCount}
+                            proposal={signals.proposal}
+                            onOpen={() => onOpenCandidates(item.lineId)}
+                          />
                         )}
                       </>
                     ) : undefined

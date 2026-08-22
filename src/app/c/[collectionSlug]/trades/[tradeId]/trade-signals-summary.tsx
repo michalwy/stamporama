@@ -7,6 +7,7 @@ import { resolveTradeFeedbackAction } from "@/app/actions/trades";
 import type { TradeFeedbackItem, TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
 import type { TradeIntakeRead } from "@/lib/trade-intake";
+import type { TradeProposalRead } from "@/lib/trade-proposals";
 import { tradeFeedbackActionLabels } from "@/lib/trade-feedback-rules";
 import {
   countTradeAttention,
@@ -75,6 +76,7 @@ export function TradeSignalsSummary({
   feedback,
   reservation,
   intake,
+  proposals,
   isPending,
   onRun,
 }: {
@@ -84,13 +86,17 @@ export function TradeSignalsSummary({
    *  here. Where the incoming material *is* belongs to the panel above, not to a count of what still
    *  wants looking at. */
   intake: TradeIntakeRead | undefined;
+  /** The partner's copy requests (#658) — counted here for the reason a remark is: it is the partner
+   *  talking, nobody else is going to answer it, and the strip's whole job is to say how many such
+   *  things there are before the collector goes looking for them. */
+  proposals: TradeProposalRead | undefined;
   isPending: boolean;
   onRun: (
     action: () => Promise<{ status: "success" } | { status: "error"; message: string }>
   ) => void;
 }) {
   const [missed, setMissed] = useState(false);
-  const sources = { feedback, reservation, intake };
+  const sources = { feedback, reservation, intake, proposals };
   const counts = countTradeAttention(sources);
   const summary = describeTradeAttention(counts);
   // The whole-exchange note, open or handled. At most one exists — a partial unique index says so.
@@ -101,7 +107,8 @@ export function TradeSignalsSummary({
   // A collision blocks the agreement, so the strip takes its colour: error while something stands in
   // the way, warning while a promise rests on a copy that has gone, accent while it is only a
   // conversation.
-  const tone = counts.listed > 0 ? "error" : counts.remarks > 0 ? "accent" : "warning";
+  const tone =
+    counts.listed > 0 ? "error" : counts.remarks + counts.proposed > 0 ? "accent" : "warning";
 
   return (
     <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.5rem" }}>

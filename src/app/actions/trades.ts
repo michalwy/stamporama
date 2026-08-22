@@ -47,7 +47,8 @@ import {
   reorderTradeColnectLists,
   updateTradeColnectList,
 } from "@/lib/trade-colnect-lists";
-import { setTradeCopyBlock } from "@/lib/trade-candidates";
+import { setTradeCopyBlock, setTradeGiveLineItem } from "@/lib/trade-candidates";
+import { dismissTradeCopyProposal } from "@/lib/trade-proposals";
 import {
   addTradeGiveLinesFromRequirement,
   type GiveRequirementReport,
@@ -688,6 +689,54 @@ export async function setTradeCopyBlockAction(
     return {
       status: "error",
       message: message(e, "Failed to change what is offered. Please try again."),
+    };
+  }
+}
+
+/**
+ * **Send this copy instead** — swap which copy the give line promises, inside its own pool (#658).
+ *
+ * The one write that moves the *effective* reference, and the same act whether the collector picked
+ * the row themselves or granted what the partner asked for: two entry points for one write would be
+ * two places for it to differ. The target has to be a candidate, which is what keeps the swap
+ * invisible to every figure on the trade; eligibility is re-run and a lapse is refused by name.
+ */
+export async function setTradeGiveLineItemAction(
+  lineId: string,
+  itemId: string
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await setTradeGiveLineItem(session.user.id, lineId, itemId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: message(e, "Failed to change the copy. Please try again."),
+    };
+  }
+}
+
+// ── The partner's pick from that pool (#658) ─────────────────────────────────────────────────────
+
+/**
+ * Drop the partner's request, leaving the promise where it is.
+ *
+ * The other answer is `setTradeGiveLineItemAction` above, which **is** granting it. This one clears
+ * advisory data and so is allowed wherever the trade is: a locked list still takes a decision about
+ * what the partner asked for.
+ */
+export async function dismissTradeCopyProposalAction(
+  lineId: string
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await dismissTradeCopyProposal(session.user.id, lineId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: message(e, "Failed to answer the request. Please try again."),
     };
   }
 }

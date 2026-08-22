@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
 import { canServeTradeSharePhoto, verifyTradeShareToken } from "@/lib/trade-share";
+import { canServeTradeShareCandidatePhoto } from "@/lib/trade-proposals";
 import { getPhotoForServing } from "@/lib/photos";
 import { getStorage, toWebStream, variantKey } from "@/lib/storage";
 import type { PhotoVariant } from "@/lib/storage";
@@ -53,7 +54,15 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (!(await canServeTradeSharePhoto(verified.access, photoId))) {
+  // Two questions, asked in that order (#658). The first is #640's: is this picture on one of this
+  // trade's own lines. The second widens the scope to the copies **offered against** those lines —
+  // the partner is being asked which one they want and cannot choose between pictures they cannot
+  // see — and not one image further. It is asked only on the miss, so an ordinary thumbnail still
+  // costs the one query it always did.
+  if (
+    !(await canServeTradeSharePhoto(verified.access, photoId)) &&
+    !(await canServeTradeShareCandidatePhoto(verified.access, photoId))
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

@@ -328,4 +328,78 @@ export const SHARE_STYLESHEET = `
 }
 .ts-fb-box { margin: 2.5rem 0 0; }
 .ts-fb-heading { font-size: 1.125rem; font-weight: 600; margin: 0; }
+
+/* **Which of these copies would you like?** (#658). The one control on this page that is made of
+   pictures, because that is what the question is: two copies of the same stamp in the same
+   condition differ in the perforation, the cancel and the gum, and none of that can be read out of
+   words. So the options get room — indented under the row they belong to, set off by a rule down the
+   side so they read as part of that line rather than as a second list. */
+.ts-choice {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0 0.25rem 0.75rem;
+  border-left: 0.1875rem solid var(--color-border);
+}
+.ts-choice-prompt {
+  margin: 0 0 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+/* The bargain, said where the choice is made: nothing here changes the list. On its own line, so it
+   is read once and then ignored rather than crowding the question. */
+.ts-choice-hint {
+  display: block;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.ts-choice-opts { display: flex; flex-wrap: wrap; gap: 1rem; }
+/* One option is a column: its scans, then the radio that picks it, then what it already is. Wide
+   enough for the two thumbnails a copy normally has. */
+.ts-choice-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-bg-page);
+}
+/* The copy the collector chose, and the copy the partner asked for, are marked apart — the two are
+   never the same thing, and a page that drew them alike would suggest the swap had happened. */
+.ts-choice-opt[data-current="true"] { border-color: var(--color-border-strong); }
+.ts-choice-opt[data-picked="true"] {
+  border-color: var(--color-info-border);
+  background: var(--color-info-soft);
+}
+.ts-choice-pics { display: flex; gap: 0.4rem; align-items: center; min-height: 4rem; }
+.ts-choice-nopic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+.ts-choice-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.ts-choice-badge {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.ts-choice-badge[data-tone="asked"] { color: var(--color-info); font-weight: 600; }
+/* A request the collector never answered, on a list that has since been locked. */
+.ts-choice-closed {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
 `;

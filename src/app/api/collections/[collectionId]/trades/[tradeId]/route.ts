@@ -8,6 +8,7 @@ import { readTradeRealisation } from "@/lib/trade-realisation";
 import { readTradeIntake } from "@/lib/trade-intake";
 import { readTradeActions } from "@/lib/trade-line-actions";
 import { readTradeCandidates } from "@/lib/trade-candidates";
+import { readTradeProposals } from "@/lib/trade-proposals";
 
 /** One trade with its sections (#637) — the trade screen's header read.
  *
@@ -42,6 +43,10 @@ import { readTradeCandidates } from "@/lib/trade-candidates";
  * each answering about fifty rows out of the same set. It returns nothing at all from `agreed` on,
  * where the choice is settled with everything else the lock covers.
  *
+ * And the **partner's copy requests** (#658): which give lines they have asked for a different copy
+ * on. One light read over the trade's own lines, rides here for the reservation's reason, and it is
+ * what the row draws its *Partner's pick* mark from and answers from.
+ *
  * And finally **what is waiting for the collector** (#663), which is a reading *of* the four above
  * rather than a sixth read: it is counted here, once for the trade, so that each column's toggle can
  * say how many of its lines are waiting before anyone applies it — a count fetched per column would
@@ -63,20 +68,24 @@ export async function GET(
     if (!trade || trade.collectionId !== collectionId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const [reservation, feedback, realisation, intake, candidates] = await Promise.all([
+    const [reservation, feedback, realisation, intake, candidates, proposals] = await Promise.all([
       readTradeReservation(tradeId),
       readTradeFeedback(session.user.id, tradeId),
       readTradeRealisation(tradeId),
       readTradeIntake(tradeId),
       readTradeCandidates(session.user.id, tradeId),
+      readTradeProposals(tradeId),
     ]);
-    // Handed the three reads it would otherwise make again: what is waiting is a reading of those
+    // Handed the four reads it would otherwise make again: what is waiting is a reading of those
     // same answers, and reading them twice on one request would be this route disagreeing with
     // itself the moment a line changed between the two.
     const actions = await readTradeActions(session.user.id, tradeId, {
       feedback,
       reservation,
       realisation,
+      // Ids alone: what "waiting" needs of a request is that there is one, and the read this route
+      // already made is where the rest of it comes from.
+      proposedLineIds: Object.keys(proposals.lines),
     });
     return NextResponse.json({
       trade,
@@ -85,6 +94,7 @@ export async function GET(
       realisation,
       intake,
       candidates,
+      proposals,
       actions,
     });
   } catch {

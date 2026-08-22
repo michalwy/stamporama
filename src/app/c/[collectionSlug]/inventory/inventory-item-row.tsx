@@ -324,6 +324,11 @@ interface InventoryItemRowProps {
   trailingChips?: ReactNode;
   /** Tint the row background to flag it (e.g. a copy blocking a lot close, #121). */
   highlight?: boolean;
+  /** Which tone the tint takes. `error` is the original and stays the default — a copy blocking a
+   *  lot close is a fault. `accent` is for a row singled out without anything being wrong with it,
+   *  which is what the partner's requested copy is (#658): the collector is comparing pictures down
+   *  a column and needs to know which one is the one in question, not to be told off about it. */
+  highlightTone?: "error" | "accent";
   /** When provided, the catalog-value area becomes an inline price editor (#121). */
   onSetCatalogPrice?: () => void;
   /** When provided, the location chip becomes a button (with an "＋ location" affordance when
@@ -395,6 +400,7 @@ export function InventoryItemRow({
   actionsOverride,
   trailingChips,
   highlight = false,
+  highlightTone = "error",
   onSetCatalogPrice,
   onSetLocation,
   hideDispositions = false,
@@ -634,7 +640,7 @@ export function InventoryItemRow({
           background: hovered
             ? "var(--color-bg-row-hover)"
             : highlight
-              ? "var(--color-error-soft, var(--color-bg-page))"
+              ? `var(--color-${highlightTone}-soft, var(--color-bg-page))`
               : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           display: "flex",

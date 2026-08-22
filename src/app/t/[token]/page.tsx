@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
 import { readTradeShareView, verifyTradeShareToken, type TradeShareView } from "@/lib/trade-share";
 import { readPartnerTradeFeedback } from "@/lib/trade-feedback";
+import { readTradeShareChoices } from "@/lib/trade-proposals";
 import {
   TRADE_SHARE_REFUSAL_MESSAGE,
   tradeShareSideHeading,
@@ -41,8 +42,8 @@ import { PartnerFeedbackProvider, TradeNoteFeedback } from "./feedback-controls"
 //
 // The page took **no client code at all** until it began taking answers back (#641), and what is
 // client code is still only what an answer needs: the control on a row, the note box at the foot,
-// and — since #666 — the scans, which enlarge on hover and open full size. The list itself is one
-// server render.
+// the scans, which enlarge on hover and open full size (#666), and the copy picker on a give line
+// with more than one candidate behind it (#658). The list itself is one server render.
 
 export const metadata: Metadata = {
   title: "Exchange list",
@@ -85,9 +86,13 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
     (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).split(",")
   );
 
-  const [view, feedback] = await Promise.all([
+  const [view, feedback, choices] = await Promise.all([
     readTradeShareView(verified.access, levels),
     readPartnerTradeFeedback(verified.access),
+    // **Which of the collector's copies would you like?** (#658). Read beside the list rather than
+    // folded into it: a choice is about the *copies behind* a line rather than about the line, and
+    // the payload the list is reduced to deliberately carries nothing about a copy at all.
+    readTradeShareChoices(verified.access),
   ]);
   // The token verified against a trade that has gone since. Told the same way a withdrawn link is:
   // the partner has no way to tell the two apart and nothing they could do differently either.
@@ -127,7 +132,12 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
               <h2 className="ts-section-name">{section.name}</h2>
               <div className="ts-sides">
                 {section.sides.map((side) => (
-                  <ShareSide key={side.side} side={side} token={token} />
+                  <ShareSide
+                    key={side.side}
+                    side={side}
+                    token={token}
+                    choices={choices}
+                  />
                 ))}
               </div>
             </section>

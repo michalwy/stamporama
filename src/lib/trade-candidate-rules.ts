@@ -95,10 +95,67 @@ export function tradeCandidateHint(count: TradeCandidateCount): string {
   return `${subject} — same stamp, condition, certificate and format, so sending any of them changes no figure on this trade.${held}`;
 }
 
+/** Which way a copy can stop being a candidate between a list being drawn and something being done
+ *  about it. A closed vocabulary rather than a free string, so the check and the sentence cannot
+ *  drift apart. */
+export type TradeCandidateLapse =
+  | "sold"
+  | "gone"
+  | "not-in-hand"
+  | "promised"
+  | "held-back"
+  | "unknown";
+
+/**
+ * Why a copy cannot take this line after all, **named by copy** (#658).
+ *
+ * `attachItemsToLot`'s rule, which #639 already follows. The dialog that offers the swap is a moment
+ * old by the time a collector acts on it, and in that moment a copy can be sold, disposed of or
+ * promised to another trade — so the refusal says which copy and what happened to it, rather than
+ * failing at something the collector cannot see.
+ */
+export function describeLapsedCandidate(label: string, reason: TradeCandidateLapse): string {
+  const why: Record<TradeCandidateLapse, string> = {
+    sold: "has been sold since",
+    gone: "is no longer held",
+    "not-in-hand": "has not arrived yet",
+    promised: "has since been promised to another trade",
+    "held-back": "is one you have held back from this exchange",
+    unknown: "no longer answers this line",
+  };
+  return `${label} ${why[reason]}, so it cannot take this line.`;
+}
+
+/** The two controls a row in the alternatives list carries (#658, revising #657's single tick).
+ *  Named apart because they answer two different questions — *which one goes* and *which ones may
+ *  be asked for* — and a collector reading one tick had no way to tell which it was. */
+export const TRADE_CANDIDATE_SEND_HINT =
+  "Send this copy — it becomes what this line promises. Every copy here answers the line exactly, so no figure on this trade moves.";
+export const TRADE_CANDIDATE_OFFER_HINT =
+  "Whether your partner is shown this copy at all. Held back, it stays in your collection and available to every other trade; this partner is simply not offered it.";
+/** The one row that is neither: it is what the line promises today. */
+export const TRADE_CANDIDATE_SENDING_HINT =
+  "This is the copy this line promises. Pick another row to send that one instead.";
+
 /** Why a copy the trade already names cannot be held back: it is the promise, not an alternative to
  *  it. Refused **by name**, the shape every other trade refusal takes (#418). */
 export function describeBlockedPromise(label: string): string {
   return `${label} is what this trade promises, not an alternative to it. Remove the line, or swap the copy, to stop offering it.`;
+}
+
+/**
+ * Why the copy a line promises cannot be swapped right now (#658).
+ *
+ * `resolveTradeFeedback`'s wording, and for its reason: past `agreed` the partner is holding a copy
+ * of the list, so the way to change what is on it is to step the trade back rather than to edit
+ * underneath them. Distinct from {@link describeClosedPool}, which is about *holding a copy back* —
+ * a different act, refused in different words, and a refusal that named the wrong one would send the
+ * collector looking for the wrong lock.
+ */
+export function describeLockedSwap(statusLabel: string, canReopen: boolean): string {
+  return canReopen
+    ? "This list is locked — your partner is holding a copy of it. Step the trade back to shared to swap the copy."
+    : `A ${statusLabel.toLowerCase()} trade's list cannot be changed.`;
 }
 
 /** Why the pool is closed. It is meaningful only while the trade is `preparing` or `shared`: at

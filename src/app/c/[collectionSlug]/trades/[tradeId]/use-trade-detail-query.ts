@@ -9,6 +9,7 @@ import type { TradeRealisationRead } from "@/lib/trade-realisation";
 import type { TradeIntakeRead } from "@/lib/trade-intake";
 import type { TradeActionRead } from "@/lib/trade-line-signals";
 import type { TradeCandidateRead, TradeLineCandidateRead } from "@/lib/trade-candidates";
+import type { TradeProposalRead } from "@/lib/trade-proposals";
 import type { TradeBalanceRead } from "@/lib/trade-valuation";
 import type { TradeLineFilters, TradeLinePage } from "@/lib/trade-lines";
 import type { TradeGroupLevel } from "@/lib/trade-grouping";
@@ -42,8 +43,13 @@ export interface TradeDetailData {
    *  be one query per column per scroll. Empty from `agreed` on, where the choice is settled with
    *  everything else the lock covers. */
   candidates: TradeCandidateRead;
+  /** **Which copy the partner asked for instead** (#658), by line id. The other half of the pool
+   *  above: #657 is the set the collector offers, this is the answer that came back. It moves
+   *  nothing until it is accepted, which is why it rides here as one more signal on a row rather
+   *  than as anything the figures or the packing list read. */
+  proposals: TradeProposalRead;
   /** **What is waiting for the collector** (#663), by line and counted per column. Rides with the
-   *  header because it is a reading of the four reads above rather than a fifth: one count for the
+   *  header because it is a reading of the five reads above rather than a sixth: one count for the
    *  whole trade, so every column's toggle can say how many of its lines are waiting without a
    *  query of its own. The filter itself is the server's — this is only the number on the chip. */
   actions: TradeActionRead;

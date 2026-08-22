@@ -22,6 +22,7 @@
 
 import type { TradeFeedbackItem } from "./trade-feedback";
 import type { TradeSubstitution } from "./trade-intake";
+import type { TradeProposalItem } from "./trade-proposals";
 import type { TradeLineRealisation } from "./trade-realisation";
 import type { DepartedCopy, ListedCopy } from "./trade-reservation-rules";
 import { canRecordTradeRealisation, hasTradeVerdict } from "./trade-realisation-rules";
@@ -47,6 +48,12 @@ export interface TradeLineSignals {
    *  at all. Drawn on the row for the same reason as everything else here — the row is where the
    *  collector is already looking, and it is the only place where *this one* needs no explaining. */
   realisation: TradeLineRealisation | null;
+  /** **Which copy the partner would rather have** (#658). Give side only, and about the *line*
+   *  rather than about the copy, because what it is a request to change is which copy the line
+   *  names. It moves nothing on its own: accepting it swaps the effective copy, dismissing it
+   *  clears the request, and until one of the two happens every figure, reservation and packing row
+   *  on this trade reads the copy the collector chose. */
+  proposal: TradeProposalItem | null;
   /** **What came instead of what was promised** (#642, shipped with #644). Receive side only, and
    *  derived rather than stored: the line says what was agreed and the copy identified from the scan
    *  tile says what turned up, so this is those two disagreeing. Shown for confirmation — the
@@ -59,6 +66,7 @@ const NO_SIGNALS: TradeLineSignals = {
   listed: [],
   departed: null,
   realisation: null,
+  proposal: null,
   substituted: null,
 };
 
@@ -71,6 +79,9 @@ export interface TradeLineSignalIndex {
   /** Only the lines somebody has answered for. A `pending` line is the ordinary state of a freshly
    *  agreed trade, and a mark on every row of one would be a mark that says nothing. */
   realisationByLine: Map<string, TradeLineRealisation>;
+  /** The partner's standing copy request per line (#658). At most one — it is a column on the line,
+   *  so the database says so. */
+  proposalByLine: Map<string, TradeProposalItem>;
   /** At most one per line: a substitution is *this line came as something else*, and where a line of
    *  quantity three brought three different stamps the first is what the row says — the collector
    *  opens the lot for the rest, which is the one place the whole list of them is. */
@@ -88,6 +99,9 @@ export interface TradeSignalSources {
   /** The intake read (#644). Only its substitutions are about a line; the purchase and the cost gate
    *  are facts about the *trade* and belong to the panel above. */
   intake?: { substitutions: readonly TradeSubstitution[] } | undefined;
+  /** The proposal read (#658), already keyed by line — the one source here that needs no indexing,
+   *  because a request *is* a column on the line it is about. */
+  proposals?: { lines: Record<string, TradeProposalItem> } | undefined;
 }
 
 export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSignalIndex {
@@ -115,6 +129,10 @@ export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSig
     if (hasTradeVerdict(line.fulfillment)) realisationByLine.set(line.lineId, line);
   }
 
+  const proposalByLine = new Map<string, TradeProposalItem>(
+    Object.entries(sources.proposals?.lines ?? {})
+  );
+
   const substitutionByLine = new Map<string, TradeSubstitution>();
   for (const substitution of sources.intake?.substitutions ?? []) {
     if (!substitutionByLine.has(substitution.lineId)) {
@@ -122,7 +140,14 @@ export function indexTradeLineSignals(sources: TradeSignalSources): TradeLineSig
     }
   }
 
-  return { feedbackByLine, listedByItem, departedByItem, realisationByLine, substitutionByLine };
+  return {
+    feedbackByLine,
+    listedByItem,
+    departedByItem,
+    realisationByLine,
+    proposalByLine,
+    substitutionByLine,
+  };
 }
 
 /** What is true of one row. `itemId` is the give side's copy and null on the receive side. */
@@ -135,11 +160,19 @@ export function tradeLineSignals(
   const listed = (itemId ? index.listedByItem.get(itemId) : undefined) ?? [];
   const departed = (itemId ? index.departedByItem.get(itemId) : undefined) ?? null;
   const realisation = index.realisationByLine.get(lineId) ?? null;
+  const proposal = index.proposalByLine.get(lineId) ?? null;
   const substituted = index.substitutionByLine.get(lineId) ?? null;
-  if (!feedback && listed.length === 0 && !departed && !realisation && !substituted) {
+  if (
+    !feedback &&
+    listed.length === 0 &&
+    !departed &&
+    !realisation &&
+    !proposal &&
+    !substituted
+  ) {
     return NO_SIGNALS;
   }
-  return { feedback, listed, departed, realisation, substituted };
+  return { feedback, listed, departed, realisation, proposal, substituted };
 }
 
 export function hasTradeLineSignals(signals: TradeLineSignals): boolean {
@@ -148,6 +181,7 @@ export function hasTradeLineSignals(signals: TradeLineSignals): boolean {
     signals.listed.length > 0 ||
     !!signals.departed ||
     !!signals.realisation ||
+    !!signals.proposal ||
     !!signals.substituted
   );
 }
@@ -167,6 +201,9 @@ export interface TradeAttentionCounts {
   listed: number;
   /** Copies that have left the collection. These warn and never block. */
   departed: number;
+  /** Lines the partner has asked for a different copy on (#658). A conversation like a remark, and
+   *  counted beside one: it blocks nothing, but nobody else is going to answer it. */
+  proposed: number;
   /** Receive lines that came as a different stamp (#644). Like a departure it is already true and
    *  blocks nothing; unlike one, nothing else on the screen would say so — the row's mark is the
    *  only place it is said, and a closed trade's rows are the ones nobody scrolls through again. */
@@ -186,12 +223,14 @@ export function countTradeAttention(sources: TradeSignalSources): TradeAttention
   const substituted = new Set(
     (sources.intake?.substitutions ?? []).map((s) => s.lineId)
   ).size;
+  const proposed = Object.keys(sources.proposals?.lines ?? {}).length;
   return {
     remarks,
     listed,
     departed,
+    proposed,
     substituted,
-    total: remarks + listed + departed + substituted,
+    total: remarks + listed + departed + proposed + substituted,
   };
 }
 
@@ -206,6 +245,13 @@ export function describeTradeAttention(counts: TradeAttentionCounts): string | n
   }
   if (counts.remarks > 0) {
     parts.push(counts.remarks === 1 ? "1 partner remark" : `${counts.remarks} partner remarks`);
+  }
+  if (counts.proposed > 0) {
+    parts.push(
+      counts.proposed === 1
+        ? "1 line where a different copy was asked for"
+        : `${counts.proposed} lines where a different copy was asked for`
+    );
   }
   if (counts.departed > 0) {
     parts.push(
@@ -243,6 +289,10 @@ export function firstTradeAttention(sources: TradeSignalSources): TradeAttention
     (item) => item.lineId !== null && item.resolvedAt === null
   );
   if (remark?.lineId) return { kind: "line", lineId: remark.lineId };
+  // Beside the remark, and after it: both are the partner talking, and a remark may well be *about*
+  // the copy they picked.
+  const proposal = Object.keys(sources.proposals?.lines ?? {})[0];
+  if (proposal) return { kind: "line", lineId: proposal };
   const departed = sources.reservation?.departed ?? [];
   if (departed.length > 0) return { kind: "copy", itemId: departed[0].itemId };
   const substituted = sources.intake?.substitutions ?? [];
@@ -297,7 +347,13 @@ export function tradeAttentionSelector(target: TradeAttentionTarget): string {
  *  four different places — a listing is withdrawn, a remark is answered, a figure is typed, a
  *  verdict is recorded — and a filter that has narrowed to eleven lines should be able to say what
  *  it narrowed to. */
-export type TradeLineAction = "listed" | "remark" | "departed" | "unvalued" | "verdict";
+export type TradeLineAction =
+  | "listed"
+  | "remark"
+  | "proposal"
+  | "departed"
+  | "unvalued"
+  | "verdict";
 
 /** One line as the rule sees it: enough to be found, and enough to be counted into its column.
  *  `itemId` is the give side's copy and null on the receive side — the reservation read knows a
@@ -319,6 +375,17 @@ export interface TradeActionSources extends TradeSignalSources {
    * with no figure in the agreed catalog holds it exactly as firmly as one with no figure at all.
    */
   unvaluedLineIds?: readonly string[];
+  /**
+   * The lines carrying a standing copy request (#658).
+   *
+   * **Ids alone**, `unvaluedLineIds`'s shape and for a second reason beside its own. What this rule
+   * needs of a request is that there *is* one — the copy, its label and the moment it arrived are
+   * what the row's mark draws, and they arrive with the row. And taking the whole read here would
+   * put `trade-line-actions.ts` above `trade-candidates.ts`, which imports `trade-lines.ts`, which
+   * imports `trade-line-actions.ts`: a cycle, and the kind that fails at module-init time rather
+   * than at a type check.
+   */
+  proposedLineIds?: readonly string[];
   /** Where the trade is. It decides the two conditions that are about the collector's window rather
    *  than about the line: a value may only be typed while the list is unlocked, and a verdict only
    *  while it is `agreed`. */
@@ -363,6 +430,15 @@ export function indexTradeLineActions(
   );
   const listed = new Set((sources.reservation?.listed ?? []).map((c) => c.itemId));
   const departed = new Set((sources.reservation?.departed ?? []).map((c) => c.itemId));
+  // Only while the swap could still be made. Accepting a pick writes the line's copy, which the lock
+  // at `agreed` forbids by name — and a line pointing at something the collector is not allowed to
+  // change is a fact rather than a call for action (#663's own rule, the same one the missing figure
+  // follows two lines down).
+  const proposed = new Set(
+    sources.status && !isTradeContentEditable(sources.status)
+      ? []
+      : (sources.proposedLineIds ?? [])
+  );
   // Only while a figure can still be typed onto the line — see the header.
   const unvalued = new Set(
     sources.status && !isTradeContentEditable(sources.status) ? [] : (sources.unvaluedLineIds ?? [])
@@ -386,6 +462,7 @@ export function indexTradeLineActions(
     const actions: TradeLineAction[] = [];
     if (line.itemId && listed.has(line.itemId)) actions.push("listed");
     if (openRemarks.has(line.lineId)) actions.push("remark");
+    if (proposed.has(line.lineId)) actions.push("proposal");
     if (line.itemId && departed.has(line.itemId)) actions.push("departed");
     if (unvalued.has(line.lineId)) actions.push("unvalued");
     if (awaitingVerdict.has(line.lineId)) actions.push("verdict");

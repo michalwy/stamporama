@@ -5,8 +5,10 @@ import type {
   TradeShareTotalsView,
 } from "@/lib/trade-share";
 import type { TradeSide } from "@/lib/trade-rules";
+import type { TradeShareChoiceRead } from "@/lib/trade-proposals";
 import { LineFeedback, ShareRow, SideRemarks } from "./feedback-controls";
 import { SharePhotos } from "./share-photos";
+import { LineCopyChoice } from "./share-choice";
 
 // One side of one section, on the partner's page (#640).
 //
@@ -30,7 +32,18 @@ export function money(value: number, currency: string): string {
   return `${value.toFixed(2)} ${currency}`;
 }
 
-export function ShareSide({ side, token }: { side: TradeShareSideView; token: string }) {
+export function ShareSide({
+  side,
+  token,
+  choices,
+}: {
+  side: TradeShareSideView;
+  token: string;
+  /** **Which copy would you like?** (#658), by line id, with a line that has no choice to offer
+   *  simply absent. Passed whole rather than looked up per row for the reason every other read on
+   *  this page is one read: it is one question about one exchange. */
+  choices: TradeShareChoiceRead;
+}) {
   return (
     <div className="ts-side">
       <div className="ts-side-head">
@@ -68,7 +81,12 @@ export function ShareSide({ side, token }: { side: TradeShareSideView; token: st
                   </div>
                 );
               })}
-              <ShareLineRow line={line} token={token} side={side.side} />
+              <ShareLineRow
+                line={line}
+                token={token}
+                side={side.side}
+                choice={choices[line.lineId]}
+              />
             </div>
           );
         })
@@ -94,10 +112,12 @@ function ShareLineRow({
   line,
   token,
   side,
+  choice,
 }: {
   line: TradeShareLineView;
   token: string;
   side: TradeSide;
+  choice: TradeShareChoiceRead[string] | undefined;
 }) {
   const issued = formatIssuedDate(line.issuedDay, line.issuedMonth, line.issuedYear);
   return (
@@ -136,6 +156,12 @@ function ShareLineRow({
           {line.issueLabel && <span>{line.issueLabel}</span>}
           {issued && <span>{issued}</span>}
         </div>
+
+        {/* **Which of the copies behind this line** (#658). Above the note, because it is a question
+            about the goods and the note is anything else — and only where there is more than one
+            copy to choose between, a line with a single candidate reading exactly as #640 drew it.
+            Nothing it saves moves the list: it is a request the collector confirms. */}
+        {choice && <LineCopyChoice token={token} choice={choice} />}
 
         {/* What the partner has to say about this one line (#641). Under the stamp it is about,
             because that is the only place a note about it can be read without a second reference —
