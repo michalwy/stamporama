@@ -1,58 +1,68 @@
 // The partner's page is styled with a **stylesheet**, not the inline `React.CSSProperties` objects
-// the rest of the app is built from (#640).
+// the rest of the app is built from (#640, widened by #665).
 //
-// Not a departure for its own sake — it is the one thing inline styles cannot do. This page's whole
-// second job is to be printed, and a print rule has nothing to override an inline `style` with. So
-// the page carries its own small sheet, scoped by a `ts-` prefix so it cannot reach the app, and the
-// screen and the paper are two states of one design rather than two designs.
+// Not a departure for its own sake. This page is a *document* — one wide sheet of list, drawn by a
+// handful of element kinds repeated a thousand times, with hover and structural rules (a group
+// heading that separates, a row that reacts to the pointer, a struck line) that an inline `style`
+// object cannot express at all. A sheet says each of those once; inline styles would say them per
+// row, in the payload, for every one of the five hundred lines this page will serve.
 //
-// It uses the app's semantic tokens on screen — a collector previewing the link should see their own
-// theme — and drops to plain black on white for print, where a dark theme is a cartridge.
+// It is scoped by a `ts-` prefix so it cannot reach the app, and it uses the app's semantic tokens
+// throughout — a collector previewing their own link should see their own theme.
+//
+// **Nothing here prints** (#665). The printout a trade needs is the parcel enclosure (#643), which
+// the collector prints from their own side and puts in the box; this page is a screen the partner
+// reads and answers on. Two print surfaces for one list would be two layouts to keep in step, and
+// the paper half was pulling this one the wrong way — paper wants tight, a reader at arm's length
+// wants air.
 
 export const SHARE_STYLESHEET = `
+/* Wide, because the reader has nothing else to go on (#665). The partner has no filters, no
+   tooltips, no column of their own to compare against — they are deciding whether to accept an
+   exchange from what is on this page, and at the collector's own density that is a wall of small
+   type. Desktop only, per the project rule: no breakpoints, just a page that reads at a normal
+   window size. */
 .ts-page {
-  max-width: 72rem;
+  max-width: 96rem;
   margin: 0 auto;
-  padding: 2.5rem 2rem 4rem;
+  padding: 3rem 3rem 6rem;
   color: var(--color-text-primary);
-  font-size: 0.875rem;
-  line-height: 1.45;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 .ts-title {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 650;
   margin: 0;
 }
 .ts-parties {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   color: var(--color-text-secondary);
-  margin: 0.35rem 0 0;
+  margin: 0.4rem 0 0;
 }
 .ts-status {
   display: inline-block;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  padding: 0.1rem 0.5rem;
+  padding: 0.1rem 0.55rem;
   border-radius: 0.375rem;
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   background: var(--color-bg-page);
-  vertical-align: 0.1rem;
-  margin-left: 0.5rem;
+  vertical-align: 0.15rem;
+  margin-left: 0.6rem;
 }
 .ts-note {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--color-text-muted);
-  margin: 0.75rem 0 0;
-  max-width: 48rem;
+  margin: 0.85rem 0 0;
+  max-width: 52rem;
 }
-.ts-rule { border: 0; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
+.ts-rule { border: 0; border-top: 1px solid var(--color-border); margin: 2rem 0; }
 
 /* The Colnect lists the exchange came out of (#645). Two columns, one per side, headed in the same
-   words the list columns below are — the partner's own list is the one they most need back. On
-   paper the address is printed after the name, because a link nobody can click is only useful if
-   it can be read and typed. */
-.ts-lists { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1rem 0 0; }
+   words the list columns below are — the partner's own list is the one they most need back. */
+.ts-lists { display: flex; flex-wrap: wrap; gap: 2.5rem; margin: 1.25rem 0 0; }
 .ts-lists-group { flex: 1 1 18rem; min-width: 15rem; }
 .ts-lists-head {
   font-size: 0.6875rem;
@@ -60,18 +70,17 @@ export const SHARE_STYLESHEET = `
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
 }
 .ts-lists ul { list-style: none; margin: 0; padding: 0; }
-.ts-lists li { font-size: 0.875rem; margin-bottom: 0.15rem; }
+.ts-lists li { margin-bottom: 0.2rem; }
 .ts-lists a { color: var(--color-action-primary); text-decoration: none; }
 .ts-lists a:hover { text-decoration: underline; }
-.ts-list-url { display: none; }
 
-/* The grouping controls. Links, not buttons: this page runs no JavaScript, so the arrangement is a
-   different address for the same list — which also means the partner can bookmark or send on the
-   view they were reading. Gone from the paper, where nothing is clickable. */
-.ts-arrange { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 1.25rem; }
+/* The grouping controls. Links, not buttons: the list itself runs no JavaScript, so the arrangement
+   is a different address for the same page — which also means the partner can bookmark or send on
+   the view they were reading. */
+.ts-arrange { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 1.75rem; }
 .ts-arrange-label {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -82,7 +91,7 @@ export const SHARE_STYLESHEET = `
 }
 .ts-chip {
   font-size: 0.8125rem;
-  padding: 0.25rem 0.6rem;
+  padding: 0.3rem 0.7rem;
   border-radius: 999px;
   border: 1px solid var(--color-border-strong);
   color: var(--color-text-secondary);
@@ -95,101 +104,163 @@ export const SHARE_STYLESHEET = `
   font-weight: 600;
 }
 
-.ts-section { margin: 0 0 2rem; break-inside: auto; }
-.ts-section-name { font-size: 1.0625rem; font-weight: 600; margin: 0 0 0.75rem; }
-.ts-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+/* A section is a break in the exchange, so it reads as one: a rule above it and real space around
+   it, rather than a heading a reader has to notice. */
+.ts-section { margin: 0 0 3rem; }
+.ts-section + .ts-section { border-top: 1px solid var(--color-border-strong); padding-top: 2.5rem; }
+.ts-section-name { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.25rem; }
+/* The two sides are far apart on purpose: at a narrow gutter the eye reads across the table instead
+   of down one side of it, and the two halves of an exchange are two lists rather than two columns
+   of one. */
+.ts-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start; }
 .ts-side { min-width: 0; }
 .ts-side-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--color-border-strong);
-  margin-bottom: 0.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-border-strong);
+  margin-bottom: 0.35rem;
 }
-.ts-side-title { font-weight: 600; }
-.ts-side-count { font-size: 0.8125rem; color: var(--color-text-muted); white-space: nowrap; }
+.ts-side-title { font-weight: 600; font-size: 1.0625rem; }
+.ts-side-count { font-size: 0.875rem; color: var(--color-text-muted); white-space: nowrap; }
+/* What this side already carries of the partner's own answers (#667), at its head. */
+.ts-side-said {
+  margin: 0 0 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--color-info);
+}
 
+/* A group heading **separates** rather than indents (#665). An indent alone is a heading a reader
+   has to measure against the row above it; a rule and a gap say where one group stopped. The indent
+   stays, since nesting still has to be legible, but it is no longer doing the work on its own. */
 .ts-group {
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.5rem 0 0.2rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  gap: 0.5rem;
+  padding: 0.35rem 0 0.3rem;
+  margin-top: 1.25rem;
+  border-bottom: 1px solid var(--color-border-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--color-text-secondary);
-  break-after: avoid;
 }
-.ts-group[data-depth="1"] { padding-left: 0.75rem; font-weight: 500; }
-.ts-group[data-depth="2"] { padding-left: 1.5rem; font-weight: 500; }
-.ts-group[data-depth="3"] { padding-left: 2.25rem; font-weight: 500; }
-.ts-group-detail { font-weight: 400; color: var(--color-text-muted); }
-.ts-group-count { margin-left: auto; font-weight: 400; color: var(--color-text-muted); }
+.ts-group[data-depth="1"] { padding-left: 1rem; margin-top: 0.9rem; text-transform: none; letter-spacing: 0; font-size: 0.875rem; font-weight: 600; }
+.ts-group[data-depth="2"] { padding-left: 2rem; margin-top: 0.7rem; text-transform: none; letter-spacing: 0; font-size: 0.875rem; font-weight: 500; border-bottom-color: var(--color-border); }
+.ts-group[data-depth="3"] { padding-left: 3rem; margin-top: 0.5rem; text-transform: none; letter-spacing: 0; font-size: 0.875rem; font-weight: 500; border-bottom-color: var(--color-border); }
+.ts-group-detail { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--color-text-muted); }
+.ts-group-count { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--color-text-muted); }
 
 .ts-row {
   display: flex;
-  gap: 0.6rem;
-  padding: 0.4rem 0;
+  gap: 1rem;
+  padding: 0.7rem 0.25rem;
   border-bottom: 1px solid var(--color-border);
-  break-inside: avoid;
 }
-.ts-thumbs { display: flex; gap: 0.2rem; width: 5.5rem; flex: 0 0 5.5rem; }
+.ts-row:hover { background: var(--color-bg-row-hover); }
+/* **The lines the partner has already answered** (#667). A remark is marked in the margin and a
+   struck line reads struck: on a list of two hundred, a not-wanted line drawn like every other one
+   is what makes a partner ask for it twice. The mark is a rule down the edge rather than a fill,
+   so a run of answered rows still reads as a list. */
+.ts-row[data-said="true"],
+.ts-row[data-rejected="true"] {
+  padding-left: 0.75rem;
+  border-left: 0.1875rem solid var(--color-info-border);
+}
+.ts-row[data-rejected="true"] { border-left-color: var(--color-warning-border); }
+.ts-row[data-rejected="true"] .ts-line1 {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--color-text-muted);
+}
+.ts-row[data-rejected="true"] .ts-thumb { opacity: 0.55; }
+/* Wide enough for the front and the back of a copy, which is the normal case. Anything further is
+   in the lightbox a click away (#666) rather than in a strip of pictures wider than the line of
+   text it belongs to. */
+.ts-thumbs { display: flex; gap: 0.4rem; width: 8.4rem; flex: 0 0 8.4rem; }
 .ts-thumb {
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 4rem;
+  height: 4rem;
   object-fit: contain;
   border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
+  border-radius: 0.375rem;
   background: var(--color-bg-page);
+  display: block;
 }
+/* The picture is a button, because it opens (#666). It carries no chrome of its own — the frame and
+   the fit are the thumbnail's — and the cursor is what says it will open. */
+.ts-thumb-btn {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.ts-thumb-btn:hover .ts-thumb { border-color: var(--color-border-hover); }
+/* How many scans are behind this one. On the picture the click opens onto, since that is what the
+   count is about. */
+.ts-thumb-more {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.15rem;
+  padding: 0 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 0.25rem;
+}
+
 .ts-body { flex: 1; min-width: 0; }
-.ts-line1 { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+.ts-line1 { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .ts-cn { font-weight: 600; }
-.ts-cn-other { font-size: 0.75rem; color: var(--color-text-muted); }
+.ts-cn-other { font-size: 0.8125rem; color: var(--color-text-muted); }
 .ts-name { color: var(--color-text-primary); }
 .ts-line2 {
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0.45rem;
   flex-wrap: wrap;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
-  margin-top: 0.1rem;
+  margin-top: 0.25rem;
 }
 .ts-tag {
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;
-  padding: 0 0.3rem;
+  padding: 0 0.35rem;
   white-space: nowrap;
 }
 /* **What changed since the handshake** (#642) — a line that will not happen. Drawn on the row and
    nowhere else, and only where there is something to say; the figures beside it are the agreed ones
-   and are untouched. It keeps its border in print (see the print block below) because the colour is
-   the only thing carrying it on screen, and a printed list must not lose the one mark that says a
-   piece is not coming. */
+   and are untouched. */
 .ts-struck {
   border: 1px solid var(--color-warning-border, var(--color-border));
   background: var(--color-warning-soft, transparent);
   color: var(--color-warning);
   border-radius: 0.25rem;
-  padding: 0 0.3rem;
+  padding: 0 0.35rem;
   white-space: nowrap;
   font-weight: 600;
 }
 .ts-right { text-align: right; white-space: nowrap; flex: 0 0 auto; }
 .ts-qty { font-weight: 600; }
-.ts-value { font-size: 0.8125rem; }
-.ts-value-note { display: block; font-size: 0.6875rem; color: var(--color-text-muted); }
-.ts-empty { color: var(--color-text-muted); padding: 0.5rem 0; font-size: 0.8125rem; }
+.ts-value { font-size: 0.9375rem; }
+.ts-value-note { display: block; font-size: 0.75rem; color: var(--color-text-muted); }
+.ts-empty { color: var(--color-text-muted); padding: 0.75rem 0; font-size: 0.875rem; }
 
 .ts-totals {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  gap: 4rem;
   border-top: 2px solid var(--color-border-strong);
-  padding-top: 0.6rem;
-  margin-top: 0.5rem;
+  padding-top: 0.9rem;
+  margin-top: 0.75rem;
   font-weight: 600;
 }
 .ts-total-line { display: flex; justify-content: space-between; gap: 0.75rem; }
@@ -199,71 +270,62 @@ export const SHARE_STYLESHEET = `
 
 /* **What the partner says back** (#641). The one part of this page that is client code, and it is
    kept visually quiet: a list is for reading, and a control per line that shouted would turn a
-   hundred stamps into a hundred forms. On paper the boxes go and the words stay. */
+   hundred stamps into a hundred forms. */
 .ts-fb {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  margin-top: 0.15rem;
-  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
-.ts-fb-toggle { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; cursor: pointer; }
+.ts-fb-toggle { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; cursor: pointer; }
 .ts-fb-input {
   flex: 1;
-  min-width: 8rem;
+  min-width: 10rem;
   font: inherit;
   color: var(--color-text-primary);
   background: var(--color-bg-page);
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;
-  padding: 0.1rem 0.35rem;
+  padding: 0.2rem 0.4rem;
 }
 .ts-fb-textarea {
   width: 100%;
-  max-width: 40rem;
+  max-width: 44rem;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--color-text-primary);
   background: var(--color-bg-page);
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.5rem 0.6rem;
   box-sizing: border-box;
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
 }
 .ts-fb-state { white-space: nowrap; }
 .ts-fb-bad { color: var(--color-error); }
-.ts-fb-said { display: inline-flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
+.ts-fb-said { display: inline-flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
 .ts-fb-mark {
   border: 1px solid var(--color-border-strong);
   border-radius: 0.25rem;
-  padding: 0 0.3rem;
+  padding: 0 0.35rem;
   font-weight: 600;
   white-space: nowrap;
 }
-.ts-fb-quote { font-style: italic; }
-.ts-fb-box { margin: 2rem 0 0; }
-.ts-fb-heading { font-size: 1.0625rem; font-weight: 600; margin: 0; }
-/* Shown only on paper: the boxes above cannot be read there, but what was typed into them can. */
-.ts-print-only { display: none; }
-
-@media print {
-  .ts-print-hide { display: none !important; }
-  .ts-print-only { display: inline; }
-  .ts-fb { color: #000; }
-  .ts-fb-mark { border-color: #999; }
-  .ts-page { max-width: none; padding: 0; font-size: 0.75rem; color: #000; }
-  .ts-row, .ts-side-head, .ts-totals, .ts-rule, .ts-thumb { border-color: #999; }
-  .ts-parties, .ts-note, .ts-side-count, .ts-line2, .ts-group-detail, .ts-group-count,
-  .ts-value-note { color: #333; }
-  .ts-status, .ts-tag { border-color: #999; background: none; color: #000; }
-  /* An address on paper has to be readable, so the bare URL comes back beside the name. */
-  .ts-list-url { display: inline; color: #333; }
-  /* Kept, and kept bold: on paper it is the one mark that says a piece is not coming. */
-  .ts-struck { border-color: #000; background: none; color: #000; }
-  .ts-section { break-inside: auto; }
-  a { color: inherit; text-decoration: none; }
+.ts-fb-quote { font-style: italic; color: var(--color-text-secondary); }
+/* The way back into the editor from an answered line. A link rather than a button: the row is a
+   line of text and the way to change what it says should not be a control sitting on it. */
+.ts-fb-edit {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-action-primary);
+  text-decoration: underline;
+  cursor: pointer;
 }
+.ts-fb-box { margin: 2.5rem 0 0; }
+.ts-fb-heading { font-size: 1.125rem; font-weight: 600; margin: 0; }
 `;

@@ -199,12 +199,27 @@ the trade's, each named. #640's issue asked for both totals converted into `Trad
 written before §7 existed, and re-converting an own total would invent a third figure nobody could
 check. What the issue was after — a rate note — is printed from `TradeFxRate`.
 
-**The page is server-rendered whole**, because its second job is to be printed and a list that prints
-only what has been scrolled to is not a list. How the material is arranged is therefore links rather
-than state: the partner gets the trade screen's own grouping levels, and an arrangement is a different
-address for the same page. The page carried **no client bundle at all** until #641 gave it something
-to say back; see §10, which revises that half of this sentence and leaves the rest of it standing —
-the *list* is still one server render, and what prints is still all of it.
+**The page is server-rendered whole.** #640 gave the reason as printing — a list that prints only
+what has been scrolled to is not a list — and **#665 took printing off this page entirely** (revised
+here in place): the printout a trade needs is the parcel enclosure (#643), which the collector prints
+from their own side and puts in the box, and two print surfaces for one list is two layouts to keep in
+step while paper and a reader at arm's length want opposite densities. The whole-list render stands on
+its own reason, which was always the better one: **the partner has no filters and no search**, so
+there is no view of this list but all of it, and a page that fetched as it scrolled would be a page
+whose end a reader can never be sure they reached — on a list they are being asked to agree to. How
+the material is arranged is therefore links rather than state: the partner gets the trade screen's own
+grouping levels, and an arrangement is a different address for the same page. The page carried **no
+client bundle at all** until #641 gave it something to say back; see §10, which revises that half of
+this sentence and leaves the rest of it standing — the *list* is still one server render.
+
+**What the page is instead is a screen that reads and answers** (#665, #666, #667). Freed of paper it
+is a wide sheet with the two sides far apart, rows and groups and sections visibly separated, and
+scans at a size worth looking at: they enlarge on hover and open full size on click, through the same
+preview and the same overlay every other screen in the app draws (`@/app/photo-viewer`, made
+collection-agnostic for it) and through the token's own photo route, which serves nothing outside this
+trade's lines. And what the partner has already said is **on the row** — a remark readable in place, a
+struck line drawn struck, and a count at the head of each side — the same argument #662 made on the
+collector's screen, for the same reason: a signal about a line belongs on that line.
 
 ### 10. Partner feedback is feedback, never an edit — and *responded* falls out of it
 
@@ -248,7 +263,10 @@ argument #639 made for stating the collision on the trade at all.
 at a time, and a Send button under two hundred rows is a button somebody forgets to press — so each
 control saves its own line the moment it is given, through a `POST` route of the token's own beside
 the photo route, rate-limited like everything else reachable without a session. The list around them
-is still one server render, and on paper the boxes disappear while what was typed into them stays.
+is still one server render. What the controls hold is **one state** (#667): the entries the server
+rendered go into a provider wrapping the server-rendered list, so the mark on a row, the words on it
+and the count at the head of its side are the same fact drawn three times, and an answered line
+settles back into what was said with the editor a click away.
 
 ### 11. Realisation is a second layer on the line, never an edit to the first
 

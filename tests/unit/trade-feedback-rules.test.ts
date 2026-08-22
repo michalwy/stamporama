@@ -5,6 +5,7 @@ import {
   parseTradeFeedback,
   tradeFeedbackActionLabels,
   tradeFeedbackRejectLabel,
+  tradeFeedbackSideSummary,
   TRADE_FEEDBACK_NOTE_MAX,
 } from "../../src/lib/trade-feedback-rules";
 
@@ -81,5 +82,32 @@ describe("what the two sides call it", () => {
   it("names a rejection's accept after what it does, and a note's after reading it", () => {
     assert.equal(tradeFeedbackActionLabels(true).accept, "Remove the line");
     assert.equal(tradeFeedbackActionLabels(false).accept, "Done");
+  });
+});
+
+describe("what a side of the partner's page says it is carrying (#667)", () => {
+  it("says nothing at all when nothing has been said", () => {
+    assert.equal(tradeFeedbackSideSummary("give", { notes: 0, rejected: 0 }), null);
+  });
+
+  it("counts notes and marks apart — they are different acts", () => {
+    assert.equal(
+      tradeFeedbackSideSummary("give", { notes: 3, rejected: 1 }),
+      "You left 3 notes and 1 marked not wanted on this side."
+    );
+  });
+
+  it("uses the side's own word for the mark, as the chip on the row does", () => {
+    assert.equal(
+      tradeFeedbackSideSummary("receive", { notes: 0, rejected: 2 }),
+      "You left 2 marked cannot send on this side."
+    );
+  });
+
+  it("counts one note as a note", () => {
+    assert.equal(
+      tradeFeedbackSideSummary("give", { notes: 1, rejected: 0 }),
+      "You left 1 note on this side."
+    );
   });
 });

@@ -17,7 +17,7 @@ import {
 } from "@/lib/trade-grouping";
 import { SHARE_STYLESHEET } from "./share-styles";
 import { ShareSide, countText, money } from "./share-side";
-import { TradeNoteFeedback } from "./feedback-controls";
+import { PartnerFeedbackProvider, TradeNoteFeedback } from "./feedback-controls";
 
 // **The partner's copy of the trade** (#640; ADR-0039 §9): a read-only page addressed by a secret
 // link, for someone with no account and no session.
@@ -31,15 +31,18 @@ import { TradeNoteFeedback } from "./feedback-controls";
 // names. This file resolves a token and lays out what comes back; it asks no questions of its own,
 // so there is no query here that could be widened by accident.
 //
-// **Server-rendered whole.** A partner will print this, and a list that only prints what has been
-// scrolled to is not a list — so every row is in the HTML on arrival, and how the material is
-// arranged is links rather than state: a different arrangement is a different address for the same
-// page, which also means the partner can bookmark or forward the view they were reading.
+// **Server-rendered whole**, and it stays that way now that printing has come off this page (#665).
+// The reason was never paper: the partner has **no filters and no search**, so there is no view of
+// this list but all of it, and a page that fetched as it scrolled would be a page whose end a reader
+// can never be sure they reached — on a list they are being asked to agree to. Every row is in the
+// HTML on arrival, and how the material is arranged is links rather than state: a different
+// arrangement is a different address for the same page, which also means the partner can bookmark or
+// forward the view they were reading.
 //
-// The page took **no client code at all** until it began taking answers back (#641). It still takes
-// none for the list; what is client code is the feedback control on a row and the note box at the
-// foot, because an answer is given one line at a time and a Send button under two hundred rows is a
-// button somebody forgets to press. On paper they disappear and what was typed into them stays.
+// The page took **no client code at all** until it began taking answers back (#641), and what is
+// client code is still only what an answer needs: the control on a row, the note box at the foot,
+// and — since #666 — the scans, which enlarge on hover and open full size. The list itself is one
+// server render.
 
 export const metadata: Metadata = {
   title: "Exchange list",
@@ -110,66 +113,68 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
 
         <Arrange token={token} levels={view.levels} />
 
-        {view.sections.map((section) => (
-          <section key={section.id} className="ts-section">
-            <h2 className="ts-section-name">{section.name}</h2>
-            <div className="ts-sides">
-              {section.sides.map((side) => (
-                <ShareSide
-                  key={side.side}
-                  side={side}
-                  token={token}
-                  feedback={feedback.byLine}
-                  canLeave={feedback.canLeave}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-
-        <div className="ts-totals">
-          {(["give", "receive"] as const).map((side) => {
-            const totals = side === "give" ? view.totals.give : view.totals.receive;
-            const heading = view.sections[0]?.sides.find((s) => s.side === side)?.heading ?? "";
-            return (
-              <div key={side}>
-                <div className="ts-total-line">
-                  <span>{heading}</span>
-                  <span>{countText(totals)}</span>
-                </div>
-                {totals.value !== null && view.valuation && (
-                  <div className="ts-total-line">
-                    <span>Total</span>
-                    <span>{money(totals.value, view.valuation.currency)}</span>
-                  </div>
-                )}
-                {/* Counted, never summed as zero: a total quietly assuming a figure for a line that
-                    has none would read as an answer while being a guess. */}
-                {totals.valueMissing > 0 && (
-                  <div className="ts-total-line ts-warn">
-                    <span>Not priced</span>
-                    <span>{totals.valueMissing} lines</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <RateNote view={view} />
-
-        {/* **What the partner has to say about the exchange as a whole** (#641). At the foot, after
-            the totals, because that is the order the conversation happens in: the list is read, the
-            two sides are compared, and then somebody says *this is close enough* or *can we add
-            something mint*. Nothing said here changes the list — it lands in the collector's inbox
-            and they decide. */}
-        <TradeNoteFeedback
+        {/* Everything the partner's own answers touch is inside one provider (#667): the mark on a
+            row, the words on it and the count at the head of its side are one state, so ticking a
+            line moves all three at once. The list itself arrives as children and stays server
+            code — the provider holds what was *said*, never what is on the exchange. */}
+        <PartnerFeedbackProvider
           token={token}
-          initial={feedback.trade}
-          disabled={!feedback.canLeave}
-          closedMessage={feedback.closedMessage}
-          collectorName={view.collectorName}
-        />
+          canLeave={feedback.canLeave}
+          initial={feedback.byLine}
+        >
+          {view.sections.map((section) => (
+            <section key={section.id} className="ts-section">
+              <h2 className="ts-section-name">{section.name}</h2>
+              <div className="ts-sides">
+                {section.sides.map((side) => (
+                  <ShareSide key={side.side} side={side} token={token} />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          <div className="ts-totals">
+            {(["give", "receive"] as const).map((side) => {
+              const totals = side === "give" ? view.totals.give : view.totals.receive;
+              const heading = view.sections[0]?.sides.find((s) => s.side === side)?.heading ?? "";
+              return (
+                <div key={side}>
+                  <div className="ts-total-line">
+                    <span>{heading}</span>
+                    <span>{countText(totals)}</span>
+                  </div>
+                  {totals.value !== null && view.valuation && (
+                    <div className="ts-total-line">
+                      <span>Total</span>
+                      <span>{money(totals.value, view.valuation.currency)}</span>
+                    </div>
+                  )}
+                  {/* Counted, never summed as zero: a total quietly assuming a figure for a line that
+                      has none would read as an answer while being a guess. */}
+                  {totals.valueMissing > 0 && (
+                    <div className="ts-total-line ts-warn">
+                      <span>Not priced</span>
+                      <span>{totals.valueMissing} lines</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <RateNote view={view} />
+
+          {/* **What the partner has to say about the exchange as a whole** (#641). At the foot, after
+              the totals, because that is the order the conversation happens in: the list is read, the
+              two sides are compared, and then somebody says *this is close enough* or *can we add
+              something mint*. Nothing said here changes the list — it lands in the collector's inbox
+              and they decide. */}
+          <TradeNoteFeedback
+            initial={feedback.trade}
+            closedMessage={feedback.closedMessage}
+            collectorName={view.collectorName}
+          />
+        </PartnerFeedbackProvider>
       </main>
     </>
   );
@@ -207,8 +212,6 @@ function ColnectLists({ view }: { view: TradeShareView }) {
                   <a href={list.url} target="_blank" rel="noreferrer noopener">
                     {list.label || list.url}
                   </a>
-                  {/* On paper the address itself, since the name alone leads nowhere there. */}
-                  {list.label && <span className="ts-list-url"> — {list.url}</span>}
                 </li>
               ))}
             </ul>
@@ -282,7 +285,7 @@ function RateNote({ view }: { view: TradeShareView }) {
 function Arrange({ token, levels }: { token: string; levels: TradeGroupLevel[] }) {
   const on = new Set(levels);
   return (
-    <nav className="ts-arrange ts-print-hide">
+    <nav className="ts-arrange">
       <span className="ts-arrange-label">Group by</span>
       {TRADE_GROUP_LEVELS.map((level) => {
         const next = on.has(level)

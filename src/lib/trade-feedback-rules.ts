@@ -61,6 +61,32 @@ export function tradeFeedbackRejectLabel(side: TradeSide): string {
   return side === "give" ? "Not wanted" : "Cannot send";
 }
 
+/**
+ * What one side of the partner's page says it is carrying (#667), or null for nothing said yet.
+ *
+ * The count is at the head of the column because the answers are **scattered down** it: a partner
+ * who left four remarks on a list of two hundred lines has no way to know they left four, and no way
+ * to find them again but by re-reading the list. Notes and marks are counted **apart** — they are
+ * different acts, and *5 things* would not say that one of them takes a line off the exchange.
+ *
+ * The mark's word comes from {@link tradeFeedbackRejectLabel}, so this sentence and the chip on the
+ * row it is counting cannot come to say different things.
+ */
+export function tradeFeedbackSideSummary(
+  side: TradeSide,
+  counts: { notes: number; rejected: number }
+): string | null {
+  const parts: string[] = [];
+  if (counts.notes > 0) {
+    parts.push(`${counts.notes} ${counts.notes === 1 ? "note" : "notes"}`);
+  }
+  if (counts.rejected > 0) {
+    parts.push(`${counts.rejected} marked ${tradeFeedbackRejectLabel(side).toLowerCase()}`);
+  }
+  if (parts.length === 0) return null;
+  return `You left ${parts.join(" and ")} on this side.`;
+}
+
 /** The same distinction as a sentence, for the places a line is read **out of** its column — the
  *  hover on the row's own mark, and anywhere the item is named away from the side it sits on. */
 export function tradeFeedbackRejectSentence(side: TradeSide): string {

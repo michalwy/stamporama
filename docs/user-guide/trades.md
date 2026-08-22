@@ -491,8 +491,19 @@ While a link is out there, the trade's screen says **Shared link**, with the dat
 opened it.
 
 Your partner can arrange the page themselves with the same **Group by** chips you have on your own
-screen, and it is laid out to print: the whole list is on the page, not just what has been scrolled
-to, and printing it drops everything that is not the list.
+screen, and the whole list is on the page — not just what has been scrolled to. They have no filters
+and no search, so there is nothing to hunt through: everything you are offering and everything you
+are asking for is in front of them, in two wide columns, one per side.
+
+**Your scans are the point of the page**, so they behave there the way they do on your own screens:
+resting on one enlarges it beside the row, and clicking it opens it full size, with the copy's other
+pictures reachable from the overlay and Escape to close. A row shows the front and the back; anything
+further is behind a **+2** on the second picture. Only photos of copies on this exchange can be
+opened, and only through the link.
+
+The page is a **screen**, not a printout. If you want a trade on paper, it is the [parcel
+enclosure](#printing-the-packing-list-and-the-parcel-enclosure) — the sheet you print from your own
+side and put in the box.
 
 ## What your partner can say back
 
@@ -505,6 +516,12 @@ no Send button to forget.
 **None of it changes your list.** A note or a tick lands as feedback, and what happens next is your
 decision. A list that rearranged itself under the person who agreed it would be worse than no feedback
 at all.
+
+**What they have already said stays visible to them.** A line they wrote on shows what they wrote, in
+words, on the row — with **Change** to edit it again — and a ticked line is drawn **struck out**, so
+they can see at a glance that they have already asked for it to come off. Each column says at its head
+what it carries — *You left 3 notes and 1 marked not wanted on this side.* — so a remark left halfway
+down two hundred lines does not have to be found by re-reading them.
 
 Feedback comes back to you **on the line it is about**. A line your partner ticked carries a *Not
 wanted* chip (or *Cannot send*, on their side of the list); a line they wrote on carries a *Partner
