@@ -756,8 +756,9 @@ export async function refreshTradeRatesAction(tradeId: string): Promise<TradeAct
 
 // ── The partner's link (#640) ────────────────────────────────────────────────────────────────────
 
-/** Minting is the one action that returns something the collector must act on immediately: the raw
- *  token, which is not stored and cannot be shown a second time. */
+/** Minting is the one action that returns the raw token. Since #681 it can be read off the trade
+ *  afterwards too — it comes back here so the dialog has the address before its refetch lands, not
+ *  because this is the last chance to see it. */
 export type TradeShareLinkActionState =
   | { status: "success"; token: string }
   | { status: "error"; message: string };

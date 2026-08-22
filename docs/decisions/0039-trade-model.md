@@ -165,7 +165,7 @@ normal thing between collectors and the app has no business forbidding it.
 number uses, and is quoted to somebody else — it heads the partner's copy of the list. Two different
 exchanges answering to "trade 7" would be worse here than anywhere.
 
-### 9. The partner's link names one trade, and only its hash is stored
+### 9. The partner's link names one trade, and the collector can read it back
 
 A trade is shown to the partner through a secret link (#640) rather than by giving them an account:
 the other collector is not a user of this instance and never will be, and an exchange runs on two
@@ -177,8 +177,27 @@ owner across the collection; this one names one trade, and every read it authori
 figures, the scans) is scoped to that trade's own lines. A leaked link therefore exposes exactly the
 list the collector chose to hand over. One row per trade, because a second live link is a second thing
 to remember to revoke and no way to tell which is in whose hands; regenerating replaces the row, which
-is what revoking means. Only the SHA-256 hash is persisted, so the address is shown once and cannot be
-recovered — a collector who loses it regenerates.
+is what revoking means.
+
+**The hash resolves the request; a sealed copy shows the collector their own address** (#681). #640
+persisted only the SHA-256, following `AssistantToken`, so the address existed for one response and
+was then unrecoverable. That bargain does not transfer, and the same swap above is why: an Assistant
+token authorises writes across a whole collection, while a share token authorises **reading one
+trade** whose every figure and scan is already in this database — an attacker holding the row holds
+what the row would let them fetch. What the hash-only rule cost, by contrast, was real: a link that
+could not be shown could not be sent twice, opened to check what the partner is reading, or handed
+again to a partner who lost it, and the only recovery — minting a new one — silently breaks the link
+the partner is holding mid-negotiation. So the raw token is sealed as well (`secret-box.ts`,
+AES-256-GCM under `STAMPORAMA_SECRET_KEY`, as `AllegroConnection` seals what it has to replay), and
+`tokenHash` stays the only thing any lookup touches: the seal is for display, the hash is for
+resolving, and neither takes over the other's job. Sealing is **best-effort**, never a new
+precondition for sharing — the key is optional (ADR-0023 requires it only once Allegro credentials
+are stored) and an install without one keeps minting links that work. Tokens minted before this, and
+those minted with no key, are **not backfillable**: a hash is not reversible, so they keep serving
+the partner and say on the collector's side why they cannot be shown, rather than pretending or
+silently rotating an address somebody is using. The reasons are told apart by what to do next — a
+pre-#681 row and one sealed under a changed key regenerate into a readable address, a missing key
+does not.
 
 **Every live status serves, and `cancelled` does not.** A link is an address for a list, not a stage
 of the negotiation, so a collector who generates one while still composing did so on purpose. Minting

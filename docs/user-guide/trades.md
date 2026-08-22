@@ -510,9 +510,16 @@ secret link to a read-only page of this exchange: both sides, section by section
 — if you say so — the figures. There is nothing else on it and nothing to click into: the link opens
 that one list and reaches no other part of your collection.
 
-The link is shown **once**, when you generate it. Only a fingerprint of it is stored, so it cannot be
-shown to you again — copy it there and then. If you lose it, generate a new one; the old address stops
-working, which is also how you withdraw a link you have changed your mind about.
+**The link stays where you can read it.** Open **Partner link…** on the same menu at any time and the
+address is there: copy it again, or press **Open as your partner sees it** to look at the page they
+are actually reading. Generating a new link is still how you replace one you have changed your mind
+about — it stops the old address working, so your partner needs the new one — and **Withdraw** takes
+the page down altogether.
+
+Links generated before Stamporama kept a readable copy cannot be shown: they keep working for your
+partner, and the dialog says so and offers you a new one. If your install has no
+`STAMPORAMA_SECRET_KEY` set, no link can be stored readably — set the key first, since a new link
+would be no more readable than the old one.
 
 **Show values** decides whether any figure crosses. With a catalogue agreed for the exchange, every
 line is priced in it and the catalogue is named at the top of the page. Without one, the page falls

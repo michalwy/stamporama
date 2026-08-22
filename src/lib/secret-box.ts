@@ -13,6 +13,11 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 //
 // Pure and dependency-free on purpose (no Prisma, no `server-only`) so it is unit-testable: it is
 // the one piece of #476 whose failure modes are worth asserting rather than reasoning about.
+//
+// A second caller since: the partner share link on a trade (#681, `trade-share-address.ts`), which
+// is replayed to the *collector* rather than to a third party. It seals only when a key is
+// configured — that link must keep working on an install that never connected Allegro — so nothing
+// here became required that was not before.
 
 /** The env var holding the master key. Required only once a secret is actually stored. */
 export const SECRET_KEY_ENV = "STAMPORAMA_SECRET_KEY";

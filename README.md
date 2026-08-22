@@ -68,7 +68,9 @@ If you sell on **Allegro**, the instance can also talk to Allegro's own API usin
 register yourself — see [Allegro](docs/user-guide/allegro.md): it keeps a worklist of what has sold
 and is still to be written down, and marks your auctions as in active bidding within minutes of the
 first bid. It needs one extra environment variable, `STAMPORAMA_SECRET_KEY`, which encrypts the
-stored credentials at rest.
+stored credentials at rest. The same key seals the partner link on a trade, so a link you generated
+can be read back later instead of only once; without it links still work, they just cannot be shown
+again.
 
 ## Development
 

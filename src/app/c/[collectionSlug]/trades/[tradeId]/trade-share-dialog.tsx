@@ -10,6 +10,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import type { TradeShareState } from "@/lib/trades";
+import type { TradeShareAddressRefusal } from "@/lib/trade-share-address";
 import {
   createTradeShareLinkAction,
   revokeTradeShareLinkAction,
@@ -18,11 +19,16 @@ import {
 
 // The collector's end of the partner's link (#640; ADR-0039 §9).
 //
-// **The address is shown exactly once**, in the response that mints it, because only its hash is
-// stored — `AssistantToken`'s bargain, made here for the same reason: a credential a server can
-// reproduce is a credential a stolen backup reproduces. The consequence is stated on the dialog
-// rather than left to be discovered, and losing the link is not a dead end: regenerating mints a new
-// one, at the cost of the old one going dead, which is what revoking a link means anyway.
+// **The address is on the dialog whenever it can be**, not only in the response that minted it
+// (#681): a link that could not be shown again could not be sent twice, opened to see what the
+// partner is actually reading, or handed to a partner who lost it — and the only recovery was
+// minting a new one, which silently breaks the link they are holding. The raw token is sealed
+// beside its hash for exactly this, so the box below is filled from the trade rather than from a
+// response that has been and gone.
+//
+// **A link that cannot be shown says why**, in the terms of what to do next: a link older than #681
+// or one sealed under a key that has since changed is recovered by generating a new one, while an
+// install with no key configured would be no better off with a new one and needs the key first.
 //
 // **Two decisions, kept apart.** *Create* and *regenerate* change the address; *save* changes what
 // the page shows. Turning the figures off on a list the partner is halfway through reading must not
@@ -69,6 +75,18 @@ const META: React.CSSProperties = {
   margin: 0,
 };
 
+/** Why an existing link cannot be shown — each sentence ending in the step that follows from it,
+ *  because *generate a new one* is the right advice for two of these three and the wrong advice for
+ *  the third, where it would break the partner's address and change nothing else. */
+const UNREADABLE_MESSAGE: Record<TradeShareAddressRefusal, string> = {
+  legacy:
+    "This link was generated before Stamporama kept a copy it could show you, so its address is gone from here. Your partner's copy still works. Generate a new link to see the address — the old one stops working.",
+  unreadable:
+    "This link cannot be opened with the key this install is running now, which has changed since the link was generated. Your partner's copy still works. Generate a new link to see the address — the old one stops working.",
+  unconfigured:
+    "This link cannot be shown because this install has no STAMPORAMA_SECRET_KEY set, so there is nothing to unlock it with. Your partner's copy still works, and a new link would be just as unreadable — set the key first.",
+};
+
 /** A stored timestamp as the `yyyy-mm-dd` a date input takes. */
 function dayValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
@@ -88,12 +106,12 @@ export function TradeShareDialog({
   /** The link this trade already has, or null. */
   share: TradeShareState | null;
   onClose: () => void;
-  /** Refresh the trade behind the dialog. Deliberately does **not** close it: a freshly minted
-   *  address is on screen and closing over it would lose the one copy there is. */
+  /** Refresh the trade behind the dialog. Deliberately does **not** close it: the collector has just
+   *  minted an address and is about to copy it. */
   onChanged: () => void;
 }) {
-  // The full URL of a link minted in this session — the only moment it exists. Built from the origin
-  // the collector is already looking at, which is by construction the right one.
+  // The URL of a link minted in this session. Kept apart from the one read off the trade only so the
+  // address is on screen the instant it is minted, ahead of the refetch behind the dialog.
   const [minted, setMinted] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
@@ -126,6 +144,14 @@ export function TradeShareDialog({
     });
   }
 
+  // The address as the partner would type it, built from the origin the collector is already looking
+  // at — by construction the right one — and from the token the trade carries, so it survives this
+  // dialog being closed and reopened. `minted` leads only because it lands a moment sooner.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const link =
+    minted ?? (share?.address.readable ? `${origin}/t/${share.address.token}` : null);
+  const unreadable = !link && share && !share.address.readable ? share.address.reason : null;
+
   function revoke() {
     setError(undefined);
     startTransition(async () => {
@@ -145,15 +171,21 @@ export function TradeShareDialog({
       >
         <DialogBody>
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {minted ? (
+            <p style={META}>
+              {share
+                ? "Anyone with the link can read this exchange list. They do not need an account, and they can see nothing else."
+                : "Generate a link your partner can open without an account. It shows this exchange list and nothing else."}
+            </p>
+
+            {link && (
               <div>
                 <LabelWithError>The link</LabelWithError>
-                <div style={LINK_BOX}>{minted}</div>
+                <div style={LINK_BOX}>{link}</div>
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                   <DialogSecondaryButton
                     type="button"
                     onClick={() =>
-                      navigator.clipboard?.writeText(minted).then(
+                      navigator.clipboard?.writeText(link).then(
                         () => setCopied(true),
                         () => setCopied(false)
                       )
@@ -161,21 +193,27 @@ export function TradeShareDialog({
                   >
                     {copied ? "Copied" : "Copy link"}
                   </DialogSecondaryButton>
+                  {/* The page as the partner has it, in a tab of its own — the one way to check what
+                      they are actually looking at, and it must not take the collector off the trade
+                      they are working on. */}
+                  <DialogSecondaryButton
+                    type="button"
+                    onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
+                  >
+                    Open as your partner sees it
+                  </DialogSecondaryButton>
                 </div>
-                <p style={HINT}>
-                  Copy it now — it is not stored and this is the only time it can be shown. If you
-                  lose it, generate a new one; the old one stops working.
-                </p>
               </div>
-            ) : (
-              <p style={META}>
-                {share
-                  ? "Anyone with the link can read this exchange list. They do not need an account, and they can see nothing else."
-                  : "Generate a link your partner can open without an account. It shows this exchange list and nothing else."}
-              </p>
             )}
 
-            {share && !minted && (
+            {unreadable && (
+              <div>
+                <LabelWithError>The link</LabelWithError>
+                <p style={{ ...HINT, marginTop: "0.375rem" }}>{UNREADABLE_MESSAGE[unreadable]}</p>
+              </div>
+            )}
+
+            {share && (
               <p style={META}>
                 Created {dateText(share.createdAt)}
                 {share.lastUsedAt

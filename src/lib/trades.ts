@@ -13,6 +13,7 @@ import {
   type TradeStatus,
 } from "./trade-rules";
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
+import { readTradeShareAddress, type TradeShareAddress } from "./trade-share-address";
 import { tradeListingRefusal } from "./trade-reservations";
 import { tradeClosingRefusal } from "./trade-realisation";
 import { createTradePurchase } from "./trade-intake";
@@ -118,8 +119,11 @@ export interface TradeColnectListSummary {
   position: number;
 }
 
-/** What the trade screen knows about its share link without asking `trade-share.ts` for it. */
+/** What the trade screen knows about its share link without asking `trade-share.ts` for it. The
+ *  address included (#681): the link is a fact about this trade, and the screen that says one is out
+ *  there is the screen that should be able to say **which**. */
 export interface TradeShareState {
+  address: TradeShareAddress;
   showValues: boolean;
   expiresAt: string | null;
   createdAt: string;
@@ -417,9 +421,17 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
       catalogVendor: { select: { abbreviation: true } },
       // Read here rather than through `trade-share.ts`: it is one nullable row hanging off the trade
       // this query already has, and importing that module — which reads the lines and values them —
-      // to fetch four columns would be the tail wagging the dog.
+      // for a handful of columns would be the tail wagging the dog. The sealed token comes with them
+      // (#681) and is opened by the same pure resolver `trade-share.ts` uses, so the two screens
+      // cannot come to disagree about whether an address can be shown.
       shareToken: {
-        select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+        select: {
+          tokenSealed: true,
+          showValues: true,
+          expiresAt: true,
+          createdAt: true,
+          lastUsedAt: true,
+        },
       },
       sections: { select: SECTION_SELECT, orderBy: [{ position: "asc" }, { name: "asc" }] },
     },
@@ -446,6 +458,7 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
     createdAt: row.createdAt,
     share: row.shareToken
       ? {
+          address: readTradeShareAddress(row.shareToken.tokenSealed),
           showValues: row.shareToken.showValues,
           expiresAt: isoOrNull(row.shareToken.expiresAt),
           createdAt: row.shareToken.createdAt.toISOString(),

@@ -1,0 +1,19 @@
+-- The partner's link can be read again after the dialog that created it is closed (#681).
+--
+-- #640 stored only `tokenHash`, following `AssistantToken`, so the address existed for exactly one
+-- response. That bargain does not transfer: an Assistant token authorises writes across a whole
+-- collection, while a share token authorises reading **one trade** whose every figure and scan is
+-- already in this database — an attacker holding this row holds what the row would let them fetch.
+-- Paying for that with a link the owner cannot see is a bad trade.
+--
+-- So the raw token is **sealed** as well (`secret-box.ts`, AES-256-GCM under `STAMPORAMA_SECRET_KEY`),
+-- the way `allegro_connection` seals what it has to replay. `tokenHash` stays and keeps resolving
+-- requests: the sealed value is for display, the hash is for lookup.
+--
+-- **Nullable, and no backfill is possible.** The raw value of an already-minted token is genuinely
+-- gone — a hash is not reversible — so those rows keep serving the partner exactly as they did and
+-- the collector's side says plainly that this link cannot be shown, rather than pretending or
+-- silently rotating an address a partner may be using. The same NULL covers an install with no key
+-- configured, where sealing is skipped rather than allowed to refuse a link that would otherwise
+-- work.
+ALTER TABLE "trade_share_token" ADD COLUMN "tokenSealed" TEXT;

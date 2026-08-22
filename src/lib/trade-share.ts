@@ -13,6 +13,11 @@ import { buildAreaPath } from "./area-path";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import {
+  readTradeShareAddress,
+  sealTradeShareToken,
+  type TradeShareAddress,
+} from "./trade-share-address";
+import {
   isTradeShareTokenShape,
   resolveTradeShareAccess,
   tradeShareSideHeading,
@@ -42,7 +47,8 @@ import {
 
 const HASH_ALGO = "sha256";
 
-/** SHA-256 hex of a raw token — the only form persisted, exactly as for an Assistant token. */
+/** SHA-256 hex of a raw token — what every lookup here runs on. The row also holds the token sealed
+ *  (#681), for showing the collector their own address; that value is never a lookup key. */
 function hashToken(rawToken: string): string {
   return createHash(HASH_ALGO).update(rawToken, "utf8").digest("hex");
 }
@@ -57,9 +63,12 @@ function hashesEqual(a: string, b: string): boolean {
 
 // ── The collector's side ────────────────────────────────────────────────────────────────────────
 
-/** A trade's share link as the collector's dialog reads it. Never the raw token: that exists for one
- *  moment, in the response that minted it, and is not recoverable afterwards. */
+/** A trade's share link as the collector's dialog reads it — including the address itself, which is
+ *  the point of #681: a link the owner cannot see is a link they cannot send twice, check, or hand
+ *  to a partner who lost it. `address` carries the token when it can be opened and the reason it
+ *  cannot when it cannot; the hash is what resolves a request either way. */
 export interface TradeShareLinkData {
+  address: TradeShareAddress;
   showValues: boolean;
   expiresAt: string | null;
   createdAt: string;
@@ -73,6 +82,16 @@ export interface TradeShareOptions {
   expiresAt: Date | null;
 }
 
+/** The columns the collector's side reads. One constant, so the three reads here cannot come to
+ *  disagree about what a link is. */
+const LINK_SELECT = {
+  tokenSealed: true,
+  showValues: true,
+  expiresAt: true,
+  createdAt: true,
+  lastUsedAt: true,
+} as const;
+
 /** The link on a trade, or null when it has none. */
 export async function readTradeShareLink(
   ownerId: string,
@@ -81,18 +100,20 @@ export async function readTradeShareLink(
   await assertTradeOwner(ownerId, tradeId);
   const row = await prisma.tradeShareToken.findUnique({
     where: { tradeId },
-    select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+    select: LINK_SELECT,
   });
   return row ? toLinkData(row) : null;
 }
 
 function toLinkData(row: {
+  tokenSealed: string | null;
   showValues: boolean;
   expiresAt: Date | null;
   createdAt: Date;
   lastUsedAt: Date | null;
 }): TradeShareLinkData {
   return {
+    address: readTradeShareAddress(row.tokenSealed),
     showValues: row.showValues,
     expiresAt: row.expiresAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -108,8 +129,10 @@ function toLinkData(row: {
  * there is never a window in which a trade has two live links, and the old hash is gone the moment
  * the new one lands.
  *
- * Returns the raw token **once**. It is not stored and cannot be recovered; a collector who loses it
- * regenerates, which is the same trade `AssistantToken` makes and for the same reason.
+ * The raw token is **sealed** beside its hash (#681), so the address can be shown again afterwards —
+ * see `trade-share-address.ts` for why that bargain differs from `AssistantToken`'s. It is still
+ * returned here, because the dialog that pressed the button has the address on screen before any
+ * refetch lands.
  */
 export async function createTradeShareToken(
   ownerId: string,
@@ -119,16 +142,21 @@ export async function createTradeShareToken(
   await assertTradeOwner(ownerId, tradeId);
   const rawToken = TRADE_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = hashToken(rawToken);
+  const tokenSealed = sealTradeShareToken(rawToken);
   const row = await prisma.tradeShareToken.upsert({
     where: { tradeId },
     create: {
       tradeId,
       tokenHash,
+      tokenSealed,
       showValues: options.showValues,
       expiresAt: options.expiresAt,
     },
     update: {
       tokenHash,
+      // Written on every regeneration, null included: a stale seal would show the collector the
+      // address of the link they have just replaced.
+      tokenSealed,
       showValues: options.showValues,
       expiresAt: options.expiresAt,
       // A regenerated link has never been opened. Carrying the old receipt over would have the
@@ -136,7 +164,7 @@ export async function createTradeShareToken(
       lastUsedAt: null,
       createdAt: new Date(),
     },
-    select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+    select: LINK_SELECT,
   });
   return { token: rawToken, record: toLinkData(row) };
 }
@@ -162,7 +190,7 @@ export async function setTradeShareOptions(
   const row = await prisma.tradeShareToken.update({
     where: { tradeId },
     data: { showValues: options.showValues, expiresAt: options.expiresAt },
-    select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+    select: LINK_SELECT,
   });
   return toLinkData(row);
 }

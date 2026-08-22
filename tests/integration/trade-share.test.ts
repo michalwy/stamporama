@@ -1,6 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
+import { SECRET_KEY_ENV } from "../../src/lib/secret-box";
 import { createItem } from "../../src/lib/items";
 import { createTrade, getTrade, setTradeStatus } from "../../src/lib/trades";
 import { addTradeGiveLines, addTradeReceiveLines } from "../../src/lib/trade-lines";
@@ -187,11 +188,22 @@ async function accessFor(token: string): Promise<TradeShareAccess> {
 
 const NO_EXPIRY = { showValues: false, expiresAt: null };
 
+/** The key every install that has one runs with. Set for this file because since #681 minting seals
+ *  the raw token with it; the one case that runs without it says so on its own test. */
+const KEY = "cLBk3n0tArEaLkEy/JustEntropyForTests=";
+let savedKey: string | undefined;
+
 describe("the partner's share link (#640)", () => {
   before(async () => {
+    savedKey = process.env[SECRET_KEY_ENV];
+    process.env[SECRET_KEY_ENV] = KEY;
     f = await seed();
   });
-  after(cleanup);
+  after(async () => {
+    if (savedKey === undefined) delete process.env[SECRET_KEY_ENV];
+    else process.env[SECRET_KEY_ENV] = savedKey;
+    await cleanup();
+  });
 
   it("resolves a raw token to the one trade it names, and to that trade's owner", async () => {
     const { tradeId } = await trade();
@@ -202,13 +214,18 @@ describe("the partner's share link (#640)", () => {
     assert.equal(access.collectionId, f.collectionId);
   });
 
-  it("stores only the hash — the raw token is nowhere in the row", async () => {
+  it("stores the hash it resolves by and a sealed copy — the token itself nowhere", async () => {
     const { tradeId } = await trade();
     const { token } = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
     const row = await prisma.tradeShareToken.findUnique({ where: { tradeId } });
     assert.ok(row);
     assert.notEqual(row.tokenHash, token);
     assert.equal(row.tokenHash.length, 64, "a SHA-256 hex digest");
+    assert.ok(row.tokenSealed, "and the sealed copy #681 shows the collector");
+    assert.ok(
+      !JSON.stringify(row).includes(token),
+      "neither column holds the address in the clear"
+    );
   });
 
   it("keeps one link per trade: regenerating replaces the row and kills the old address", async () => {
@@ -287,6 +304,56 @@ describe("the partner's share link (#640)", () => {
     const share = (await getTrade(f.userId, tradeId))?.share;
     assert.equal(share?.showValues, true);
     assert.equal(share?.lastUsedAt, null);
+  });
+
+  // ── Reading the address again, after the dialog is closed (#681) ──────────────────────────────
+
+  it("hands the address back long after the dialog that minted it was closed", async () => {
+    const { tradeId } = await trade();
+    const { token } = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+    const link = await readTradeShareLink(f.userId, tradeId);
+    assert.deepEqual(link?.address, { readable: true, token });
+  });
+
+  it("says the same address on the trade's own screen", async () => {
+    const { tradeId } = await trade();
+    const { token } = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+    assert.deepEqual((await getTrade(f.userId, tradeId))?.share?.address, {
+      readable: true,
+      token,
+    });
+  });
+
+  it("shows the new address after regenerating, never the one it replaced", async () => {
+    const { tradeId } = await trade();
+    const first = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+    const second = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+    const link = await readTradeShareLink(f.userId, tradeId);
+    assert.deepEqual(link?.address, { readable: true, token: second.token });
+    assert.notEqual(second.token, first.token);
+  });
+
+  it("keeps a link minted before #681 serving, and says plainly why it cannot be shown", async () => {
+    const { tradeId } = await trade();
+    const { token } = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+    // What the migration leaves behind: the hash resolves, and the raw value is genuinely gone.
+    await prisma.tradeShareToken.update({ where: { tradeId }, data: { tokenSealed: null } });
+
+    const link = await readTradeShareLink(f.userId, tradeId);
+    assert.deepEqual(link?.address, { readable: false, reason: "legacy" });
+    assert.equal((await verifyTradeShareToken(token)).ok, true, "the partner's copy still works");
+  });
+
+  it("mints on an install with no key rather than refusing, and does not pretend", async () => {
+    const { tradeId } = await trade();
+    delete process.env[SECRET_KEY_ENV];
+    try {
+      const { token, record } = await createTradeShareToken(f.userId, tradeId, NO_EXPIRY);
+      assert.deepEqual(record.address, { readable: false, reason: "unconfigured" });
+      assert.equal((await verifyTradeShareToken(token)).ok, true, "and the link works");
+    } finally {
+      process.env[SECRET_KEY_ENV] = KEY;
+    }
   });
 
   // ── Scoping: nothing outside the named trade ──────────────────────────────────────────────────

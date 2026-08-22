@@ -3625,8 +3625,17 @@ model TradeFxRate {
 model TradeShareToken {
   id         String    @id @default(cuid())
   tradeId    String    @unique
-  // SHA-256 hex of the raw token; the raw value (prefix "stmpx_") is never stored.
+  // SHA-256 hex of the raw token (prefix "stmpx_"). What a request is resolved by, and the only
+  // form a lookup ever touches — sealing the token below did not make it the key.
   tokenHash  String    @unique
+  // The same raw token, **sealed** (`secret-box.ts`, AES-256-GCM under `STAMPORAMA_SECRET_KEY`), so
+  // the collector can be shown their own link again (#681). `AssistantToken`'s hash-only bargain does
+  // not transfer: that token authorises writes across a whole collection, while this one authorises
+  // reading one trade whose every figure and scan is already in this database — an attacker holding
+  // this row holds what the row would let them fetch. Null where there is nothing to open: a link
+  // minted before #681, or one minted on an install with no key configured, which keeps working for
+  // the partner and reads as *not recoverable* on the collector's side.
+  tokenSealed String?
   // Whether the page prints figures at all, or counts only. The collector's **explicit** choice: the
   // fallback valuation is the collector's own, so this is what decides whether that reaches the
   // partner. Off by default, because a default that discloses is not a choice.

@@ -248,7 +248,10 @@ already passed around whole, so no caller downstream had to learn that any of th
   `docs/user-guide/allegro.md`.
 - A new optional environment variable, `STAMPORAMA_SECRET_KEY`, which becomes required the moment
   an Allegro connection exists. It is the first secret in this app whose loss destroys stored data
-  rather than just a session.
+  rather than just a session. `secret-box.ts` has since acquired a second caller with a weaker claim
+  on it: the partner share link on a trade is sealed with the same key so the collector can read
+  their own address back (#681; ADR-0039 §9). That one does **not** make the variable required —
+  a keyless install still mints links that work, and simply cannot show them a second time.
 - A failed refresh puts the connection into an explicit `needs_reconnect` state, surfaced in
   Settings, rather than letting every later call fail on its own with a different message.
 - Every call to Allegro now names the application. A collector who registered theirs under a
