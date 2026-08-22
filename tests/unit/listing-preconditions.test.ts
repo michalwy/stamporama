@@ -171,17 +171,22 @@ describe("evaluateListingPreconditions", () => {
       assert.deepEqual(blockers[0].subjects, ["Mi\u00b7PL 870a", "Mi\u00b7PL 870c"]);
       assert.deepEqual(blockers[0].stampIds, ["stamp-870a", "stamp-870c"]);
       // Each variant carries the axes of the copy it was reported for (#633) — the cell the listing
-      // is blocked on, which is what the price grid behind the link opens narrowed to.
+      // is blocked on, which is what the price grid behind the link opens narrowed to — and the
+      // **umbrella** it is a variant of (#679), which is the tree that grid draws: a grid holding
+      // this one variant's row could not close the fault, the cheapest variant being unknowable
+      // until its siblings are priced too.
       assert.deepEqual(blockers[0].stampSubjects, [
         {
           stampId: "stamp-870a",
           label: "Mi\u00b7PL 870a",
           axes: { conditionId: "cond-mnh", certificateStatusId: null, formatId: null },
+          treeStampId: "stamp-870",
         },
         {
           stampId: "stamp-870c",
           label: "Mi\u00b7PL 870c",
           axes: { conditionId: "cond-mnh", certificateStatusId: null, formatId: null },
+          treeStampId: "stamp-870",
         },
       ]);
       assert.match(blockers[0].message, /cheapest variant/);
@@ -196,6 +201,7 @@ describe("evaluateListingPreconditions", () => {
               label: "A",
               copies: [
                 copy({
+                  stampId: "stamp-870",
                   catalogItemId: null,
                   conditionId: "cond-u",
                   conditionName: "Used",
@@ -229,6 +235,8 @@ describe("evaluateListingPreconditions", () => {
             certificateStatusId: "cert-1",
             formatId: "fmt-block",
           },
+          // The first copy's umbrella too, deduplicated on the same first-seen rule (#679).
+          treeStampId: "stamp-870",
         },
       ]);
     });

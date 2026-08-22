@@ -15,10 +15,12 @@ stamp on no want list has no Wants card, a stamp nobody has priced has no Catalo
 what you see on one of these pages is what that record actually has — the page never spends a
 heading, and the scrolling under it, on telling you that something is not there.
 
-These pages are **read-only**. Everything on them is still edited where it always was: the copy
-form, the stamp dialog, the issue dialog. The popups you already use (**View copies**, **View
-offers**, **Show valuation**) also stay exactly where they are — they answer one question
-without leaving the list, and these pages are for when you want the whole picture instead.
+No field on these pages is typed into directly. Everything is still edited where it always was: the
+copy form, the stamp dialog, the issue dialog — and where a page offers a button that starts one of
+those, it is that same dialog that opens, so there is never a second version of a record to keep
+straight. The popups you already use (**View copies**, **View offers**, **Show valuation**) also stay
+exactly where they are — they answer one question without leaving the list, and these pages are for
+when you want the whole picture instead.
 
 ## Opening one
 
@@ -68,7 +70,10 @@ records you were last on are listed under it; see
 Details is always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
-  page), and its catalog numbers.
+  page), and its catalog numbers. At the end of the line, **Edit** opens the copy form — the same one
+  the Copies list opens, over this copy — so a correction noticed while reading the page is made
+  here instead of back on the list. A copy whose variant is not identified also carries **Identify
+  variant** beside it, opening the same picker the list's row menu does.
 - **State chips** — disposition (*In collection*, *For sale*, *For trade*), delivery state, *Sold*
   and any disposal.
 - **Details** — condition, certificate status, physical format, area, issue, storage location and

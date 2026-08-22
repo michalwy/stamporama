@@ -710,9 +710,19 @@ function ListingBlockers({
                     <button
                       type="button"
                       // At the very axes the blocker was raised on (#633) — the copy this variant
-                      // was reported for, which is the one cell that unblocks the listing.
+                      // was reported for, which is the one cell that unblocks the listing — over the
+                      // **umbrella being listed** and nothing above it (#679). The variant names the
+                      // link, its umbrella is the tree: pricing that one variant alone would never
+                      // say which is cheapest, and the umbrella's ancestors are not the question.
                       onClick={() =>
-                        variantPrices.open({ kind: "stamp", stampId: stamp.stampId }, stamp.axes)
+                        variantPrices.open(
+                          {
+                            kind: "stamp",
+                            stampId: stamp.treeStampId ?? stamp.stampId,
+                            subtree: true,
+                          },
+                          stamp.axes
+                        )
                       }
                       style={{
                         padding: 0,

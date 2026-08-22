@@ -52,6 +52,10 @@ import type {
  * to walk off the axis the question was asked on. The edition stays switchable, a copy fixing none.
  * Every other entry point draws the whole grid: those are opened to work a tree through.
  *
+ * It is narrowed in **rows** as well (#679, `scope.subtree`): the item being listed is one umbrella,
+ * so the grid starts at that umbrella rather than at its tree's root. The two narrowings travel
+ * together for the same reason — an opening made for one copy is one question.
+ *
  * **An umbrella row is read-only until unlocked** (#627). Its value is the lowest of its variants'
  * (#238), so an open input on it reads as one more gap to fill while what it would record is an
  * override of a computed figure. The cell therefore shows that rolled-up figure `≈`-prefixed —
@@ -86,8 +90,11 @@ export function VariantPriceGridDialog({
   onSaved?: () => void;
 }) {
   const scopeKey = scope.kind === "issue" ? scope.issueId : scope.stampId;
+  // The subtree flag is part of the key: the same stamp answers with a different tree under it
+  // (#679), and one cached payload serving both would draw whichever was opened first.
+  const scopeSubtree = scope.kind === "stamp" && scope.subtree === true;
   const { data, isLoading, error } = useQuery({
-    queryKey: ["variantPriceGrid", scope.kind, scopeKey] as const,
+    queryKey: ["variantPriceGrid", scope.kind, scopeKey, scopeSubtree] as const,
     queryFn: async () => {
       const { getVariantPriceGridAction } = await import("@/app/actions/variant-prices");
       const r = await getVariantPriceGridAction(scope);

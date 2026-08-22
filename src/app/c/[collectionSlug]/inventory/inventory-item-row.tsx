@@ -587,13 +587,22 @@ export function InventoryItemRow({
 
   const rowActions = actionsOverride ?? menuActions;
 
-  // A read-only surface still gets **one** icon: the way to the copy's own screen (#517). Going to
-  // a record's page is navigation, not action — `readOnly` is about not editing a copy from a
-  // screen that is not the Copies list, and it would be a strange kind of read-only that refused
-  // to let you read more. This is what puts the icon on the copies list inside the stamp and issue
-  // detail screens, and on the copies popup (#110) it shares that list with.
+  // A read-only surface gets the way to the copy's own screen (#517). Going to a record's page is
+  // navigation, not action — `readOnly` is about not editing a copy from a screen that is not the
+  // Copies list, and it would be a strange kind of read-only that refused to let you read more.
+  // This is what puts the icon on the copies list inside the stamp and issue detail screens, and on
+  // the copies popup (#110) it shares that list with.
+  //
+  // Beside it, where the screen offers one, **Edit stamp** (#676). It does not break what read-only
+  // means: the copy is still not edited from here — what it opens is the shared editor for the
+  // *stamp* behind it, a record this surface never claimed to own. The offer's sets are where a
+  // wrong catalog number is noticed while the listing is being written, and the alternative is two
+  // screens away. A screen that does not pass `onEditStamp` still shows the one icon.
   const actions = readOnly ? (
-    <RowQuickActions actions={[detailPage]} visible={hovered} />
+    <RowQuickActions
+      actions={pickRowActions(menuActions, ["detail-page", "edit-stamp"])}
+      visible={hovered}
+    />
   ) : (
     <>
       {/* Edit the copy · edit the stamp behind it · put it on an existing offer · start a new

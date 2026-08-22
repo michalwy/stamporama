@@ -17,6 +17,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { sortCopies, COPY_SORT_KEYS, COPY_SORT_LABELS } from "@/app/c/[collectionSlug]/shared/copy-sort";
 import { useHydrated, usePersistentToggle, usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import {
   useReorderList,
@@ -27,6 +28,7 @@ import {
   type DragList,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { useInvalidateOffers } from "../use-offers-query";
+import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { Icon, type IconName } from "@/app/icons";
 
 
@@ -135,6 +137,9 @@ interface CopyCtx {
   areaNameById: Map<string, string>;
   /** Opens the quick catalog-value editor for a copy (the "+ catalog value" link). */
   onSetPrice?: (item: ItemListItem) => void;
+  /** Opens the shared stamp editor for the stamp behind a copy (#676) — promoted onto the row even
+   *  though these rows are read-only, the stamp being a record this screen never owned. */
+  onEditStamp?: (item: ItemListItem) => void;
 }
 
 interface CopyGroup {
@@ -221,6 +226,7 @@ function CopyRow({
       readOnly
       showCostBasis
       onSetCatalogPrice={ctx.onSetPrice ? () => ctx.onSetPrice!(item) : undefined}
+      onEditStamp={ctx.onEditStamp}
     />
   );
   if (!drag) return row;
@@ -899,7 +905,10 @@ export function OfferSetsView({
   const unknownVariantCount = copies.filter((c) => c.unknownVariant).length;
 
   const { invalidateAll } = useInvalidateOffers();
+  // The stamp behind a listed copy is named by every copy list too (#676).
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [isPending, startTransition] = useTransition();
   const [copyError, setCopyError] = useState<string | undefined>();
 
@@ -917,6 +926,10 @@ export function OfferSetsView({
     vendorMapFor,
     areaNameById,
     onSetPrice: setQuickPriceItem,
+    onEditStamp: (item) => {
+      setCopyError(undefined);
+      setEditStampItem(item);
+    },
   };
 
   // The offer's canonical order (#306) after any optimistic override: sets in order, each set's
@@ -1241,6 +1254,47 @@ export function OfferSetsView({
               else {
                 setQuickPriceItem(null);
                 invalidateAll(collectionId); // refresh copies + the suggested price
+              }
+            });
+          }}
+        />
+      )}
+
+      {/* The shared stamp editor (#54/#243), opened over the stamp a listed copy points at (#676):
+          the numbers and the name in the listing text come off it, so this is where a wrong one is
+          noticed. The copy itself is still not editable from here — see `readOnly` on the rows. */}
+      {editStampItem && (
+        <StampFormDialog
+          mode="edit"
+          stampId={editStampItem.stampId}
+          collectionId={collectionId}
+          stamp={{
+            name: editStampItem.stampName,
+            issuedDay: editStampItem.issuedDay,
+            issuedMonth: editStampItem.issuedMonth,
+            issuedYear: editStampItem.issuedYear,
+            catalogNumbers: editStampItem.catalogNumbers,
+          }}
+          areaVendors={[...vendorMapFor(editStampItem.areaId, editStampItem.issueId).values()]}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setEditStampItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(fd) => {
+            const stampId = editStampItem.stampId;
+            setCopyError(undefined);
+            startTransition(async () => {
+              const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
+              const r = await updateStampWithCatalogAction(stampId, fd);
+              if (r.status === "error") setCopyError(r.message);
+              else {
+                setEditStampItem(null);
+                invalidateAll(collectionId); // the rows, and the listing text built off them
+                void invalidateInventory(collectionId);
               }
             });
           }}

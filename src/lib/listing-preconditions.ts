@@ -209,6 +209,12 @@ interface StampSubject {
    *  what narrows the grid the link opens to the cell the listing is actually blocked on. Absent on
    *  a fault that is not about one: matching is a fact about a stamp, not about a copy. */
   axes?: PriceAxes;
+  /** The **umbrella being listed** that this stamp is a variant of (#679) — the tree the price grid
+   *  should draw. The variant above is what wants a price and is what the link is named after, but a
+   *  grid showing that row alone could not close the fault: the cheapest variant is unknown until
+   *  every *sibling* is priced too. Its tree's root would go the other way and drag in ancestors the
+   *  listing is not about. Absent on a fault that is not about a variant's price. */
+  treeStampId?: string;
 }
 
 /** The stamps of a fault, one entry per **stamp** in first-seen order — deduplicated on identity
@@ -361,15 +367,21 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
   }
 
   if (unpriced.length > 0) {
-    // Named against the **unpriced variants**, not the umbrella: they are what wants a price, and each
-    // has a price grid of its own to go and fill.
+    // Named against the **unpriced variants**, not the umbrella: they are what wants a price. The
+    // grid a link opens is still the *umbrella's* (#679, `treeStampId`) — pricing one variant alone
+    // never resolves which is cheapest — but drawn from that umbrella down, not from its root.
     // Each variant carries the axes of the copy it was reported for (#633) — the cell the listing is
     // blocked on, and so the cell the grid behind the link opens at. Where two copies at different
     // grades name the same variant, `distinctStamps` keeps the first, as it does for the label.
     const stamps = distinctStamps(
       unpriced.flatMap((c) =>
         c.catalogRollup?.kind === "unpriced-variants"
-          ? c.catalogRollup.variants.map((v) => ({ ...v, axes: axesOf(c) }))
+          ? c.catalogRollup.variants.map((v) => ({
+              ...v,
+              axes: axesOf(c),
+              // The umbrella this copy is listed as — the tree the grid behind the link draws (#679).
+              treeStampId: c.stampId,
+            }))
           : []
       )
     );

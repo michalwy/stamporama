@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import type { ItemListItem } from "@/lib/items";
 import type { ItemSaleRecord } from "@/lib/sales";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -27,7 +29,14 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import { useCollectionItemNoPad } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import {
+  useCollectionCertificateStatuses,
+  useCollectionItemNoPad,
+  useInvalidateInventory,
+} from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
+import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 
@@ -36,6 +45,16 @@ import { Icon } from "@/app/icons";
 // keep honest. What this page adds is *everything in one place* — the identity, the physical facts,
 // the money, the photos, and the three relationships (purchase, offers, sale) that a list row can
 // only hint at.
+//
+// The two acts a copy's own screen **starts** (#673) are the exception that proves it: **Edit** and
+// **Identify variant** open the very dialogs the Copies list opens, so there is still exactly one
+// editor per record and no field here becomes typeable in place. What they save is the trip back to
+// the list to hunt down the row this page was opened from — the whole reason for the screen. They
+// sit on the identity band rather than on the cards they would change, because they are about the
+// copy as a whole and a per-card button would be four of them saying the same thing.
+//
+// Identify variant follows the row's own rule and shows only on an unknown-variant copy: elsewhere
+// there is nothing to decide.
 
 const ITEM_NO: React.CSSProperties = {
   fontSize: "0.8125rem",
@@ -90,6 +109,33 @@ export function CopyDetailPanel({
   const primaryVendorId = maps.primaryVendorByArea.get(item.areaId ?? "") ?? null;
   const itemNoPad = useCollectionItemNoPad(collectionId);
 
+  // The two dialogs this screen opens (#673). The dictionaries the copy form needs are fetched
+  // here rather than loaded on the server beside the copy: both are cached per collection and
+  // shared with every other screen that opens the same dialog, and a page that is read far more
+  // often than it is edited should not pay for them on the way in.
+  const router = useRouter();
+  const { data: conditions = [] } = useCollectionConditions(collectionId);
+  const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
+  const [dialog, setDialog] = useState<"none" | "edit" | "identify">("none");
+  const [actionError, setActionError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
+  const closeDialog = () => {
+    if (isPending) return;
+    setDialog("none");
+    setActionError(undefined);
+  };
+  // The page is server-rendered, so a save is shown by re-reading it. The Copies list's own cached
+  // pages are marked stale in the same breath — the collector arrived here from one of its rows and
+  // **Back to copies** is the way out, so a row still reading the way it read before the edit is the
+  // one thing this page must not leave behind.
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
+  const onSaved = () => {
+    setDialog("none");
+    setActionError(undefined);
+    router.refresh();
+    void invalidateInventory(collectionId);
+  };
+
   const areaPath = buildAreaPath(areas, item.areaId);
   const locationPath = item.locationId ? buildLocationPath(locations, item.locationId) : null;
 
@@ -122,6 +168,22 @@ export function CopyDetailPanel({
               </span>
             </Tooltip>
           )}
+          {/* What this screen can start (#673), at the end of the line that says which copy it is
+              about. Both open the Copies list's own dialogs. */}
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
+            {item.unknownVariant && (
+              <Tooltip content="Say which variant this copy is, from the variants under its current stamp.">
+                <button type="button" style={DETAIL_BUTTON} onClick={() => setDialog("identify")}>
+                  <Icon name="variant" size="sm" /> Identify variant
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip content="Edit this copy — condition, filing, disposition, notes and photos.">
+              <button type="button" style={DETAIL_BUTTON} onClick={() => setDialog("edit")}>
+                <Icon name="edit" size="sm" /> Edit
+              </button>
+            </Tooltip>
+          </span>
         </DetailFullRow>
 
         <DetailFullRow style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
@@ -277,6 +339,50 @@ export function CopyDetailPanel({
           </DetailColumn>
         </DetailColumns>
       </DetailLayout>
+
+      {/* The Copies list's own dialogs (#99, #100), opened over this one copy. */}
+      {dialog === "edit" && (
+        <InventoryItemFormDialog
+          mode="edit"
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          item={item}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            setActionError(undefined);
+            startTransition(async () => {
+              const { updateItemAction } = await import("@/app/actions/items");
+              const result = await updateItemAction(item.id, fd);
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {dialog === "identify" && (
+        <IdentifyVariantDialog
+          collectionId={collectionId}
+          item={item}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            setActionError(undefined);
+            startTransition(async () => {
+              const { resolveItemVariantAction } = await import("@/app/actions/items");
+              const result = await resolveItemVariantAction(item.id, fd);
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
     </>
   );
 }

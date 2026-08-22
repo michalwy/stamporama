@@ -183,24 +183,29 @@ export function DuplicateGroupRow({
       }}
       header={
         <>
-          {/* Line 1: how many, the stamp's name */}
+          {/* Line 1: how many, the stamp's name. A stamp with no name prints **nothing** in the
+              name's place (#678, the same fix #535 made on the Issue list): the count chip is what
+              this line is for, the catalog numbers two lines down say which stamp it is, and
+              "(unnamed stamp)" repeated down a grouped list is the same non-fact on every row. */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Tooltip content={`${group.count} interchangeable copies in this group`}>
               <span style={COUNT_CHIP}>×{group.count}</span>
             </Tooltip>
-            <span
-              style={{
-                flex: 1,
-                fontSize: "0.9375rem",
-                fontWeight: 600,
-                color: "var(--color-text-primary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {group.stampName ?? "(unnamed stamp)"}
-            </span>
+            {group.stampName && (
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: "0.9375rem",
+                  fontWeight: 600,
+                  color: "var(--color-text-primary)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {group.stampName}
+              </span>
+            )}
           </div>
 
           {/* Line 2: area path, date, issue */}

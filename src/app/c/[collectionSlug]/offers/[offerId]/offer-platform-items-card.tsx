@@ -6,12 +6,14 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { ListedVariantDialog } from "./listed-variant-dialog";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
 import { useInvalidateOffers } from "../use-offers-query";
+import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import {
   STAMP_PRIMARY_CHIP,
@@ -228,6 +230,24 @@ export function OfferPlatformItemsCard({
   const assistantPresent = useAssistantPresence() !== null;
   const { handoff, nodeRef, start, dismiss } = useAssistantMatch();
   const { invalidateAll } = useInvalidateOffers();
+  // A stamp edited from a row is a stamp every copy list also names (#676) — cheap to be generous
+  // with, those queries being inactive while this screen is up.
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
+
+  // Re-read the offer on demand (#677). What a row says about Colnect goes stale from writes this
+  // card never hears about — a match made in another tab, a variant priced elsewhere — and the
+  // several cache paths that would each have to invalidate it are the standing bug (#212/#440/#624/
+  // #654). Rather than chasing every one of them, the collector gets the reload the card is worth on
+  // its own, without the page's.
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await invalidateAll(collectionId);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const unmatched = items.filter((i) => i.searchUrl);
 
@@ -247,6 +267,24 @@ export function OfferPlatformItemsCard({
   }, [copies]);
   const unpricedFor = (item: OfferPlatformItem) =>
     unpricedBy.get(`${item.stampId}|${item.conditionId}`) ?? null;
+
+  // ── The stamp behind a row ─────────────────────────────────────────────────
+  // A row is `stamp × condition` and the card is read while checking that stamp against the
+  // platform's own catalogue (#676) — which is exactly when a number recorded wrong, or a name never
+  // filled in, is noticed. The shared stamp dialog is opened over one of the row's copies rather
+  // than over the row: the row carries formatted labels for reading, while the dialog edits
+  // `vendor × number` pairs, and the copies already on this screen carry those.
+  const copyByStamp = useMemo(() => {
+    const map = new Map<string, ItemListItem>();
+    for (const copy of copies) if (!map.has(copy.stampId)) map.set(copy.stampId, copy);
+    return map;
+  }, [copies]);
+  /** One of the row's own copies, which is what the dialog is opened over. Null where the offer
+   *  holds none for that stamp — nothing to edit from, and the action is simply absent. */
+  const editableStamp = (item: OfferPlatformItem) => copyByStamp.get(item.stampId) ?? null;
+  const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
+  const [stampError, setStampError] = useState<string | undefined>();
+  const [isSavingStamp, startSavingStamp] = useTransition();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
@@ -373,6 +411,7 @@ export function OfferPlatformItemsCard({
           )}
         </button>
       </Tooltip>
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
         {/* One press for the whole gap: the walk hands over the first stamp with no item-ID and, as
             each match lands, the next — which is the shape of the job, since a listing cannot be
             posted until none are left. */}
@@ -389,7 +428,6 @@ export function OfferPlatformItemsCard({
               onClick={walking ? stopWalk : startWalk}
               style={{
                 ...HEADER_CHIP,
-                marginLeft: "auto",
                 color: "var(--color-text-primary)",
                 background: "var(--color-bg-elevated)",
                 cursor: "pointer",
@@ -405,6 +443,28 @@ export function OfferPlatformItemsCard({
             </button>
           </Tooltip>
         )}
+        {/* Drawn whether or not the Assistant is here, unlike **Link all** beside it: a stale row is
+            stale however the match was made, and the collector who linked a stamp somewhere else is
+            exactly the one looking at an unchanged card. An icon alone — it re-reads what is already
+            on screen and has nothing to say about the offer. */}
+        <Tooltip content="Re-read these stamps' Colnect links and catalog values — without reloading the page.">
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            aria-label="Refresh the item list"
+            style={{
+              ...HEADER_CHIP,
+              color: "var(--color-text-secondary)",
+              background: "var(--color-bg-elevated)",
+              cursor: refreshing ? "default" : "pointer",
+              opacity: refreshing ? 0.6 : 1,
+            }}
+          >
+            <Icon name="refresh" size="sm" />
+          </button>
+        </Tooltip>
+        </span>
       </div>
 
       {/* What the Assistant says about the handoff in flight. It ends at "matched it in the window" —
@@ -617,9 +677,11 @@ export function OfferPlatformItemsCard({
                           type="button"
                           // Narrowed to this row's own copy (#633): the tree is unlistable at one
                           // `condition × certificate × format`, and that is the cell being asked for.
+                          // Narrowed in rows too (#679) — the umbrella being listed is the tree the
+                          // question is about, not whatever it happens to hang under.
                           onClick={() =>
                             variantPrices.open(
-                              { kind: "stamp", stampId: item.unpricedVariantStampId! },
+                              { kind: "stamp", stampId: item.unpricedVariantStampId!, subtree: true },
                               {
                                 conditionId: item.conditionId,
                                 certificateStatusId: item.certificateStatusId,
@@ -672,6 +734,27 @@ export function OfferPlatformItemsCard({
                         style={{ ...LINK, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
                       >
                         Listed as…
+                      </button>
+                    </Tooltip>
+                  )}
+                  {/* The stamp itself (#676), edited through the dialog every other screen edits it
+                      through — the numbers in the first column are what this card is read *against*,
+                      so a wrong one is found here and nowhere else, and the Copies list is two
+                      screens away. Plain rather than amber: nothing is missing, this is a correction
+                      the collector may make. It edits **this row's own stamp**, including on an
+                      umbrella standing under a variant: the variant on the line below is a different
+                      entry, reachable from its own catalog page. */}
+                  {editableStamp(item) && (
+                    <Tooltip content="Edit this stamp — its name, its catalog numbers and its prices — without leaving the offer.">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStampError(undefined);
+                          setEditStampItem(editableStamp(item));
+                        }}
+                        style={{ ...LINK, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      >
+                        Edit stamp
                       </button>
                     </Tooltip>
                   )}
@@ -793,6 +876,46 @@ export function OfferPlatformItemsCard({
               else {
                 setQuickPriceItem(null);
                 void invalidateAll(collectionId); // the row's gap closes, and the offer's totals move
+              }
+            });
+          }}
+        />
+      )}
+
+      {/* The shared stamp editor (#54), reused exactly as the Copies list (#243) and purchase intake
+          do — a stamp is edited one way wherever it is edited from. */}
+      {editStampItem && (
+        <StampFormDialog
+          mode="edit"
+          stampId={editStampItem.stampId}
+          collectionId={collectionId}
+          stamp={{
+            name: editStampItem.stampName,
+            issuedDay: editStampItem.issuedDay,
+            issuedMonth: editStampItem.issuedMonth,
+            issuedYear: editStampItem.issuedYear,
+            catalogNumbers: editStampItem.catalogNumbers,
+          }}
+          areaVendors={[...vendorMapFor(editStampItem.areaId, editStampItem.issueId).values()]}
+          isPending={isSavingStamp}
+          error={stampError}
+          onClose={() => {
+            if (isSavingStamp) return;
+            setEditStampItem(null);
+            setStampError(undefined);
+          }}
+          onSubmit={(fd) => {
+            const stampId = editStampItem.stampId;
+            setStampError(undefined);
+            startSavingStamp(async () => {
+              const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
+              const r = await updateStampWithCatalogAction(stampId, fd);
+              if (r.status === "error") setStampError(r.message);
+              else {
+                setEditStampItem(null);
+                // The numbers, the name and the links a row is built from all come off this stamp.
+                void invalidateAll(collectionId);
+                void invalidateInventory(collectionId);
               }
             });
           }}

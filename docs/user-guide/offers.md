@@ -217,7 +217,10 @@ band's **Expand all** to open them. A set you add while the screen is open opens
 Group by **Set** or **Location**, optionally sub-group
 by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
 Each copy row has a quick **+ catalog value** link (click the value to edit it) so you can fill in
-missing catalog prices without leaving the offer — which also feeds the suggested price. The
+missing catalog prices without leaving the offer — which also feeds the suggested price. Hovering a
+row also shows two small icons: one opens that **copy's own page**, the other opens the **stamp
+editor** for the stamp behind it, for when the listing text you are writing turns up a wrong catalog
+number or a missing name. The copy itself is still edited from the Copies list — these rows read. The
 **Only** filters — **Unpriced**, **No photo**, and **Unknown variant** — narrow the view to copies
 that still need a catalog value, a photo, or their variant identified, so you can clear them before
 listing.
@@ -773,6 +776,17 @@ value recorded in that condition. It opens the same *Set catalog value* dialog t
 so the values can be filled in from the one list that already names each stamp and grade once —
 rather than by scrolling the sets looking for which copy is unpriced. A row that is priced says
 nothing: this card shows gaps, never figures.
+
+Beside it, every row carries **Edit stamp**. This card is where you read your own numbers against
+somebody else's catalogue, so it is where a number typed wrong or a name never filled in gets
+noticed — and it opens the same stamp editor the Copies list and the Issues list open, so the
+correction is made on the spot instead of two screens away. It edits the stamp on **that row**; where
+the row is listed under a variant, that variant is a separate entry with its own catalog page.
+
+The heading carries a **↻** beside *Link all*. The card is a picture of what Colnect knows about
+these stamps, and that changes from things this screen does not see — a match you made in another
+tab, a stamp you edited elsewhere. Press it and the card re-reads itself, without reloading the
+page.
 
 Both gaps are marked in **amber**: the *N not matched* count in the heading, and the **⚡ Link** and
 **+ CV** buttons in the rows. Amber is always something to *do* — Search is left plain, being a link

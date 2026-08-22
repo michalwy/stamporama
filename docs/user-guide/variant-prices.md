@@ -52,16 +52,22 @@ puts the rolled-up figure back on screen.
 
 - **An issue** — its `⋮` menu on the Issues list → **Price variants…**, beside the format
   multipliers. The whole issue's tree, in one grid.
-- **A stamp** — the **Price variants** button on the worklist below, on an offer's *On
-  Colnect* card, or on a listing blocker naming an unpriced variant. Opening it over any
-  stamp of a tree shows the **whole tree**, since that is what the value is read from.
+- **A stamp** — the **Price variants** button on the worklist below, on an offer's *Items*
+  card, or on a listing blocker naming an unpriced variant. Opening it over any stamp of a
+  tree shows the **whole tree**, since that is what the value is read from.
 
 Opened **from an offer** — the *Items* card or a listing blocker — the grid is narrowed
 to the copy being listed: its condition alone, at its certificate and its format. Those two
 controls are gone, and a line above the grid names what it is scoped to; the catalog edition
 is still yours to choose. It is one cell per row, because that is the one cell the listing is
-blocked on. The rest of the tree's prices are filled in from the Issues list or from the
-worklist below, where the whole grid is drawn.
+blocked on.
+
+It is narrowed in **rows** too: you get the stamp being listed and the variants under it,
+not everything hanging off the top of its tree. Listing `Mi·NL 175E` shows `175E`, `175Ea`
+and `175Eb` — not `175`, `175A`, `175C` and `175D` beside them. Those are perfectly good
+stamps; they are simply not what this listing is waiting on. The rest of the tree's prices
+are filled in from the Issues list or from the worklist below, where the whole grid is
+drawn.
 
 ## The worklist
 

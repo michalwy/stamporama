@@ -40,12 +40,27 @@ import type { RawCatalogPrice } from "./catalog-price";
 // Scope is an **issue** or a **stamp**, and never an area or a checklist: a checklist is a
 // collecting goal (#531) and a variant tree crosses it, while the printed catalogue's page is an
 // issue. A stamp scope resolves **up to its tree's root**, because the rollup is taken over the
-// whole tree — which is also what lets #617's per-variant blocker links land on the same grid the
-// umbrella's own entry point opens.
+// whole tree — which is also what lets a per-variant entry point land on the same grid the
+// umbrella's own one opens. A scope opened **for one copy** asks `subtree` for the opposite (#679):
+// there the stamp named *is* the umbrella being listed, and its ancestors are not the question.
 
 /** What a grid is opened over. */
 export type VariantPriceScope =
-  | { kind: "stamp"; stampId: string }
+  | {
+      kind: "stamp";
+      stampId: string;
+      /**
+       * Draw **this stamp's own subtree** rather than its whole tree (#679).
+       *
+       * The default resolves up to the tree's root, which is what an entry point opened to work a
+       * tree *through* wants. An opening made **for one copy** is a different question: the item
+       * being listed is one umbrella, and `Mi·NL 175`'s whole tree in answer to a question about
+       * `175E` buries the two rows that would unblock the listing under five that have nothing to
+       * do with it. The rollup stays correct either way — an umbrella's value is the lowest of its
+       * **own** descendants, and those are all still drawn.
+       */
+      subtree?: boolean;
+    }
   | { kind: "issue"; issueId: string };
 
 /**
@@ -171,24 +186,37 @@ type GridStamp = StampLabelRow & {
 };
 
 /**
- * The tree's root, walking `parentId` up from any stamp. Bounded rather than trusting termination:
+ * A stamp's ancestry, self first, up to its tree's root. Bounded rather than trusting termination:
  * the tree is user-built and nothing at the database level forbids a cycle (`makeFormatFactorLookup`
  * guards its area walk the same way).
+ *
+ * The whole chain is walked rather than just the root, because a **subtree** scope (#679) needs the
+ * nearest area link at-or-above the stamp it is drawn from: editions and multipliers hang off an
+ * area, and a variant node need not carry a `StampAreaLink` of its own.
  */
-async function resolveTreeRoot(collectionId: string, stampId: string): Promise<string> {
+async function resolveAncestry(
+  collectionId: string,
+  stampId: string
+): Promise<{ id: string; areaId: string | null }[]> {
+  const chain: { id: string; areaId: string | null }[] = [];
   let current = stampId;
   const seen = new Set<string>([current]);
   for (let depth = 0; depth < 50; depth++) {
-    const stamp: { parentId: string | null } | null = await prisma.stamp.findFirst({
+    const stamp = await prisma.stamp.findFirst({
       where: { id: current, collectionId },
-      select: { parentId: true },
+      select: {
+        parentId: true,
+        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      },
     });
+    const link = stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0] ?? null;
+    chain.push({ id: current, areaId: link?.collectionAreaId ?? null });
     const parentId = stamp?.parentId ?? null;
-    if (!parentId || seen.has(parentId)) return current;
+    if (!parentId || seen.has(parentId)) return chain;
     seen.add(parentId);
     current = parentId;
   }
-  return current;
+  return chain;
 }
 
 /**
@@ -446,33 +474,36 @@ async function resolveScope(
   });
   if (!stamp) throw new Error("Stamp not found.");
   await assertCollectionOwner(ownerId, stamp.collectionId);
-  const rootId = await resolveTreeRoot(stamp.collectionId, scope.stampId);
+  const ancestry = await resolveAncestry(stamp.collectionId, scope.stampId);
+  // Where the drawn tree starts: the stamp itself for a scope opened over one copy's umbrella
+  // (#679), else the root of the tree it hangs in.
+  const rootId = scope.subtree ? scope.stampId : (ancestry[ancestry.length - 1]?.id ?? scope.stampId);
   const descendants = await buildDescendantMap(stamp.collectionId, new Set([rootId]));
   const stampIds = [rootId, ...(descendants.get(rootId) ?? new Set<string>())];
 
+  // Which area the editions and the multipliers are resolved against. A whole tree takes its
+  // root's, as it always has; a subtree takes the nearest link at-or-above the stamp it is drawn
+  // from, since a variant node need not carry one of its own and a grid with no editions could not
+  // be filled in at all.
+  const areaId = scope.subtree
+    ? (ancestry.find((a) => a.areaId != null)?.areaId ?? null)
+    : (ancestry[ancestry.length - 1]?.areaId ?? null);
+
   // The root's own issue supplies the sibling order for every row that belongs to it; a descendant
   // in no issue falls back to the catalogue's own order (see `compareRows`).
-  const [members, root] = await Promise.all([
-    prisma.issueMember.findMany({
-      where: { stampId: { in: stampIds } },
-      select: { stampId: true, sortOrder: true },
-      orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
-    }),
-    prisma.stamp.findUnique({
-      where: { id: rootId },
-      select: { stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } } },
-    }),
-  ]);
+  const members = await prisma.issueMember.findMany({
+    where: { stampId: { in: stampIds } },
+    select: { stampId: true, sortOrder: true },
+    orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+  });
   const sortOrderByStamp = new Map<string, number>();
   for (const m of members) if (!sortOrderByStamp.has(m.stampId)) sortOrderByStamp.set(m.stampId, m.sortOrder);
-  const link =
-    root?.stampAreaLinks.find((l) => l.isPrimary) ?? root?.stampAreaLinks[0] ?? null;
   return {
     collectionId: stamp.collectionId,
     stampIds,
     sortOrderByStamp,
     scopeLabelIssue: null,
-    areaId: link?.collectionAreaId ?? null,
+    areaId,
   };
 }
 
