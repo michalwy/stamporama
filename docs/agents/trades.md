@@ -165,16 +165,26 @@ Exchanges with another collector: what leaves, what arrives, the sections over b
   on a file already picked and reads it through a query keyed on which file it is, so opening the
   dialog is asking the question rather than presenting a second button that asks it again.
 
-- **The lists themselves are records on the trade, and they are not contents** (#645).
+- **The lists themselves are records on the section, and they are not contents** (#645; #680).
   `TradeColnectList` is any number of rows, each an address, a label and a **side** — a partner
   routinely sends two or three custom lists, and *what I am asking you for* and *what you are asking
-  me for* are two lists that one heading would misname. They are drawn under the trade's terms and on
-  the partner's page (#640), which is where they matter most: the partner is reading a list of stamps
-  they wrote themselves and has no other way back to their own copy of it. **Ungated by status**,
-  unlike every line and section: `assertContentEditable` guards the contents of a list the partner is
-  holding a copy of, and an address is not contents — this is `updateTrade`'s rule, not
-  `addTradeGiveLines`'s. Re-offering the same URL updates the row rather than adding a second, since
-  the import offers the file's own list every time it reads one.
+  me for* are two lists that one heading would misname. The owner is the **section**, not the trade:
+  the import targets one `(section, side)` — mint goes into the mint section, used into the used one,
+  and a trade routinely carries several — so the link is filed where the stamps it produced went.
+  Filed at the trade level they sat four to a box with nothing saying which part of the trade each of
+  them was about, and the reader had to reconstruct that from whatever the files happened to be
+  called. So they are drawn **on the section**, under its band and over its own two columns, on the
+  collector's screen and on the partner's page (#640) alike — the partner is reading a list of stamps
+  they wrote themselves, and the section is where its stamps are. **The uniqueness rule went with the
+  parent**, from `(tradeId, url)` to `(sectionId, url)`: one export routinely carries mint and used
+  together and gets split across the sections it belongs to, and each of those sections is honestly
+  about that list, while the same list twice *in one section* still is a mistake. Re-offering the
+  same URL to the same section updates the row rather than adding a second, since the import offers
+  the file's own list every time it reads one. Deleting a section takes its links with it — a link is
+  about that part of the trade, and the section's existing delete guards (not empty, not the last
+  one) already say when a section may go. **Ungated by status**, unlike every line and section:
+  `assertContentEditable` guards the contents of a list the partner is holding a copy of, and an
+  address is not contents — this is `updateTrade`'s rule, not `addTradeGiveLines`'s.
 
 - **The partner's answer to that pool is a second reference on the line, never a write into the
   first** (#658; ADR-0039 §15). `TradeLine.proposedItemId` — with the moment it arrived beside it,

@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createTrade, updateTradeSection } from "../../src/lib/trades";
+import {
+  createTrade,
+  createTradeSection,
+  deleteTradeSection,
+  updateTradeSection,
+} from "../../src/lib/trades";
 import {
   importColnectListRows,
   previewColnectListImport,
@@ -24,7 +29,9 @@ import {
 // through the collection's *own* Colnect mapping rather than through a second opinion; that a row
 // stating no grade takes the section's default and, where the section states none, comes back as a
 // gap; that the give side reports what it cannot serve instead of quietly writing less; and that
-// nothing at all is written by a preview.
+// nothing at all is written by a preview. Since #680 the links a list leaves behind belong to the
+// **section** it was imported into, so what is checked here includes the two halves of that rule:
+// one address may sit on two sections of a trade, never twice on one.
 //
 // The file under test is a real Colnect export, trimmed to eight rows — the same fixture the unit
 // tests read, so the two halves cannot drift apart about what the file says.
@@ -541,27 +548,27 @@ describe("writing the list into a side (#645)", () => {
   });
 });
 
-describe("the Colnect lists a trade is about (#645)", () => {
+describe("the Colnect lists a section is about (#645; #680)", () => {
   it("keeps a list per side and does not duplicate the same address", async () => {
-    const { tradeId } = await trade();
-    await addTradeColnectList(f.userId, tradeId, {
+    const { sectionId } = await trade();
+    await addTradeColnectList(f.userId, sectionId, {
       url: "https://colnect.com/en/stamps/list/custom_list__18/partner",
       label: "Their wants",
       side: "give",
     });
-    await addTradeColnectList(f.userId, tradeId, {
+    await addTradeColnectList(f.userId, sectionId, {
       url: "https://colnect.com/en/stamps/list/custom_list__15/collector",
       label: "My wants",
       side: "receive",
     });
-    // The import offers the file's own list every time it reads one; the second offer is the same
-    // list, not a second one.
-    await addTradeColnectList(f.userId, tradeId, {
+    // The import offers the file's own list every time it reads one; the second offer into the same
+    // section is the same list, not a second one.
+    await addTradeColnectList(f.userId, sectionId, {
       url: "https://colnect.com/en/stamps/list/custom_list__18/partner",
       side: "give",
     });
 
-    const lists = await listTradeColnectLists(f.userId, tradeId);
+    const lists = await listTradeColnectLists(f.userId, sectionId);
     assert.equal(lists.length, 2);
     assert.deepEqual(
       lists.map((list) => [list.side, list.label]),
@@ -573,25 +580,63 @@ describe("the Colnect lists a trade is about (#645)", () => {
     );
   });
 
+  it("lets one address sit on two sections, since one export is split across them", async () => {
+    const { tradeId, sectionId } = await trade();
+    const used = await createTradeSection(f.userId, tradeId, { name: "Used" });
+    const url = "https://colnect.com/en/stamps/list/custom_list__18/partner";
+
+    await addTradeColnectList(f.userId, sectionId, { url, label: "Their wants", side: "give" });
+    await addTradeColnectList(f.userId, used.id, { url, label: "Their wants", side: "give" });
+
+    assert.equal((await listTradeColnectLists(f.userId, sectionId)).length, 1);
+    assert.equal(
+      (await listTradeColnectLists(f.userId, used.id)).length,
+      1,
+      "the same file covered mint and used, and each section is honestly about it"
+    );
+  });
+
+  it("takes a section's links with the section", async () => {
+    const { tradeId, sectionId } = await trade();
+    const used = await createTradeSection(f.userId, tradeId, { name: "Used" });
+    await addTradeColnectList(f.userId, used.id, {
+      url: "https://colnect.com/en/stamps/list/used/partner",
+      side: "give",
+    });
+    await addTradeColnectList(f.userId, sectionId, {
+      url: "https://colnect.com/en/stamps/list/mint/partner",
+      side: "give",
+    });
+
+    await deleteTradeSection(f.userId, used.id);
+
+    assert.equal(await prisma.tradeColnectList.count({ where: { sectionId: used.id } }), 0);
+    assert.equal(
+      (await listTradeColnectLists(f.userId, sectionId)).length,
+      1,
+      "the other section keeps its own"
+    );
+  });
+
   it("refuses an address a browser should not follow", async () => {
-    const { tradeId } = await trade();
+    const { sectionId } = await trade();
     await assert.rejects(
-      addTradeColnectList(f.userId, tradeId, { url: "javascript:alert(1)", side: "give" }),
+      addTradeColnectList(f.userId, sectionId, { url: "javascript:alert(1)", side: "give" }),
       /http or https/
     );
     await assert.rejects(
-      addTradeColnectList(f.userId, tradeId, { url: "not a link", side: "give" }),
+      addTradeColnectList(f.userId, sectionId, { url: "not a link", side: "give" }),
       /not a link/
     );
   });
 
-  it("refuses to move one list onto another's address", async () => {
-    const { tradeId } = await trade();
-    const first = await addTradeColnectList(f.userId, tradeId, {
+  it("refuses to move one list onto another's address in the same section", async () => {
+    const { sectionId } = await trade();
+    const first = await addTradeColnectList(f.userId, sectionId, {
       url: "https://colnect.com/en/stamps/list/a/partner",
       side: "give",
     });
-    await addTradeColnectList(f.userId, tradeId, {
+    await addTradeColnectList(f.userId, sectionId, {
       url: "https://colnect.com/en/stamps/list/b/partner",
       side: "receive",
     });
@@ -600,7 +645,7 @@ describe("the Colnect lists a trade is about (#645)", () => {
         url: "https://colnect.com/en/stamps/list/b/partner",
         side: "give",
       }),
-      /already on this trade/
+      /already on this section/
     );
   });
 });

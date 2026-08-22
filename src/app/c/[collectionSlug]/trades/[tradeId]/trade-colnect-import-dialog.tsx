@@ -299,10 +299,11 @@ export function TradeColnectImportDialog({
         setError(result.message);
         return;
       }
-      // The list's own address, kept beside the lines it produced — under the side it was imported
-      // into, which is the heading it belongs under on the partner's page.
+      // The list's own address, kept beside the lines it produced — on the **section** it was
+      // imported into and under the side it went in on (#680), which is where it is drawn on the
+      // collector's screen and on the partner's page alike.
       if (keepLink && preview?.listUrl) {
-        await addTradeColnectListAction(tradeId, {
+        await addTradeColnectListAction(sectionId, {
           url: preview.listUrl,
           label: listName,
           side,
@@ -493,7 +494,7 @@ export function TradeColnectImportDialog({
                   checked={keepLink}
                   onChange={(event) => setKeepLink(event.target.checked)}
                 />
-                Keep this list&rsquo;s link on the trade
+                Keep this list&rsquo;s link on this section
                 <span style={MUTED}>({listName || preview.listUrl})</span>
               </label>
             )}

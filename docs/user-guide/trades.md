@@ -340,20 +340,26 @@ A row you cannot or do not want to answer is **skipped** on purpose — nothing 
 is neither fixed nor skipped. An import that quietly dropped rows would leave both of you believing
 the list was complete.
 
-The file's own address is offered as a link to keep on the trade (see below), ticked by default.
+The file's own address is offered as a link to keep on the section (see below), ticked by default.
 
-### Colnect lists on the trade
+### Colnect lists on a section
 
-A Colnect exchange lives half on Colnect, so the trade keeps the **addresses of the lists** it is
-about — any number of them, each under the side it belongs to. They sit under the trade's terms, and
-they are also printed on your partner's copy of the list, which is where they matter most: your
-partner is reading a list of stamps they wrote themselves, and this is their way back to their own
-copy of it.
+A Colnect exchange lives half on Colnect, so a section keeps the **addresses of the lists** it is
+about — any number of them, each over the column it belongs to. They sit under the section's heading
+and above its two lists of stamps, and they are also printed on your partner's copy of the list,
+which is where they matter most: your partner is reading a list of stamps they wrote themselves, and
+this is their way back to their own copy of it.
 
-Add one with **Add list** under either heading, or let an import add the one it just read. Editing is
-in place; the `⋮` menu removes one. Unlike the lines, these are not locked once the trade is agreed —
-an address is not a change to what was agreed, and a link added after sharing is exactly the one your
-partner needs.
+They belong to the **section**, not to the trade as a whole, because that is what an import produces:
+you read a file into the mint section and another into the used one, and the link belongs where the
+stamps it produced went. One export often covers both — the same address can sit on two sections of
+one trade, and each of them is honestly about that list. The same address twice on one section is
+refused.
+
+Add one with **Colnect list link** under either column, or let an import add the one it just read.
+Editing is in place; the `⋮` menu removes one. Unlike the lines, these are not locked once the trade
+is agreed — an address is not a change to what was agreed, and a link added after sharing is exactly
+the one your partner needs. Deleting a section takes its links with it.
 
 ### Finding things in a long list
 

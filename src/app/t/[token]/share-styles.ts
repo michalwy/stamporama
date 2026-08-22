@@ -72,6 +72,14 @@ export const SHARE_STYLESHEET = `
   color: var(--color-text-muted);
   margin-bottom: 0.3rem;
 }
+/* On a section (#680) the links line up with the two columns of rows below them, in the same grid
+   and at the same gutter — a link sits over the stamps it produced. */
+.ts-lists-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  margin: 0 0 1.25rem;
+}
 .ts-lists ul { list-style: none; margin: 0; padding: 0; }
 .ts-lists li { margin-bottom: 0.2rem; }
 .ts-lists a { color: var(--color-action-primary); text-decoration: none; }

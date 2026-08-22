@@ -75,6 +75,11 @@ export interface TradeSectionData {
   receiveCount: number;
   /** Pieces on the receive side, which is not its line count — three lines can be thirty stamps. */
   receiveQuantity: number;
+  /** The Colnect lists **this part** of the exchange is about (#645; re-parented in #680), both
+   *  sides' — the import targets one `(section, side)`, so the link is filed where the stamps it
+   *  produced went. Read with the section rather than behind a second fetch: they are four columns
+   *  hanging off a row this query already has, and they are drawn on this very card. */
+  colnectLists: TradeColnectListSummary[];
 }
 
 /** A trade with its sections, for the header dialog and the trade's own screen. */
@@ -101,10 +106,6 @@ export interface TradeData {
    *  header can say a list is out there without the collector opening a dialog to find out. */
   share: TradeShareState | null;
   sections: TradeSectionData[];
-  /** The Colnect lists this exchange is about (#645), the collector's and the partner's. Read with
-   *  the trade rather than behind a second fetch — they are four columns hanging off the row this
-   *  query already has, and the card that draws them is on the same screen. */
-  colnectLists: TradeColnectListSummary[];
 }
 
 /** One Colnect list as the trade screen and the partner's page draw it. The shape `trade-colnect-lists.ts`
@@ -253,6 +254,10 @@ const SECTION_SELECT = {
   defaultConditionId: true,
   defaultCondition: { select: { name: true } },
   lines: { select: { side: true, quantity: true } },
+  colnectLists: {
+    select: { id: true, url: true, label: true, side: true, position: true },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  },
 } satisfies Prisma.TradeSectionSelect;
 
 function toSectionData(row: {
@@ -266,6 +271,7 @@ function toSectionData(row: {
   defaultConditionId: string | null;
   defaultCondition: { name: string } | null;
   lines: { side: string; quantity: number }[];
+  colnectLists: { id: string; url: string; label: string; side: string; position: number }[];
 }): TradeSectionData {
   return {
     id: row.id,
@@ -282,6 +288,15 @@ function toSectionData(row: {
     receiveQuantity: row.lines
       .filter((l) => l.side === "receive")
       .reduce((sum, l) => sum + l.quantity, 0),
+    colnectLists: row.colnectLists.map((list) => ({
+      id: list.id,
+      url: list.url,
+      label: list.label,
+      // A row can only have been written through `trade-colnect-lists.ts`, so the column is always
+      // one of the two; the fallback keeps the type honest rather than covering a reachable case.
+      side: isTradeSide(list.side) ? list.side : "give",
+      position: list.position,
+    })),
   };
 }
 
@@ -407,10 +422,6 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
         select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
       },
       sections: { select: SECTION_SELECT, orderBy: [{ position: "asc" }, { name: "asc" }] },
-      colnectLists: {
-        select: { id: true, url: true, label: true, side: true, position: true },
-        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-      },
     },
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
@@ -442,13 +453,6 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
         }
       : null,
     sections: row.sections.map(toSectionData),
-    colnectLists: row.colnectLists.map((list) => ({
-      id: list.id,
-      url: list.url,
-      label: list.label,
-      side: isTradeSide(list.side) ? list.side : "give",
-      position: list.position,
-    })),
   };
 }
 

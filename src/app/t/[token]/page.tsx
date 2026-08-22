@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
-import { readTradeShareView, verifyTradeShareToken, type TradeShareView } from "@/lib/trade-share";
+import {
+  readTradeShareView,
+  verifyTradeShareToken,
+  type TradeShareSectionView,
+  type TradeShareView,
+} from "@/lib/trade-share";
 import { readPartnerTradeFeedback } from "@/lib/trade-feedback";
 import { readTradeShareChoices } from "@/lib/trade-proposals";
 import {
@@ -112,8 +117,6 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
 
         <ValuationNote view={view} />
 
-        <ColnectLists view={view} />
-
         <hr className="ts-rule" />
 
         <Arrange token={token} levels={view.levels} />
@@ -130,6 +133,7 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
           {view.sections.map((section) => (
             <section key={section.id} className="ts-section">
               <h2 className="ts-section-name">{section.name}</h2>
+              <ColnectLists section={section} view={view} />
               <div className="ts-sides">
                 {section.sides.map((side) => (
                   <ShareSide
@@ -191,23 +195,35 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
 }
 
 /**
- * **The Colnect lists the exchange came out of** (#645).
+ * **The Colnect lists this part of the exchange came out of** (#645; re-parented in #680).
  *
- * Above the list rather than under it: a partner reading this page is comparing it against a list
- * they wrote on Colnect, and the link to their own copy of it is the first thing they reach for.
- * Grouped by side and headed in the same words the columns below are, because *what you are asking
- * me for* and *what I am asking you for* are two lists and one heading would be wrong for one.
+ * On the **section**, over its own two columns: the import targets one `(section, side)` — mint into
+ * the mint section, used into the used one — so the link sits above the stamps it produced rather
+ * than in one box at the top of the page saying nothing about which part of the trade it was about.
  *
- * Absent entirely on a trade that names none — an empty heading would be a promise of something
+ * Above the columns rather than under them: a partner reading this page is comparing it against a
+ * list they wrote on Colnect, and the link to their own copy of it is the first thing they reach
+ * for. Laid out in the same two columns the rows are, because *what you are asking me for* and *what
+ * I am asking you for* are two lists and one heading would be wrong for one.
+ *
+ * Absent entirely on a section that names none — an empty heading would be a promise of something
  * that is not there.
  */
-function ColnectLists({ view }: { view: TradeShareView }) {
-  if (view.colnectLists.length === 0) return null;
+function ColnectLists({
+  section,
+  view,
+}: {
+  section: TradeShareSectionView;
+  view: TradeShareView;
+}) {
+  if (section.colnectLists.length === 0) return null;
   return (
-    <div className="ts-lists">
+    <div className="ts-lists ts-lists-section">
       {(["give", "receive"] as const).map((side) => {
-        const own = view.colnectLists.filter((list) => list.side === side);
-        if (own.length === 0) return null;
+        const own = section.colnectLists.filter((list) => list.side === side);
+        // The empty side is still a cell, so the other one stays over its own column rather than
+        // sliding into the first.
+        if (own.length === 0) return <div key={side} />;
         return (
           <div key={side} className="ts-lists-group">
             {/* Headed by **name**, exactly as the side columns below are (`tradeShareSideHeading`):

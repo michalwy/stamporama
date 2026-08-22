@@ -1,9 +1,9 @@
 import "server-only";
 import { prisma } from "./db";
-import { assertTradeOwner } from "./trade-access";
+import { assertSectionOwner } from "./trade-access";
 import { isTradeSide, type TradeSide } from "./trade-rules";
 
-// The Colnect lists an exchange is about (#645).
+// The Colnect lists a **part** of an exchange is about (#645; re-parented in #680).
 //
 // A Colnect trade *is* two lists: the partner exports what they want out of this collection, the
 // collector exports what they want back, and both go on living on Colnect while the trade is
@@ -11,6 +11,14 @@ import { isTradeSide, type TradeSide } from "./trade-rules";
 // either side opens to check a row, and it is most needed on the **partner's** page (#640), because
 // the partner is reading a list of stamps they wrote themselves and otherwise has no way back to
 // their own copy of it.
+//
+// **The owner is the section, not the trade** (#680). The import targets one `(section, side)` —
+// mint goes into the mint section, used into the used one — so the link is filed where the stamps it
+// produced went, and a trade carrying four of them says which part each is about. `side` stays,
+// because a section has two of them and *what I am asking you for* and *what you are asking me for*
+// are still two lists. The uniqueness rule moved with the parent: the same address in two sections
+// is one export split across the parts it belongs to, which is the ordinary case rather than a
+// mistake; twice in one section still is a mistake.
 //
 // Deliberately **not** an import record. Nothing here remembers which lines came out of which file:
 // a line is a promise about a copy and stands on its own, and a provenance column would be a second
@@ -92,27 +100,14 @@ function normalizeUrl(raw: string): string {
   return parsed.toString();
 }
 
-/** Every list on a trade, in the order the collector put them. */
+/** Every list on a section, in the order the collector put them. */
 export async function listTradeColnectLists(
   ownerId: string,
-  tradeId: string
+  sectionId: string
 ): Promise<TradeColnectListData[]> {
-  await assertTradeOwner(ownerId, tradeId);
+  await assertSectionOwner(ownerId, sectionId);
   const rows = await prisma.tradeColnectList.findMany({
-    where: { tradeId },
-    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    select: LIST_SELECT,
-  });
-  return rows.map(toData);
-}
-
-/** What the partner's page needs: the same rows, read without an owner because the token is the
- *  authorization (#640). The caller has already resolved the token to this trade. */
-export async function readTradeColnectListsForShare(
-  tradeId: string
-): Promise<TradeColnectListData[]> {
-  const rows = await prisma.tradeColnectList.findMany({
-    where: { tradeId },
+    where: { sectionId },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     select: LIST_SELECT,
   });
@@ -120,23 +115,25 @@ export async function readTradeColnectListsForShare(
 }
 
 /**
- * Add a list, appended after the ones already there.
+ * Add a list to a section, appended after the ones already there.
  *
- * The same URL twice is the same list, so it is **updated rather than duplicated** — the import
- * offers the file's own list every time it reads one, and a collector who imports two sections off
- * one file should end up with one link, not two identical ones.
+ * The same URL twice **in this section** is the same list, so it is **updated rather than
+ * duplicated** — the import offers the file's own list every time it reads one, and a collector who
+ * imports one section twice off one file should end up with one link, not two identical ones. The
+ * same URL on a *different* section is a different row on purpose (#680): one export routinely
+ * carries mint and used together and is split across the sections it belongs to.
  */
 export async function addTradeColnectList(
   ownerId: string,
-  tradeId: string,
+  sectionId: string,
   input: TradeColnectListInput
 ): Promise<TradeColnectListData> {
-  await assertTradeOwner(ownerId, tradeId);
+  await assertSectionOwner(ownerId, sectionId);
   const url = normalizeUrl(input.url);
   const label = (input.label ?? "").trim();
 
   const existing = await prisma.tradeColnectList.findUnique({
-    where: { tradeId_url: { tradeId, url } },
+    where: { sectionId_url: { sectionId, url } },
     select: LIST_SELECT,
   });
   if (existing) {
@@ -151,13 +148,13 @@ export async function addTradeColnectList(
   }
 
   const last = await prisma.tradeColnectList.findFirst({
-    where: { tradeId },
+    where: { sectionId },
     orderBy: { position: "desc" },
     select: { position: true },
   });
   const created = await prisma.tradeColnectList.create({
     data: {
-      tradeId,
+      sectionId,
       url,
       label,
       side: input.side,
@@ -168,19 +165,19 @@ export async function addTradeColnectList(
   return toData(created);
 }
 
-/** Restate a list — its address, its name or which side it belongs to. */
+/** Restate a list — its address, its name or which side of the section it belongs to. */
 export async function updateTradeColnectList(
   ownerId: string,
   listId: string,
   input: TradeColnectListInput
 ): Promise<TradeColnectListData> {
-  const { tradeId } = await assertColnectListOwner(ownerId, listId);
+  const { sectionId } = await assertColnectListOwner(ownerId, listId);
   const url = normalizeUrl(input.url);
   const clash = await prisma.tradeColnectList.findUnique({
-    where: { tradeId_url: { tradeId, url } },
+    where: { sectionId_url: { sectionId, url } },
     select: { id: true },
   });
-  if (clash && clash.id !== listId) throw new Error("That list is already on this trade.");
+  if (clash && clash.id !== listId) throw new Error("That list is already on this section.");
 
   const updated = await prisma.tradeColnectList.update({
     where: { id: listId },
@@ -190,21 +187,22 @@ export async function updateTradeColnectList(
   return toData(updated);
 }
 
-/** Take a list off the trade. Nothing hangs off it, so nothing is guarded. */
+/** Take a list off the section. Nothing hangs off it, so nothing is guarded. */
 export async function deleteTradeColnectList(ownerId: string, listId: string): Promise<void> {
   await assertColnectListOwner(ownerId, listId);
   await prisma.tradeColnectList.delete({ where: { id: listId } });
 }
 
-/** Hand-ordered, dragged rather than typed — the sections' idiom. Ids not on the trade are ignored. */
+/** Hand-ordered, dragged rather than typed — the sections' idiom. Ids not on the section are
+ *  ignored. */
 export async function reorderTradeColnectLists(
   ownerId: string,
-  tradeId: string,
+  sectionId: string,
   orderedIds: readonly string[]
 ): Promise<void> {
-  await assertTradeOwner(ownerId, tradeId);
+  await assertSectionOwner(ownerId, sectionId);
   const rows = await prisma.tradeColnectList.findMany({
-    where: { tradeId },
+    where: { sectionId },
     select: { id: true },
   });
   const mine = new Set(rows.map((row) => row.id));
@@ -216,17 +214,20 @@ export async function reorderTradeColnectLists(
   );
 }
 
-/** Whose trade a list is on. The same shape the other guards return, for the same reason. */
+/** Which section a list is on. The same shape the other guards return, for the same reason. */
 async function assertColnectListOwner(
   ownerId: string,
   listId: string
-): Promise<{ tradeId: string }> {
+): Promise<{ sectionId: string }> {
   const row = await prisma.tradeColnectList.findUnique({
     where: { id: listId },
-    select: { tradeId: true, trade: { select: { collection: { select: { ownerId: true } } } } },
+    select: {
+      sectionId: true,
+      section: { select: { trade: { select: { collection: { select: { ownerId: true } } } } } },
+    },
   });
-  if (!row || row.trade.collection.ownerId !== ownerId) {
+  if (!row || row.section.trade.collection.ownerId !== ownerId) {
     throw new Error("Colnect list not found or access denied.");
   }
-  return { tradeId: row.tradeId };
+  return { sectionId: row.sectionId };
 }

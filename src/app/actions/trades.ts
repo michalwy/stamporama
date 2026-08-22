@@ -349,9 +349,10 @@ export async function importColnectListAction(
   }
 }
 
-// ── The Colnect lists a trade is about (#645) ────────────────────────────────────────────────────
+// ── The Colnect lists a section is about (#645; #680) ────────────────────────────────────────────
 //
-// An address, not contents: ungated by status, for the reason `trade-colnect-lists.ts` states.
+// An address, not contents: ungated by status, for the reason `trade-colnect-lists.ts` states. The
+// owner is the **section** the list was imported into (#680), not the trade.
 
 /** The side a link belongs to, refused rather than defaulted — a link filed under the wrong heading
  *  tells the partner the opposite of the truth. */
@@ -362,14 +363,14 @@ function parseSide(raw: string): { side: TradeSide } | { error: string } {
 }
 
 export async function addTradeColnectListAction(
-  tradeId: string,
+  sectionId: string,
   raw: { url: string; label?: string; side: string }
 ): Promise<TradeActionState> {
   const session = await getSession();
   const side = parseSide(raw.side);
   if ("error" in side) return { status: "error", message: side.error };
   try {
-    await addTradeColnectList(session.user.id, tradeId, {
+    await addTradeColnectList(session.user.id, sectionId, {
       url: raw.url,
       label: raw.label,
       side: side.side,
@@ -410,12 +411,12 @@ export async function deleteTradeColnectListAction(listId: string): Promise<Trad
 }
 
 export async function reorderTradeColnectListsAction(
-  tradeId: string,
+  sectionId: string,
   orderedIds: string[]
 ): Promise<TradeActionState> {
   const session = await getSession();
   try {
-    await reorderTradeColnectLists(session.user.id, tradeId, orderedIds);
+    await reorderTradeColnectLists(session.user.id, sectionId, orderedIds);
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to reorder lists. Please try again.") };

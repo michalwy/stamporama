@@ -363,6 +363,9 @@ export interface TradeShareSectionView {
   id: string;
   name: string;
   sides: TradeShareSideView[];
+  /** The Colnect lists **this part** of the exchange is about (#645; re-parented in #680), grouped
+   *  by side over the two columns below. Empty on a section that names none. */
+  colnectLists: TradeShareColnectListView[];
 }
 
 export interface TradeShareView {
@@ -393,14 +396,12 @@ export interface TradeShareView {
   levels: TradeGroupLevel[];
   sections: TradeShareSectionView[];
   totals: { give: TradeShareTotalsView; receive: TradeShareTotalsView };
-  /** The Colnect lists the exchange is about (#645), grouped by side on the page. Printed for the
-   *  partner above all: they are reading a list of stamps they wrote themselves, and this is their
-   *  way back to their own copy of it. Empty on a trade that names none. */
-  colnectLists: TradeShareColnectListView[];
 }
 
-/** One Colnect list as the partner's page prints it — an address and what to call it. The side it
- *  belongs to is which of the two headings it goes under. */
+/** One Colnect list as the partner's page prints it — an address and what to call it. It hangs off
+ *  the section it was imported into (#680), which is where its stamps are; the side decides which of
+ *  the two columns it is printed over. Printed for the partner above all: they are reading a list of
+ *  stamps they wrote themselves, and this is their way back to their own copy of it. */
 export interface TradeShareColnectListView {
   url: string;
   /** Blank where the collector named none, which the page prints as the bare address. */
@@ -435,11 +436,14 @@ export async function readTradeShareView(
       collection: { select: { name: true } },
       sections: {
         orderBy: [{ position: "asc" }, { name: "asc" }],
-        select: { id: true, name: true },
-      },
-      colnectLists: {
-        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        select: { url: true, label: true, side: true },
+        select: {
+          id: true,
+          name: true,
+          colnectLists: {
+            orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+            select: { url: true, label: true, side: true },
+          },
+        },
       },
     },
   });
@@ -536,7 +540,16 @@ export async function readTradeShareView(
         truncated: page.nextCursor !== null,
       });
     }
-    sections.push({ id: section.id, name: section.name, sides });
+    sections.push({
+      id: section.id,
+      name: section.name,
+      sides,
+      colnectLists: section.colnectLists.map((list) => ({
+        url: list.url,
+        label: list.label,
+        side: isTradeSide(list.side) ? list.side : "give",
+      })),
+    });
   }
 
   const flatSides = sections.flatMap((s) => s.sides);
@@ -563,11 +576,6 @@ export async function readTradeShareView(
       give: sumTotals(flatSides.filter((s) => s.side === "give").map((s) => s.totals)),
       receive: sumTotals(flatSides.filter((s) => s.side === "receive").map((s) => s.totals)),
     },
-    colnectLists: trade.colnectLists.map((list) => ({
-      url: list.url,
-      label: list.label,
-      side: isTradeSide(list.side) ? list.side : "give",
-    })),
   };
 }
 

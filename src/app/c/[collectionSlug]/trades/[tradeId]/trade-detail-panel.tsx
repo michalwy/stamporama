@@ -49,7 +49,6 @@ import { TradeSectionDialog } from "./trade-section-dialog";
 import { TradeShareDialog } from "./trade-share-dialog";
 import { TradeSignalsSummary } from "./trade-signals-summary";
 import { TradeIntakeCard } from "./trade-intake-card";
-import { TradeColnectListsCard } from "./trade-colnect-lists-card";
 import { Icon } from "@/app/icons";
 
 // The trade's own screen (#637; ADR-0039): the terms at the top, then one card per section with the
@@ -480,17 +479,6 @@ export function TradeDetailPanel({
             <div style={{ ...VALUE, whiteSpace: "pre-wrap" }}>{trade.notes}</div>
           </div>
         )}
-
-        {/* **Where the two lists live on Colnect** (#645). Beside the terms rather than under the
-            columns: a Colnect exchange *is* two lists, and the address of each is a fact about the
-            trade in the same way the partner and the currency are. Ungated by status — an address
-            is not contents, and a link added after sharing is exactly the one the partner needs. */}
-        <TradeColnectListsCard
-          tradeId={tradeId}
-          lists={trade.colnectLists}
-          disabled={isPending}
-          onRun={run}
-        />
 
         {/* **What both sides are worth, and whether that balances** (#638). Under the terms rather
             than beside them, because it is what the terms above *produce*: the balance rule, the

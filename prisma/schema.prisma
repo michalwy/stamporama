@@ -3311,10 +3311,6 @@ model Trade {
   /** The copies the collector has taken out of this trade's candidate pools (#657). See
    *  {@link TradeCopyBlock}. */
   copyBlocks    TradeCopyBlock[]
-  /** The Colnect lists this exchange is about (#645) — the partner's and the collector's, any
-   *  number of each, shown here and on the partner's own page. See {@link TradeColnectList}. */
-  colnectLists  TradeColnectList[]
-
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
   // Every list read narrows to a status, so it is indexed with the scope rather than on its own —
@@ -3360,6 +3356,10 @@ model TradeSection {
   trade            Trade           @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   defaultCondition StampCondition? @relation("TradeSectionDefaultCondition", fields: [defaultConditionId], references: [id], onDelete: Restrict)
   lines            TradeLine[]
+  /** The Colnect lists **this part** of the exchange is about (#645; re-parented in #680) — the
+   *  partner's and the collector's, any number of each, shown on this section on both screens. See
+   *  {@link TradeColnectList}. */
+  colnectLists     TradeColnectList[]
 
   @@index([tradeId])
   @@index([defaultConditionId])
@@ -3741,26 +3741,35 @@ model TradeCopyBlock {
 //
 // A **table** rather than two columns on `Trade`: a partner routinely sends two or three custom
 // lists, and the second one would otherwise have nowhere to go.
+//
+// **The owner is the section, not the trade** (#680). The import targets one `(section, side)` —
+// mint goes into the mint section, used into the used one — so the link belongs where the stamps it
+// produced went. Filed at the trade level, four links sat in one box with nothing saying which part
+// of the trade each of them was about, and the reader had to reconstruct that from whatever the
+// files happened to be called.
 model TradeColnectList {
-  id      String @id @default(cuid())
-  tradeId String
-  url     String
+  id        String @id @default(cuid())
+  sectionId String
+  url       String
   /** What to call it on both screens. The import proposes the list's own name off the file it read;
    *  blank is allowed and renders as the bare link. */
-  label   String @default("")
+  label     String @default("")
   /** give | receive. *What I am asking you for* and *what you are asking me for* are two lists, and
-   *  one heading would be wrong for one of them. The vocabulary is `trade-rules.ts`'s. */
-  side     String
-  /** Hand-ordered, dragged rather than typed — the dictionaries' idiom. */
-  position Int    @default(0)
+   *  one heading would be wrong for one of them — a section has both. The vocabulary is
+   *  `trade-rules.ts`'s. */
+  side      String
+  /** Hand-ordered, dragged rather than typed — the dictionaries' idiom. Per `(section, side)`. */
+  position  Int    @default(0)
 
   createdAt DateTime @default(now())
 
-  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  section TradeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
-  // The same list twice is a mistake, not a second list.
-  @@unique([tradeId, url])
-  @@index([tradeId])
+  // The same list twice **in one section** is a mistake, not a second list. Across two sections it
+  // is neither: one export routinely carries mint and used together and is split across the sections
+  // it belongs to, and each of those sections is honestly about that list.
+  @@unique([sectionId, url])
+  @@index([sectionId])
   @@map("trade_colnect_list")
 }
 

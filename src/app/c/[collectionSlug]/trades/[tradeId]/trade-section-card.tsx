@@ -27,6 +27,7 @@ import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-colum
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
 import { TradeGiveRequirementDialog } from "./trade-give-requirement-dialog";
 import { TradeColnectImportDialog } from "./trade-colnect-import-dialog";
+import { TradeSectionColnectLists } from "./trade-section-colnect-lists";
 import { TradeCandidatesDialog } from "./trade-candidates-dialog";
 import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
@@ -347,6 +348,30 @@ export function TradeSectionCard({
             onImportList={(file) => setDialog({ kind: "importList", side: "receive", file })}
           />
         </div>
+      </div>
+
+      {/* **Where this part of the exchange lives on Colnect** (#645; #680). Under the band and over
+          the rows, in the same two columns as them, so a link sits above the stamps it produced —
+          the import targets one `(section, side)`, and a link filed on the trade as a whole said
+          nothing about which part of it it was about. Ungated by status: an address is not
+          contents, so only a write in flight quiets it. */}
+      <div style={{ ...TWO_COLUMNS, borderBottom: "1px solid var(--color-border)" }}>
+        <div style={{ borderRight: "1px solid var(--color-border)", minWidth: 0 }}>
+          <TradeSectionColnectLists
+            sectionId={section.id}
+            side="give"
+            lists={section.colnectLists}
+            disabled={isPending}
+            onRun={onRun}
+          />
+        </div>
+        <TradeSectionColnectLists
+          sectionId={section.id}
+          side="receive"
+          lists={section.colnectLists}
+          disabled={isPending}
+          onRun={onRun}
+        />
       </div>
 
       <div style={TWO_COLUMNS}>
