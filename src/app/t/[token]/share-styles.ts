@@ -48,6 +48,26 @@ export const SHARE_STYLESHEET = `
 }
 .ts-rule { border: 0; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
 
+/* The Colnect lists the exchange came out of (#645). Two columns, one per side, headed in the same
+   words the list columns below are — the partner's own list is the one they most need back. On
+   paper the address is printed after the name, because a link nobody can click is only useful if
+   it can be read and typed. */
+.ts-lists { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1rem 0 0; }
+.ts-lists-group { flex: 1 1 18rem; min-width: 15rem; }
+.ts-lists-head {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+.ts-lists ul { list-style: none; margin: 0; padding: 0; }
+.ts-lists li { font-size: 0.875rem; margin-bottom: 0.15rem; }
+.ts-lists a { color: var(--color-action-primary); text-decoration: none; }
+.ts-lists a:hover { text-decoration: underline; }
+.ts-list-url { display: none; }
+
 /* The grouping controls. Links, not buttons: this page runs no JavaScript, so the arrangement is a
    different address for the same list — which also means the partner can bookmark or send on the
    view they were reading. Gone from the paper, where nothing is clickable. */
@@ -239,6 +259,8 @@ export const SHARE_STYLESHEET = `
   .ts-parties, .ts-note, .ts-side-count, .ts-line2, .ts-group-detail, .ts-group-count,
   .ts-value-note { color: #333; }
   .ts-status, .ts-tag { border-color: #999; background: none; color: #000; }
+  /* An address on paper has to be readable, so the bare URL comes back beside the name. */
+  .ts-list-url { display: inline; color: #333; }
   /* Kept, and kept bold: on paper it is the one mark that says a piece is not coming. */
   .ts-struck { border-color: #000; background: none; color: #000; }
   .ts-section { break-inside: auto; }

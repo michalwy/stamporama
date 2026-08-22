@@ -136,6 +136,11 @@ Below them sits one card per section, with **both sides side by side inside it**
 its balance rule. Nothing is ever filed into a section automatically — a section is a name and a
 rule, and what goes in it is your decision.
 
+A section can also state a **default condition**. It is read by one thing only: importing a Colnect
+list, where it says what a row that states no grade of its own means. Sections are usually grouped by
+grade anyway — "Poland, used" — so saying it once here beats answering it row by row. Leave it at
+*None* and those rows come in as gaps to settle by hand.
+
 A section can be deleted only when it is **empty**, and never when it is the last one. Emptying it
 first is deliberate: moving its lines somewhere by implication is exactly the silent reshuffle a
 list both of you are reading must never do.
@@ -239,6 +244,82 @@ priority's colour, when *this* line would satisfy one, because the line names th
 certificate and format a want is judged on. It is the most useful thing the app can say while you are
 negotiating: this is one you have been looking for. (The give side carries the chip too, where it
 means the other thing — a copy you already hold never closes a want, so there it reads as an upgrade.)
+
+### Importing a Colnect list
+
+A Colnect exchange starts as two lists: your partner exports theirs and sends it, you export your
+own and send it back. **Colnect list**, in either column's heading, reads that file straight into the
+side it belongs to instead of you retyping eighty-five rows.
+
+On Colnect, open the list and use **Export list → CSV**. Which side you press the button on decides
+what the file becomes: on the **give** side it is your partner's list — what they want out of your
+collection — and every row has to find a copy you actually hold; on the **receive** side it is your
+own list, and nothing has to be found, because your partner's stamps are in nobody's inventory.
+
+Each row is matched twice over. First by the **Colnect item id** the file carries in its `Link`
+column: a stamp of yours already carrying that id *is* the stamp. Failing that, by the **catalog
+numbers** it prints (`Mi:AD-ES 207, Sn:AD-ES 196, …`) through the same matcher the Assistant uses,
+against whichever of those catalogs you keep. The grade travels through the mapping you set in
+**Settings → Colnect**, read backwards: Colnect's `MNH` becomes whichever of your conditions you told
+the app it means. Nothing here writes a Colnect id onto a stamp — learning an id is the Assistant's
+job, done against a page you are looking at.
+
+**Which list is this?** A Colnect export carries every list its stamps are on, not just the one you
+exported — what you offer for exchange is usually also on a swap list, and what you want is usually
+also on your wish list. The same stamp is then mint on one and used on the other, so the grade and
+the quantity are read **per list** and the dialog asks which one you are importing. It opens on the
+one the most rows carry, which for an export of a single list is all of them; rows that are not on
+the list you picked are greyed out and left out, because they are not part of it.
+
+**Colnect list** opens the file chooser straight away — pick the export and the dialog appears
+already reading it.
+
+Every row carries a **thumbnail** of whatever it matched, so a wrong match is visible rather than
+something you have to read two catalog numbers to catch, and its name is a **link to Colnect** — the
+stamp's own page where the file gave one, and Colnect's catalog-number search where it did not,
+which is the page that tells you what an unmatched row actually is. Candidates offered for a row are
+listed with their own thumbnails, so *which of these two* can be answered by looking.
+
+Both sides of a row show **every catalog number**, with the one the match rests on picked out in
+green: the file's numbers on the left, your stamp's on the right, and the Colnect id highlighted
+instead where the id is what found it. A number your stamp carries that the file contradicts is
+marked in amber, and a catalog you do not keep is struck through. That is what makes a match
+checkable — a row showing only the number that matched would be asking you to take its word for it.
+
+Then you are shown **every row with its verdict**, and the import stays out of reach until each
+unanswered one has been dealt with. There are three ways a row can be unanswered, and each is worked
+through in place:
+
+- **No stamp.** Either nothing you hold carries those numbers, or several do. Where the matcher found
+  candidates they are listed and one click each; otherwise **Pick a stamp…** opens the usual picker,
+  which can create the issue and the stamp on the spot.
+- **No condition.** A Colnect list states a grade on some rows and not on others — five in eight, on
+  a real export. A silent row takes the section's **default condition**, which you set in the
+  section's own dialog; where the section states none, or where the grade is one you have never
+  mapped, the row waits for you to pick.
+- **Fewer than asked for** — give side only. The **Can give** column says `1 of 2` where your partner
+  asked for two and you hold one. This is not a failure: *these eleven I cannot serve* is the single
+  most useful thing to come out of reading someone's wish list, and it is what you send back. The
+  count refreshes as you edit, because the copies are shared between rows.
+
+A row you cannot or do not want to answer is **skipped** on purpose — nothing is imported while a row
+is neither fixed nor skipped. An import that quietly dropped rows would leave both of you believing
+the list was complete.
+
+The file's own address is offered as a link to keep on the trade (see below), ticked by default.
+
+### Colnect lists on the trade
+
+A Colnect exchange lives half on Colnect, so the trade keeps the **addresses of the lists** it is
+about — any number of them, each under the side it belongs to. They sit under the trade's terms, and
+they are also printed on your partner's copy of the list, which is where they matter most: your
+partner is reading a list of stamps they wrote themselves, and this is their way back to their own
+copy of it.
+
+Add one with **Add list** under either heading, or let an import add the one it just read. Editing is
+in place; the `⋮` menu removes one. Unlike the lines, these are not locked once the trade is agreed —
+an address is not a change to what was agreed, and a link added after sharing is exactly the one your
+partner needs.
 
 ### Finding things in a long list
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { TradeLineFilters, TradeLinePageItem } from "@/lib/trade-lines";
@@ -280,6 +280,7 @@ export function TradeSideHeader({
   isPending,
   onAdd,
   onAddByStamp,
+  onImportList,
 }: {
   state: TradeSideState;
   collectionId: string;
@@ -290,8 +291,14 @@ export function TradeSideHeader({
    *  condition — and let the resolver find the copy. Absent on the receive side, where there is no
    *  copy to find: the partner's material is in nobody's inventory. */
   onAddByStamp?: () => void;
+  /** A whole Colnect list at once (#645). On **both** sides, unlike *By stamp*: an exchange is two
+   *  lists and each side has one of them. Takes the **file**, because the button is the file input:
+   *  the collector pressed *Colnect list* to hand over a list, and a dialog whose only content is a
+   *  second button asking for it is a click that says nothing. */
+  onImportList?: (file: File) => void;
 }) {
   const { data: conditions = [] } = useCollectionConditions(collectionId);
+  const listFileInput = useRef<HTMLInputElement>(null);
   const { side, isGive, total, pieces, unfiltered } = state;
   const narrowed = total !== unfiltered;
 
@@ -332,6 +339,40 @@ export function TradeSideHeader({
               <Icon name="add" size="sm" /> By stamp
             </button>
           </Tooltip>
+        )}
+        {/* The same act as *By stamp*, done eighty-five times off a file (#645) — which is why it
+            sits beside it rather than under the section's own menu. The button opens the file
+            chooser itself; the dialog appears already reading what was picked. */}
+        {editable && onImportList && (
+          <>
+            <input
+              ref={listFileInput}
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) onImportList(file);
+              }}
+            />
+            <Tooltip
+              content={
+                isGive
+                  ? "Read your partner's Colnect list and find a copy for each row they asked for."
+                  : "Read your own Colnect list and turn each row into a line you are asking for."
+              }
+            >
+              <button
+                type="button"
+                style={ADD_BUTTON}
+                disabled={isPending}
+                onClick={() => listFileInput.current?.click()}
+              >
+                <Icon name="import" size="sm" /> Colnect list
+              </button>
+            </Tooltip>
+          </>
         )}
       </div>
 

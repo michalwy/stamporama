@@ -4,7 +4,7 @@ import { prisma } from "./db";
 import { assertTradeOwner } from "./trade-access";
 import { listTradeLinePage, type TradeLinePageItem } from "./trade-lines";
 import { readTradeBalance, type TradeLineValueRead, type TradeRateRead } from "./trade-valuation";
-import { TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
+import { isTradeSide, TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
 import { readTradeLineFulfillments } from "./trade-realisation";
 import { tradeShareFulfillmentLabel } from "./trade-realisation-rules";
 import type { TradeGroupHeading, TradeGroupLevel } from "./trade-grouping";
@@ -393,6 +393,19 @@ export interface TradeShareView {
   levels: TradeGroupLevel[];
   sections: TradeShareSectionView[];
   totals: { give: TradeShareTotalsView; receive: TradeShareTotalsView };
+  /** The Colnect lists the exchange is about (#645), grouped by side on the page. Printed for the
+   *  partner above all: they are reading a list of stamps they wrote themselves, and this is their
+   *  way back to their own copy of it. Empty on a trade that names none. */
+  colnectLists: TradeShareColnectListView[];
+}
+
+/** One Colnect list as the partner's page prints it — an address and what to call it. The side it
+ *  belongs to is which of the two headings it goes under. */
+export interface TradeShareColnectListView {
+  url: string;
+  /** Blank where the collector named none, which the page prints as the bare address. */
+  label: string;
+  side: TradeSide;
 }
 
 /**
@@ -423,6 +436,10 @@ export async function readTradeShareView(
       sections: {
         orderBy: [{ position: "asc" }, { name: "asc" }],
         select: { id: true, name: true },
+      },
+      colnectLists: {
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        select: { url: true, label: true, side: true },
       },
     },
   });
@@ -546,6 +563,11 @@ export async function readTradeShareView(
       give: sumTotals(flatSides.filter((s) => s.side === "give").map((s) => s.totals)),
       receive: sumTotals(flatSides.filter((s) => s.side === "receive").map((s) => s.totals)),
     },
+    colnectLists: trade.colnectLists.map((list) => ({
+      url: list.url,
+      label: list.label,
+      side: isTradeSide(list.side) ? list.side : "give",
+    })),
   };
 }
 

@@ -115,6 +115,7 @@ import {
   Truck,
   Undo2,
   Upload,
+  FileUp,
   Users,
   X,
   Zap,
@@ -210,6 +211,10 @@ const GLYPHS = {
   more: Ellipsis,
   /** A read-only list opened over the current screen. */
   list: List,
+  /** Reads a file the collector picked into the app — a marketplace's own export (#611, #645).
+   *  Told apart from `activate`, whose arrow goes the other way: that one puts *our* record onto
+   *  somebody else's site. */
+  import: FileUp,
   /** Goes looking for something, where `externalLink` goes to a page already known (#441). */
   search: Search,
   /** A grouping mode on a list. */

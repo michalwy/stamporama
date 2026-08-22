@@ -183,6 +183,8 @@ model StampCondition {
    *  answer, so overriding it is too. See {@link OfferListedVariant}. */
   offerListedVariants OfferListedVariant[]
   tradeLines        TradeLine[]
+  /** Sections that read this grade where their imported rows state none (#645). */
+  tradeSectionDefaults TradeSection[] @relation("TradeSectionDefaultCondition")
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -3305,6 +3307,9 @@ model Trade {
   /** The copies the collector has taken out of this trade's candidate pools (#657). See
    *  {@link TradeCopyBlock}. */
   copyBlocks    TradeCopyBlock[]
+  /** The Colnect lists this exchange is about (#645) — the partner's and the collector's, any
+   *  number of each, shown here and on the partner's own page. See {@link TradeColnectList}. */
+  colnectLists  TradeColnectList[]
 
   @@unique([collectionId, tradeNo])
   @@index([collectionId])
@@ -3341,10 +3346,19 @@ model TradeSection {
   valueTolerancePct Decimal? @db.Decimal(5, 2)
   ownValueWarnPct   Decimal? @db.Decimal(5, 2)
 
-  trade Trade       @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  lines TradeLine[]
+  /** The grade this section's lines are in when nothing else says (#645). Read by the Colnect list
+   *  import, whose files state a condition on some rows and not on others: a section is already the
+   *  unit a collector groups a list into ("Poland, used"), so the grade belongs to it far more often
+   *  than to a row. Null means the section states none, and a silent row is then a **gap** to settle
+   *  rather than a guess to make. */
+  defaultConditionId String?
+
+  trade            Trade           @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  defaultCondition StampCondition? @relation("TradeSectionDefaultCondition", fields: [defaultConditionId], references: [id], onDelete: Restrict)
+  lines            TradeLine[]
 
   @@index([tradeId])
+  @@index([defaultConditionId])
   @@map("trade_section")
 }
 
@@ -3672,6 +3686,39 @@ model TradeCopyBlock {
   @@unique([tradeId, itemId])
   @@index([itemId])
   @@map("trade_copy_block")
+}
+
+// The Colnect lists an exchange is about (#645).
+//
+// A Colnect trade *is* two lists — the partner exports what they want from this collection, the
+// collector exports what they want back — and both keep living on Colnect while the trade is
+// negotiated here. The link is part of the agreement rather than a note about it, which is why it
+// travels to the partner's page (#640): the partner is reading a list of stamps they themselves
+// wrote, and this is their way back to their own copy of it.
+//
+// A **table** rather than two columns on `Trade`: a partner routinely sends two or three custom
+// lists, and the second one would otherwise have nowhere to go.
+model TradeColnectList {
+  id      String @id @default(cuid())
+  tradeId String
+  url     String
+  /** What to call it on both screens. The import proposes the list's own name off the file it read;
+   *  blank is allowed and renders as the bare link. */
+  label   String @default("")
+  /** give | receive. *What I am asking you for* and *what you are asking me for* are two lists, and
+   *  one heading would be wrong for one of them. The vocabulary is `trade-rules.ts`'s. */
+  side     String
+  /** Hand-ordered, dragged rather than typed — the dictionaries' idiom. */
+  position Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  // The same list twice is a mistake, not a second list.
+  @@unique([tradeId, url])
+  @@index([tradeId])
+  @@map("trade_colnect_list")
 }
 
 model Contact {

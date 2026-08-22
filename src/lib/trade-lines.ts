@@ -1077,6 +1077,67 @@ export async function addTradeReceiveLines(
   return stampIds.length;
 }
 
+/** One row of a bulk receive add: the three things a wish list actually says. The certificate and
+ *  format axes are deliberately absent rather than nullable — a list never states them, and a field
+ *  the caller may set but this ignores would be a lie in the signature. */
+export interface TradeReceiveLineRow {
+  stampId: string;
+  conditionId: string;
+  quantity: number;
+}
+
+/**
+ * Add **many** receive lines at once (#645) — one row of an imported list, one line.
+ *
+ * The sibling of {@link addTradeReceiveLines} and not a replacement for it: that one takes *one*
+ * description and spreads it over the stamps of a set, which is what a partner offering "Michel
+ * 1–12, complete" means. This one takes rows that each describe themselves, which is what a file
+ * is, and it exists because eighty-five of them through the singular path is eighty-five round
+ * trips of the same three lookups.
+ *
+ * Every member is still checked against the collection, in two queries rather than in four per row:
+ * a tampered or cross-collection id is refused here exactly as it is there, and the whole batch is
+ * refused rather than half-written — an import that silently dropped the rows it did not like is
+ * the failure this whole feature exists to avoid.
+ */
+export async function addTradeReceiveLinesBulk(
+  ownerId: string,
+  sectionId: string,
+  rows: readonly TradeReceiveLineRow[]
+): Promise<number> {
+  const { tradeId, status } = await assertSectionOwner(ownerId, sectionId);
+  assertContentEditable(status);
+  const { collectionId } = await assertTradeOwner(ownerId, tradeId);
+  if (rows.length === 0) return 0;
+
+  const stampIds = [...new Set(rows.map((row) => row.stampId))];
+  const conditionIds = [...new Set(rows.map((row) => row.conditionId))];
+  const [stamps, conditions] = await Promise.all([
+    prisma.stamp.count({ where: { collectionId, id: { in: stampIds } } }),
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+  ]);
+  if (stamps !== stampIds.length) throw new Error("Pick a stamp for this line.");
+  if (conditions !== conditionIds.length) throw new Error("A condition is required.");
+
+  const start = await nextPosition(sectionId, "receive");
+  await prisma.tradeLine.createMany({
+    data: rows.map((row, index) => ({
+      tradeId,
+      sectionId,
+      side: "receive",
+      position: start + index,
+      stampId: row.stampId,
+      conditionId: row.conditionId,
+      // Null is a value on both of these axes (ADR-0006 §2, ADR-0020), and an import states
+      // neither: a wish list says a stamp and a grade and stops.
+      certificateStatusId: null,
+      formatId: null,
+      quantity: Math.max(1, Math.trunc(row.quantity || 1)),
+    })),
+  });
+  return rows.length;
+}
+
 /** What a line — or a whole checklist — comes to, as stamp ids. Local rather than borrowed from the
  *  auction module: that one throws an auction-specific blocked-action error, and a trade has no
  *  business raising one.

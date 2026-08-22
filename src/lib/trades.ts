@@ -6,8 +6,10 @@ import { allocateEntityNumber } from "./items";
 import {
   canTransitionTrade,
   isTradeContentEditable,
+  isTradeSide,
   isTradeStatus,
   TRADE_STATUS_LABEL,
+  type TradeSide,
   type TradeStatus,
 } from "./trade-rules";
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
@@ -64,6 +66,11 @@ export interface TradeSectionData {
   countTolerance: number | null;
   valueTolerancePct: number | null;
   ownValueWarnPct: number | null;
+  /** The grade this section's imported rows fall back to (#645), or null where it states none. Not
+   *  a default anywhere else: the hand-add dialogs ask, and an answer is what they are for. */
+  defaultConditionId: string | null;
+  /** Its name, so a screen can say which grade that is without a second lookup. */
+  defaultConditionName: string | null;
   giveCount: number;
   receiveCount: number;
   /** Pieces on the receive side, which is not its line count — three lines can be thirty stamps. */
@@ -94,6 +101,20 @@ export interface TradeData {
    *  header can say a list is out there without the collector opening a dialog to find out. */
   share: TradeShareState | null;
   sections: TradeSectionData[];
+  /** The Colnect lists this exchange is about (#645), the collector's and the partner's. Read with
+   *  the trade rather than behind a second fetch — they are four columns hanging off the row this
+   *  query already has, and the card that draws them is on the same screen. */
+  colnectLists: TradeColnectListSummary[];
+}
+
+/** One Colnect list as the trade screen and the partner's page draw it. The shape `trade-colnect-lists.ts`
+ *  writes; restated here so `TradeData` does not drag a `server-only` module into the client bundle. */
+export interface TradeColnectListSummary {
+  id: string;
+  url: string;
+  label: string;
+  side: TradeSide;
+  position: number;
 }
 
 /** What the trade screen knows about its share link without asking `trade-share.ts` for it. */
@@ -184,6 +205,10 @@ export type TradeUpdateInput = TradeCreateInput;
  * own rule whole or inherits the trade's whole. */
 export interface TradeSectionInput {
   name: string;
+  /** The section's default grade (#645), or null to state none. Written on its own, beside the
+   *  balance override rather than inside it — the two answer different questions and clearing one
+   *  must not clear the other. */
+  defaultConditionId?: string | null;
   balanceByValue?: boolean | null;
   countTolerance?: number | null;
   valueTolerancePct?: number | null;
@@ -225,6 +250,8 @@ const SECTION_SELECT = {
   countTolerance: true,
   valueTolerancePct: true,
   ownValueWarnPct: true,
+  defaultConditionId: true,
+  defaultCondition: { select: { name: true } },
   lines: { select: { side: true, quantity: true } },
 } satisfies Prisma.TradeSectionSelect;
 
@@ -236,6 +263,8 @@ function toSectionData(row: {
   countTolerance: number | null;
   valueTolerancePct: Prisma.Decimal | null;
   ownValueWarnPct: Prisma.Decimal | null;
+  defaultConditionId: string | null;
+  defaultCondition: { name: string } | null;
   lines: { side: string; quantity: number }[];
 }): TradeSectionData {
   return {
@@ -246,6 +275,8 @@ function toSectionData(row: {
     countTolerance: row.countTolerance,
     valueTolerancePct: decimalToNumber(row.valueTolerancePct),
     ownValueWarnPct: decimalToNumber(row.ownValueWarnPct),
+    defaultConditionId: row.defaultConditionId,
+    defaultConditionName: row.defaultCondition?.name ?? null,
     giveCount: row.lines.filter((l) => l.side === "give").length,
     receiveCount: row.lines.filter((l) => l.side === "receive").length,
     receiveQuantity: row.lines
@@ -376,6 +407,10 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
         select: { showValues: true, expiresAt: true, createdAt: true, lastUsedAt: true },
       },
       sections: { select: SECTION_SELECT, orderBy: [{ position: "asc" }, { name: "asc" }] },
+      colnectLists: {
+        select: { id: true, url: true, label: true, side: true, position: true },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
@@ -407,6 +442,13 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
         }
       : null,
     sections: row.sections.map(toSectionData),
+    colnectLists: row.colnectLists.map((list) => ({
+      id: list.id,
+      url: list.url,
+      label: list.label,
+      side: isTradeSide(list.side) ? list.side : "give",
+      position: list.position,
+    })),
   };
 }
 
@@ -685,17 +727,36 @@ function sectionOverrideData(data: TradeSectionInput) {
   };
 }
 
+/** The section's default grade, checked against the collection it will be read in — a condition from
+ *  somewhere else would be a grade no line on this trade could ever be written in. Undefined leaves
+ *  the column alone; null clears it. */
+async function sectionConditionData(
+  collectionId: string,
+  data: TradeSectionInput
+): Promise<{ defaultConditionId?: string | null }> {
+  if (data.defaultConditionId === undefined) return {};
+  const id = data.defaultConditionId?.trim() ?? "";
+  if (!id) return { defaultConditionId: null };
+  const condition = await prisma.stampCondition.findFirst({
+    where: { id, collectionId },
+    select: { id: true },
+  });
+  if (!condition) throw new Error("That condition is not in this collection.");
+  return { defaultConditionId: condition.id };
+}
+
 /** Add a section, appended after the existing ones. */
 export async function createTradeSection(
   ownerId: string,
   tradeId: string,
   data: TradeSectionInput
 ): Promise<TradeSectionData> {
-  const { status } = await assertTradeOwner(ownerId, tradeId);
+  const { collectionId, status } = await assertTradeOwner(ownerId, tradeId);
   assertContentEditable(status);
 
   const name = data.name.trim();
   if (!name) throw new Error("A section name is required.");
+  const condition = await sectionConditionData(collectionId, data);
 
   const last = await prisma.tradeSection.findFirst({
     where: { tradeId },
@@ -709,6 +770,7 @@ export async function createTradeSection(
       name,
       position: (last?.position ?? -1) + 1,
       ...sectionOverrideData(data),
+      ...condition,
     },
     select: SECTION_SELECT,
   });
@@ -721,15 +783,17 @@ export async function updateTradeSection(
   sectionId: string,
   data: TradeSectionInput
 ): Promise<TradeSectionData> {
-  const { status } = await assertSectionOwner(ownerId, sectionId);
+  const { tradeId, status } = await assertSectionOwner(ownerId, sectionId);
   assertContentEditable(status);
 
   const name = data.name.trim();
   if (!name) throw new Error("A section name is required.");
+  const { collectionId } = await assertTradeOwner(ownerId, tradeId);
+  const condition = await sectionConditionData(collectionId, data);
 
   const updated = await prisma.tradeSection.update({
     where: { id: sectionId },
-    data: { name, ...sectionOverrideData(data) },
+    data: { name, ...sectionOverrideData(data), ...condition },
     select: SECTION_SELECT,
   });
   return toSectionData(updated);

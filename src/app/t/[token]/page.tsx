@@ -4,7 +4,11 @@ import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
 import { readTradeShareView, verifyTradeShareToken, type TradeShareView } from "@/lib/trade-share";
 import { readPartnerTradeFeedback } from "@/lib/trade-feedback";
-import { TRADE_SHARE_REFUSAL_MESSAGE, type TradeShareRefusal } from "@/lib/trade-share-rules";
+import {
+  TRADE_SHARE_REFUSAL_MESSAGE,
+  tradeShareSideHeading,
+  type TradeShareRefusal,
+} from "@/lib/trade-share-rules";
 import {
   TRADE_GROUP_LABEL,
   TRADE_GROUP_LEVELS,
@@ -100,6 +104,8 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
 
         <ValuationNote view={view} />
 
+        <ColnectLists view={view} />
+
         <hr className="ts-rule" />
 
         <Arrange token={token} levels={view.levels} />
@@ -166,6 +172,50 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
         />
       </main>
     </>
+  );
+}
+
+/**
+ * **The Colnect lists the exchange came out of** (#645).
+ *
+ * Above the list rather than under it: a partner reading this page is comparing it against a list
+ * they wrote on Colnect, and the link to their own copy of it is the first thing they reach for.
+ * Grouped by side and headed in the same words the columns below are, because *what you are asking
+ * me for* and *what I am asking you for* are two lists and one heading would be wrong for one.
+ *
+ * Absent entirely on a trade that names none — an empty heading would be a promise of something
+ * that is not there.
+ */
+function ColnectLists({ view }: { view: TradeShareView }) {
+  if (view.colnectLists.length === 0) return null;
+  return (
+    <div className="ts-lists">
+      {(["give", "receive"] as const).map((side) => {
+        const own = view.colnectLists.filter((list) => list.side === side);
+        if (own.length === 0) return null;
+        return (
+          <div key={side} className="ts-lists-group">
+            {/* Headed by **name**, exactly as the side columns below are (`tradeShareSideHeading`):
+                *give* and *receive* are the collector's words and they invert on this side of the
+                table. */}
+            <div className="ts-lists-head">
+              {tradeShareSideHeading(side, view.collectorName, view.partnerName)} — on Colnect
+            </div>
+            <ul>
+              {own.map((list) => (
+                <li key={list.url}>
+                  <a href={list.url} target="_blank" rel="noreferrer noopener">
+                    {list.label || list.url}
+                  </a>
+                  {/* On paper the address itself, since the name alone leads nowhere there. */}
+                  {list.label && <span className="ts-list-url"> — {list.url}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

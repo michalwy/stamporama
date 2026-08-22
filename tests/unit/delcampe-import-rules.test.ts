@@ -4,7 +4,6 @@ import {
   delcampeBidWriteFor,
   delcampeItemUrl,
   offerNoFromPersonalReference,
-  parseCsvRows,
   parseDelcampeDecimal,
   parseDelcampeEndDate,
   readDelcampeActiveItems,
@@ -98,20 +97,6 @@ describe("Delcampe export reader (#611)", () => {
     const read = readDelcampeActiveItems(`﻿${SAMPLE}`);
     assert.ok(read.ok, JSON.stringify(read));
     assert.equal(read.rows[0].itemId, "2508054797");
-  });
-});
-
-describe("CSV reading (#611)", () => {
-  it("keeps separators, quotes and line breaks that sit inside a quoted field", () => {
-    const rows = parseCsvRows('a,"b,c","d""e","f\ng"\r\nh,i,j,k');
-    assert.deepEqual(rows, [
-      ["a", "b,c", 'd"e', "f\ng"],
-      ["h", "i", "j", "k"],
-    ]);
-  });
-
-  it("does not invent a row from a trailing newline", () => {
-    assert.equal(parseCsvRows("a,b\r\nc,d\r\n").length, 2);
   });
 });
 

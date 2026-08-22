@@ -26,6 +26,7 @@ import { renameTradeSectionAction, type TradeActionState } from "@/app/actions/t
 import { useTradeSide, TradeSideHeader, TradeSideRows } from "./trade-side-column";
 import { TradeCopyPickerDialog } from "./trade-copy-picker-dialog";
 import { TradeGiveRequirementDialog } from "./trade-give-requirement-dialog";
+import { TradeColnectImportDialog } from "./trade-colnect-import-dialog";
 import { TradeCandidatesDialog } from "./trade-candidates-dialog";
 import type { TradeCandidateRead } from "@/lib/trade-candidates";
 import { TradeReceiveLineDialog } from "./trade-receive-line-dialog";
@@ -94,6 +95,7 @@ type SectionDialog =
   | { kind: "none" }
   | { kind: "addCopies" }
   | { kind: "addByStamp" }
+  | { kind: "importList"; side: TradeSide; file: File }
   | { kind: "addReceive" }
   | { kind: "editReceive"; line: TradeReceiveLineData }
   | { kind: "lineValue"; line: TradeLineValueRead }
@@ -333,6 +335,7 @@ export function TradeSectionCard({
               isPending={isPending}
               onAdd={() => setDialog({ kind: "addCopies" })}
               onAddByStamp={() => setDialog({ kind: "addByStamp" })}
+              onImportList={(file) => setDialog({ kind: "importList", side: "give", file })}
             />
           </div>
           <TradeSideHeader
@@ -341,6 +344,7 @@ export function TradeSectionCard({
             editable={editable}
             isPending={isPending}
             onAdd={() => setDialog({ kind: "addReceive" })}
+            onImportList={(file) => setDialog({ kind: "importList", side: "receive", file })}
           />
         </div>
       </div>
@@ -409,6 +413,22 @@ export function TradeSectionCard({
           collectionId={collectionId}
           sectionId={section.id}
           sectionName={section.name}
+          areas={areas}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+
+      {/* **A whole Colnect list at once** (#645). The same act as *By stamp* on the give side and as
+          *Add line* on the receive one, done off the file the partner actually sent — and the rows
+          it cannot answer for are worked through in the dialog rather than left to be noticed. */}
+      {dialog.kind === "importList" && (
+        <TradeColnectImportDialog
+          collectionId={collectionId}
+          tradeId={tradeId}
+          sectionId={section.id}
+          sectionName={section.name}
+          side={dialog.side}
+          file={dialog.file}
           areas={areas}
           onClose={() => setDialog({ kind: "none" })}
         />

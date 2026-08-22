@@ -84,4 +84,91 @@ Exchanges with another collector: what leaves, what arrives, the sections over b
 
 - **A requirement resolves to a copy by a stated order** (#659; ADR-0039 §14). A wish list says `stamp × condition` and nothing else, so the give side has a second way in beside the picker — state what the partner asked for and let the resolver find the copy. The candidate set is #657's, narrowed by the requirement instead of by a copy's own key and with this trade's `TradeCopyBlock` rows taken out: an automatic pick has no business reaching past a decision the collector already took. The order is **`forTrade` first, then the plain single, then a copy with a photo, then the lowest `itemNo`** — and unlike #657's pool these candidates are *not* interchangeable, which is exactly why the order is written down: matched on stamp and condition alone they differ on the two axes that carry value, so handing over a block of four or a certified piece for "this stamp" would be a bad trade and a silent change to the balance. Quantity N takes N distinct copies, no copy serves two requirements, and fewer than asked for is a **shortfall** stated as served-and-missing. **A gap is an outcome, not an error** — *you do not hold this in this condition* is what the collector sends back, and on an imported list it is the main output, so it survives to the report rather than being dropped or thrown. The write goes through `addTradeGiveLines`, which re-checks eligibility and names refusals per copy; a refused copy goes back on the shortfall it came from. The pure half is `trade-give-resolution-rules.ts`, the database half `trade-give-resolution.ts`, which sits above `trade-lines.ts` and borrows its checklist reader so a whole set means the same thing on both sides of the trade.
 
-- **What is deliberately not here yet.** The partner's own pick from that pool (#658) — a second, advisory reference beside `itemId` rather than a write into it. And the Colnect exchange-list import (#645), whose requirements are #659's resolver's to serve. It ships its own columns with it (ADR-0039 §"Consequences"); this file is extended by it rather than restating its decisions in an issue body.
+- **A Colnect list is read by name and matched twice over** (#645). The file half is
+  `colnect-list-rules.ts`, pure and asserted against two real exports kept as fixtures: five preamble
+  lines, the header found by **column name** (the Delcampe reader's rule, #611, so a preamble that
+  grows a line still reads), an `END of Colnect list` footer, and three columns out of thirty-nine
+  that say anything — `Catalog Codes` (`Mi:AR BL176, …`, already the matcher's `{catalog, number}`
+  shape), `Link` (**the only place the item id lives**; there is no id column) and the three
+  **per-list** columns. `Ord Mi`/`Ord Sn` are Colnect's sort keys and
+  look enough like catalog numbers to be mistaken for them; `Parent Item` is *another* item's id.
+  Both are deliberately unread. `parseCsvRows` moved out of `delcampe-import-rules.ts` into `csv.ts`
+  on the way — extraction before addition, `packing-list.ts`'s move for #643 — and grew a line number
+  per record, because a gap pointing at the wrong line is worse than one pointing at none.
+
+- **`List` / `Quantity` / `Condition` are positional, and which list is being imported is a question**
+  (#645). A stamp sits on every list the collector put it on, and the three cells line up by index:
+  `List` = `"Wish,Test Swap FROM"`, `Quantity` = `"[1],[1]"`, `Condition` = `"[MNH],[U]"` — mint on
+  the wish list, used on the swap list, one row. So a blank group is kept rather than dropped (an
+  empty `[]` belongs to *its* list, and dropping it shifts every later grade onto the wrong one), the
+  reader resolves the grade for **every** list a row carries, and the caller picks. This is the
+  common case, not the exotic one: what a collector offers is also on their swap lists and what they
+  want is also on their wish list. The likeliest list is offered — the one the **most rows** carry,
+  which in an export of one list is all of them — and rows not on the chosen list are not gaps to
+  answer for; they are simply not part of it, drawn greyed and left out. An earlier reading of this,
+  which called two grades on one row an ambiguity and asked the collector to settle it, was wrong:
+  the file states which grade is which, and asking would have been asking about something already
+  written down.
+
+- **The matching is the Assistant's, in `dryRun`; the grade is the collection's, read backwards**
+  (#645). `colnect-list-import.ts` asks two questions in order: a stamp already carrying the row's
+  `Stamp.colnectId` (#247) *is* the stamp, and everything else goes through `matchColnectItems` with
+  `dryRun: true` — the existing matrix (#250), not a third matcher written to disagree with it in six
+  months. `dryRun` is the point: reading somebody else's wish list must not write eighty-five Colnect
+  ids onto the collection, because learning an id is a deliberate act against a page the collector is
+  looking at. The condition goes `abbrev → Colnect's option value → ColnectConditionMapping`
+  **backwards** to a local grade — the collection has already said what MNH means to it (#404), and a
+  trade holding a second opinion is how two screens come to disagree. Two conditions mapping to one
+  Colnect grade is an ambiguity reported, not a first row taken.
+
+- **Silence about a grade is answered by the section, and by nothing else** (#645). A real export
+  states a grade on three rows in eight, and a condition is required on both sides (`trade_line`'s
+  CHECK; `GiveRequirement`). `TradeSection.defaultConditionId` is where the answer lives, because a
+  section is already the unit a list is grouped into ("Poland, used") — so the grade is a property of
+  the section far more often than of a row, and stating it once where it is visible and editable is
+  the difference between a default and a guess. Null means the section states none, and then the row
+  is a **gap** — per list, since a row silent on the swap list may well state a grade on the wish
+  list. It is read by the import and by nothing else: the hand-add dialogs go on asking,
+  because being asked is what they are for.
+
+- **Nothing is written until every row is answered or skipped on purpose** (#645). The preview and
+  the give-side re-resolve are reads; the write is a separate act over settled rows. The give side
+  goes through #659 unchanged — requirements in, `resolveTradeGiveRequirements` for the shortfall
+  column, `addTradeGiveLinesForRequirements` to write — and the receive side through
+  `addTradeReceiveLinesBulk`, the sibling `trade-lines.ts` grew here: the singular call spreads *one*
+  description over the stamps of a set, which is the wrong shape for rows that each describe
+  themselves, and eighty-five trips through it is eighty-five repetitions of the same three lookups.
+  The shortfall count is refreshed from the server after every edit, because the copy pool is finite
+  and shared: settling one row can turn another into a shortfall or out of one. **Every number is
+  shown and the matching one is picked out** — on both sides of the row, plus the Colnect id where
+  the id is what matched — because a match is only checkable against the numbers that did *not*
+  match, and a row that showed one number would be asking the collector to trust it. The marks are
+  the matcher's own (#284's `matched`/`conflict`/`unmapped`/`unknown`), which is why the matcher now
+  runs for **every** row rather than only for the ones the id could not place: the id still decides,
+  but the comparison has to be the one the rest of the app draws. A stamp found by id whose numbers
+  the matcher never compared shows them unmarked, formatted through `buildAreaVendorMaps` /
+  `formatStampCN` like every other stamp surface — plain is the honest rendering when nothing
+  compared them. Each row draws the
+  matched stamp's own thumbnail and each candidate its own (one query over every drawable stamp, not
+  one per row), because a wrong match is something you see rather than something you read; and each
+  row links out to Colnect — `colnectStampUrl` where the file gave an id, `colnectSearchUrl` on the
+  first catalog number where it did not, which is #441's rule for an unmatched stamp holding here
+  too. A hand-picked stamp shows no thumbnail until the file is read again: `PickedStamp` carries no
+  photos, and a second round trip per pick would buy a picture of a stamp the collector just looked
+  at in the picker. The affordance on the section heading **is** the file chooser — the dialog opens
+  on a file already picked and reads it through a query keyed on which file it is, so opening the
+  dialog is asking the question rather than presenting a second button that asks it again.
+
+- **The lists themselves are records on the trade, and they are not contents** (#645).
+  `TradeColnectList` is any number of rows, each an address, a label and a **side** — a partner
+  routinely sends two or three custom lists, and *what I am asking you for* and *what you are asking
+  me for* are two lists that one heading would misname. They are drawn under the trade's terms and on
+  the partner's page (#640), which is where they matter most: the partner is reading a list of stamps
+  they wrote themselves and has no other way back to their own copy of it. **Ungated by status**,
+  unlike every line and section: `assertContentEditable` guards the contents of a list the partner is
+  holding a copy of, and an address is not contents — this is `updateTrade`'s rule, not
+  `addTradeGiveLines`'s. Re-offering the same URL updates the row rather than adding a second, since
+  the import offers the file's own list every time it reads one.
+
+- **What is deliberately not here yet.** The partner's own pick from that pool (#658) — a second,
+  advisory reference beside `itemId` rather than a write into it.

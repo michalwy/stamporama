@@ -503,6 +503,25 @@ The chosen copy is the **effective** one, written to `TradeLine.itemId` like any
   and the shaping now serves three sheets — the sale's list, the trade's checklist, and the parcel
   enclosure. The sheet component moved to `shared/packing-sheet.tsx` with its column chips and its
   global preference key intact, and each printout brings its own columns.
+- #645 shipped two: `trade_section.defaultConditionId` and the `trade_colnect_list` table. The
+  column is what a Colnect row *stating no grade* means — a real export states one on three rows in
+  eight, and a condition is required on both sides — put on the **section** because a section is
+  already the unit a list is grouped into, so the grade belongs to it far more often than to a row.
+  Null means the section states none, and then a silent row is a gap rather than a guess. The table
+  holds the addresses of the lists the exchange is about, each with a side and a label: a Colnect
+  trade *is* two lists, a partner routinely sends several, and the link travels to the partner's page
+  because they are reading stamps they wrote themselves and have no other way back to their own copy.
+  It is **ungated by status**, unlike everything under §5's lock — that lock guards the contents of a
+  list somebody is holding a copy of, and an address is not contents. No import record was added and
+  none will be: a line is a promise about a copy and stands on its own, and a provenance column would
+  be a second story about it that nothing keeps true. It also moved `parseCsvRows` out of the
+  Delcampe reader into `csv.ts` and gave it a line number per record, so both file readers agree
+  about quotes, blank lines and which line a refusal is pointing at. The export's `List` /
+  `Quantity` / `Condition` columns are **positional per list** — one stamp is mint on the wish list
+  and used on the swap list in the same row — so which list is being imported is asked, with the one
+  the most rows carry offered as the answer, and rows outside it are not part of the import rather
+  than gaps in it.
+
 - `CopyValuation` gained `catalogNameId` and `editionYear`. Every other reader ignores them; the
   freeze needs them, because a snapshot recording an amount but not the book and edition behind it is
   a number the partner's printout can never be checked against.

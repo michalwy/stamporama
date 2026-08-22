@@ -8,6 +8,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import type { TradeSectionData } from "@/lib/trades";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { describeBalanceRule, type TradeBalanceRule } from "@/lib/trade-rules";
 import { createTradeSectionAction, updateTradeSectionAction } from "@/app/actions/trades";
 
@@ -18,6 +19,12 @@ import { createTradeSectionAction, updateTradeSectionAction } from "@/app/action
 // reason this dialog would otherwise have to invent an interface for — "tolerance 0 because the
 // trade says so" and "tolerance 0 because this section says so" look identical on screen and behave
 // identically, so offering the distinction would only be offering a way to get it wrong.
+//
+// The **default condition** (#645) sits here for the same reason the balance rule does: it is a
+// property of the section rather than of a line. A Colnect list states a grade on some rows and not
+// on others, and the section is where the collector says what the silent ones mean. It is read by
+// the import and by nothing else — the hand-add dialogs go on asking, because being asked is what
+// they are for.
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -48,6 +55,7 @@ const HINT: React.CSSProperties = {
 
 export function TradeSectionDialog({
   mode,
+  collectionId,
   tradeId,
   section,
   trade,
@@ -55,6 +63,7 @@ export function TradeSectionDialog({
   onDone,
 }: {
   mode: "add" | "edit";
+  collectionId: string;
   tradeId: string;
   /** The section being edited; add mode leaves it undefined. */
   section?: TradeSectionData;
@@ -63,6 +72,7 @@ export function TradeSectionDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { data: conditions = [] } = useCollectionConditions(collectionId);
   const [ownRule, setOwnRule] = useState(section?.balanceByValue !== null && section !== undefined);
   const [balanceByValue, setBalanceByValue] = useState(section?.balanceByValue ?? false);
   const [isPending, startTransition] = useTransition();
@@ -108,6 +118,32 @@ export function TradeSectionDialog({
                 Nothing is ever put in a section automatically — a section is a name and a balance
                 rule, and what goes in it is your call. Mint apart from used is the usual reason for
                 a second one.
+              </p>
+            </div>
+
+            <div>
+              <LabelWithError htmlFor="trade-section-condition">
+                Default condition
+              </LabelWithError>
+              <select
+                id="trade-section-condition"
+                name="defaultConditionId"
+                defaultValue={section?.defaultConditionId ?? ""}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                <option value="">— None —</option>
+                {conditions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.abbreviation})
+                  </option>
+                ))}
+              </select>
+              <p style={HINT}>
+                What an imported Colnect row means when it states no grade of its own — five rows in
+                eight, on a real export. Leave it at none and those rows come in as gaps to settle by
+                hand instead. Nothing else reads it, and a line&rsquo;s own condition can be changed
+                after it is written.
               </p>
             </div>
 

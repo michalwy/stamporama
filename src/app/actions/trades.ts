@@ -36,6 +36,17 @@ import {
   setTradeShareOptions,
 } from "@/lib/trade-share";
 import { resolveTradeFeedback } from "@/lib/trade-feedback";
+import {
+  importColnectListRows,
+  type ColnectImportResult,
+  type ColnectImportSettledRow,
+} from "@/lib/colnect-list-import";
+import {
+  addTradeColnectList,
+  deleteTradeColnectList,
+  reorderTradeColnectLists,
+  updateTradeColnectList,
+} from "@/lib/trade-colnect-lists";
 import { setTradeCopyBlock } from "@/lib/trade-candidates";
 import {
   addTradeGiveLinesFromRequirement,
@@ -43,7 +54,7 @@ import {
 } from "@/lib/trade-give-resolution";
 import { parseGiveAxis, type GiveRequirement } from "@/lib/trade-give-resolution-rules";
 import { setTradeLineFulfillment } from "@/lib/trade-realisation";
-import { isTradeStatus, type TradeStatus } from "@/lib/trade-rules";
+import { isTradeSide, isTradeStatus, type TradeSide, type TradeStatus } from "@/lib/trade-rules";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 // Server actions for trades (#646; ADR-0039). Thin: they parse the form, call the domain and turn a
@@ -220,12 +231,17 @@ function parseSectionFields(formData: FormData): { data: TradeSectionInput; erro
   const name = str(formData, "name");
   if (!name) return { data: {} as TradeSectionInput, error: "A section name is required." };
 
+  // The default grade (#645) is written on its own: it answers a different question from the
+  // balance rule, and clearing one must not clear the other. Blank is *none*, which is a value.
+  const defaultConditionId = str(formData, "defaultConditionId") || null;
+
   if (str(formData, "balanceMode") !== "own") {
-    return { data: { name, balanceByValue: null } };
+    return { data: { name, defaultConditionId, balanceByValue: null } };
   }
   return {
     data: {
       name,
+      defaultConditionId,
       balanceByValue: str(formData, "balanceByValue") === "true",
       countTolerance: parseCount(str(formData, "countTolerance"), 0),
       valueTolerancePct: parsePercent(str(formData, "valueTolerancePct"), 0),
@@ -301,6 +317,107 @@ export async function deleteTradeSectionAction(sectionId: string): Promise<Trade
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to delete section. Please try again.") };
+  }
+}
+
+// ── Importing a Colnect list (#645) ──────────────────────────────────────────────────────────────
+//
+// The reading is a route handler (a file upload, and two reads that write nothing); this is the
+// write, over the rows the collector settled. A success can still carry shortfalls: *these eleven I
+// cannot serve* is the main output of importing somebody's wish list, not a failure of it.
+
+export type ImportColnectListActionState =
+  | ({ status: "success" } & ColnectImportResult)
+  | { status: "error"; message: string };
+
+export async function importColnectListAction(
+  sectionId: string,
+  side: string,
+  rows: ColnectImportSettledRow[]
+): Promise<ImportColnectListActionState> {
+  const session = await getSession();
+  if (!isTradeSide(side)) return { status: "error", message: "Which side of the trade?" };
+  if (rows.length === 0) {
+    return { status: "error", message: "Nothing to import — every row still needs settling." };
+  }
+  try {
+    const result = await importColnectListRows(session.user.id, sectionId, side, rows);
+    return { status: "success", ...result };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to import that list. Please try again.") };
+  }
+}
+
+// ── The Colnect lists a trade is about (#645) ────────────────────────────────────────────────────
+//
+// An address, not contents: ungated by status, for the reason `trade-colnect-lists.ts` states.
+
+/** The side a link belongs to, refused rather than defaulted — a link filed under the wrong heading
+ *  tells the partner the opposite of the truth. */
+function parseSide(raw: string): { side: TradeSide } | { error: string } {
+  const value = raw.trim();
+  if (!isTradeSide(value)) return { error: "Say which side of the trade that list is." };
+  return { side: value };
+}
+
+export async function addTradeColnectListAction(
+  tradeId: string,
+  raw: { url: string; label?: string; side: string }
+): Promise<TradeActionState> {
+  const session = await getSession();
+  const side = parseSide(raw.side);
+  if ("error" in side) return { status: "error", message: side.error };
+  try {
+    await addTradeColnectList(session.user.id, tradeId, {
+      url: raw.url,
+      label: raw.label,
+      side: side.side,
+    });
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to add that list. Please try again.") };
+  }
+}
+
+export async function updateTradeColnectListAction(
+  listId: string,
+  raw: { url: string; label?: string; side: string }
+): Promise<TradeActionState> {
+  const session = await getSession();
+  const side = parseSide(raw.side);
+  if ("error" in side) return { status: "error", message: side.error };
+  try {
+    await updateTradeColnectList(session.user.id, listId, {
+      url: raw.url,
+      label: raw.label,
+      side: side.side,
+    });
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to save that list. Please try again.") };
+  }
+}
+
+export async function deleteTradeColnectListAction(listId: string): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await deleteTradeColnectList(session.user.id, listId);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to remove that list. Please try again.") };
+  }
+}
+
+export async function reorderTradeColnectListsAction(
+  tradeId: string,
+  orderedIds: string[]
+): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await reorderTradeColnectLists(session.user.id, tradeId, orderedIds);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to reorder lists. Please try again.") };
   }
 }
 

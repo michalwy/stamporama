@@ -20,6 +20,7 @@
 //     newer, the cheaper or the first.
 //   * **Formatting.** Nothing here writes a file.
 
+import { parseCsvRows } from "./csv";
 import {
   CLOSED_OFFER_STATES,
   isAuctionListing,
@@ -90,79 +91,6 @@ export interface DelcampeActiveItemRow {
 export type DelcampeExportRead =
   | { ok: true; rows: DelcampeActiveItemRow[] }
   | { ok: false; message: string };
-
-/**
- * Split delimited text into rows of fields (RFC 4180).
- *
- * Written here rather than depended on: the file is a dozen columns of a marketplace's own export,
- * the rules are quotes, doubled quotes and separators-inside-quotes, and a parser that can be
- * asserted against Delcampe's actual sample is worth more than a dependency whose options would have
- * to be settled anyway. `\r\n`, `\n` and a bare `\r` all end a row, since the file travels through
- * whatever the collector's browser and spreadsheet did to it on the way here.
- *
- * A trailing newline does not produce an empty final row, and neither does a blank line anywhere —
- * a spreadsheet's parting gift, and not a listing.
- */
-export function parseCsvRows(text: string, separator = ","): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
-  let dirty = false;
-
-  const endField = () => {
-    row.push(field);
-    field = "";
-    dirty = true;
-  };
-  const endRow = () => {
-    if (dirty) rows.push(row);
-    row = [];
-    dirty = false;
-  };
-
-  // A byte-order mark is a spreadsheet's convenience that would otherwise become part of the first
-  // column's *name*, which is how a file that looks perfect reads as having no `id_auction`.
-  const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-
-  for (let i = 0; i < source.length; i += 1) {
-    const char = source[i];
-    if (quoted) {
-      if (char === '"') {
-        if (source[i + 1] === '"') {
-          field += '"';
-          i += 1;
-        } else {
-          quoted = false;
-        }
-      } else {
-        field += char;
-      }
-      continue;
-    }
-    if (char === '"') {
-      quoted = true;
-      dirty = true;
-      continue;
-    }
-    if (char === separator) {
-      endField();
-      continue;
-    }
-    if (char === "\r" || char === "\n") {
-      if (char === "\r" && source[i + 1] === "\n") i += 1;
-      if (dirty || field.length > 0) endField();
-      endRow();
-      continue;
-    }
-    field += char;
-  }
-  if (dirty || field.length > 0) endField();
-  endRow();
-
-  // A row of nothing but empty fields is a blank line the split above could not tell from a record.
-  return rows.filter((entry) => entry.some((value) => value.trim().length > 0));
-}
 
 /**
  * A figure as the **export** spells it: a dot separator (`17.44`), against the comma the upload file
