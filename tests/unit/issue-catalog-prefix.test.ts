@@ -16,7 +16,9 @@ const MICHEL: AreaCatalogEntry = {
   vendorName: "Michel",
   catalogName: "Michel Europa",
   vendorAbbreviation: "Mi",
-  prefix: "PL",
+  // Derived, never declared: `effectiveVendorsForArea` fills each entry's prefix from the area's
+  // own levels (#675), so the `PL` these tests read comes from the area's `catalogPrefix` below.
+  prefix: null,
 };
 
 const FISCHER: AreaCatalogEntry = {
@@ -25,7 +27,7 @@ const FISCHER: AreaCatalogEntry = {
   vendorName: "Fischer",
   catalogName: "Fischer",
   vendorAbbreviation: "Fi",
-  prefix: "PL",
+  prefix: null,
 };
 
 function area(over: Partial<CollectionAreaData> & { id: string; name: string }): CollectionAreaData {
@@ -33,6 +35,8 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     parentId: null,
     description: null,
     primaryCatalogNameId: null,
+    primaryCatalogVendorId: null,
+    catalogPrefix: null,
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,
@@ -40,11 +44,14 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     stampCount: 0,
     childCount: 0,
     catalogEntries: [],
+    vendorEntries: [],
     ...over,
   };
 }
 
-const AREAS = [area({ id: "pl", name: "Poland", catalogEntries: [MICHEL, FISCHER] })];
+const AREAS = [
+  area({ id: "pl", name: "Poland", catalogPrefix: "PL", catalogEntries: [MICHEL, FISCHER] }),
+];
 
 function overrides(entries: [string, [string, string][]][]): IssuePrefixMap {
   return new Map(entries.map(([issueId, pairs]) => [issueId, new Map(pairs)]));

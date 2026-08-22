@@ -65,6 +65,8 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   parentId: null,
   description: null,
   primaryCatalogNameId: null,
+  primaryCatalogVendorId: null,
+  catalogPrefix: null,
   titleName: null,
   titleNameByLanguage: {},
   assignable: true,
@@ -72,6 +74,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   stampCount: 0,
   childCount: 0,
   catalogEntries: [],
+  vendorEntries: [],
   ...over,
 });
 
@@ -136,6 +139,7 @@ describe("effectivePrimaryVendorId", () => {
       area({
         id: "root",
         primaryCatalogNameId: "nameMi",
+        primaryCatalogVendorId: "mi",
         catalogEntries: [entry({ catalogVendorId: "mi", catalogNameId: "nameMi" })],
       }),
       area({ id: "child", parentId: "root" }),
@@ -147,6 +151,16 @@ describe("effectivePrimaryVendorId", () => {
   it("returns null when no ancestor declares a primary", () => {
     const areas = [area({ id: "a" })];
     assert.equal(effectivePrimaryVendorId(areas, "a"), null);
+  });
+
+  it("leads with a vendor the area owns no book of (#675)", () => {
+    // The whole point of the split: `primaryCatalogNameId` says which book gives a copy its
+    // catalogue value, `primaryCatalogVendorId` says whose numbers lead. An area may record Michel
+    // numbers while pricing off Fischer.
+    const areas = [
+      area({ id: "pl", primaryCatalogNameId: "nameFi", primaryCatalogVendorId: "mi" }),
+    ];
+    assert.equal(effectivePrimaryVendorId(areas, "pl"), "mi");
   });
 });
 

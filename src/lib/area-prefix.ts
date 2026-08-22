@@ -2,22 +2,40 @@ import "server-only";
 
 // Effective per-vendor area prefix resolution, shared by the stamp picker (#104) and the Colnect
 // matcher (#155). A stamp's catalog number stores only the bare number; its human-facing identity
-// prepends the area's per-vendor prefix (e.g. Michel Poland "200" shows as "Mi·PL 200"). The prefix
-// is set on `CollectionAreaVendor.areaPrefix` and inherited down the area tree, so resolving it for
-// a given (area, vendor) walks toward the root until an area sets one.
+// prepends the area's prefix (e.g. Michel Poland "200" shows as "Mi·PL 200").
+//
+// The prefix lives at **two** levels on an area since #675: `CollectionArea.catalogPrefix` answers
+// for every vendor, and `CollectionAreaVendor.areaPrefix` is the per-vendor exception. Resolving a
+// (area, vendor) pair walks toward the root and stops at the **first area that says anything** —
+// either a vendor row *stating* a prefix or its own `catalogPrefix` — with the vendor row winning
+// inside that one area. That is `StampFormatFactor`'s rule (ADR-0020): *where* outranks *for which*.
+// So Poland setting `catalogPrefix = PL` plus a Fischer row with no prefix, and a child GG setting
+// `catalogPrefix = GG` and saying nothing about Fischer, resolves Fischer under GG to `GG`: the
+// nearer area decided, and repeating the Fischer exception on GG is how you keep it.
+//
+// A vendor row states a prefix when its `areaPrefix` is non-null: `''` is the stated *no prefix*,
+// and NULL is the ordinary tick, which declares the vendor and lets the prefix inherit — the area's
+// own `catalogPrefix` first, then on up. Merging those two into one state is what would make ticking
+// four vendors on a `PL` area silently kill `PL` four times.
 
 export interface AreaPrefixNode {
   parentId: string | null;
   name: string;
-  /** Per-vendor prefix rows set directly on this area (value may be null). */
+  /** The area's own prefix for every vendor (#675); null when the area says nothing at this level. */
+  catalogPrefix: string | null;
+  /** Per-vendor prefix rows set directly on this area. `''` is the stated *no prefix for this
+   * vendor here*, which stops both inheritance and the area's own {@link
+   * AreaPrefixNode.catalogPrefix}; a null value declares the vendor without saying anything about
+   * its prefix, so the question passes on. */
   vendorPrefix: Map<string, string | null>;
 }
 
-/** One area row as loaded from Prisma, carrying its direct per-vendor prefix entries. */
+/** One area row as loaded from Prisma, carrying both prefix levels it declares. */
 export interface AreaPrefixRow {
   id: string;
   name: string;
   parentId: string | null;
+  catalogPrefix: string | null;
   collectionAreaVendors: { catalogVendorId: string; areaPrefix: string | null }[];
 }
 
@@ -31,6 +49,7 @@ export function buildAreaPrefixNodes(
       {
         parentId: a.parentId,
         name: a.name,
+        catalogPrefix: a.catalogPrefix,
         vendorPrefix: new Map(
           a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
         ),
@@ -61,9 +80,12 @@ export function effectivePrefixFor(
   return areaId ? resolveEffectivePrefix(areaId, vendorId, nodes) : null;
 }
 
-/** Resolve the effective per-vendor area prefix, inheriting from the nearest ancestor area that
- * sets one (mirrors `effectiveVendorsForArea` on the client). Prefer {@link effectivePrefixFor}
- * where an issue is known — an issue may override what this returns (#377). */
+/** Resolve the effective area prefix for one vendor: walk toward the root and stop at the first
+ * area that states one — a `CollectionAreaVendor` row with a non-null `areaPrefix`, or the area's
+ * own `catalogPrefix` — the row winning inside that one area (#675). An empty string at either level
+ * is a stated *no prefix* and stops the walk returning null. Mirrors `resolveAreaVendorPrefix` on
+ * the client. Prefer {@link effectivePrefixFor} where an issue is known — an issue may override what
+ * this returns (#377). */
 export function resolveEffectivePrefix(
   areaId: string,
   vendorId: string,
@@ -74,7 +96,9 @@ export function resolveEffectivePrefix(
   while (current && depth < 50) {
     const node: AreaPrefixNode | undefined = nodes.get(current);
     if (!node) break;
-    if (node.vendorPrefix.has(vendorId)) return node.vendorPrefix.get(vendorId) ?? null;
+    const own = node.vendorPrefix.get(vendorId);
+    if (own != null) return own || null;
+    if (node.catalogPrefix !== null) return node.catalogPrefix || null;
     current = node.parentId;
     depth++;
   }

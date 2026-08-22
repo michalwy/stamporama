@@ -7,7 +7,9 @@ import {
   createCollectionArea,
   updateCollectionArea,
   deleteCollectionArea,
-  syncAreaCatalogEntries,
+  syncAreaCatalogBooks,
+  syncAreaVendors,
+  type AreaVendorInput,
   reorderCollectionAreas,
   AREA_TRANSLATION_FIELDS,
 } from "@/lib/areas";
@@ -37,26 +39,35 @@ function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
 }
 
-function parseCatalogEntries(
-  formData: FormData
-): { catalogNameId: string; prefix: string | null }[] {
+function parseJsonArray(formData: FormData, key: string): unknown[] {
   try {
-    const raw = (formData.get("catalogEntries") as string | null) ?? "[]";
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as unknown[])
-      .filter(
-        (e): e is { catalogNameId: string; prefix?: string } =>
-          typeof (e as { catalogNameId?: unknown }).catalogNameId === "string" &&
-          !!(e as { catalogNameId: string }).catalogNameId
-      )
-      .map((e) => ({
-        catalogNameId: e.catalogNameId,
-        prefix: e.prefix || null,
-      }));
+    const parsed: unknown = JSON.parse((formData.get(key) as string | null) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
+}
+
+/** The price books the area attaches — one field, ids only (#675). */
+function parseCatalogNameIds(formData: FormData): string[] {
+  return parseJsonArray(formData, "catalogNameIds").filter(
+    (id): id is string => typeof id === "string" && !!id
+  );
+}
+
+/** The numbering vendors the area declares, each with its optional prefix exception (#675). A
+ * blank prefix reaches the domain as a blank and is stored as null — see {@link AreaVendorInput}. */
+function parseAreaVendors(formData: FormData): AreaVendorInput[] {
+  return parseJsonArray(formData, "areaVendors").flatMap((v) => {
+    const row = v as { catalogVendorId?: unknown; areaPrefix?: unknown };
+    if (typeof row.catalogVendorId !== "string" || !row.catalogVendorId) return [];
+    return [
+      {
+        catalogVendorId: row.catalogVendorId,
+        areaPrefix: typeof row.areaPrefix === "string" ? row.areaPrefix : null,
+      },
+    ];
+  });
 }
 
 export async function createCollectionAreaAction(
@@ -72,11 +83,14 @@ export async function createCollectionAreaAction(
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
+      primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
+      catalogPrefix: optionalStr(formData, "catalogPrefix"),
       titleName: optionalStr(formData, "titleName"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
-    await syncAreaCatalogEntries(session.user.id, id, parseCatalogEntries(formData));
+    await syncAreaCatalogBooks(session.user.id, id, parseCatalogNameIds(formData));
+    await syncAreaVendors(session.user.id, id, parseAreaVendors(formData));
     return { status: "success" };
   } catch (e) {
     return {
@@ -99,11 +113,14 @@ export async function updateCollectionAreaAction(
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
+      primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
+      catalogPrefix: optionalStr(formData, "catalogPrefix"),
       titleName: optionalStr(formData, "titleName"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
-    await syncAreaCatalogEntries(session.user.id, areaId, parseCatalogEntries(formData));
+    await syncAreaCatalogBooks(session.user.id, areaId, parseCatalogNameIds(formData));
+    await syncAreaVendors(session.user.id, areaId, parseAreaVendors(formData));
     return { status: "success" };
   } catch (e) {
     return {

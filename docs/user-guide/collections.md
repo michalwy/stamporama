@@ -133,9 +133,25 @@ Areas are managed in **Settings → Areas**, where they form a tree: an area can
 Some areas exist only to organize the ones inside them — for example a **Europe** node that groups individual countries but never holds issues of its own. In the **Add area** / **Edit area** dialog, the **Can hold issues** checkbox controls this:
 
 - **Leave it checked** (the default) for a normal area that holds issues and stamps.
-- **Uncheck** it for a grouping-only area. Grouping-only areas are shown with a **Grouping** badge in the area list, and they cannot be picked as the area for an issue — in the **Add issue** and **Move to another area** dialogs they appear for context but are not selectable; you choose one of the real areas nested inside them instead. Catalog settings (primary catalog, number prefixes) still pass down to their children as before.
+- **Uncheck** it for a grouping-only area. Grouping-only areas are shown with a **Grouping** badge in the area list, and they cannot be picked as the area for an issue — in the **Add issue** and **Move to another area** dialogs they appear for context but are not selectable; you choose one of the real areas nested inside them instead. Catalog settings (the area prefix, the numbering vendors, the price sources and both primaries) still pass down to their children as before.
 
 You cannot mark an area as grouping-only while issues or stamps are still assigned directly to it — move those into a child area first.
+
+### Catalog settings: numbering and price sources
+
+The **Add area** / **Edit area** dialog asks two separate questions about catalogs, in two sections, because they really are separate: *whose numbers your stamps here carry* and *which catalogues price them*. A Michel volume can do both, one, or neither, and an area may well record Michel numbers without owning a single Michel volume.
+
+**Numbering** starts with the **area prefix** — one box, used for **every** vendor. Setting `PL` on Poland is all it takes for `Mi·PL 200`, `Fi·PL 200` and `Yt·PL 200`; there is no need to repeat it per catalog. Under it is one row per vendor whose numbers this area uses. Vendors are ticked for you from the price sources below, and you can **add one that has no book here** from the dropdown. Each row has:
+
+- an optional **prefix box** that overrides the area prefix for that one vendor. Leave it blank and it shows the inherited value as a placeholder, which is what it will use;
+- a **none** checkbox for the vendor whose numbers carry no prefix at all here — the exception that stops the area prefix reaching it;
+- a **radio** marking the vendor that **leads** the numbering. That is the one whose number sorts your issues and stamps into catalogue order, whose chip is highlighted, and which names a stamp when it is referred to by its number.
+
+**Price sources** lists the catalogue volumes whose prices apply here, with a radio marking the **valuing volume** — the one a copy's catalogue value is read from. Attach **none** and the area uses its parent's whole list, which is the usual thing for a leaf: the volumes are declared once, on the country, and every period underneath just uses them. Attach any and you are stating this area's price sources completely.
+
+Everything on both sections **inherits down the tree**, and everything shown as a placeholder or in italics is inherited rather than set here. Clearing a field hands it back to the parent — it never stores a blank. The area rows on the list show the same picture: the prefix in force, the leading vendor and the other vendors as chips, and the valuing volume, each in *italics* when it comes from an ancestor. So a leaf that declares nothing still tells you what it is using and where it came from, without opening the dialog.
+
+One rule is worth knowing because it looks surprising the first time: the resolution stops at the **nearest area that says anything**. If Poland sets `PL` and excepts Fischer (no prefix), and General Government below it sets `GG` and says nothing about Fischer, then Fischer under General Government is `GG` — the nearer area decided, for every vendor it did not except itself. To keep the Fischer exception there, repeat it there.
 
 ### Custom order
 
@@ -149,7 +165,7 @@ Catalog numbers are never lost in a move: catalogs belong to the collection, not
 
 ## Overriding an issue's catalog prefix
 
-Catalog numbers are stored bare (`200`) and shown with the prefix your **area** sets for that catalog (`Mi·PL 200`), inherited down the area tree from **Settings → Areas**. Some issues legitimately number under a different prefix than the area they sit in — a special or commemorative sub-catalog that does not follow the country's ordinary numbering.
+Catalog numbers are stored bare (`200`) and shown with the prefix your **area** sets (`Mi·PL 200`) — the area's own prefix, or a per-vendor exception to it, inherited down the area tree from [**Settings → Areas**](#catalog-settings-numbering-and-price-sources). Some issues legitimately number under a different prefix than the area they sit in — a special or commemorative sub-catalog that does not follow the country's ordinary numbering.
 
 The **Add issue** and **Edit issue** dialogs therefore give every catalog a small **prefix** box, in front of its **First** / **Last** range — which is exactly where the prefix appears when the number is printed. Its placeholder shows the prefix the area supplies, so leaving it **blank means "use the area's"**, which is what every ordinary issue does. Type something into it and that issue's stamps carry it instead, for that one catalog: enter `SP` on the Michel row and its stamps read `Mi·SP 200` while the rest of the area keeps `Mi·PL`. Each catalog is overridden separately; the ones you leave blank are unaffected.
 

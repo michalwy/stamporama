@@ -46,6 +46,9 @@ async function resolveEditionCollection(editionId: string): Promise<string> {
 export interface CatalogNameFlat {
   id: string;
   name: string;
+  /** The vendor this book belongs to. Numbering and pricing are separate declarations on an area
+   * (#675), so a surface that lists books has to be able to say whose they are. */
+  vendorId: string;
   vendorName: string;
   vendorAbbreviation: string;
 }
@@ -80,12 +83,14 @@ export async function getCatalogNames(
     select: {
       id: true,
       name: true,
+      vendorId: true,
       vendor: { select: { name: true, abbreviation: true } },
     },
   });
   return names.map((n) => ({
     id: n.id,
     name: n.name,
+    vendorId: n.vendorId,
     vendorName: n.vendor.name,
     vendorAbbreviation: n.vendor.abbreviation,
   }));

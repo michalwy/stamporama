@@ -6,7 +6,8 @@ import {
   createCollectionArea,
   updateCollectionArea,
   deleteCollectionArea,
-  syncAreaCatalogEntries,
+  syncAreaCatalogBooks,
+  syncAreaVendors,
 } from "../../src/lib/areas";
 import { getCollectionTitleLanguages } from "../../src/lib/contacts";
 import { setCollectionDefaultLanguage } from "../../src/lib/collections";
@@ -325,11 +326,18 @@ describe("deleteCollectionArea", () => {
   });
 });
 
-describe("syncAreaCatalogEntries", () => {
+describe("syncAreaCatalogBooks / syncAreaVendors (#675)", () => {
+  // The write path is two lists, not one. It used to be a single call keyed by book that *derived*
+  // the vendor rows with "non-null prefix wins, else last wins", so two Michel volumes with two
+  // prefix boxes stored one value and threw the other away, and a vendor could not be recorded at
+  // all without attaching one of its books.
   let userId: string;
   let collectionId: string;
-  let catalogNameId: string;
-  let catalogName2Id: string;
+  let michelVendorId: string;
+  let scottVendorId: string;
+  let michelBookId: string;
+  let michelSpezialId: string;
+  let scottBookId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -341,14 +349,23 @@ describe("syncAreaCatalogEntries", () => {
     const vendor2 = await prisma.catalogVendor.create({
       data: { collectionId, name: "Scott", abbreviation: "Sc" },
     });
-    const cn1 = await prisma.catalogName.create({
-      data: { vendorId: vendor1.id, name: "Deutschland", currency: "EUR" },
-    });
-    const cn2 = await prisma.catalogName.create({
-      data: { vendorId: vendor2.id, name: "USA", currency: "USD" },
-    });
-    catalogNameId = cn1.id;
-    catalogName2Id = cn2.id;
+    michelVendorId = vendor1.id;
+    scottVendorId = vendor2.id;
+    michelBookId = (
+      await prisma.catalogName.create({
+        data: { vendorId: vendor1.id, name: "Deutschland", currency: "EUR" },
+      })
+    ).id;
+    michelSpezialId = (
+      await prisma.catalogName.create({
+        data: { vendorId: vendor1.id, name: "Deutschland Spezial", currency: "EUR" },
+      })
+    ).id;
+    scottBookId = (
+      await prisma.catalogName.create({
+        data: { vendorId: vendor2.id, name: "USA", currency: "USD" },
+      })
+    ).id;
   });
 
   after(async () => {
@@ -356,75 +373,144 @@ describe("syncAreaCatalogEntries", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("creates catalog entries and reads them back via getCollectionAreas", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "SynTest", primaryCatalogNameId: catalogNameId });
-    await syncAreaCatalogEntries(userId, areaId, [
-      { catalogNameId, prefix: "1" },
-      { catalogNameId: catalogName2Id, prefix: null },
-    ]);
+  async function areaById(areaId: string) {
     const areas = await getCollectionAreas(userId, collectionId);
     const area = areas.find((a) => a.id === areaId);
     assert.ok(area);
+    return area;
+  }
+
+  it("stores one vendor row for an area holding two books of that vendor", async () => {
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "TwoVolumes",
+      primaryCatalogNameId: michelBookId,
+      catalogPrefix: "DE",
+    });
+    await syncAreaCatalogBooks(userId, areaId, [michelBookId, michelSpezialId]);
+    await syncAreaVendors(userId, areaId, [{ catalogVendorId: michelVendorId }]);
+
+    const area = await areaById(areaId);
     assert.equal(area.catalogEntries.length, 2);
-    const e1 = area.catalogEntries.find((e) => e.catalogNameId === catalogNameId);
-    assert.ok(e1);
-    assert.equal(e1.prefix, "1");
-    const e2 = area.catalogEntries.find((e) => e.catalogNameId === catalogName2Id);
-    assert.ok(e2);
-    assert.equal(e2.prefix, null);
+    assert.equal(area.vendorEntries.length, 1);
+    assert.equal(area.vendorEntries[0].catalogVendorId, michelVendorId);
+    // The ordinary tick states nothing about the prefix, so the area's own answers for both books.
+    assert.equal(area.vendorEntries[0].areaPrefix, null);
+    assert.deepEqual(new Set(area.catalogEntries.map((e) => e.prefix)), new Set(["DE"]));
   });
 
-  it("replaces all existing entries on re-sync", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ReplaceTest", primaryCatalogNameId: catalogNameId });
-    await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId, prefix: "old" }]);
-    await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId: catalogName2Id, prefix: "new" }]);
-    const areas = await getCollectionAreas(userId, collectionId);
-    const area = areas.find((a) => a.id === areaId);
-    assert.ok(area);
+  it("round-trips a vendor recorded with no book of its own", async () => {
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "NoBook",
+      primaryCatalogNameId: michelBookId,
+    });
+    await syncAreaCatalogBooks(userId, areaId, [michelBookId]);
+    await syncAreaVendors(userId, areaId, [
+      { catalogVendorId: michelVendorId },
+      { catalogVendorId: scottVendorId, areaPrefix: "US" },
+    ]);
+
+    const area = await areaById(areaId);
     assert.equal(area.catalogEntries.length, 1);
-    assert.equal(area.catalogEntries[0].catalogNameId, catalogName2Id);
-    assert.equal(area.catalogEntries[0].prefix, "new");
+    const scott = area.vendorEntries.find((v) => v.catalogVendorId === scottVendorId);
+    assert.ok(scott);
+    assert.equal(scott.areaPrefix, "US");
   });
 
-  it("syncing with empty array removes all entries", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ClearTest", primaryCatalogNameId: catalogNameId });
-    await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId, prefix: "x" }]);
-    await syncAreaCatalogEntries(userId, areaId, []);
-    const areas = await getCollectionAreas(userId, collectionId);
-    const area = areas.find((a) => a.id === areaId);
-    assert.ok(area);
+  it("stores a blank prefix as inherit, and a marked one as no prefix", async () => {
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "Blanks",
+      primaryCatalogNameId: michelBookId,
+      catalogPrefix: "  ",
+    });
+    await syncAreaVendors(userId, areaId, [
+      { catalogVendorId: michelVendorId, areaPrefix: "   " },
+      { catalogVendorId: scottVendorId, areaPrefix: null },
+    ]);
+
+    const area = await areaById(areaId);
+    // The area prefix is two-state: a blank field is "inherit", never a stored blank.
+    assert.equal(area.catalogPrefix, null);
+    const michel = area.vendorEntries.find((v) => v.catalogVendorId === michelVendorId);
+    // Whitespace is never a prefix; it is the stated "no prefix here".
+    assert.equal(michel?.areaPrefix, "");
+    const scott = area.vendorEntries.find((v) => v.catalogVendorId === scottVendorId);
+    assert.equal(scott?.areaPrefix, null);
+  });
+
+  it("replaces both lists wholesale on re-sync", async () => {
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "ReplaceTest",
+      primaryCatalogNameId: michelBookId,
+    });
+    await syncAreaCatalogBooks(userId, areaId, [michelBookId]);
+    await syncAreaVendors(userId, areaId, [{ catalogVendorId: michelVendorId, areaPrefix: "old" }]);
+    await syncAreaCatalogBooks(userId, areaId, [scottBookId]);
+    await syncAreaVendors(userId, areaId, [{ catalogVendorId: scottVendorId, areaPrefix: "new" }]);
+
+    const area = await areaById(areaId);
+    assert.equal(area.catalogEntries.length, 1);
+    assert.equal(area.catalogEntries[0].catalogNameId, scottBookId);
+    assert.deepEqual(area.vendorEntries, [
+      {
+        catalogVendorId: scottVendorId,
+        vendorName: "Scott",
+        vendorAbbreviation: "Sc",
+        areaPrefix: "new",
+      },
+    ]);
+  });
+
+  it("syncing with empty arrays removes every row", async () => {
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "ClearTest",
+      primaryCatalogNameId: michelBookId,
+    });
+    await syncAreaCatalogBooks(userId, areaId, [michelBookId]);
+    await syncAreaVendors(userId, areaId, [{ catalogVendorId: michelVendorId, areaPrefix: "x" }]);
+    await syncAreaCatalogBooks(userId, areaId, []);
+    await syncAreaVendors(userId, areaId, []);
+
+    const area = await areaById(areaId);
     assert.equal(area.catalogEntries.length, 0);
+    assert.equal(area.vendorEntries.length, 0);
   });
 
-  it("throws when catalogNameId belongs to a different collection", async () => {
-    const otherUser = await createTestUser(`sace-other-${Date.now()}`);
-    const otherCollection = await createTestCollection(otherUser.id, `sace-other-${Date.now()}`);
+  it("throws when a book or a vendor belongs to a different collection", async () => {
+    const ts = Date.now();
+    const otherUser = await createTestUser(`sace-other-${ts}`);
+    const otherCollection = await createTestCollection(otherUser.id, `sace-other-${ts}`);
     const otherVendor = await prisma.catalogVendor.create({
       data: { collectionId: otherCollection.id, name: "Scott", abbreviation: "Sc" },
     });
     const otherCn = await prisma.catalogName.create({
       data: { vendorId: otherVendor.id, name: "USA", currency: "USD" },
     });
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "BadCatalog", primaryCatalogNameId: catalogNameId });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "BadCatalog",
+      primaryCatalogNameId: michelBookId,
+    });
     await assert.rejects(
-      () => syncAreaCatalogEntries(userId, areaId, [{ catalogNameId: otherCn.id, prefix: null }]),
+      () => syncAreaCatalogBooks(userId, areaId, [otherCn.id]),
       /catalog name not found/i
+    );
+    await assert.rejects(
+      () => syncAreaVendors(userId, areaId, [{ catalogVendorId: otherVendor.id }]),
+      /catalog vendor not found/i
     );
     await prisma.collection.deleteMany({ where: { ownerId: otherUser.id } });
     await prisma.user.delete({ where: { id: otherUser.id } });
   });
 
   it("throws when collection is not owned by user", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "AuthTest", primaryCatalogNameId: catalogNameId });
-    await assert.rejects(
-      () => syncAreaCatalogEntries("wrong-user", areaId, []),
-      /access denied/i
-    );
+    const { id: areaId } = await createCollectionArea(userId, collectionId, {
+      name: "AuthTest",
+      primaryCatalogNameId: michelBookId,
+    });
+    await assert.rejects(() => syncAreaCatalogBooks("wrong-user", areaId, []), /access denied/i);
+    await assert.rejects(() => syncAreaVendors("wrong-user", areaId, []), /access denied/i);
   });
 });
 
-// Per-language area title names (#293): translation rows are additive on top of the default
-// `titleName` column, and the collection's language set is derived from its platforms.
 describe("area title translations", () => {
   let userId: string;
   let collectionId: string;

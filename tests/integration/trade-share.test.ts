@@ -78,7 +78,8 @@ async function seed(): Promise<Fixtures> {
   });
   await prisma.collectionArea.update({
     where: { id: area.id },
-    data: { primaryCatalogNameId: catalogName.id },
+    // Both primaries (#675): the book a copy is valued from, and the vendor whose numbers lead.
+    data: { primaryCatalogNameId: catalogName.id, primaryCatalogVendorId: vendor.id },
   });
   await prisma.collectionAreaCatalog.create({
     data: { collectionAreaId: area.id, catalogNameId: catalogName.id },

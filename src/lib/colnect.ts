@@ -429,6 +429,7 @@ async function loadColnectContext(collectionId: string): Promise<ColnectContext>
         id: true,
         name: true,
         parentId: true,
+        catalogPrefix: true,
         collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
       },
     }),

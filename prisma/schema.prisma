@@ -484,6 +484,8 @@ model CatalogVendor {
   issueCatalogNumbers   IssueCatalogNumber[]
   issueCatalogPrefixes  IssueCatalogPrefix[]
   collectionAreaVendors CollectionAreaVendor[]
+  /** Areas that lead their numbering with this vendor (#675). */
+  primaryForAreas       CollectionArea[]       @relation("CollectionAreaPrimaryVendor")
   colnectCatalogMappings ColnectCatalogMapping[]
   /** Trades that named this vendor as the catalog both sides speak in (#646). A vendor rather than
    *  a `CatalogName`: one book covers one part of the world, and a trade routinely spans several. */
@@ -1384,7 +1386,20 @@ model CollectionArea {
   parentId             String?
   description          String?
   catalogId            String?
+  // Which book gives a copy in this area its catalogue value (`item-valuation.ts`). Since #675 that
+  // is *all* it answers — the vendor that leads numbering rides on `primaryCatalogVendorId` beside
+  // it, so a vendor whose books this collection does not own can still lead the labels.
   primaryCatalogNameId String?
+  // Which vendor leads numbering here (#675): the catalog sort key (#181), the leading catalog label
+  // and the primary chip. Inherited down the tree from the nearest ancestor that sets one, exactly
+  // as the primary book is.
+  primaryCatalogVendorId String?
+  // The area's catalog prefix for *every* vendor (#675) — `PL` on Poland rather than once per Mi,
+  // Sg, Yt, Fi. `CollectionAreaVendor.areaPrefix` stays as the per-vendor exception, and resolving a
+  // (area, vendor) pair walks up to the **first area that says anything** (a vendor row or its own
+  // `catalogPrefix`), the vendor row winning inside that one area. ADR-0020's rule: *where* outranks
+  // *for which*. Null means this area says nothing and the question passes to its parent.
+  catalogPrefix        String?
   // Optional name to use for this area in auto-generated listing titles (#210), independent of the
   // internal `name`. When blank, the `{area}` token walks up the tree and uses the nearest ancestor
   // that sets one, else the area's own `name` — so internal grouping levels (e.g. "Second Republic")
@@ -1405,12 +1420,14 @@ model CollectionArea {
   translations           CollectionAreaTranslation[]
   stampAreaLinks         StampCollectionArea[]
   primaryCatalogName     CatalogName?           @relation("CollectionAreaPrimaryCatalog", fields: [primaryCatalogNameId], references: [id])
+  primaryCatalogVendor   CatalogVendor?         @relation("CollectionAreaPrimaryVendor", fields: [primaryCatalogVendorId], references: [id])
   collectionAreaCatalogs CollectionAreaCatalog[]
   collectionAreaVendors  CollectionAreaVendor[]
   issues                 Issue[]
   formatFactors          StampFormatFactor[]
   platformCategoryLessons PlatformCategoryLesson[]
 
+  @@index([primaryCatalogVendorId])
   @@map("collection_area")
 }
 
@@ -3902,6 +3919,16 @@ model CollectionAreaCatalog {
   @@map("collection_area_catalog")
 }
 
+// The numbering vendors an area's stamps carry numbers for (#675). **Written, not derived**: until
+// #675 these rows were rebuilt at save time from the books attached in `CollectionAreaCatalog`, which
+// made "record Michel numbers in an area I own no Michel volume for" inexpressible and collapsed two
+// books of one vendor onto one prefix box. A row may now exist with no book behind it.
+//
+// `areaPrefix` carries three states, because the row's *presence* and its *prefix* answer different
+// questions: NULL means the vendor is declared here and its prefix **inherits** (the area's own
+// `catalogPrefix` first, then up the tree) — the ordinary tick; `''` means **no prefix** for this
+// vendor here, a stated exception that stops the walk; anything else is that prefix. Two states
+// could not express the ordinary tick without killing the area prefix it was meant to pick up.
 model CollectionAreaVendor {
   collectionAreaId String
   catalogVendorId  String

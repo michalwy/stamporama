@@ -77,6 +77,7 @@ async function loadAreaNodes(collectionId: string): Promise<Map<string, AreaPref
       id: true,
       name: true,
       parentId: true,
+      catalogPrefix: true,
       collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
     },
   });

@@ -358,6 +358,11 @@ export function SettingsTabs({
           collectionSlug={collectionSlug}
           initialAreas={initialAreas}
           catalogNames={catalogNames}
+          catalogVendors={initialTree.map((v) => ({
+            id: v.id,
+            name: v.name,
+            abbreviation: v.abbreviation,
+          }))}
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
         />

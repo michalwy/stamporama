@@ -1,0 +1,28 @@
+-- **A per-vendor row needs three states, not two** (#675).
+--
+-- `20260822120000_area_catalog_prefix_and_primary_vendor` lifted the prefix to the area, and that
+-- turned a two-state column into a contradiction. Ticking a vendor on an area is how the collector
+-- says "this area's stamps carry Michel numbers", and it writes a `collection_area_vendor` row —
+-- but a row whose `areaPrefix` was NULL meant *no prefix for this vendor here*, so ticking Mi, Sg,
+-- Yt and Fi on a Poland that had just been given `catalogPrefix = 'PL'` would write four rows that
+-- each kill `PL`, which is the very typing the area prefix exists to remove.
+--
+-- So the column carries three states from here on:
+--
+-- * NULL — the vendor is declared here and its prefix **inherits**: the area's own `catalogPrefix`
+--   first, then on up the tree. This is the ordinary tick, and the dialog renders the inherited
+--   value as the field's placeholder (the issue dialog's idiom, #377).
+-- * `''` — **no prefix** for this vendor here. A stated exception that stops the walk, which is what
+--   the issue's worked example means by "a Fischer row with an empty prefix".
+-- * anything else — that prefix, for this vendor, here.
+--
+-- Every row that exists today means the second of those: before #675 the only prefix level was this
+-- column, and the resolver stopped at any row it found, NULL included. Rewriting those NULLs to `''`
+-- is therefore a no-op on behaviour — every (area, vendor) pair resolves exactly as it did — and it
+-- is what leaves NULL free to mean "inherit" for rows written from now on. The rows the previous
+-- migration pinned are converted here too, which is what keeps *them* faithful as well.
+--
+-- The collector clears the "no prefix" mark where they want a lifted area prefix to reach down. That
+-- is a deliberate, visible act in the new Numbering section, and the alternative — reading today's
+-- NULLs as "inherit" — would silently give prefixes to areas that have never had one.
+UPDATE "collection_area_vendor" SET "areaPrefix" = '' WHERE "areaPrefix" IS NULL;

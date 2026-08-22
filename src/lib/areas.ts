@@ -78,13 +78,82 @@ async function assertEffectivePrimaryCatalog(
   );
 }
 
+/** One catalog **vendor** effective on an area — what a stamp's number is labelled and identified
+ * with. Since #675 a vendor may be recorded on an area with no book of its behind it (numbering and
+ * pricing are separate declarations), so the book fields are nullable: recording Michel numbers in an
+ * area you own no Michel volume for is an ordinary situation. */
+/** A blank area prefix means "inherit", not "an empty prefix" — the issue dialog's own idiom
+ * (#377). The area level is two-state: null passes the question to the parent. */
+function blankToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/** A vendor row's prefix, normalised to the column's three states (#675): null stays null (declared,
+ * inherits), and anything else is trimmed — to `''` when it comes out blank, which is the stated
+ * *no prefix*. Whitespace is never a prefix. */
+function normalizeVendorPrefix(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value.trim();
+}
+
+/** What one area says about a (vendor) prefix at its own level: its row where that row states
+ * something, else its own area prefix, else nothing. The same precedence the tree walk applies at
+ * each step ({@link resolveAreaVendorPrefix}). */
+function resolveOwnPrefix(
+  rowPrefix: string | null | undefined,
+  catalogPrefix: string | null
+): string | null {
+  if (rowPrefix != null) return rowPrefix || null;
+  if (catalogPrefix !== null) return catalogPrefix || null;
+  return null;
+}
+
+/**
+ * Which vendor leads numbering after this write (#675).
+ *
+ * The caller states it, because the dialog does. When it says nothing at all, the vendor follows the
+ * primary catalog name's — which is what the column meant before the split, and keeps every other
+ * write path (the demo seeder, tests, any area created without touching the dialog) leading its
+ * numbering correctly instead of silently losing its sort keys.
+ */
+async function resolvePrimaryVendorId(data: {
+  primaryCatalogNameId?: string | null;
+  primaryCatalogVendorId?: string | null;
+}): Promise<string | null> {
+  if (data.primaryCatalogVendorId !== undefined) return data.primaryCatalogVendorId;
+  if (!data.primaryCatalogNameId) return null;
+  const name = await prisma.catalogName.findUnique({
+    where: { id: data.primaryCatalogNameId },
+    select: { vendorId: true },
+  });
+  return name?.vendorId ?? null;
+}
+
 export interface AreaCatalogEntry {
-  catalogNameId: string;
   catalogVendorId: string;
   vendorName: string;
-  catalogName: string;
   vendorAbbreviation: string;
+  /** The resolved prefix for this (area, vendor) pair — see {@link resolveAreaVendorPrefix}. */
   prefix: string | null;
+  /** The area's price book for this vendor, where it attaches one; null for a vendor recorded
+   * without a book. An area attaching several of a vendor's books reports one of them here. */
+  catalogNameId: string | null;
+  catalogName: string | null;
+}
+
+/** One `CollectionAreaVendor` row exactly as the area declares it (#675) — the numbering vendors
+ * this area's stamps carry numbers for. Distinct from {@link AreaCatalogEntry}, which is the
+ * *resolved* answer for an area after the tree walk. */
+export interface AreaVendorEntry {
+  catalogVendorId: string;
+  vendorName: string;
+  vendorAbbreviation: string;
+  /** The per-vendor exception to the area's own `catalogPrefix`, in three states: `''` is the
+   * stated *no prefix for this vendor here*, which stops both the area's own prefix and any
+   * ancestor's; null declares the vendor and lets the prefix inherit; anything else is that prefix.
+   * The absence of a row entirely means the area does not record this vendor's numbers. */
+  areaPrefix: string | null;
 }
 
 export interface CollectionAreaData {
@@ -93,6 +162,11 @@ export interface CollectionAreaData {
   parentId: string | null;
   description: string | null;
   primaryCatalogNameId: string | null;
+  /** The vendor that leads numbering here (#675) — the catalog sort key, the leading label and the
+   * primary chip. Null when this area declares none and the question passes to its parent. */
+  primaryCatalogVendorId: string | null;
+  /** The area's own prefix for every vendor (#675); null when it says nothing at this level. */
+  catalogPrefix: string | null;
   /** Optional name used for this area in auto-generated listing titles (#210); null when blank.
    * This is the **default-language** value; {@link titleNameByLanguage} overrides it per language. */
   titleName: string | null;
@@ -105,7 +179,11 @@ export interface CollectionAreaData {
   sortOrder: number;
   stampCount: number;
   childCount: number;
+  /** The **books** this area attaches, one entry per book. The area's price sources, and — until a
+   * vendor row says otherwise — where its numbering vendors are read from. */
   catalogEntries: AreaCatalogEntry[];
+  /** The `CollectionAreaVendor` rows this area declares (#675), verbatim. */
+  vendorEntries: AreaVendorEntry[];
 }
 
 export async function getCollectionAreas(
@@ -134,6 +212,8 @@ export async function readCollectionAreas(
       parentId: true,
       description: true,
       primaryCatalogNameId: true,
+      primaryCatalogVendorId: true,
+      catalogPrefix: true,
       titleName: true,
       assignable: true,
       sortOrder: true,
@@ -156,7 +236,12 @@ export async function readCollectionAreas(
         },
       },
       collectionAreaVendors: {
-        select: { catalogVendorId: true, areaPrefix: true },
+        orderBy: [{ catalogVendor: { name: "asc" } }],
+        select: {
+          catalogVendorId: true,
+          areaPrefix: true,
+          catalogVendor: { select: { name: true, abbreviation: true } },
+        },
       },
     },
   });
@@ -166,6 +251,8 @@ export async function readCollectionAreas(
     parentId: a.parentId,
     description: a.description,
     primaryCatalogNameId: a.primaryCatalogNameId,
+    primaryCatalogVendorId: a.primaryCatalogVendorId,
+    catalogPrefix: a.catalogPrefix,
     titleName: a.titleName,
     titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
     assignable: a.assignable,
@@ -173,6 +260,9 @@ export async function readCollectionAreas(
     stampCount: a._count.stampAreaLinks,
     childCount: a._count.children,
     catalogEntries: (() => {
+      // What *this* area says about the prefix, at the level it says it: its own vendor row where
+      // that row states one, else its own `catalogPrefix` (#675). The tree walk that turns this into
+      // an answer for a descendant is `resolveAreaVendorPrefix`.
       const vendorPrefixMap = new Map(
         a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
       );
@@ -182,9 +272,15 @@ export async function readCollectionAreas(
         vendorName: c.catalogName.vendor.name,
         catalogName: c.catalogName.name,
         vendorAbbreviation: c.catalogName.vendor.abbreviation,
-        prefix: vendorPrefixMap.get(c.catalogName.vendorId) ?? null,
+        prefix: resolveOwnPrefix(vendorPrefixMap.get(c.catalogName.vendorId), a.catalogPrefix),
       }));
     })(),
+    vendorEntries: a.collectionAreaVendors.map((v) => ({
+      catalogVendorId: v.catalogVendorId,
+      vendorName: v.catalogVendor.name,
+      vendorAbbreviation: v.catalogVendor.abbreviation,
+      areaPrefix: v.areaPrefix,
+    })),
   }));
 }
 
@@ -196,6 +292,11 @@ export async function createCollectionArea(
     parentId?: string | null;
     description?: string | null;
     primaryCatalogNameId?: string | null;
+    /** The vendor that leads numbering here (#675). Omitted, it follows `primaryCatalogNameId`'s
+     * vendor — see {@link resolvePrimaryVendorId}. */
+    primaryCatalogVendorId?: string | null;
+    /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
+    catalogPrefix?: string | null;
     titleName?: string | null;
     /** Per-language `titleName` overrides (#293), keyed by ISO 639-1 code then field key. A blank
      * / null value removes that language's row. Languages absent from the record are left
@@ -228,6 +329,8 @@ export async function createCollectionArea(
       parentId: data.parentId ?? null,
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
+      primaryCatalogVendorId: await resolvePrimaryVendorId(data),
+      catalogPrefix: blankToNull(data.catalogPrefix),
       titleName: data.titleName ?? null,
       assignable: data.assignable ?? true,
       // Append to the end of the sibling group (#78).
@@ -286,6 +389,10 @@ export async function updateCollectionArea(
     parentId?: string | null;
     description?: string | null;
     primaryCatalogNameId?: string | null;
+    /** The vendor that leads numbering here (#675); see {@link createCollectionArea}. */
+    primaryCatalogVendorId?: string | null;
+    /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
+    catalogPrefix?: string | null;
     titleName?: string | null;
     /** Per-language `titleName` overrides (#293); see {@link createCollectionArea}. */
     translations?: TranslationValueMap;
@@ -301,6 +408,7 @@ export async function updateCollectionArea(
       parentId: true,
       assignable: true,
       primaryCatalogNameId: true,
+      primaryCatalogVendorId: true,
       _count: { select: { issues: true, stampAreaLinks: true } },
     },
   });
@@ -351,6 +459,7 @@ export async function updateCollectionArea(
   // the end there (#78). Staying under the same parent keeps its existing position.
   const nextParentId = data.parentId ?? null;
   const parentChanged = nextParentId !== existing.parentId;
+  const nextPrimaryVendorId = await resolvePrimaryVendorId(data);
 
   await prisma.collectionArea.update({
     where: { id: areaId },
@@ -359,6 +468,8 @@ export async function updateCollectionArea(
       parentId: nextParentId,
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
+      primaryCatalogVendorId: nextPrimaryVendorId,
+      catalogPrefix: blankToNull(data.catalogPrefix),
       titleName: data.titleName ?? null,
       ...(data.assignable !== undefined ? { assignable: data.assignable } : {}),
       ...(parentChanged
@@ -369,11 +480,15 @@ export async function updateCollectionArea(
 
   await syncAreaTranslations(areaId, data.translations);
 
-  // Changing an area's own primary catalog or its parent shifts the *effective* primary catalog
-  // (and thus the catalog sort key, #181) for this area and every descendant that inherits it.
-  // Recompute the whole subtree — rare, so a bulk pass is fine.
-  const primaryChanged = (data.primaryCatalogNameId ?? null) !== existing.primaryCatalogNameId;
-  if (primaryChanged || parentChanged) {
+  // Changing the area's own leading **vendor**, or its parent, shifts the effective leading vendor
+  // — and thus the catalog sort key (#181) — for this area and every descendant that inherits it.
+  // Recompute the whole subtree; rare, so a bulk pass is fine.
+  //
+  // The gate is the vendor and not the primary *book* (#675): the sort key is built from the primary
+  // vendor's catalog number, so swapping which Michel volume prices the area moves nothing about how
+  // its stamps sort, and a subtree recompute on that edit is work with no effect.
+  const primaryVendorChanged = nextPrimaryVendorId !== existing.primaryCatalogVendorId;
+  if (primaryVendorChanged || parentChanged) {
     const subtree = await areaSubtreeIds(collectionId, areaId);
     await recomputeSortKeysForAreas(collectionId, subtree);
   }
@@ -443,49 +558,87 @@ export async function reorderCollectionAreas(
   );
 }
 
-export async function syncAreaCatalogEntries(
+/**
+ * The **price books** attached to an area (`CollectionAreaCatalog`). Replaces the list wholesale;
+ * an empty list detaches every book, which is the area saying "inherit my parent's" (#675 —
+ * `buildEffectiveAreaCatalogMap`).
+ *
+ * Split from {@link syncAreaVendors} by #675. One call used to write both tables, deriving the
+ * vendor rows from the books with "non-null prefix wins, else last wins": two Michel volumes with
+ * two prefix boxes stored one value and silently threw the other away, and a vendor could not exist
+ * without a book at all.
+ */
+export async function syncAreaCatalogBooks(
   ownerId: string,
   areaId: string,
-  entries: { catalogNameId: string; prefix: string | null }[]
+  catalogNameIds: readonly string[]
 ): Promise<void> {
   const collectionId = await resolveAreaCollection(areaId);
   await assertCollectionOwner(ownerId, collectionId);
 
-  const vendorPrefixes: Map<string, string | null> = new Map();
-
-  if (entries.length > 0) {
-    const ids = entries.map((e) => e.catalogNameId);
+  const ids = [...new Set(catalogNameIds)];
+  if (ids.length > 0) {
     const valid = await prisma.catalogName.findMany({
       where: { id: { in: ids }, vendor: { collectionId } },
-      select: { id: true, vendorId: true },
+      select: { id: true },
     });
-    const validIds = new Set(valid.map((v) => v.id));
-    const invalid = ids.find((id) => !validIds.has(id));
-    if (invalid) {
+    if (valid.length !== ids.length) {
       throw new Error("Catalog name not found in this collection.");
-    }
-
-    // Derive vendor-level prefixes: non-null prefix wins; last entry for a vendor wins otherwise
-    const vendorIdMap = new Map(valid.map((v) => [v.id, v.vendorId]));
-    for (const e of entries) {
-      const vendorId = vendorIdMap.get(e.catalogNameId)!;
-      if (!vendorPrefixes.has(vendorId) || e.prefix !== null) {
-        vendorPrefixes.set(vendorId, e.prefix);
-      }
     }
   }
 
   await prisma.$transaction([
     prisma.collectionAreaCatalog.deleteMany({ where: { collectionAreaId: areaId } }),
-    prisma.collectionAreaVendor.deleteMany({ where: { collectionAreaId: areaId } }),
     prisma.collectionAreaCatalog.createMany({
-      data: entries.map((e) => ({
-        collectionAreaId: areaId,
-        catalogNameId: e.catalogNameId,
-      })),
+      data: ids.map((catalogNameId) => ({ collectionAreaId: areaId, catalogNameId })),
     }),
+  ]);
+}
+
+/** One numbering vendor as the area declares it (#675). */
+export interface AreaVendorInput {
+  catalogVendorId: string;
+  /** The per-vendor exception to the area's `catalogPrefix`, in the column's three states (#675):
+   * omit it (or pass null) for the ordinary tick, where the prefix inherits; pass `''` for the
+   * stated *no prefix for this vendor here*, which stops the walk; pass text for that prefix. */
+  areaPrefix?: string | null;
+}
+
+/**
+ * The **numbering vendors** an area's stamps carry numbers for (`CollectionAreaVendor`). Replaces
+ * the list wholesale, and is written explicitly rather than derived from the attached books (#675),
+ * so a vendor may be recorded with no book of its behind it — recording Michel numbers in an area
+ * you own no Michel volume for is an ordinary situation, and attaching a book used to be the only
+ * way to obtain a vendor.
+ */
+export async function syncAreaVendors(
+  ownerId: string,
+  areaId: string,
+  vendors: readonly AreaVendorInput[]
+): Promise<void> {
+  const collectionId = await resolveAreaCollection(areaId);
+  await assertCollectionOwner(ownerId, collectionId);
+
+  // Last mention of a vendor wins, so a caller repeating one cannot violate the primary key. The
+  // lossy part of the old collapse was merging *different* prefixes of one vendor's several books;
+  // there is one row per vendor on this list by construction.
+  const byVendor = new Map<string, string | null>();
+  for (const v of vendors) byVendor.set(v.catalogVendorId, normalizeVendorPrefix(v.areaPrefix));
+
+  if (byVendor.size > 0) {
+    const valid = await prisma.catalogVendor.findMany({
+      where: { id: { in: [...byVendor.keys()] }, collectionId },
+      select: { id: true },
+    });
+    if (valid.length !== byVendor.size) {
+      throw new Error("Catalog vendor not found in this collection.");
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.collectionAreaVendor.deleteMany({ where: { collectionAreaId: areaId } }),
     prisma.collectionAreaVendor.createMany({
-      data: Array.from(vendorPrefixes.entries()).map(([catalogVendorId, areaPrefix]) => ({
+      data: [...byVendor].map(([catalogVendorId, areaPrefix]) => ({
         collectionAreaId: areaId,
         catalogVendorId,
         areaPrefix,

@@ -8,6 +8,9 @@ interface AreaNode {
   key: string;
   name: string;
   primaryCatalogNameId?: string;
+  /** The vendor that leads numbering (#675). Declared beside the primary book on the same node, so
+   * the demo tree shows the two as the separate answers they are. */
+  primaryCatalogVendorId?: string;
   catalogNameIds?: string[];
   catalogVendorIds?: string[];
   children?: AreaNode[];
@@ -23,6 +26,7 @@ export async function seedAreas(
       key: "pl",
       name: "Poland",
       primaryCatalogNameId: catalog.fischerNameId,
+      primaryCatalogVendorId: catalog.fischerVendorId,
       children: [
         {
           key: "sr",
@@ -61,6 +65,7 @@ export async function seedAreas(
       key: "de",
       name: "Germany",
       primaryCatalogNameId: catalog.michelDeutschlandNameId,
+      primaryCatalogVendorId: catalog.michelVendorId,
       children: [
         { key: "de-emp", name: "German Empire 1872–1918", catalogNameIds: [catalog.michelDeutschlandNameId], catalogVendorIds: [catalog.michelVendorId] },
         { key: "de-wei", name: "Weimar Republic 1919–1933", catalogNameIds: [catalog.michelDeutschlandNameId], catalogVendorIds: [catalog.michelVendorId] },
@@ -91,6 +96,7 @@ export async function seedAreas(
         name: node.name,
         parentId,
         primaryCatalogNameId: node.primaryCatalogNameId ?? null,
+        primaryCatalogVendorId: node.primaryCatalogVendorId ?? null,
       },
     });
     areas[node.key] = area.id;

@@ -55,6 +55,75 @@ export async function buildEffectivePrimaryCatalogMap(
 }
 
 /**
+ * The catalog **books** that price each area, inheriting down the tree: the `CollectionAreaCatalog`
+ * links of the nearest ancestor that attaches any, or the area's own when it does (#675).
+ *
+ * One rule for every reader. The three server paths that resolve an area's price sources used to
+ * disagree — the trade's agreed catalog walked the tree, while the variant price grid and the stamp
+ * catalog-prices tab read own rows only and so offered nothing on a leaf whose books sit on its
+ * parent, which is why the same books had to be re-attached at every leaf area.
+ *
+ * The unit that inherits is the **whole list**, not one book at a time: the nearest ancestor that
+ * says anything about price sources answers for all of them, which is the same shape the prefix
+ * resolution has (ADR-0020's *where* outranks *for which*). So an area attaching a single Michel
+ * volume states its price sources completely, and does not silently keep an ancestor's Fischer.
+ *
+ * Ordering is pinned — vendor name, then catalog name, then id — because callers turn it into an
+ * answer: {@link buildVendorCatalogMap} takes the first book of the vendor it was asked about, and a
+ * line may not be valued from one volume today and another tomorrow.
+ *
+ * Returns Map<areaId, catalogNameId[]>; an area with no books anywhere up its chain maps to `[]`.
+ */
+export async function buildEffectiveAreaCatalogMap(
+  collectionId: string
+): Promise<Map<string, string[]>> {
+  const [areas, links] = await Promise.all([
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: { id: true, parentId: true },
+    }),
+    prisma.collectionAreaCatalog.findMany({
+      where: {
+        collectionArea: { collectionId },
+        catalogName: { vendor: { collectionId } },
+      },
+      select: { collectionAreaId: true, catalogNameId: true },
+      orderBy: [
+        { catalogName: { vendor: { name: "asc" } } },
+        { catalogName: { name: "asc" } },
+        { catalogNameId: "asc" },
+      ],
+    }),
+  ]);
+
+  const own = new Map<string, string[]>();
+  for (const l of links) {
+    const list = own.get(l.collectionAreaId);
+    if (list) list.push(l.catalogNameId);
+    else own.set(l.collectionAreaId, [l.catalogNameId]);
+  }
+
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const result = new Map<string, string[]>();
+  for (const a of areas) {
+    let current: (typeof areas)[number] | undefined = a;
+    let depth = 0;
+    let found: string[] | null = null;
+    while (current && depth < 50) {
+      const list = own.get(current.id);
+      if (list && list.length > 0) {
+        found = list;
+        break;
+      }
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+      depth++;
+    }
+    result.set(a.id, found ?? []);
+  }
+  return result;
+}
+
+/**
  * Effective catalog **name** per area for one named vendor, inheriting from ancestors exactly as
  * {@link buildEffectivePrimaryCatalogMap} does.
  *
@@ -66,34 +135,58 @@ export async function buildEffectivePrimaryCatalogMap(
  * `CollectionAreaCatalog` links every other valuation already walks.
  *
  * An area declaring several of one vendor's books resolves to the first by name — deterministic, so
- * that a line cannot be valued from one volume today and another tomorrow. Areas the vendor covers
- * nowhere up their chain map to null, and a line under one of them has no agreed valuation rather
- * than a wrong one.
+ * that a line cannot be valued from one volume today and another tomorrow. Areas whose effective
+ * book list holds nothing of this vendor map to null, and a line under one of them has no agreed
+ * valuation rather than a wrong one.
+ *
+ * The tree walk itself is {@link buildEffectiveAreaCatalogMap}'s since #675, so this answers off the
+ * same book list the variant price grid and the stamp prices tab offer. The one behavioural
+ * consequence: an area that attaches books of its own states its price sources *completely*, so a
+ * vendor missing from that list is missing here too rather than falling through to an ancestor.
  */
 export async function buildVendorCatalogMap(
   collectionId: string,
   vendorId: string
 ): Promise<Map<string, string | null>> {
-  const [areas, links] = await Promise.all([
-    prisma.collectionArea.findMany({
-      where: { collectionId },
-      select: { id: true, parentId: true },
-    }),
-    prisma.collectionAreaCatalog.findMany({
-      where: {
-        collectionArea: { collectionId },
-        catalogName: { vendorId, vendor: { collectionId } },
-      },
-      select: { collectionAreaId: true, catalogNameId: true, catalogName: { select: { name: true } } },
-      orderBy: [{ catalogName: { name: "asc" } }, { catalogNameId: "asc" }],
-    }),
-  ]);
-
-  const ownName = new Map<string, string>();
-  for (const l of links) {
-    if (!ownName.has(l.collectionAreaId)) ownName.set(l.collectionAreaId, l.catalogNameId);
+  const booksByArea = await buildEffectiveAreaCatalogMap(collectionId);
+  const allIds = [...new Set([...booksByArea.values()].flat())];
+  const ofVendor = new Set<string>();
+  if (allIds.length > 0) {
+    const names = await prisma.catalogName.findMany({
+      where: { id: { in: allIds }, vendorId, vendor: { collectionId } },
+      select: { id: true },
+    });
+    for (const n of names) ofVendor.add(n.id);
   }
+  const result = new Map<string, string | null>();
+  for (const [areaId, ids] of booksByArea) {
+    result.set(areaId, ids.find((id) => ofVendor.has(id)) ?? null);
+  }
+  return result;
+}
 
+/**
+ * Effective primary *vendor* per area — the vendor that **leads numbering** here: the catalog sort
+ * key (#181), the leading catalog label and the primary chip. Read from `primaryCatalogVendorId`,
+ * inherited from the nearest ancestor that sets one exactly as {@link
+ * buildEffectivePrimaryCatalogMap} resolves the primary book.
+ *
+ * It used to be derived from the primary catalog *name*, which made one column answer two unrelated
+ * questions (#675): which book gives a copy its catalogue value (`item-valuation.ts`, still
+ * `primaryCatalogNameId`'s job and now its only one) and which vendor leads the numbering. They are
+ * separable and must be, or a vendor recorded on an area without any of its books — an ordinary
+ * situation — could never lead.
+ *
+ * Returns Map<areaId, primaryVendorId | null>; areas that declare no leading vendor anywhere up
+ * their chain map to null.
+ */
+export async function buildPrimaryVendorByAreaMap(
+  collectionId: string
+): Promise<Map<string, string | null>> {
+  const areas = await prisma.collectionArea.findMany({
+    where: { collectionId },
+    select: { id: true, parentId: true, primaryCatalogVendorId: true },
+  });
   const byId = new Map(areas.map((a) => [a.id, a]));
   const result = new Map<string, string | null>();
   for (const a of areas) {
@@ -101,42 +194,14 @@ export async function buildVendorCatalogMap(
     let depth = 0;
     let found: string | null = null;
     while (current && depth < 50) {
-      const name = ownName.get(current.id);
-      if (name) {
-        found = name;
+      if (current.primaryCatalogVendorId) {
+        found = current.primaryCatalogVendorId;
         break;
       }
       current = current.parentId ? byId.get(current.parentId) : undefined;
       depth++;
     }
     result.set(a.id, found);
-  }
-  return result;
-}
-
-/**
- * Effective primary *vendor* per area: the vendor that owns each area's effective primary catalog
- * name (inherited from ancestors just like {@link buildEffectivePrimaryCatalogMap}). Areas with no
- * primary catalog — or whose primary catalog name no longer exists — map to null. Used to resolve
- * the "primary catalog number" for the implicit secondary sort key (#181).
- * Returns Map<areaId, primaryVendorId | null>.
- */
-export async function buildPrimaryVendorByAreaMap(
-  collectionId: string
-): Promise<Map<string, string | null>> {
-  const byArea = await buildEffectivePrimaryCatalogMap(collectionId);
-  const nameIds = [...new Set([...byArea.values()].filter((v): v is string => !!v))];
-  const vendorByName = new Map<string, string>();
-  if (nameIds.length > 0) {
-    const names = await prisma.catalogName.findMany({
-      where: { id: { in: nameIds } },
-      select: { id: true, vendorId: true },
-    });
-    for (const n of names) vendorByName.set(n.id, n.vendorId);
-  }
-  const result = new Map<string, string | null>();
-  for (const [areaId, nameId] of byArea) {
-    result.set(areaId, nameId ? (vendorByName.get(nameId) ?? null) : null);
   }
   return result;
 }

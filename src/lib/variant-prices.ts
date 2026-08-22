@@ -1,6 +1,10 @@
 import "server-only";
 import { prisma } from "./db";
-import { buildDescendantMap, buildEffectivePrimaryCatalogMap } from "./pricing";
+import {
+  buildDescendantMap,
+  buildEffectiveAreaCatalogMap,
+  buildEffectivePrimaryCatalogMap,
+} from "./pricing";
 import { makeFormatFactorLookup } from "./format-pricing";
 import { makeOfferLabeller, STAMP_LABEL_SELECT, type StampLabelRow } from "./offer-labels";
 import { getStampConditions, type StampConditionData } from "./conditions";
@@ -250,19 +254,20 @@ function flattenTree(
   return rows;
 }
 
-/** Every edition of every catalog assigned to an area, the area's primary catalog first. */
+/** Every edition of every catalog that prices an area, the area's primary catalog first. The books
+ * are the area's **effective** ones (#675) — its own, or the nearest ancestor's where it attaches
+ * none — so a leaf offers the same editions as the area that declares them. */
 async function readAreaEditions(
   collectionId: string,
   areaId: string | null
 ): Promise<VariantPriceEdition[]> {
   if (!areaId) return [];
-  const primaryByArea = await buildEffectivePrimaryCatalogMap(collectionId);
+  const [primaryByArea, booksByArea] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    buildEffectiveAreaCatalogMap(collectionId),
+  ]);
   const primaryCatalogNameId = primaryByArea.get(areaId) ?? null;
-  const area = await prisma.collectionArea.findFirst({
-    where: { id: areaId, collectionId },
-    select: { collectionAreaCatalogs: { select: { catalogNameId: true } } },
-  });
-  const candidateIds = new Set((area?.collectionAreaCatalogs ?? []).map((c) => c.catalogNameId));
+  const candidateIds = new Set(booksByArea.get(areaId) ?? []);
   if (primaryCatalogNameId) candidateIds.add(primaryCatalogNameId);
   if (candidateIds.size === 0) return [];
 

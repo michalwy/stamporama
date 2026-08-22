@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted. §5's single "primary catalog" is superseded by ADR-0040, which splits it into the vendor
+that leads numbering and the book a copy is valued from.
 
 ## Context
 
@@ -64,6 +65,12 @@ Michel Grundkatalog and Michel Spezialkatalog are separate `CatalogName` rows (u
 ### 5. Each stamp has a primary number plus optional additional catalog numbers; the primary catalog is inherited from the collection area
 
 Each `Stamp` row may have one `StampCatalogNumber` per active `CatalogName`. One of those is the **primary number** — determined by which `CatalogName` the stamp's `CollectionArea` designates as primary. Additional catalog numbers (e.g., Scott, Zumstein) are optional.
+
+> **Superseded by ADR-0040.** One column answering both "whose numbers lead here" and "which book
+> gives a copy its catalogue value" is two questions on one field, and it left a vendor recorded
+> without any of its books unable to lead. The numbering answer moved to
+> `CollectionArea.primaryCatalogVendorId` — a **vendor**, not a book — and `primaryCatalogNameId`
+> keeps only the valuation one. Both still inherit down the area tree exactly as described below.
 
 **Configuration inheritance (top-down):**
 

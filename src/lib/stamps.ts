@@ -10,6 +10,7 @@ import {
 import {
   type MoneyDisplay,
   type RawCatalogPrice,
+  buildEffectiveAreaCatalogMap,
   buildEffectivePrimaryCatalogMap,
   pickFormatCatalogPrice,
   getLatestEditionYearByName,
@@ -1091,6 +1092,7 @@ export async function searchStampsForPicker(
         id: true,
         name: true,
         parentId: true,
+        catalogPrefix: true,
         collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
       },
     }),
@@ -1369,8 +1371,9 @@ export interface QuickCatalogPriceContext {
   displayFormat: { formatId: string; abbreviation: string; factor: number | null } | null;
 }
 
-/** Resolve the catalogs the quick-price editor can write to for a stamp: every catalog active
- * on the stamp's primary area, unioned with the area's effective primary catalog, keeping only
+/** Resolve the catalogs the quick-price editor can write to for a stamp: every catalog **effective**
+ * on the stamp's primary area (#675 — its own books, or the nearest ancestor's where it attaches
+ * none), unioned with the area's effective primary catalog, keeping only
  * catalogs that have at least one edition (a price needs an edition to land on). Latest edition
  * per catalog, primary first, then by vendor/catalog name. Throws if the stamp isn't linked to
  * an area. Returns the internal target shape (with `editionId` for price matching); the public
@@ -1398,16 +1401,12 @@ async function resolveAreaCatalogTargets(
   if (!areaId) {
     throw new Error("This stamp isn't linked to an area, so it has no catalog.");
   }
-  const primaryByArea = await buildEffectivePrimaryCatalogMap(collectionId);
+  const [primaryByArea, booksByArea] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    buildEffectiveAreaCatalogMap(collectionId),
+  ]);
   const primaryCatalogNameId = primaryByArea.get(areaId) ?? null;
-
-  const area = await prisma.collectionArea.findUnique({
-    where: { id: areaId },
-    select: { collectionAreaCatalogs: { select: { catalogNameId: true } } },
-  });
-  const candidateIds = new Set<string>(
-    (area?.collectionAreaCatalogs ?? []).map((c) => c.catalogNameId)
-  );
+  const candidateIds = new Set<string>(booksByArea.get(areaId) ?? []);
   if (primaryCatalogNameId) candidateIds.add(primaryCatalogNameId);
   if (candidateIds.size === 0) return [];
 

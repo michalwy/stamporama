@@ -60,7 +60,12 @@ describe("catalog sort key maintenance", () => {
     // Area whose effective primary catalog is Michel.
     areaId = (
       await prisma.collectionArea.create({
-        data: { collectionId, name: "Germany", primaryCatalogNameId: miCatalogNameId },
+        data: {
+          collectionId,
+          name: "Germany",
+          primaryCatalogNameId: miCatalogNameId,
+          primaryCatalogVendorId: mi.id,
+        },
       })
     ).id;
   });
@@ -104,7 +109,12 @@ describe("catalog sort key maintenance", () => {
   it("orders same-year issues by primary catalog number as the tiebreaker", async () => {
     const ts = Date.now();
     const area = await prisma.collectionArea.create({
-      data: { collectionId, name: `Tie ${ts}`, primaryCatalogNameId: miCatalogNameId },
+      data: {
+        collectionId,
+        name: `Tie ${ts}`,
+        primaryCatalogNameId: miCatalogNameId,
+        primaryCatalogVendorId: miVendorId,
+      },
     });
     // Same year, inserted out of catalog order.
     await createIssue(userId, collectionId, area.id, {
@@ -126,13 +136,18 @@ describe("catalog sort key maintenance", () => {
     assert.deepEqual(keys, ["100", "500"]);
   });
 
-  it("recomputes the subtree when an area's primary catalog changes", async () => {
+  it("recomputes the subtree when an area's leading vendor changes", async () => {
     const ts = Date.now();
     const scCatalogName = await prisma.catalogName.create({
       data: { vendorId: scVendorId, name: `Scott ${ts}`, currency: "USD" },
     });
     const area = await prisma.collectionArea.create({
-      data: { collectionId, name: `Switch ${ts}`, primaryCatalogNameId: miCatalogNameId },
+      data: {
+        collectionId,
+        name: `Switch ${ts}`,
+        primaryCatalogNameId: miCatalogNameId,
+        primaryCatalogVendorId: miVendorId,
+      },
     });
     const { id } = await createIssue(userId, collectionId, area.id, {
       name: "Switch primary",
@@ -141,13 +156,56 @@ describe("catalog sort key maintenance", () => {
         { catalogVendorId: scVendorId, firstNumber: "12" },
       ],
     });
-    assert.equal(await keyOf(id), 900); // Michel is primary
+    assert.equal(await keyOf(id), 900); // Michel leads
 
-    // Repoint the area's primary catalog to Scott → the key should follow to Scott's number.
+    // Repoint the area's leading vendor to Scott → the key should follow to Scott's number.
     await updateCollectionArea(userId, area.id, {
       name: area.name,
       primaryCatalogNameId: scCatalogName.id,
+      primaryCatalogVendorId: scVendorId,
     });
     assert.equal(await keyOf(id), 12);
+  });
+
+  // The sort key follows the **vendor**, so swapping which volume prices the area moves nothing
+  // about how its stamps sort (#675). Observed by leaving a deliberately wrong key in place: a
+  // recompute would correct it, and the point is that this edit does not run one.
+  it("does not recompute when only the area's primary book changes", async () => {
+    const ts = Date.now();
+    const otherMichelBook = await prisma.catalogName.create({
+      data: { vendorId: miVendorId, name: `Michel Spezial ${ts}`, currency: "EUR" },
+    });
+    const area = await prisma.collectionArea.create({
+      data: {
+        collectionId,
+        name: `Book only ${ts}`,
+        primaryCatalogNameId: miCatalogNameId,
+        primaryCatalogVendorId: miVendorId,
+      },
+    });
+    const { id } = await createIssue(userId, collectionId, area.id, {
+      name: "Book only",
+      catalogNumbers: [{ catalogVendorId: miVendorId, firstNumber: "700" }],
+    });
+    assert.equal(await keyOf(id), 700);
+
+    await prisma.issue.update({
+      where: { id },
+      data: { primaryCatalogSortKey: -1 },
+    });
+    await updateCollectionArea(userId, area.id, {
+      name: area.name,
+      primaryCatalogNameId: otherMichelBook.id,
+      primaryCatalogVendorId: miVendorId,
+    });
+    assert.equal(await keyOf(id), -1);
+
+    // …and the vendor edit that *does* affect it still recomputes the subtree.
+    await updateCollectionArea(userId, area.id, {
+      name: area.name,
+      primaryCatalogNameId: otherMichelBook.id,
+      primaryCatalogVendorId: scVendorId,
+    });
+    assert.equal(await keyOf(id), 700);
   });
 });

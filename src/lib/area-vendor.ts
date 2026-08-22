@@ -6,48 +6,110 @@ import { primaryCatalogNumber } from "./copy-sort";
 // server-side lot-intake reads (#172). An area inherits its ancestors' catalog vendors and
 // its nearest ancestor's declared primary vendor. No React / Prisma so it runs on both sides.
 
-/** Every catalog vendor effective for an area — its own plus all inherited from ancestors,
- * nearer areas overriding farther ones. */
+/** The area and each of its ancestors, nearest first. Shared by the two walks below so they cannot
+ * disagree about the chain or its depth guard. */
+function areaChain(areas: CollectionAreaData[], areaId: string): CollectionAreaData[] {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const chain: CollectionAreaData[] = [];
+  let current = byId.get(areaId);
+  let depth = 0;
+  while (current && depth < 50) {
+    chain.push(current);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return chain;
+}
+
+/**
+ * The prefix one (area, vendor) pair carries (#675): walk toward the root and stop at the **first
+ * area that states one** — a `CollectionAreaVendor` row with a non-null `areaPrefix`, or the area's
+ * own `catalogPrefix` — with the vendor row winning inside that one area. An empty string at either
+ * level is a stated *no prefix*; nothing up the chain → no prefix either.
+ *
+ * A vendor row whose `areaPrefix` is null declares the vendor without saying anything about its
+ * prefix, so the walk carries on — the area's own `catalogPrefix` next. That is what makes ticking
+ * Mi, Sg, Yt and Fi on a `PL` area give all four `PL` instead of four rows that each kill it.
+ *
+ * ADR-0020's rule, *where* outranks *for which*. Poland setting `catalogPrefix = PL` plus a Fischer
+ * row with no prefix, and a child GG setting `catalogPrefix = GG` while saying nothing about
+ * Fischer, resolves Fischer under GG to `GG`: the nearer area decided, and repeating the Fischer
+ * exception on GG is how you keep it.
+ *
+ * Mirrors `resolveEffectivePrefix` (`area-prefix.ts`) on the server. The two exist separately
+ * because one reads Prisma rows and one reads the client's area payload; they must resolve
+ * identically, which is what the unit tests on both modules hold.
+ */
+export function resolveAreaVendorPrefix(
+  areas: CollectionAreaData[],
+  areaId: string,
+  vendorId: string
+): string | null {
+  for (const area of areaChain(areas, areaId)) {
+    const own = area.vendorEntries.find((v) => v.catalogVendorId === vendorId);
+    if (own?.areaPrefix != null) return own.areaPrefix || null;
+    if (area.catalogPrefix !== null) return area.catalogPrefix || null;
+  }
+  return null;
+}
+
+/**
+ * Every catalog vendor effective for an area — its own plus all inherited from ancestors, nearer
+ * areas overriding farther ones.
+ *
+ * A vendor is effective here when some area up the chain attaches a **book** of it or declares a
+ * `CollectionAreaVendor` row for it (#675). The second source is what lets an area record Michel
+ * numbers without owning a Michel volume; the first is what keeps a leaf labelling numbers off books
+ * that were only ever attached to its parent.
+ *
+ * Each entry's `prefix` is the fully resolved one ({@link resolveAreaVendorPrefix}), not the
+ * declaring area's raw row — the vendor set and the prefix answer two different questions and are
+ * resolved separately.
+ */
 export function effectiveVendorsForArea(
   areas: CollectionAreaData[],
   areaId: string
 ): AreaCatalogEntry[] {
-  const byId = new Map(areas.map((a) => [a.id, a]));
   const result = new Map<string, AreaCatalogEntry>();
-  const ancestors: CollectionAreaData[] = [];
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    ancestors.push(current);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  for (const a of ancestors.reverse()) {
+  for (const a of areaChain(areas, areaId).reverse()) {
     for (const e of a.catalogEntries) {
       result.set(e.catalogVendorId, e);
     }
+    for (const v of a.vendorEntries) {
+      const existing = result.get(v.catalogVendorId);
+      // A vendor row does not carry a book, so it must not erase one an ancestor supplied — it only
+      // introduces the vendor where nothing has yet.
+      if (!existing) {
+        result.set(v.catalogVendorId, {
+          catalogVendorId: v.catalogVendorId,
+          vendorName: v.vendorName,
+          vendorAbbreviation: v.vendorAbbreviation,
+          prefix: null,
+          catalogNameId: null,
+          catalogName: null,
+        });
+      }
+    }
   }
-  return Array.from(result.values());
+  return Array.from(result.values(), (e) => ({
+    ...e,
+    prefix: resolveAreaVendorPrefix(areas, areaId, e.catalogVendorId),
+  }));
 }
 
-/** The catalog vendor id that is primary for an area (from the nearest ancestor that declares
- * a primary catalog name), or null when none is set. */
+/** The catalog vendor that **leads numbering** for an area — the leading label and the primary chip
+ * — taken from the nearest ancestor that declares one, or null when nobody does. Mirrors
+ * `buildPrimaryVendorByAreaMap` on the server.
+ *
+ * Read straight off `primaryCatalogVendorId` since #675. It used to be derived from the primary
+ * catalog *name*, which conflated leading the numbering with supplying the catalogue value, and left
+ * a vendor recorded without a book unable to lead. */
 export function effectivePrimaryVendorId(
   areas: CollectionAreaData[],
   areaId: string
 ): string | null {
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    if (current.primaryCatalogNameId) {
-      const entry = effectiveVendorsForArea(areas, areaId).find(
-        (e) => e.catalogNameId === current!.primaryCatalogNameId
-      );
-      return entry?.catalogVendorId ?? null;
-    }
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
+  for (const area of areaChain(areas, areaId)) {
+    if (area.primaryCatalogVendorId) return area.primaryCatalogVendorId;
   }
   return null;
 }

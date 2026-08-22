@@ -8,6 +8,8 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     parentId: null,
     description: null,
     primaryCatalogNameId: null,
+    primaryCatalogVendorId: null,
+    catalogPrefix: null,
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,
@@ -15,6 +17,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     stampCount: 0,
     childCount: 0,
     catalogEntries: [],
+    vendorEntries: [],
     ...over,
   };
 }

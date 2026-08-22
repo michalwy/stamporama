@@ -475,6 +475,7 @@ async function makeCatalogLabeller(
         id: true,
         name: true,
         parentId: true,
+        catalogPrefix: true,
         collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
       },
     }),
