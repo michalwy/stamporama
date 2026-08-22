@@ -182,8 +182,8 @@ export function useGroupMembers({
     [members, axes]
   );
   // What a quick select-all covers: every member that is not an outlier and that the list would give
-  // a checkbox to at all (`isEligible` — for sale, in hand, still held), so the shortcut can never
-  // tick a copy a hand could not.
+  // a checkbox to at all (`isEligible` — since #682, every copy still held), so the shortcut can
+  // never tick a copy a hand could not.
   const quickSelectable = members.filter(
     (m) => !outliers.has(m.id) && selection.isEligible(m)
   );

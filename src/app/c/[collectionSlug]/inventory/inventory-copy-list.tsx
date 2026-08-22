@@ -102,10 +102,11 @@ interface InventoryCopyListProps extends CopyRowActions {
   onLoadMore: () => void;
   /** Read-only mode hides per-row actions (inventory popup, #110). */
   readOnly?: boolean;
-  /** When provided, each row gains a selection checkbox (#373). Only *eligible* copies get one —
-   * a copy that is not for sale or not in hand cannot be listed, and the row already says so
-   * through its disposition and delivery chips, so a permanently disabled checkbox would add a
-   * control that explains nothing. Ineligible rows keep the column's width so nothing jumps. */
+  /** When provided, each row gains a selection checkbox (#373). Only *eligible* copies get one, and
+   * what that means is the **caller's** question — the Copies list ticks every copy still held
+   * (#682), where it used to tick only the ones an offer could be made of. A copy that fails gets
+   * no box rather than a disabled one — its disposition, delivery and disposal chips are already on the
+   * row — and the column keeps its width so nothing jumps. */
   selection?: CopySelection;
   /** Copies that **differ from the rest of the duplicate group** they are listed under (#372/#398):
    * warning-tinted and marked, so the odd one out is visible in the group's own member list rather

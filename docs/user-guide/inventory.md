@@ -704,12 +704,19 @@ still drafts.
 
 ## Adding several copies to an offer at once
 
-Every copy you can list carries a **checkbox** on the left of its row. Tick a few and a bar appears
-under the toolbar saying how many are picked, with **Clear**, the [new-offer
-shortcuts](#the-new-offer-shortcuts) and **🏷 Add selected to offer**.
+Every copy you still hold carries a **checkbox** on the left of its row. Tick a few and a bar
+appears under the toolbar saying how many are picked, with **Clear**, [**Bulk
+edit…**](#bulk-editing-the-selection), the [new-offer shortcuts](#the-new-offer-shortcuts) and
+**🏷 Add selected to offer**.
 
-Only copies you can actually list get a checkbox: **For sale** and **delivered** (in hand). A copy
-that fails either shows none — its disposition and delivery chips on the row already say why.
+A copy you [no longer hold](#copies-you-no-longer-hold) gets no checkbox — there is nothing left to
+list, move or re-flag. Everything else can be ticked.
+
+The **listing** buttons in the bar act only on the copies that can actually go into an offer —
+**For sale** and **delivered** (in hand). When only some of your picked copies qualify, those
+buttons say so in their number (**Add 4 to offer**, **＋ New offer · 4 sets**) and their tooltips
+spell it out; when none of them do, the listing buttons are simply not shown, and the rest of the
+bar works as usual.
 
 **Add selected to offer** opens the same picker as the single-copy action, with one extra control in
 the footer — **Add as**:
@@ -810,6 +817,39 @@ Press **Done** (or the button at the top again) to leave. Two things to know:
 - A platform with **no currency set** cannot be used here — its currency is fixed the first time
   something is listed on it, and that choice belongs in the create form. The bar says so, and the
   ordinary dialog stays in effect until you pick a platform that has one.
+
+## Bulk editing the selection
+
+**Bulk edit…** in the selection bar changes **where the picked copies are kept** and **what they are
+kept for**, in one dialog. It is the fast way to re-organise physical storage after a re-shuffle, or
+to re-flag a batch you have just decided something about ("all of these are for trade now").
+
+Both halves are optional and both start on **Leave as is**, so the dialog is equally the *move*
+action and the *re-flag* action. Nothing you leave alone is written at all — every copy keeps
+everything the dialog does not name. **Apply** stays greyed out until you have said something.
+
+**Storage location** has three settings:
+
+- **Leave as is** — the copies stay where they are filed. The line underneath tells you what that is
+  today ("Filed across 3 locations, and 4 not filed at all").
+- **Move to…** — pick a [location](locations.md) from the tree and every picked copy is filed there.
+  Only locations that can hold copies are selectable, exactly as in the copy form.
+- **Clear** — takes them out of storage entirely: location and ref both cleared.
+
+While you are moving copies, a **Ref** box appears under the location. Fill it in and every picked
+copy gets that ref — the card they now sit on inside the location. **Leave it blank and the refs
+they carry now are cleared**, because a ref addresses a place inside the location they are leaving.
+
+**Disposition** carries all three flags — *In collection*, *For sale*, *For trade* — each with its
+own **Leave as is · On · Off**. They are independent (a copy can be in the collection, for sale and
+for trade at once), so answer as many as your change needs: moving a drawer from stock to swaps is
+*For trade → On* **and** *For sale → Off*, set together and applied in one go. Every flag left on
+*Leave as is* is not written at all, so a mixed selection keeps whatever those flags said. Beside
+each flag you answer, the dialog says how many of the picked copies are already like that.
+
+Applying acts on every ticked copy, clears the selection (what has been dealt with should not invite
+doing it twice) and confirms with a toast — worth having on this list, where a moved or re-flagged
+copy often lands outside the filter you are looking through.
 
 ## Copying a catalog number
 

@@ -109,6 +109,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/sticky-header";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
+import {
+  appendBulkChanges,
+  type BulkCopyChanges,
+} from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import {
   useHydrated,
@@ -1641,19 +1645,6 @@ type RunFn = (
   onDone?: (result: { status: string; message?: string; id?: string }) => void
 ) => void;
 
-interface BulkChanges {
-  locationId?: string | null;
-  /** The ref card's identifier, written with the location in one act (#565). */
-  locationRef?: string | null;
-  deliveryState?: string;
-  inCollection?: boolean;
-  forSale?: boolean;
-  forTrade?: boolean;
-  markSorted?: boolean;
-  /** Mark-sorted only (#274): leave each copy's disposition untouched instead of writing one. */
-  keepDisposition?: boolean;
-}
-
 /** A bulk-action target: either an explicit id list (a single copy from its row menu) or a
  * server-resolved scope with its copy count (a whole lot/issue, which may exceed one page and
  * so can no longer be enumerated client-side, #172). */
@@ -1663,19 +1654,6 @@ type BulkTarget =
 
 function bulkTargetCount(t: BulkTarget): number {
   return t.kind === "ids" ? t.ids.length : t.count;
-}
-
-/** Serialize the shared bulk-change fields onto a form (location / delivery / disposition /
- * mark-sorted), used by both the id-list and scoped bulk requests. */
-function appendBulkChanges(fd: FormData, changes: BulkChanges): void {
-  if (changes.locationId !== undefined) fd.set("locationId", changes.locationId ?? "");
-  if (changes.locationRef !== undefined) fd.set("locationRef", changes.locationRef ?? "");
-  if (changes.deliveryState) fd.set("deliveryState", changes.deliveryState);
-  if (changes.inCollection !== undefined) fd.set("inCollection", String(changes.inCollection));
-  if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
-  if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
-  if (changes.markSorted) fd.set("markSorted", "true");
-  if (changes.keepDisposition) fd.set("keepDisposition", "true");
 }
 
 /** Shared copy-editing machinery (#121) used by both the by-lot cards and the order-level
@@ -1710,7 +1688,7 @@ function useCopyEditing(ctx: {
   const [bulkStore, setBulkStore] = useState<BulkTarget | null>(null);
 
   /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
-  function runBulk(itemIds: string[], changes: BulkChanges) {
+  function runBulk(itemIds: string[], changes: BulkCopyChanges) {
     setCopyError(undefined);
     run(
       async () => {
@@ -1732,7 +1710,7 @@ function useCopyEditing(ctx: {
 
   /** Apply a bulk change to a server-resolved scope (whole issue groups, or a whole filtered
    * list), so it covers copies beyond the loaded page (#172/#571). */
-  function runScopedBulk(scope: BulkScopeClient, changes: BulkChanges) {
+  function runScopedBulk(scope: BulkScopeClient, changes: BulkCopyChanges) {
     setCopyError(undefined);
     run(
       async () => {
@@ -1754,7 +1732,7 @@ function useCopyEditing(ctx: {
   }
 
   /** Dispatch a bulk change to whichever target kind was opened. */
-  function applyBulk(target: BulkTarget, changes: BulkChanges) {
+  function applyBulk(target: BulkTarget, changes: BulkCopyChanges) {
     if (target.kind === "ids") runBulk(target.ids, changes);
     else runScopedBulk(target.scope, changes);
   }

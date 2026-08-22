@@ -61,6 +61,11 @@ import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
+import { BulkEditCopiesDialog } from "./bulk-edit-copies-dialog";
+import {
+  appendBulkChanges,
+  type BulkCopyChanges,
+} from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
@@ -91,8 +96,18 @@ type DialogState =
   // it is one fact with nothing to fill in, so it is a confirmation.
   | { kind: "dispose"; item: ItemListItem }
   | { kind: "restore"; item: ItemListItem }
-  | { kind: "quickPrice"; item: ItemListItem };
+  | { kind: "quickPrice"; item: ItemListItem }
+  // Location and disposition over the whole selection (#682) — the bulk bar's own dialog, and the
+  // only one here that acts on copies rather than on a copy.
+  | { kind: "bulkEdit"; items: ItemListItem[] };
 
+
+/** Can this copy go into an offer? For sale, in hand and still held — the offer composition
+ * picker's own eligibility (#164/#188/#394), asked of the selection rather than of the checkbox
+ * since #682 widened who gets one. */
+function isListableCopy(item: ItemListItem): boolean {
+  return item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null;
+}
 
 /** The bulk bar's new-offer shortcuts (#497), for a selection of `count` copies. One copy has no
  * packaging to decide, so it gets a single button; several get one per composition. */
@@ -599,6 +614,18 @@ export function InventoryListPanel({
     () => setSelection((prev) => ({ sig: prev.sig, items: new Map() })),
     []
   );
+  // The part of the selection an **offer** can be made of — for sale, in hand, still held (the
+  // composition picker's own eligibility, #164/#188/#394). Since #682 the checkbox no longer asks
+  // that question, so the listing actions ask it here instead: they act on this subset and are not
+  // offered at all when it is empty. Narrowing beats disabling, because the same selection is a
+  // perfectly good target for the location and disposition actions beside them.
+  const listableCopies = useMemo(() => selectedCopies.filter(isListableCopy), [selectedCopies]);
+  /** Said on the listing buttons themselves, never in the bar's count: the bar counts what is
+   * ticked, and only those buttons act on part of it. Empty while the whole selection qualifies. */
+  const partialListingHint =
+    listableCopies.length < selectedCopies.length
+      ? ` Applies to the ${listableCopies.length} of ${selectedCopies.length} selected copies that are for sale and in hand.`
+      : "";
 
   // Setting a copy aside from a platform, or bringing it back (#506). No dialog on either path: it
   // is one reversible flag, and a confirmation for something the very next click can undo is noise.
@@ -696,12 +723,14 @@ export function InventoryListPanel({
   // Only asked while a platform *is* in scope (#506's shared reading of the platform filter): a
   // collision is always a collision on some platform, and with none named there is no listing being
   // planned to warn about.
-  const selectedIdList = useMemo(() => [...selectedIds], [selectedIds]);
+  // Asked of the **listable** copies only (#682): a copy that is not for sale or not in hand is
+  // going nowhere near an offer, so it can collide with none.
+  const listableIdList = useMemo(() => listableCopies.map((c) => c.id), [listableCopies]);
   const { data: selectionCollisions = [] } = useStampConditionCollisions(
     collectionId,
-    selectedIdList,
+    listableIdList,
     scopedPlatform?.id ?? null,
-    selectedIdList.length > 0
+    listableIdList.length > 0
   );
   // The offer the bar's shortcut points at: the one accounting for the most of the selection, which
   // is how `findStampConditionCollisions` already orders them.
@@ -770,17 +799,18 @@ export function InventoryListPanel({
         ? allIssueGroups.length === 0
         : allCopies.length === 0;
 
-  // Only a for-sale, in-hand copy can be listed — the offer composition picker's own eligibility
-  // (#164/#188). A copy that fails it gets no checkbox rather than a disabled one: its disposition
-  // and delivery chips are on the row, so the row already answers the question.
+  // **Every copy still held is selectable** (#682). It used to be the offer picker's own
+  // eligibility — for sale and in hand (#164/#188) — because listing was the only thing a selection
+  // was for; filing a batch into a location and re-flagging one are about exactly the copies that
+  // test excludes, and a checkbox that appears only on stock would have put the collection's own
+  // copies out of reach of the two actions written for them. A **disposed** copy still gets none
+  // (#394): it is not there to be moved or re-flagged, and its row says so.
   const copySelection = useMemo(
     () => ({
       selected: selectedIds,
       onToggle: toggleSelected,
       onSetMany: setManySelected,
-      // A copy no longer held cannot be listed either (#394) — same eligibility, second axis.
-      isEligible: (item: ItemListItem) =>
-        item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null,
+      isEligible: (item: ItemListItem) => item.disposedAt == null,
     }),
     [selectedIds, toggleSelected, setManySelected]
   );
@@ -1050,7 +1080,7 @@ export function InventoryListPanel({
                         onClick={() =>
                           setDialog({
                             kind: "addToOffer",
-                            items: selectedCopies,
+                            items: listableCopies,
                             targetOfferId: collisionOffer.offerId,
                           })
                         }
@@ -1069,14 +1099,31 @@ export function InventoryListPanel({
                       </button>
                     </Tooltip>
                   )}
-                  {/* The picker flow, and beside it the shortcuts that skip it (#497): a new offer
-                      is the common quick start, so the only decision left — one set or one each —
-                      is made by which button is pressed. Secondary next to the primary, since they
-                      are narrower paths through the same flow. With a single copy there is no
-                      packaging to choose, so the pair collapses into one ＋ New offer button. */}
+                  {/* The bulk actions, in one group pushed to the right of the bar. */}
                   <div
                     style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                   >
+                    {/* Where these copies are kept, and what they are kept for (#682). One dialog
+                        for both, and the only bar action that acts on the *whole* selection: the
+                        listing ones beside it can only speak for the copies that are for sale and
+                        in hand. */}
+                    <Tooltip content="Move the selected copies to a storage location, and turn any of their disposition flags on or off — all in one pass.">
+                      <button
+                        type="button"
+                        onClick={() => setDialog({ kind: "bulkEdit", items: selectedCopies })}
+                        style={{
+                          ...CONTROL_STYLE,
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          color: "var(--color-text-secondary)",
+                          borderColor: "var(--color-border-strong)",
+                          background: "var(--color-bg-elevated)",
+                          padding: "0.375rem 0.75rem",
+                        }}
+                      >
+                        <Icon name="edit" size="sm" /> Bulk edit…
+                      </button>
+                    </Tooltip>
                     {/* Clearing the worklist in one go (#506) — the reason the flag exists: a
                         thousand copies deliberately kept off a platform are set aside in one
                         press. Only offered while a platform is in scope, since the decision names
@@ -1117,59 +1164,85 @@ export function InventoryListPanel({
                         </button>
                       </Tooltip>
                     )}
-                    {newOfferShortcuts(selectedCopies.length).map(({ packaging, label, hint }) => (
-                      <Tooltip
-                        key={packaging}
-                        content={
-                          quickOfferActive && quickPlatform
-                            ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
-                            : hint
-                        }
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            quickOfferActive
-                              ? createQuickOffer(selectedCopies, packaging === "per-copy")
-                              : setDialog({
-                                  kind: "addToNewOffer",
-                                  items: selectedCopies,
-                                  packaging,
-                                })
+                    {/* The listing half of the bar: the picker flow, and beside it the shortcuts
+                        that skip it (#497) — a new offer is the common quick start, so the only
+                        decision left, one set or one each, is made by which button is pressed.
+                        Secondary next to the primary, since they are narrower paths through the
+                        same flow; with a single copy there is no packaging to choose, so the pair
+                        collapses into one ＋ New offer button. All of it acts on the copies that
+                        can actually be listed (#682) — absent rather than disabled when the
+                        selection holds none, a selection of album copies being a perfectly good
+                        target for the actions beside these, and a dead button among live ones
+                        reading as a fault. Where only some qualify, the labels carry the number: a
+                        count that differs from the bar's own is the plainest way to say which
+                        copies are meant. */}
+                    {listableCopies.length > 0 && (
+                      <>
+                        {newOfferShortcuts(listableCopies.length).map(({ packaging, label, hint }) => (
+                          <Tooltip
+                            key={packaging}
+                            content={
+                              (quickOfferActive && quickPlatform
+                                ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
+                                : hint) + partialListingHint
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                quickOfferActive
+                                  ? createQuickOffer(listableCopies, packaging === "per-copy")
+                                  : setDialog({
+                                      kind: "addToNewOffer",
+                                      items: listableCopies,
+                                      packaging,
+                                    })
+                              }
+                              style={{
+                                ...CONTROL_STYLE,
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                color: "var(--color-accent)",
+                                borderColor: "var(--color-accent)",
+                                background: "var(--color-bg-elevated)",
+                                padding: "0.375rem 0.75rem",
+                                // Amber while this selection already has a live offer (#660).
+                                ...(collisionOffer ? COLLIDING_OUTLINE : {}),
+                              }}
+                            >
+                              <Icon name="add" size="sm" /> {label}
+                            </button>
+                          </Tooltip>
+                        ))}
+                        <Tooltip
+                          content={
+                            "Put these copies into an offer — an existing one, or a new one." +
+                            partialListingHint
                           }
-                          style={{
-                            ...CONTROL_STYLE,
-                            cursor: "pointer",
-                            fontWeight: 600,
-                            color: "var(--color-accent)",
-                            borderColor: "var(--color-accent)",
-                            background: "var(--color-bg-elevated)",
-                            padding: "0.375rem 0.75rem",
-                            // Amber while this selection already has a live offer (#660).
-                            ...(collisionOffer ? COLLIDING_OUTLINE : {}),
-                          }}
                         >
-                          <Icon name="add" size="sm" /> {label}
-                        </button>
-                      </Tooltip>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setDialog({ kind: "addToOffer", items: selectedCopies })}
-                      style={{
-                        ...CONTROL_STYLE,
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        color: "#fff",
-                        background: "var(--color-action-primary)",
-                        border: "none",
-                        padding: "0.375rem 0.875rem",
-                        // Amber while this selection already has a live offer (#660).
-                        ...(collisionOffer ? COLLIDING_FILLED : {}),
-                      }}
-                    >
-                      <Icon name="addToOffer" size="sm" /> Add selected to offer
-                    </button>
+                          <button
+                            type="button"
+                            onClick={() => setDialog({ kind: "addToOffer", items: listableCopies })}
+                            style={{
+                              ...CONTROL_STYLE,
+                              cursor: "pointer",
+                              fontWeight: 600,
+                              color: "#fff",
+                              background: "var(--color-action-primary)",
+                              border: "none",
+                              padding: "0.375rem 0.875rem",
+                              // Amber while this selection already has a live offer (#660).
+                              ...(collisionOffer ? COLLIDING_FILLED : {}),
+                            }}
+                          >
+                            <Icon name="addToOffer" size="sm" />{" "}
+                            {listableCopies.length < selectedCopies.length
+                              ? `Add ${listableCopies.length} to offer`
+                              : "Add selected to offer"}
+                          </button>
+                        </Tooltip>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : undefined
@@ -1868,6 +1941,38 @@ export function InventoryListPanel({
           initialPackaging={dialog.kind === "addToNewOffer" ? dialog.packaging : undefined}
           onClose={closeDialog}
           onDone={handleSuccess}
+        />
+      )}
+
+      {/* Where the selection is kept, and what it is kept for (#682). The intake screen's own bulk
+          write (#121/#565) over an id list: one action for both screens, so a copy filed from here
+          and one filed while its purchase was being sorted are written the same way. */}
+      {dialog.kind === "bulkEdit" && (
+        <BulkEditCopiesDialog
+          copies={dialog.items}
+          locations={locations}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(changes: BulkCopyChanges) => {
+            const items = dialog.items;
+            setActionError(undefined);
+            startTransition(async () => {
+              const fd = new FormData();
+              fd.set("itemIds", items.map((i) => i.id).join(","));
+              appendBulkChanges(fd, changes);
+              const { bulkUpdateLotItemsAction } = await import("@/app/actions/purchases");
+              const result = await bulkUpdateLotItemsAction(fd);
+              if (result.status === "success") {
+                handleSuccess();
+                // #541: this list groups, filters and hides in more ways than any other, so a
+                // filed or re-flagged copy routinely lands somewhere the collector is not looking.
+                toast({
+                  message: `${items.length} cop${items.length === 1 ? "y" : "ies"} updated`,
+                });
+              } else if (result.status === "error") setActionError(result.message);
+            });
+          }}
         />
       )}
 
