@@ -185,11 +185,22 @@ describe("readDelcampeOrders", () => {
       "anchor",
       "buyerLogin",
       "buyerName",
+      "canImport",
       "lines",
       "orderId",
       "orderUrl",
+      "shippingMethodText",
+      "soldAtText",
       "totalTexts",
     ]);
+  });
+
+  it("dates its rows and names no delivery method, and says so at the order level (#698)", () => {
+    const [order] = readDelcampeOrders(pageOf(THREE_ITEM_ORDER), PAGE_URL);
+    assert.equal(order.soldAtText, null);
+    assert.equal(order.shippingMethodText, null);
+    // Every phase screen states the whole order, so every row here may be imported from.
+    assert.equal(order.canImport, true);
   });
 
   it("carries both figures the header prints for one total, deciding between neither", () => {
@@ -205,6 +216,8 @@ describe("readDelcampeOrders", () => {
       reference: "A054",
       priceText: "US$0.15",
       soldAtText: "Sun 22 Mar 2026",
+      // Delcampe prints one row per copy, so there is no count to read (#698).
+      quantityText: null,
     });
   });
 

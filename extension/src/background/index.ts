@@ -251,10 +251,10 @@ async function lookupLots(platformOfferIds: string[]): Promise<LotLookupResponse
  * that cannot be asked must be left exactly as it was found, and marking a row *Import* when there is
  * no instance to import into would be worse than not marking it at all.
  */
-async function lookupOrders(orderIds: string[]): Promise<OrderLookupResponse> {
+async function lookupOrders(module: string, orderIds: string[]): Promise<OrderLookupResponse> {
   const profile = await getActiveProfile();
   if (!profile) return { ok: true, matches: {} };
-  return callOrderLookup(profile, orderIds);
+  return callOrderLookup(profile, module, orderIds);
 }
 
 /**
@@ -264,12 +264,12 @@ async function lookupOrders(orderIds: string[]): Promise<OrderLookupResponse> {
  * lookups: this one happens because the collector pressed a button, and a click that quietly did
  * nothing is the one outcome they cannot act on.
  */
-async function importOrder(order: ReportedOrder): Promise<OrderImportResponse> {
+async function importOrder(module: string, order: ReportedOrder): Promise<OrderImportResponse> {
   const profile = await getActiveProfile();
   if (!profile) {
     return { ok: false, error: "No active profile. Set one in the extension options." };
   }
-  return callOrderImport(profile, order);
+  return callOrderImport(profile, module, order);
 }
 
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
@@ -364,7 +364,7 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // "Which of these orders have I already written down?" (#612), asked by a marketplace's own sold
   // items screen as it loads — the selling-side sibling of the two lookups above.
   if (msg?.type === "order-lookup") {
-    lookupOrders(msg.orderIds)
+    lookupOrders(msg.module, msg.orderIds)
       .then(sendResponse)
       .catch((e) =>
         sendResponse({
@@ -377,7 +377,7 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
 
   // "Record this one" (#612) — the same page, one row, and the collector's own click.
   if (msg?.type === "order-import") {
-    importOrder(msg.order)
+    importOrder(msg.module, msg.order)
       .then(sendResponse)
       .catch((e) =>
         sendResponse({

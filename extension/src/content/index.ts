@@ -410,6 +410,7 @@ async function markSoldOrders(): Promise<void> {
   if (unknown.length > 0) {
     const res = (await chrome.runtime.sendMessage({
       type: "order-lookup",
+      module: module.id,
       orderIds: unknown,
     } satisfies OrderLookupRequest)) as OrderLookupResponse;
     // No answer leaves the page unmarked rather than marked wrongly: nothing is recorded here as far
@@ -421,20 +422,28 @@ async function markSoldOrders(): Promise<void> {
 
   for (const order of orders) {
     if (!orderNeedsMark(order.anchor, order.orderId)) continue;
-    drawOrderMark(order);
+    drawOrderMark(module.id, order);
   }
 }
 
-/** Draw one row's mark from what is currently known about it, and wire its button. */
-function drawOrderMark(order: PlatformOrder, refusal?: string): void {
+/**
+ * Draw one row's mark from what is currently known about it, and wire its button.
+ *
+ * A screen that cannot state the whole order (`canImport: false`, #698) says so and offers nothing:
+ * the answer — recorded or not — is worth having on a list, and the act belongs on the order's own
+ * page, which is the only screen that knows every line.
+ */
+function drawOrderMark(module: string, order: PlatformOrder, refusal?: string): void {
   const sale = knownOrders.get(order.orderId);
   const state = sale
     ? ({ kind: "recorded", sale } as const)
-    : refusal
-      ? ({ kind: "refused", message: refusal } as const)
-      : ({ kind: "importable" } as const);
+    : !order.canImport
+      ? ({ kind: "not-recorded" } as const)
+      : refusal
+        ? ({ kind: "refused", message: refusal } as const)
+        : ({ kind: "importable" } as const);
   renderOrderMark(order.anchor, order.orderId, state, iconUrl, () => {
-    void importOrder(order);
+    void importOrder(module, order);
   });
 }
 
@@ -446,7 +455,7 @@ function drawOrderMark(order: PlatformOrder, refusal?: string): void {
  * instance's own answer — the sale it created, or the sentence naming the item that stopped it, kept
  * verbatim so the collector reads the same words the app would have shown them.
  */
-async function importOrder(order: PlatformOrder): Promise<void> {
+async function importOrder(module: string, order: PlatformOrder): Promise<void> {
   renderOrderMark(order.anchor, order.orderId, { kind: "importing" }, iconUrl, () => {});
   let res: OrderImportResponse;
   try {
@@ -455,6 +464,7 @@ async function importOrder(order: PlatformOrder): Promise<void> {
     const { anchor: _anchor, ...reported } = order;
     res = (await chrome.runtime.sendMessage({
       type: "order-import",
+      module,
       order: reported,
     } satisfies OrderImportRequest)) as OrderImportResponse;
   } catch (e) {
@@ -462,10 +472,10 @@ async function importOrder(order: PlatformOrder): Promise<void> {
   }
   if (res?.ok) {
     knownOrders.set(order.orderId, res.sale);
-    drawOrderMark(order);
+    drawOrderMark(module, order);
     return;
   }
-  drawOrderMark(order, res?.error ?? "The import failed.");
+  drawOrderMark(module, order, res?.error ?? "The import failed.");
 }
 
 /** How long to let a burst of DOM changes settle before re-scanning. A filtered, sorted or paged

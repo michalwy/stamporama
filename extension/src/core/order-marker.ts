@@ -22,6 +22,11 @@
 // confirmation overlay — the button says *Import*, the row beside it says which order, and that is
 // #515's rule: an overlay that restated the label just clicked is a step, not a safeguard.
 //
+// A second marketplace (#698) added the one state that offers neither a link nor the act:
+// `not-recorded`. Colnect prints a transaction in two places and truncates its items in one of them,
+// so that screen can say *whether* an order is written down here and must not offer to write it —
+// which is a fact about the screen, reported by the module that read it.
+//
 // Pure DOM: no `chrome.*`, so it is unit-tested against `linkedom` like the platform modules.
 
 import { ORDER_MARK_ATTR as MARK_ATTR } from "./marker-shell";
@@ -53,6 +58,13 @@ export interface OrderSaleTarget {
 export type OrderMarkState =
   | { kind: "recorded"; sale: OrderSaleTarget }
   | { kind: "importable" }
+  /**
+   * Not recorded here, and **this screen cannot record it** (#698): a marketplace list that prints
+   * only the first few of an order's items states which order a row is without stating what is in
+   * it, and a sale written from that would silently understate what sold. So the answer is given
+   * and the act is not offered — it waits on the order's own page, where the whole order is.
+   */
+  | { kind: "not-recorded" }
   | { kind: "importing" }
   /** The instance refused, and said why — the sentence names the item to go and fix. */
   | { kind: "refused"; message: string };
@@ -138,6 +150,13 @@ export function renderOrderMark(
     link.style.cssText = markStyle("#2563eb", true);
     withIcon(link, iconUrl, `Sale #${state.sale.saleNo}`);
     mark = link;
+  } else if (state.kind === "not-recorded") {
+    // Plain text and no button, the one mark here that offers nothing: the collector has their
+    // answer, and the way to act on it is the *Details* link already beside these words.
+    const span = doc.createElement("span");
+    span.style.cssText = markStyle("#6b7280", false);
+    withIcon(span, iconUrl, "Not recorded");
+    mark = span;
   } else if (state.kind === "importing") {
     const span = doc.createElement("span");
     span.style.cssText = markStyle("#6b7280", false);

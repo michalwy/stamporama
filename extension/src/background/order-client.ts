@@ -10,12 +10,19 @@ import type { ReportedOrder } from "../core/messages";
 // One asks and one writes, and they are separate for the reason the marks are: "is this order
 // recorded?" is asked of every row on the screen as it loads, and "record it" happens once, to one
 // order, because the collector pressed a button.
+//
+// **Both are addressed per marketplace** (#698). The instance answers a Delcampe order at
+// `…/sales/by-delcampe-order` and a Colnect transaction at `…/sales/by-colnect-order`, because the
+// two are matched against different columns and read by different rules — an order id means nothing
+// without the site that issued it. The pair of addresses is built from the **module id** the page's
+// own module reported, so this file names no marketplace and a third module reaching the instance
+// needs nothing here (`moduleReports()`'s rule, applied to a URL).
 
 /** The instance's own answer, mirrored by hand as `core/decisions.ts` mirrors the matcher's — the
  *  extension is a separate build with no import path into the app. `path` is **relative**: the
  *  instance answers where the sale is on itself, and the origin is the one this profile
  *  authenticated against, never one the answer could name. */
-interface DelcampeOrderSaleMatch {
+interface OrderSaleMatch {
   orderId: string;
   saleId: string;
   saleNo: number;
@@ -33,7 +40,19 @@ export type OrderImportResult = { ok: true; sale: OrderSaleTarget } | { ok: fals
  *  offer lookup's own guard against a very long URL. */
 const BATCH_SIZE = 100;
 
-function saleTarget(base: string, match: DelcampeOrderSaleMatch): OrderSaleTarget {
+/** Where a module's orders are asked about, and where one is recorded. Derived from the module's own
+ *  id rather than looked up in a table for the reason the registry has no list of ids: the app and
+ *  the extension name a marketplace with the same word, and a table would be a second place to
+ *  forget. */
+function orderEndpoints(profile: Profile, module: string): { lookup: string; import: string } {
+  const base = `${normalizeBaseUrl(profile.apiBaseUrl)}/api/collections/${profile.collectionId}/sales`;
+  return {
+    lookup: `${base}/by-${encodeURIComponent(module)}-order`,
+    import: `${base}/${encodeURIComponent(module)}-order`,
+  };
+}
+
+function saleTarget(base: string, match: OrderSaleMatch): OrderSaleTarget {
   return {
     // Built here, from the base URL this profile is connected to. The page is handed a finished
     // address rather than the parts of one: a content script inside a marketplace has no business
@@ -52,16 +71,18 @@ function saleTarget(base: string, match: DelcampeOrderSaleMatch): OrderSaleTarge
  */
 export async function callOrderLookup(
   profile: Profile,
+  module: string,
   orderIds: string[]
 ): Promise<OrderLookupResult> {
   const base = normalizeBaseUrl(profile.apiBaseUrl);
+  const endpoints = orderEndpoints(profile, module);
   const ids = [...new Set(orderIds)];
   const matches: Record<string, OrderSaleTarget> = {};
 
   for (let from = 0; from < ids.length; from += BATCH_SIZE) {
     const batch = ids.slice(from, from + BATCH_SIZE);
     const query = batch.map((id) => `orderId=${encodeURIComponent(id)}`).join("&");
-    const url = `${base}/api/collections/${profile.collectionId}/sales/by-delcampe-order?${query}`;
+    const url = `${endpoints.lookup}?${query}`;
 
     let res: Response;
     try {
@@ -72,7 +93,7 @@ export async function callOrderLookup(
     if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
     if (!res.ok) return { ok: false, error: `Lookup failed (HTTP ${res.status}).` };
 
-    const body = (await res.json().catch(() => ({}))) as { matches?: DelcampeOrderSaleMatch[] };
+    const body = (await res.json().catch(() => ({}))) as { matches?: OrderSaleMatch[] };
     for (const match of body.matches ?? []) {
       if (!match?.orderId || typeof match.path !== "string") continue;
       matches[match.orderId] = saleTarget(base, match);
@@ -93,10 +114,11 @@ export async function callOrderLookup(
  */
 export async function callOrderImport(
   profile: Profile,
+  module: string,
   order: ReportedOrder
 ): Promise<OrderImportResult> {
   const base = normalizeBaseUrl(profile.apiBaseUrl);
-  const url = `${base}/api/collections/${profile.collectionId}/sales/delcampe-order`;
+  const url = orderEndpoints(profile, module).import;
 
   let res: Response;
   try {

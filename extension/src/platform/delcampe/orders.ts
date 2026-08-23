@@ -171,6 +171,8 @@ function readLine(itemAnchor: Element): PlatformOrderLine | null {
     reference: reference || null,
     priceText: priceText ?? null,
     soldAtText: date,
+    // Delcampe prints one row per copy, so a row is one item and there is no count to read (#698).
+    quantityText: null,
   };
 }
 
@@ -225,7 +227,14 @@ export function readDelcampeOrders(doc: Document, pageUrl: string): PlatformOrde
       buyerLogin: profile ? decodeLogin(profile[2]) : null,
       buyerName: profileAnchor ? nameBeside(profileAnchor) : null,
       totalTexts: amountsIn(block, rows),
+      // Delcampe dates its **rows** and states no delivery method on any of them (ADR-0038 §6), so
+      // both order-level fields are empty here and the sale's date comes from the rows.
+      soldAtText: null,
+      shippingMethodText: null,
       lines,
+      // Every phase screen states the whole order — the six differ only in which status transitions
+      // they offer — so there is no Delcampe screen that may only be marked and not imported.
+      canImport: true,
       anchor: orderAnchor,
     });
   }

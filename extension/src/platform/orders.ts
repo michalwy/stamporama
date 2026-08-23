@@ -30,8 +30,17 @@ export interface PlatformOrderLine {
   /** The row's own price, exactly as printed — currency symbol and all, because which currency a row
    *  is in is part of what it says and not something to strip on the way past. */
   priceText: string | null;
-  /** The row's own date, exactly as printed. */
+  /** The row's own date, exactly as printed. Null on a marketplace that dates the **order** instead
+   *  of its rows — see {@link PlatformOrder.soldAtText}. */
   soldAtText: string | null;
+  /**
+   * How many of that listing the row is for, exactly as printed — `"Item count: 1"` (#698).
+   *
+   * Colnect states one per row and Delcampe's rows are one item each, so it is null there. As
+   * printed, label and all, like every other field on this interface: what a count of more than one
+   * means for the price beside it is the instance's answer, not this module's.
+   */
+  quantityText: string | null;
 }
 
 /** One order block on a seller's screen, as the page printed it. */
@@ -53,9 +62,40 @@ export interface PlatformOrder {
    * A list rather than one figure because Delcampe prints the total **twice**: converted into the
    * screen's display currency and again in the currency the listings were in. Picking between them
    * is a decision, and decisions are the instance's.
+   *
+   * **With whatever label the screen prints beside the figure**, where it prints one. Colnect states
+   * four amounts in its header and each means something different (`Items total € 9.97`,
+   * `Shipping price € 2.40`, `Discount -€ 0.37`, `Total with shipping € 12.00`); dropping the words
+   * would hand the instance four figures and no way to tell which of them a buyer actually paid,
+   * which is a decision destroyed rather than deferred.
    */
   totalTexts: string[];
+  /**
+   * The order's own date, exactly as printed — Colnect's `Started: August 23, 2026 2:21 PM` (#698).
+   *
+   * Null where the marketplace dates its **rows** instead of the order, which is Delcampe's shape:
+   * there the date is on each {@link PlatformOrderLine} and the instance decides what the order's
+   * own date is from them. One of the two is always null, and which is a fact about the screen.
+   */
+  soldAtText: string | null;
+  /**
+   * The delivery method the order names, exactly as printed and with the screen's own label off it
+   * — `"Stamps→domestic: Registered mail (Poczta Polska)"` (#698). Null where the screen states
+   * none, which is every Delcampe sold row.
+   */
+  shippingMethodText: string | null;
   lines: PlatformOrderLine[];
+  /**
+   * Whether **this screen** states the whole order — the question that decides whether the row may
+   * offer to record it (#698).
+   *
+   * A marketplace can print an order in two places and only one of them completely: Colnect's
+   * transaction list truncates its items (`+ 12 more listings`), so an import from there would
+   * write a sale missing lines it should have carried, which is exactly what ADR-0038 §3 refuses.
+   * Such a screen still answers *whether* the order is recorded — that is worth knowing on a list —
+   * so it reports the order with `canImport: false` and the mark drops its button.
+   */
+  canImport: boolean;
   /**
    * The element the mark belongs after: the block's own identifier — the link that states which
    * order this is.

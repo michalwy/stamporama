@@ -128,6 +128,10 @@ export type LotLookupResponse =
 // affordance on that row exists for.
 export interface OrderLookupRequest {
   type: "order-lookup";
+  /** Which marketplace's orders these are — the id of the module that read the page (#698). Sent
+   *  because the instance answers per marketplace: an order id is only unique inside the site that
+   *  issued it, and two of them could be the same digits. The shell still never names one. */
+  module: string;
   /** The marketplace's own order ids, read from the addresses by the page's own module. */
   orderIds: string[];
 }
@@ -148,6 +152,8 @@ export type ReportedOrder = Omit<PlatformOrder, "anchor">;
 // that offer's own screen and then the same button again.
 export interface OrderImportRequest {
   type: "order-import";
+  /** The module that read the order, as on the lookup above (#698). */
+  module: string;
   order: ReportedOrder;
 }
 export type OrderImportResponse =

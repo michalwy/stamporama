@@ -267,7 +267,9 @@ actually going in the envelope, and press **Choose**:
   packing you have already done survives.
 
 Sometimes a unit arrives with **⚠ Set not chosen** on it — an import or a buyer's own pick named one
-of the interchangeable sets without anybody deciding. The chip is the button as well as the flag:
+of the interchangeable sets without anybody deciding. Recording a [Colnect
+transaction](assistant.md#your-colnect-sales) through the Assistant is the usual way it happens: the
+transaction says a copy of that listing sold, not which of yours goes in the envelope. The chip is the button as well as the flag:
 press it and the picker opens, so you never have to go looking for the menu.
 
 On a sale holding such units the toolbar above them grows a **Set** filter — **All** / **Not chosen

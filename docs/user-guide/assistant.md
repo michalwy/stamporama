@@ -3,8 +3,9 @@
 The Assistant is a Chrome extension that connects marketplace pages to your collection while you
 browse. On a Colnect list page it tells you which stamps you already have, which need a decision, and
 writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
-bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** it tells you
-which of them you have already written down, and records the ones you have not.
+bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** and your own
+**Colnect transactions** it tells you which of them you have already written down, and records the
+ones you have not.
 
 On **any page whatsoever**, selecting a catalog number and right-clicking answers the two questions
 you opened the listing with — [do I still want this, and have I already got
@@ -482,6 +483,63 @@ The full account of what is recorded, and of each reason an order can be refused
 It needs the platform named under **Settings → Delcampe**, and it matches items to offers best once
 you have [imported your active items](delcampe.md#reading-your-listings-back) at least once, since
 that is what teaches Stamporama each listing's own Delcampe number.
+
+## Your Colnect sales
+
+Open one of your own **transactions** on Colnect — the *Details* page of a sale you have made — and
+the header, beside *Buyer* and *Started*, gains a small mark:
+
+- **Sale #34** — a link. That transaction is already a sale here; clicking opens it in a new tab, so
+  the screen you were packing from keeps its place.
+- **Import** — it is not recorded yet, and one click records it: the buyer, the transaction's date,
+  its id, a link back to it, one line per listing matched to the offer it was here and priced at what
+  it sold for, and the shipping method Colnect names.
+
+On the **transactions list** the same mark appears beside each row's *Details* link, but it only ever
+**answers** — **Sale #34** or **Not recorded**. There is no button there, and that is deliberate: the
+list prints only the first few listings of a transaction (`+ 12 more listings`), so a sale recorded
+from it would be missing lines it should have carried. Open the transaction and import it from there.
+
+While the click is being answered the mark reads **Importing…**, and then becomes either the new
+sale's link or **Not imported** — hover that for the reason. Nothing is recorded in that case: a
+transaction goes in whole or not at all.
+
+### What it needs from you
+
+- The platform named under **Settings → Colnect**, with a **currency** set on it.
+- Each sold listing's **Colnect address** on the offer here — that is the only thing a transaction
+  row states about which offer it is. An offer listed through the Assistant gets it by itself; one
+  posted by hand needs its **URL** field filled in (see [Offers](offers.md)).
+- Colnect set to **display prices in that same currency**, and its interface in **English**. Colnect
+  prints every figure in whatever currency you are viewing in, and this app will not record an amount
+  in money you were not paid — nor date a sale from a month name it cannot read.
+
+### The reasons a transaction is refused
+
+Every reason is listed at once, so you make one trip rather than one per problem:
+
+- **No offer here carries this Colnect listing.** Paste that listing's address onto the offer, or
+  record it through the offer's own [sell flow](offers.md#selling-directly-from-the-list).
+- **The offer has no copies left to sell here**, or fewer than the row says sold.
+- **Priced in another currency** than this platform's sales are in.
+- **Colnect states no amount** for a row.
+- **More than one of a listing sold in one row.** Colnect does not say whether the figure beside it
+  is the price of one or of all, so that one is recorded by hand for now.
+
+### A quantity listing arrives half-decided
+
+If the matched offer still has more copies than the transaction bought, the sale is recorded anyway
+and the line is marked **⚠ Set not chosen**: the copies of one offer are the same thing at the same
+price, so *which* one goes in the envelope is your call at the packing table, not something the order
+states. Settle it from the sold unit's own **Choose set** picker — see [Choosing which set
+left](sales.md#choosing-which-set-left).
+
+### What it never does
+
+It keeps the buyer's **login** and the **name printed beside it**, and nothing else — the postal
+address printed on the same page is not read, so it cannot be stored. And it **writes nothing to
+Colnect**: the sale opens at **Ordered**, your own [fulfillment status](sales.md#fulfillment-status),
+and Colnect's own *Items sent* / *Items received* buttons are never pressed for you.
 
 ## Keeping it up to date
 
