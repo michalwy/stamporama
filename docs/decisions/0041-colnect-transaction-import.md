@@ -50,14 +50,23 @@ Which screen may act is a fact about the screen, so the module that read it says
 link nor the act — the alternative was a button that writes an order missing lines it should have
 carried, which is exactly what §3 below refuses.
 
-The mark sits **in the heading that names the transaction** — `Transactions › Transaction #hflVE` —
-found as the smallest element whose text carries the id the address states. That is where a reader is
-already asking *which one is this?*, and it is about **this page**: the first cut hung the mark on the
-buyer's link, which on the live page resolved to Colnect's own site-header greeting (see §9) and put
-it beside the banner. A heading states its order as **text**, so there is no element to sit beside and
-the mark goes *inside* it — `PlatformOrder.markPlacement`, the module's own answer, since where an
-order names itself is a fact about the screen. On the list it goes after the row's own *Details* link,
-which is that row's answer to the same question.
+The mark sits in the transaction's **own block** — the `Started: …` line, or the `Buyer: …` line
+beside it. Both are in the served markup, both state a fact about this order, and neither moves.
+
+That took three tries, and the two rejected answers are the useful part. The first hung the mark on
+the buyer's link, which on the live page resolved to Colnect's own site-header greeting (§9) and put
+it beside the banner. The second used the **heading** (`Transactions › Transaction #hflVE`), found as
+the smallest drawn element naming the id — right about the page and wrong about **time**: Colnect
+keeps a copy of the page title in a sticky header and hides it with its own script *after* the
+document settles, so a reading taken at idle picked the copy and drew into an element that was about
+to disappear. The mark then materialised on the first scroll, whose mutations triggered a second
+reading. A served block cannot be raced that way, which is why it wins over a heading — the heading
+remains the fallback for a page that states no such block.
+
+Each of those lines states its fact as **text**, so there is no element to sit beside and the mark
+goes *inside* the line — `PlatformOrder.markPlacement`, the module's own answer, since where an order
+names itself is a fact about the screen. On the list it goes after the row's own *Details* link, which
+is that row's answer to the same question.
 
 `GET …/sales/by-colnect-order` — batched, session-or-token, answering a **relative** path, matched on
 `Sale.externalRef` narrowed to the Colnect platform. All four exactly as `by-delcampe-order` is, for
@@ -250,6 +259,11 @@ as a list rather than only as the joined sentence.
 - One label can introduce two facts: Colnect prints the payment method's `Discount: 3%` as well as
   the order's own `Discount: -€ 0.37`, and the shorter is the rate. A total is therefore the smallest
   line under its label **that states money**.
+- **A page is not finished when the document goes idle.** The reading that picks where a mark goes
+  has to hold against markup a script is still rearranging, which is what ruled the heading out and
+  what the mark now avoids by living in a served block. It is also why the module never reads back
+  its own marks: the mark sits *inside* the line it answers about, and a re-scan would otherwise hand
+  the instance `August 23, 2026 2:21 PM Import`.
 - Nothing is read from what the browser does not draw. `textContent` reports a script's source as
   text, so an inline script carrying the transaction id was a smaller "element naming this order"
   than the heading — and the mark went inside it, invisible. Every scan now skips `script`, `style`,

@@ -116,6 +116,7 @@ function textUpToList(element: Element): string {
         if (tag === "ul" || tag === "ol" || tag === "li" || tag === "table" || tag === "br") {
           return false;
         }
+        if ((child as Element).matches(OWN_MARKUP)) continue;
         if (!walk(child as Element)) return false;
       } else {
         text += child.textContent ?? "";
@@ -136,6 +137,17 @@ function textUpToList(element: Element): string {
  * open for every label: a script saying `Buyer:` would answer for the page.
  */
 const UNRENDERED = new Set(["script", "style", "noscript", "template", "head", "title", "iframe"]);
+
+/**
+ * The Assistant's own markup, skipped by every read.
+ *
+ * The mark now sits **inside** the line it answers about, so a re-scan — a page rewrites itself and
+ * the watcher looks again — would otherwise read `Started: August 23, 2026 2:21 PM Import` and hand
+ * the instance a date with a word of ours on the end. Mirrored as a literal rather than imported
+ * from the shell for the reason every other contract here is: a platform module knows the page, not
+ * the extension around it.
+ */
+const OWN_MARKUP = "[data-stamporama-order], [data-stamporama-order-dialog]";
 
 function isRendered(element: Element): boolean {
   return !UNRENDERED.has(element.tagName.toLowerCase());
@@ -174,7 +186,10 @@ function isDrawn(element: Element): boolean {
 /** Every rendered element under `root`, itself included — what the scans below choose from. */
 function elementsIn(root: Element): Element[] {
   return [root, ...root.querySelectorAll("*")].filter(
-    (element) => isRendered(element) && !element.closest([...UNRENDERED].join(","))
+    (element) =>
+      isRendered(element) &&
+      !element.closest([...UNRENDERED].join(",")) &&
+      !element.closest(OWN_MARKUP)
   );
 }
 
@@ -460,11 +475,15 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
     quantityText: labelledLine(row, ITEM_COUNT_LABEL),
   }));
 
-  // Where the mark goes: the heading that names this transaction, which is where a reader is already
-  // asking *which one is this?* — and, unlike the header block, is about this page rather than about
-  // whoever is signed in.
-  const heading = headingOf(root, orderId);
-  const anchor = heading ?? buyerLine ?? buyerAnchor ?? startedLeaf(root);
+  // Where the mark goes: the transaction's **own** block — the line saying when it started, or the
+  // buyer's line beside it. Both are served in the page's markup, both state a fact about this
+  // order, and neither moves: the page's heading turned out to be a worse place than it looks,
+  // Colnect keeping a second copy of it in a sticky header that its own script hides *after* the
+  // document settles, so a mark drawn at idle went into an element that was about to disappear. The
+  // heading stays as the fallback for a page that states no such block.
+  const startedLine = labelledElement(root, STARTED_LABEL);
+  const inside = startedLine ?? buyerLine ?? headingOf(root, orderId);
+  const anchor = inside ?? buyerAnchor ?? startedLeaf(root);
   if (!anchor) return null;
 
   return {
@@ -480,9 +499,9 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
     lines,
     canImport: true,
     anchor,
-    // Inside the heading, because the heading *states* the order as text — there is no element to
-    // sit beside, and after the heading is the line below it.
-    markPlacement: heading ? "inside" : "after",
+    // Inside, because each of those *states* its fact as text — there is no element to sit beside,
+    // and after the line is the line below it.
+    markPlacement: inside ? "inside" : "after",
   };
 }
 
@@ -547,24 +566,50 @@ function shippingMethodOf(root: Element): string | null {
   return name || null;
 }
 
+/** Tags that are a page **saying what this page is**. Preferred over any other element naming the
+ *  transaction, and that preference is what makes the answer stable — see {@link headingOf}. */
+const HEADING_TAGS = new Set(["h1", "h2", "h3"]);
+
 /**
  * The heading naming this transaction — `Transactions › Transaction #hflVE`.
  *
- * The **smallest element whose text names the id**, which is the same rule the labels use and for
- * the same reason: every ancestor of the heading says it too. Matched on the id from the address
- * rather than on the word *Transaction*, since the id is the fact and the word is the wording; the
- * word is only used to prefer the crumb over an element that happens to hold the id alone.
+ * **A heading element first**, and only then the smallest other element that names the order. The
+ * smallest-element rule alone is right about the page and wrong about *time*: Colnect keeps a copy
+ * of the page's title in its header, shorter than the breadcrumb, and its own script hides that copy
+ * **after** the page settles — so a reading taken as the document goes idle picks the copy, and the
+ * mark is drawn into an element that is about to be hidden. That is exactly what happened: the mark
+ * appeared only after a scroll, whose mutations triggered a second reading against a page that had
+ * finished making up its mind.
+ *
+ * A heading cannot be raced in that way. It is what the page calls itself, it is in the served
+ * markup, and no later script demotes it to a duplicate.
+ *
+ * Named **and worded** in both passes: the id alone is carried by anything that mentions this
+ * transaction, while `Transaction #hflVE` is the page saying which one the reader is looking at.
  */
 function headingOf(root: Element, orderId: string): Element | null {
   const names = new RegExp(`(?:^|[^\\w-])#?${escapeForRegExp(orderId)}(?![\\w-])`);
+  const candidates = elementsIn(root).filter((element) => {
+    const text = textOf(element);
+    return (
+      names.test(text) &&
+      /\btransaction\b/i.test(text) &&
+      text.length <= 200 &&
+      isDrawn(element)
+    );
+  });
+  const headings = candidates.filter((element) =>
+    HEADING_TAGS.has(element.tagName.toLowerCase())
+  );
+  return smallestByText(headings.length > 0 ? headings : candidates);
+}
+
+/** The one that says the least, which among elements naming the same thing is the innermost. */
+function smallestByText(elements: readonly Element[]): Element | null {
   let found: Element | null = null;
   let length = Infinity;
-  for (const element of elementsIn(root)) {
+  for (const element of elements) {
     const text = textOf(element);
-    // Named **and worded**: the id alone is carried by anything that mentions this transaction,
-    // while `Transaction #hflVE` is the page saying which one the reader is looking at.
-    if (!names.test(text) || !/\btransaction\b/i.test(text) || text.length > 200) continue;
-    if (!isDrawn(element)) continue;
     if (text.length < length) {
       found = element;
       length = text.length;

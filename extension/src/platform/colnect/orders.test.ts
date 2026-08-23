@@ -209,13 +209,36 @@ describe("readColnectOrders — the transaction's own page", () => {
     assert.equal(order.shippingMethodText, "Registered mail (Poczta Polska)");
   });
 
-  it("marks the heading that names the transaction, not the page's own banner", () => {
+  it("marks the transaction's own block — the line saying when it started", () => {
     const [order] = read(DETAIL, DETAIL_URL);
-    assert.equal(order.anchor.className, "crumbs");
-    assert.match(order.anchor.textContent ?? "", /Transaction #hflVE/);
-    // Inside it: the heading states the order as text, so there is nothing to sit beside — after the
-    // heading is the line below it.
+    assert.match(order.anchor.textContent ?? "", /^Started:/);
+    // Inside it: the line states its fact as text, so there is nothing to sit beside — after the line
+    // is the line below it.
     assert.equal(order.markPlacement, "inside");
+  });
+
+  it("falls back to the heading where the page states no such block", () => {
+    const [order] = read(
+      `<div class="crumbs">Transactions › Transaction #hflVE</div>
+       <div class="_sl-entry"><a href="/en/market/sale/aBcDe">One stamp</a><div>Item count: 1</div><div class="_sl-price">€ 0.46</div></div>`,
+      DETAIL_URL
+    );
+    assert.equal(order.anchor.className, "crumbs");
+    assert.equal(order.markPlacement, "inside");
+  });
+
+  it("does not read back the mark it drew into the line it answers about", () => {
+    const { document } = parseHTML(`<!doctype html><html><body>${DETAIL}</body></html>`);
+    const doc = document as unknown as Document;
+    const [first] = readColnectOrders(doc, DETAIL_URL);
+    // The shell draws the mark inside that line; a re-scan must still read the date, not the date
+    // with a word of ours on the end.
+    const mark = doc.createElement("a");
+    mark.setAttribute("data-stamporama-order", "hflVE");
+    mark.textContent = "Import";
+    first.anchor.appendChild(mark);
+    const [again] = readColnectOrders(doc, DETAIL_URL);
+    assert.equal(again.soldAtText, "August 23, 2026 2:21 PM");
   });
 
   it("never marks what the browser does not draw", () => {
@@ -230,7 +253,7 @@ describe("readColnectOrders — the transaction's own page", () => {
       ),
       DETAIL_URL
     );
-    assert.equal(order.anchor.className, "crumbs");
+    assert.match(order.anchor.textContent ?? "", /^Started:/);
     assert.equal(order.buyerLogin, "samplebuyer");
     assert.equal(order.soldAtText, "August 23, 2026 2:21 PM");
   });
@@ -246,7 +269,7 @@ describe("readColnectOrders — the transaction's own page", () => {
       ),
       DETAIL_URL
     );
-    assert.equal(order.anchor.className, "crumbs");
+    assert.match(order.anchor.textContent ?? "", /^Started:/);
   });
 
   it("takes the total that states money, not the rate printed under the same word", () => {
@@ -267,7 +290,7 @@ describe("readColnectOrders — the transaction's own page", () => {
       DETAIL.replace("<div class=\"crumbs\">", '<div class="stray">hflVE</div><div class="crumbs">'),
       DETAIL_URL
     );
-    assert.equal(order.anchor.className, "crumbs");
+    assert.match(order.anchor.textContent ?? "", /^Started:/);
   });
 
   it("does not mistake the signed-in collector's own link for the buyer", () => {
