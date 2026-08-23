@@ -315,7 +315,7 @@ Colnect keeps four lists of its own — **Collection**, **Swap**, **Wish** and *
 
 **Source of truth** is which side wins when the two disagree, and therefore what gets proposed about an item that is on Colnect but not here: with **Stamporama**, removing it there; with **Colnect**, adopting it here. Wish starts on **Colnect** on purpose — a wish list built up over years of clicking *I want this* runs to tens of thousands of entries against far fewer wants recorded here, and treating this side as right would open with a proposal to delete all of them.
 
-**Sync** switches a list on. A list left off is simply never compared, and switching it off later parks it without forgetting how you set it up. Each control saves on the spot, so there is nothing to submit.
+**Sync** switches a list on. A list left off is simply never compared, and switching it off later parks it without forgetting how you set it up. Each control saves on the spot, so there is nothing to submit. A list switched on appears on the **[Colnect](colnect-lists.md)** screen, which is where the export is loaded and the differences are read.
 
 Comparison is by **[Colnect ID](#colnect-id)**: a stamp that carries one can be found in an export, and a stamp that does not is not comparable at all — it is neither a match nor a difference. Filling those IDs in is what the [Assistant](assistant.md) is for.
 

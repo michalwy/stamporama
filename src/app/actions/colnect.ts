@@ -9,6 +9,13 @@ import {
   ColnectListMappingValueError,
   type ColnectListMappingData,
 } from "@/lib/colnect-list-sync";
+import {
+  ColnectReportValueError,
+  getColnectReportLists,
+  setColnectReportDone,
+  setColnectReportIgnored,
+  type ColnectReportList,
+} from "@/lib/colnect-list-report";
 import type {
   ColnectListSource,
   ColnectListSourceOfTruth,
@@ -139,6 +146,75 @@ export async function setColnectListMappingAction(
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save the list setting. Please try again." };
+  }
+}
+
+/** Every Colnect list this collection syncs, with the export its side of the report comes from
+ *  (#686) — the selector and the header read it together, since a list with no import yet has a
+ *  screen to draw and no report. */
+export async function getColnectReportListsAction(
+  collectionId: string
+): Promise<ColnectReportList[]> {
+  const session = await getSession();
+  return getColnectReportLists(session.user.id, collectionId);
+}
+
+/**
+ * Claim one difference already fixed on Colnect, or take the claim back (#686).
+ *
+ * Hidden until the next import and no longer: the app never talks to Colnect, so this is a claim
+ * about the other side's state and only a fresh export can check it.
+ */
+export async function setColnectReportDoneAction(
+  collectionId: string,
+  lt: number,
+  colnectId: string,
+  kind: string,
+  done: boolean
+): Promise<ColnectActionState> {
+  const session = await getSession();
+  try {
+    await setColnectReportDone(session.user.id, collectionId, lt, colnectId, kind, done);
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ColnectReportValueError) {
+      return { status: "error", message: err.message };
+    }
+    return { status: "error", message: "Failed to mark that row. Please try again." };
+  }
+}
+
+/**
+ * Accept one difference as a standing divergence, or withdraw the acceptance (#686).
+ *
+ * Hangs off the mapping, so it outlives every import: a judgement about this collection does not
+ * expire because a file was read again.
+ */
+export async function setColnectReportIgnoredAction(
+  collectionId: string,
+  lt: number,
+  colnectId: string,
+  kind: string,
+  ignored: boolean,
+  note?: string | null
+): Promise<ColnectActionState> {
+  const session = await getSession();
+  try {
+    await setColnectReportIgnored(
+      session.user.id,
+      collectionId,
+      lt,
+      colnectId,
+      kind,
+      ignored,
+      note
+    );
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ColnectReportValueError) {
+      return { status: "error", message: err.message };
+    }
+    return { status: "error", message: "Failed to save that decision. Please try again." };
   }
 }
 

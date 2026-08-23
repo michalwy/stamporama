@@ -399,6 +399,16 @@ export function CollectionSidebar({
           label="Contacts"
           active={isActive(`${base}/contacts`)}
         />
+        {/* Colnect list sync (#686), beside Trades and Contacts for the same reason: it serves both
+            directions at once. The Swap and Sell lists are what a partner reads before offering
+            anything, and the Wish list is what this collection is looking for — one screen, two
+            halves of the hobby, so it belongs under neither heading. */}
+        <NavItem
+          href={`${base}/colnect`}
+          icon={<Icon name="link" />}
+          label="Colnect"
+          active={isActive(`${base}/colnect`)}
+        />
       </nav>
 
       {/* Footer */}

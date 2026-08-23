@@ -1,11 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  COLNECT_LIST_BUCKETS,
   COLNECT_LIST_SOURCES,
   COLNECT_LIST_SOURCES_OF_TRUTH,
   COLNECT_STANDARD_LISTS,
+  colnectListBucketLabel,
   colnectListSourceLabel,
+  colnectListSourceShape,
   colnectStandardList,
+  isColnectListBucket,
   isColnectListDifferenceKind,
   isColnectListSource,
   isColnectListSourceOfTruth,
@@ -80,10 +84,62 @@ describe("the write-side guards", () => {
     assert.equal(isColnectListSourceOfTruth("Colnect"), false);
   });
 
-  it("know the two difference kinds an acceptance can be filed against", () => {
+  it("know the difference kinds an acceptance can be filed against", () => {
     assert.ok(isColnectListDifferenceKind("only-colnect"));
     assert.ok(isColnectListDifferenceKind("only-local"));
-    assert.equal(isColnectListDifferenceKind("quantity"), false);
+    // Added by the report (#686) — a plain string in the database is what made that free.
+    assert.ok(isColnectListDifferenceKind("quantity"));
+    assert.ok(isColnectListDifferenceKind("grade"));
+    // A bucket, but never a decision: it is keyed by a Colnect id these rows do not have.
+    assert.equal(isColnectListDifferenceKind("not-comparable"), false);
+    assert.equal(isColnectListDifferenceKind("in-sync"), false);
+  });
+});
+
+describe("COLNECT_LIST_BUCKETS (#686)", () => {
+  it("holds the report's five buckets, membership first", () => {
+    assert.deepEqual(
+      COLNECT_LIST_BUCKETS.map((b) => b.value),
+      ["only-local", "only-colnect", "quantity", "grade", "not-comparable"]
+    );
+  });
+
+  it("marks every bucket decidable except the one with no Colnect id to key by", () => {
+    assert.deepEqual(
+      COLNECT_LIST_BUCKETS.filter((b) => !b.decidable).map((b) => b.value),
+      ["not-comparable"]
+    );
+  });
+
+  it("recognises its own values and nothing else", () => {
+    assert.ok(isColnectListBucket("not-comparable"));
+    assert.equal(isColnectListBucket("in-sync"), false);
+  });
+
+  it("names a bucket the way the chip does, and prints an unknown one rather than a blank", () => {
+    assert.equal(colnectListBucketLabel("only-local"), "Missing on Colnect");
+    assert.equal(colnectListBucketLabel("only-there"), "only-there");
+  });
+});
+
+describe("colnectListSourceShape (#686)", () => {
+  it("resolves the three copy predicates to their own flag", () => {
+    assert.deepEqual(colnectListSourceShape("items_in_collection"), {
+      kind: "copies",
+      flag: "inCollection",
+    });
+    assert.deepEqual(colnectListSourceShape("items_for_trade"), {
+      kind: "copies",
+      flag: "forTrade",
+    });
+    assert.deepEqual(colnectListSourceShape("items_for_sale"), {
+      kind: "copies",
+      flag: "forSale",
+    });
+  });
+
+  it("keeps wants apart, because they are not copies at all", () => {
+    assert.deepEqual(colnectListSourceShape("wants_open"), { kind: "wants" });
   });
 });
 

@@ -635,8 +635,9 @@ model ColnectListSnapshot {
   declaredCount Int?
   importedAt    DateTime @default(now())
 
-  mapping ColnectListMapping       @relation(fields: [mappingId], references: [id], onDelete: Cascade)
-  rows    ColnectListSnapshotRow[]
+  mapping   ColnectListMapping       @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+  rows      ColnectListSnapshotRow[]
+  doneMarks ColnectListDoneMark[]
 
   @@map("colnect_list_snapshot")
 }
@@ -714,6 +715,41 @@ model ColnectListDecision {
   @@unique([mappingId, colnectId, kind])
   @@index([mappingId])
   @@map("colnect_list_decision")
+}
+
+/// One difference the collector says they have **already fixed on Colnect** (#686).
+///
+/// Hidden from the report until the next import, which is exactly how long the claim is worth
+/// anything: nothing here can talk to Colnect, so "done" is a claim about the other side's state
+/// and a fresh export is the only thing that can check it. It therefore hangs off the **snapshot**
+/// and goes with it — a row that comes back after the next import was not actually done, and the
+/// report has to say so rather than keep hiding it.
+///
+/// That is the whole asymmetry with `ColnectListDecision` beside it, which is a *judgement about
+/// this collection* — "this divergence is fine" — hangs off the mapping, and survives every
+/// re-import. Two different sentences, so two different tables.
+model ColnectListDoneMark {
+  id         String @id @default(cuid())
+  snapshotId String
+
+  /// The item the claim is about, in the only vocabulary both sides share (#247) — the same key
+  /// `ColnectListDecision` uses, and for the same reason: a difference exists precisely where one
+  /// of the two sides has no row to point at.
+  colnectId String
+  /// Which difference was claimed done — the report's bucket, in
+  /// `colnect-list-sync-rules.ts`'s words. Part of the key, because a row's difference can change
+  /// between imports: a quantity corrected on Colnect can leave a grade still wrong, and a claim
+  /// about the first must not hide the second.
+  kind      String
+
+  createdAt DateTime @default(now())
+
+  snapshot ColnectListSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  // One claim per difference: marking a row done twice is the same claim, not a second one.
+  @@unique([snapshotId, colnectId, kind])
+  @@index([snapshotId])
+  @@map("colnect_list_done_mark")
 }
 
 // This collection's authenticated access to the collector's Allegro account through Allegro's

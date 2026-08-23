@@ -366,6 +366,24 @@ export function readColnectList(text: string): ColnectListRead {
   };
 }
 
+/**
+ * The export's own timestamp as a `Date`, or null.
+ *
+ * {@link ColnectListFile.exportedAt} is kept **verbatim** because the reader promises nothing about
+ * the zone spelling, and for the trade import (#645) a stamp of when is all that is wanted. The
+ * snapshot (#685) stores a real timestamp, though — the report says how stale its Colnect side is,
+ * and "three weeks ago" is a subtraction — so the parse lives here, beside the string it parses,
+ * and answers null rather than an Invalid Date for anything it does not recognise. A snapshot with
+ * no export date is a snapshot that says it does not know, which is honest; a NaN one is a crash
+ * three screens later.
+ */
+export function colnectExportedAtDate(raw: string | null | undefined): Date | null {
+  const text = raw?.trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /** The item id out of a `Link` cell. Kept beside the reader rather than in `colnect-link.ts`'s
  *  formatters: that module writes URLs the app owns, this reads one somebody else wrote. */
 function colnectIdFromRow(raw: string): string | null {
