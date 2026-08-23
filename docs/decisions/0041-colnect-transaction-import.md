@@ -174,6 +174,33 @@ transaction starts at `ordered`, where every sale starts. Nothing here confirms 
 tracking number, or rates the buyer — the Assistant reads these screens and clicks none of their
 buttons.
 
+### 11. The act reports in a window, on both marketplaces
+
+ADR-0038 gave the click no surface of its own: the mark said `Sale #34` or `Not imported`, with the
+refusal in a `title`. That is as much as a mark can carry and less than the moment deserves — a
+refusal naming three listings became one hover-only run-on sentence, and a success became a number
+with nothing to check the screen against. It is also the wrong division of labour: **a mark answers a
+question, and this one also performs an act**, which is precisely the asymmetry ADR-0038 §1 noted and
+left standing.
+
+So *Import* opens a window (`extension/src/core/order-dialog.ts`) on the click, before anything is
+known, and it reports what happened: the sale's number as a link plus the few figures worth reading
+against the page underneath — buyer, date, lines, what they add up to, what the buyer paid, how it is
+going — or **every** refusal, one sentence per line, which is the all-or-nothing rule finally shown
+the way it was always worded. A sale that was **already** there is described the same way, a
+re-import being a link and a link worth following being worth describing. The lines nobody has chosen
+a set for (#697) are named there too: the collector is holding the parcel, which is exactly when that
+question can be answered.
+
+It is **not** a confirmation — nothing is asked before the write, #515's rule unchanged — and the
+mark keeps its own answer beside the row, since the row is where the question was asked and the
+window is closed as soon as it has been read.
+
+This applies to **Delcampe too**, and deliberately: one act with two behaviours would be a worse
+answer than the one it replaces. The instance therefore states an `ImportedSaleSummary`
+(`src/lib/order-import-summary.ts`) on both imports, and the extension carries the refusals through
+as a list rather than only as the joined sentence.
+
 ## Consequences
 
 - The Colnect loop is closed end to end: list a copy through the Assistant (#408), keep the listing's
@@ -189,3 +216,10 @@ buttons.
   module. Neither names a marketplace.
 - The screens are read in **English**, like Delcampe's, and in the platform's own currency. Two
   settings on Colnect's side therefore decide whether the button works, and both refusals say so.
+- Reading a value printed **beside** its label rather than inside an element of its own is what the
+  live page actually does (`<b>Started:</b> August 23, 2026 2:21 PM`), and a reader that walked
+  elements alone saw the label and refused the transaction over a date printed right there. Labels
+  are therefore read off elements' own text, forward through text nodes where no element holds both,
+  and every value ends where the page's next label begins.
+- Delcampe's import gained the window with Colnect's, so #612's flow changed without #612 asking. The
+  alternative was the same button behaving differently on two marketplaces.

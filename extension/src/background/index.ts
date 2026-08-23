@@ -267,7 +267,11 @@ async function lookupOrders(module: string, orderIds: string[]): Promise<OrderLo
 async function importOrder(module: string, order: ReportedOrder): Promise<OrderImportResponse> {
   const profile = await getActiveProfile();
   if (!profile) {
-    return { ok: false, error: "No active profile. Set one in the extension options." };
+    return {
+      ok: false,
+      error: "No active profile. Set one in the extension options.",
+      problems: [],
+    };
   }
   return callOrderImport(profile, module, order);
 }
@@ -383,6 +387,7 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
         sendResponse({
           ok: false,
           error: e instanceof Error ? e.message : String(e),
+          problems: [],
         } satisfies OrderImportResponse)
       );
     return true;

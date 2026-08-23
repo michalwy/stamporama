@@ -25,7 +25,7 @@ const DETAIL = `
     <div class="_sl-entry">
       <a href="/en/market/sale/aBcDe"><img src="/i/1.jpg" alt=""></a>
       <a href="/en/market/sale/aBcDe">One stamp</a>
-      <div><span>Item count:</span><span>1</span></div>
+      <div><span>Item count:</span> <span>1</span></div>
       <div>Item condition: Used</div>
       <div>Catalog codes: Mi:PL 200</div>
       <div>Sale status: Sold</div>
@@ -34,14 +34,14 @@ const DETAIL = `
     <div class="_sl-entry">
       <a href="/en/market/sale/fGhIj"><img src="/i/2.jpg" alt=""></a>
       <a href="/en/market/sale/fGhIj">Another stamp</a>
-      <div><span>Item count:</span><span>1</span></div>
+      <div><span>Item count:</span> <span>1</span></div>
       <div>Sale status: Sold</div>
       <div class="_sl-price">€ 4.51</div>
     </div>
     <div class="_sl-entry">
       <a href="/en/market/sale/kLmNo"><img src="/i/3.jpg" alt=""></a>
       <a href="/en/market/sale/kLmNo">A third stamp</a>
-      <div><span>Item count:</span><span>2</span></div>
+      <div><span>Item count:</span> <span>2</span></div>
       <div>Sale status: Sold</div>
       <div class="_sl-price">€ 5.00</div>
     </div>
@@ -63,7 +63,7 @@ const DETAIL = `
 const SINGLE = `
 <div>
   <div><span>Buyer:</span> <a href="/en/collectors/collector/samplebuyer">samplebuyer</a></div>
-  <div><span>Started:</span><span>August 23, 2026 2:21 PM</span></div>
+  <div><span>Started:</span> <span>August 23, 2026 2:21 PM</span></div>
   <div class="row">
     <a href="/en/market/sale/aBcDe">One stamp</a>
     <div>Item count: 1</div>
@@ -182,6 +182,38 @@ describe("readColnectOrders — the transaction's own page", () => {
     assert.equal(order.lines.length, 1);
     assert.equal(order.lines[0].priceText, "€ 0.46");
     assert.deepEqual(order.totalTexts, ["Items total € 0.46", "Total with shipping € 2.86"]);
+  });
+
+  it("reads a value printed as a bare text node beside its label", () => {
+    // What the live page does: `<b>Started:</b> August 23, 2026 2:21 PM`, the value being a text node
+    // rather than an element. A reader that walked elements alone saw the label and no date, and
+    // refused the transaction over a date that was printed right there.
+    const [order] = read(
+      DETAIL.replace(
+        "<div><span>Started:</span> <span>August 23, 2026 2:21 PM</span></div>",
+        "<div><b>Started:</b> August 23, 2026 2:21 PM</div>"
+      ).replace(
+        "<div><span>Shipping method:</span><span>Stamps→domestic: Registered mail (Poczta Polska)</span></div>",
+        "<div><b>Shipping method:</b> Stamps→domestic: Registered mail (Poczta Polska)</div>"
+      ),
+      DETAIL_URL
+    );
+    assert.equal(order.soldAtText, "August 23, 2026 2:21 PM");
+    assert.equal(order.shippingMethodText, "Stamps→domestic: Registered mail (Poczta Polska)");
+    assert.equal(order.buyerName, "Sample Buyer");
+  });
+
+  it("takes the buyer's name from its own line, not from whatever holds the link", () => {
+    // The header holds the buyer *and* the date on one flat line of labels and bare text, so a value
+    // has to end where the next label begins — otherwise the buyer is filed as
+    // `Sample Buyer samplebuyer Started: August 23, 2026 2:21 PM`.
+    const [order] = read(
+      `<div class="header"><b>Buyer:</b> Sample Buyer <a href="/en/collectors/collector/samplebuyer">samplebuyer</a> <b>Started:</b> August 23, 2026 2:21 PM</div>
+       <div class="_sl-entry"><a href="/en/market/sale/aBcDe">One stamp</a><div>Item count: 1</div><div class="_sl-price">€ 0.46</div></div>`,
+      DETAIL_URL
+    );
+    assert.equal(order.buyerName, "Sample Buyer");
+    assert.equal(order.soldAtText, "August 23, 2026 2:21 PM");
   });
 
   it("reads a page whose own classes have gone, by its labels and addresses alone", () => {

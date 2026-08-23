@@ -6,6 +6,7 @@ import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
 import type { LotMarkerTarget } from "./lot-marker";
 import type { OrderSaleTarget } from "./order-marker";
+import type { OrderImportSummary } from "./order-dialog";
 import type { PlatformOrder } from "../platform/orders";
 import type { SearchAnswer } from "./search";
 
@@ -157,8 +158,22 @@ export interface OrderImportRequest {
   order: ReportedOrder;
 }
 export type OrderImportResponse =
-  | { ok: true; sale: OrderSaleTarget }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      sale: OrderSaleTarget;
+      /** What the sale says, for the window the click opened (#698's follow-up). Null where the
+       *  instance answered without one — an older build, whose window then shows the link alone. */
+      summary: OrderImportSummary | null;
+      /** False where the order was already recorded, so nothing was written just now. */
+      created: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+      /** One sentence per reason, as the instance worded them. The window lists them; the mark still
+       *  carries the run-on in its tooltip, a mark having room for a line and not for a list. */
+      problems: string[];
+    };
 
 // search window → background service worker: "what does the collection hold matching this text?"
 // (#529). Through the worker like every other instance call — a cross-site fetch is only exempt from

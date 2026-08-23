@@ -6,6 +6,7 @@ import { resolvePurchaseContact } from "./contacts";
 import { addSaleLines, createSale, deleteSale, listSellableOffers } from "./sales";
 import { offerNoFromPersonalReference } from "./delcampe-import-rules";
 import { parseSaleDate } from "./sale-rules";
+import { saleImportSummary, type ImportedSaleSummary } from "./order-import-summary";
 import {
   describeDelcampeOrderProblems,
   planDelcampeOrderSale,
@@ -129,6 +130,10 @@ export async function findSalesForDelcampeOrders(
 export interface DelcampeOrderImportResult extends DelcampeOrderSaleMatch {
   /** False when the order was already recorded — the answer is then a link and nothing was written. */
   created: boolean;
+  /** What the sale says, for the window the collector is reading this in. Stated for a sale that was
+   *  already there as well as one just written: a re-import is a link, and a link worth following is
+   *  worth describing. */
+  summary: ImportedSaleSummary | null;
 }
 
 /**
@@ -185,6 +190,7 @@ export async function importDelcampeOrder(
       path: salePath(existing.id),
       status: existing.status,
       created: false,
+      summary: await saleImportSummary(collectionId, existing.id),
     };
   }
 
@@ -272,6 +278,7 @@ export async function importDelcampeOrder(
     path: salePath(saleId),
     status: sale?.status ?? "ordered",
     created: true,
+    summary: await saleImportSummary(collectionId, saleId),
   };
 }
 

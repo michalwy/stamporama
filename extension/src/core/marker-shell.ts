@@ -28,6 +28,9 @@ export const OFFER_LINK_ATTR = "data-stamporama-offer-link";
 export const LOT_MARKER_ATTR = "data-stamporama-lot";
 /** The mark on a sold order: the sale it is here, or the affordance that records it (#612). */
 export const ORDER_MARK_ATTR = "data-stamporama-order";
+/** The window the *Import* click opens, saying what was recorded or every reason it was not
+ *  (#612/#698). The one surface here that is not a mark: a mark answers, and this reports an act. */
+export const ORDER_DIALOG_ATTR = "data-stamporama-order-dialog";
 
 /**
  * The document's marker stack, created on first use. Null when there is no body to attach to — a
@@ -105,7 +108,7 @@ export function isAssistantNode(node: Node): boolean {
     node.nodeType === 1 ? (node as Element) : ((node.parentElement as Element | null) ?? null);
   return (
     element?.closest(
-      `[${OFFER_MARKER_ATTR}], [${OFFER_LINK_ATTR}], [${LOT_MARKER_ATTR}], [${ORDER_MARK_ATTR}], [${STACK_ATTR}]`
+      `[${OFFER_MARKER_ATTR}], [${OFFER_LINK_ATTR}], [${LOT_MARKER_ATTR}], [${ORDER_MARK_ATTR}], [${ORDER_DIALOG_ATTR}], [${STACK_ATTR}]`
     ) != null
   );
 }

@@ -1,5 +1,6 @@
 import { normalizeBaseUrl, type Profile } from "../core/profile";
 import type { OrderSaleTarget } from "../core/order-marker";
+import type { OrderImportSummary } from "../core/order-dialog";
 import type { ReportedOrder } from "../core/messages";
 
 // The two calls a marketplace's own **sold-order** screens make of the instance (#612), run from the
@@ -34,7 +35,9 @@ export type OrderLookupResult =
   | { ok: true; matches: Record<string, OrderSaleTarget> }
   | { ok: false; error: string };
 
-export type OrderImportResult = { ok: true; sale: OrderSaleTarget } | { ok: false; error: string };
+export type OrderImportResult =
+  | { ok: true; sale: OrderSaleTarget; summary: OrderImportSummary | null; created: boolean }
+  | { ok: false; error: string; problems: string[] };
 
 /** How many order ids go in one request. A phase screen shows a page of orders; the cap is the
  *  offer lookup's own guard against a very long URL. */
@@ -128,20 +131,31 @@ export async function callOrderImport(
       body: JSON.stringify(order),
     });
   } catch {
-    return { ok: false, error: "Could not reach the instance." };
+    return { ok: false, error: "Could not reach the instance.", problems: [] };
   }
-  if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
+  if (res.status === 401) {
+    return { ok: false, error: "Unauthorized — check the profile token.", problems: [] };
+  }
 
   const body = (await res.json().catch(() => ({}))) as {
     error?: string;
+    problems?: { message?: unknown }[];
     saleNo?: number;
     path?: string;
     status?: string;
     orderId?: string;
     saleId?: string;
+    created?: boolean;
+    summary?: OrderImportSummary | null;
   };
   if (!res.ok || typeof body.path !== "string") {
-    return { ok: false, error: body.error ?? `The import failed (HTTP ${res.status}).` };
+    const error = body.error ?? `The import failed (HTTP ${res.status}).`;
+    // One sentence per reason, kept **verbatim**: each names a listing and an offer, and rewording
+    // them here would put a second vocabulary between the collector and what they have to go and fix.
+    const problems = (body.problems ?? []).flatMap((problem) =>
+      typeof problem?.message === "string" && problem.message.trim() ? [problem.message.trim()] : []
+    );
+    return { ok: false, error, problems };
   }
   return {
     ok: true,
@@ -152,5 +166,7 @@ export async function callOrderImport(
       path: body.path,
       status: body.status ?? "ordered",
     }),
+    summary: body.summary ?? null,
+    created: body.created !== false,
   };
 }

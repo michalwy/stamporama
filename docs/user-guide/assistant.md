@@ -469,11 +469,13 @@ that says which order it is:
 It is the only mark in the Assistant that *does* something rather than telling you something, and
 that is deliberate: recording the sale is what you came to the screen for.
 
-While the click is being answered the mark reads **Importing…**, and then becomes either the new
-sale's link or **Not imported**. The second one means the order could not be recorded in full —
-hover it for the reason, which names the item that stopped it. Nothing is recorded in that case: an
-order goes in whole or not at all, because nothing is shown to you in between and a sale quietly
-missing a line looks exactly like a complete one.
+The click opens a **window** with the answer, and the row's mark keeps it afterwards. If the order was
+recorded, the window gives you the new sale as a link plus what it says — the buyer, the date, how
+many lines, what they add up to, what the buyer paid, how it is going — so you can check the record
+against the screen you are packing from without opening a second tab. If it was not, the window lists
+**every** reason, one per line, and nothing was recorded: an order goes in whole or not at all,
+because a sale quietly missing a line looks exactly like a complete one. Close it with **✕**,
+**Escape**, or a click outside it; the row then reads either the sale's link or **Not imported**.
 
 Stamporama keeps the buyer's **login** and the **name printed beside it**, and nothing else — not the
 address on that row, not the e-mail behind *Contact the buyer*.
@@ -500,9 +502,12 @@ On the **transactions list** the same mark appears beside each row's *Details* l
 list prints only the first few listings of a transaction (`+ 12 more listings`), so a sale recorded
 from it would be missing lines it should have carried. Open the transaction and import it from there.
 
-While the click is being answered the mark reads **Importing…**, and then becomes either the new
-sale's link or **Not imported** — hover that for the reason. Nothing is recorded in that case: a
-transaction goes in whole or not at all.
+The click opens a **window**: while the instance is deciding it says so, and then it either gives you
+the new sale as a link with what it says — buyer, date, lines, their total, what the buyer paid, the
+shipping method, the status — or lists **every** reason the transaction was refused, one per line.
+Nothing is recorded in the second case: a transaction goes in whole or not at all. Close the window
+with **✕**, **Escape**, or a click outside it; the mark in the header then reads either the sale's
+link or **Not imported**.
 
 ### What it needs from you
 
@@ -529,7 +534,7 @@ Every reason is listed at once, so you make one trip rather than one per problem
 ### A quantity listing arrives half-decided
 
 If the matched offer still has more copies than the transaction bought, the sale is recorded anyway
-and the line is marked **⚠ Set not chosen**: the copies of one offer are the same thing at the same
+and the window says how many lines are waiting on you; the line is marked **⚠ Set not chosen**: the copies of one offer are the same thing at the same
 price, so *which* one goes in the envelope is your call at the packing table, not something the order
 states. Settle it from the sold unit's own **Choose set** picker — see [Choosing which set
 left](sales.md#choosing-which-set-left).

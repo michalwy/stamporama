@@ -24,6 +24,7 @@ import {
   renderOrderMark,
   type OrderSaleTarget,
 } from "../core/order-marker";
+import { showOrderDialog, type OrderDialogState } from "../core/order-dialog";
 import { renderLotMarker, type LotMarkerTarget } from "../core/lot-marker";
 import { getProfileStore } from "../core/profile";
 import { markIconUrl as iconUrl } from "../core/mark";
@@ -448,14 +449,22 @@ function drawOrderMark(module: string, order: PlatformOrder, refusal?: string): 
 }
 
 /**
- * Record one order, and redraw its row with whatever the instance answered.
+ * Record one order: open the window, ask the instance, and say what happened in both places.
  *
- * The row says *Importing…* while the instance is deciding, because this is the one mark that starts
- * something: a button that stayed unchanged would be pressed again. What replaces it is always the
- * instance's own answer — the sale it created, or the sentence naming the item that stopped it, kept
- * verbatim so the collector reads the same words the app would have shown them.
+ * **The window opens on the click**, before anything is known, and says it is working. That is the
+ * whole of what a mark could not do: pressing *Import* writes to the collection, and what it wrote —
+ * or every reason it wrote nothing — is more than a word in somebody else's table cell can carry.
+ * The row keeps its own answer beside it (*Importing…*, then the sale or *Not imported*), because
+ * the row is where the question was asked and the window is closed as soon as it has been read.
+ *
+ * Whatever the instance says travels **verbatim** into both: a refusal names a listing and an offer,
+ * and rewording it here would put a second vocabulary between the collector and what they have to go
+ * and fix.
  */
 async function importOrder(module: string, order: PlatformOrder): Promise<void> {
+  const say = (state: OrderDialogState) =>
+    showOrderDialog(document, order.orderId, state, iconUrl);
+  say({ kind: "working" });
   renderOrderMark(order.anchor, order.orderId, { kind: "importing" }, iconUrl, () => {});
   let res: OrderImportResponse;
   try {
@@ -468,14 +477,17 @@ async function importOrder(module: string, order: PlatformOrder): Promise<void> 
       order: reported,
     } satisfies OrderImportRequest)) as OrderImportResponse;
   } catch (e) {
-    res = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    res = { ok: false, error: e instanceof Error ? e.message : String(e), problems: [] };
   }
   if (res?.ok) {
     knownOrders.set(order.orderId, res.sale);
     drawOrderMark(module, order);
+    say({ kind: "recorded", sale: res.sale, summary: res.summary, created: res.created });
     return;
   }
-  drawOrderMark(module, order, res?.error ?? "The import failed.");
+  const error = res?.error ?? "The import failed.";
+  drawOrderMark(module, order, error);
+  say({ kind: "refused", message: error, problems: res?.problems ?? [] });
 }
 
 /** How long to let a burst of DOM changes settle before re-scanning. A filtered, sorted or paged

@@ -7,6 +7,7 @@ import { addSaleLines, createSale, deleteSale, listSellableOffers } from "./sale
 import { getShippingMethods } from "./shipping-methods";
 import { matchShippingMethod } from "./allegro-sale-rules";
 import { parseSaleDate } from "./sale-rules";
+import { saleImportSummary, type ImportedSaleSummary } from "./order-import-summary";
 import {
   describeColnectOrderProblems,
   planColnectOrderSale,
@@ -130,6 +131,10 @@ export interface ColnectOrderImportResult extends ColnectOrderSaleMatch {
   /** False when the transaction was already recorded — the answer is then a link and nothing was
    *  written. */
   created: boolean;
+  /** What the sale says, for the window the collector is reading this in. Stated for a sale that was
+   *  already there as well as one just written: a re-import is a link, and a link worth following is
+   *  worth describing. */
+  summary: ImportedSaleSummary | null;
 }
 
 /**
@@ -171,6 +176,7 @@ export async function importColnectOrder(
       path: salePath(existing.id),
       status: existing.status,
       created: false,
+      summary: await saleImportSummary(collectionId, existing.id),
     };
   }
 
@@ -270,6 +276,7 @@ export async function importColnectOrder(
     path: salePath(saleId),
     status: sale?.status ?? "ordered",
     created: true,
+    summary: await saleImportSummary(collectionId, saleId),
   };
 }
 

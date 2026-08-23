@@ -64,6 +64,21 @@ const LABELLED_AMOUNT = new RegExp(
   "i"
 );
 
+/**
+ * The labels this page prints, as a value's **right-hand boundary**.
+ *
+ * A value ends where the next label begins, and it has to be said explicitly because the smallest
+ * element holding a label may hold the label after it too — Colnect writes the header as one flat
+ * line of `<b>` labels and bare text, so "the text after `Buyer:`" is otherwise the buyer, the date
+ * and everything below them.
+ *
+ * A label of the page, not any word with a colon after it: `Shipping method: Stamps→domestic:
+ * Registered mail` carries a colon of its own inside the value, and cutting at that one would file
+ * half a method name.
+ */
+const NEXT_LABEL =
+  /\b(?:Buyer|Started|Shipping method|Shipping price|Item count|Item condition|Catalog codes|Sale status|Items total|Discount|Total with shipping)\s*[::]/i;
+
 const ITEM_COUNT_LABEL = /^item count\b/i;
 const STARTED_LABEL = /^started\b/i;
 const SHIPPING_METHOD_LABEL = /^shipping method\b/i;
@@ -123,22 +138,63 @@ function saleAnchorsIn(root: Element, code: string): Element[] {
 /**
  * A line the page printed behind a label, label and all — `Item count: 1`.
  *
- * Colnect prints these either as one leaf (`Started: August 23, 2026 2:21 PM`) or as a label and its
- * value side by side, so both are read: the label's own leaf first, and the leaf after it joined on
- * when the label stands alone. Null when the label is not on the page at all, which every rule
- * downstream has an answer for.
+ * Read off **elements' own text** rather than leaf by leaf, which is the correction the live page
+ * forced: Colnect writes `<b>Started:</b> August 23, 2026 2:21 PM`, where the value is a bare text
+ * node beside the label's element and a reader that walks elements sees the label and nothing else.
+ * So the line is the **smallest** element whose text begins with the label and says more than it —
+ * smallest, because every ancestor's text begins with the label too and the innermost one is the
+ * line the page drew.
+ *
+ * Where no element holds both — Colnect's header is one flat line of `<b>` labels and bare text, so
+ * every element containing the second label contains the first — the value is read **forward from
+ * the label**, siblings and text nodes alike, up to the next label. Null when the label is not on the
+ * page at all, which every rule downstream has an answer for.
  */
 function labelledLine(root: Element, label: RegExp): string | null {
-  const all = leaves(root);
-  for (let index = 0; index < all.length; index += 1) {
-    const text = textOf(all[index]);
+  let line: string | null = null;
+  for (const element of [root, ...root.querySelectorAll("*")]) {
+    const text = textOf(element);
     if (!label.test(text)) continue;
-    const rest = text.replace(label, "").replace(/^\s*[::]\s*/, "").trim();
-    if (rest) return text;
-    const next = textOf(all[index + 1]);
-    return next ? `${text} ${next}`.replace(/\s+/g, " ").trim() : null;
+    if (!valueAfter(text, label)) continue;
+    if (line === null || text.length < line.length) line = text;
   }
-  return null;
+  if (line !== null) return line;
+
+  // No element holds both, which is the flat header: `<b>Buyer:</b> … <b>Started:</b> August 23,
+  // 2026 2:21 PM`, where every element's text begins with the *first* label. So read **forward from
+  // the label itself** through what follows it, stopping at the page's next label.
+  const labelElement = leaves(root).find((leaf) => label.test(textOf(leaf)));
+  if (!labelElement) return null;
+  const value = textAfter(labelElement, root);
+  return value ? `${textOf(labelElement)} ${value}`.replace(/\s+/g, " ").trim() : null;
+}
+
+/**
+ * The text that follows `element` inside its parent, up to the next label.
+ *
+ * Text **nodes** included, which is the whole point: a value printed beside its label is not an
+ * element and a reader walking elements cannot see it. Climbs while nothing follows, so a label
+ * wrapped one level deeper than its value is still read, and stops at `root` so it never wanders
+ * into the rest of the page.
+ */
+function textAfter(element: Element, root: Element): string {
+  let from: Element | null = element;
+  while (from && from !== root) {
+    let text = "";
+    for (let node = from.nextSibling; node; node = node.nextSibling) text += node.textContent ?? "";
+    const value = text.replace(/\s+/g, " ").trim().split(NEXT_LABEL)[0].trim();
+    if (value) return value;
+    from = from.parentElement;
+  }
+  return "";
+}
+
+/** What a labelled line says once its **first** label is off and the **next** label is cut away.
+ *  Only the first label goes, because a value may carry a colon of its own — `Shipping method:
+ *  Stamps→domestic: Registered mail`. */
+function valueAfter(text: string, label: RegExp): string {
+  const rest = text.replace(label, "").replace(/^\s*[::]\s*/, "");
+  return rest.split(NEXT_LABEL)[0].trim();
 }
 
 /**
@@ -150,9 +206,7 @@ function labelledLine(root: Element, label: RegExp): string | null {
  */
 function labelledValue(root: Element, label: RegExp): string | null {
   const line = labelledLine(root, label);
-  if (line === null) return null;
-  const value = line.replace(label, "").replace(/^\s*[::]\s*/, "").trim();
-  return value || null;
+  return line === null ? null : valueAfter(line, label) || null;
 }
 
 /**
@@ -291,7 +345,7 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
     // the collector is standing *is* the statement of which order this is.
     orderUrl: pageUrl.split("?")[0],
     buyerLogin: buyerLoginOf(buyerAnchor),
-    buyerName: buyerNameBeside(buyerAnchor),
+    buyerName: buyerNameBeside(root, buyerAnchor),
     totalTexts: readTotals(totalsBlock ?? root, totalsBlock ? [] : rowElements),
     soldAtText: labelledValue(root, STARTED_LABEL),
     shippingMethodText: labelledValue(root, SHIPPING_METHOD_LABEL),
@@ -365,15 +419,20 @@ function buyerLoginOf(buyerAnchor: Element | null): string | null {
  * says nothing but the login: a sale with no name is filed under the login, which is how buyers are
  * filed here anyway (#463).
  *
+ * Found through the `Buyer:` label rather than through the link's parent, for the reason the labels
+ * above are read that way: the name may be a bare text node, and the parent that holds both it and
+ * the link may just as well be the whole header — which would file the buyer under the date as well.
+ *
  * The **postal address printed further down the same page is not read**, and therefore cannot be
  * stored — ADR-0038 §4's rule, unchanged.
  */
-function buyerNameBeside(buyerAnchor: Element | null): string | null {
-  const line = textOf(buyerAnchor?.parentElement);
+function buyerNameBeside(root: Element, buyerAnchor: Element | null): string | null {
+  const line =
+    labelledValue(root, BUYER_LABEL) ??
+    valueAfter(textOf(buyerAnchor?.parentElement), BUYER_LABEL);
   if (!line || line.length > 200) return null;
   const login = buyerLoginOf(buyerAnchor);
   const name = line
-    .replace(BUYER_LABEL, "")
     .replace(/\[[^\]]*\]/g, " ")
     .replace(login ? new RegExp(`\\b${escapeForRegExp(login)}\\b`, "g") : /$^/, " ")
     .replace(/\s+/g, " ")

@@ -153,6 +153,18 @@ describe("Colnect transaction import (#698)", () => {
 
     assert.equal(result.created, true);
     assert.equal(result.path, `/c/${collectionSlug}/sales/${result.saleId}`);
+    // What the window on Colnect's own page reads back, so the collector can check the record
+    // against the screen in front of them without opening a second tab.
+    assert.deepEqual(result.summary, {
+      buyer: "samplebuyer",
+      soldAt: "2026-08-23",
+      currency: "EUR",
+      lineCount: 2,
+      gross: "5.00",
+      buyerPaidTotal: "7.40",
+      shippingMethodName: "Stamps→domestic: Registered mail (Poczta Polska)",
+      setChoicePending: 0,
+    });
 
     const sale = await prisma.sale.findUniqueOrThrow({
       where: { id: result.saleId },
@@ -252,6 +264,8 @@ describe("Colnect transaction import (#698)", () => {
     });
     assert.equal(lines.length, 1);
     assert.equal(lines[0].setChoicePending, true);
+    // And the window says so, rather than leaving the outstanding decision to be found later.
+    assert.equal(result.summary?.setChoicePending, 1);
     const sets = await prisma.offerSet.findMany({
       where: { offerId: offer.id },
       orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
@@ -301,6 +315,10 @@ describe("Colnect transaction import (#698)", () => {
 
     assert.equal(again.created, false);
     assert.equal(again.saleId, first.saleId);
+    // A re-import is a link, and a link worth following is worth describing: the sale that was
+    // already there is summarised exactly as one just written is.
+    assert.equal(again.summary?.lineCount, 1);
+    assert.equal(again.summary?.soldAt, "2026-08-23");
     assert.equal(await prisma.sale.count({ where: { collectionId, externalRef: "hflVE05" } }), 1);
   });
 
