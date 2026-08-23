@@ -194,6 +194,12 @@ const catalogBadgeStyle: React.CSSProperties = {
   borderRadius: "0.25rem",
   padding: "0.1rem 0.4rem",
   fontFamily: "monospace",
+  // A chip is one token and stays on one line (#691): a prefix broken across two lines inside a
+  // single-line row reads as two chips. It never gives up width either — the area name beside it is
+  // what yields when a deeply nested row runs out of room, since a shortened name is still the row's
+  // identity while half a catalog prefix is nothing.
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 /** The area's one translatable field (#293). `defaultValue` is filled in at render time from the
@@ -224,6 +230,7 @@ function SectionHeading({ title, hint }: { title: string; hint: string }) {
 }
 
 const groupingBadgeStyle: React.CSSProperties = {
+  flexShrink: 0,
   fontSize: "0.6875rem",
   fontWeight: 600,
   color: "var(--color-text-muted)",
@@ -1285,7 +1292,7 @@ export function AreasPanel({
                 )}
 
                 {otherPrefixEntries.length > 0 && (
-                  <span style={{ display: "flex", gap: "0.25rem" }}>
+                  <span style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}>
                     {otherPrefixEntries.map((entry) => {
                       const isInherited = !declaresVendor(entry.catalogVendorId);
                       return (
@@ -1328,10 +1335,16 @@ export function AreasPanel({
                         ...catalogBadgeStyle,
                         fontFamily: "inherit",
                         fontStyle: isPrimaryInherited ? "italic" : undefined,
-                        maxWidth: "10rem",
+                        // The one chip holding a catalog *name* rather than an abbreviation
+                        // ("Deutschland Spezial - Band 1"), so it is the one allowed to take the
+                        // room it needs and the one that shrinks when there is none (#691). The
+                        // fixed 10rem it used to have cut every long volume name short even on a
+                        // row with space to spare; the tooltip still carries the full value.
+                        flexShrink: 1,
+                        minWidth: "4rem",
+                        maxWidth: "24rem",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
                       }}
                     >
                       {primaryCatalog.name}
@@ -1340,7 +1353,14 @@ export function AreasPanel({
                 )}
 
                 {area.stampCount > 0 && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--color-text-muted)",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                  >
                     {area.stampCount} stamp{area.stampCount !== 1 ? "s" : ""}
                   </span>
                 )}

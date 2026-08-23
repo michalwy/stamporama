@@ -145,6 +145,16 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
+/** How wide the settings screen is allowed to get, per tab (#691). Almost every tab is a column of
+ * labelled fields, which reads badly stretched across a wide monitor — hence the 56rem the whole
+ * screen used to be capped at. The **areas** tab is the exception: it is a tree, every level of
+ * nesting spends width on indentation, and each row states the catalog configuration in force
+ * beside the name. At 56rem a fourth-level area's catalog name was being cut mid-word with its
+ * chips crowded against the stamp count. It is still bounded — an unbounded row would strand the
+ * chips at the far edge of the screen from the name they describe. */
+const TAB_MAX_WIDTH: Partial<Record<TabKey, string>> = { areas: "80rem" };
+const DEFAULT_MAX_WIDTH = "56rem";
+
 const sectionHeadingStyle: React.CSSProperties = {
   fontSize: "1rem",
   fontWeight: 600,
@@ -230,7 +240,7 @@ export function SettingsTabs({
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: TAB_MAX_WIDTH[activeTab] ?? DEFAULT_MAX_WIDTH }}>
       <div
         style={{
           display: "flex",

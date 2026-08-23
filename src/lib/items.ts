@@ -1684,16 +1684,6 @@ export async function listItemsPaginated(
 
 // ── Duplicate groups (#372) ──────────────────────────────────────────────────
 
-/** The eligibility every duplicate group is computed over: **for sale, delivered, unsold** — the
- * offer composition picker's own eligibility, because listing the group is the only thing a group
- * is for. Forced rather than merged, so the panel's delivery-state / include-sold controls cannot
- * silently produce a group nothing in it could be listed from. */
-const GROUP_ELIGIBILITY = {
-  forSale: true,
-  deliveryStates: ["delivered"],
-  excludeGone: true,
-} as const satisfies Partial<ItemListFiltersPaginated>;
-
 /** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for
  * what "interchangeable" means and why condition is never optional). Carries the stamp identity a
  * copy row shows, plus what the group adds — how many, how many are already listed, and where its
@@ -1791,6 +1781,12 @@ function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
  * `axes`; the panel's own condition / format / certificate *filters* still narrow which copies are
  * grouped at all, since grouping and filtering answer different questions.
  *
+ * The groups are computed over **exactly the filtered set** — no eligibility of its own (#692).
+ * Until then a group was forced to *for sale, delivered, unsold*, the offer picker's eligibility,
+ * because listing the group was the only thing a group was for; since #682 that question belongs to
+ * the *selection* and not to the row, and the filing and issue groupings (#421/#424) never forced
+ * anything. A grouping mode must not silently decide which copies are being looked at.
+ *
  * The page's member copies are read once (bounded: a page of groups is a page of copies) and carry
  * three things at once — the counts, the mixed markers, and the valuation agreement — so no
  * per-group query exists.
@@ -1805,12 +1801,11 @@ export async function listItemDuplicateGroups(
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
 
-  const eligible: ItemListFiltersPaginated = { ...filters, ...GROUP_ELIGIBILITY };
-  const locationIds = await resolveLocationScope(collectionId, eligible);
+  const locationIds = await resolveLocationScope(collectionId, filters);
   const where = await withMissingCatalogFilter(
     collectionId,
-    eligible,
-    buildItemWhere(collectionId, eligible, locationIds)
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
   );
 
   // `by` is chosen at runtime from the axes, which Prisma's generic `groupBy` signature cannot

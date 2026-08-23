@@ -60,6 +60,15 @@ page URL, so you can bookmark or share a filtered view.
 The inventory list filters the same way the [Stamps](collections.md) list does: a left
 **area panel** plus a toolbar of filters, all kept in the page URL.
 
+Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
+the way you left it — condition, format, certificate, delivery state, location, issue, the
+disposition toggles, *No photos*, *Missing catalog value* and both *Include* toggles, alongside the
+grouping mode and sort that were already remembered. Switching a filter off is remembered too, so
+clearing one clears it for next time. A link that names a filter still wins over what is remembered,
+so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
+is never remembered, so you are never greeted by a list narrowed to a phrase you have forgotten
+typing.
+
 The toolbar **stays pinned to the top of the window** as you scroll a long list, so search,
 sorting and the filter chips are always in reach — on every list that has one: Issues,
 Stamps, Copies, Offers, Sales and Purchases.
@@ -913,10 +922,16 @@ certificates**. With that axis switched on, the marking cannot appear: the copie
 groups.
 
 Grouping and filtering are **different questions** and both apply. The sidebar and toolbar filters
-decide *which copies you are looking at*; the toggles decide *what counts as the same item*. On top
-of that, grouping only ever covers copies you can still list — **For sale**, **delivered**, and
-unsold — so the *Include sold & traded* and delivery-state controls grey out while it is on, and the sort
-control is replaced: groups are ordered by **how many copies each holds**, largest first.
+decide *which copies you are looking at*; the toggles decide *what counts as the same item*. Grouping
+**never changes which copies are shown** — it used to cover only copies you could still list (*For
+sale*, delivered, unsold), which greyed out the *Include sold & traded* and delivery-state controls;
+it no longer does, so every filter stays live and works the same way it does in the other grouping
+modes. The one control that *is* replaced is the sort: groups are ordered by **how many copies each
+holds**, largest first.
+
+A group can therefore hold copies you cannot list — one still in transit, one not marked for sale.
+That does not get in the way of listing the rest: tick the group and the **Add selected to offer**
+buttons act on the copies that qualify and say how many that is.
 
 Each toggle is remembered per collection, so the list opens the way you left it.
 
@@ -964,11 +979,11 @@ A few things worth knowing:
   *include sub-locations* scope instead.)
 - Copies **filed nowhere** are the last row, and copies with **no ref** are the last row within their
   location. There is nothing to walk to, so they sort last.
-- Unlike duplicate grouping, this covers **whatever the list is showing**. Every filter still applies
+- Like every grouping, this covers **whatever the list is showing**. Every filter still applies
   — including *Include sold & traded* and *Include no longer held* — because "where is it?" is a fair question
   about a copy you have already sold but not yet posted.
-- The **checkbox** in front of a group row ticks the copies filed there that can be listed (for sale
-  and in hand), exactly as it does on a duplicate group.
+- The **checkbox** in front of a group row ticks the copies filed there that you still hold, exactly
+  as it does on a duplicate group.
 
 Both groupings are computed on the server, so a group is never split in half by scrolling.
 
@@ -980,11 +995,11 @@ thin. Rows are in the **Issues list's own order**: by year, then by the issue's 
 number, then by name. An issue with no year comes after the dated ones, and the copies whose stamp
 belongs to **no issue** are the last row of all.
 
-Like the filing groupings and unlike duplicate grouping, this covers **whatever the list is
-showing** — every filter still applies, *Include sold & traded* and *Include no longer held* among them,
-because "what have I got of this set" includes the piece you have already sold. The **checkbox** in
-front of a group row ticks the copies of that issue that can be listed, and the grouping is computed
-on the server, so a group is never split in half by scrolling.
+Like every other grouping, this covers **whatever the list is showing** — every filter still
+applies, *Include sold & traded* and *Include no longer held* among them, because "what have I got of
+this set" includes the piece you have already sold. The **checkbox** in front of a group row ticks
+the copies of that issue you still hold, and the grouping is computed on the server, so a group is
+never split in half by scrolling.
 
 A stamp can belong to more than one issue. A copy is counted under **one** of them — the first issue
 its stamp was added to — so the counts add up to the list exactly rather than reporting one copy

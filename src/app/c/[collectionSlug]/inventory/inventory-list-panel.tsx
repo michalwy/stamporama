@@ -18,6 +18,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { usePersistedFilterParams } from "@/app/c/[collectionSlug]/shared/use-persisted-filter-params";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SubtreeScopeToggle, useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -148,6 +149,27 @@ const DISPOSITION_FILTERS = [
   { key: "forTrade", label: "For trade" },
 ] as const;
 
+/** The filters this list remembers per collection (#693) — every one of them except the search box,
+ * which is a lookup one finishes rather than a way of working (a list silently narrowed to a phrase
+ * typed last week is the failure that rule avoids). The area and the year are absent because
+ * `use-collection-filter-store` already carries them across every list screen (#143), the sort
+ * because `usePersistedSort` does (#325), and the platform worklist because #275 remembers it on its
+ * own — and its *review* half (#506) is deliberately never remembered, so it is not here either.
+ * Grouping mode and its axes are a client preference of their own and never travel in the URL. */
+const REMEMBERED_FILTER_KEYS = [
+  "conditionIds",
+  "formatIds",
+  "certificateStatusIds",
+  "deliveryStates",
+  "locationId",
+  "issueId",
+  "noPhotos",
+  "missingCatalogValue",
+  "includeGone",
+  "includeDisposed",
+  ...DISPOSITION_FILTERS.map((f) => f.key),
+] as const;
+
 const SORT_OPTIONS: SortOption[] = [
   { value: "created", label: "Date added" },
 ];
@@ -185,11 +207,11 @@ const COLLIDING_FILLED: React.CSSProperties = {
   background: "var(--color-warning)",
 };
 
-/** A comma-separated multi-select filter read off the URL (#425, #427), memoised so the filter
- * objects it feeds stay referentially stable and do not refetch every render. An absent or
- * all-blank parameter is the empty list — the absence of the filter, never an empty set. */
-function useCsvParam(searchParams: ReturnType<typeof useSearchParams>, key: string): string[] {
-  const raw = searchParams.get(key);
+/** A comma-separated multi-select filter (#425, #427), memoised so the filter objects it feeds stay
+ * referentially stable and do not refetch every render. Takes the value *in force* — which since
+ * #693 is the URL's or the remembered one — rather than reading the URL itself. An absent or
+ * all-blank value is the empty list: the absence of the filter, never an empty set. */
+function useCsvValue(raw: string | null): string[] {
   return useMemo(() => (raw ? raw.split(",").filter(Boolean) : []), [raw]);
 }
 
@@ -250,29 +272,42 @@ export function InventoryListPanel({
     [filterAreaId, areas, includeSubAreas]
   );
 
+  // Every filter below is remembered per collection (#693): the URL wins where it names one, the
+  // stored set fills in otherwise, and `updateParams` — the one funnel every filter control writes
+  // through — stores the set as it stands after each change.
+  const { readParam: readFilterParam, remember: rememberFilters } = usePersistedFilterParams(
+    "inventory-filters",
+    collectionId,
+    REMEMBERED_FILTER_KEYS,
+    searchParams
+  );
+
+  // The search box is the one filter *not* remembered: it is a lookup one finishes, and a fresh
+  // visit narrowed to a phrase nobody remembers typing reads as a broken list rather than a
+  // remembered one.
   const search = searchParams.get("search") ?? "";
   // Condition, format and delivery state are **multi-selects** (#425, #427): a copy is in exactly
   // one of each, but the question asked of the list is routinely a group of them — "the mint
   // grades", "everything still on its way to me" — and asking it three times over is not the same as
   // asking it once. Comma-separated in the URL exactly as `areaIds` is; an empty list is the absence
   // of the filter.
-  const conditionIds = useCsvParam(searchParams, "conditionIds");
+  const conditionIds = useCsvValue(readFilterParam("conditionIds"));
   // Format is a *filter* here, not a price switcher (#343): a copy's format is a fact it carries,
   // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
   // choice — the copies with no format — which an absent value could not express.
-  const formatIds = useCsvParam(searchParams, "formatIds");
+  const formatIds = useCsvValue(readFilterParam("formatIds"));
   // Certificate is the fourth fact a copy carries that this list reasons about — it is a
   // duplicate-grouping axis, a valuation axis and a listing axis — and until #428 it was the one with
   // no filter at all. `"none"` is a tickable value, not the absence of the filter: null *is* a value
   // here (ADR-0006 §2), exactly as `"single"` is for format.
-  const certificateStatusIds = useCsvParam(searchParams, "certificateStatusIds");
-  const locationId = searchParams.get("locationId") ?? "";
+  const certificateStatusIds = useCsvValue(readFilterParam("certificateStatusIds"));
+  const locationId = readFilterParam("locationId") ?? "";
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
   const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
-  const issueId = searchParams.get("issueId") ?? "";
-  const noPhotos = searchParams.get("noPhotos") === "true";
-  const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
+  const issueId = readFilterParam("issueId") ?? "";
+  const noPhotos = readFilterParam("noPhotos") === "true";
+  const missingCatalogValue = readFilterParam("missingCatalogValue") === "true";
   // "For sale, not yet offered on platform X" (#259), remembered per collection (#275): the URL
   // param wins when present (shareable), else fall back to the stored selection on a fresh visit.
   // A stale value (platform since removed) is ignored so the filter can't silently narrow to nothing.
@@ -316,11 +351,11 @@ export function InventoryListPanel({
   // Physical delivery state (#272): the axis the row chip shows, and a multi-select like the
   // condition one (#427) — the states worth asking about come in groups ("ordered, in transit, to
   // sort" is one question: what is still on its way).
-  const deliveryStates = useCsvParam(searchParams, "deliveryStates");
+  const deliveryStates = useCsvValue(readFilterParam("deliveryStates"));
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
-  const includeGone = searchParams.get("includeGone") === "true";
+  const includeGone = readFilterParam("includeGone") === "true";
   // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
-  const includeDisposed = searchParams.get("includeDisposed") === "true";
+  const includeDisposed = readFilterParam("includeDisposed") === "true";
   // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
   // changes *what the rows are*, not what is being looked at, and it is a way of working the
   // collector keeps. The modes answer different questions: what stock do I have in duplicate (#372),
@@ -370,10 +405,10 @@ export function InventoryListPanel({
   const activeDispositions = useMemo(() => {
     const set = new Set<string>();
     for (const { key } of DISPOSITION_FILTERS) {
-      if (searchParams.get(key) === "true") set.add(key);
+      if (readFilterParam(key) === "true") set.add(key);
     }
     return set;
-  }, [searchParams]);
+  }, [readFilterParam]);
 
   // Prefixed catalog search (#146): the inventory list has no dedicated vendor
   // dropdown, so its single search box doubles as the catalog input. Parse a leading
@@ -486,10 +521,14 @@ export function InventoryListPanel({
         if (value) params.set(key, value);
         else params.delete(key);
       }
+      // Both, in the same breath (#325/#693). A cleared filter leaves the URL, so remembering it
+      // here — with the update's own `""` winning over what is stored — is what makes switching a
+      // filter off stick rather than being read straight back on the next render.
+      rememberFilters(updates);
       const qs = params.toString();
       router.push(`/c/${collectionSlug}/inventory${qs ? `?${qs}` : ""}`);
     },
-    [router, collectionSlug, searchParams]
+    [router, collectionSlug, searchParams, rememberFilters]
   );
 
   function handleNavigateFilter(areaId: string | null) {
@@ -511,22 +550,10 @@ export function InventoryListPanel({
     !!locationGroupBy
   );
   const issueGroupsQuery = useIssueGroupsInfinite(collectionId, filters, groupIssues);
-  // Grouping narrows the set to for-sale, delivered, unsold copies, so the holdings bar must narrow
-  // with it — a total counting copies the list no longer shows is worse than none (#151).
-  const valuationFilters: InventoryItemFilters = useMemo(
-    () =>
-      groupDuplicates
-        ? {
-            ...filters,
-            forSale: true,
-            deliveryStates: ["delivered"],
-            includeGone: undefined,
-            includeDisposed: undefined,
-          }
-        : filters,
-    [filters, groupDuplicates]
-  );
-  const { data: holdingsTotal } = useHoldingsValuation(collectionId, valuationFilters);
+  // The holdings bar counts exactly what the list is showing (#151), and since #692 that is the
+  // filtered set whatever the grouping mode: no mode narrows the copies on its own any more, so
+  // there is nothing left here to re-narrow with.
+  const { data: holdingsTotal } = useHoldingsValuation(collectionId, filters);
 
   const allCopies = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -1312,21 +1339,13 @@ export function InventoryListPanel({
                     Missing catalog value
                   </button>
                 </Tooltip>
-                <Tooltip
-                  content={
-                    groupDuplicates
-                      ? "Duplicate groups only cover copies you can still list, so ones that have left stay out."
-                      : "Also show copies that have left — sold, or given to a partner in a closed trade (hidden by default)"
-                  }
-                >
+                <Tooltip content="Also show copies that have left — sold, or given to a partner in a closed trade (hidden by default)">
                   <button
                     type="button"
-                    disabled={groupDuplicates}
                     onClick={() => updateParams({ includeGone: includeGone ? "" : "true" })}
                     style={{
                       ...CONTROL_STYLE,
-                      cursor: groupDuplicates ? "default" : "pointer",
-                      opacity: groupDuplicates ? 0.5 : 1,
+                      cursor: "pointer",
                       fontWeight: includeGone ? 600 : 400,
                       color: includeGone ? "var(--color-accent)" : "var(--color-text-secondary)",
                       borderColor: includeGone ? "var(--color-accent)" : "var(--color-border-strong)",
@@ -1339,23 +1358,15 @@ export function InventoryListPanel({
                 {/* Copies no longer held (#394/#395), beside the one above: between them these are
                     the ways a copy leaves the shelf — sold, given to a partner (#644), or lost.
                     Hidden by default for the same reason — the list answers "what do I have". */}
-                <Tooltip
-                  content={
-                    groupDuplicates
-                      ? "Duplicate groups only cover copies you can still list, so ones you no longer hold stay out."
-                      : "Also show copies you no longer hold — lost, damaged in storage, discarded (hidden by default)"
-                  }
-                >
+                <Tooltip content="Also show copies you no longer hold — lost, damaged in storage, discarded (hidden by default)">
                   <button
                     type="button"
-                    disabled={groupDuplicates}
                     onClick={() =>
                       updateParams({ includeDisposed: includeDisposed ? "" : "true" })
                     }
                     style={{
                       ...CONTROL_STYLE,
-                      cursor: groupDuplicates ? "default" : "pointer",
-                      opacity: groupDuplicates ? 0.5 : 1,
+                      cursor: "pointer",
                       fontWeight: includeDisposed ? 600 : 400,
                       color: includeDisposed ? "var(--color-accent)" : "var(--color-text-secondary)",
                       borderColor: includeDisposed ? "var(--color-accent)" : "var(--color-border-strong)",
@@ -1385,7 +1396,7 @@ export function InventoryListPanel({
                     color: groupMode === "none" ? "var(--color-text-muted)" : "var(--color-accent)",
                   }}
                 />
-                <Tooltip content="Collapse the list into groups: duplicates ready to list as one offer with a quantity, the copies filed in one place, or what you hold of one issue.">
+                <Tooltip content="Collapse the list into groups: interchangeable duplicates, the copies filed in one place, or what you hold of one issue. Grouping never changes which copies are shown — the filters decide that.">
                   <select
                     value={groupMode}
                     onChange={(e) => setGroupMode(e.target.value)}
@@ -1463,28 +1474,17 @@ export function InventoryListPanel({
                   shows, so "what is still in transit?" is one click from seeing it flagged. A
                   multi-select (#427) because the states worth asking about come in groups —
                   *Ordered*, *In transit* and *To sort* together are "what is still on its way". */}
-              <Tooltip
-                content={
-                  groupDuplicates
-                    ? "Duplicate groups only cover copies in hand, so the delivery state is fixed to Delivered."
-                    : ""
-                }
-              >
-                <span>
-                  <MultiSelectFilter
-                    options={DELIVERY_STATES.map((state) => ({
-                      id: state,
-                      label: DELIVERY_STATE_META[state].label,
-                    }))}
-                    selected={deliveryStates}
-                    onChange={(ids) => updateParams({ deliveryStates: ids.join(",") })}
-                    allLabel="All delivery states"
-                    itemNoun="delivery states"
-                    ariaLabel="Filter by delivery state"
-                    disabled={groupDuplicates}
-                  />
-                </span>
-              </Tooltip>
+              <MultiSelectFilter
+                options={DELIVERY_STATES.map((state) => ({
+                  id: state,
+                  label: DELIVERY_STATE_META[state].label,
+                }))}
+                selected={deliveryStates}
+                onChange={(ids) => updateParams({ deliveryStates: ids.join(",") })}
+                allLabel="All delivery states"
+                itemNoun="delivery states"
+                ariaLabel="Filter by delivery state"
+              />
 
               {/* Format filter (#343), beside the condition one, and a multi-select like it (#427).
                   Absent entirely when the collection defines no formats — most never do. "Single" is
@@ -1674,7 +1674,7 @@ export function InventoryListPanel({
           {!listLoading && listEmpty && (
             <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
               {groupDuplicates
-                ? "No duplicate groups here. Grouping covers copies that are For sale, delivered and unsold."
+                ? "No copies match these filters, so there is nothing to group as duplicates."
                 : locationGroupBy
                 ? "No copies match these filters, so there is nothing filed to group."
                 : groupIssues

@@ -109,7 +109,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "56rem" }}>
+    // The width cap lives on the tabs (#691): most settings are a column of fields and read badly
+    // stretched, but the area tree is a tree and needs the room its nesting takes.
+    <div style={{ padding: "2rem" }}>
       <Suspense fallback={null}>
         <SettingsTabs
           collectionId={collection.id}

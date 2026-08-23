@@ -10,12 +10,18 @@ import { createOffer } from "../../src/lib/offers";
 
 // Duplicate grouping on the Copies list (#372). What is worth pinning down is the *key*: the fixed
 // `stamp × condition` part (Colnect refuses a second offer for the same stamp in the same
-// condition), the two optional axes, and the eligibility — grouping only covers copies that can
-// still be listed, so a not-for-sale, undelivered or sold copy is not part of any group. Plus the
-// two derived figures a group carries beyond a plain count: how many are already listed, and
-// whether its members disagree on an axis left at *any*.
+// condition) and the two optional axes — and, since #692, that the grouping applies **no
+// eligibility of its own**: it collapses exactly the copies the filters let through, so a
+// not-for-sale or still-undelivered copy is grouped like any other and a sold one is out only
+// because the list hides sold copies by default. Plus the two derived figures a group carries
+// beyond a plain count: how many are already listed, and whether its members disagree on an axis
+// left at *any*.
 
 const ts = Date.now();
+
+/** What the Copies list route always sends (#207): sold and traded-away copies stay out until the
+ * collector asks for them. Since #692 it is the *only* thing keeping a copy out of a group. */
+const LIST_DEFAULTS = { excludeGone: true } as const;
 
 describe("duplicate groups", () => {
   let userId: string;
@@ -104,7 +110,8 @@ describe("duplicate groups", () => {
       ...sellable,
     });
 
-    // Three copies that must never be grouped: not for sale, not in hand, and sold.
+    // Three copies the grouping used to exclude: not for sale, not in hand, and sold. Since #692
+    // only the sold one is out, and only because the list hides sold copies until asked (#207).
     await createItem(userId, collectionId, { stampId, conditionId: mnhId, forSale: false });
     await createItem(userId, collectionId, {
       stampId,
@@ -156,11 +163,12 @@ describe("duplicate groups", () => {
   });
 
   it("groups by stamp × condition, biggest stack first", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId);
-    // Chopin/MNH (4), Curie/MNH (2), Chopin/Used (1) — count descending.
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
+    // Chopin/MNH (6 — four sellable, one not for sale, one still in transit), Curie/MNH (2),
+    // Chopin/Used (1) — count descending.
     assert.deepEqual(
       groups.map((g) => g.count),
-      [4, 2, 1]
+      [6, 2, 1]
     );
     const top = groups[0];
     assert.equal(top.stampId, stampId);
@@ -170,22 +178,28 @@ describe("duplicate groups", () => {
     assert.equal(groups.filter((g) => g.stampId === stampId).length, 2);
   });
 
-  it("leaves out copies that cannot be listed", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId);
+  it("groups exactly the copies the filters let through (#692)", async () => {
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
     const total = groups.reduce((n, g) => n + g.count, 0);
-    // Seven sellable copies were created; the not-for-sale, in-transit and sold ones are excluded.
-    assert.equal(total, 7);
+    // Ten copies exist; only the sold one is missing, and only because the list hides sold copies
+    // by default. Being unlistable — not for sale, not yet arrived — no longer keeps a copy out.
+    assert.equal(total, 9);
+    const withGone = await listItemDuplicateGroups(userId, collectionId, {});
+    assert.equal(
+      withGone.groups.reduce((n, g) => n + g.count, 0),
+      10
+    );
   });
 
   it("reports how many of a group are already listed", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId);
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
     const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
     assert.equal(top.listedCount, 1);
     assert.equal(groups.find((g) => g.stampId === otherStampId)!.listedCount, 0);
   });
 
   it("marks a group mixed on the axes left at any", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId);
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
     const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
     assert.equal(top.mixedFormat, true);
     assert.equal(top.mixedCertificate, true);
@@ -196,13 +210,14 @@ describe("duplicate groups", () => {
 
   it("splits on format and certificate when those axes join the key", async () => {
     const { groups } = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
       axes: { format: true, certificate: true },
     });
     const chopinMnh = groups.filter((g) => g.stampId === stampId && g.conditionId === mnhId);
-    // Four copies become three groups: two plain singles, one certified single, one pair.
+    // Six copies become three groups: four plain singles, one certified single, one pair.
     assert.deepEqual(
       chopinMnh.map((g) => g.count).sort(),
-      [1, 1, 2]
+      [1, 1, 4]
     );
     // With both axes on, nothing can be mixed by construction.
     assert.ok(groups.every((g) => !g.mixedFormat && !g.mixedCertificate));
@@ -216,6 +231,7 @@ describe("duplicate groups", () => {
 
   it("still narrows by the list's own filters — grouping and filtering compose", async () => {
     const { groups } = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
       conditionIds: [usedId],
     });
     assert.equal(groups.length, 1);
@@ -227,8 +243,8 @@ describe("duplicate groups", () => {
     // The group's own action (#372): one offer, one set each, so the listing carries a quantity —
     // the shape Colnect requires, since it refuses a second offer for the same stamp in the same
     // condition. `seedPerCopy` is the only difference from the single-set seed (#189).
-    const { groups } = await listItemDuplicateGroups(userId, collectionId);
-    const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
+    // Since #692 a group may hold copies that cannot be listed, so what is seeded is the listable
+    // subset of it — the question the selection asks (#682), not one the group row answers.
     const { items } = await listItemsPaginated(userId, collectionId, {
       stampId,
       conditionIds: [mnhId],
@@ -236,7 +252,7 @@ describe("duplicate groups", () => {
       deliveryStates: ["delivered"],
       excludeGone: true,
     });
-    assert.equal(items.length, top.count);
+    assert.equal(items.length, 4);
     const platformId = (
       await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
     ).id;
@@ -267,10 +283,14 @@ describe("duplicate groups", () => {
   });
 
   it("paginates without splitting a group across a page boundary", async () => {
-    const first = await listItemDuplicateGroups(userId, collectionId, { pageSize: 2 });
+    const first = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
+      pageSize: 2,
+    });
     assert.equal(first.groups.length, 2);
     assert.equal(first.nextCursor, "2");
     const second = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
       pageSize: 2,
       offset: 2,
     });

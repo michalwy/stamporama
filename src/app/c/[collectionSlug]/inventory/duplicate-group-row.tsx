@@ -383,8 +383,9 @@ export function DuplicateGroupRow({
 /**
  * The filters addressing one group's members: the panel's own filters plus the group's key. Only
  * the axes that joined the key are pinned — one left at *any* must keep the panel's own value, or
- * the members shown would not be the members counted. The eligibility the grouping applies
- * (for sale, delivered, unsold) is repeated here for the same reason.
+ * the members shown would not be the members counted. Since #692 the grouping applies no
+ * eligibility of its own, so there is nothing beyond the key to repeat here either: the members
+ * come back through the very filters the counts were taken over.
  */
 export function groupMemberFilters(
   group: CopyGroupRow,
@@ -406,8 +407,5 @@ export function groupMemberFilters(
     ...(axes.certificate
       ? { certificateStatusIds: [group.certificateStatusId ?? "none"] }
       : {}),
-    forSale: true,
-    deliveryStates: ["delivered"],
-    includeGone: undefined,
   };
 }
