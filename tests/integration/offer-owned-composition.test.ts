@@ -146,9 +146,17 @@ describe("offer-owned composition + coordination", () => {
     const qd = await prisma.offer.findUnique({ where: { id: offerQD }, select: { state: true } });
     assert.equal(qd?.state, "active", "the offer still has its z-set to sell");
 
-    const needsIds = (await listOffersPaginated(userId, collectionId, { needsAction: true })).items.map((o) => o.id);
-    assert.ok(!needsIds.includes(offerQD), "the selling offer keeps hanging — z is still for sale");
+    const flagged = (await listOffersPaginated(userId, collectionId, { needsAction: true })).items;
+    const needsIds = flagged.map((o) => o.id);
     assert.ok(needsIds.includes(offerQA), "the twin on the other platform must decrement (y is gone)");
+
+    // The selling offer is flagged too since #700 — but for the other reason *Needs action* selects:
+    // its live listing still advertises the set that has just gone (#542), not a copy committed
+    // twice. It keeps hanging as a listing, which is why z stays for sale.
+    const selling = flagged.find((o) => o.id === offerQD);
+    assert.ok(selling, "the partially sold offer's listing is now out of step with it");
+    assert.equal(selling.soldCopyCount, 0, "…and not as a dead copy: z is still sellable here");
+    assert.notEqual(selling.listingOutOfDate, null);
 
     // Decrement: Delcampe's offer now exposes a single remaining sellable set (z).
     const sellable = (await listSellableOffers(userId, collectionId, { platformId: delcampeId })).find(

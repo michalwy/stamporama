@@ -15,6 +15,7 @@ import {
 } from "./items";
 import { attributeLineToPurchase } from "./purchase-return";
 import { resolveShippingMethodForPlatform } from "./shipping-methods";
+import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
 import { readShareAddress, type ShareAddress } from "./share-address";
@@ -822,6 +823,17 @@ export async function addSaleLines(
           });
         }
       }
+      // A sale is a **composition change** (#700), and the strongest of them: the sets that sold
+      // leave what the listing has to offer, and #315 drops them from its photo plan. So a listing
+      // still up after a partial sale is out of step exactly as one whose sets were edited is —
+      // it advertises a quantity it no longer has and pictures a copy that has gone — and it is
+      // flagged by the same rule, cleared by the same three things (#542: the Assistant's update,
+      // a republication, *Mark as up to date*).
+      //
+      // **After** the flip above, deliberately: an offer that just sold out is `sold`, which the
+      // rule excludes, so the sale that closes a listing does not ask anyone to go and fix it. Only
+      // the one that leaves something behind does.
+      await markListingContentChanged(offerIds, tx);
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -1119,6 +1131,9 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
       if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, line.offerId))) {
         await tx.offer.update({ where: { id: line.offerId }, data: { state: "active" } });
       }
+      // The set is back in what this offer sells, which is the same composition change in reverse
+      // (#700/#542): a live listing now understates what is there.
+      await markListingContentChanged(line.offerId, tx);
     }
   });
 }
@@ -1675,6 +1690,10 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
         // back out of the generated-photo purge's reach.
         data: { state: "active", closedAt: null },
       });
+      // As in `removeSaleLine`: every set the sale held is sellable again, so a listing still up is
+      // out of step with it (#700/#542). After the reopen above, so an offer this call just took
+      // back out of `sold` is stamped as well.
+      await markListingContentChanged(offerIds, tx);
     }
   });
 }

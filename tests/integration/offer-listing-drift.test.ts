@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { getActionItems } from "../../src/lib/action-items";
+import { addSaleLines, createSale, deleteSale, removeSaleLine } from "../../src/lib/sales";
 import {
   addItemsToOfferSet,
   addOfferSet,
@@ -65,6 +66,10 @@ describe("changed-since-listed flag (#542)", () => {
   });
 
   after(async () => {
+    // Sales first: a sold copy is `Restrict`-ed by `sale_line_item` (the no-double-sale backstop),
+    // so the collection cannot be cascaded away while its sales still name the copies — and this
+    // file sells things since #700.
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
@@ -91,6 +96,29 @@ describe("changed-since-listed flag (#542)", () => {
     await setOfferState(userId, offerId, "ready");
     await setOfferState(userId, offerId, "active");
     return offerId;
+  }
+
+  /** Sell one set of an offer, the way the sale screens do. Returns the sale's id. */
+  async function sell(offerId: string, offerSetId: string): Promise<string> {
+    const items = await prisma.offerSetItem.findMany({
+      where: { offerSetId },
+      select: { itemId: true },
+    });
+    const saleId = await createSale(userId, collectionId, {
+      platformId,
+      buyerId: null,
+      externalRef: null,
+      transactionUrl: null,
+      soldAt: new Date("2026-08-24"),
+      currency: "EUR",
+      buyerHandling: null,
+      buyerPaidTotal: null,
+      commission: null,
+    });
+    await addSaleLines(userId, saleId, [
+      { offerId, offerSetId, price: "5.00", itemIds: items.map((i) => i.itemId) },
+    ]);
+    return saleId;
   }
 
   const flag = async (offerId: string): Promise<Date | null> =>
@@ -122,6 +150,61 @@ describe("changed-since-listed flag (#542)", () => {
     await markOfferListingSynced(userId, shrunk); // back in step, so the removal is what is measured
     await removeOfferSet(userId, doomed);
     assert.notEqual(await flag(shrunk), null);
+  });
+
+  it("raises it when a set **sells** out of a listing that stays up (#700)", async () => {
+    // The strongest composition change there is: the set leaves what the listing has to offer, and
+    // #315 drops it from the photo plan — so the live entry advertises a quantity it no longer has
+    // and pictures a copy that has gone.
+    const offerId = await liveOffer();
+    const second = await addOfferSet(userId, offerId, [await newCopy()]);
+    await markOfferListingSynced(userId, offerId); // in step, so the sale is what is measured
+    assert.equal(await flag(offerId), null);
+
+    await sell(offerId, second);
+    assert.notEqual(await flag(offerId), null);
+  });
+
+  it("raises nothing when the sale closes the listing — a sold offer is history", async () => {
+    const offerId = await liveOffer();
+    const only = (
+      await prisma.offerSet.findFirstOrThrow({ where: { offerId }, select: { id: true } })
+    ).id;
+
+    await sell(offerId, only);
+    const offer = await prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { state: true, listingContentChangedAt: true },
+    });
+    assert.equal(offer.state, "sold");
+    assert.equal(offer.listingContentChangedAt, null);
+  });
+
+  it("raises it again when a sale is undone and the set comes back (#700)", async () => {
+    const offerId = await liveOffer();
+    const second = await addOfferSet(userId, offerId, [await newCopy()]);
+    await markOfferListingSynced(userId, offerId);
+    const saleId = await sell(offerId, second);
+    await markOfferListingSynced(userId, offerId); // the collector updated the listing
+    assert.equal(await flag(offerId), null);
+
+    await deleteSale(userId, saleId);
+    assert.notEqual(await flag(offerId), null);
+  });
+
+  it("raises it when a single line is taken off a sale", async () => {
+    const offerId = await liveOffer();
+    const second = await addOfferSet(userId, offerId, [await newCopy()]);
+    await markOfferListingSynced(userId, offerId);
+    const saleId = await sell(offerId, second);
+    await markOfferListingSynced(userId, offerId);
+
+    const line = await prisma.saleLine.findFirstOrThrow({
+      where: { saleId },
+      select: { id: true },
+    });
+    await removeSaleLine(userId, line.id);
+    assert.notEqual(await flag(offerId), null);
   });
 
   it("dates the first change and leaves it there — the flag reads 'diverging since'", async () => {

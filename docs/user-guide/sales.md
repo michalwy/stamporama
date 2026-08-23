@@ -143,7 +143,11 @@ changing the platform's currency later leaves existing sales untouched.
 - The exact **copies** that left are recorded on the sale and become **unavailable** — they drop
   out of your for-sale inventory and can never be sold twice.
 - Each **offer** flips to **Sold** once *every* one of its sets has sold through it; a partial sale
-  keeps it **Active** for its remaining sets.
+  keeps it **Active** for its remaining sets — and marks it **Changed since listed**, because the
+  live listing now advertises a quantity it no longer has and pictures a copy that has gone. Push the
+  update (regenerating the photos on the way, which drops the sold set from them), or say the listing
+  is up to date by hand. See [listings that no longer
+  match](offers.md#listings-that-no-longer-match).
 - Any **other active offer** — on another platform — holding a set with a copy you just sold is
   flagged **Needs action**, so you can take those stale listings down. See
   [keeping platforms in sync](offers.md) on the Offers page.

@@ -46,6 +46,10 @@ import {
   isListedState,
   LISTED_OFFER_STATES,
 } from "./offer-listing-drift";
+import {
+  clearListingContentChanged,
+  markListingContentChanged,
+} from "./offer-listing-sync";
 import { claimCovers, type AllegroPaymentStatus } from "./allegro-sync-rules";
 import { parseOfferAddressSearch } from "./offer-search";
 import { urlNamesPlatformOffer } from "./platform-offer-url";
@@ -4983,39 +4987,10 @@ const EDITED_FLAG: Record<OfferTextField, "nameEdited" | "descriptionEdited" | "
   privateNote: "privateNoteEdited",
 };
 
-/**
- * Record that a **live** listing no longer says what this offer says (#542).
- *
- * Called from every mutation that changes what the platform would show — the composition mutations
- * below, the header where {@link headerChangeIsDrift} says the change counts, and a regenerated text.
- * Silently does nothing on an offer that is not up: a change to something never posted is just
- * composing, which is what `preparing` and `ready` are for.
- *
- * `updateMany` with `listingContentChangedAt: null` in the filter, so it stamps the **first** change
- * and leaves it alone thereafter. Two things follow from that, both wanted: the flag reads as
- * "diverging since…" rather than "last touched", which is the figure a collector triages by; and an
- * offer being worked on for ten minutes is one write, not ten.
- */
-async function markListingContentChanged(offerId: string): Promise<void> {
-  await prisma.offer.updateMany({
-    where: {
-      id: offerId,
-      state: { in: [...LISTED_OFFER_STATES] },
-      listingContentChangedAt: null,
-    },
-    data: { listingContentChangedAt: new Date() },
-  });
-}
-
-/** The live listing is back in step (#542) — see {@link markOfferListingSynced} for what counts. */
-async function clearListingContentChanged(offerId: string): Promise<void> {
-  await prisma.offer.updateMany({
-    // Filtered on the flag being set, so clearing an offer that carries none is a no-op rather than a
-    // write — this runs on every publication, and most of those have nothing to clear.
-    where: { id: offerId, listingContentChangedAt: { not: null } },
-    data: { listingContentChangedAt: null },
-  });
-}
+// The two writes behind `Offer.listingContentChangedAt` live in `offer-listing-sync.ts` since #700:
+// **selling** part of an offer is the one change that causes drift from outside this module, and
+// `sales.ts` has no business importing the offers domain to make that write. Every call below is
+// unchanged; what moved is where the rule is written down, so there is one of it rather than two.
 
 /**
  * The live listing has been brought back into step with this record (#542).
