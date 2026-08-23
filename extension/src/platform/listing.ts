@@ -28,6 +28,14 @@ export interface ListingTask {
   /** The listing's address on the platform (#412), which an update navigates back to and a module
    *  turns into its own edit address. Null on an offer that carries none. */
   listingUrl?: string | null;
+  /** The platform's **own identifier** for this listing (#696) — Colnect's sale code, which the
+   *  instance now stores in a column of its own rather than only inside `listingUrl`. Neutral: a
+   *  module turns it into whatever address it needs.
+   *
+   *  **Optional**, and absent means the instance is older than the column or has none recorded for
+   *  this offer; a module that has both prefers this and falls back to reading the URL, which is
+   *  where the same string has always been. */
+  listingId?: string | null;
   /** The platform, and the module id that knows its sale form — `Contact.platformModule` (#406),
    *  matched against `PlatformModule.id`. Null when the platform names none, which the endpoint
    *  refuses; the shell refuses it too rather than guessing a module. */

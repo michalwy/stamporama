@@ -166,6 +166,36 @@ describe("the edit form URL", () => {
     );
   });
 
+  // #696: the instance stores the sale code in a column of its own now, precisely because a code
+  // buried in a URL varies with the locale Colnect answered in. The task states it directly.
+  it("prefers the id the instance states over anything read out of the URL", () => {
+    assert.equal(
+      colnectSaleEditUrl(
+        task([item("111")], {
+          state: "active",
+          mode: "update",
+          listingUrl: "https://colnect.com/pl/market/sale/h5pxfc",
+          listingId: "h5UXNh",
+        })
+      ),
+      "https://colnect.com/en/sell/edit/sale_id/h5UXNh"
+    );
+  });
+
+  it("falls back to the URL for a listing posted before that column existed", () => {
+    assert.equal(
+      colnectSaleEditUrl(
+        task([item("111")], {
+          state: "active",
+          mode: "update",
+          listingUrl: "https://colnect.com/en/market/sale/h5pxfc",
+          listingId: null,
+        })
+      ),
+      "https://colnect.com/en/sell/edit/sale_id/h5pxfc"
+    );
+  });
+
   it("accepts an edit address pasted in by hand, since it states the same code", () => {
     assert.equal(
       colnectSaleEditUrl(live("https://colnect.com/pl/sell/edit/sale_id/h5pxfc")),

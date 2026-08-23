@@ -54,7 +54,7 @@ import { normalizeDescriptionFormat, type DescriptionFormat } from "./descriptio
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
 import { catalogChipCopyValueFromLabel } from "./catalog-number";
-import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
+import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
   listedVariantKey,
   loadOfferListedVariants,
@@ -162,6 +162,9 @@ export type OfferBlockReason =
   | "bad-order"
   /** Recording a listing (#412) without the URL that *is* the record. */
   | "no-url"
+  /** A listing URL whose sale code (#696) another offer in the collection already holds — two
+   *  offers claiming one live listing. */
+  | "duplicate-listing"
   /** Marking an offer ready (#418) while a listing precondition (#406) still fails. */
   | "listing-preconditions"
   /** Going live, or adding to a live listing (#639), with a copy promised in an agreed trade. Its
@@ -3155,6 +3158,47 @@ function distinctAreaYears(sets: AreaLinkedSet[]): OfferAreaYear[] {
 }
 
 /**
+ * The Colnect sale code a listing URL states (#696), checked against the collection before it is
+ * stored.
+ *
+ * Derived rather than kept by hand, and derived **wherever the URL is written**, so the two can
+ * never come to disagree: the URL is the address a person clicks and the code is the id the app
+ * joins on, and a code left behind by a corrected URL would send #462's update to somebody else's
+ * listing — the one step in the app that writes to a live marketplace. A URL naming no sale code
+ * therefore clears the column rather than leaving the old one standing.
+ *
+ * A code another offer in this collection already holds is **refused by name**. The unique index is
+ * the real guard, but a raw constraint violation says nothing a collector can act on, and the thing
+ * that has actually happened — two offers claiming one live listing — is worth naming: one of them
+ * has the wrong address recorded on it.
+ */
+async function resolveColnectSaleId(
+  collectionId: string,
+  /** The offer the code is about to be written to, excluded from the collision check — null while
+   *  it is still being created, which excludes nothing. */
+  offerId: string | null,
+  url: string | null
+): Promise<string | null> {
+  const code = colnectSaleCode(url);
+  if (!code) return null;
+  const claimed = await prisma.offer.findFirst({
+    where: {
+      collectionId,
+      colnectSaleId: code,
+      ...(offerId ? { id: { not: offerId } } : {}),
+    },
+    select: { offerNo: true },
+  });
+  if (claimed) {
+    throw new OfferActionBlockedError(
+      "duplicate-listing",
+      `Offer #${claimed.offerNo} is already recorded as this Colnect listing — one live listing belongs to one offer.`
+    );
+  }
+  return code;
+}
+
+/**
  * Publish a prepared offer (#322): record the listing URL the platform gave back, then move
  * `ready → active`, which stamps the listing date (#320).
  *
@@ -3169,6 +3213,11 @@ export async function publishOffer(
   offerId: string,
   url: string | null
 ): Promise<void> {
+  // Asked **before** the transition (#696), even though `patchOffer` asks it again on the way in: a
+  // collision refused after the offer had already gone Active would leave a live listing with no
+  // address recorded on it, which is the very thing the URL-after-transition order exists to avoid.
+  const ref = await assertOfferOwner(ownerId, offerId);
+  await resolveColnectSaleId(ref.collectionId, offerId, url);
   await setOfferState(ownerId, offerId, "active");
   await patchOffer(ownerId, offerId, { url });
 }
@@ -4390,6 +4439,10 @@ export async function createOffer(
   // alters this listing's photos.
   const photoConfig = await seedPhotoConfig(platform);
 
+  // The listing's own id, where the form already knows the address (#696) — an offer is routinely
+  // created for a listing that is already up. Resolved before the transaction so a code another
+  // offer holds refuses the creation by name rather than as a constraint violation.
+  const colnectSaleId = await resolveColnectSaleId(collectionId, null, input.url);
   const offerId = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
@@ -4405,6 +4458,7 @@ export async function createOffer(
         descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
+        colnectSaleId,
         // The whole pricing decision, resolved once above (#449): format, live price, and the
         // auction-only opening figure + check date.
         ...pricing,
@@ -4553,6 +4607,10 @@ export async function duplicateOffer(
   // platform, so it is seeded from *that* platform's defaults rather than copied from the source.
   const photoConfig = await seedPhotoConfig(platform);
 
+  // As in `createOffer` (#696). A duplicate carries whatever URL its own form states — which is
+  // ordinarily none, the clone being a listing that has not been posted yet — and a clone handed the
+  // source's address is refused by name, since one live listing is one offer's.
+  const colnectSaleId = await resolveColnectSaleId(ref.collectionId, null, input.url);
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
@@ -4567,6 +4625,7 @@ export async function duplicateOffer(
         descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
+        colnectSaleId,
         // The clone is a listing on another platform and is described by its own form (#449): the
         // same composition routinely goes up as a quick buy in one place and an auction in another,
         // so the format comes from that form (or the new platform's default) rather than being
@@ -4648,11 +4707,14 @@ export async function updateOffer(
         select: { startingPrice: true },
       })
     : null;
+  // The listing's own id follows its address (#696), exactly as it does on the in-place edit.
+  const colnectSaleId = await resolveColnectSaleId(ref.collectionId, offerId, input.url);
   await prisma.offer.update({
     where: { id: offerId },
     data: {
       platformId: input.platformId,
       url: input.url,
+      colnectSaleId,
       listingType: pricing.listingType,
       price: pricing.price,
       startingPrice: pricing.startingPrice,
@@ -4774,11 +4836,17 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
     ((patch.name !== undefined && patch.name !== before.name) ||
       (patch.description !== undefined && patch.description !== before.description) ||
       (patch.privateNote !== undefined && patch.privateNote !== before.privateNote));
+  // The listing's own id follows its address (#696) — re-derived from whatever URL this patch
+  // writes, and cleared by one that names no sale, so the pair can never drift apart.
+  const colnectSaleId =
+    patch.url !== undefined
+      ? await resolveColnectSaleId(ref.collectionId, offerId, patch.url)
+      : null;
   await prisma.offer.update({
     where: { id: offerId },
     data: {
       ...(patch.platformId !== undefined ? { platformId: patch.platformId } : {}),
-      ...(patch.url !== undefined ? { url: patch.url } : {}),
+      ...(patch.url !== undefined ? { url: patch.url, colnectSaleId } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
       ...(patch.startingPrice !== undefined ? { startingPrice: patch.startingPrice } : {}),
       ...(refreshesBid ? { priceCheckedAt: new Date() } : {}),

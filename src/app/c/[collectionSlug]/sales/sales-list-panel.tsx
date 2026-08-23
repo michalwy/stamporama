@@ -63,9 +63,16 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     : (storedStatus ?? "");
   const statuses = useMemo(() => statusParam.split(",").filter(isSaleStatus), [statusParam]);
 
+  // "Only the sales still waiting on which set went" (#697). A filter of its own rather than a chip
+  // among the statuses: it is not a place in the fulfilment lifecycle but a decision outstanding
+  // *inside* a sale, and a sale can be waiting on it in any status. URL-only and **not** remembered
+  // per collection like the status set is — it answers a question one comes to the list with today,
+  // and a remembered one would silently hide every settled sale on the next visit.
+  const setChoicePending = searchParams.get("setChoice") === "1";
+
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, statuses, search }),
-    [platformId, statuses, search]
+    () => ({ platformId, statuses, search, setChoicePending }),
+    [platformId, statuses, search, setChoicePending]
   );
 
   // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
@@ -202,6 +209,14 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           })}
         </div>
 
+        {/* Drawn apart from the status chips, after a separator, because it selects on a different
+            axis — see the note above `setChoicePending`. */}
+        <FilterChip
+          label="Set not chosen"
+          active={setChoicePending}
+          onClick={() => updateParams({ setChoice: setChoicePending ? "" : "1" })}
+        />
+
         <button
           type="button"
           onClick={() => setDialog({ kind: "record" })}
@@ -241,6 +256,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {search
               ? "No sales match your search."
+              : setChoicePending
+              ? "Every sale has had its sets chosen — nothing is waiting on that decision."
               : statuses.length > 0
                 ? `No ${statuses
                     .map((s) => SALE_STATUS_META[s].label.toLowerCase())

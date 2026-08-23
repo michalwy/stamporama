@@ -124,7 +124,11 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    opens with its current value **selected**, so typing a new one replaces it rather than running into
    it. Once a listing URL is set, its **Listing** link opens the listing when clicked; use the **✎**
    pencil beside it to change the URL. The listing URL stays editable in **every** state — including a
-   **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
+   **sold** or **withdrawn** offer — so you can keep the record straight after the fact. On a
+   **Colnect** address the app also reads the listing's own sale code out of the URL and keeps it
+   beside it, which is how it later recognises the listing a Colnect transaction is about. That code
+   belongs to **one** offer: if you paste an address another offer is already recorded at, the save
+   is refused and names that offer — one of the two has the wrong link on it. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu. When a **listing date** was recorded it shows as a **📅** chip on the
    detail header; to change it, use **Edit offer** (the header form) — where the listing date and URL

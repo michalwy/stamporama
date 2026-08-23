@@ -124,6 +124,16 @@ export interface OfferListingKit {
    *  and null on an offer that has none. Carried in both modes: it is a fact about the offer, and a
    *  create task naming the listing it is about to replace would be the more surprising shape. */
   listingUrl: string | null;
+  /** The platform's **own identifier** for this live listing, where the record holds one (#696) —
+   *  `Offer.colnectSaleId` on Colnect. Neutral like every other field here: a module turns it into
+   *  whatever address it needs, and one that has no such id simply reads null.
+   *
+   *  It is carried beside `listingUrl` rather than instead of it because they answer different
+   *  questions. The URL is where the listing *is*, and its locale segment is whatever the platform
+   *  served; this is what the listing *is*, which is the half an edit address is built from. A
+   *  module that has both prefers this and keeps parsing the URL as the fallback, for an offer
+   *  listed before the column existed. */
+  listingId: string | null;
   /** The platform, and the Assistant module that knows its sale form (#406) — null when it names
    *  none, which is itself the `no-platform-module` refusal below. */
   platform: { id: string; name: string; module: string | null };
@@ -214,6 +224,7 @@ export async function getOfferListingKit(
       price: true,
       currency: true,
       url: true,
+      colnectSaleId: true,
       collection: { select: { ownerId: true } },
       platform: { select: { id: true, name: true, platformModule: true } },
       sets: {
@@ -344,6 +355,7 @@ export async function getOfferListingKit(
     state: offer.state as OfferState,
     mode,
     listingUrl: offer.url,
+    listingId: offer.colnectSaleId,
     platform: {
       id: offer.platform.id,
       name: offer.platform.name,

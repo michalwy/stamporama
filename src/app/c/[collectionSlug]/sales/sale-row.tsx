@@ -150,6 +150,27 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
               {sale.itemCount} {unitWord}
             </span>
           </Tooltip>
+          {/* Lines whose set an automatic pick took rather than a person chose (#697), off the very
+              column the sale detail draws its per-line chip from — a flag shown on a list is shown
+              on the thing's own screen too. It is a decision still to be made rather than something
+              wrong, hence `warning` and not the `error` tint *Needs action* carries. */}
+          {sale.pendingSetChoiceCount > 0 && (
+            <Tooltip content="Nobody has said which of the offer's sets actually left — open the sale and choose">
+              <span
+                style={{
+                  ...CHIP,
+                  color: "var(--color-warning)",
+                  borderColor: "var(--color-warning-border, var(--color-border))",
+                  background: "var(--color-warning-soft, var(--color-bg-page))",
+                  fontWeight: 600,
+                }}
+              >
+                {sale.pendingSetChoiceCount === 1
+                  ? "Set not chosen"
+                  : `${sale.pendingSetChoiceCount} sets not chosen`}
+              </span>
+            </Tooltip>
+          )}
           {/* Transaction link (#292) — opens the marketplace's order page without opening the sale.
               Stops the click so the row's own navigation doesn't fire too. */}
           {sale.transactionUrl && (

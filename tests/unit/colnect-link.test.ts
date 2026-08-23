@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "@/lib/colnect-link";
+import {
+  colnectMarketUrl,
+  colnectSaleCode,
+  colnectSearchUrl,
+  colnectStampUrl,
+} from "@/lib/colnect-link";
 import { COLNECT_CONDITIONS } from "@/lib/colnect-conditions";
 
 describe("colnectStampUrl", () => {
@@ -74,5 +79,45 @@ describe("colnectSearchUrl", () => {
   it("returns null when there is nothing to search for", () => {
     assert.equal(colnectSearchUrl(null), null);
     assert.equal(colnectSearchUrl("   "), null);
+  });
+});
+
+// The listing's own id (#696). Stored on `Offer.colnectSaleId` because a code buried inside a URL
+// varies with the locale Colnect answered in, cannot be indexed, and cannot be made unique — which
+// is exactly what the transaction import (#698) has to join one row to one offer on.
+//
+// These cases mirror the extension's own `colnectSaleCode` tests: the two are hand-mirrored
+// (separate builds, no import path) and a reading that drifts apart is a listing edited at the
+// wrong address.
+describe("colnectSaleCode", () => {
+  it("reads the code off the public entry Colnect lands on after a save (#412)", () => {
+    assert.equal(colnectSaleCode("https://colnect.com/en/market/sale/h5UXNh"), "h5UXNh");
+  });
+
+  it("reads it off the edit form too, which is the same code at the other address (#462)", () => {
+    assert.equal(colnectSaleCode("https://www.colnect.com/de/sell/edit/sale_id/h5pxfc/"), "h5pxfc");
+  });
+
+  it("accepts whatever locale Colnect served — the segment is not the seller's choice", () => {
+    assert.equal(colnectSaleCode("https://colnect.com/pl/market/sale/h5UXNh"), "h5UXNh");
+  });
+
+  it("ignores the query and the fragment, which name no listing", () => {
+    assert.equal(colnectSaleCode("https://colnect.com/en/market/sale/h5UXNh?ref=mail#pics"), "h5UXNh");
+  });
+
+  it("is null for a Colnect page that is not a sale", () => {
+    assert.equal(colnectSaleCode("https://colnect.com/en/market/list"), null);
+    assert.equal(colnectSaleCode("https://colnect.com/en/stamps/stamp/1133075"), null);
+  });
+
+  it("is null for another marketplace entirely — the shape alone must not be enough", () => {
+    assert.equal(colnectSaleCode("https://not-colnect.test/en/market/sale/h5UXNh"), null);
+  });
+
+  it("is null for nothing at all, and for a string that will not parse", () => {
+    assert.equal(colnectSaleCode(null), null);
+    assert.equal(colnectSaleCode("   "), null);
+    assert.equal(colnectSaleCode("market/sale/h5UXNh"), null);
   });
 });

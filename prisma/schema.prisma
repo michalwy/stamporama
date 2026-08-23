@@ -2889,6 +2889,26 @@ model Offer {
   // stored a second time, and it is what #612 will match an order's items on. Unique per collection:
   // two offers claiming one listing is a contradiction, not a state to be reconciled later.
   delcampeItemId       String?
+  // The Colnect listing this offer is up as (#696) — the opaque sale code Colnect states at both of
+  // the addresses one entry has, `/<locale>/market/sale/<code>` and
+  // `/<locale>/sell/edit/sale_id/<code>`.
+  //
+  // `Offer.url` already carries that code inside it (#412) and #462 reads it back out to open the
+  // edit form, which is enough to *edit* a listing and not enough to *find* one: the locale segment
+  // is whatever Colnect served rather than the locale that was asked for, so an offer looked up by
+  // its URL string is looked up on a value that varies with the language of the answer, cannot be
+  // indexed and cannot be made unique. The transaction import (#698) needs exactly that lookup, once
+  // per imported row.
+  //
+  // So the two are stored side by side and neither is derived from the other at read time: the URL
+  // is the address a person clicks, this is the id the app joins on. It is written **wherever the
+  // URL is written** — `patchOffer` re-derives it from any URL it writes — so the pair cannot drift
+  // apart, and it is null on every offer whose URL states no sale code, including one on another
+  // marketplace entirely.
+  //
+  // Unique per collection, the guard `delcampeItemId` above carries and for its reason: two offers
+  // claiming one live listing is a contradiction, not a state to be reconciled later.
+  colnectSaleId        String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -2925,6 +2945,9 @@ model Offer {
   // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
   // enforceable rather than merely intended.
   @@unique([collectionId, delcampeItemId])
+  // The same rule on the marketplace next door (#696), and the lookup the transaction import joins
+  // one imported row to one offer on.
+  @@unique([collectionId, colnectSaleId])
   // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
   @@index([state, closedAt])
   @@map("offer")
@@ -3396,6 +3419,19 @@ model SaleLine {
   offerSetId String
   // Line sale price in the sale's transaction currency.
   price      Decimal @db.Decimal(10, 2)
+  // The line names a set, but **nobody has chosen it yet** (#697).
+  //
+  // An offer listed at quantity 3 has three sets, and a buyer who takes one has said *one of these*,
+  // not *this one*. The sets of one offer are the same thing at the same price — that is why they
+  // are one listing — so which copy leaves is the seller's own fulfilment choice, made at the
+  // packing table, and it can change after the fact when a copy turns out to have a thin.
+  //
+  // `offerSetId` stays NOT NULL through all of it and every read that assumes a set keeps working:
+  // the line does name one, it was just **picked rather than chosen**. Set by an automatic pick —
+  // an imported multi-quantity order (#698), a buyer's own pick (#699) — and cleared the moment a
+  // person confirms the set or swaps it (`swapSaleLineSet`). A hand-recorded sale never sets it: the
+  // collector picked the set on the way in.
+  setChoicePending Boolean @default(false)
 
   sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   offer    Offer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)

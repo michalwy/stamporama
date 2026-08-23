@@ -42,7 +42,10 @@ export type SaleBlockReason =
   | "empty"
   | "bad-offer"
   | "bad-set"
-  | "already-sold";
+  | "already-sold"
+  /** Choosing which set left (#697) on a line whose offer is gone — there is nothing to choose
+   *  among. */
+  | "no-offer";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -343,6 +346,11 @@ export interface SaleLineDraft {
   price: string;
   /** The exact copies that left — must be the full current copy set of `offerSetId`. */
   itemIds: string[];
+  /** The set above was **picked, not chosen** (#697): the line names it so every read keeps working,
+   *  but nobody has said which physical copy goes. Written by an automatic pick — an imported
+   *  multi-quantity order (#698), a buyer's own pick (#699) — and absent (false) everywhere a person
+   *  recorded the sale, since they chose the set on the way in. */
+  setChoicePending?: boolean;
 }
 
 /** Freeze the base-currency FX rate at save time (same behaviour as purchases, #119). Returns
@@ -791,6 +799,7 @@ export async function addSaleLines(
             offerId: line.offerId,
             offerSetId: line.offerSetId,
             price: line.price,
+            setChoicePending: line.setChoicePending ?? false,
             items: { create: line.itemIds.map((itemId) => ({ itemId })) },
           },
         });
@@ -839,6 +848,233 @@ export async function updateSaleLinePrice(
     throw new Error("Sale line not found or access denied.");
   }
   await prisma.saleLine.update({ where: { id: lineId }, data: { price } });
+}
+
+// ── Which set left (#697) ───────────────────────────────────────────────────
+//
+// **Which set went is not a fact about the order.** An offer listed at quantity 3 has three sets,
+// and a buyer who takes one has said *one of these*, not *this one*: the sets of one offer are the
+// same thing at the same price, which is why they are one listing. So the copy that leaves is the
+// seller's own fulfilment choice, made at the packing table — and it can change after the fact, when
+// a copy turns out to have a thin.
+//
+// Before this, `removeSaleLine` + `addSaleLines` was the only way to change it, and that path throws
+// away the line's price and its per-copy `packed` marks on the way. Both survive here: the price is
+// what the buyer paid, and swapping which copy goes does not change it.
+
+/** One of a line's swap candidates, and which of them the line names now. */
+export interface SaleLineSetChoice {
+  lineId: string;
+  /** The offer the line sold through — the whole choice is inside it. */
+  offerId: string;
+  offerLabel: string;
+  /** The set the line names today, always present among `sets` so confirming it is one click. */
+  currentSetId: string;
+  /** True while nobody has chosen (#697) — what the picker's own wording turns on. */
+  setChoicePending: boolean;
+  /** The offer's sets that are still free to take, this line's own included, in the offer's explicit
+   *  order (#306). Never empty: the current set is always among them. */
+  sets: SaleSetOption[];
+  /** Every copy across those sets, enriched as the Copies list draws them — **with their scans**.
+   *  Choosing between interchangeable sets is choosing between physical pieces, and the difference
+   *  between two copies of one stamp is a thin, a corner, a cancel: things one can only see. A list
+   *  of catalogue labels would name three identical-looking rows and leave the actual comparison to
+   *  a second screen. Loaded here rather than through a second endpoint because the picker's whole
+   *  subject is one offer, which is a handful of copies. */
+  copies: ItemListItem[];
+}
+
+/**
+ * The sets this line could have gone out as (#697) — every set of its **own offer** whose copies are
+ * still free, plus the one it already names.
+ *
+ * Deliberately `SaleSetOption`'s shape, the one {@link listSellableOffers} serves the sale-creation
+ * flow: the collector is choosing from the same list in the same words, and a second vocabulary for
+ * one question is how two screens come to disagree about what a set is called.
+ *
+ * The offer's own **state** is not asked about, unlike the sellable picker's: an offer every set of
+ * which has sold is `sold` (ADR-0013 §4) and is exactly the offer a quantity sale is being
+ * re-allocated inside. What decides a set here is whether its copies have left, not whether the
+ * listing is still up.
+ *
+ * Null when the line does not exist or is not the caller's; the caller's 404.
+ */
+export async function listSaleLineSetOptions(
+  ownerId: string,
+  lineId: string
+): Promise<SaleLineSetChoice | null> {
+  const line = await prisma.saleLine.findUnique({
+    where: { id: lineId },
+    select: {
+      offerId: true,
+      offerSetId: true,
+      setChoicePending: true,
+      sale: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      offer: {
+        select: {
+          id: true,
+          sets: {
+            orderBy: OFFER_SETS_ORDER_BY,
+            select: {
+              id: true,
+              title: true,
+              items: {
+                select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!line || line.sale.collection.ownerId !== ownerId) return null;
+  // A line whose offer was deleted has no choice to offer: the sets it could swap among went with
+  // it, and the copies it holds are all the record still knows about.
+  if (!line.offerId || !line.offer) return null;
+
+  const allItemIds = line.offer.sets.flatMap((s) => s.items.map((li) => li.itemId));
+  // Every copy of this offer that has already left, and on which line — so this line's own copies
+  // are not read as an obstacle to itself.
+  const taken = await prisma.saleLineItem.findMany({
+    where: { itemId: { in: [...new Set(allItemIds)] } },
+    select: { itemId: true, saleLineId: true },
+  });
+  const takenElsewhere = new Set(
+    taken.filter((r) => r.saleLineId !== lineId).map((r) => r.itemId)
+  );
+
+  const labeller = await makeOfferLabeller(line.sale.collectionId);
+  const sets: SaleSetOption[] = [];
+  for (const set of line.offer.sets) {
+    // A set is atomic, so one copy gone elsewhere retires the whole set — the sellable picker's rule.
+    if (set.items.length === 0) continue;
+    if (set.id !== line.offerSetId && set.items.some((li) => takenElsewhere.has(li.itemId))) continue;
+    const items = orderedSetItems(set.items);
+    sets.push({
+      offerSetId: set.id,
+      label: labeller.set(set),
+      itemIds: items.map((li) => li.itemId),
+      itemLabels: items.map((li) => labeller.copy(li.item.stamp)),
+    });
+  }
+
+  const copyIds = [...new Set(sets.flatMap((s) => s.itemIds))];
+  const copies = copyIds.length
+    ? (await listItemsPaginated(ownerId, line.sale.collectionId, {
+        ids: copyIds,
+        pageSize: copyIds.length,
+      })).items
+    : [];
+
+  return {
+    lineId,
+    offerId: line.offerId,
+    offerLabel: labeller.offer(line.offer.sets),
+    currentSetId: line.offerSetId,
+    setChoicePending: line.setChoicePending,
+    sets,
+    copies,
+  };
+}
+
+/**
+ * Say which set actually left on this line (#697).
+ *
+ * The line's copies are rewritten to the target set's **full current copy set** — whole-set
+ * integrity is unchanged, a series still never breaks apart — and:
+ *
+ *   • the **price is untouched**. It is what the buyer paid, and swapping which copy goes does not
+ *     change that. This is the whole reason the swap exists rather than a remove-and-re-add.
+ *   • `packed` marks are **dropped with the copies they were about**: a different copy has not been
+ *     packed, and a mark carried across would say it had.
+ *   • `setChoicePending` is cleared — a person has now said which one.
+ *
+ * Choosing the set the line **already names** is *confirming* it: the flag clears and nothing else
+ * moves, so a line whose copies are already in the parcel keeps its packing.
+ *
+ * The target must belong to the **same offer**. A set of another offer is a different listing that a
+ * different buyer is looking at, and moving a line onto it would be recording a sale that did not
+ * happen; a set holding a copy that left on another sale is refused for the plainer reason, with the
+ * `sale_line_item.itemId` unique as the backstop.
+ *
+ * The offer's own `sold` state is deliberately not recomputed: a swap inside one offer leaves the
+ * number of its sets that have sold exactly where it was.
+ */
+export async function swapSaleLineSet(
+  ownerId: string,
+  lineId: string,
+  offerSetId: string
+): Promise<void> {
+  const line = await prisma.saleLine.findUnique({
+    where: { id: lineId },
+    select: {
+      offerId: true,
+      offerSetId: true,
+      sale: { select: { collection: { select: { ownerId: true } } } },
+    },
+  });
+  if (!line || line.sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale line not found or access denied.");
+  }
+  if (!line.offerId) {
+    throw new SaleActionBlockedError(
+      "no-offer",
+      "This line's offer is gone, so there are no other sets to choose from."
+    );
+  }
+
+  // Confirming the set the line already names: nothing about the copies changes, so nothing about
+  // their packing does either.
+  if (offerSetId === line.offerSetId) {
+    await prisma.saleLine.update({ where: { id: lineId }, data: { setChoicePending: false } });
+    return;
+  }
+
+  const target = await prisma.offerSet.findUnique({
+    where: { id: offerSetId },
+    select: { offerId: true, items: { select: { itemId: true } } },
+  });
+  if (!target || target.offerId !== line.offerId) {
+    throw new SaleActionBlockedError(
+      "bad-set",
+      "That set belongs to a different offer — a sale line can only move among the sets of the listing it sold through."
+    );
+  }
+  if (target.items.length === 0) {
+    throw new SaleActionBlockedError("bad-set", "That set holds no copies.");
+  }
+  const itemIds = target.items.map((r) => r.itemId);
+  const already = await soldItemIds(itemIds);
+  if (already.size > 0) {
+    throw new SaleActionBlockedError(
+      "already-sold",
+      "One or more copies of that set have already sold — choose a set that is still available."
+    );
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // The old copies go, and their `packed` marks go with them: a different copy has not been
+      // packed.
+      await tx.saleLineItem.deleteMany({ where: { saleLineId: lineId } });
+      await tx.saleLine.update({
+        where: { id: lineId },
+        data: {
+          offerSetId,
+          setChoicePending: false,
+          items: { create: itemIds.map((itemId) => ({ itemId })) },
+        },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new SaleActionBlockedError(
+        "already-sold",
+        "One or more copies of that set have already sold — choose a set that is still available."
+      );
+    }
+    throw e;
+  }
 }
 
 /** Remove a sold set from a sale (ADR-0013). Its copies become available again (their sold state
@@ -890,6 +1126,10 @@ export interface SaleListItem {
   currency: string;
   lineCount: number;
   itemCount: number;
+  /** How many of this sale's lines still name a set nobody has chosen (#697). A **flag shown on a
+   *  list is shown on the thing's own screen too**, and it is read off the very column the detail's
+   *  own per-line flag is, so the two can never disagree. Zero on every hand-recorded sale. */
+  pendingSetChoiceCount: number;
   /** The collection base currency — `netProceeds` is expressed in it (#206). */
   baseCurrency: string;
   /** Sum of line sale prices (transaction currency). */
@@ -920,7 +1160,9 @@ const SALE_LIST_SELECT = {
   createdAt: true,
   platform: { select: { name: true } },
   buyer: { select: { name: true } },
-  lines: { select: { price: true, _count: { select: { items: true } } } },
+  lines: {
+    select: { price: true, setChoicePending: true, _count: { select: { items: true } } },
+  },
 } as const;
 
 function num(v: Prisma.Decimal | null): number {
@@ -969,7 +1211,7 @@ function toSaleListItem(
     createdAt: Date;
     platform: { name: string };
     buyer: { name: string } | null;
-    lines: { price: Prisma.Decimal; _count: { items: number } }[];
+    lines: { price: Prisma.Decimal; setChoicePending: boolean; _count: { items: number } }[];
   },
   baseCurrency: string
 ): SaleListItem {
@@ -999,6 +1241,7 @@ function toSaleListItem(
     currency: row.currency,
     lineCount: row.lines.length,
     itemCount: row.lines.reduce((s, l) => s + l._count.items, 0),
+    pendingSetChoiceCount: row.lines.filter((l) => l.setChoicePending).length,
     baseCurrency,
     grossProceeds: gross.toFixed(2),
     netProceeds: netBase.toFixed(2),
@@ -1014,6 +1257,11 @@ export interface SaleListFilters {
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
   search?: string;
+  /** Narrow to sales holding at least one line whose set nobody has chosen yet (#697). A **boolean
+   * rather than a chip among the statuses**: it is not a place in the fulfilment lifecycle but a
+   * decision outstanding *inside* a sale, and a sale can be waiting on it in any status. Absent is
+   * every sale, chosen or not — this never narrows the default view. */
+  setChoicePending?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -1060,6 +1308,9 @@ export async function listSalesPaginated(
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
       ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
       ...(filters.search ? saleSearchWhere(filters.search) : {}),
+      // One line is enough to put the sale on the list (#697): the collector is looking for parcels
+      // that cannot be packed yet, and one undecided line stops the parcel.
+      ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
     },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
     take: pageSize + 1,
@@ -1106,6 +1357,9 @@ export interface SaleDetailLine {
   priceBase: string | null;
   /** How many physical copies left on this line (its copies load lazily on the detail screen). */
   copyCount: number;
+  /** The line names a set nobody has chosen yet (#697) — an automatic pick took one of the offer's
+   *  interchangeable sets, and *Choose set* is what settles it. */
+  setChoicePending: boolean;
   itemLabels: string[];
   /** This line's resolved net proceeds in the transaction currency (allocation engine). */
   netTx: string;
@@ -1223,6 +1477,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           offerSetId: true,
           offerId: true,
           price: true,
+          setChoicePending: true,
           offerSet: {
             select: {
               title: true,
@@ -1285,6 +1540,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           ? null
           : (Number(l.price) * Number(sale.fxRateToBase)).toFixed(2),
       copyCount: l.items.length,
+      setChoicePending: l.setChoicePending,
       itemLabels: l.items.map((li) => labeller.copy(li.item.stamp)),
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
       netBase: (net?.netBase ?? Number(l.price)).toFixed(2),

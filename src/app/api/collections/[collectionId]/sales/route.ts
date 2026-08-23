@@ -5,7 +5,7 @@ import { listSalesPaginated } from "@/lib/sales";
 import { isSaleStatus } from "@/lib/sale-status";
 
 // Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, fulfillment
-// status (#392) and free text.
+// status (#392), free text, and whether a set is still to be chosen (#697).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -25,6 +25,9 @@ export async function GET(
   // authority on what exists.
   const statuses = (sp.get("status") || "").split(",").filter(isSaleStatus);
   const search = sp.get("search") || undefined;
+  // "Only the sales still waiting on which set went" (#697). Present-and-`1` rather than any truthy
+  // value, so a link carrying `setChoice=0` reads as off rather than as on.
+  const setChoicePending = sp.get("setChoice") === "1";
 
   try {
     const result = await listSalesPaginated(session.user.id, collectionId, {
@@ -32,6 +35,7 @@ export async function GET(
       platformId,
       statuses,
       search,
+      setChoicePending,
       pageSize: 50,
     });
     return NextResponse.json(result);

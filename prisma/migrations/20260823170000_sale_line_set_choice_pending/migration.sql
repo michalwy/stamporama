@@ -1,0 +1,13 @@
+-- "This line names a set, but nobody has chosen it yet" (#697).
+--
+-- A `sale_line` names exactly one `offer_set` — the atomic sellable unit carrying its exact physical
+-- copies — and that column stays NOT NULL, so every read that assumes a set keeps working. What was
+-- missing is the distinction between a set the collector **chose** at the packing table and one an
+-- automatic pick took on their behalf, which is what an imported multi-quantity order (#698) and a
+-- buyer picking their own copy (#699) both need to be able to say.
+--
+-- Which set went is not a fact about the order: the sets of one offer are the same thing at the same
+-- price, which is why they are one listing. So this defaults to false — every line recorded by hand
+-- was chosen by the person recording it — and is cleared the moment a person confirms the set or
+-- swaps it.
+ALTER TABLE "sale_line" ADD COLUMN "setChoicePending" BOOLEAN NOT NULL DEFAULT false;

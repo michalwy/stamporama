@@ -80,3 +80,38 @@ export function colnectSearchUrl(query: string | null | undefined): string | nul
   if (!q) return null;
   return `${COLNECT_SEARCH_BASE}${encodeURIComponent(q).replace(/%20/g, "+")}`;
 }
+
+// ── The listing's own id (#696) ──────────────────────────────────────────────
+//
+// Colnect names one sale entry at two addresses — the public entry `/<locale>/market/sale/<code>`
+// that #412 captures, and the edit form `/<locale>/sell/edit/sale_id/<code>` that #462 posts an
+// update to — and the locale segment is whatever Colnect served rather than the locale that was
+// asked for. What both have in common, and the only part of either that identifies the listing, is
+// the opaque code.
+//
+// It is stored on its own (`Offer.colnectSaleId`) because a code buried in a URL cannot be indexed,
+// cannot be made unique, and cannot answer "which offer is this transaction about" (#698). This is
+// the parser that gets it out of the address, and it is deliberately the same reading as the
+// extension's own `colnectSaleCode()` (`extension/src/platform/colnect/listing.ts`), mirrored by
+// hand as every other contract with the extension is — separate builds, no import path.
+
+/**
+ * The sale's own code, from either address Colnect states it at. Null for anything else, including
+ * a Colnect page that is not a sale and any URL that will not parse — the caller stores the null,
+ * which is the honest record of an address that names no listing.
+ */
+export function colnectSaleCode(url: string | null | undefined): string | null {
+  if (!url?.trim()) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return null;
+  const entry = /^\/[a-z]{2}\/market\/sale\/([^/]+)\/?$/.exec(u.pathname);
+  if (entry) return decodeURIComponent(entry[1]);
+  const edit = /^\/[a-z]{2}\/sell\/edit\/sale_id\/([^/]+)\/?$/.exec(u.pathname);
+  return edit ? decodeURIComponent(edit[1]) : null;
+}

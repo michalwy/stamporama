@@ -1,7 +1,12 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SaleListItem, SellableOffer, SaleCopyItem } from "@/lib/sales";
+import type {
+  SaleListItem,
+  SellableOffer,
+  SaleCopyItem,
+  SaleLineSetChoice,
+} from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
 import type { SaleStatus } from "@/lib/sale-status";
 
@@ -18,6 +23,8 @@ export interface SaleFilters {
   statuses?: SaleStatus[];
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
+  /** Only sales holding a line whose set nobody has chosen yet (#697). */
+  setChoicePending?: boolean;
 }
 
 export const saleKeys = {
@@ -35,6 +42,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.setChoicePending) params.set("setChoice", "1");
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch sales");
       return res.json();
@@ -106,6 +114,22 @@ export function useSaleLineCopies(collectionId: string, lineId: string, enabled:
       return (await res.json()).items;
     },
     enabled,
+  });
+}
+
+/** The sets one sale line could have gone out as (#697) — its own offer's still-available sets, and
+ * the one it names today. Fetched only while the *Choose set* picker is open. */
+export function useSaleLineSetOptions(collectionId: string, lineId: string | null) {
+  return useQuery<SaleLineSetChoice>({
+    queryKey: ["sales", collectionId, "line-set-options", lineId ?? ""] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/sales/lines/${lineId}/set-options`
+      );
+      if (!res.ok) throw new Error("Failed to load the sets for this line");
+      return res.json();
+    },
+    enabled: !!lineId,
   });
 }
 

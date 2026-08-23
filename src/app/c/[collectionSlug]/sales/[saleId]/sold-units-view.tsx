@@ -75,6 +75,23 @@ type Primary = "lot" | "location" | "none";
 
 const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
 
+/** The line names a set nobody has chosen (#697). `warning`-tinted rather than `error`: nothing is
+ *  wrong with the record — every copy of the offer is the same thing at the same price — there is
+ *  simply a decision the collector has not made yet, and the parcel cannot be packed until they do. */
+const SET_PENDING_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.375rem",
+  color: "var(--color-warning)",
+  borderWidth: "1px",
+  borderStyle: "solid",
+  borderColor: "var(--color-warning-border, var(--color-border))",
+  background: "var(--color-warning-soft, var(--color-bg-page))",
+};
+
 const TOOLBAR_CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
   fontWeight: 500,
@@ -97,6 +114,11 @@ const TOOLBAR_LABEL: React.CSSProperties = {
 /** Packed-status filter for the packing view (#192): show everything, only packed, or only the
  * copies still to pack. */
 type PackedFilter = "all" | "packed" | "unpacked";
+
+/** Which sold units the packing view lists (#697): all of them, or only the ones whose set nobody
+ *  has chosen yet. Two values rather than three — the opposite ("only the settled units") is not a
+ *  question anybody asks of a parcel they are packing. */
+type SetChoiceFilter = "all" | "pending";
 
 /** Narrow a copy set by packed status. */
 function filterByPacked(items: SaleCopyItem[], filter: PackedFilter): SaleCopyItem[] {
@@ -473,6 +495,8 @@ interface SoldUnitsViewProps {
   onRemove: (lineId: string, label: string) => void;
   /** Override a sold unit's line sale price in place (#258) — independent of the offer's price. */
   onEditPrice: (lineId: string, price: string) => void;
+  /** Say which of the offer's interchangeable sets actually left on this line (#697). */
+  onChooseSet: (lineId: string) => void;
 }
 
 /** The sold-units list for the packing view (ADR-0012, #166): the same rich, sortable copy
@@ -491,6 +515,7 @@ export function SoldUnitsView({
   baseCurrency,
   onRemove,
   onEditPrice,
+  onChooseSet,
 }: SoldUnitsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
@@ -503,9 +528,24 @@ export function SoldUnitsView({
     ? packedFilterRaw
     : "all") as PackedFilter;
 
+  // "Only the units still waiting on which set went" (#697) — the packing screen's own filter, where
+  // the sold units actually are. Deliberately **not** persisted the way the group / sort / packed
+  // prefs above are: those are how this collector likes to read a packing list, while this is a
+  // question asked of *this* sale today, and a remembered one would open the next sale showing
+  // fewer units than it holds — which reads as a sale that lost a line, not as a filter.
+  const [setFilterRaw, setSetFilter] = useState<SetChoiceFilter>("all");
+  const pendingCount = useMemo(() => lines.filter((l) => l.setChoicePending).length, [lines]);
+  // Self-clearing: settle the last outstanding line and there is nothing left to select, so the
+  // filter stops selecting rather than emptying the screen under the collector who just settled it.
+  const setFilter: SetChoiceFilter = pendingCount > 0 ? setFilterRaw : "all";
+  const visibleLines = useMemo(
+    () => (setFilter === "pending" ? lines.filter((l) => l.setChoicePending) : lines),
+    [lines, setFilter]
+  );
+
   // Cards default expanded (packing wants contents visible); a set of collapsed line ids overrides.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const allCollapsed = collapsed.size === lines.length && lines.length > 0;
+  const allCollapsed = visibleLines.length > 0 && visibleLines.every((l) => collapsed.has(l.id));
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
@@ -597,10 +637,29 @@ export function SoldUnitsView({
           <ToggleChip label="To pack" on={packedFilter === "unpacked"} onClick={() => setPackedFilter("unpacked")} />
         </div>
 
+        {/* Shown **only while something is actually waiting**, unlike the three groups beside it: on
+            almost every sale every set was chosen on the way in, and a permanently drawn control for
+            a condition no unit meets is furniture on the one screen that is read while working. It
+            selects sold *units*, so it belongs to the Lot grouping — the other two draw a copy
+            stream with no unit cards in it to narrow. */}
+        {primary === "lot" && pendingCount > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Set</span>
+            <ToggleChip label="All" on={setFilter === "all"} onClick={() => setSetFilter("all")} />
+            <ToggleChip
+              label={`Not chosen (${pendingCount})`}
+              on={setFilter === "pending"}
+              onClick={() => setSetFilter("pending")}
+            />
+          </div>
+        )}
+
         {primary === "lot" && (
           <button
             type="button"
-            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(lines.map((l) => l.id)))}
+            onClick={() =>
+              setCollapsed(allCollapsed ? new Set() : new Set(visibleLines.map((l) => l.id)))
+            }
             style={{ ...TOOLBAR_CHIP, cursor: "pointer", marginLeft: "auto" }}
           >
             {allCollapsed ? "Expand all" : "Collapse all"}
@@ -610,7 +669,7 @@ export function SoldUnitsView({
 
       {primary === "lot" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {lines.map((line) => (
+          {visibleLines.map((line) => (
             <SoldUnitCard
               key={line.id}
               currency={currency}
@@ -623,6 +682,7 @@ export function SoldUnitsView({
               onToggle={() => toggle(line.id)}
               onRemove={() => onRemove(line.id, line.setLabel)}
               onEditPrice={(price) => onEditPrice(line.id, price)}
+              onChooseSet={() => onChooseSet(line.id)}
             />
           ))}
         </div>
@@ -794,6 +854,7 @@ function SoldUnitCard({
   onToggle,
   onRemove,
   onEditPrice,
+  onChooseSet,
 }: {
   currency: string;
   line: SaleDetailLine;
@@ -805,6 +866,7 @@ function SoldUnitCard({
   onToggle: () => void;
   onRemove: () => void;
   onEditPrice: (price: string) => void;
+  onChooseSet: () => void;
 }) {
   const { sentinelRef, stuck } = useStuck(0);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
@@ -812,8 +874,13 @@ function SoldUnitCard({
   // Copies load only when the card is expanded (packing view stays cheap for a large sale).
   const { data: copies = [], isLoading } = useSaleLineCopies(ctx.collectionId, line.id, expanded);
 
+  // *Choose set* (#697) is offered on every line, not only on a pending one: which copy went is the
+  // seller's own fulfilment choice, and it stays correctable after the fact — a copy turns out to
+  // have a thin and a different one goes in the envelope. Removing and re-adding the line was the
+  // only way to say so before, and that path throws away the price and the packing on the way.
   const actions: RowAction[] = [
-    { key: "remove", label: "Remove", icon: "remove", danger: true, onSelect: onRemove },
+    { key: "choose-set", label: "Choose set", icon: "move", onSelect: onChooseSet },
+    { key: "remove", label: "Remove", icon: "remove", danger: true, separatorBefore: true, onSelect: onRemove },
   ];
 
   return (
@@ -848,6 +915,27 @@ function SoldUnitCard({
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}
             </span>
+            {/* A set an automatic pick took rather than a person chose (#697). Drawn where the set is
+                named, and on the sales list from the same column — a flag shown on a list is shown
+                on the thing's own screen too.
+                It is the **affordance as well as the signal**: a flag that says a decision is
+                outstanding and then makes the reader go and find the control for it is two clicks
+                where one will do, so pressing it opens the very picker the `⋮` menu opens. The click
+                is stopped so the card does not collapse under the dialog. */}
+            {line.setChoicePending && (
+              <Tooltip content="Nobody has said which of this offer's sets actually left — press to choose">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChooseSet();
+                  }}
+                  style={{ ...SET_PENDING_CHIP, cursor: "pointer" }}
+                >
+                  Set not chosen
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
         {/* Click stops the card toggle so editing the price doesn't collapse the card (#258). */}

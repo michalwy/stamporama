@@ -77,16 +77,19 @@ function declaredItemIds(items: readonly ListingTaskItem[]): string[] {
  * `new_sale[…]` names, same grades, same uploader — so an update is this address and nothing else:
  * {@link fillColnectSaleForm} needs no variant, and neither does the shell.
  *
- * The code is read off the entry's own address rather than stored separately, since the two are the
- * same string; an edit address is accepted as well, so an offer whose URL was pasted in by hand from
- * the seller's own screen still resolves.
+ * The code comes from `listingId` where the instance states one (#696) — it stores the sale code in a
+ * column of its own now, precisely because a code buried in a URL is a value that varies with the
+ * locale Colnect answered in — and is otherwise read off the entry's own address, the two being the
+ * same string. That fallback is what keeps a listing posted before the column existed editable, and
+ * an edit address is accepted there as well, so an offer whose URL was pasted in by hand from the
+ * seller's own screen still resolves.
  *
- * Throws when the offer carries no URL, or one that is not a Colnect sale — an edit form opened at a
- * guessed address would be somebody else's listing, and this is the one step where guessing writes to
- * a live marketplace.
+ * Throws when the offer carries neither, or a URL that is not a Colnect sale — an edit form opened at
+ * a guessed address would be somebody else's listing, and this is the one step where guessing writes
+ * to a live marketplace.
  */
 export function colnectSaleEditUrl(task: ListingTask): string {
-  const code = colnectSaleCode(task.listingUrl);
+  const code = task.listingId?.trim() || colnectSaleCode(task.listingUrl);
   if (!code) {
     throw new Error(
       task.listingUrl?.trim()

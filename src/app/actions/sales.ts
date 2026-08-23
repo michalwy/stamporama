@@ -13,6 +13,7 @@ import {
   addSaleLines,
   updateSaleLinePrice,
   removeSaleLine,
+  swapSaleLineSet,
   deleteSale,
   setSaleStatus,
   setSaleLineItemPacked,
@@ -245,6 +246,22 @@ export async function updateSaleLinePriceAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the sale price.");
+  }
+}
+
+/** Say which of the offer's interchangeable sets actually left on this line (#697) — and, where the
+ * chosen set is the one the line already names, confirm it. The price and the line itself stand;
+ * only the copies (and their `packed` marks) move. */
+export async function swapSaleLineSetAction(
+  lineId: string,
+  offerSetId: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await swapSaleLineSet(session.user.id, lineId, offerSetId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to change which set left on this line.");
   }
 }
 

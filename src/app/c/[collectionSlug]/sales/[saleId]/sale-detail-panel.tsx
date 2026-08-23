@@ -21,6 +21,7 @@ import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
+import { ChooseSetDialog } from "./choose-set-dialog";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
@@ -93,6 +94,7 @@ type Dialog =
   | { kind: "editHeader" }
   | { kind: "addLines" }
   | { kind: "removeLine"; lineId: string; label: string }
+  | { kind: "chooseSet"; lineId: string }
   | { kind: "paidTotal" }
   | { kind: "shipment"; mode: "sent" | "edit" };
 
@@ -608,6 +610,10 @@ export function SaleDetailPanel({
           locations={locations}
           issueHeaderById={issueHeaderById}
           onRemove={(lineId, label) => setDialog({ kind: "removeLine", lineId, label })}
+          onChooseSet={(lineId) => {
+            setError(undefined);
+            setDialog({ kind: "chooseSet", lineId });
+          }}
           onEditPrice={(lineId, price) =>
             run(async () => {
               const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
@@ -756,6 +762,37 @@ export function SaleDetailPanel({
               () => setDialog({ kind: "none" })
             )
           }
+        />
+      )}
+
+      {/* Which of the offer's interchangeable sets actually left (#697). The line, its price and its
+          place on the sale all stand — only the copies move — so this is deliberately not a
+          confirm-and-destroy dialog like the removal below it. */}
+      {dialog.kind === "chooseSet" && (
+        <ChooseSetDialog
+          collectionId={collectionId}
+          lineId={dialog.lineId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={sale.baseCurrency}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onSubmit={(offerSetId) => {
+            const lineId = dialog.lineId;
+            run(
+              async () => {
+                const { swapSaleLineSetAction } = await import("@/app/actions/sales");
+                return swapSaleLineSetAction(lineId, offerSetId);
+              },
+              () => setDialog({ kind: "none" })
+            );
+          }}
         />
       )}
 

@@ -242,6 +242,44 @@ you still advance the status yourself, it never changes on its own.
 
 Remove a sold set from its card's **⋮** menu (its copies become available again).
 
+### Choosing which set left
+
+An offer listed at quantity 3 holds three sets, and a buyer who takes one has said *one of these*,
+not *this one*. They are the same thing at the same price — that is why they are one listing — so
+**which copy actually goes is your choice**, made at the packing table. Pick a piece up, find a thin
+on it, and send the next one instead.
+
+Any sold unit's **⋮** menu carries **Choose set**. It lists the sets of that unit's own offer that
+are still available and marks the one the line names today with **On this line now** — including
+when there is only one, since what you came to see is which set this line is standing on.
+
+Each set is shown **with its copies opened out**, as full inventory rows with their scans, catalog
+number, condition and location. That is the point of the dialog: choosing between interchangeable
+sets is choosing between physical pieces, and what separates two copies of the same stamp — a thin,
+a short perf, the cancel — is something you can only see. Compare the pictures, pick the one that is
+actually going in the envelope, and press **Choose**:
+
+- the **sale price stays** — it is what the buyer paid, and swapping which copy goes does not change
+  it;
+- **packed** ticks go with the copies they were about, so the new copies start unpacked;
+- a set whose copies have already left on another sale isn't offered, and can't be chosen;
+- choosing the set that is already on the line simply **confirms** it — nothing moves, and the
+  packing you have already done survives.
+
+Sometimes a unit arrives with **⚠ Set not chosen** on it — an import or a buyer's own pick named one
+of the interchangeable sets without anybody deciding. The chip is the button as well as the flag:
+press it and the picker opens, so you never have to go looking for the menu.
+
+On a sale holding such units the toolbar above them grows a **Set** filter — **All** / **Not chosen
+(N)** — so you can narrow the sold units to exactly the ones still waiting on you and work through
+them without scrolling past the settled ones. It appears only while something is actually waiting,
+and stands down by itself once you have settled the last one. Like **Packed** beside it, it narrows
+what is listed and changes nothing.
+
+The same chip appears on that sale's row in the sales list, where a **Set not chosen** filter narrows
+to the sales still waiting — that one answers *which parcels* need attention, before you open any of
+them.
+
 ## Printing a packing list
 
 If you'd rather pack from paper than from the screen, the header's **🖨 Packing list** button opens

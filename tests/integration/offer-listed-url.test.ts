@@ -20,7 +20,11 @@ function today(): Date {
   return new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
 }
 
-const URL_ONE = "https://colnect.com/en/market/sale/h5UXNh";
+// One code per *offer*, not one per file: since #696 the sale code inside a Colnect listing URL is
+// stored on `Offer.colnectSaleId` and is unique per collection, so two offers of this collection
+// cannot both claim `h5UXNh` — which is the point of the column. Each case takes its own address.
+let nextCode = 0;
+const saleUrl = () => `https://colnect.com/en/market/sale/h5UX${nextCode++}`;
 const URL_TWO = "https://colnect.com/en/market/sale/other1";
 
 describe("recording a listing's URL (#412)", () => {
@@ -89,29 +93,33 @@ describe("recording a listing's URL (#412)", () => {
   const offerRow = (offerId: string) =>
     prisma.offer.findUniqueOrThrow({
       where: { id: offerId },
-      select: { state: true, url: true, listingDate: true },
+      select: { state: true, url: true, listingDate: true, colnectSaleId: true },
     });
 
   it("takes a ready offer live with the URL and today's listing date", async () => {
     const offerId = await readyOffer();
-    assert.equal(await recordOfferListed(userId, offerId, URL_ONE), "activated");
+    const url = saleUrl();
+    assert.equal(await recordOfferListed(userId, offerId, url), "activated");
 
     const row = await offerRow(offerId);
     assert.equal(row.state, "active");
-    assert.equal(row.url, URL_ONE);
+    assert.equal(row.url, url);
     assert.deepEqual(row.listingDate, today());
+    // The address a person clicks and the id the app joins on are written together (#696).
+    assert.equal(row.colnectSaleId, url.slice(url.lastIndexOf("/") + 1));
   });
 
   it("is a no-op the second time — the two deliverers must not collide", async () => {
     const offerId = await readyOffer();
-    await recordOfferListed(userId, offerId, URL_ONE);
+    const url = saleUrl();
+    await recordOfferListed(userId, offerId, url);
 
     // The other deliverer arrives with the same URL: nothing to do, and nothing refused.
-    assert.equal(await recordOfferListed(userId, offerId, URL_ONE), "unchanged");
+    assert.equal(await recordOfferListed(userId, offerId, url), "unchanged");
     // And a *different* URL does not overwrite a record that already carries one: whatever is there
     // was put there by the collector or by this same capture.
     assert.equal(await recordOfferListed(userId, offerId, URL_TWO), "unchanged");
-    assert.equal((await offerRow(offerId)).url, URL_ONE);
+    assert.equal((await offerRow(offerId)).url, url);
   });
 
   it("fills a blank URL on an offer that is already active", async () => {
@@ -119,17 +127,19 @@ describe("recording a listing's URL (#412)", () => {
     await setOfferState(userId, offerId, "active"); // activated by hand, no URL to hand over yet
     assert.equal((await offerRow(offerId)).url, null);
 
-    assert.equal(await recordOfferListed(userId, offerId, URL_ONE), "url-recorded");
+    const url = saleUrl();
+    assert.equal(await recordOfferListed(userId, offerId, url), "url-recorded");
     const row = await offerRow(offerId);
-    assert.equal(row.url, URL_ONE);
+    assert.equal(row.url, url);
     assert.equal(row.state, "active");
+    assert.equal(row.colnectSaleId, url.slice(url.lastIndexOf("/") + 1));
   });
 
   it("refuses an offer no marketplace submission may take live", async () => {
     const offerId = await readyOffer();
     await setOfferState(userId, offerId, "preparing");
     await assert.rejects(
-      () => recordOfferListed(userId, offerId, URL_ONE),
+      () => recordOfferListed(userId, offerId, saleUrl()),
       (e: unknown) =>
         e instanceof OfferActionBlockedError && e.reason === "bad-transition"
     );
@@ -143,5 +153,25 @@ describe("recording a listing's URL (#412)", () => {
       (e: unknown) => e instanceof OfferActionBlockedError && e.reason === "no-url"
     );
     assert.equal((await offerRow(offerId)).state, "ready");
+  });
+
+  // #696: one live listing belongs to one offer. The capture is where a second claim on one sale
+  // code would otherwise be made silently — the collector posted the wrong offer, or recorded the
+  // address on the wrong one — and the refusal names the offer that already holds it.
+  it("refuses a second offer claiming a Colnect listing another one already is", async () => {
+    const first = await readyOffer();
+    const url = saleUrl();
+    await recordOfferListed(userId, first, url);
+
+    const second = await readyOffer();
+    await assert.rejects(
+      () => recordOfferListed(userId, second, url),
+      (e: unknown) => e instanceof OfferActionBlockedError && e.reason === "duplicate-listing"
+    );
+    // Refused *before* the transition, so the second offer is untouched — a live listing with no
+    // address recorded on it is the state the URL-after-transition order exists to prevent.
+    const row = await offerRow(second);
+    assert.equal(row.state, "ready");
+    assert.equal(row.url, null);
   });
 });
