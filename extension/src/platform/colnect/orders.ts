@@ -141,6 +141,36 @@ function isRendered(element: Element): boolean {
   return !UNRENDERED.has(element.tagName.toLowerCase());
 }
 
+/**
+ * Whether the page actually **draws** `element` — asked of the document itself, and only where the
+ * document can answer.
+ *
+ * A tag list catches a `<script>`; it does not catch the copy of the page's title that Colnect keeps
+ * in its header under `visibility: hidden`, which is a *shorter* element naming this transaction
+ * than the heading is — the mark went inside it, present in the DOM, findable by selector, and
+ * invisible to the person it was drawn for.
+ *
+ * **Computed style, not the layout box.** `getClientRects()` reports a rectangle for a
+ * `visibility: hidden` element, which is exactly the case that hid the mark; `display` and
+ * `visibility` are the page's own answer. Both are read, and where the document has neither — the
+ * `linkedom` documents these rules are tested against — every element passes, so the reading is the
+ * same whether or not anyone is looking at it. Asked **after** the text has already narrowed the
+ * candidates to a handful, since a computed style is a style recalculation and this runs on somebody
+ * else's page.
+ */
+function isDrawn(element: Element): boolean {
+  const inline = element.getAttribute("style") ?? "";
+  if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(inline)) return false;
+
+  const view = element.ownerDocument?.defaultView as
+    | { getComputedStyle?: (element: Element) => { display?: string; visibility?: string } }
+    | null
+    | undefined;
+  if (typeof view?.getComputedStyle !== "function") return true;
+  const style = view.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
 /** Every rendered element under `root`, itself included — what the scans below choose from. */
 function elementsIn(root: Element): Element[] {
   return [root, ...root.querySelectorAll("*")].filter(
@@ -193,8 +223,12 @@ function saleAnchorsIn(root: Element, code: string): Element[] {
  * the label**, siblings and text nodes alike, up to the next label. Null when the label is not on the
  * page at all, which every rule downstream has an answer for.
  */
-function labelledLine(root: Element, label: RegExp): string | null {
-  const element = labelledElement(root, label);
+function labelledLine(
+  root: Element,
+  label: RegExp,
+  accept: (line: string) => boolean = () => true
+): string | null {
+  const element = labelledElement(root, label, accept);
   if (element) return textUpToList(element);
 
   // No element holds both, which is the flat header: `<b>Buyer:</b> … <b>Started:</b> August 23,
@@ -235,7 +269,11 @@ function textAfter(element: Element, root: Element): string {
  * page is the collector's *own* greeting in Colnect's site header — which is how the first cut filed
  * a sale under the seller and marked the page banner instead of the transaction.
  */
-function labelledElement(root: Element, label: RegExp): Element | null {
+function labelledElement(
+  root: Element,
+  label: RegExp,
+  accept: (line: string) => boolean = () => true
+): Element | null {
   let found: Element | null = null;
   let length = Infinity;
   for (const element of elementsIn(root)) {
@@ -246,6 +284,9 @@ function labelledElement(root: Element, label: RegExp): Element | null {
     const text = textUpToList(element);
     if (!label.test(text)) continue;
     if (!valueAfter(text, label)) continue;
+    // The smallest line the caller will *take*: one page's label can introduce two different facts,
+    // and the shorter is not always the one asked for.
+    if (!accept(text)) continue;
     if (text.length < length) {
       found = element;
       length = text.length;
@@ -330,9 +371,16 @@ const TOTAL_LABELS: readonly RegExp[] = [
  */
 function readTotals(root: Element): string[] {
   return TOTAL_LABELS.flatMap((label) => {
-    const line = labelledLine(root, label);
-    return line && readAmountIn(line) ? [line] : [];
+    const line = labelledLine(root, label, statesAnAmount);
+    return line ? [line] : [];
   });
+}
+
+/** A line that states a figure in money. What `Discount:` needs: Colnect prints the payment method's
+ *  `Discount: 3%` as well as the order's own `Discount: -€ 0.37`, and the shorter of the two is the
+ *  percentage — which is a rate and not an amount, and belongs to a different question entirely. */
+function statesAnAmount(line: string): boolean {
+  return readAmountIn(line);
 }
 
 /** True when a line states a figure at all — a label with nothing after it is not a total, and a
@@ -380,6 +428,7 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
   // seller — which filed the first imported sale under its own owner and hung the mark on the
   // banner. No `Buyer:` line, no buyer: better anonymous than somebody else.
   const buyerLine = labelledElement(root, BUYER_LABEL);
+
   const buyerAnchor =
     [...(buyerLine?.querySelectorAll("a[href]") ?? [])].find((anchor) =>
       COLLECTOR_HREF.test(hrefOf(anchor))
@@ -515,6 +564,7 @@ function headingOf(root: Element, orderId: string): Element | null {
     // Named **and worded**: the id alone is carried by anything that mentions this transaction,
     // while `Transaction #hflVE` is the page saying which one the reader is looking at.
     if (!names.test(text) || !/\btransaction\b/i.test(text) || text.length > 200) continue;
+    if (!isDrawn(element)) continue;
     if (text.length < length) {
       found = element;
       length = text.length;

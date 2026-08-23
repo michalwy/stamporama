@@ -235,6 +235,31 @@ describe("readColnectOrders — the transaction's own page", () => {
     assert.equal(order.soldAtText, "August 23, 2026 2:21 PM");
   });
 
+  it("does not mark a heading the page keeps hidden", () => {
+    // Colnect keeps a copy of the page's title in its header under `visibility: hidden` — a *shorter*
+    // element naming this transaction than the breadcrumb is. `getClientRects()` reports a rectangle
+    // for it, which is why the check is the computed style and not the layout box.
+    const [order] = read(
+      DETAIL.replace(
+        '<div class="crumbs">',
+        '<div style="visibility: hidden">Transaction #hflVE: Colnect</div><div class="crumbs">'
+      ),
+      DETAIL_URL
+    );
+    assert.equal(order.anchor.className, "crumbs");
+  });
+
+  it("takes the total that states money, not the rate printed under the same word", () => {
+    // Colnect prints the payment method's `Discount: 3%` as well as the order's own
+    // `Discount: -€ 0.37`, and the shorter of the two is the percentage.
+    const [order] = read(
+      DETAIL.replace("<div class=\"crumbs\">", '<div>Discount: 3%</div><div class="crumbs">'),
+      DETAIL_URL
+    );
+    assert.ok(order.totalTexts.includes("Discount: -€ 0.37"));
+    assert.ok(!order.totalTexts.some((total) => total.includes("3%")));
+  });
+
   it("marks a heading that says which transaction, not anything carrying the id", () => {
     // The id alone is on everything that mentions this transaction — a confirm form, a hidden field,
     // a tracking link. `Transaction #hflVE` is the page saying which one the reader is looking at.

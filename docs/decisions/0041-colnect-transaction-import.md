@@ -247,11 +247,16 @@ as a list rather than only as the joined sentence.
   list, the name ends at its first figure.
 - Delcampe's import gained the window with Colnect's, so #612's flow changed without #612 asking. The
   alternative was the same button behaving differently on two marketplaces.
+- One label can introduce two facts: Colnect prints the payment method's `Discount: 3%` as well as
+  the order's own `Discount: -€ 0.37`, and the shorter is the rate. A total is therefore the smallest
+  line under its label **that states money**.
 - Nothing is read from what the browser does not draw. `textContent` reports a script's source as
   text, so an inline script carrying the transaction id was a smaller "element naming this order"
   than the heading — and the mark went inside it, invisible. Every scan now skips `script`, `style`,
   `noscript`, `template`, `title` and `iframe`, and the heading must say `Transaction` as well as the
-  id.
+  id. Nor was that enough: Colnect keeps a copy of the page's title in its header under
+  `visibility: hidden`, shorter than the breadcrumb and carrying a layout rectangle all the same, so
+  "is this drawn" is the **computed `display`/`visibility`** rather than `getClientRects()`.
 - Every one of these corrections is the same mistake: a rule that was true of the **fixture** and not
   of the page — the first collector link, the first labelled leaf, an amount that is one leaf. What
   survived contact is the principle underneath them, that a fact is read from the thing that states
