@@ -112,7 +112,10 @@ reverting the bidding flag both clear it live, same as the sold case.
 
 When a quantity offer sells one of several interchangeable sets, the seller picks which physical
 set ships; the sale binds that set's exact copies (whole-set integrity, as today). Default in
-the picker: any still-available set. On *other* offers, the now-sold copy makes its containing
+the picker: any still-available set. **Refined by #697 and §7 below**: which set left is a decision
+rather than a fact about the order, so a set an automatic pick took is marked
+`SaleLine.setChoicePending` until a person confirms or swaps it — and the person best placed to
+choose may be the buyer. On *other* offers, the now-sold copy makes its containing
 set the one to remove (§4) — since the sets are interchangeable, the collector may remove any
 equivalent set to decrement.
 
@@ -133,6 +136,45 @@ both enumerate the composition:
 
 The comparators live in the pure `offer-set-order.ts` so server reads, duplication, the sale flow
 and (later) the photo planner all order a set identically. No read may fall back to cuid order.
+
+### 7. The buyer can choose their own copy, through a link (#699)
+
+A listing of three identical copies is one listing because the three are the same thing *as far as
+the listing was concerned*. They are not the same stamp: the centring, a corner perf and the exact
+shade differ, and the person who is going to own one has an opinion the seller does not. So the
+decision §5 leaves with the seller can be **handed to the buyer**, and asking them costs a link.
+
+**`SaleShareToken` is `TradeShareToken`'s shape (ADR-0039 §9) with the trade swapped for a single
+sale**, and that swap is the whole security argument here too: the token names one sale, and every
+read it authorises is about that sale's own lines — the ones nobody has chosen a set for, and the
+copies those sets hold. A leaked link exposes exactly the question the seller asked. One row per
+sale, regenerating replaces it, and the raw token is sealed beside its hash (#681) so the seller can
+be shown their own address again. What it deliberately does **not** carry is a `showValues` switch:
+a trade's page is a column of figures and disclosing them is a real choice, while this page has no
+figures at all — the buyer knows what they paid, and nothing else about the sale or the collection
+is on it in any setting.
+
+**The pick is the seller's own write.** `swapSaleLineSet` (#697) and nothing beside it: the copies
+move, the price stands (it is what the buyer paid), the packing marks of the copies that are no
+longer going are dropped, and `setChoicePending` clears — exactly as when the seller picks. Two ways
+to make that write would be two places for it to differ. One flag goes in with it:
+`SaleLine.setChosenByBuyerAt`, which is how the seller sees *who* chose and how the buyer's page
+knows which settled lines are still theirs to change. Any later swap by the seller clears it — the
+parcel is theirs to pack, and once they have overridden the pick the line is no longer the buyer's
+answer.
+
+**The window is the parcel, and it closes at `packed`.** Up to then the question is live and the
+buyer may re-pick as often as they like; from `packed` on it has been answered in the physical
+world, and a pick landing afterwards would rewrite the record to say a copy left that did not while
+dropping the packing marks the seller had made. The link still *opens* after that — the buyer is
+entitled to see what was chosen — and says why it no longer asks. The seller's own override is
+unaffected in every status: correcting the record of what actually went is a different act from
+being asked which one should go.
+
+**What is on the page is the pictures.** Only the lines still pending a choice, plus the ones this
+buyer answered; each candidate is its copies' scans, a radio, and *Copy 2*. Set titles, copy
+numbers, shelves, cost bases and the rest of the order never enter the payload rather than merely
+going undrawn — the surest way to keep something off a page is for it never to be in it.
 
 ## Consequences
 

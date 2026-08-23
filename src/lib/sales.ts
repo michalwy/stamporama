@@ -17,6 +17,7 @@ import { attributeLineToPurchase } from "./purchase-return";
 import { resolveShippingMethodForPlatform } from "./shipping-methods";
 import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
+import { readShareAddress, type ShareAddress } from "./share-address";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -901,7 +902,11 @@ export interface SaleLineSetChoice {
  */
 export async function listSaleLineSetOptions(
   ownerId: string,
-  lineId: string
+  lineId: string,
+  // The copy rows are the collector's own — copy numbers, shelves, cost basis — and the buyer's page
+  // (#699) offers the same sets without them, so it says so here rather than fetching them to throw
+  // away. The default is the collector's picker, which is what this read exists for.
+  options: { withCopies?: boolean } = {}
 ): Promise<SaleLineSetChoice | null> {
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
@@ -959,12 +964,13 @@ export async function listSaleLineSetOptions(
   }
 
   const copyIds = [...new Set(sets.flatMap((s) => s.itemIds))];
-  const copies = copyIds.length
-    ? (await listItemsPaginated(ownerId, line.sale.collectionId, {
-        ids: copyIds,
-        pageSize: copyIds.length,
-      })).items
-    : [];
+  const copies =
+    options.withCopies !== false && copyIds.length
+      ? (await listItemsPaginated(ownerId, line.sale.collectionId, {
+          ids: copyIds,
+          pageSize: copyIds.length,
+        })).items
+      : [];
 
   return {
     lineId,
@@ -992,6 +998,11 @@ export async function listSaleLineSetOptions(
  * Choosing the set the line **already names** is *confirming* it: the flag clears and nothing else
  * moves, so a line whose copies are already in the parcel keeps its packing.
  *
+ * **Who chose is recorded, in one column and one write.** `byBuyer` stamps `setChosenByBuyerAt` on
+ * a pick that came through the sale's share link (#699); every other call clears it, because a
+ * seller correcting the record afterwards has overridden the buyer's answer and the line is no
+ * longer that answer. The same write does both, so the two can never come to disagree.
+ *
  * The target must belong to the **same offer**. A set of another offer is a different listing that a
  * different buyer is looking at, and moving a line onto it would be recording a sale that did not
  * happen; a set holding a copy that left on another sale is refused for the plainer reason, with the
@@ -1003,8 +1014,10 @@ export async function listSaleLineSetOptions(
 export async function swapSaleLineSet(
   ownerId: string,
   lineId: string,
-  offerSetId: string
+  offerSetId: string,
+  options: { byBuyer?: boolean } = {}
 ): Promise<void> {
+  const setChosenByBuyerAt = options.byBuyer ? new Date() : null;
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
     select: {
@@ -1026,7 +1039,10 @@ export async function swapSaleLineSet(
   // Confirming the set the line already names: nothing about the copies changes, so nothing about
   // their packing does either.
   if (offerSetId === line.offerSetId) {
-    await prisma.saleLine.update({ where: { id: lineId }, data: { setChoicePending: false } });
+    await prisma.saleLine.update({
+      where: { id: lineId },
+      data: { setChoicePending: false, setChosenByBuyerAt },
+    });
     return;
   }
 
@@ -1062,6 +1078,7 @@ export async function swapSaleLineSet(
         data: {
           offerSetId,
           setChoicePending: false,
+          setChosenByBuyerAt,
           items: { create: itemIds.map((itemId) => ({ itemId })) },
         },
       });
@@ -1360,11 +1377,25 @@ export interface SaleDetailLine {
   /** The line names a set nobody has chosen yet (#697) — an automatic pick took one of the offer's
    *  interchangeable sets, and *Choose set* is what settles it. */
   setChoicePending: boolean;
+  /** When the **buyer** chose this set through the sale's share link (#699), else null. The seller
+   *  reads it to know the pick is not their own — and it is cleared the moment they override it. */
+  setChosenByBuyerAt: string | null;
   itemLabels: string[];
   /** This line's resolved net proceeds in the transaction currency (allocation engine). */
   netTx: string;
   /** …and converted to the base currency at the frozen FX rate. */
   netBase: string;
+}
+
+/** What the sale screen knows about its buyer link (#699) without asking `sale-share.ts` for it.
+ *  The address included (#681): the link is a fact about this sale, and the screen that says one is
+ *  out there is the screen that should be able to say **which**. */
+export interface SaleShareState {
+  address: ShareAddress;
+  expiresAt: string | null;
+  createdAt: string;
+  /** When the buyer last opened it, or null. The only sign the question reached anybody. */
+  lastUsedAt: string | null;
 }
 
 export interface SaleDetail {
@@ -1431,6 +1462,10 @@ export interface SaleDetail {
    * "mark sale packed?" hint. Never auto-advances the status. */
   allItemsPacked: boolean;
   lines: SaleDetailLine[];
+  /** The buyer's link for choosing their own copy (#699), or null when the sale has none. Here
+   *  rather than behind a second fetch, so the header can say a question is out there — and whether
+   *  it has been opened — without the seller opening a dialog to find out. */
+  share: SaleShareState | null;
   createdAt: Date;
 }
 
@@ -1471,6 +1506,11 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: { select: { name: true } },
       buyer: { select: { name: true } },
+      // The buyer's link (#699). Metadata only — the address is sealed, and `readShareAddress` says
+      // why it cannot be opened where it cannot.
+      shareToken: {
+        select: { tokenSealed: true, expiresAt: true, createdAt: true, lastUsedAt: true },
+      },
       lines: {
         select: {
           id: true,
@@ -1478,6 +1518,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           offerId: true,
           price: true,
           setChoicePending: true,
+          setChosenByBuyerAt: true,
           offerSet: {
             select: {
               title: true,
@@ -1541,6 +1582,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           : (Number(l.price) * Number(sale.fxRateToBase)).toFixed(2),
       copyCount: l.items.length,
       setChoicePending: l.setChoicePending,
+      setChosenByBuyerAt: l.setChosenByBuyerAt?.toISOString() ?? null,
       itemLabels: l.items.map((li) => labeller.copy(li.item.stamp)),
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
       netBase: (net?.netBase ?? Number(l.price)).toFixed(2),
@@ -1595,6 +1637,14 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     status: sale.status,
     allItemsPacked: allItemsPacked,
     lines,
+    share: sale.shareToken
+      ? {
+          address: readShareAddress(sale.shareToken.tokenSealed),
+          expiresAt: sale.shareToken.expiresAt?.toISOString() ?? null,
+          createdAt: sale.shareToken.createdAt.toISOString(),
+          lastUsedAt: sale.shareToken.lastUsedAt?.toISOString() ?? null,
+        }
+      : null,
     createdAt: sale.createdAt,
   };
 }

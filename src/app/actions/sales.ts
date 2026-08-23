@@ -22,6 +22,11 @@ import {
   type SaleAmountField,
   type SaleStatus,
 } from "@/lib/sales";
+import {
+  createSaleShareToken,
+  revokeSaleShareToken,
+  setSaleShareOptions,
+} from "@/lib/sale-share";
 import { parseAmount, parsePrice } from "@/lib/sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
@@ -314,5 +319,74 @@ export async function deleteSaleAction(saleId: string): Promise<SaleActionState>
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the sale.");
+  }
+}
+
+// ── The buyer's link (#699) ──────────────────────────────────────────────────────────────────────
+//
+// Which of an offer's interchangeable sets left is the seller's own fulfilment choice (#697) — but
+// on a listing of three identical copies the seller is not the best person to make it. The buyer
+// bought a stamp from a picture, and the three are the same thing only as far as the listing was
+// concerned. Asking them costs a link.
+
+export type SaleShareLinkActionState =
+  | { status: "success"; token: string }
+  | { status: "error"; message: string };
+
+/**
+ * A day from a date input → the moment that day ends.
+ *
+ * End of the day rather than its start, because a seller who types a date means "good through then".
+ * Blank means no expiry, which is the default and the common case — the question closes when the
+ * parcel is packed anyway.
+ */
+function parseShareExpiry(raw: string): Date | null {
+  const value = raw.trim();
+  if (!value) return null;
+  const parsed = new Date(`${value}T23:59:59.999Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Generate the sale's buyer link, replacing any it had. Regeneration is the same act, because a
+ *  sale has one link and asking for a new one is asking for the old one to stop working. */
+export async function createSaleShareLinkAction(
+  saleId: string,
+  rawExpiresAt: string
+): Promise<SaleShareLinkActionState> {
+  const session = await getSession();
+  try {
+    const { token } = await createSaleShareToken(session.user.id, saleId, {
+      expiresAt: parseShareExpiry(rawExpiresAt),
+    });
+    return { status: "success", token };
+  } catch (e) {
+    return fail(e, "Failed to create the link. Please try again.");
+  }
+}
+
+/** Change when the link runs out without changing the address — extending a link the buyer is
+ *  halfway through answering must not break it. */
+export async function setSaleShareOptionsAction(
+  saleId: string,
+  rawExpiresAt: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await setSaleShareOptions(session.user.id, saleId, {
+      expiresAt: parseShareExpiry(rawExpiresAt),
+    });
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update the link. Please try again.");
+  }
+}
+
+export async function revokeSaleShareLinkAction(saleId: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await revokeSaleShareToken(session.user.id, saleId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to withdraw the link. Please try again.");
   }
 }

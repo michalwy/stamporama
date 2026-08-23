@@ -13,7 +13,7 @@ import {
   type TradeStatus,
 } from "./trade-rules";
 import { assertContentEditable, assertSectionOwner, assertTradeOwner } from "./trade-access";
-import { readTradeShareAddress, type TradeShareAddress } from "./trade-share-address";
+import { readShareAddress, type ShareAddress } from "./share-address";
 import { tradeListingRefusal } from "./trade-reservations";
 import { tradeClosingRefusal } from "./trade-realisation";
 import { createTradePurchase } from "./trade-intake";
@@ -123,7 +123,7 @@ export interface TradeColnectListSummary {
  *  address included (#681): the link is a fact about this trade, and the screen that says one is out
  *  there is the screen that should be able to say **which**. */
 export interface TradeShareState {
-  address: TradeShareAddress;
+  address: ShareAddress;
   showValues: boolean;
   expiresAt: string | null;
   createdAt: string;
@@ -458,7 +458,7 @@ export async function getTrade(ownerId: string, tradeId: string): Promise<TradeD
     createdAt: row.createdAt,
     share: row.shareToken
       ? {
-          address: readTradeShareAddress(row.shareToken.tokenSealed),
+          address: readShareAddress(row.shareToken.tokenSealed),
           showValues: row.shareToken.showValues,
           expiresAt: isoOrNull(row.shareToken.expiresAt),
           createdAt: row.shareToken.createdAt.toISOString(),

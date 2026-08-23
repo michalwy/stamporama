@@ -282,6 +282,31 @@ The same chip appears on that sale's row in the sales list, where a **Set not ch
 to the sales still waiting — that one answers *which parcels* need attention, before you open any of
 them.
 
+### Letting the buyer choose
+
+You are not always the best person to choose. Your buyer bought a stamp from a picture, and your
+three copies are the same thing only as far as the listing was concerned — the centring, a corner
+perf and the exact shade differ, and the person who is going to own it has an opinion. So you can
+hand the decision over.
+
+While a sale has a unit waiting on a set choice, the detail header carries **Ask the buyer**. It
+generates a link — no account, no sign-in — that you send with your usual message. The page behind
+it shows the units nobody has chosen a set for, each with **photos of your actual copies**, and a
+radio under each. Nothing else is on it: not the prices, not the rest of your collection, not the
+copies' numbers or where they are filed.
+
+- The buyer's pick **moves the copies straight away**, exactly as your own **Choose set** does: the
+  price stands, the flag clears, and the unit card gains a green **Buyer chose** chip so you know at
+  the packing table that the copy in front of you was asked for.
+- They can **change their mind** as often as they like — until you mark the sale **packed**. From
+  then on the page says the copies are settled and takes no more answers, which is why marking a
+  sale packed is worth doing when you actually pack it.
+- **You always have the last word.** Opening **Choose set** and picking something else replaces
+  their answer with yours, and the *Buyer chose* chip goes with it.
+- The dialog shows the link's address whenever it can, says when the buyer last opened it, and
+  carries **New link** (the old address stops working) and **Withdraw**. An optional expiry date is
+  there if you want one; left blank, the link lives until you withdraw it.
+
 ## Printing a packing list
 
 If you'd rather pack from paper than from the screen, the header's **🖨 Packing list** button opens

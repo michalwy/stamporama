@@ -78,6 +78,24 @@ const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
 /** The line names a set nobody has chosen (#697). `warning`-tinted rather than `error`: nothing is
  *  wrong with the record — every copy of the offer is the same thing at the same price — there is
  *  simply a decision the collector has not made yet, and the parcel cannot be packed until they do. */
+/** The **buyer** chose this set, through the sale's link (#699). `success`-tinted and quiet: it is
+ *  not an outstanding decision but a settled one, and what it adds is *who* settled it — the seller
+ *  packing the parcel is entitled to know the copy in front of them was asked for rather than
+ *  picked. Gone the moment the seller swaps the set themselves, because then it is their pick again. */
+const BUYER_CHOSE_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.375rem",
+  color: "var(--color-success)",
+  borderWidth: "1px",
+  borderStyle: "solid",
+  borderColor: "var(--color-success-border, var(--color-border))",
+  background: "var(--color-success-soft, var(--color-bg-page))",
+};
+
 const SET_PENDING_CHIP: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -934,6 +952,17 @@ function SoldUnitCard({
                 >
                   Set not chosen
                 </button>
+              </Tooltip>
+            )}
+            {/* Who chose, on a line that was settled through the buyer's link (#699). Not a control:
+                the seller's own way to change it is *Choose set*, which is where it already was, and
+                pressing it would clear this mark — which is the one thing a reader of this chip is
+                not asking for. */}
+            {!line.setChoicePending && line.setChosenByBuyerAt && (
+              <Tooltip
+                content={`The buyer picked this copy themselves on ${new Date(line.setChosenByBuyerAt).toLocaleDateString()} — choosing a different set replaces their pick with yours`}
+              >
+                <span style={BUYER_CHOSE_CHIP}>Buyer chose</span>
               </Tooltip>
             )}
           </div>

@@ -13,10 +13,10 @@ import { buildAreaPath } from "./area-path";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import {
-  readTradeShareAddress,
-  sealTradeShareToken,
-  type TradeShareAddress,
-} from "./trade-share-address";
+  readShareAddress,
+  sealShareToken,
+  type ShareAddress,
+} from "./share-address";
 import {
   isTradeShareTokenShape,
   resolveTradeShareAccess,
@@ -68,7 +68,7 @@ function hashesEqual(a: string, b: string): boolean {
  *  to a partner who lost it. `address` carries the token when it can be opened and the reason it
  *  cannot when it cannot; the hash is what resolves a request either way. */
 export interface TradeShareLinkData {
-  address: TradeShareAddress;
+  address: ShareAddress;
   showValues: boolean;
   expiresAt: string | null;
   createdAt: string;
@@ -113,7 +113,7 @@ function toLinkData(row: {
   lastUsedAt: Date | null;
 }): TradeShareLinkData {
   return {
-    address: readTradeShareAddress(row.tokenSealed),
+    address: readShareAddress(row.tokenSealed),
     showValues: row.showValues,
     expiresAt: row.expiresAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -130,7 +130,7 @@ function toLinkData(row: {
  * the new one lands.
  *
  * The raw token is **sealed** beside its hash (#681), so the address can be shown again afterwards —
- * see `trade-share-address.ts` for why that bargain differs from `AssistantToken`'s. It is still
+ * see `share-address.ts` for why that bargain differs from `AssistantToken`'s. It is still
  * returned here, because the dialog that pressed the button has the address on screen before any
  * refetch lands.
  */
@@ -142,7 +142,7 @@ export async function createTradeShareToken(
   await assertTradeOwner(ownerId, tradeId);
   const rawToken = TRADE_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = hashToken(rawToken);
-  const tokenSealed = sealTradeShareToken(rawToken);
+  const tokenSealed = sealShareToken(rawToken);
   const row = await prisma.tradeShareToken.upsert({
     where: { tradeId },
     create: {

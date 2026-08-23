@@ -22,6 +22,7 @@ import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
 import { ChooseSetDialog } from "./choose-set-dialog";
+import { SaleShareDialog } from "./sale-share-dialog";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
@@ -95,6 +96,7 @@ type Dialog =
   | { kind: "addLines" }
   | { kind: "removeLine"; lineId: string; label: string }
   | { kind: "chooseSet"; lineId: string }
+  | { kind: "share" }
   | { kind: "paidTotal" }
   | { kind: "shipment"; mode: "sent" | "edit" };
 
@@ -143,6 +145,10 @@ export function SaleDetailPanel({
   // anchor (a stored total, or a handling entered directly) has answered the question; re-asking
   // would silently overwrite that choice, since the two are mutually exclusive.
   const buyerSideUnanchored = sale.buyerPaidTotal == null && sale.buyerHandling == null;
+
+  // How many units still have nobody's decision on which set left (#697) — what the buyer's link
+  // (#699) would be asking about, and what decides whether the header offers one.
+  const pendingSetCount = sale.lines.filter((l) => l.setChoicePending).length;
 
   function applyStatus(next: string) {
     if (next === sale.status) return;
@@ -214,10 +220,41 @@ export function SaleDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             {sale.buyerName ? `to ${sale.buyerName}` : "buyer unknown"}
           </span>
+          {/* **Ask the buyer** (#699): a link that lets them pick which of the interchangeable copies
+              they get. Drawn while there is something to ask about — or while a link is already out
+              there, since a seller who has sent one needs a way back to it to check or withdraw it
+              even after the last unit has been settled. */}
+          {(pendingSetCount > 0 || sale.share) && (
+            <Tooltip
+              content={
+                pendingSetCount > 0
+                  ? "Send the buyer a link and let them choose which copy they get"
+                  : "This sale has a buyer link out — open it to check or withdraw it"
+              }
+              style={{ marginLeft: "auto" }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setError(undefined);
+                  setDialog({ kind: "share" });
+                }}
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                <Icon name="share" size="sm" /> Ask the buyer
+              </button>
+            </Tooltip>
+          )}
           {/* Printable packing list (#330) — a paper checklist of the sold copies, in shelf order. */}
           <Link
             href={`/c/${params.collectionSlug}/sales/${sale.id}/packing-list`}
-            style={{ ...SECONDARY_BTN, marginLeft: "auto", textDecoration: "none", display: "inline-block" }}
+            style={{
+              ...SECONDARY_BTN,
+              marginLeft: pendingSetCount > 0 || sale.share ? undefined : "auto",
+              textDecoration: "none",
+              display: "inline-block",
+            }}
             title="Open a print-friendly packing list for this sale"
           >
             <Icon name="print" size="sm" /> Packing list
@@ -762,6 +799,26 @@ export function SaleDetailPanel({
               () => setDialog({ kind: "none" })
             )
           }
+        />
+      )}
+
+      {/* The buyer's own pick of which copy they get (#699). Mint, copy, and withdraw — the trade
+          share dialog's shape, minus the figures switch a sale page has no figures for. */}
+      {dialog.kind === "share" && (
+        <SaleShareDialog
+          saleId={sale.id}
+          share={sale.share}
+          pendingCount={pendingSetCount}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onChanged={() => {
+            router.refresh();
+            invalidateAll(collectionId);
+          }}
         />
       )}
 

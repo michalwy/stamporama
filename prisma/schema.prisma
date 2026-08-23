@@ -3305,6 +3305,9 @@ model Sale {
   carrier       Carrier?          @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
   statusEvents  SaleStatusEvent[]
+  /** The buyer's link for choosing their own copy (#699), or none. At most one — see
+   *  {@link SaleShareToken}. */
+  shareToken    SaleShareToken?
 
   @@unique([collectionId, saleNo])
   @@index([collectionId])
@@ -3432,6 +3435,17 @@ model SaleLine {
   // person confirms the set or swaps it (`swapSaleLineSet`). A hand-recorded sale never sets it: the
   // collector picked the set on the way in.
   setChoicePending Boolean @default(false)
+  // When the **buyer** said which one they wanted, through the sale's share link (#699). Null on
+  // every line the seller settled themselves, which is nearly all of them.
+  //
+  // Two jobs, and it is one column because they are one fact. The seller reads it to know that the
+  // pick on this line is not their own — *Buyer chose, 3 Aug* beside the set — and the buyer's page
+  // reads it to know which settled lines are still **theirs to change**: a line they answered stays
+  // on that page, marked, until the parcel is packed, while a line the seller settled leaves it.
+  //
+  // Cleared by any later `swapSaleLineSet` the seller makes: the parcel is theirs to pack, and once
+  // they have overridden the pick the line is no longer the buyer's answer.
+  setChosenByBuyerAt DateTime?
 
   sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   offer    Offer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
@@ -3463,6 +3477,51 @@ model SaleLineItem {
   @@id([saleLineId, itemId])
   @@unique([itemId])
   @@map("sale_line_item")
+}
+
+// **The buyer's link for choosing their own copy** (#699; ADR-0013 §7).
+//
+// `TradeShareToken`'s shape (ADR-0039 §9) with the trade swapped for a **single sale**, and that
+// swap is the whole security argument here too: the token names one sale, and every read it
+// authorises is about that sale's own lines — the ones nobody has chosen a set for, and the copies
+// those sets hold. A leaked link exposes exactly the question the seller asked and nothing beside
+// it: not the sale's figures, not the collection, not the collector.
+//
+// **Why ask at all.** An offer listed at quantity 3 has three sets, and a buyer who takes one has
+// said *one of these* (#697). The three are the same thing only as far as the listing was concerned
+// — the centring, a corner perf, the exact shade differ — and the person who is going to own it has
+// an opinion the seller does not. Asking them costs a link.
+//
+// **One row per sale** (`saleId` unique), `TradeShareToken`'s rule for its reason: a second live
+// link is a second thing to remember to revoke. Regenerating replaces the row, which is what
+// revocation means.
+//
+// The hash resolves a request and the seal is for display (#681), the same division and the same
+// best-effort sealing: without `STAMPORAMA_SECRET_KEY` a link is still minted and shown once, and
+// afterwards says why it cannot be shown again.
+model SaleShareToken {
+  id          String    @id @default(cuid())
+  saleId      String    @unique
+  // SHA-256 hex of the raw token (prefix "stmps_" — an Assistant token is "stmpa_" and a trade's
+  // share link "stmpx_"; three credentials authorising three different things are told apart before
+  // anything is hashed). The only form a lookup ever touches.
+  tokenHash   String    @unique
+  // The same raw token, **sealed** (`secret-box.ts`, AES-256-GCM under `STAMPORAMA_SECRET_KEY`), so
+  // the seller can be shown their own link again. Null where there is nothing to open: an install
+  // with no key configured, which keeps working for the buyer and reads as *not recoverable* on the
+  // seller's side.
+  tokenSealed String?
+  // Optional. Null is a link that stays live until it is revoked, which is the common case — the
+  // question is only open until the parcel is packed anyway, and that is a better fence than a date.
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  // When the buyer last opened it. The one signal the seller has that the question was actually
+  // read, and the reason the page bumps it on every serve.
+  lastUsedAt  DateTime?
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("sale_share_token")
 }
 
 // ── Trades (#646; ADR-0039) ──────────────────────────────────────────────────────────────────────

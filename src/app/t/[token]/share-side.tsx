@@ -7,7 +7,7 @@ import type {
 import type { TradeSide } from "@/lib/trade-rules";
 import type { TradeShareChoiceRead } from "@/lib/trade-proposals";
 import { LineFeedback, ShareRow, SideRemarks } from "./feedback-controls";
-import { SharePhotos } from "./share-photos";
+import { SharePhotos } from "@/app/share/share-photos";
 import { LineCopyChoice } from "./share-choice";
 
 // One side of one section, on the partner's page (#640).
@@ -128,7 +128,7 @@ function ShareLineRow({
           What goes in it is client code (#666) — the ids authorise nothing on their own, and the
           token's own route will not serve one that is not on this trade's lines. */}
       <div className="ts-thumbs">
-        <SharePhotos token={token} photoIds={line.photoIds} />
+        <SharePhotos base={`/api/t/${encodeURIComponent(token)}/photos`} photoIds={line.photoIds} />
       </div>
 
       <div className="ts-body">

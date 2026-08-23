@@ -8,7 +8,7 @@ import {
   TRADE_PROPOSAL_CURRENT_LABEL,
   TRADE_PROPOSAL_PICKED_LABEL,
 } from "@/lib/trade-proposal-rules";
-import { SharePhotos } from "./share-photos";
+import { SharePhotos } from "@/app/share/share-photos";
 
 // **Which of these copies would you like?** (#658) — the partner's half, and the second thing on this
 // page that is client code (#641's controls being the first).
@@ -115,7 +115,7 @@ export function LineCopyChoice({
               data-current={option.current ? "true" : undefined}
             >
               <div className="ts-choice-pics">
-                <SharePhotos token={token} photoIds={option.photoIds} />
+                <SharePhotos base={`/api/t/${encodeURIComponent(token)}/photos`} photoIds={option.photoIds} />
                 {option.photoIds.length === 0 && (
                   // Said rather than left as a gap: a copy with no scan is a copy the partner cannot
                   // judge, and knowing that is itself worth knowing.
