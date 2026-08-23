@@ -443,9 +443,16 @@ function drawOrderMark(module: string, order: PlatformOrder, refusal?: string): 
       : refusal
         ? ({ kind: "refused", message: refusal } as const)
         : ({ kind: "importable" } as const);
-  renderOrderMark(order.anchor, order.orderId, state, iconUrl, () => {
-    void importOrder(module, order);
-  });
+  renderOrderMark(
+    order.anchor,
+    order.orderId,
+    state,
+    iconUrl,
+    () => {
+      void importOrder(module, order);
+    },
+    order.markPlacement
+  );
 }
 
 /**
@@ -465,7 +472,14 @@ async function importOrder(module: string, order: PlatformOrder): Promise<void> 
   const say = (state: OrderDialogState) =>
     showOrderDialog(document, order.orderId, state, iconUrl);
   say({ kind: "working" });
-  renderOrderMark(order.anchor, order.orderId, { kind: "importing" }, iconUrl, () => {});
+  renderOrderMark(
+    order.anchor,
+    order.orderId,
+    { kind: "importing" },
+    iconUrl,
+    () => {},
+    order.markPlacement
+  );
   let res: OrderImportResponse;
   try {
     // The element the mark hangs on is not sent: what the instance decides from is what the page

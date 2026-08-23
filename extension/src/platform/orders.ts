@@ -106,6 +106,16 @@ export interface PlatformOrder {
    * this?", which is where a reader is already looking.
    */
   anchor: Element;
+  /**
+   * Where the mark goes relative to {@link anchor}: **after** it, or as the last thing **inside** it.
+   *
+   * A row's own order link is a link, and a mark belongs beside it — that is `after`. A page that
+   * names its order in a heading (`Transactions › Transaction #hflVE`) states it as text inside a
+   * container, and there is no element to sit beside: `after` would drop the mark onto the next line
+   * under the heading. Which of the two a screen is, is a fact about that screen, so the module that
+   * read it says so rather than the shell guessing from tag names.
+   */
+  markPlacement: "after" | "inside";
 }
 
 /** The orders half of a module: recognise a seller's order screen, and read the orders on it. */

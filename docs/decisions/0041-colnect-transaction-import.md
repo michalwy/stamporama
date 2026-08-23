@@ -50,10 +50,14 @@ Which screen may act is a fact about the screen, so the module that read it says
 link nor the act — the alternative was a button that writes an order missing lines it should have
 carried, which is exactly what §3 below refuses.
 
-The mark sits in the transaction's **header block**, beside `Buyer: … Started: …`: the detail page
-has no link to itself, so its own address is what states which order this is, and the header is where
-a reader is already asking. On the list it goes beside the row's own *Details* link, which is that
-row's answer to "which one is this?".
+The mark sits **in the heading that names the transaction** — `Transactions › Transaction #hflVE` —
+found as the smallest element whose text carries the id the address states. That is where a reader is
+already asking *which one is this?*, and it is about **this page**: the first cut hung the mark on the
+buyer's link, which on the live page resolved to Colnect's own site-header greeting (see §9) and put
+it beside the banner. A heading states its order as **text**, so there is no element to sit beside and
+the mark goes *inside* it — `PlatformOrder.markPlacement`, the module's own answer, since where an
+order names itself is a fact about the screen. On the list it goes after the row's own *Details* link,
+which is that row's answer to the same question.
 
 `GET …/sales/by-colnect-order` — batched, session-or-token, answering a **relative** path, matched on
 `Sale.externalRef` narrowed to the Colnect platform. All four exactly as `by-delcampe-order` is, for
@@ -71,9 +75,15 @@ locale segment, since the list's own link carries none), each item off `market/s
 buyer off `collectors/collector/<login>`.
 
 What has no address is read from its **printed label** — `Item count:`, `Started:`,
-`Shipping method:` — and Colnect's own classes (`_sl-entry`, `_sl-price`, `_t-transaction-price`) are
-tried first as a shortcut and never relied on: a page whose classes have changed is still read by its
-labels and its addresses.
+`Shipping method:`, and each of the header's four figures — and Colnect's own classes (`_sl-entry`,
+`_sl-price`, `_t-transaction-price`) are tried first as a shortcut and never relied on: a page whose
+classes have changed is still read by its labels and its addresses.
+
+A label reading is three rules, and the live page taught all three (see *Consequences*): a value is
+the text of the **smallest element whose own text begins with the label**, read **forward through
+text nodes** where no element holds both, ending at the page's **next label** — and stopping at any
+**list** inside it, because `Shipping method:` is printed with its whole price ladder underneath and
+a method's name is not a price list.
 
 `PlatformOrderLine` gains `quantityText` and `PlatformOrder` gains `soldAtText` and
 `shippingMethodText`, all as printed, because Colnect states three things Delcampe did not. The
@@ -167,6 +177,12 @@ date, and refuses the order rather than dating a sale by guesswork.
 postal address printed on the same page is not read and not stored** — `Contact` gains no address
 field here, exactly as ADR-0038 §4 refused Delcampe's.
 
+The login is read from the collector link **inside the `Buyer:` line and nowhere else**. Colnect
+greets the signed-in collector in its site header with a link of exactly that shape, so "the first
+`collectors/collector/<login>` on the page" is the **seller** — which is what the first cut read, and
+it filed a sale under its own owner. A page stating no buyer line leaves the sale anonymous: better
+nobody than somebody else.
+
 ### 10. Colnect's phases are not mirrored, and nothing is written to Colnect
 
 `Sale.status` is the collector's own workflow with its own transition log (#191/#492); an imported
@@ -221,5 +237,17 @@ as a list rather than only as the joined sentence.
   elements alone saw the label and refused the transaction over a date printed right there. Labels
   are therefore read off elements' own text, forward through text nodes where no element holds both,
   and every value ends where the page's next label begins.
+- The header's figures are read **by their labels** for the same reason. Pairing a bare amount with
+  the words before it assumes the figure is one leaf, and Colnect prints `<b>€</b> <b>12.00</b>`:
+  neither half is an amount on its own, so `Total with shipping` was never reported and the first
+  imported sale carried no anchor (#205) and therefore no handling. An element's text puts the halves
+  back together, which is what a person reading the page sees.
+- A value ends at the **list** beneath it as well as at the next label, or the method's name is
+  `Registered mail (Poczta Polska)1-100 items - € 2.40101-500 items…` — and where the ladder is not a
+  list, the name ends at its first figure.
 - Delcampe's import gained the window with Colnect's, so #612's flow changed without #612 asking. The
   alternative was the same button behaving differently on two marketplaces.
+- Every one of these corrections is the same mistake: a rule that was true of the **fixture** and not
+  of the page — the first collector link, the first labelled leaf, an amount that is one leaf. What
+  survived contact is the principle underneath them, that a fact is read from the thing that states
+  it: the buyer from the buyer's line, a value from its label, a heading from the id in the address.

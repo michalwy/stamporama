@@ -489,7 +489,7 @@ that is what teaches Stamporama each listing's own Delcampe number.
 ## Your Colnect sales
 
 Open one of your own **transactions** on Colnect — the *Details* page of a sale you have made — and
-the header, beside *Buyer* and *Started*, gains a small mark:
+the heading that names it (*Transaction #hflVE*) gains a small mark:
 
 - **Sale #34** — a link. That transaction is already a sale here; clicking opens it in a new tab, so
   the screen you were packing from keeps its place.

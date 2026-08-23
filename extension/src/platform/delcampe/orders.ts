@@ -236,6 +236,8 @@ export function readDelcampeOrders(doc: Document, pageUrl: string): PlatformOrde
       // they offer — so there is no Delcampe screen that may only be marked and not imported.
       canImport: true,
       anchor: orderAnchor,
+      // Beside the row's own order link, which is where the row already says which order it is.
+      markPlacement: "after",
     });
   }
   return orders;

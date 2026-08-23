@@ -16,6 +16,8 @@ const LIST_URL = "https://colnect.com/en/transaction/list";
 
 /** The transaction detail: a header, three listing rows, the four totals, and the shipping method. */
 const DETAIL = `
+<div class="site-header">Hello, Seller Name <a href="/en/collectors/collector/sellerlogin">sellerlogin</a></div>
+<div class="crumbs"><a href="/en/transaction/list">Transactions</a> › Transaction #hflVE</div>
 <div class="_fn-transaction-hflVE">
   <div class="transaction-header">
     <div><span>Buyer:</span> <span>Sample Buyer</span> <a href="/en/collectors/collector/samplebuyer">samplebuyer</a> <span>[samplebuyer]</span></div>
@@ -47,13 +49,18 @@ const DETAIL = `
     </div>
   </div>
   <div class="_t-transaction-price">
-    <div><span>Items total</span><span>€ 9.97</span></div>
-    <div><span>Shipping price</span><span>€ 2.40</span></div>
-    <div><span>Discount</span><span>-€ 0.37</span></div>
-    <div><span>Total with shipping</span><span>€ 12.00</span></div>
+    <div><span>Items total:</span> <span>€ 9.97</span></div>
+    <div><span>Shipping price:</span> <span>€ 2.40</span></div>
+    <div><span>Discount:</span> <span>-€ 0.37</span></div>
+    <div><span>Total with shipping:</span> <span>€ 12.00</span></div>
   </div>
-  <div><span>Shipping method:</span><span>Stamps→domestic: Registered mail (Poczta Polska)</span></div>
-  <div class="shipping-ladder"><div>up to 50 g</div><div>€ 2.40</div></div>
+  <div><span>Shipping method:</span>
+    <div>Stamps→domestic: Registered mail (Poczta Polska)
+      <ul><li>1-100 items - € 2.40</li><li>101-500 items - € 3.00</li><li>501 and up items - € 3.50</li></ul>
+      Shipping in 3 business days
+      Delivery in 3-7 business days
+    </div>
+  </div>
   <div class="buyer-address">Sample Buyer, 1 Sample Street, 00-001 Sample City, Poland</div>
   <div class="status-ladder"><a href="/en/transaction/confirm/id/hflVE/what/items_sent">Items sent</a></div>
 </div>`;
@@ -165,16 +172,70 @@ describe("readColnectOrders — the transaction's own page", () => {
   it("keeps each total's own words, because four figures mean four things", () => {
     const [order] = read(DETAIL, DETAIL_URL);
     assert.deepEqual(order.totalTexts, [
-      "Items total € 9.97",
-      "Shipping price € 2.40",
-      "Discount -€ 0.37",
-      "Total with shipping € 12.00",
+      "Items total: € 9.97",
+      "Shipping price: € 2.40",
+      "Discount: -€ 0.37",
+      "Total with shipping: € 12.00",
     ]);
   });
 
-  it("marks the header, where the reader is already asking whose parcel this is", () => {
+  it("puts a figure back together when its symbol and its number are separate elements", () => {
+    // What the live page does with the totals: `<b>€</b> <b>12.00</b>`. Neither half is an amount on
+    // its own, so pairing bare amounts with the words before them reported no total at all — and the
+    // sale was recorded with no anchor (#205) and therefore no handling.
+    const [order] = read(
+      DETAIL.replace(
+        "<div><span>Total with shipping:</span> <span>€ 12.00</span></div>",
+        "<div>Total with shipping: <b>€</b> <b>12.00</b></div>"
+      ),
+      DETAIL_URL
+    );
+    assert.ok(order.totalTexts.includes("Total with shipping: € 12.00"));
+  });
+
+  it("takes the shipping method's name without the price ladder under it", () => {
     const [order] = read(DETAIL, DETAIL_URL);
-    assert.equal(order.anchor.getAttribute("href"), "/en/collectors/collector/samplebuyer");
+    assert.equal(order.shippingMethodText, "Stamps→domestic: Registered mail (Poczta Polska)");
+  });
+
+  it("stops the method's name at the first figure where the ladder is not a list", () => {
+    const [order] = read(
+      `<div><b>Buyer:</b> Sample Buyer <a href="/en/collectors/collector/samplebuyer">samplebuyer</a></div>
+       <div><b>Started:</b> August 23, 2026 2:21 PM</div>
+       <div class="_sl-entry"><a href="/en/market/sale/aBcDe">One stamp</a><div>Item count: 1</div><div class="_sl-price">€ 0.46</div></div>
+       <div><b>Shipping method:</b> Registered mail (Poczta Polska) 1-100 items - € 2.40 101-500 items - € 3.00</div>`,
+      DETAIL_URL
+    );
+    assert.equal(order.shippingMethodText, "Registered mail (Poczta Polska)");
+  });
+
+  it("marks the heading that names the transaction, not the page's own banner", () => {
+    const [order] = read(DETAIL, DETAIL_URL);
+    assert.equal(order.anchor.className, "crumbs");
+    assert.match(order.anchor.textContent ?? "", /Transaction #hflVE/);
+    // Inside it: the heading states the order as text, so there is nothing to sit beside — after the
+    // heading is the line below it.
+    assert.equal(order.markPlacement, "inside");
+  });
+
+  it("does not mistake the signed-in collector's own link for the buyer", () => {
+    // Colnect greets the seller in its site header with a `collectors/collector/<login>` link of
+    // exactly the buyer's shape. Taking the first one on the page filed the sale under its own owner.
+    const [order] = read(DETAIL, DETAIL_URL);
+    assert.equal(order.buyerLogin, "samplebuyer");
+    assert.equal(order.buyerName, "Sample Buyer");
+  });
+
+  it("leaves the buyer unknown rather than guessing when the page states no buyer line", () => {
+    const [order] = read(
+      `<div class="site-header">Hello, Seller Name <a href="/en/collectors/collector/sellerlogin">sellerlogin</a></div>
+       <div class="crumbs">Transaction #hflVE</div>
+       <div><b>Started:</b> August 23, 2026 2:21 PM</div>
+       <div class="_sl-entry"><a href="/en/market/sale/aBcDe">One stamp</a><div>Item count: 1</div><div class="_sl-price">€ 0.46</div></div>`,
+      DETAIL_URL
+    );
+    assert.equal(order.buyerLogin, null);
+    assert.equal(order.buyerName, null);
   });
 
   it("does not read the row's price off the totals of a single-listing transaction", () => {
@@ -226,7 +287,7 @@ describe("readColnectOrders — the transaction's own page", () => {
         ["kLmNo", "€ 5.00", "Item count: 2"],
       ]
     );
-    assert.ok(order.totalTexts.includes("Total with shipping € 12.00"));
+    assert.ok(order.totalTexts.includes("Total with shipping: € 12.00"));
   });
 });
 

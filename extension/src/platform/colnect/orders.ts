@@ -57,13 +57,6 @@ const WHOLE_AMOUNT = new RegExp(
   "i"
 );
 
-/** A leaf that prints a label **and** its figure together — `Items total € 9.97`. Reported whole,
- *  because the label is half of what the figure means. */
-const LABELLED_AMOUNT = new RegExp(
-  `^\\s*\\S.*?[A-Za-z].*?[::]?\\s*[-−±~≈]?\\s*(?:${SYMBOLS}\\s*-?[\\d.,]+|-?[\\d.,]+\\s*${SYMBOLS})\\s*$`,
-  "i"
-);
-
 /**
  * The labels this page prints, as a value's **right-hand boundary**.
  *
@@ -103,6 +96,35 @@ export function matchesColnectTransactionUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * An element's own text, stopping at the **list** inside it.
+ *
+ * `Shipping method:` is why: Colnect prints the method's name and then its whole price ladder in one
+ * block, and the smallest element holding the label holds the ladder with it — so the sale was
+ * recorded with `Registered mail (Poczta Polska)1-100 items - € 2.40101-500 items…` as the method's
+ * name. A value is the line the label introduces, and a list beneath it is the next thing on the
+ * page rather than more of the value.
+ */
+function textUpToList(element: Element): string {
+  let text = "";
+  const walk = (node: Element): boolean => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 1) {
+        const tag = (child as Element).tagName.toLowerCase();
+        if (tag === "ul" || tag === "ol" || tag === "li" || tag === "table" || tag === "br") {
+          return false;
+        }
+        if (!walk(child as Element)) return false;
+      } else {
+        text += child.textContent ?? "";
+      }
+    }
+    return true;
+  };
+  walk(element);
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /** Every element under `root` with no children of its own — where a page's text actually is. */
@@ -151,14 +173,8 @@ function saleAnchorsIn(root: Element, code: string): Element[] {
  * page at all, which every rule downstream has an answer for.
  */
 function labelledLine(root: Element, label: RegExp): string | null {
-  let line: string | null = null;
-  for (const element of [root, ...root.querySelectorAll("*")]) {
-    const text = textOf(element);
-    if (!label.test(text)) continue;
-    if (!valueAfter(text, label)) continue;
-    if (line === null || text.length < line.length) line = text;
-  }
-  if (line !== null) return line;
+  const element = labelledElement(root, label);
+  if (element) return textUpToList(element);
 
   // No element holds both, which is the flat header: `<b>Buyer:</b> … <b>Started:</b> August 23,
   // 2026 2:21 PM`, where every element's text begins with the *first* label. So read **forward from
@@ -187,6 +203,30 @@ function textAfter(element: Element, root: Element): string {
     from = from.parentElement;
   }
   return "";
+}
+
+/**
+ * The **smallest** element whose own text begins with `label` and says more than it — the line the
+ * page drew, every one of its ancestors' texts beginning with the label as well.
+ *
+ * Returned as the element and not only as its text because it is also a **scope**: the buyer's link
+ * is the one inside the buyer's own line, and the first `collectors/collector/<login>` link on the
+ * page is the collector's *own* greeting in Colnect's site header — which is how the first cut filed
+ * a sale under the seller and marked the page banner instead of the transaction.
+ */
+function labelledElement(root: Element, label: RegExp): Element | null {
+  let found: Element | null = null;
+  let length = Infinity;
+  for (const element of [root, ...root.querySelectorAll("*")]) {
+    const text = textUpToList(element);
+    if (!label.test(text)) continue;
+    if (!valueAfter(text, label)) continue;
+    if (text.length < length) {
+      found = element;
+      length = text.length;
+    }
+  }
+  return found;
 }
 
 /** What a labelled line says once its **first** label is off and the **next** label is cut away.
@@ -242,33 +282,38 @@ function rowPrice(row: Element): string | null {
   return leaves(row).map(textOf).find((text) => WHOLE_AMOUNT.test(text)) ?? null;
 }
 
+/** The labels the transaction's header prints its four figures under. Read by name for the reason
+ *  every other field is: the words are what tell one figure from another, and `Items total` and
+ *  `Total with shipping` are the same number on a transaction with no postage. */
+const TOTAL_LABELS: readonly RegExp[] = [
+  /^items total\b/i,
+  /^shipping price\b/i,
+  /^discount\b/i,
+  /^total with shipping\b/i,
+];
+
 /**
  * The figures the transaction's own header states, each with the words that say what it is.
  *
- * Read as label-and-figure pairs rather than as bare amounts, because Colnect prints four of them
- * and they mean four different things. A figure printed in the same leaf as its label comes back
- * whole; one printed beside its label is joined to the last words before it.
+ * Read **by those words**, through the same labelled-line rule as `Started:` and `Item count:`, and
+ * that is the correction the live page forced. Pairing a bare amount with the text before it —
+ * which is what this did first — assumes the figure is one leaf, and Colnect prints
+ * `<b>€</b> <b>12.00</b>`: neither half is an amount on its own, so the total the buyer actually
+ * paid was never reported at all and the sale was recorded with no anchor (#205) and no handling.
+ *
+ * An element's text puts the halves back together, which is what a person reading the page sees.
  */
-function readTotals(root: Element, skip: readonly Element[]): string[] {
-  const totals: string[] = [];
-  let label = "";
-  for (const leaf of leaves(root)) {
-    if (skip.some((area) => area.contains(leaf))) continue;
-    const text = textOf(leaf);
-    if (!text) continue;
-    if (WHOLE_AMOUNT.test(text)) {
-      totals.push(`${label} ${text}`.trim());
-      label = "";
-      continue;
-    }
-    if (LABELLED_AMOUNT.test(text)) {
-      totals.push(text);
-      label = "";
-      continue;
-    }
-    label = text;
-  }
-  return totals;
+function readTotals(root: Element): string[] {
+  return TOTAL_LABELS.flatMap((label) => {
+    const line = labelledLine(root, label);
+    return line && readAmountIn(line) ? [line] : [];
+  });
+}
+
+/** True when a line states a figure at all — a label with nothing after it is not a total, and a
+ *  page that prints one is reporting an empty row rather than an amount. */
+function readAmountIn(line: string): boolean {
+  return new RegExp(`(?:${SYMBOLS})\\s*-?[\\d.,]*\\d|\\d[\\d.,]*\\s*(?:${SYMBOLS})`, "i").test(line);
 }
 
 /**
@@ -305,9 +350,15 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
   const root = doc.body ?? doc.documentElement;
   if (!root) return null;
 
+  // **Inside the buyer's own line**, and nowhere else. Colnect's site header greets the signed-in
+  // collector with a link of exactly this shape, so "the first collector link on the page" is the
+  // seller — which filed the first imported sale under its own owner and hung the mark on the
+  // banner. No `Buyer:` line, no buyer: better anonymous than somebody else.
+  const buyerLine = labelledElement(root, BUYER_LABEL);
   const buyerAnchor =
-    [...root.querySelectorAll("a[href]")].find((anchor) => COLLECTOR_HREF.test(hrefOf(anchor))) ??
-    null;
+    [...(buyerLine?.querySelectorAll("a[href]") ?? [])].find((anchor) =>
+      COLLECTOR_HREF.test(hrefOf(anchor))
+    ) ?? null;
   const totalsBlock = root.querySelector(TOTALS_CLASS);
   // The transaction's own furniture, which a row must never climb into: the buyer's link and the
   // totals block. Both are elements rather than selectors so the climb can ask `contains`.
@@ -335,10 +386,13 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
     quantityText: labelledLine(row, ITEM_COUNT_LABEL),
   }));
 
-  const anchor = buyerAnchor ?? startedLeaf(root);
+  // Where the mark goes: the heading that names this transaction, which is where a reader is already
+  // asking *which one is this?* — and, unlike the header block, is about this page rather than about
+  // whoever is signed in.
+  const heading = headingOf(root, orderId);
+  const anchor = heading ?? buyerLine ?? buyerAnchor ?? startedLeaf(root);
   if (!anchor) return null;
 
-  const rowElements = rows.map(({ row }) => row);
   return {
     orderId,
     // The page's own address, without the query: the detail page links to itself nowhere, so where
@@ -346,12 +400,15 @@ function readTransaction(doc: Document, pageUrl: string, orderId: string): Platf
     orderUrl: pageUrl.split("?")[0],
     buyerLogin: buyerLoginOf(buyerAnchor),
     buyerName: buyerNameBeside(root, buyerAnchor),
-    totalTexts: readTotals(totalsBlock ?? root, totalsBlock ? [] : rowElements),
+    totalTexts: readTotals(totalsBlock ?? root),
     soldAtText: labelledValue(root, STARTED_LABEL),
-    shippingMethodText: labelledValue(root, SHIPPING_METHOD_LABEL),
+    shippingMethodText: shippingMethodOf(root),
     lines,
     canImport: true,
     anchor,
+    // Inside the heading, because the heading *states* the order as text — there is no element to
+    // sit beside, and after the heading is the line below it.
+    markPlacement: heading ? "inside" : "after",
   };
 }
 
@@ -393,9 +450,50 @@ function readTransactionList(doc: Document, pageUrl: string): PlatformOrder[] {
       lines: [],
       canImport: false,
       anchor,
+      // Beside the row's own *Details* link, which is that row's answer to "which one is this?".
+      markPlacement: "after",
     });
   }
   return orders;
+}
+
+/**
+ * The delivery method the transaction names, as printed.
+ *
+ * A method's name is **not a price list**. Colnect prints the ladder (`1-100 items - € 2.40`, …) and
+ * its two lead times directly under the name, and where the page runs them into the same block the
+ * name ends at the first figure — the list boundary in {@link textUpToList} takes care of the case
+ * where the ladder is a list, and this takes care of the case where it is not.
+ */
+function shippingMethodOf(root: Element): string | null {
+  const value = labelledValue(root, SHIPPING_METHOD_LABEL);
+  if (!value) return null;
+  const ladder = new RegExp(`\\d+\\s*[-–—]\\s*\\d+\\s|(?:${SYMBOLS})\\s*\\d`, "i").exec(value);
+  const name = (ladder ? value.slice(0, ladder.index) : value).trim();
+  return name || null;
+}
+
+/**
+ * The heading naming this transaction — `Transactions › Transaction #hflVE`.
+ *
+ * The **smallest element whose text names the id**, which is the same rule the labels use and for
+ * the same reason: every ancestor of the heading says it too. Matched on the id from the address
+ * rather than on the word *Transaction*, since the id is the fact and the word is the wording; the
+ * word is only used to prefer the crumb over an element that happens to hold the id alone.
+ */
+function headingOf(root: Element, orderId: string): Element | null {
+  const names = new RegExp(`(?:^|[^\\w-])#?${escapeForRegExp(orderId)}(?![\\w-])`);
+  let found: Element | null = null;
+  let length = Infinity;
+  for (const element of [root, ...root.querySelectorAll("*")]) {
+    const text = textOf(element);
+    if (!names.test(text) || text.length > 200) continue;
+    if (text.length < length) {
+      found = element;
+      length = text.length;
+    }
+  }
+  return found;
 }
 
 /** The leaf that prints the transaction's own start, for a page whose buyer link has moved: the mark

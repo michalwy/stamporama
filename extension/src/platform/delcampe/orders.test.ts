@@ -187,6 +187,7 @@ describe("readDelcampeOrders", () => {
       "buyerName",
       "canImport",
       "lines",
+      "markPlacement",
       "orderId",
       "orderUrl",
       "shippingMethodText",

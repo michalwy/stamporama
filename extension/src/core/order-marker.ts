@@ -120,13 +120,16 @@ function withIcon(element: Element, iconUrl: string | null, label: string): void
  * itself in response: the caller redraws it as `importing` and then as whatever the instance
  * answered, so what the row says is always what the instance last said rather than what this module
  * hoped would happen.
+ *
+ * `placement` is the module's own answer to where the mark sits — see `PlatformOrder.markPlacement`.
  */
 export function renderOrderMark(
   anchor: Element,
   orderId: string,
   state: OrderMarkState,
   iconUrl: string | null,
-  onImport: () => void
+  onImport: () => void,
+  placement: "after" | "inside" = "after"
 ): Element | null {
   const doc = anchor.ownerDocument;
   const parent = anchor.parentNode;
@@ -196,6 +199,10 @@ export function renderOrderMark(
   }
 
   mark.setAttribute(MARK_ATTR, "");
-  parent.insertBefore(mark, anchor.nextSibling);
+  // `inside` is for a heading that *states* the order rather than linking it: the words are text in a
+  // container, so the only place beside them is the end of that container. Everywhere else the mark
+  // follows the link that names the order.
+  if (placement === "inside") anchor.appendChild(mark);
+  else parent.insertBefore(mark, anchor.nextSibling);
   return mark;
 }
