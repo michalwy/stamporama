@@ -298,6 +298,29 @@ Every one of your conditions gets a row, with a picker holding Colnect's five gr
 
 Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the [bulk listing workspace says so](offers.md#what-the-assistant-cant-post) before you start filling a form.
 
+## Colnect list sync
+
+Colnect keeps four lists of its own — **Collection**, **Swap**, **Wish** and **Sell** — and an exchange usually starts from one of them: a possible partner opens your Swap list to see whether there is anything they want. That only works if the list still says what you actually hold for trade. Colnect offers no way to push your data there, but it does **export** a list as a CSV file, so keeping the two in step is a loop: export the list, load it here, look at what differs, and fix whichever side is wrong.
+
+**Settings → Colnect → Colnect list sync** is where you say what each of those lists is supposed to mirror. Every one of the four is listed, whether or not you have set it up:
+
+| Colnect list | Mirrors, by default | Source of truth |
+| --- | --- | --- |
+| Collection | Copies in the collection | Stamporama |
+| Swap | Copies for trade | Stamporama |
+| Wish | Open wants | Colnect |
+| Sell | Copies for sale | Stamporama |
+
+**Mirrors** is which of your own things the list stands for. The three copy predicates all count copies **in hand** — delivered and not disposed of — because a copy you have already sold is not on offer, and a Colnect list still naming it is exactly the discrepancy worth seeing. **Open wants** is the odd one out and is not about copies at all: it is your [wants](wants.md) that are still open.
+
+**Source of truth** is which side wins when the two disagree, and therefore what gets proposed about an item that is on Colnect but not here: with **Stamporama**, removing it there; with **Colnect**, adopting it here. Wish starts on **Colnect** on purpose — a wish list built up over years of clicking *I want this* runs to tens of thousands of entries against far fewer wants recorded here, and treating this side as right would open with a proposal to delete all of them.
+
+**Sync** switches a list on. A list left off is simply never compared, and switching it off later parks it without forgetting how you set it up. Each control saves on the spot, so there is nothing to submit.
+
+Comparison is by **[Colnect ID](#colnect-id)**: a stamp that carries one can be found in an export, and a stamp that does not is not comparable at all — it is neither a match nor a difference. Filling those IDs in is what the [Assistant](assistant.md) is for.
+
+Custom Colnect lists are not offered yet; the four standard ones are.
+
 ## Connecting the browser extension
 
 The **Stamporama Assistant** browser extension matches marketplace catalog pages against your stamps. **Settings → Assistant** connects it, and there is nothing to type: click **Connect Stamporama Assistant**, then — with that page still in front — click the Assistant icon in your browser toolbar. The page hands the extension this instance's address, this collection, and a one-time code; the extension trades the code for its own access token and reports back on the page. Because the page is served *by* the instance, the address is always right, which is also how your test server and your everyday one stay apart without you having to remember which is which.

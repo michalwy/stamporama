@@ -144,6 +144,7 @@ model Collection {
   trades          Trade[]
   colnectCatalogMappings ColnectCatalogMapping[]
   colnectConditionMappings ColnectConditionMapping[]
+  colnectListMappings ColnectListMapping[]
   assistantTokens AssistantToken[]
   assistantRegistrationCodes AssistantRegistrationCode[]
   allegroConnection AllegroConnection?
@@ -547,6 +548,172 @@ model ColnectConditionMapping {
   @@unique([stampConditionId])
   @@index([collectionId])
   @@map("colnect_condition_mapping")
+}
+
+// ── Colnect list sync (#684, the foundation of #684–#690) ──────────────────────────────────────
+//
+// A Colnect exchange starts from the collector's **Swap** list: a potential partner opens it to see
+// whether there is anything they want, which only works if that list agrees with what this app
+// holds as `Item.forTrade`. The same gap exists on Collection, Wish and Sell, and Colnect offers no
+// API and no import — only a CSV **export**, which `colnect-list-rules.ts` already reads for trades
+// (#645). So the loop is: export the list, load it here, look at the discrepancies, fix whichever
+// side is wrong. These four tables are what that loop stands on.
+//
+// **The join key is `Stamp.colnectId`** (#247) throughout. A stamp without one is not comparable —
+// not a difference, and the report says so rather than proposing anything about it (#686).
+
+// One Colnect list this collection wants kept in sync. Configured in Settings → Colnect, beside the
+// catalog mapping (#248) and the condition mapping (#404) — the same question in a third form: what
+// of ours is what of theirs.
+model ColnectListMapping {
+  id           String @id @default(cuid())
+  collectionId String
+
+  /** Colnect's own list id, as `div.ibox_list[data-lt=N]` carries it on every item row: 2 =
+   *  Collection, 3 = Swap, 4 = Wish, 5 = Sell. A plain int rather than an enum precisely so a
+   *  custom list — which carries its number in its `custom_list__N` URL (11, 15, 16 …) — needs no
+   *  migration when the collector wants one of those synced too. Only the standard four are
+   *  offered in Settings for now; the column already holds the rest. */
+  lt            Int
+  /** What to call it on screen. Seeded from the built-in name of the standard list and not editable
+   *  yet: it is the column a custom list will need, since Colnect states no name for `lt=16`
+   *  anywhere the export or the row markup can be read. */
+  label         String
+  /** Which predicate of **ours** defines membership — `items_for_trade`, `wants_open` and the rest.
+   *  The vocabulary and what each one means live in `colnect-list-sync-rules.ts`. */
+  source        String
+  /** `local` | `colnect` — **which side wins when the two disagree**, and therefore what the report
+   *  proposes for an item present only on Colnect: remove it there (`local`) or adopt it here
+   *  (`colnect`).
+   *
+   *  Collection, Swap and Sell are `local`. **Wish is `colnect`**, and that asymmetry is a fact
+   *  about the data rather than a preference: the account read on 2026-08-22 held 25,145 Wish
+   *  entries built up over years against far fewer `Want` rows, so a `local` Wish would produce a
+   *  report saying "delete 25,000 things" — formally correct and useless (#688). */
+  sourceOfTruth String
+  /** Off until the collector opts in. A list with no row at all is likewise not synced, so the two
+   *  "not synced" states differ only in whether the setup was kept: unchecking parks a list without
+   *  forgetting how it was configured. */
+  enabled       Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  collection Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  snapshot   ColnectListSnapshot?
+  decisions  ColnectListDecision[]
+
+  // One mapping per list per collection: two rows for `lt=3` would be two opinions about what Swap
+  // mirrors, and the import has to find exactly one.
+  @@unique([collectionId, lt])
+  @@index([collectionId])
+  @@map("colnect_list_mapping")
+}
+
+// What one export of that list said — the Colnect side of the comparison, frozen at the moment the
+// file was read (#685).
+//
+// **One per mapping, replaced by the next import.** A history of exports is not the question this
+// answers: the report is always about the list as it stands, and an old snapshot beside a new one
+// is a second answer to "what is on Colnect" that nothing would ever choose between. Re-importing
+// therefore drops the rows and writes the new ones, which is also what makes "done on Colnect"
+// (#686) honest — see {@link ColnectListDecision}.
+model ColnectListSnapshot {
+  id        String @id @default(cuid())
+  mappingId String @unique
+
+  /** The file, so the screen can say which export it is looking at. */
+  fileName      String
+  /** `"launched on …"` off the export's preamble — **Colnect's** timestamp, which is the one that
+   *  answers "how stale is this", and null where the preamble could not be read. `importedAt` is
+   *  ours and is a different question: a file exported in March and loaded in August is stale even
+   *  though it arrived a minute ago. */
+  exportedAt    DateTime?
+  /** `"This list contains 85 Stamps"`, as the preamble states it. Kept as something the screen can
+   *  report against the number of rows actually read, never enforced: a file the collector edited
+   *  in a spreadsheet is still a list, and refusing it over a stale header refuses the wrong thing
+   *  (`colnect-list-rules.ts` takes the same line). */
+  declaredCount Int?
+  importedAt    DateTime @default(now())
+
+  mapping ColnectListMapping       @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+  rows    ColnectListSnapshotRow[]
+
+  @@map("colnect_list_snapshot")
+}
+
+// One row of that file, already read into the app's own words by `colnect-list-rules.ts`. Kept
+// rather than re-parsed because the file is a download the collector is not going to keep, and the
+// report is looked at more than once.
+model ColnectListSnapshotRow {
+  id         String @id @default(cuid())
+  snapshotId String
+
+  /** The Colnect item id, out of the row's `Link` — **there is no id column** in the export, the id
+   *  lives in that URL and nowhere else. This is the join key, so a row that carries none never
+   *  becomes a row here. */
+  colnectId       String
+  /** Colnect's own name for the stamp, where it is from, and the catalog codes as printed
+   *  (`"Mi:AR BL176, Sn:AR 2949"`). All three are for **recognising a row by eye** on the report —
+   *  nothing matches on them, so the codes stay as one string rather than being split into rows
+   *  that would then need marking against a stamp none of them found. */
+  name            String
+  country         String
+  catalogCodes    String
+  /** `Quantity` and `Condition` **for the list this snapshot is of**, read positionally out of the
+   *  per-list columns (a row carries one group per list it is on). Null where the cell is blank,
+   *  which the report reads as one and as *no grade stated*. `conditionAbbrev` is Colnect's own
+   *  abbreviation (`MNH`), untranslated: what it means here is `ColnectConditionMapping`'s answer
+   *  (#404) and this table does not pre-empt it. */
+  quantity        Int?
+  conditionAbbrev String?
+
+  snapshot ColnectListSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  // The lookup the report does — every row of the snapshot, by item — and deliberately **not**
+  // unique. One item appears once per list in a real export, but a hand-edited file may repeat it,
+  // and whether that is an error is the import's judgement (#685) rather than a constraint failure
+  // 20,000 rows into a bulk insert.
+  @@index([snapshotId, colnectId])
+  @@map("colnect_list_snapshot_row")
+}
+
+// A difference the collector has decided to live with: a standing "ignore this one" that keeps the
+// report about the differences still worth acting on.
+//
+// **It hangs off the mapping, not the snapshot, so it survives a re-import** — and note the
+// deliberate asymmetry with "done on Colnect" (#686), which hangs off the snapshot and dies with
+// it. The two look alike and are opposites. "Accepted" is a decision about this collection, and a
+// decision does not expire because a file was read again. "Done" is a *claim about the state of
+// Colnect*, and a re-import reads that state afresh: a row that comes back is a row that was not
+// actually done, and the report must say so rather than remember a claim that turned out false.
+model ColnectListDecision {
+  id        String @id @default(cuid())
+  mappingId String
+
+  /** The item the difference is about, in the only vocabulary both sides share (#247). It is the
+   *  key for a Colnect-only row and for a local-only one alike: a stamp with no `colnectId` is not
+   *  comparable, so it never produces a difference to accept. */
+  colnectId String
+  /** Which difference was accepted — `only-colnect` (they have it, we don't) or `only-local` (we
+   *  have it, they don't); `colnect-list-sync-rules.ts` holds the vocabulary, and a plain string so
+   *  a later kind (a quantity or grade mismatch) needs no migration.
+   *
+   *  **Part of the key, and that is the point.** The direction can flip — a row removed on Colnect
+   *  for a stamp that is still `forTrade` here turns "they have it, we don't" into its opposite —
+   *  and an accepted difference silently swallowing the *other* one for the same item is how a
+   *  report comes to omit something nobody ever decided about. */
+  kind      String
+  /** Why, in the collector's own words. Optional: most acceptances are obvious to the person who
+   *  made them, and forcing a sentence would make the quick ones slow. */
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  mapping ColnectListMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  @@unique([mappingId, colnectId, kind])
+  @@index([mappingId])
+  @@map("colnect_list_decision")
 }
 
 // This collection's authenticated access to the collector's Allegro account through Allegro's

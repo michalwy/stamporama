@@ -40,6 +40,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | Stack, routing, auth, Prisma/Postgres, migrations, RSC boundaries, deployment | [`docs/agents/platform.md`](docs/agents/platform.md) |
 | Photos and binary assets, background jobs, upload caps, retention and deletion | [`docs/agents/storage-and-jobs.md`](docs/agents/storage-and-jobs.md) |
 | The `extension/` package, Colnect matcher, marks drawn on marketplace pages | [`docs/agents/extension.md`](docs/agents/extension.md) |
+| Colnect list sync: list mappings, list snapshots, the discrepancy report | [`docs/agents/colnect-list-sync.md`](docs/agents/colnect-list-sync.md) |
 | Allegro API access, sync worklist, listing profiles, categories, publishing | [`docs/agents/allegro.md`](docs/agents/allegro.md) |
 | Delcampe platform marker, listing profiles, Easy Uploader defaults | [`docs/agents/delcampe.md`](docs/agents/delcampe.md) |
 | Offers, listing texts, listing kit, offer pricing, offer screens | [`docs/agents/offers.md`](docs/agents/offers.md) |

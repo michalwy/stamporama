@@ -15,6 +15,7 @@ import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
+import { ColnectListsPanel } from "./colnect-lists-panel";
 import { AllegroPlatformPanel } from "./allegro-platform-panel";
 import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { AllegroProfilesPanel } from "./allegro-profiles-panel";
@@ -30,6 +31,7 @@ import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/colnect";
+import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { StampConditionData } from "@/lib/conditions";
 import type { StampFormatData } from "@/lib/stamp-formats";
@@ -71,6 +73,9 @@ interface SettingsTabsProps {
   initialColnectMappings: ColnectMappingData[];
   /** Every condition with the Colnect grade it maps to (#404) — one row each, mapped or not. */
   initialColnectConditionMappings: ColnectConditionMappingData[];
+  /** Colnect's four standard lists with what each mirrors (#684) — one row each, configured or
+   *  not, since the set is Colnect's and is fixed. */
+  initialColnectListMappings: ColnectListMappingData[];
   /** Which platform contact is Colnect (#406), or null when none is — the setting the listing
    * checks ride on. */
   colnectPlatformId: string | null;
@@ -182,6 +187,7 @@ export function SettingsTabs({
   initialCarriers,
   initialColnectMappings,
   initialColnectConditionMappings,
+  initialColnectListMappings,
   colnectPlatformId,
   allegroPlatformId,
   allegroConnection,
@@ -441,6 +447,16 @@ export function SettingsTabs({
               is called on Colnect — and are set up in one sitting. */}
           <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect condition mapping</h2>
           <ColnectConditionsPanel mappings={initialColnectConditionMappings} />
+
+          {/* The third translation in the tab (#684), and the one that reads in the other
+              direction: the two above say what our vocabulary is called on Colnect, this says what
+              a list *of theirs* is a list of here. Last because it is what the export → compare →
+              fix loop (#685–#690) is configured with, and that loop presupposes the rest. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect list sync</h2>
+          <ColnectListsPanel
+            collectionId={collectionId}
+            mappings={initialColnectListMappings}
+          />
         </section>
       )}
       {activeTab === "allegro" && (

@@ -16,6 +16,7 @@ import {
   getColnectPlatform,
   listPlatformContacts,
 } from "@/lib/colnect";
+import { getColnectListMappings } from "@/lib/colnect-list-sync";
 import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
@@ -66,6 +67,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     carriers,
     colnectMappings,
     colnectConditionMappings,
+    colnectListMappings,
     colnectPlatform,
     allegroPlatform,
     allegroConnection,
@@ -93,6 +95,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCarriers(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
+    getColnectListMappings(session.user.id, collection.id),
     getColnectPlatform(session.user.id, collection.id),
     getAllegroPlatform(session.user.id, collection.id),
     getAllegroConnectionStatus(session.user.id, collection.id),
@@ -152,6 +155,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialCarriers={carriers}
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
+          initialColnectListMappings={colnectListMappings}
           colnectPlatformId={colnectPlatform?.id ?? null}
           allegroPlatformId={allegroPlatform?.id ?? null}
           allegroConnection={allegroConnection}

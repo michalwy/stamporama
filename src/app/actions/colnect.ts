@@ -4,6 +4,16 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
+  getColnectListMappings,
+  setColnectListMapping,
+  ColnectListMappingValueError,
+  type ColnectListMappingData,
+} from "@/lib/colnect-list-sync";
+import type {
+  ColnectListSource,
+  ColnectListSourceOfTruth,
+} from "@/lib/colnect-list-sync-rules";
+import {
   createColnectMapping,
   updateColnectMapping,
   deleteColnectMapping,
@@ -94,6 +104,41 @@ export async function setColnectPlatformAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save the Colnect platform. Please try again." };
+  }
+}
+
+/** Every standard Colnect list with what it mirrors (#684), for the Settings panel — all four,
+ *  configured or not, since the set is fixed and the screen lists it whole. */
+export async function getColnectListMappingsAction(
+  collectionId: string
+): Promise<ColnectListMappingData[]> {
+  const session = await getSession();
+  return getColnectListMappings(session.user.id, collectionId);
+}
+
+/**
+ * Configure one Colnect list (#684). One list and one field at a time, the condition mapping's
+ * idiom beside it: each control on the panel *is* the write, so there is no draft to lose and no
+ * way for a change to one field to carry a stale opinion about another.
+ */
+export async function setColnectListMappingAction(
+  collectionId: string,
+  lt: number,
+  patch: {
+    source?: ColnectListSource;
+    sourceOfTruth?: ColnectListSourceOfTruth;
+    enabled?: boolean;
+  }
+): Promise<ColnectActionState> {
+  const session = await getSession();
+  try {
+    await setColnectListMapping(session.user.id, collectionId, lt, patch);
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ColnectListMappingValueError) {
+      return { status: "error", message: err.message };
+    }
+    return { status: "error", message: "Failed to save the list setting. Please try again." };
   }
 }
 
