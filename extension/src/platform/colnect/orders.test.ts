@@ -218,6 +218,33 @@ describe("readColnectOrders — the transaction's own page", () => {
     assert.equal(order.markPlacement, "inside");
   });
 
+  it("never marks what the browser does not draw", () => {
+    // `textContent` reports a script's source as text, so an inline script mentioning the id is a
+    // *smaller* element naming this transaction than the heading is — and the mark went inside it,
+    // where nothing is drawn. Same trap for the labels: a script saying `Buyer:` would answer here.
+    const [order] = read(
+      DETAIL.replace(
+        '<div class="crumbs">',
+        `<script>var t = {"id":"hflVE","Buyer:":"none","Started:":"never"};</script>
+         <div class="crumbs">`
+      ),
+      DETAIL_URL
+    );
+    assert.equal(order.anchor.className, "crumbs");
+    assert.equal(order.buyerLogin, "samplebuyer");
+    assert.equal(order.soldAtText, "August 23, 2026 2:21 PM");
+  });
+
+  it("marks a heading that says which transaction, not anything carrying the id", () => {
+    // The id alone is on everything that mentions this transaction — a confirm form, a hidden field,
+    // a tracking link. `Transaction #hflVE` is the page saying which one the reader is looking at.
+    const [order] = read(
+      DETAIL.replace("<div class=\"crumbs\">", '<div class="stray">hflVE</div><div class="crumbs">'),
+      DETAIL_URL
+    );
+    assert.equal(order.anchor.className, "crumbs");
+  });
+
   it("does not mistake the signed-in collector's own link for the buyer", () => {
     // Colnect greets the seller in its site header with a `collectors/collector/<login>` link of
     // exactly the buyer's shape. Taking the first one on the page filed the sale under its own owner.

@@ -127,9 +127,30 @@ function textUpToList(element: Element): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** Every element under `root` with no children of its own — where a page's text actually is. */
+/**
+ * Tags whose text a **reader never sees**: a script's source, a stylesheet, a template's contents.
+ *
+ * Excluded from every scan below, and that is not tidiness. `textContent` reports a script's source
+ * as text, so an inline `<script>` mentioning the transaction id is a smaller "element naming this
+ * order" than the heading is — and the mark went inside it, where nothing is drawn. The same trap is
+ * open for every label: a script saying `Buyer:` would answer for the page.
+ */
+const UNRENDERED = new Set(["script", "style", "noscript", "template", "head", "title", "iframe"]);
+
+function isRendered(element: Element): boolean {
+  return !UNRENDERED.has(element.tagName.toLowerCase());
+}
+
+/** Every rendered element under `root`, itself included — what the scans below choose from. */
+function elementsIn(root: Element): Element[] {
+  return [root, ...root.querySelectorAll("*")].filter(
+    (element) => isRendered(element) && !element.closest([...UNRENDERED].join(","))
+  );
+}
+
+/** Every rendered element under `root` with no children of its own — where a page's text actually is. */
 function leaves(root: Element): Element[] {
-  return [...root.querySelectorAll("*")].filter((element) => element.children.length === 0);
+  return elementsIn(root).filter((element) => element.children.length === 0);
 }
 
 function textOf(element: Element | null | undefined): string {
@@ -217,7 +238,11 @@ function textAfter(element: Element, root: Element): string {
 function labelledElement(root: Element, label: RegExp): Element | null {
   let found: Element | null = null;
   let length = Infinity;
-  for (const element of [root, ...root.querySelectorAll("*")]) {
+  for (const element of elementsIn(root)) {
+    // The cheap test first: an element whose whole text does not begin with the label cannot have a
+    // line that does, since the line is a prefix of it. `textContent` is the browser's own and this
+    // runs over every element on the page.
+    if (!label.test(textOf(element))) continue;
     const text = textUpToList(element);
     if (!label.test(text)) continue;
     if (!valueAfter(text, label)) continue;
@@ -485,9 +510,11 @@ function headingOf(root: Element, orderId: string): Element | null {
   const names = new RegExp(`(?:^|[^\\w-])#?${escapeForRegExp(orderId)}(?![\\w-])`);
   let found: Element | null = null;
   let length = Infinity;
-  for (const element of [root, ...root.querySelectorAll("*")]) {
+  for (const element of elementsIn(root)) {
     const text = textOf(element);
-    if (!names.test(text) || text.length > 200) continue;
+    // Named **and worded**: the id alone is carried by anything that mentions this transaction,
+    // while `Transaction #hflVE` is the page saying which one the reader is looking at.
+    if (!names.test(text) || !/\btransaction\b/i.test(text) || text.length > 200) continue;
     if (text.length < length) {
       found = element;
       length = text.length;
