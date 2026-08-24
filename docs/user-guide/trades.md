@@ -707,9 +707,9 @@ says so under it. Lines nobody could price are **counted, not counted as zero** 
 where a line was struck off: what you agreed is what you agreed, and the marks are what is recorded
 against it.
 
-Both sheets carry a line at the foot of every printed page — the trade number, both names, and the
-version, collection and time the sheet was generated in your own timezone — so a page that slips out
-of the stack can be matched back, and two printings of the same trade can be told apart. **Page
+Both sheets carry two lines at the foot of every printed page — the trade number and both names,
+then the version, collection and time the sheet was generated in your own timezone — so a page that
+slips out of the stack can be matched back, and two printings of the same trade can be told apart. **Page
 numbers** come from the browser: tick **Headers and footers** in the print dialog.
 
 ## Closing: what it does to your books

@@ -230,15 +230,24 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 
   /* A printed sheet drops the screen padding — the page margin above is the paper margin. The
-     bottom padding is the strip the pinned footer sits in, so the last rows can't hide under it. */
+     bottom padding is the strip the pinned footer sits in, so the last rows can't hide under it.
+     It is sized for the footer's two lines, which the rule below makes a constant. */
   .print-sheet {
-    padding: 0 0 2.25rem !important;
+    padding: 0 0 3rem !important;
     max-width: none !important;
   }
 
   /* Pinned to the foot of the printed page rather than trailing the content. A fixed element in
      paged media lands at the bottom of the page box; Chrome repeats it on every page, which is
-     what a sheet several pages long wants anyway. On screen the footer stays in normal flow. */
+     what a sheet several pages long wants anyway. On screen the footer stays in normal flow.
+
+     On paper it is **two lines, always** — what the sheet is, then where the printout came from
+     (#701). On screen the footer is one flex row that wraps when it has to, and that was the bug:
+     how many lines it wrapped to depended on the record (a long order ref, a long buyer name, a
+     long partner), while the strip reserved for it above is a constant, so a footer that wrapped
+     sat over the last row of the list. Stacked, with each line clipped to one line, its height no
+     longer depends on what is in it — a value too long to fit ellipsizes rather than pushing the
+     footer up into the sheet. */
   .print-footer {
     position: fixed;
     left: 0;
@@ -246,6 +255,15 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
     bottom: 0;
     margin: 0 !important;
     background: #ffffff;
+    /* `!important` because the footer's on-screen layout is an inline `display: flex`. */
+    display: block !important;
+  }
+
+  .print-footer > * {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Keep a row (and a short section) from being split across a page break, and repeat the
