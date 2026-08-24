@@ -5,8 +5,15 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type { IssueWantGapChecklist, WantAcceptanceInput } from "@/lib/wants";
 import type { RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import type { WantPriority } from "@/lib/want-rules";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { WantAcceptanceFields } from "./want-acceptance-fields";
+import { WantPriorityChoice } from "./want-priority-choice";
+import {
+  useAcceptanceProfiles,
+  readRememberedProfile,
+  rememberProfileFor,
+} from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 import { useToast } from "@/app/toast-provider";
 import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
 import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
@@ -30,6 +37,12 @@ import { useInvalidateWants } from "./use-wants-query";
  * row already carries: what the row shows is how large the goal is, and what this writes is how
  * much of it is missing *and not already on the list*. The write recomputes both server-side — the
  * count is what the collector agrees to, not what is trusted.
+ *
+ * What it asks is **the whole of what a want records** — terms, and since #695 priority too, from
+ * the same controls the per-stamp form uses and against the same remembered profile. Those are one
+ * question asked at two scales, not two questions, and the gap between them was the bug: a bulk run
+ * wrote a dozen `normal` wants that then had to be re-prioritised one at a time, and each door kept
+ * its own idea of what the last run's terms were.
  */
 export function useAddIssueWantsAction({
   collectionId,
@@ -88,8 +101,36 @@ function AddIssueWantsDialog({
   // the same set meaningful: *used, for sale* and *mint, for me* are two different intents about
   // one stamp, and only terms can tell them apart.
   const [acceptance, setAcceptance] = useState<WantAcceptanceInput>(ANY_ACCEPTANCE);
+  // One urgency for the whole run (#695). Going after a set is a single decision about what to
+  // chase first, so it is asked once here rather than left to be re-set a dozen times on the list.
+  const [priority, setPriority] = useState<WantPriority>("normal");
   // Any of the three axis menus being open — the shell must not take Escape from them (#361).
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // **The same remembered profile the want form reads and writes** (#533; ADR-0032 §9), not a
+  // second one of its own (#695). A run of wants is a run whichever door it is entered by — twelve
+  // through this dialog and the thirteenth through the form is one evening on one set of terms —
+  // and two memories over one question would each keep answering it with the other's last run
+  // missing. Seeded during **render** once the dictionary lands, the want form's own pattern, and
+  // skipped outright if the terms were already touched: a late default must not take back an
+  // answer.
+  const { data: profiles } = useAcceptanceProfiles(collectionId);
+  const [profileSeeded, setProfileSeeded] = useState(false);
+  if (!profileSeeded && profiles) {
+    setProfileSeeded(true);
+    const untouched =
+      acceptance.conditionIds.length === 0 &&
+      acceptance.certificateStatusIds.length === 0 &&
+      acceptance.formatIds.length === 0;
+    const remembered = untouched ? readRememberedProfile(collectionId, profiles) : null;
+    if (remembered) {
+      setAcceptance({
+        conditionIds: [...remembered.conditionIds],
+        certificateStatusIds: [...remembered.certificateStatusIds],
+        formatIds: [...remembered.formatIds],
+      });
+    }
+  }
 
   const { invalidate: invalidateWants } = useInvalidateWants();
   const { invalidateList: invalidateStamps } = useInvalidateStamps();
@@ -143,12 +184,17 @@ function AddIssueWantsDialog({
         collectionId,
         issueId,
         [...selected],
-        acceptance
+        acceptance,
+        priority
       );
       if (result.status === "error") {
         setError(result.message);
         return;
       }
+      // What the next add — here or on the want form — opens on. Written on the same rule the form
+      // uses: **saved, not picked**, and custom terms clear it rather than leaving the old profile
+      // to seed a run just chosen against.
+      rememberProfileFor(collectionId, profiles ?? [], acceptance);
       onClose();
       // The want chip rides on the catalogue read models as well as the want list itself, so all
       // three caches go — the rule `useAddWantAction` states: whatever a value is copied onto has
@@ -247,8 +293,10 @@ function AddIssueWantsDialog({
 
             {/* The terms lead nothing and follow everything: the counts above are what the
                 collector came for, and this is the control that changes what they mean. Same
-                editor as the want form — profile picker included (#533) — because "add the whole
-                set as MNH" is the same sentence typed once instead of twelve times. */}
+                editor as the want form — profile picker included (#533), Priority in the grid's
+                fourth cell (#695) — because "add the whole set as MNH, high" is the same sentence
+                typed once instead of twelve times, and a question asked in two places has to be
+                asked in one shape. */}
             <div style={{ marginTop: "1rem" }}>
               <LabelWithError>Terms</LabelWithError>
               <WantAcceptanceFields
@@ -258,6 +306,16 @@ function AddIssueWantsDialog({
                 disabled={isPending}
                 onPopoverOpenChange={setMenuOpen}
                 menuZIndex={200}
+                extra={
+                  <div style={{ minWidth: 0 }}>
+                    <LabelWithError>Priority</LabelWithError>
+                    <WantPriorityChoice
+                      value={priority}
+                      onChange={setPriority}
+                      disabled={isPending}
+                    />
+                  </div>
+                }
               />
             </div>
           </>

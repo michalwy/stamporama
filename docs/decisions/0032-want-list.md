@@ -232,7 +232,7 @@ because an issue may hold several checklists (#531), the dialog asks **which** �
 "the set" of an issue that carries more than one, and a stamp on no checklist at all is an extra
 nobody is shopping for.
 
-It also carries **terms**, wide open by default. That is not a softening of the paragraph above: a
+It also carries **terms** and a **priority** (#695), wide open and `normal` by default. That is not a softening of the paragraph above: a
 gap still carries no acceptance criteria, and nothing is derived from it — the terms are *stated by
 the collector*, exactly as they are on the form, and the generator only stops throwing them away.
 What this settles is the question the one-shot skip rule was quietly answering wrong. "Already has
@@ -247,6 +247,15 @@ take" (`wantMatchesCopy`, §7's own predicate), not "no copy at all". Holding a 
 reason to stop looking for the mint one, and a generator that cannot say that could not fill an MNH
 run of a series half of which is already in the album. On wide-open terms both rules reduce to the
 originals exactly, which is why the completeness card's button is unchanged.
+
+Priority is there for the same reason the terms are, and its absence was the same mistake: deciding
+to go after a set is **one** decision about what to chase first, not one per stamp, and a dialog
+that could not take it wrote a dozen `normal` rows that then had to be re-prioritised one at a time
+on the list — the very work the bulk action exists to remove. It is the want form's own control,
+lifted into a shared component rather than copied, because a question asked at two scales is one
+question and two implementations of it drift into one of them not asking it at all. The completeness
+card's plain button still writes `normal`: it asks nobody anything, which is what makes it a button
+rather than a dialog.
 
 ### 6b. The review belongs to arrival, not to creation
 
@@ -357,6 +366,11 @@ is almost always on one set of terms. Four things about it are decisions rather 
 - **Read on add only.** An edit shows the want's own terms, which is what an edit is for; the
   narrow step at intake has §7's own seed and must not have it overwritten. A remembered profile
   since deleted falls back to no profile rather than to a guess.
+- **One memory, every door that adds** (#695). The Issue list's bulk dialog reads and writes the
+  same key on the same four rules; it previously kept none, so a run begun there and finished on
+  the form asked the same question twice. A run is a run whichever dialog it is entered through,
+  and two stores over one question would each answer it with the other's last run missing — which
+  is a worse failure than no memory, because it looks like one that works.
 
 ## Schema
 

@@ -1384,7 +1384,10 @@ async function wantGapForStamps(
 async function writeGeneratedWants(
   collectionId: string,
   gap: { missing: string[]; toCreate: string[] },
-  acceptance: WantAcceptanceInput
+  acceptance: WantAcceptanceInput,
+  /** One urgency for the whole run (#695). `normal` is the column's default and what the
+   *  completeness card's plain button, which asks nobody anything, has always written. */
+  priority: WantPriority = "normal"
 ): Promise<{ created: number; missing: number }> {
   const hasTerms =
     acceptance.conditionIds.length > 0 ||
@@ -1393,7 +1396,11 @@ async function writeGeneratedWants(
   if (gap.toCreate.length > 0) {
     await prisma.$transaction(async (tx) => {
       const wants = await tx.want.createManyAndReturn({
-        data: gap.toCreate.map((stampId) => ({ collectionId, stampId })),
+        data: gap.toCreate.map((stampId) => ({
+          collectionId,
+          stampId,
+          priority: WANT_PRIORITY_RANK[priority],
+        })),
         select: { id: true },
       });
       // Wide-open terms are the absence of rows, so a whole-issue run on the default writes the
@@ -1466,13 +1473,18 @@ export async function previewIssueMissingWants(
  * and leave the basic list's `226` looking missing, wanting a stamp two screens report as held.
  * Unioning the *gaps* keeps the old property that a stamp on two of them is wanted once — a shared
  * stamp is one id in either set.
+ *
+ * `priority` is stated by the collector too (#695) and applies to every want the run writes: going
+ * after a set is one decision about urgency, not twelve, and leaving it out meant a bulk run landed
+ * a dozen rows that then had to be re-prioritised one at a time on the list.
  */
 export async function createWantsForIssue(
   ownerId: string,
   collectionId: string,
   issueId: string,
   checklistIds: string[],
-  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
+  priority: WantPriority = "normal"
 ): Promise<{ created: number; missing: number }> {
   await assertCollectionOwner(ownerId, collectionId);
   const terms = await validateAcceptance(collectionId, acceptance);
@@ -1491,5 +1503,5 @@ export async function createWantsForIssue(
     missing: [...new Set(gaps.flatMap((g) => g.missing))],
     toCreate: [...new Set(gaps.flatMap((g) => g.toCreate))],
   };
-  return writeGeneratedWants(collectionId, gap, terms);
+  return writeGeneratedWants(collectionId, gap, terms, priority);
 }

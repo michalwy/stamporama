@@ -1459,4 +1459,48 @@ describe("previewIssueMissingWants / createWantsForIssue", () => {
       /No checklist of this issue/
     );
   });
+
+  it("writes the run's priority onto every want, and normal when none is stated (#695)", async () => {
+    const stamp = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 312" },
+    });
+    const otherStamp = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 313" },
+    });
+    const list = await prisma.checklist.create({
+      data: {
+        collectionId: f.collectionId,
+        issueId,
+        name: "Fourth",
+        sortOrder: 3,
+        stamps: { create: [{ stampId: stamp.id }, { stampId: otherStamp.id }] },
+      },
+    });
+
+    // Stated once for the run, landing on both rows — the point of asking it here at all.
+    const high = await createWantsForIssue(
+      f.userId,
+      f.collectionId,
+      issueId,
+      [list.id],
+      undefined,
+      "high"
+    );
+    assert.deepEqual(high, { created: 2, missing: 2 });
+    const rows = await listWants(f.userId, f.collectionId);
+    const written = rows.filter((r) => r.stampId === stamp.id || r.stampId === otherStamp.id);
+    assert.equal(written.length, 2);
+    assert.deepEqual([...new Set(written.map((r) => r.priority))], ["high"]);
+
+    // Unstated is `normal`, the column's default and what the completeness card's own button writes.
+    const mnh = { conditionIds: [f.mnh.id], certificateStatusIds: [], formatIds: [] };
+    const plain = await createWantsForIssue(f.userId, f.collectionId, issueId, [list.id], mnh);
+    assert.deepEqual(plain, { created: 2, missing: 2 });
+    const onMnh = (await listWants(f.userId, f.collectionId)).filter(
+      (r) =>
+        (r.stampId === stamp.id || r.stampId === otherStamp.id) && r.conditionIds.length === 1
+    );
+    assert.equal(onMnh.length, 2);
+    assert.deepEqual([...new Set(onMnh.map((r) => r.priority))], ["normal"]);
+  });
 });

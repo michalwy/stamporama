@@ -21,6 +21,7 @@ import {
   type WantCreateInput,
   type WantInput,
   type WantMatchForCopy,
+  type WantPriority,
 } from "@/lib/wants";
 
 // Server actions for the want list (#532; ADR-0032).
@@ -161,12 +162,14 @@ export async function previewIssueMissingWantsAction(
 }
 
 /** "Add missing to want list" for a whole issue (#548) — the checklists the collector ticked, on
- *  the terms they chose. */
+ *  the terms and at the priority they chose (#695). An unknown priority falls back to `normal`, the
+ *  way the want form's own does, rather than failing the run over a word. */
 export async function addIssueMissingToWantListAction(
   collectionId: string,
   issueId: string,
   checklistIds: string[],
-  acceptance: WantAcceptanceInput
+  acceptance: WantAcceptanceInput,
+  priority: WantPriority = "normal"
 ): Promise<AddMissingWantsState> {
   const session = await getSession();
   try {
@@ -175,7 +178,8 @@ export async function addIssueMissingToWantListAction(
       collectionId,
       issueId,
       checklistIds,
-      acceptance
+      acceptance,
+      isWantPriority(priority) ? priority : "normal"
     );
     return { status: "success", ...result };
   } catch (err) {

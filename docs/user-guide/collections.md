@@ -416,9 +416,9 @@ action, not a live link: changing the checklist afterwards leaves the want list 
 
 The **Issue list** offers the same thing without opening the issue: **Add missing to want list…**
 in the row's ⋮ menu, or the want-list icon among its quick actions. On an issue with several
-checklists the dialog asks which of them you are shopping for, it lets you state the **terms** the
-whole run is wanted on (MNH only, no certificate needed, …), and it always says how many wants it
-will create before it writes anything. See
+checklists the dialog asks which of them you are shopping for, it lets you state the **terms** and
+the **priority** the whole run is wanted on (MNH only, no certificate needed, high …), and it
+always says how many wants it will create before it writes anything. See
 [Straight from the Issue list](wants.md#straight-from-the-issue-list).
 
 ### Showing one checklist at a time

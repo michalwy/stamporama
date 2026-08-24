@@ -304,10 +304,17 @@ create. If it has several, it lists them with a tick each — every checklist wi
 to add starts ticked — so you can go after one goal without accepting the others. A stamp
 on two of the ticked checklists is one want, not two.
 
-Under the counts sits **Terms** — the same three acceptance sets (and the same named
-[profile](collections.md#acceptance-profiles) picker) the want form carries. Leave them
-open and you get the plain gap generator: wants that accept anything. Narrow them and the
-whole run is written on those terms — *add everything I am missing from this set, MNH*.
+Under the counts sits **Terms** — the same three acceptance sets, the same named
+[profile](collections.md#acceptance-profiles) picker and the same **Priority** chips the
+want form carries. Leave the terms open and you get the plain gap generator: wants that
+accept anything. Narrow them and the whole run is written on those terms — *add everything
+I am missing from this set, MNH*. The priority you pick lands on every want the run
+creates, so a set you are actually chasing does not have to be re-prioritised a stamp at a
+time afterwards; leave it on **Normal** and nothing changes from before.
+
+The profile is remembered across **both** ways in. Whichever dialog you last saved a want
+from, the next one — here or on the want form — opens on those terms, and entering one on
+custom terms clears it. It is one memory for one habit, not one per dialog.
 
 Both figures are then read **through** the terms, which is what makes a second run over the
 same issue meaningful:
