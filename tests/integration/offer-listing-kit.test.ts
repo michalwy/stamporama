@@ -5,6 +5,7 @@ import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer, getOfferDetail, setOfferState } from "../../src/lib/offers";
 import { setColnectConditionMapping } from "../../src/lib/colnect";
 import { getOfferListingKit } from "../../src/lib/listing-kit";
+import { addSaleLines, createSale } from "../../src/lib/sales";
 import {
   getOfferListedVariantChoice,
   setOfferListedVariant,
@@ -139,6 +140,10 @@ describe("offer listing kit (#405)", () => {
   });
 
   after(async () => {
+    // Sales first: a sold copy is `Restrict`-ed by `sale_line_item` (the no-double-sale backstop),
+    // so the collection cannot be cascaded away while its sales still name the copies — this file
+    // sells one since #700.
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.collection.deleteMany({ where: { ownerId: otherUserId } });
     await prisma.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } });
@@ -266,6 +271,49 @@ describe("offer listing kit (#405)", () => {
     // Nothing has been generated, so the upload set is empty rather than absent.
     assert.deepEqual(kit.photos.images, []);
     assert.equal(kit.photos.status, "none");
+  });
+
+  it("counts only what is still there to buy after a partial sale (#700)", async () => {
+    const a = await stamp("PL sold-a", "1301");
+    const offerId = await offer([[await copy(a)], [await copy(a)], [await copy(a)]]);
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "active" } });
+
+    const before = await getOfferListingKit(userId, collectionId, offerId);
+    assert.equal(before?.quantity, 3);
+
+    // One set sells through this very offer — the listing stays up for the other two.
+    const sets = await prisma.offerSet.findMany({
+      where: { offerId },
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      select: { id: true, items: { select: { itemId: true } } },
+    });
+    const saleId = await createSale(userId, collectionId, {
+      platformId,
+      buyerId: null,
+      externalRef: null,
+      transactionUrl: null,
+      soldAt: new Date("2026-08-24"),
+      currency: "EUR",
+      buyerHandling: null,
+      buyerPaidTotal: null,
+      commission: null,
+    });
+    await addSaleLines(userId, saleId, [
+      {
+        offerId,
+        offerSetId: sets[0].id,
+        price: "12.50",
+        itemIds: sets[0].items.map((i) => i.itemId),
+      },
+    ]);
+
+    const after = await getOfferListingKit(userId, collectionId, offerId);
+    // The form the Assistant fills must offer two, not the three the offer has ever held: the sold
+    // copy has gone, and the photo plan already stopped picturing it (#315).
+    assert.equal(after?.quantity, 2);
+    // …and the copies it describes come from a set that is still there.
+    const soldItemIds = new Set(sets[0].items.map((i) => i.itemId));
+    assert.ok(after?.items.every((i) => !soldItemIds.has(i.itemId)));
   });
 
   it("refuses a platform the Assistant has no module for, and says nothing else", async () => {

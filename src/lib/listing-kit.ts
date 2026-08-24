@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
 import { loadColnectConditionMap } from "./colnect";
+import { soldItemIds } from "./sales";
 import { colnectGradeFor } from "./colnect-conditions";
 import {
   getOfferPhotoPlanState,
@@ -289,7 +290,23 @@ export async function getOfferListingKit(
     )
   );
 
-  const sets = offer.sets.map((set) => {
+  // **What is still there to be bought** (#700). A set that has sold is not part of this listing any
+  // more: the copies have left, `readInputs` already drops it from the photo plan (#315), and a
+  // quantity typed into the form from the offer's whole set count re-offers something that is gone —
+  // which is exactly what an update after a partial sale was doing.
+  //
+  // The rule is the sale picker's own (`listSellableOffers`): a set is out when **any** of its copies
+  // is on a sale line, whether that line was this offer's or another's. A copy sold through somebody
+  // else's listing is gone just the same, and the offer carries the *needs action* flag for it.
+  //
+  // Deliberately **not** the photo plan's fuller exclusion, which also drops a set another live
+  // auction holds (#215): that copy has not sold, it is still sellable here, and understating the
+  // quantity over a bid that may come to nothing would be this app deciding a conflict rather than
+  // reporting it.
+  const soldCopies = await soldItemIds(offer.sets.flatMap((s) => s.items.map((li) => li.itemId)));
+  const liveSets = offer.sets.filter((set) => !set.items.some((li) => soldCopies.has(li.itemId)));
+
+  const sets = liveSets.map((set) => {
     const items = orderedLabelItems(set.items);
     return {
       setId: set.id,
@@ -345,8 +362,11 @@ export async function getOfferListingKit(
     })),
   });
 
+  // Off what is still listed, for the reason above — falling back to the whole offer where nothing
+  // is left, so a sold offer's kit is still called something.
+  const titleSets = liveSets.length > 0 ? liveSets : offer.sets;
   const title =
-    offer.name ?? labeller.offer(offer.sets.map((s) => ({ title: s.title, items: s.items })));
+    offer.name ?? labeller.offer(titleSets.map((s) => ({ title: s.title, items: s.items })));
   const photos = await uploadPhotos(ownerId, collectionId, offerId);
 
   return {

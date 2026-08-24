@@ -154,8 +154,12 @@ function orderedSetItems<
   ).map((r) => byId.get(r.itemId)!);
 }
 
-/** Item ids already retired on a sale line, from a candidate set (no-double-sale). */
-async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
+/** Item ids already retired on a sale line, from a candidate set (no-double-sale).
+ *
+ *  Exported since #700, for the listing kit: "which of these copies have gone" is one question, and
+ *  the kit asks it to say how many of a listing are left to buy. A second spelling of it is how the
+ *  sale picker and the form the collector types into come to disagree about the same offer. */
+export async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
   if (itemIds.length === 0) return new Set();
   const rows = await prisma.saleLineItem.findMany({
     where: { itemId: { in: itemIds } },

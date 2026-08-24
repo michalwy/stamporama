@@ -1235,7 +1235,8 @@ What raises it:
 
 - a set added or removed, copies added to a set, a set renamed, sets or copies reordered;
 - **part of the offer selling.** A listing at quantity 3 with one set sold is still up and still
-  advertising three, and its generated images still show the copy that has gone — so recording that
+  advertising three, and its generated images still show the copy that has gone (what the Assistant
+  then types back into the form is **two**, counted off what is still there) — so recording that
   sale raises the flag exactly as editing the sets would, and regenerating the photos is usually part
   of the update you then push. Undoing the sale — deleting it, or taking that line off it — raises it
   again, the listing now understating what is there. A sale that sells the offer **out** raises
