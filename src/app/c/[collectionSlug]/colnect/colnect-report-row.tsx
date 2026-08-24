@@ -6,7 +6,12 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { ColnectReportRow } from "@/lib/colnect-list-report";
 import {
   colnectListBucketLabel,
+  colnectLocalFixesFor,
+  colnectLocalFixHint,
+  colnectLocalFixLabel,
+  type ColnectListSource,
   type ColnectListSourceOfTruth,
+  type ColnectLocalFix,
 } from "@/lib/colnect-list-sync-rules";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
@@ -57,17 +62,26 @@ function holding(quantity: number | null, grade: string | null): string {
 }
 
 /** What the collector is expected to do about a row only Colnect has, which is the mapping's
- *  `sourceOfTruth` said out loud. The report proposes and never performs — nothing here can write
- *  to Colnect (#689 is the extension's job). */
+ *  `sourceOfTruth` said out loud. The report still proposes rather than performs — the fixes below
+ *  act on **this** side, and applying the other one is the extension's run (#689). */
 function proposal(bucket: string, sourceOfTruth: ColnectListSourceOfTruth): string | null {
   if (bucket !== "only-colnect") return null;
   return sourceOfTruth === "local" ? "Remove it on Colnect" : "Adopt it here";
 }
 
+/** The icon a fix is drawn with, from the app's own vocabulary (ADR-0030). Clearing takes something
+ *  away, setting puts it back, and narrowing a want is an edit of what it accepts. */
+const FIX_ICON: Record<ColnectLocalFix, "hidden" | "check" | "edit"> = {
+  clear: "hidden",
+  set: "check",
+  grade: "edit",
+};
+
 export function ColnectReportRowView({
   row,
   collectionId,
   collectionSlug,
+  source,
   sourceOfTruth,
   vendorMap,
   primaryVendorId,
@@ -75,10 +89,13 @@ export function ColnectReportRowView({
   isLast,
   onMarkDone,
   onIgnore,
+  onFix,
+  onAdopt,
 }: {
   row: ColnectReportRow;
   collectionId: string;
   collectionSlug: string;
+  source: ColnectListSource;
   sourceOfTruth: ColnectListSourceOfTruth;
   vendorMap: Map<string, AreaCatalogEntry>;
   primaryVendorId: string | null;
@@ -86,6 +103,10 @@ export function ColnectReportRowView({
   isLast: boolean;
   onMarkDone: (row: ColnectReportRow, done: boolean) => void;
   onIgnore: (row: ColnectReportRow) => void;
+  /** Fixing this side from the row (#687) — the panel opens the dialog that names what it touches. */
+  onFix: (row: ColnectReportRow, fix: ColnectLocalFix) => void;
+  /** Adopting a Colnect-only wish into a want (#688), where the list is one that admits it. */
+  onAdopt: ((row: ColnectReportRow) => void) | null;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -95,14 +116,48 @@ export function ColnectReportRowView({
   const hidden = row.done || row.ignored;
 
   const actions: RowAction[] = [];
-  if (row.stampId) {
+  const stampHref = row.stampId ?? row.candidateStampId;
+  if (stampHref) {
     actions.push({
       key: "stamp",
       label: "Go to stamp",
       icon: "stamps",
-      href: `/c/${collectionSlug}/stamps/${row.stampId}`,
+      href: `/c/${collectionSlug}/stamps/${stampHref}`,
     });
   }
+
+  // Fixing **this** side (#687). Absent rather than disabled where a row admits none: a menu that
+  // lists every fix greyed out on every row is noise, and the one disabled entry this menu already
+  // has is about a row with no identity at all, which is a different thing to say.
+  const fixes = colnectLocalFixesFor({
+    bucket: row.bucket,
+    source,
+    sourceOfTruth,
+    candidateCopies: row.candidateCopies,
+  });
+  for (const fix of fixes) {
+    actions.push({
+      key: `fix-${fix}`,
+      label: colnectLocalFixLabel(fix, source, row.colnectGrade),
+      icon: FIX_ICON[fix],
+      hint: colnectLocalFixHint(fix, source),
+      separatorBefore: actions.length > 0,
+      onSelect: () => onFix(row, fix),
+    });
+  }
+  if (onAdopt && row.bucket === "only-colnect" && row.colnectId) {
+    actions.push({
+      key: "adopt",
+      label: "Add it to the want list",
+      icon: "wants",
+      hint: row.candidateStampId
+        ? undefined
+        : "Only if it resolves to a stamp here — the Assistant's own matcher decides, and writes nothing.",
+      separatorBefore: actions.length > 0,
+      onSelect: () => onAdopt(row),
+    });
+  }
+
   if (row.colnectId) {
     actions.push({
       key: "done",

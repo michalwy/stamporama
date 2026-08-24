@@ -10,8 +10,25 @@ import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { ColnectReportRow } from "@/lib/colnect-list-report";
-import { COLNECT_LIST_BUCKETS, colnectListBucketLabel } from "@/lib/colnect-list-sync-rules";
+import type { ColnectLocalFixPreview } from "@/lib/colnect-list-fix";
+import type { ColnectAdoptPass } from "@/lib/colnect-list-adopt";
+import type { ColnectApplyWorklist } from "@/lib/colnect-list-apply";
 import {
+  COLNECT_LIST_BUCKETS,
+  colnectListAdmitsAdoption,
+  colnectListBucketLabel,
+  colnectLocalFixHint,
+  colnectLocalFixLabel,
+  type ColnectListSource,
+  type ColnectLocalFix,
+} from "@/lib/colnect-list-sync-rules";
+import {
+  adoptColnectRowAction,
+  getColnectApplyWorklistAction,
+  applyColnectAdoptionAction,
+  applyColnectLocalFixAction,
+  previewColnectAdoptionAction,
+  previewColnectLocalFixAction,
   setColnectReportDoneAction,
   setColnectReportIgnoredAction,
 } from "@/app/actions/colnect";
@@ -22,6 +39,11 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  APPLY_ELEMENT_ID,
+  useAssistantApply,
+  useAssistantPresent,
+} from "./assistant-apply-handoff";
 import { ColnectImportDialog } from "./colnect-import-dialog";
 import { ColnectReportRowView } from "./colnect-report-row";
 import {
@@ -75,6 +97,27 @@ export function ColnectReportPanel({
   const fileInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState<File | null>(null);
   const [ignoring, setIgnoring] = useState<ColnectReportRow | null>(null);
+  // The fix the collector picked, and what the server says it would touch. Two states rather than
+  // one, because the dialog opens on the *asking* — resolving the copies is a round trip, and a
+  // menu entry that does nothing for half a second reads as a dead one.
+  const [fixing, setFixing] = useState<{ row: ColnectReportRow; fix: ColnectLocalFix } | null>(null);
+  const [fixPreview, setFixPreview] = useState<ColnectLocalFixPreview | null>(null);
+  // The bulk adopt (#688): open, then the pass it would run, then the pass it ran. One state for
+  // the dialog and one for the last answer, because after a pass the dialog stays open saying what
+  // happened and offering the next — twenty-five thousand rows is fifty passes, not one click.
+  const [adopting, setAdopting] = useState(false);
+  const [adoptPass, setAdoptPass] = useState<ColnectAdoptPass | null>(null);
+  const [adoptRan, setAdoptRan] = useState(false);
+  // Applying the difference **on Colnect** (#689) — the confirmation, and the run it hands over.
+  const [applying, setApplying] = useState(false);
+  const [worklist, setWorklist] = useState<ColnectApplyWorklist | null>(null);
+  const assistantPresent = useAssistantPresent();
+  const {
+    handoff: applyHandoff,
+    nodeRef: applyNodeRef,
+    start: startApplyRun,
+    dismiss: dismissApplyRun,
+  } = useAssistantApply();
   const [isPending, startTransition] = useTransition();
 
   const { data: lists = [], isPending: loadingLists } = useColnectReportLists(collectionId);
@@ -160,6 +203,146 @@ export function ColnectReportPanel({
     [collectionId, invalidate, selected, toast]
   );
 
+  const openFix = useCallback(
+    (row: ColnectReportRow, fix: ColnectLocalFix) => {
+      if (!selected || !row.colnectId) return;
+      setFixing({ row, fix });
+      setFixPreview(null);
+      startTransition(async () => {
+        const result = await previewColnectLocalFixAction(
+          collectionId,
+          selected.lt,
+          row.colnectId as string,
+          row.bucket,
+          fix,
+          row.colnectGrade
+        );
+        if (result.status === "error") {
+          setFixing(null);
+          toast({ message: result.message, tone: "error" });
+          return;
+        }
+        setFixPreview(result.preview);
+      });
+    },
+    [collectionId, selected, toast]
+  );
+
+  const applyFix = useCallback(() => {
+    if (!selected || !fixing?.row.colnectId) return;
+    const { row, fix } = fixing;
+    startTransition(async () => {
+      const result = await applyColnectLocalFixAction(
+        collectionId,
+        selected.lt,
+        row.colnectId as string,
+        row.bucket,
+        fix,
+        row.colnectGrade
+      );
+      setFixing(null);
+      setFixPreview(null);
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      invalidate(collectionId);
+      toast({
+        message: `${result.changed} ${result.changed === 1 ? "row" : "rows"} corrected here.`,
+      });
+    });
+  }, [collectionId, fixing, invalidate, selected, toast]);
+
+  /** What the report is narrowed by, in the shape the server's own filters take. */
+  const serverFilters = useMemo(
+    () => ({
+      countries: countries.length ? countries : undefined,
+      includeHidden,
+    }),
+    [countries, includeHidden]
+  );
+
+  const canAdopt = !!selected?.snapshot && colnectListAdmitsAdoption(selected);
+
+  const loadAdoptPreview = useCallback(() => {
+    if (!selected) return;
+    setAdoptPass(null);
+    setAdoptRan(false);
+    startTransition(async () => {
+      const result = await previewColnectAdoptionAction(collectionId, selected.lt, serverFilters);
+      if (result.status === "error") {
+        setAdopting(false);
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      setAdoptPass(result.pass);
+    });
+  }, [collectionId, selected, serverFilters, toast]);
+
+  const runAdoptPass = useCallback(() => {
+    if (!selected) return;
+    startTransition(async () => {
+      const result = await applyColnectAdoptionAction(collectionId, selected.lt, serverFilters);
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      setAdoptPass(result.pass);
+      setAdoptRan(true);
+      invalidate(collectionId);
+    });
+  }, [collectionId, invalidate, selected, serverFilters, toast]);
+
+  const adoptRow = useCallback(
+    (row: ColnectReportRow) => {
+      if (!selected || !row.colnectId) return;
+      startTransition(async () => {
+        const result = await adoptColnectRowAction(
+          collectionId,
+          selected.lt,
+          row.colnectId as string
+        );
+        if (result.status === "error") {
+          toast({ message: result.message, tone: "error" });
+          return;
+        }
+        invalidate(collectionId);
+        toast({
+          message: result.pass.created
+            ? "Added to the want list"
+            : "Already on the want list — nothing written.",
+        });
+      });
+    },
+    [collectionId, invalidate, selected, toast]
+  );
+
+  const loadWorklist = useCallback(() => {
+    if (!selected) return;
+    setWorklist(null);
+    startTransition(async () => {
+      const result = await getColnectApplyWorklistAction(collectionId, selected.lt, serverFilters);
+      if (result.status === "error") {
+        setApplying(false);
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      setWorklist(result.worklist);
+    });
+  }, [collectionId, selected, serverFilters, toast]);
+
+  const handOverRun = useCallback(() => {
+    if (!worklist) return;
+    startApplyRun({
+      collectionId,
+      lt: worklist.lt,
+      label: worklist.label,
+      items: worklist.items,
+    });
+    setApplying(false);
+    setWorklist(null);
+  }, [collectionId, startApplyRun, worklist]);
+
   if (loadingLists) return <div style={MUTED}>Loading…</div>;
 
   if (lists.length === 0) {
@@ -204,7 +387,49 @@ export function ColnectReportPanel({
           <span style={MUTED}>No export loaded yet.</span>
         )}
 
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+          {selected?.snapshot && assistantPresent && (
+            <Tooltip content="Hand the difference to the Assistant, which applies it on Colnect in this browser — slowly, and only list membership.">
+              <button
+                type="button"
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  fontWeight: 600,
+                }}
+                onClick={() => {
+                  setApplying(true);
+                  loadWorklist();
+                }}
+              >
+                <Icon name="assistant" /> Apply on Colnect
+              </button>
+            </Tooltip>
+          )}
+          {canAdopt && (
+            <Tooltip content="Turn the items only Colnect has into wants here, a pass at a time. Nothing is written until you have seen what would be.">
+              <button
+                type="button"
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  fontWeight: 600,
+                }}
+                onClick={() => {
+                  setAdopting(true);
+                  loadAdoptPreview();
+                }}
+              >
+                <Icon name="wants" /> Adopt into wants
+              </button>
+            </Tooltip>
+          )}
           <input
             ref={fileInput}
             type="file"
@@ -301,6 +526,7 @@ export function ColnectReportPanel({
                     row={row}
                     collectionId={collectionId}
                     collectionSlug={collectionSlug}
+                    source={selected.source}
                     sourceOfTruth={selected.sourceOfTruth}
                     vendorMap={vendorMapFor(row.areaId, null)}
                     primaryVendorId={
@@ -309,6 +535,8 @@ export function ColnectReportPanel({
                     conditionsById={conditionsById}
                     isLast={index === rows.length - 1}
                     onMarkDone={markDone}
+                    onFix={openFix}
+                    onAdopt={canAdopt ? adoptRow : null}
                     onIgnore={(target) => {
                       if (target.ignored) saveIgnore(target, "", false);
                       else setIgnoring(target);
@@ -335,6 +563,58 @@ export function ColnectReportPanel({
         />
       )}
 
+      {/* The node the worklist crosses on, and the progress comes back on (#689). The extension
+          reads its text and answers with attributes on it; React owns it either way. */}
+      <div id={APPLY_ELEMENT_ID} ref={applyNodeRef} style={{ display: "none" }}>
+        {applyHandoff?.payload ?? ""}
+      </div>
+
+      {applyHandoff && (
+        <ColnectApplyProgress handoff={applyHandoff} onDismiss={dismissApplyRun} />
+      )}
+
+      {applying && (
+        <ColnectApplyDialog
+          worklist={worklist}
+          isPending={isPending}
+          onClose={() => {
+            setApplying(false);
+            setWorklist(null);
+          }}
+          onConfirm={handOverRun}
+        />
+      )}
+
+      {adopting && (
+        <ColnectAdoptDialog
+          listLabel={selected?.label ?? "this list"}
+          pass={adoptPass}
+          ran={adoptRan}
+          isPending={isPending}
+          onClose={() => {
+            setAdopting(false);
+            setAdoptPass(null);
+            setAdoptRan(false);
+          }}
+          onRun={runAdoptPass}
+        />
+      )}
+
+      {fixing && (
+        <ColnectFixDialog
+          row={fixing.row}
+          fix={fixing.fix}
+          source={selected?.source ?? "items_for_trade"}
+          preview={fixPreview}
+          isPending={isPending}
+          onClose={() => {
+            setFixing(null);
+            setFixPreview(null);
+          }}
+          onConfirm={applyFix}
+        />
+      )}
+
       {ignoring && (
         <IgnoreDialog
           row={ignoring}
@@ -344,6 +624,349 @@ export function ColnectReportPanel({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The confirmation before the Assistant writes to Colnect (#689, ADR-0042).
+ *
+ * **The counts in both directions, before anything is sent.** A bulk removal from a public list is
+ * visible to every partner reading it, and is not something to start by accident — the numbers are
+ * the whole point of this dialog, not decoration on a spinner.
+ *
+ * It also says the two things a collector cannot see from the report: that this writes list
+ * membership and nothing else — no quantity, no grade, no notes — and how long a run of this size
+ * will take at the pace Colnect tolerates. Where the export is too old, the removals have already
+ * been dropped from the worklist and this says so and names the import as the way through.
+ */
+function ColnectApplyDialog({
+  worklist,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  worklist: ColnectApplyWorklist | null;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  // At one write every 1.6 seconds. Stated in whole minutes, rounded up: a run is measured in
+  // "leave it going", not in seconds.
+  const minutes = worklist ? Math.max(1, Math.ceil((worklist.items.length * 1.6) / 60)) : 0;
+  return (
+    <DialogShell title={`Apply on Colnect${worklist ? ` — ${worklist.label}` : ""}`} onClose={onClose}>
+      <DialogBody>
+        {!worklist ? (
+          <p style={{ margin: 0, fontSize: "0.9375rem" }}>Working out what to apply…</p>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem", lineHeight: 1.6 }}>
+              The Assistant will <strong>add {worklist.additions}</strong>{" "}
+              {worklist.additions === 1 ? "item" : "items"} to {worklist.label} on Colnect and{" "}
+              <strong>remove {worklist.removals}</strong>, in this browser, signed in as you.
+            </p>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.375rem" }}>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>Membership only.</strong>
+                <span style={MUTED}> No quantity, no grade, no notes — those stay yours to set.</span>
+              </li>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>About {minutes} {minutes === 1 ? "minute" : "minutes"}.</strong>
+                <span style={MUTED}>
+                  {" "}
+                  Paced to roughly one change every other second, which is what Colnect tolerates
+                  without complaint. Leave it running; if it is interrupted it carries on from where
+                  it stopped, and each item is ticked off here as it lands.
+                </span>
+              </li>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>From the export of {worklist.snapshot.exportedAt?.slice(0, 10) ?? worklist.snapshot.importedAt.slice(0, 10)}</strong>
+                <span style={MUTED}> — {worklist.snapshot.fileName}, {worklist.snapshot.ageDays} days old.</span>
+              </li>
+            </ul>
+            {worklist.removalsRefused && (
+              <p
+                style={{
+                  margin: "1rem 0 0",
+                  padding: "0.5rem 0.625rem",
+                  borderRadius: "0.375rem",
+                  background: "var(--color-bg-muted)",
+                  fontSize: "0.875rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                {worklist.removalsRefused}
+              </p>
+            )}
+          </>
+        )}
+      </DialogBody>
+      <DialogActions
+        actionLabel={isPending ? "Working…" : `Apply ${worklist?.items.length ?? 0} on Colnect`}
+        disabled={isPending || !worklist || worklist.items.length === 0}
+        onCancel={onClose}
+        onAction={onConfirm}
+      />
+    </DialogShell>
+  );
+}
+
+/**
+ * How a Colnect run is going (#689) — a strip, not a dialog.
+ *
+ * A run is minutes to hours, and the collector is meant to carry on working through the report while
+ * it happens: rows tick off behind it as the Assistant marks each applied item done. A modal would
+ * hold the screen hostage for an hour to show a number.
+ */
+function ColnectApplyProgress({
+  handoff,
+  onDismiss,
+}: {
+  handoff: { state: string; message: string | null; report: { total: number; applied: number; changed: number; failed: number } | null };
+  onDismiss: () => void;
+}) {
+  const report = handoff.report;
+  const settled = report ? report.applied + report.changed + report.failed : 0;
+  const share = report && report.total > 0 ? settled / report.total : 0;
+  const finished = handoff.state === "done" || handoff.state === "error";
+  return (
+    <div
+      style={{
+        ...PANEL,
+        padding: "0.625rem 1rem",
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+      }}
+    >
+      <Icon name="assistant" />
+      <div style={{ flex: 1, minWidth: 0, display: "grid", gap: "0.375rem" }}>
+        <div style={{ fontSize: "0.875rem" }}>{handoff.message ?? "Applying on Colnect…"}</div>
+        {!finished && (
+          <div
+            style={{
+              height: "0.25rem",
+              borderRadius: "0.125rem",
+              background: "var(--color-bg-muted)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(share * 100)}%`,
+                height: "100%",
+                background: "var(--color-accent)",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
+        onClick={onDismiss}
+      >
+        {finished ? "Dismiss" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Adopting the Colnect side into wants, a pass at a time (#688).
+ *
+ * The dialog is the **preview**, and it exists because a wish list of twenty-five thousand entries
+ * is not something to start blind: most of it will resolve to no stamp here, and saying so before
+ * anything is written is the difference between a bulk action and a surprise. The same numbers come
+ * back after a run, so the dialog stays open reporting what happened and offering the next pass —
+ * fifty of them for a first sweep, and the bucket count on the screen behind falls each time.
+ *
+ * A row that resolves to no stamp is stated as an **outcome**, not hidden as a failure. On a list
+ * this size that number will be the largest one here, and it is the honest one.
+ */
+function ColnectAdoptDialog({
+  listLabel,
+  pass,
+  ran,
+  isPending,
+  onClose,
+  onRun,
+}: {
+  listLabel: string;
+  pass: ColnectAdoptPass | null;
+  ran: boolean;
+  isPending: boolean;
+  onClose: () => void;
+  onRun: () => void;
+}) {
+  const remaining = pass ? Math.max(0, pass.bucketRows - pass.passRows) : 0;
+  return (
+    <DialogShell title={`Adopt ${listLabel} into wants`} onClose={onClose}>
+      <DialogBody>
+        {!pass ? (
+          <p style={{ margin: 0, fontSize: "0.9375rem" }}>Working out what this pass would adopt…</p>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem", lineHeight: 1.6 }}>
+              {ran ? (
+                <>
+                  <strong>{pass.created}</strong> {pass.created === 1 ? "want" : "wants"} added.
+                </>
+              ) : (
+                <>
+                  This pass looks at <strong>{pass.passRows}</strong> of the{" "}
+                  <strong>{pass.bucketRows}</strong> {pass.bucketRows === 1 ? "row" : "rows"} only
+                  Colnect has.
+                </>
+              )}
+            </p>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.375rem" }}>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>{pass.adoptable}</strong> {ran ? "resolved to a stamp here" : "would become wants"}
+                {pass.withCondition > 0 && (
+                  <span style={MUTED}> — {pass.withCondition} carrying a grade this collection reads</span>
+                )}
+              </li>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>{pass.unresolved}</strong> match no stamp here
+                <span style={MUTED}> — reported, left on the report. Filling those IDs in is the Assistant&apos;s job.</span>
+              </li>
+              <li style={{ fontSize: "0.875rem" }}>
+                <strong>{pass.alreadyWanted}</strong> are already on the want list
+              </li>
+            </ul>
+            {ran && remaining > 0 && (
+              <p style={{ ...MUTED, margin: "1rem 0 0" }}>
+                {remaining} {remaining === 1 ? "row" : "rows"} still only on Colnect. Run the next
+                pass — each one starts where the last stopped.
+              </p>
+            )}
+            {!ran && (
+              <p style={{ ...MUTED, margin: "1rem 0 0" }}>
+                Nothing here writes a Colnect ID onto a stamp: the matcher runs dry, because learning
+                an ID is something you do against a page you are looking at.
+              </p>
+            )}
+          </>
+        )}
+      </DialogBody>
+      <DialogActions
+        actionLabel={
+          isPending ? "Working…" : ran ? "Run the next pass" : `Adopt ${pass?.adoptable ?? 0}`
+        }
+        disabled={isPending || !pass || (ran ? remaining === 0 : pass.adoptable === 0)}
+        onCancel={onClose}
+        onAction={onRun}
+      />
+    </DialogShell>
+  );
+}
+
+/**
+ * Fixing this side of one difference (#687) — and, before that, **saying what it will touch**.
+ *
+ * The naming is the whole reason this is a dialog and not a menu entry that just writes. Several
+ * copies of one stamp qualify routinely, and *stop offering this for trade* silently meaning *four
+ * copies* is how a report stops being believed. So the copies are listed by their own number, with
+ * the grade and the place a collector would recognise them by, and the action sits under that list.
+ *
+ * It opens before the answer arrives, because resolving the copies is a round trip and a menu entry
+ * that does nothing for half a second reads as a dead one.
+ */
+function ColnectFixDialog({
+  row,
+  fix,
+  source,
+  preview,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  row: ColnectReportRow;
+  fix: ColnectLocalFix;
+  source: ColnectListSource;
+  preview: ColnectLocalFixPreview | null;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const title = colnectLocalFixLabel(fix, source, row.colnectGrade);
+  const subject = preview?.stampName || row.stampName || row.colnectName || "this stamp";
+  const count = (preview?.copies.length ?? 0) + (preview?.wants.length ?? 0);
+
+  return (
+    <DialogShell title={title} onClose={onClose}>
+      <DialogBody>
+        <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem", lineHeight: 1.6 }}>
+          {preview ? (
+            <>
+              <strong>{subject}</strong> — {count} {count === 1 ? "row" : "rows"} here will change.{" "}
+              {colnectLocalFixHint(fix, source)}
+            </>
+          ) : (
+            "Working out what this would change…"
+          )}
+        </p>
+
+        {preview && preview.copies.length > 0 && (
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.25rem" }}>
+            {preview.copies.map((copy) => (
+              <li
+                key={copy.id}
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                  fontSize: "0.875rem",
+                  padding: "0.375rem 0.5rem",
+                  borderRadius: "0.375rem",
+                  background: "var(--color-bg-muted)",
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>#{copy.itemNo}</span>
+                <span>{copy.conditionAbbreviation}</span>
+                {copy.formatName && <span style={MUTED}>{copy.formatName}</span>}
+                {copy.locationName && (
+                  <span style={MUTED}>
+                    {copy.locationName}
+                    {copy.locationRef ? ` · ${copy.locationRef}` : ""}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {preview && preview.wants.length > 0 && (
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.25rem" }}>
+            {preview.wants.map((want) => (
+              <li
+                key={want.id}
+                style={{
+                  fontSize: "0.875rem",
+                  padding: "0.375rem 0.5rem",
+                  borderRadius: "0.375rem",
+                  background: "var(--color-bg-muted)",
+                }}
+              >
+                {want.conditionNames.length
+                  ? `Accepts ${want.conditionNames.join(", ")}`
+                  : "Accepts any condition"}
+                {fix === "grade" && preview.conditionName ? ` → ${preview.conditionName}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </DialogBody>
+      <DialogActions
+        actionLabel={isPending ? "Working…" : title}
+        disabled={isPending || !preview || count === 0}
+        onCancel={onClose}
+        onAction={onConfirm}
+      />
+    </DialogShell>
   );
 }
 

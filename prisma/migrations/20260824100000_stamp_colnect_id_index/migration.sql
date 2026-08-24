@@ -1,0 +1,14 @@
+-- The Colnect id as a **lookup key**, not only as a stored fact (#687/#688).
+--
+-- `Stamp.colnectId` has been the join key of the whole list-sync track since #247, but nothing until
+-- now asked the question in this direction: *which stamp is Colnect item 1234567*. The report asked
+-- it the other way round — from the stamps a predicate holds for, outwards — so a scan of the
+-- collection's stamps was already paid for and an index bought nothing.
+--
+-- #687 and #688 ask it directly, and in bulk: the Colnect-only rows of a Wish list are 25,145 ids
+-- looking for stamps, resolved a pass at a time. Without this that is a sequential scan per pass.
+--
+-- Scoped by collection first, because every read here is, and non-unique on purpose: two stamps
+-- carrying one Colnect id is a mistake the matcher already refuses to make (#250) and not one this
+-- index should turn into a failed insert somewhere else entirely.
+CREATE INDEX "stamp_collectionId_colnectId_idx" ON "stamp"("collectionId", "colnectId");

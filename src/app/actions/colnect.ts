@@ -16,9 +16,29 @@ import {
   setColnectReportIgnored,
   type ColnectReportList,
 } from "@/lib/colnect-list-report";
+import {
+  ColnectAdoptError,
+  applyColnectAdoption,
+  applyColnectAdoptionForRow,
+  previewColnectAdoption,
+  type ColnectAdoptPass,
+} from "@/lib/colnect-list-adopt";
+import type { ColnectReportFilters } from "@/lib/colnect-list-report";
+import {
+  ColnectApplyError,
+  getColnectApplyWorklist,
+  type ColnectApplyWorklist,
+} from "@/lib/colnect-list-apply";
+import {
+  ColnectLocalFixError,
+  applyColnectLocalFix,
+  previewColnectLocalFix,
+  type ColnectLocalFixPreview,
+} from "@/lib/colnect-list-fix";
 import type {
   ColnectListSource,
   ColnectListSourceOfTruth,
+  ColnectLocalFix,
 } from "@/lib/colnect-list-sync-rules";
 import {
   createColnectMapping,
@@ -215,6 +235,159 @@ export async function setColnectReportIgnoredAction(
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save that decision. Please try again." };
+  }
+}
+
+/**
+ * What a local-side fix would touch, before it touches it (#687).
+ *
+ * A separate call from the write, and the dialog renders it: several copies of one stamp qualify
+ * routinely, and *unflag this stamp* silently meaning *unflag four copies* is how a report loses
+ * trust. It resolves the copies afresh from the live predicate rather than taking any from the
+ * client, which is also why it can refuse — a row read a minute ago may no longer be one.
+ */
+export async function previewColnectLocalFixAction(
+  collectionId: string,
+  lt: number,
+  colnectId: string,
+  bucket: string,
+  fix: ColnectLocalFix,
+  colnectGrade: string | null
+): Promise<
+  { status: "success"; preview: ColnectLocalFixPreview } | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const preview = await previewColnectLocalFix(
+      session.user.id,
+      collectionId,
+      lt,
+      colnectId,
+      bucket,
+      fix,
+      colnectGrade
+    );
+    return { status: "success", preview };
+  } catch (err) {
+    if (err instanceof ColnectLocalFixError) return { status: "error", message: err.message };
+    return { status: "error", message: "Could not work out what that fix would change." };
+  }
+}
+
+/**
+ * Apply one local-side fix (#687) — the half of a discrepancy that is this side's fault.
+ *
+ * It writes nothing else: no done mark and no accepted divergence, because the row leaves the report
+ * on the next read for the only honest reason, which is that the predicate changed.
+ */
+export async function applyColnectLocalFixAction(
+  collectionId: string,
+  lt: number,
+  colnectId: string,
+  bucket: string,
+  fix: ColnectLocalFix,
+  colnectGrade: string | null
+): Promise<{ status: "success"; changed: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const result = await applyColnectLocalFix(
+      session.user.id,
+      collectionId,
+      lt,
+      colnectId,
+      bucket,
+      fix,
+      colnectGrade
+    );
+    return { status: "success", changed: result.changed };
+  } catch (err) {
+    if (err instanceof ColnectLocalFixError) return { status: "error", message: err.message };
+    return { status: "error", message: "Failed to apply that fix. Please try again." };
+  }
+}
+
+type ColnectAdoptState =
+  | { status: "success"; pass: ColnectAdoptPass }
+  | { status: "error"; message: string };
+
+/**
+ * What the next adoption pass would write, writing nothing (#688).
+ *
+ * The dialog renders this first and only then offers the run, because a wish list of twenty-five
+ * thousand entries is not something to start blind: most of it will resolve to no stamp, and saying
+ * so beforehand is the difference between a bulk action and a surprise.
+ */
+export async function previewColnectAdoptionAction(
+  collectionId: string,
+  lt: number,
+  filters: ColnectReportFilters
+): Promise<ColnectAdoptState> {
+  const session = await getSession();
+  try {
+    return { status: "success", pass: await previewColnectAdoption(session.user.id, collectionId, lt, filters) };
+  } catch (err) {
+    if (err instanceof ColnectAdoptError) return { status: "error", message: err.message };
+    return { status: "error", message: "Could not work out what that would adopt." };
+  }
+}
+
+/** Adopt one pass of the Extra-on-Colnect bucket into wants (#688). */
+export async function applyColnectAdoptionAction(
+  collectionId: string,
+  lt: number,
+  filters: ColnectReportFilters
+): Promise<ColnectAdoptState> {
+  const session = await getSession();
+  try {
+    return { status: "success", pass: await applyColnectAdoption(session.user.id, collectionId, lt, filters) };
+  } catch (err) {
+    if (err instanceof ColnectAdoptError) return { status: "error", message: err.message };
+    return { status: "error", message: "The adoption failed. Please try again." };
+  }
+}
+
+/** Adopt one row from its own menu (#688) — the same resolution, narrowed to one Colnect id. */
+export async function adoptColnectRowAction(
+  collectionId: string,
+  lt: number,
+  colnectId: string
+): Promise<ColnectAdoptState> {
+  const session = await getSession();
+  try {
+    return {
+      status: "success",
+      pass: await applyColnectAdoptionForRow(session.user.id, collectionId, lt, colnectId),
+    };
+  } catch (err) {
+    if (err instanceof ColnectAdoptError) return { status: "error", message: err.message };
+    return { status: "error", message: "Could not add that to the want list. Please try again." };
+  }
+}
+
+/**
+ * What the Assistant would carry out on Colnect for this list (#689).
+ *
+ * Read before the confirmation, and the confirmation states its counts in both directions: a bulk
+ * removal from a public list is visible to every partner reading it, and is not something to start
+ * by accident. It is also where a stale export loses its removals — see
+ * `COLNECT_APPLY_MAX_SNAPSHOT_AGE_DAYS`.
+ */
+export async function getColnectApplyWorklistAction(
+  collectionId: string,
+  lt: number,
+  filters: ColnectReportFilters
+): Promise<
+  { status: "success"; worklist: ColnectApplyWorklist } | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    return {
+      status: "success",
+      worklist: await getColnectApplyWorklist(session.user.id, collectionId, lt, filters),
+    };
+  } catch (err) {
+    if (err instanceof ColnectApplyError) return { status: "error", message: err.message };
+    return { status: "error", message: "Could not work out what to apply on Colnect." };
   }
 }
 

@@ -272,3 +272,118 @@ export function colnectListSourceShape(source: ColnectListSource): ColnectListSo
 export function colnectListSourceLabel(value: string): string {
   return COLNECT_LIST_SOURCES.find((s) => s.value === value)?.label ?? value;
 }
+
+// ── Fixing this side from the report (#687) ──────────────────────────────────
+
+/**
+ * Which correction of **our own** side a report row admits.
+ *
+ * - `clear` — the predicate holds here and should not: unset the flag on every qualifying copy, or
+ *   close every open want.
+ * - `set` — the predicate does not hold here and should: flag the copies in hand that lack it.
+ * - `grade` — narrow every open want for the stamp to the one condition Colnect's grade maps to.
+ *
+ * The vocabulary lives here rather than beside the writes because the **menu** asks the question
+ * first, in a client component, and a menu offering a fix the write then refuses is exactly the
+ * drift one shared answer prevents. `colnect-list-fix.ts` performs them.
+ */
+export type ColnectLocalFix = "clear" | "set" | "grade";
+
+/**
+ * Which fixes a row admits, given the list it is on. Pure enough to be the single place the menu,
+ * the preview and the write all ask — a menu offering a fix the write then refuses is the drift this
+ * exists to prevent.
+ *
+ * Read as a sentence per bucket:
+ *   • *Missing on Colnect* — the predicate holds here. Clearing it is always available: it is this
+ *     side saying "no, that is out of date", which needs nobody's permission.
+ *   • *Extra on Colnect* — the predicate does not hold here. Setting it is available only where the
+ *     list is the side that wins, and (for copies) only where a copy exists to set it on; on a
+ *     want-backed list the answer is a *want to create*, which is #688's and not a fix.
+ *   • *Quantity* — nothing. See the module note.
+ *   • *Grade* — a want's terms only.
+ *   • *Not comparable* — nothing was checked, so there is nothing to correct.
+ */
+export function colnectLocalFixesFor(input: {
+  bucket: ColnectListBucket;
+  source: ColnectListSource;
+  sourceOfTruth: ColnectListSourceOfTruth;
+  /** Copies in hand that do not carry the flag (`ColnectReportRow.candidateCopies`). */
+  candidateCopies: number | null;
+}): ColnectLocalFix[] {
+  const shape = colnectListSourceShape(input.source);
+  switch (input.bucket) {
+    case "only-local":
+      return ["clear"];
+    case "only-colnect":
+      if (input.sourceOfTruth !== "colnect") return [];
+      if (shape.kind === "wants") return [];
+      return (input.candidateCopies ?? 0) > 0 ? ["set"] : [];
+    case "grade":
+      return shape.kind === "wants" ? ["grade"] : [];
+    case "quantity":
+    case "not-comparable":
+      return [];
+  }
+}
+
+/**
+ * What a fix is called on the row's menu, in the collection's own words rather than the schema's.
+ *
+ * The label names **the rows it touches**, plural, because that is what it touches: a stamp with
+ * four copies for trade has four flags to clear, and a menu entry saying "unflag this stamp" would
+ * be describing something the app does not do. The dialog then names them one by one.
+ */
+export function colnectLocalFixLabel(
+  fix: ColnectLocalFix,
+  source: ColnectListSource,
+  colnectGrade: string | null
+): string {
+  if (fix === "grade") {
+    return colnectGrade ? `Accept only ${colnectGrade}` : "Narrow to the listed grade";
+  }
+  switch (source) {
+    case "items_in_collection":
+      return fix === "clear" ? "Take these copies out of the collection" : "Put these copies in the collection";
+    case "items_for_trade":
+      return fix === "clear" ? "Stop offering these copies for trade" : "Offer these copies for trade";
+    case "items_for_sale":
+      return fix === "clear" ? "Stop offering these copies for sale" : "Offer these copies for sale";
+    case "wants_open":
+      return "Close the wants for this stamp";
+  }
+}
+
+/** The one line under a fix's label, saying what it will and will not do. */
+export function colnectLocalFixHint(fix: ColnectLocalFix, source: ColnectListSource): string {
+  if (fix === "grade") {
+    return "Replaces what every open want for this stamp accepts. Nothing on Colnect changes.";
+  }
+  if (source === "wants_open") {
+    return "Closes every open want for this stamp. Nothing on Colnect changes.";
+  }
+  return fix === "clear"
+    ? "Only the copies still in hand that carry the flag. Nothing on Colnect changes."
+    : "Only the copies already in hand — no copy is created. Nothing on Colnect changes.";
+}
+
+// ── Adopting Colnect's side into wants (#688) ────────────────────────────────
+
+/**
+ * Whether a list admits the bulk adoption at all.
+ *
+ * Two conditions, both about meaning: a list whose **local** side wins proposes removal *there* for
+ * an item only on Colnect, so adopting it here would be the opposite of what the mapping says; and a
+ * list standing for copies has no want to create — its Colnect-only rows are #687's *set the flag*
+ * fix, or nothing at all.
+ *
+ * Here rather than beside the adoption itself because the screen asks it first, to decide whether to
+ * draw the button — a button drawn and then refused is worse than one that never appears.
+ */
+export function colnectListAdmitsAdoption(input: {
+  source: ColnectListSource;
+  sourceOfTruth: ColnectListSourceOfTruth;
+}): boolean {
+  return input.sourceOfTruth === "colnect" && input.source === "wants_open";
+}
+

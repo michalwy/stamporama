@@ -44,6 +44,13 @@ import {
 // **`not-comparable` is a bucket and not a difference.** A local stamp with no `colnectId` was never
 // checked against anything. It carries no decision and no done mark either, and cannot: both are
 // keyed by the Colnect id it does not have.
+//
+// **A row also carries its *candidate*, which is a different question from its local side** (#687).
+// The local side is narrowed by the predicate, so an `only-colnect` row has none by construction —
+// and that says nothing about whether the collection holds the stamp. It very often does, untagged,
+// which is exactly the row a local fix acts on. `candidateStampId` answers "which stamp is this
+// Colnect item here", predicate or no predicate, and `candidateCopies` how many copies such a fix
+// would flag.
 
 /** Colnect's stored grade values against the abbreviations the export prints, as a relation the
  *  query can join. Built from the same constant the rest of the app maps conditions with, so the
@@ -106,6 +113,21 @@ export interface ColnectReportRow {
   localQuantity: number | null;
   /** The one condition the local side agrees on, or null where it states none. */
   localConditionId: string | null;
+
+  /**
+   * The stamp this collection holds under the row's Colnect id, **predicate or no predicate**
+   * (#687). The same as `stampId` wherever the row has a local side; the point of it is the rows
+   * where it is not — an `only-colnect` row carries no `stampId` by construction, since the local
+   * side of the comparison holds only stamps the predicate holds *for*, and yet the collection may
+   * well hold the stamp untagged. That is precisely the row a local fix can act on.
+   */
+  candidateStampId: string | null;
+  /**
+   * How many copies the *set the predicate here* fix would flag: copies of {@link candidateStampId}
+   * in hand that do **not** carry the list's flag. Null for a want-backed list, where there is no
+   * flag to set on anything and the answer is a want to create (#688) rather than a fix.
+   */
+  candidateCopies: number | null;
 
   /** The Colnect side, null throughout for a row only this collection has. */
   colnectName: string | null;
@@ -268,8 +290,35 @@ function differences(input: {
   snapshotId: string;
   source: ColnectListSource;
 }): Prisma.Sql {
+  const shape = colnectListSourceShape(input.source);
+  // What a *set the predicate here* fix (#687) would have to flag, per stamp: copies in hand that do
+  // not carry the list's flag. A want-backed list has no such thing — nothing carries a flag — so it
+  // contributes no rows and the column comes back null everywhere, which is the honest answer.
+  const candidateCopies =
+    shape.kind === "copies"
+      ? Prisma.sql`
+          SELECT i."stampId" AS stamp_id, COUNT(*)::int AS spare
+          FROM "item" i
+          WHERE i."collectionId" = ${input.collectionId}
+            AND i.${Prisma.raw(`"${shape.flag}"`)} = FALSE
+            AND i."deliveryState" = 'delivered'
+            AND i."disposedAt" IS NULL
+          GROUP BY i."stampId"`
+      : Prisma.sql`SELECT NULL::text AS stamp_id, NULL::int AS spare WHERE FALSE`;
+
   return Prisma.sql`
     WITH local_rows AS (${localSide(input.collectionId, input.source)}),
+    -- Every Colnect id this collection holds, whatever the predicate says about it. The report's
+    -- local side is narrowed by the predicate and therefore cannot answer "is this item a stamp we
+    -- hold?" for a row only Colnect has — which is the one question a fix on such a row needs.
+    stamp_by_cid AS (
+      SELECT NULLIF(TRIM(s."colnectId"), '') AS cid, MIN(s."id") AS stamp_id
+      FROM "stamp" s
+      WHERE s."collectionId" = ${input.collectionId}
+        AND NULLIF(TRIM(s."colnectId"), '') IS NOT NULL
+      GROUP BY NULLIF(TRIM(s."colnectId"), '')
+    ),
+    candidate_copies AS (${candidateCopies}),
     grade_map AS (
       SELECT m."stampConditionId" AS condition_id, g.abbrev AS abbrev
       FROM "colnect_condition_mapping" m
@@ -322,6 +371,8 @@ function differences(input: {
         c.grade AS colnect_grade,
         c.name AS colnect_name,
         c.catalog_codes,
+        COALESCE(l.stamp_id, sc.stamp_id) AS candidate_stamp_id,
+        cc.spare AS candidate_copies,
         COALESCE(NULLIF(l.area_name, ''), NULLIF(c.country, '')) AS country,
         COALESCE(NULLIF(l.stamp_name, ''), NULLIF(c.name, ''), '') AS sort_name,
         CASE
@@ -337,6 +388,8 @@ function differences(input: {
         END AS bucket
       FROM local_side l
       FULL OUTER JOIN colnect_side c ON c.cid = l.cid
+      LEFT JOIN stamp_by_cid sc ON sc.cid = COALESCE(l.cid, c.cid)
+      LEFT JOIN candidate_copies cc ON cc.stamp_id = COALESCE(l.stamp_id, sc.stamp_id)
     )
     SELECT j.*,
            COALESCE(j.cid, j.stamp_id) AS "key",
@@ -377,6 +430,8 @@ interface ReportKeyRow {
   country: string | null;
   local_qty: number | null;
   condition_id: string | null;
+  candidate_stamp_id: string | null;
+  candidate_copies: number | null;
   colnect_qty: number | null;
   colnect_grade: string | null;
   colnect_name: string | null;
@@ -414,6 +469,7 @@ export async function listColnectReportRows(
       source: mapping.source as ColnectListSource,
     })})
     SELECT d.key, d.bucket, d.cid, d.stamp_id, d.country, d.local_qty, d.condition_id,
+           d.candidate_stamp_id, d.candidate_copies,
            d.colnect_qty, d.colnect_grade, d.colnect_name, d.catalog_codes,
            d.done, d.ignored, d.ignored_note
     FROM differences d
@@ -469,6 +525,8 @@ export async function listColnectReportRows(
           .sort(sortPhotos),
         localQuantity: row.local_qty,
         localConditionId: row.condition_id,
+        candidateStampId: row.candidate_stamp_id,
+        candidateCopies: row.candidate_copies,
         colnectName: row.colnect_name,
         colnectCatalogCodes: row.catalog_codes,
         colnectQuantity: row.colnect_qty,
@@ -480,6 +538,45 @@ export async function listColnectReportRows(
     }),
     nextCursor: hasMore ? String(offset + limit) : null,
   };
+}
+
+/**
+ * Every differing row's Colnect id and bucket, under the filters, and nothing else.
+ * Owner-authorized.
+ *
+ * The report's page hydrates stamps — photos, catalog numbers, areas — because it is drawing rows.
+ * This is for the caller that needs the *set* rather than the rows: the worklist the extension
+ * applies on Colnect (#689) is tens of thousands of ids and no pictures. Same relation, same
+ * filters, same idea of what a difference is; only the projection differs.
+ *
+ * `not-comparable` rows carry no Colnect id and are dropped, which is the same thing they are
+ * everywhere else: nothing was checked, so there is nothing to act on.
+ */
+export async function listColnectReportKeys(
+  ownerId: string,
+  collectionId: string,
+  lt: number,
+  filters: ColnectReportFilters = {}
+): Promise<{ colnectId: string; bucket: ColnectListBucket }[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const mapping = await readMapping(collectionId, lt);
+  if (!mapping?.snapshot) return [];
+
+  const rows = await prisma.$queryRaw<{ cid: string | null; bucket: string }[]>`
+    WITH differences AS (${differences({
+      collectionId,
+      mappingId: mapping.id,
+      snapshotId: mapping.snapshot.id,
+      source: mapping.source as ColnectListSource,
+    })})
+    SELECT d.cid, d.bucket
+    FROM differences d
+    ${whereFrom(filters, true, true)}
+    ORDER BY d.country ASC NULLS LAST, d.sort_key ASC NULLS LAST, d.sort_name ASC, d.key ASC`;
+
+  return rows.flatMap((row) =>
+    row.cid ? [{ colnectId: row.cid, bucket: row.bucket as ColnectListBucket }] : []
+  );
 }
 
 /** Every bucket with what it holds under the other filters, so the chips can carry counts.

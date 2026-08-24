@@ -49,7 +49,7 @@ so there is usually nothing to configure. Only a proxy set *below* that needs an
 
 Alternatively, photos can be stored in **Google Cloud Storage** — the installer asks for the bucket and service-account key and sets it up for you (or configure it by hand via the GCS section of `.env.prod.example`). Photos are served via short-lived signed URLs so bytes bypass the app. Switching is safe at any time — existing filesystem photos keep serving from the volume while new photos write to GCS, and the optional `pnpm photos:migrate:gcs` command moves old photos across so the volume can be retired.
 
-There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse, marks your own marketplace listings with the offer they are here, and records a Delcampe order as a sale from the screen you pack it on. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
+There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse, marks your own marketplace listings with the offer they are here, records a Delcampe order as a sale from the screen you pack it on, and — the one thing anywhere here that writes to Colnect — applies a Colnect list difference for you (ADR-0042). It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
 If you sell on **Delcampe**, listings go up as an uploaded file rather than through an API — the app
 builds that file, one CSV plus the pictures it names, for a batch of prepared offers, and reads

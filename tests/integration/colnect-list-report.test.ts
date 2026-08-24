@@ -40,6 +40,7 @@ const REAL_EXPORT = readFileSync(
 
 const SWAP_LT = 3;
 const WISH_LT = 4;
+const SELL_LT = 5;
 
 interface Fixtures {
   userId: string;
@@ -117,7 +118,11 @@ async function stamp(colnectId: string | null, name: string): Promise<string> {
   return created.id;
 }
 
-async function copy(stampId: string, conditionId: string, over: { forTrade?: boolean } = {}) {
+async function copy(
+  stampId: string,
+  conditionId: string,
+  over: { forTrade?: boolean; forSale?: boolean } = {}
+) {
   itemNo += 1;
   await prisma.item.create({
     data: {
@@ -127,6 +132,7 @@ async function copy(stampId: string, conditionId: string, over: { forTrade?: boo
       conditionId,
       inCollection: true,
       forTrade: over.forTrade ?? true,
+      forSale: over.forSale ?? false,
       deliveryState: "delivered",
     },
   });
@@ -537,5 +543,84 @@ describe("Colnect list report over wants (#686)", () => {
       "only-colnect",
       "a closed want is not an open one — the list still holds it"
     );
+  });
+});
+
+describe("The local candidate behind a Colnect-only row (#687)", () => {
+  // A list of its own, because this is about what the *other* rows of a report cannot show: the
+  // Swap fixtures above are built so that every stamp either qualifies or does not exist here, and
+  // the whole question here is the third case — held, and not on the list's terms.
+  const held = "1101";
+  const unknown = "1102";
+  const qualifying = "1103";
+  let heldStampId = "";
+
+  before(async () => {
+    await setColnectListMapping(f.userId, f.collectionId, SELL_LT, {
+      source: "items_for_sale",
+      sourceOfTruth: "colnect",
+      enabled: true,
+    });
+
+    // Held, in hand, and **not** for sale: the predicate does not hold, so the row is
+    // `only-colnect` — and yet there is something here to set the flag on.
+    heldStampId = await stamp(held, "Held but not for sale");
+    await copy(heldStampId, f.mnhId, { forSale: false });
+    await copy(heldStampId, f.mnhId, { forSale: false });
+    // Never heard of it: the list names an item this collection holds no stamp for at all.
+    // (No local stamp is created for `unknown`.)
+    // On both sides, so it stays off the report entirely.
+    const forSale = await stamp(qualifying, "For sale");
+    await copy(forSale, f.mnhId, { forSale: true });
+
+    await importColnectListSnapshot(f.userId, f.collectionId, {
+      lt: SELL_LT,
+      fileName: "sell.csv",
+      text: exportFile([
+        { colnectId: held, name: "Held but not for sale", country: "Poland", lists: [{ listName: "Sell", quantity: "1", condition: "MNH" }] },
+        { colnectId: unknown, name: "Never heard of it", country: "Poland", lists: [{ listName: "Sell", quantity: "1", condition: "MNH" }] },
+        { colnectId: qualifying, name: "For sale", country: "Poland", lists: [{ listName: "Sell", quantity: "1", condition: "MNH" }] },
+      ]),
+    });
+  });
+
+  it("names the stamp a Colnect-only row could be set on, and how many copies it would flag", async () => {
+    const page = await listColnectReportRows(f.userId, f.collectionId, SELL_LT);
+    const byKey = new Map(page.rows.map((row) => [row.key, row]));
+
+    const heldRow = byKey.get(held);
+    assert.equal(heldRow?.bucket, "only-colnect", "the predicate does not hold, so it is extra there");
+    assert.equal(heldRow?.stampId, null, "the local side of the comparison holds no row for it");
+    assert.equal(heldRow?.candidateStampId, heldStampId, "and yet the collection holds the stamp");
+    assert.equal(heldRow?.candidateCopies, 2, "both copies are in hand and unflagged");
+
+    const unknownRow = byKey.get(unknown);
+    assert.equal(unknownRow?.bucket, "only-colnect");
+    assert.equal(unknownRow?.candidateStampId, null, "nothing here carries that Colnect ID");
+    assert.equal(unknownRow?.candidateCopies, null);
+
+    assert.equal(byKey.has(qualifying), false, "an item in step is not a difference");
+  });
+
+  it("states no candidate copies for a want-backed list, where no flag is set on anything", async () => {
+    await setColnectListMapping(f.userId, f.collectionId, WISH_LT, {
+      source: "wants_open",
+      sourceOfTruth: "colnect",
+      enabled: true,
+    });
+    const wanted = await stamp("1104", "Wanted, no want row yet");
+    await importColnectListSnapshot(f.userId, f.collectionId, {
+      lt: WISH_LT,
+      fileName: "wish.csv",
+      text: exportFile([
+        { colnectId: "1104", name: "Wanted, no want row yet", country: "Poland", lists: [{ listName: "Wish", quantity: "1", condition: "MNH" }] },
+      ]),
+    });
+
+    const page = await listColnectReportRows(f.userId, f.collectionId, WISH_LT);
+    const row = page.rows.find((r) => r.key === "1104");
+    assert.equal(row?.bucket, "only-colnect");
+    assert.equal(row?.candidateStampId, wanted, "the stamp is here; the want is not");
+    assert.equal(row?.candidateCopies, null, "there is no flag to set — a want is created instead");
   });
 });

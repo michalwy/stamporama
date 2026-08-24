@@ -86,3 +86,94 @@ Tick **Include put away** to see both again, and undo either from the same menu.
 
 The header says which file the Colnect side came from and when Colnect made it, because a report
 read against a three-week-old export is a different thing from one read against this morning's.
+
+## Fixing your side
+
+Half of what a report finds is your own list being out of date, not Colnect's — a copy still flagged
+*for trade* after it went out, a want left open after you found the stamp. The row's **⋮** menu
+offers those corrections where they apply, so you fix them without leaving your place in a list of
+thousands.
+
+Which correction a row offers depends on the bucket and on what the list stands for:
+
+| Row | What you are offered |
+| --- | --- |
+| **Missing on Colnect** | *Stop offering these copies for trade* (or for sale, or take them out of the collection) — and on the Wish list, *Close the wants for this stamp* |
+| **Extra on Colnect**, on a list where **Colnect** is the source of truth | *Offer these copies for trade* — but only if you already hold a copy. Nothing here ever invents a copy out of a list entry |
+| **Grade**, on the Wish list | *Accept only MNH* — narrowing every open want for that stamp to the grade Colnect states |
+| **Quantity** | nothing. A quantity is a count of copies, and you change it by adding or removing copies on the inventory screen |
+| **Grade**, on a copy list | nothing. Your copy's condition is a judgement about the piece in your hand, and a line on a Colnect list is no evidence about it |
+
+**Every correction names what it will touch before it takes it.** You may hold four copies of a
+stamp, and *stop offering this for trade* meaning *four copies* without saying so is how a report
+stops being worth trusting. So the dialog lists them by copy number, with the grade and the place
+each one is filed, and only then offers the button.
+
+Only copies **still in hand** are touched — delivered, not disposed of — which is the same set the
+report counted in the first place. A copy you sold last month keeps whatever flags it had.
+
+A correction writes nothing else: no *done* mark, no accepted difference. The row simply leaves the
+report the next time you look at it, because the comparison is worked out fresh and the thing it was
+comparing has changed.
+
+## Adopting the wish list
+
+The Wish list is the one where Colnect is right and Stamporama has to catch up — years of clicking
+*I want this* over there against far fewer wants here. **Adopt into wants** in the header does that
+in bulk.
+
+It works a **pass at a time** — five hundred rows per press — because a first sweep is tens of
+thousands of rows and neither you nor your server wants that as one action. Each pass shows you what
+it would do before it does anything:
+
+- how many rows become wants;
+- how many **match no stamp here**, which on a list this size will be most of them;
+- how many are already on your want list.
+
+A row becomes a want only where it resolves to a stamp you already have in the catalogue: first by
+its [Colnect ID](collections.md#colnect-id), and failing that through the same matcher the
+[Assistant](assistant.md) uses, run **dry**. Nothing writes a Colnect ID onto a stamp — learning an
+ID is something you do deliberately, against a page you are looking at, and a bulk import is not
+that. A row matching nothing is reported and stays on the report; filling those IDs in is the
+Assistant's job.
+
+The new want takes the stamp and, where the row states a grade your
+[condition mapping](collections.md#colnect-condition-mapping) can read, that one condition. Where the row
+states no grade — or where two of your conditions both mean the same Colnect grade — the want accepts
+anything rather than a guess. Priority is the default.
+
+Run it again for the next pass; each one starts where the last stopped, and the bucket count falls
+as you go. A single row can also be adopted on its own, from its **⋮** menu.
+
+## Applying a difference on Colnect
+
+Everything above fixes *your* side. **Apply on Colnect** is the other direction, and it is a bigger
+thing: the [Assistant](assistant.md) ticks and unticks the list boxes on Colnect for you, in this
+browser, signed in as you.
+
+The button appears only when the Assistant is installed and connected to this collection. Pressing
+it shows what will be sent before anything is:
+
+- how many items go **onto** the list and how many come **off** it;
+- that it is **membership only** — never a quantity, never a grade, never a note;
+- roughly how long it will take.
+
+It is slow on purpose. Colnect starts refusing requests above about four a second, and comfortably
+tolerates one every other second, so that is the pace: a first Swap pass is an hour or so. Leave it
+running and carry on working — rows tick off the report as each one lands. If it is interrupted, or
+if Colnect asks for a slower pace, nothing is lost: the run remembers where it was and carries on
+from there.
+
+**Removals need a fresh export.** Adding something is safe whatever the file's age — you hold it
+right now, so the list should say so. Removing is different: the report only knows Colnect has an
+item *because the file said so*, and if that file is a fortnight old you may well have added the
+item over there on purpose since. So a run against an export more than a week old sends its
+additions and leaves its removals out, and says so. Load a fresh export and run it again.
+
+Two things this cannot do, and does not pretend to:
+
+- **Colnect does not document any of this.** The Assistant is doing exactly what your click on the
+  list checkbox does, but Colnect never promised those requests would keep working. If they change,
+  the run stops and tells you — it never guesses — and everything else here carries on unaffected.
+  You can always fix a row by hand from the report, which is what the whole screen did before.
+- It changes nothing about quantity or grade. Those stay yours.

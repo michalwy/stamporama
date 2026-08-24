@@ -50,7 +50,13 @@ import type {
   OrderImportResponse,
   OrderLookupRequest,
   OrderLookupResponse,
+  ColnectWriteRequest,
+  ColnectWriteResponse,
 } from "../core/messages";
+import {
+  COLNECT_LIST_WRITE_PATH,
+  colnectListWriteBody,
+} from "../platform/colnect/list-write";
 import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
@@ -592,6 +598,40 @@ if (!window.__stamporamaAssistantLoaded) {
       } catch (e) {
         sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
       }
+    }
+  );
+
+  // Putting one item on a Colnect list, or taking it off (#689, ADR-0042). **The one message this
+  // extension handles that changes something on somebody else's site.**
+  //
+  // It happens here rather than in the service worker because Colnect authenticates the call by
+  // session cookie alone — no CSRF token, no header — so it has to be same-origin, from a document
+  // the collector is signed in on. It is exactly the request clicking the row's own checkbox makes.
+  //
+  // The page **reports** and never decides: the status and `Retry-After` go back as they came, and
+  // what they mean is `platform/colnect/list-write.ts`'s answer, given in the worker that owns the
+  // pace and the worklist.
+  chrome.runtime.onMessage.addListener(
+    (msg: ColnectWriteRequest, _sender, sendResponse: (r: ColnectWriteResponse) => void) => {
+      if (msg?.type !== "colnect-write") return;
+      void fetch(COLNECT_LIST_WRITE_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: colnectListWriteBody({
+          colnectId: msg.colnectId,
+          lt: msg.lt,
+          direction: msg.direction,
+        }),
+        // The collector's own session, which is the only authority this ever runs under.
+        credentials: "include",
+      })
+        .then((res) =>
+          sendResponse({ ok: true, status: res.status, retryAfter: res.headers.get("retry-after") })
+        )
+        .catch((e: unknown) =>
+          sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
+        );
+      return true;
     }
   );
 

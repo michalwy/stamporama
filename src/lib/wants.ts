@@ -1291,6 +1291,81 @@ export async function createWantsForMissing(
   return writeGeneratedWants(collectionId, gap, ANY_ACCEPTANCE);
 }
 
+/**
+ * Write one want per stamp, each on its own terms, skipping every stamp that already carries an
+ * **open** want. Owner-authorized. Returns what it wrote and what it stepped over.
+ *
+ * The bulk write behind adopting a list of wishes kept somewhere else (#688). It is here rather than
+ * beside its caller because a want is written in one place in this app — the acceptance rows go in
+ * the same transaction as the wants, `createWant`'s own shape, so a failure halfway cannot leave a
+ * batch of wants quietly meaning "anything".
+ *
+ * **Already wanted is any open want, not one on matching terms.** The generator above compares terms
+ * because it is filling a *gap the collector defined*; this one is importing somebody else's list,
+ * and a second want for a stamp already being looked for says nothing the first does not.
+ *
+ * Entries are grouped by their terms, so a pass over hundreds of rows is a handful of statements
+ * rather than one transaction per row.
+ */
+export async function createWantsForStamps(
+  ownerId: string,
+  collectionId: string,
+  entries: readonly { stampId: string; conditionIds?: readonly string[] }[],
+  priority: WantPriority = "normal"
+): Promise<{ created: number; alreadyWanted: number }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const byStamp = new Map<string, readonly string[]>();
+  for (const entry of entries) {
+    if (!byStamp.has(entry.stampId)) byStamp.set(entry.stampId, entry.conditionIds ?? []);
+  }
+  const stampIds = [...byStamp.keys()];
+  if (stampIds.length === 0) return { created: 0, alreadyWanted: 0 };
+
+  const open = await prisma.want.findMany({
+    where: { collectionId, closedAt: null, stampId: { in: stampIds } },
+    select: { stampId: true },
+  });
+  const already = new Set(open.map((w) => w.stampId));
+  const targets = stampIds.filter((id) => !already.has(id));
+  if (targets.length === 0) return { created: 0, alreadyWanted: already.size };
+
+  // Grouped by terms: a pass over hundreds of rows carries at most a handful of distinct grades, so
+  // this is a few statements rather than one transaction per want.
+  const groups = new Map<string, string[]>();
+  for (const stampId of targets) {
+    const key = [...(byStamp.get(stampId) ?? [])].sort().join(",");
+    const group = groups.get(key);
+    if (group) group.push(stampId);
+    else groups.set(key, [stampId]);
+  }
+
+  let created = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const [key, ids] of groups) {
+      const conditionIds = key ? key.split(",") : [];
+      const wants = await tx.want.createManyAndReturn({
+        data: ids.map((stampId) => ({
+          collectionId,
+          stampId,
+          priority: WANT_PRIORITY_RANK[priority],
+        })),
+        select: { id: true },
+      });
+      created += wants.length;
+      // Wide-open terms are the absence of rows, so a run that states no grade writes the wants
+      // alone rather than a delete-and-insert against a table it just did not fill.
+      if (conditionIds.length) {
+        await tx.wantCondition.createMany({
+          data: wants.flatMap((want) =>
+            conditionIds.map((conditionId) => ({ wantId: want.id, conditionId }))
+          ),
+        });
+      }
+    }
+  });
+  return { created, alreadyWanted: already.size };
+}
+
 /** "Anything will do" — the terms the completeness card's own button has always written, and the
  *  bulk dialog's default. Every axis empty, which is what an empty set means everywhere here. */
 const ANY_ACCEPTANCE: WantAcceptanceInput = {

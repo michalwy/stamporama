@@ -5,7 +5,9 @@ browse. On a Colnect list page it tells you which stamps you already have, which
 writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
 bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** and your own
 **Colnect transactions** it tells you which of them you have already written down, and records the
-ones you have not.
+ones you have not. It is also the only part of Stamporama that ever **writes** to Colnect: it can
+apply a [list difference](colnect-lists.md#applying-a-difference-on-colnect) for you, one throttled
+change at a time.
 
 On **any page whatsoever**, selecting a catalog number and right-clicking answers the two questions
 you opened the listing with — [do I still want this, and have I already got
@@ -545,6 +547,27 @@ It keeps the buyer's **login** and the **name printed beside it**, and nothing e
 address printed on the same page is not read, so it cannot be stored. And it **writes nothing to
 Colnect**: the sale opens at **Ordered**, your own [fulfillment status](sales.md#fulfillment-status),
 and Colnect's own *Items sent* / *Items received* buttons are never pressed for you.
+
+## Applying a Colnect list difference
+
+This is the one thing the Assistant does that **changes something in your Colnect account**.
+
+The [Colnect lists](colnect-lists.md) screen works out exactly which items belong on a Colnect list
+and which do not. Pressing **Apply on Colnect** there hands that difference to the Assistant, which
+ticks and unticks the list boxes for you — in this browser, signed in as you, at a deliberately slow
+pace, and **membership only**: never a quantity, never a grade, never a note.
+
+Everything about it is described where you press it, including the confirmation that states the
+counts in both directions, why removals need a fresh export, and what happens when a run is
+interrupted. See [Applying a difference on Colnect](colnect-lists.md#applying-a-difference-on-colnect).
+
+Two things worth knowing here:
+
+- The button only appears when the Assistant is installed **and** connected to that collection —
+  applying is the extension's work, not the app's.
+- Colnect publishes no way to do this, so the Assistant is issuing exactly the request your own click
+  on the checkbox makes. If Colnect changes it, the run stops and tells you rather than guessing, and
+  nothing else in the Assistant or the app is affected.
 
 ## Keeping it up to date
 

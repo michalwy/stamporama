@@ -8,6 +8,7 @@ import {
   colnectListBucketLabel,
   colnectListSourceLabel,
   colnectListSourceShape,
+  colnectLocalFixesFor,
   colnectStandardList,
   isColnectListBucket,
   isColnectListDifferenceKind,
@@ -150,5 +151,64 @@ describe("colnectListSourceLabel", () => {
 
   it("prints a value it no longer offers rather than a blank", () => {
     assert.equal(colnectListSourceLabel("items_on_loan"), "items_on_loan");
+  });
+});
+
+describe("colnectLocalFixesFor (#687)", () => {
+  const swap = { source: "items_for_trade", sourceOfTruth: "local" } as const;
+  const sell = { source: "items_for_sale", sourceOfTruth: "colnect" } as const;
+  const wish = { source: "wants_open", sourceOfTruth: "colnect" } as const;
+
+  it("always offers clearing a Missing-on-Colnect row, whichever side wins", () => {
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...swap, bucket: "only-local", candidateCopies: null }),
+      ["clear"],
+      "saying our own flag is out of date needs nobody's permission"
+    );
+    assert.deepEqual(colnectLocalFixesFor({ ...wish, bucket: "only-local", candidateCopies: null }), [
+      "clear",
+    ]);
+  });
+
+  it("offers setting the flag only where Colnect wins and a copy exists to set it on", () => {
+    assert.deepEqual(colnectLocalFixesFor({ ...sell, bucket: "only-colnect", candidateCopies: 2 }), [
+      "set",
+    ]);
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...sell, bucket: "only-colnect", candidateCopies: 0 }),
+      [],
+      "nothing to flag — and a fix never conjures a copy out of a list entry"
+    );
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...swap, bucket: "only-colnect", candidateCopies: 3 }),
+      [],
+      "this side wins, so the correction belongs on Colnect"
+    );
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...wish, bucket: "only-colnect", candidateCopies: null }),
+      [],
+      "a want to create is #688's bulk adopt, not a fix"
+    );
+  });
+
+  it("admits a grade fix on a want and never on a copy", () => {
+    assert.deepEqual(colnectLocalFixesFor({ ...wish, bucket: "grade", candidateCopies: null }), [
+      "grade",
+    ]);
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...swap, bucket: "grade", candidateCopies: null }),
+      [],
+      "a copy's condition is a judgement about the piece, not about a list entry"
+    );
+  });
+
+  it("offers nothing for a quantity or an unlinked row", () => {
+    assert.deepEqual(colnectLocalFixesFor({ ...swap, bucket: "quantity", candidateCopies: 4 }), []);
+    assert.deepEqual(colnectLocalFixesFor({ ...wish, bucket: "quantity", candidateCopies: null }), []);
+    assert.deepEqual(
+      colnectLocalFixesFor({ ...swap, bucket: "not-comparable", candidateCopies: null }),
+      [],
+      "nothing was checked, so there is nothing to correct"
+    );
   });
 });

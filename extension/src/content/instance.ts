@@ -22,7 +22,19 @@ import {
   parseMatchHandoff,
   type MatchHandoffState,
 } from "../core/match-handoff";
+import {
+  APPLY_ELEMENT_ID,
+  APPLY_MESSAGE_ATTRIBUTE,
+  APPLY_REPORT_ATTRIBUTE,
+  APPLY_REQUEST_ATTRIBUTE,
+  APPLY_STATE_ATTRIBUTE,
+  parseApplyHandoff,
+  type ApplyHandoffState,
+} from "../core/colnect-apply-handoff";
 import type {
+  ColnectApplyProgressNotice,
+  ColnectApplyRequest,
+  ColnectApplyResponse,
   ListedNotice,
   ListedResponse,
   ListRequest,
@@ -36,9 +48,10 @@ import type {
 // dynamically as profiles are (`background/instance-scripts.ts`), because a self-hosted instance has
 // no origin the manifest could declare.
 //
-// It does one thing: carry a listing task from the bulk listing workspace (#322/#407) to the
-// background worker, and carry the outcome back onto the page. It never touches the instance's data,
-// never reads a token, and runs on no other origin.
+// It carries tasks from the instance's own screens to the background worker, and the outcomes back
+// onto the page: a listing task from the bulk listing workspace (#322/#407), a stamp to match
+// (#423), and — since #689 — a Colnect list difference to apply. It never touches the instance's
+// data, never reads a token, and runs on no other origin.
 
 declare global {
   interface Window {
@@ -92,6 +105,7 @@ function report(
  */
 let lastListingPayload: string | null = null;
 let lastMatchPayload: string | null = null;
+let lastApplyPayload: string | null = null;
 
 /** Read the element; hand a task the extension has not seen before to the worker. */
 async function pump(): Promise<void> {
@@ -197,6 +211,61 @@ async function pumpMatch(): Promise<void> {
   );
 }
 
+// ── The Colnect apply handoff (#689) ─────────────────────────────────────────
+// The same two motions on a fourth node, and its own `handled` set. What is different is the far
+// end: this is the one handoff that leads to a **write on somebody else's site** (ADR-0042), and one
+// that runs for an hour and a half — so the answer is not one report but a stream of them, arriving
+// on the notice below long after the request was answered.
+
+const appliesHandled = new Set<string>();
+
+function applyElement(): HTMLElement | null {
+  return document.getElementById(APPLY_ELEMENT_ID);
+}
+
+function reportApply(
+  requestId: string,
+  state: ApplyHandoffState,
+  message: string,
+  report?: unknown
+): void {
+  const el = applyElement();
+  if (!el) return; // the collector navigated on; the run carries on regardless
+  el.setAttribute(APPLY_REQUEST_ATTRIBUTE, requestId);
+  el.setAttribute(APPLY_STATE_ATTRIBUTE, state);
+  el.setAttribute(APPLY_MESSAGE_ATTRIBUTE, message);
+  if (report) el.setAttribute(APPLY_REPORT_ATTRIBUTE, JSON.stringify(report));
+}
+
+async function pumpApply(): Promise<void> {
+  const el = applyElement();
+  if (!el) return;
+  const raw = el.textContent;
+  if (raw === lastApplyPayload) return;
+  lastApplyPayload = raw;
+  const handoff = parseApplyHandoff(raw);
+  if (!handoff || appliesHandled.has(handoff.requestId)) return;
+  appliesHandled.add(handoff.requestId);
+
+  reportApply(handoff.requestId, "running", "Opening Colnect…");
+
+  let res: ColnectApplyResponse;
+  try {
+    res = (await chrome.runtime.sendMessage({
+      type: "colnect-apply",
+      task: handoff.task,
+      requestId: handoff.requestId,
+    } satisfies ColnectApplyRequest)) as ColnectApplyResponse;
+  } catch (e) {
+    // Reported and left alone, exactly as the two pumps above are: the answer lands on the node the
+    // request came in on, so an id forgotten on failure is picked straight back up by the mutation
+    // the failure itself caused. A press of the button mints a new id, which is what a retry is.
+    reportApply(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
+    return;
+  }
+  if (!res.ok) reportApply(handoff.requestId, "error", res.error);
+}
+
 /**
  * Whether this page is still following `requestId` — which is what decides who activates the offer
  * (#412).
@@ -263,8 +332,17 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
     chrome.runtime.getManifest().version
   );
 
+  // How a Colnect run is going (#689), arriving over the whole length of it — minutes to hours. It
+  // comes back onto the same node the worklist went out on, and is dropped where the screen has been
+  // replaced: the run is recorded on the instance as it goes, so nobody is depending on this.
+  chrome.runtime.onMessage.addListener((msg: ColnectApplyProgressNotice) => {
+    if (msg?.type !== "colnect-apply-progress") return;
+    reportApply(msg.requestId, msg.state, msg.message, msg.report);
+  });
+
   void pump();
   void pumpMatch();
+  void pumpApply();
 
   // The elements are written by a click inside a client-rendered screen, so they appear (and are
   // rewritten for the next offer) long after load. Watching the whole document is the cheap, obvious
@@ -285,6 +363,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
       scheduled = false;
       void pump();
       void pumpMatch();
+      void pumpApply();
     });
   }).observe(document.documentElement, {
     childList: true,

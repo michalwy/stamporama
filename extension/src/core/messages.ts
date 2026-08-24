@@ -9,6 +9,12 @@ import type { OrderSaleTarget } from "./order-marker";
 import type { OrderImportSummary } from "./order-dialog";
 import type { PlatformOrder } from "../platform/orders";
 import type { SearchAnswer } from "./search";
+import type {
+  ApplyDirection,
+  ApplyHandoffReport,
+  ApplyHandoffState,
+  ApplyTask,
+} from "./colnect-apply-handoff";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -242,6 +248,50 @@ export type OverwriteDateResponse =
   | { ok: true; label: string }
   | { ok: false; error: string };
 
+// instance content script (on the Colnect report screen) → background: "carry this list difference
+// out on Colnect" (#689). The **first message in this extension that leads to a write on somebody
+// else's site** — see ADR-0042.
+//
+// It goes through the worker for the reason every long job does: the page that asked may be closed
+// or navigated away from long before an hour-and-a-half run finishes, and the worklist has to
+// outlive it. The worker answers as soon as the run is under way; the progress comes back on
+// {@link ColnectApplyProgressNotice}, and what landed is marked done on the instance as it lands.
+export interface ColnectApplyRequest {
+  type: "colnect-apply";
+  task: ApplyTask;
+  /** The handoff this is, echoed back so the page can tell an answer from a leftover. */
+  requestId: string;
+}
+export type ColnectApplyResponse = { ok: true } | { ok: false; error: string };
+
+// background → instance content script: how the run is going (#689), carried back onto the node the
+// worklist came in on. Fire-and-forget: a run must never wait on a page that may be closed.
+export interface ColnectApplyProgressNotice {
+  type: "colnect-apply-progress";
+  requestId: string;
+  state: ApplyHandoffState;
+  message: string;
+  report: ApplyHandoffReport;
+}
+
+// background → content script on a **colnect.com** page: write one item's list membership (#689).
+//
+// It happens in the page rather than in the worker because the auth is Colnect's own session cookie
+// and nothing else — no CSRF token, no header — so the request has to be same-origin, from a
+// document the collector is signed in on. The worker owns the pace, the worklist and the reporting;
+// the page owns exactly one `fetch`.
+export interface ColnectWriteRequest {
+  type: "colnect-write";
+  colnectId: string;
+  lt: number;
+  direction: ApplyDirection;
+}
+export type ColnectWriteResponse =
+  /** The HTTP status, classified by the worker through `platform/colnect/list-write.ts` — the page
+   *  reports what happened and never decides what it means. */
+  | { ok: true; status: number; retryAfter: string | null }
+  | { ok: false; error: string };
+
 export type BackgroundRequest =
   | MatchRequest
   | ConfirmRequest
@@ -402,6 +452,7 @@ export type BackgroundMessage =
   | LotLookupRequest
   | OrderLookupRequest
   | OrderImportRequest
+  | ColnectApplyRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

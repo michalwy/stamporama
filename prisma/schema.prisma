@@ -1718,6 +1718,11 @@ model Stamp {
   @@index([subtypeId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
+  // *Which stamp is Colnect item 1234567* (#687/#688) — the join key read in the direction the list
+  // sync's fixes need it, a pass of hundreds of ids at a time. Non-unique on purpose: one Colnect id
+  // on two stamps is a mistake the matcher refuses to make (#250), not one to turn into a failed
+  // insert somewhere else.
+  @@index([collectionId, colnectId])
   @@map("stamp")
 }
 

@@ -44,6 +44,7 @@ import {
   runListingTask,
 } from "./listing";
 import { handleRegistrationClick } from "./registration";
+import { resumeColnectApply, runColnectApply } from "./colnect-apply";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
@@ -407,6 +408,16 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
     return true;
   }
 
+  // "Carry this list difference out on Colnect" (#689) — the one handoff that leads to a **write**
+  // on somebody else's site. It answers as soon as the run is under way: a first Swap pass is about
+  // an hour and a half, and nothing is going to hold a message channel open for that.
+  if (msg?.type === "colnect-apply") {
+    runColnectApply(msg.task, msg.requestId, sender.tab)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    return true;
+  }
+
   if (msg?.type === "list") {
     runListingTask(msg.task, msg.requestId, sender.tab)
       .then(sendResponse)
@@ -433,6 +444,12 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
     .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
   return true; // keep the message channel open for the async response
 });
+
+// A paced Colnect run outlives many lives of this worker (#689): an hour and a half of writes at one
+// every 1.6 seconds, across every unload the browser sees fit to do. Its place is written down, so
+// whoever starts next picks it up — which is what makes an interrupted run continue rather than
+// begin again on somebody else's server.
+void resumeColnectApply();
 
 // A navigation invalidates the previous count; clear it so a stale number never lingers on a page
 // we haven't (or can't) parse. The content script sets a fresh one when the new page settles.
