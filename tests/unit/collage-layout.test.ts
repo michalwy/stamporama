@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  collageGap,
   layOutCollage,
+  pairedCellGap,
+  pairedTrueScaledSizes,
   resolveCollageColumns,
   trueScaledSizes,
   trueSizeScales,
@@ -389,5 +392,84 @@ describe("trueScaledSizes", () => {
     ]);
     assert.deepEqual(sheet, { width: 2500, height: 2000 });
     assert.deepEqual(stamp, { width: 625, height: 500 });
+  });
+});
+
+// Paired cells (#694) --------------------------------------------------------
+
+const trueSize = (w: number, h: number, original?: CollageTileSize): CollageTileTrueSize => ({
+  stored: { width: w, height: h },
+  original: original ?? null,
+});
+
+describe("pairedTrueScaledSizes", () => {
+  it("measures a paired cell as its two scans laid side by side", () => {
+    const sizes = pairedTrueScaledSizes([
+      { main: trueSize(100, 140), pair: trueSize(90, 130) },
+      { main: trueSize(60, 80), pair: null },
+    ]);
+
+    // Width adds, height takes the taller — the cell is one tile from here on.
+    assert.deepEqual(sizes, [
+      { width: 190, height: 140 },
+      { width: 60, height: 80 },
+    ]);
+  });
+
+  it("normalises the true-size correction across both members of every pair", () => {
+    // The back was clamped to half its original by `FULL_MAX_EDGE`; nothing else was touched. The
+    // whole image is scaled against that worst case, so the untouched scans come down by half and
+    // the clamped one stays where it is — never interpolated back up.
+    const sizes = pairedTrueScaledSizes([
+      { main: trueSize(100, 100), pair: trueSize(100, 100, { width: 200, height: 200 }) },
+      { main: trueSize(100, 100), pair: null },
+    ]);
+
+    assert.deepEqual(sizes, [
+      { width: 150, height: 100 },
+      { width: 50, height: 50 },
+    ]);
+  });
+
+  it("leaves the sizes exactly as the unpaired path reads them when nothing is paired", () => {
+    const tiles = [trueSize(100, 140), trueSize(60, 80)];
+    assert.deepEqual(
+      pairedTrueScaledSizes(tiles.map((main) => ({ main, pair: null }))),
+      trueScaledSizes(tiles)
+    );
+  });
+
+  it("gives the auto grid a narrower row than the same scans unpaired (#514)", () => {
+    const grid = { gridMode: "auto" as const, rows: 6, columns: 6 };
+    const six = Array.from({ length: 6 }, () => trueSize(100, 100));
+
+    // Six square scans land three across, on a 3:2 canvas inside the landscape band. Pair each with
+    // a reverse and every cell is twice as wide, so three across would be a 3:1 strip — the solver
+    // answers 2, which is the whole point of scoring a cell rather than counting scans.
+    assert.equal(resolveCollageColumns(trueScaledSizes(six), grid), 3);
+    assert.equal(
+      resolveCollageColumns(
+        pairedTrueScaledSizes(six.map((main) => ({ main, pair: trueSize(100, 100) }))),
+        grid
+      ),
+      2
+    );
+  });
+});
+
+describe("collageGap and pairedCellGap", () => {
+  it("reports the gap the layout is drawn with", () => {
+    const sizes = [size(100, 140), size(100, 100)];
+    assert.equal(collageGap(sizes, 10), 10); // median of the two heights is the lower, 100
+    assert.equal(collageGap(sizes, 10), layOutCollage(sizes, style()).gap);
+    assert.equal(collageGap([], 10), 0);
+  });
+
+  it("spaces a cell's two scans by half the collage's own gap", () => {
+    // Half, so a pair reads as one stamp seen from both sides: at the full gap a cell would be
+    // indistinguishable from two neighbouring tiles.
+    assert.equal(pairedCellGap(10), 5);
+    assert.equal(pairedCellGap(0), 0);
+    assert.equal(pairedCellGap(9), 5);
   });
 });

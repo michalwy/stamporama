@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyCollagePairing,
   DEFAULT_PHOTO_SIDES,
   MAX_PHOTO_COUNT_LIMIT,
   normalizePhotoSides,
@@ -35,6 +36,7 @@ const FULL_CONFIG = {
 describe("normalizePhotoSides", () => {
   it("keeps a known side", () => {
     assert.equal(normalizePhotoSides("both"), "both");
+    assert.equal(normalizePhotoSides("paired"), "paired");
     assert.equal(normalizePhotoSides(" Back "), "back");
   });
 
@@ -42,6 +44,22 @@ describe("normalizePhotoSides", () => {
     assert.equal(normalizePhotoSides(null), DEFAULT_PHOTO_SIDES);
     assert.equal(normalizePhotoSides(""), DEFAULT_PHOTO_SIDES);
     assert.equal(normalizePhotoSides("sideways"), DEFAULT_PHOTO_SIDES);
+  });
+});
+
+describe("applyCollagePairing (#694)", () => {
+  it("upgrades a both-sides answer and downgrades a paired one", () => {
+    assert.equal(applyCollagePairing("both", true), "paired");
+    assert.equal(applyCollagePairing("paired", false), "both");
+    assert.equal(applyCollagePairing("paired", true), "paired");
+    assert.equal(applyCollagePairing("both", false), "both");
+  });
+
+  it("leaves a one-sided listing alone, whatever the template says", () => {
+    // The platform says which sides; the template only says how two of them are arranged, so a
+    // paired template has nothing to arrange here and must not quietly add the other side.
+    assert.equal(applyCollagePairing("front", true), "front");
+    assert.equal(applyCollagePairing("back", true), "back");
   });
 });
 

@@ -115,6 +115,30 @@ describe("offer photo configuration (#308)", () => {
     });
   });
 
+  it("upgrades a both-sides platform to paired when its template pairs the sides (#694)", async () => {
+    // The platform says which sides; its template says how the two are arranged.
+    await prisma.collageTemplate.update({ where: { id: templateId }, data: { pairSides: true } });
+    try {
+      const paired = await getOfferDetail(userId, await offerOn(configuredPlatformId));
+      assert.equal(paired?.photoConfig.photoSides, "paired");
+
+      // A one-sided platform has nothing to arrange, so the same template leaves it alone rather
+      // than quietly adding the other side.
+      await prisma.contact.update({
+        where: { id: configuredPlatformId },
+        data: { photoSides: "front" },
+      });
+      const front = await getOfferDetail(userId, await offerOn(configuredPlatformId));
+      assert.equal(front?.photoConfig.photoSides, "front");
+    } finally {
+      await prisma.collageTemplate.update({ where: { id: templateId }, data: { pairSides: false } });
+      await prisma.contact.update({
+        where: { id: configuredPlatformId },
+        data: { photoSides: "both" },
+      });
+    }
+  });
+
   it("reads the platform's limits live rather than from the offer", async () => {
     const offerId = await offerOn(configuredPlatformId);
     assert.deepEqual((await getOfferDetail(userId, offerId))?.platformPhotoLimits, {

@@ -228,6 +228,108 @@ describe("planOfferPhotos sides", () => {
   });
 });
 
+// Paired cells (#694) --------------------------------------------------------
+
+/** A group's cells as `item(front|back)`, so a paired cell and a single-scan one read apart. */
+const cells = (image: PlannedCollage) =>
+  image.tiles.map((t) => `${t.itemId}(${t.photoId}${t.pairedPhotoId ? `|${t.pairedPhotoId}` : ""})`);
+
+describe("planOfferPhotos paired cells", () => {
+  it("renders one image per group, each cell holding a copy's two scans", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")]), set("s2", 1, [copy("c"), copy("d")])],
+      photoSides: "paired",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:paired:a,b", "g1:paired:c,d"]);
+    assert.deepEqual(cells(collages(plan.images)[0]), ["a(a-f|a-b)", "b(b-f|b-b)"]);
+  });
+
+  it("keeps the image when a copy has only one scan, as a single-scan cell", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b", { back: false }), copy("c", { front: false })])],
+      photoSides: "paired",
+      collage: { collageRows: 3, collageColumns: 3 },
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(cells(collages(plan.images)[0]), ["a(a-f|a-b)", "b(b-f)", "c(c-b)"]);
+    // Nothing to report: a half-scanned copy is on the image, and its gap is the picture's own.
+    assert.deepEqual(skips(plan), []);
+  });
+
+  it("leaves out a copy with no scan at all, and names it", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b", { front: false, back: false })])],
+      photoSides: "paired",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:paired:a"]);
+    assert.deepEqual(skips(plan), ["g0:paired:b"]);
+  });
+
+  it("produces no image for a group where no copy has a scan, naming all of them", () => {
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a", { front: false, back: false }), copy("b", { front: false, back: false })]),
+        set("s2", 1, [copy("c"), copy("d")]),
+      ],
+      photoSides: "paired",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g1:paired:c,d"]);
+    assert.deepEqual(skips(plan), ["g0:paired:a,b"]);
+  });
+
+  it("costs one upload slot per group, where `both` costs two", () => {
+    const sets = [set("s1", 0, [copy("a"), copy("b")]), set("s2", 1, [copy("c"), copy("d")])];
+    const paired = planOfferPhotos({ sets, photoSides: "paired", collage, maxPhotos: 2 });
+    const both = planOfferPhotos({ sets, photoSides: "both", collage, maxPhotos: 2 });
+
+    assert.equal(paired.overLimitCount, 0);
+    assert.equal(paired.uploaded.length, 2);
+    // The same two groups as `both` fill the allowance with the first group's two sides alone.
+    assert.deepEqual(shape(both.uploaded), ["g0:front:a,b", "g0:back:a,b"]);
+  });
+
+  it("spends the singles budget (#521) on a paired group's one image, not two", () => {
+    const sets = [
+      set("s1", 0, [copy("a")]),
+      set("s2", 1, [copy("b")]),
+      set("s3", 2, [copy("c"), copy("d")]),
+    ];
+    // Three slots: the multi-copy set costs one paired image, leaving two for the singles.
+    const plan = planOfferPhotos({
+      sets,
+      photoSides: "paired",
+      collage,
+      maxPhotos: 3,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:paired:a", "g1:paired:b", "g2:paired:c,d"]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("takes its own token, so a paired image and a front one never collide", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")])],
+      photoSides: "paired",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.equal(plan.images[0].token, collageToken("paired", ["a", "b"]));
+    assert.notEqual(plan.images[0].token, collageToken("front", ["a", "b"]));
+  });
+});
+
 // Skipped sides (#314) -------------------------------------------------------
 
 describe("planOfferPhotos skipped sides", () => {

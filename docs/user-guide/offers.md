@@ -435,7 +435,9 @@ edge, file size). Those are the platform's limits, not the offer's — change th
 [platform contact](contacts.md#offer-photos). Below that sit the settings that belong to this
 listing:
 
-- **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
+- **Sides to photograph** — *Front only*, *Back only*, *Front and back*, or *Front and back,
+  paired*. The last two photograph the same scans and arrange them differently; see
+  [paired front and back](#paired-front-and-back).
 - **Single photos while the platform's limit allows** — whether single-stamp sets are photographed
   one per image while the listing has slots for them, with only the leftovers collaged, or always
   collaged. On by default, seeded from the platform. Multi-copy sets are one collage each either
@@ -513,6 +515,8 @@ What gets made follows the offer, not a choice you make here:
   scan. One missing back means no back image for that group, rather than one with a hole in it. The
   card says so out loud, naming the copies to scan — a set of eight quietly losing its back image
   over one missing reverse is easy to miss.
+- With *Front and back, paired*, each group gives **one** image instead of two — see
+  [paired front and back](#paired-front-and-back).
 - Everything the plan lists is generated, including anything you
   [attached by hand](#attaching-your-own-images) and anything past the platform's photo limit — see
   [holding a photo back](#holding-a-photo-back) for what that limit does instead.
@@ -525,12 +529,45 @@ the background every image is drawn with.
 The images are **stored**, not made again on demand: what you download tomorrow is the same file you
 uploaded to the platform today.
 
+### Paired front and back
+
+*Front and back, paired* shows every stamp from both sides **in one cell**: front and back beside
+each other, under one label, in a single collage — instead of a page of fronts followed by a
+separate page of backs.
+
+What it changes:
+
+- **One image per group, not two.** A group that costs two of the platform's photo slots under
+  *Front and back* costs one here, so a listing with a tight photo limit fits more stamps.
+- **The grid is untouched.** A 3 × 3 collage still holds nine stamps; each cell is simply twice as
+  wide. On the automatic grid the arrangement follows from that — the same six stamps that go three
+  across unpaired go two across when each cell carries a reverse.
+- **One label per stamp**, written under the pair rather than under each scan, so a buyer asking for
+  "the one marked A234" is pointed at one stamp and both its sides.
+- The two scans of a cell sit closer together than two neighbouring stamps do — half the gap you set
+  on the template — so a pair reads as one stamp seen from both sides.
+
+Missing scans work differently here, and deliberately. The other modes are all-or-nothing: one
+unscanned reverse costs the whole group its back image. A paired collage instead shows **whatever
+each stamp has** — a copy scanned on one side only takes a narrower, single-scan cell in the same
+image, and nothing is lost. The gap is visible in the picture itself, which is what the
+all-or-nothing rule exists to guarantee elsewhere.
+
+What is still reported is a copy with **no scan at all**: it takes no cell, so nothing in the image
+says it was ever meant to be there. The Photos card names those copies, exactly as it names a side
+it could not produce.
+
+The mode can be set on the listing directly, or come from a [collage
+template](collections.md#collage-templates) whose **Front and back in one cell** is ticked — picking
+such a template, here or as a platform's default, turns a *Front and back* listing into a paired one
+and leaves a one-sided listing alone.
+
 ### Single photos and the limit
 
 How many of the offer's single-stamp sets get a photo to themselves follows from the **platform's
 photo limit**, and the arithmetic is the whole plan's, not the stamps' alone: the collages your
 multi-copy sets make and every [attachment](#attaching-your-own-images) you have added take their
-slots first, and *Front and back* counts each side. Whatever is left is spent on single photos, and
+slots first, and *Front and back* counts each side (*paired* counts one per group). Whatever is left is spent on single photos, and
 the stamps that do not fit are collaged.
 
 The tail eats a single slot at a time as it has to. Ten stamps on a platform taking five photos, with

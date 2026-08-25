@@ -432,6 +432,14 @@ model CollageTemplate {
   // at one size across a collage, a lone scan and a wide detail crop. Fractional, because the usable
   // band is a couple of percent wide and whole numbers cannot land inside it. 0 = no strip.
   labelPercent Float @default(0)
+  // Whether one cell holds a stamp's **two scans side by side** rather than a single scan (#694).
+  // The template is the reusable *look*, so it is where the arrangement is written; what an offer
+  // does with it is a fourth value of `Offer.photoSides`, because pairing is only meaningful when
+  // both sides are being photographed. Seeding therefore *upgrades* rather than overrides: a
+  // platform on `both` starts its offers on `paired`, and one on `front` or `back` is untouched —
+  // the platform says which sides, the template says how the two are arranged. Defaults to false,
+  // which is what every template written before this renders as.
+  pairSides    Boolean @default(false)
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
@@ -2751,7 +2759,11 @@ model Offer {
   // uploaded image must keep getting the same label after a regeneration (#315). Editing any of
   // these marks the generated photo plan out of date (#311).
   //
-  // Scan sides to include: `front` | `back` | `both`.
+  // Scan sides to include: `front` | `back` | `both` | `paired`. The last two both photograph the
+  // whole stamp and differ only in the arrangement (#694): `both` renders a collage of fronts and a
+  // separate one of backs, `paired` renders one collage whose every cell holds a copy's front and
+  // back side by side. Seeded from the platform's own sides, upgraded to `paired` when the collage
+  // template it seeds from says so.
   photoSides   String  @default("front")
   // Whether a single-copy set is photographed **on its own while the platform's limit has room**
   // (#521). A collage exists to fit more stamps than the listing has slots for, so it is a
@@ -3023,7 +3035,8 @@ model OfferPhotoEntry {
   /** What the image was produced from: `collage` (a group of set copies) today; `copy_photo` and
    * `upload` arrive with manual attachments (#313). */
   source  String @default("collage")
-  /** `front` | `back` for a collage; null for an attachment, which has no side. */
+  /** `front` | `back` for a collage — or `paired` (#694), the one image whose cells each hold a
+   * copy's two scans; null for an attachment, which has no side. */
   side    String?
   /** Links the front/back pair rendered from the same copies; null when the image has no pair. */
   pairKey String?
@@ -4189,7 +4202,8 @@ model Contact {
   // it; validated against the modules the app knows (`src/lib/platform-modules.ts`).
   platformModule   String?
   // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
-  // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both`) and
+  // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both` |
+  // `paired`, #694 — the default collage template's pairing upgrades `both` to `paired`) and
   // the two per-tile label templates (#312). Changing any of them here never touches an offer
   // already prepared — a buyer referring to a label on an uploaded image must keep getting that
   // label. A tile's strip carries two independent annotations, drawn flush left and flush right;

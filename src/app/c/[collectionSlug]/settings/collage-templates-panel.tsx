@@ -22,6 +22,7 @@ import {
   COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
   DEFAULT_COLLAGE_GRID_MODE,
+  DEFAULT_COLLAGE_PAIR_SIDES,
   collageAxisLabels,
   normalizeCollageGridMode,
   MIN_COLLAGE_AXIS,
@@ -164,6 +165,37 @@ function CollageTemplateForm({
           {gridMode === "auto"
             ? "The numbers below are limits only — each collage is arranged from however many stamps it holds, so one template suits offers of any size."
             : "Every row is filled to the number of columns below, and the last row is as short as it needs to be."}
+        </span>
+      </div>
+
+      {/* What a *cell* holds (#694) — the grid above is untouched by it, each cell is simply wider.
+          It is the reusable half of the paired mode: the template is the look a collector settles
+          on, while which sides get photographed stays the listing's own answer. A paired template
+          therefore upgrades an offer already photographing both sides and has nothing to arrange on
+          a front-only one. */}
+      <div>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4375rem",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+            cursor: isPending ? "default" : "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            name="pairSides"
+            defaultChecked={template?.pairSides ?? DEFAULT_COLLAGE_PAIR_SIDES}
+            disabled={isPending}
+            style={{ cursor: isPending ? "default" : "pointer" }}
+          />
+          Front and back in one cell
+        </label>
+        <span style={HINT_STYLE}>
+          Each stamp is shown from both sides, side by side under one label, instead of a page of
+          fronts and a separate page of backs. Listings photographing only one side are unaffected.
         </span>
       </div>
 
@@ -379,7 +411,7 @@ export function CollageTemplatesPanel({
               {normalizeCollageGridMode(template.gridMode) === "auto"
                 ? `auto, up to ${template.rows} × ${template.columns}`
                 : `${template.rows} × ${template.columns}`}{" "}
-              · gap {template.gapPercent}% ·{" "}
+              {template.pairSides ? " · front+back cells" : ""} · gap {template.gapPercent}% ·{" "}
               {template.labelPercent > 0 ? `strip ${template.labelPercent}% of image` : "no label strip"}
             </span>
 

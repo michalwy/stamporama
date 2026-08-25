@@ -1,10 +1,13 @@
 import sharp from "sharp";
 import {
+  collageGap,
   layOutCollage,
+  pairedCellGap,
   trueSizeScales,
   type CollageLayout,
   type CollageLayoutStyle,
   type CollageTileSize,
+  type CollageTileTrueSize,
 } from "../collage-layout";
 import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
 
@@ -48,6 +51,19 @@ import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
  * Each tile's two annotations (#312) are drawn on the strip the layout reserves below it, from the
  * text the caller resolved against that copy. Text layout lives in `src/lib/collage-label.ts`; here it is one
  * more composite, applied before the output limits so labels scale with the stamps.
+ *
+ * Paired cells
+ * ------------
+ * In paired mode (#694) a cell holds a copy's two scans side by side. They are joined into **one
+ * tile** before the layout runs, which is what keeps the geometry a single mechanism: `collage-layout`
+ * never learns about pairs, a paired cell is simply a wider tile, the grid and the `auto` solver
+ * score it as one, and the label strip spans the pair for free because it is as wide as its tile.
+ *
+ * The one thing that cannot be done per cell is the true-size correction: `trueSizeScales`
+ * normalises against the worst-shrunk scan on the image, so it is solved over every scan — both
+ * members of every pair — and only then are the pairs joined. The two scans are separated by half
+ * the collage's own gap and centred against each other vertically, so a cell reads as one stamp
+ * seen from both sides rather than as two stamps that happen to be close.
  */
 
 /** The encoded output format for every collage. */
@@ -62,9 +78,21 @@ export const COLLAGE_QUALITY_MIN = 40;
 const MIN_SIZE_SCALE = 0.2;
 const MAX_SHRINK_ROUNDS = 4;
 
+/** One scan's bytes and the size it was uploaded at — a tile, or the reverse sharing its cell. */
+export interface CollageScanSource {
+  buffer: Buffer;
+  /** The dimensions this scan was uploaded at, before `FULL_MAX_EDGE` clamped the bytes. Absent
+   * reads as "never downscaled". */
+  originalSize?: CollageTileSize | null;
+}
+
 /** One tile's source bytes. `sharp` decodes and EXIF-rotates it before anything is measured. */
 export interface CollageTileSource {
   buffer: Buffer;
+  /** The reverse scan drawn beside `buffer` in the same cell, in paired mode (#694). Absent
+   * everywhere else — including for a paired copy that has only one of its two scans, which is a
+   * single-scan tile like any other. */
+  pair?: CollageScanSource | null;
   /** The dimensions this scan was uploaded at, before `FULL_MAX_EDGE` clamped the bytes above.
    * Absent — or absent on the photo row, for anything uploaded before they were recorded — reads
    * as "never downscaled", which is what the renderer assumed of everything until now. */
@@ -123,8 +151,8 @@ interface DecodedTile {
   channels: 1 | 2 | 3 | 4;
 }
 
-async function decodeTile(source: CollageTileSource): Promise<DecodedTile> {
-  const { data, info } = await sharp(source.buffer, { failOn: "error" })
+async function decodeTile(buffer: Buffer): Promise<DecodedTile> {
+  const { data, info } = await sharp(buffer, { failOn: "error" })
     .rotate()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -144,6 +172,44 @@ async function rescaleTile(tile: DecodedTile, scale: number): Promise<DecodedTil
     raw: { width: tile.width, height: tile.height, channels: tile.channels },
   })
     .resize(width, height, { fit: "fill" })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height, channels: info.channels };
+}
+
+/**
+ * Joins a cell's two scans into one tile (#694): front, a gap, back, each centred against the taller
+ * of the two, on the collage's own background so the seam is invisible.
+ *
+ * The result is an ordinary decoded tile, which is the point — from here on nothing downstream can
+ * tell a paired cell from a single scan, so the layout, the label strip and the output limits are
+ * the same single mechanism they were.
+ */
+async function joinPair(
+  main: DecodedTile,
+  pair: DecodedTile,
+  gap: number,
+  background: string
+): Promise<DecodedTile> {
+  const width = main.width + gap + pair.width;
+  const height = Math.max(main.height, pair.height);
+  const { data, info } = await sharp({
+    create: { width, height, channels: 3, background },
+  })
+    .composite([
+      {
+        input: main.data,
+        raw: { width: main.width, height: main.height, channels: main.channels },
+        left: 0,
+        top: Math.round((height - main.height) / 2),
+      },
+      {
+        input: pair.data,
+        raw: { width: pair.width, height: pair.height, channels: pair.channels },
+        left: main.width + gap,
+        top: Math.round((height - pair.height) / 2),
+      },
+    ])
     .raw()
     .toBuffer({ resolveWithObject: true });
   return { data, width: info.width, height: info.height, channels: info.channels };
@@ -201,15 +267,44 @@ export async function renderCollage(
     throw new EmptyCollageError("A collage needs at least one tile.");
   }
 
-  const decoded = await Promise.all(sources.map(decodeTile));
-  const tiles = await Promise.all(
+  // Every scan on the image, in one flat list: a paired cell's two scans (#694) sit next to each
+  // other, because the true-size correction is normalised across the whole image and cannot be
+  // solved a cell at a time.
+  const scans: { source: CollageScanSource; cell: number }[] = [];
+  sources.forEach((source, cell) => {
+    scans.push({ source, cell });
+    if (source.pair) scans.push({ source: source.pair, cell });
+  });
+
+  const decoded = await Promise.all(scans.map((scan) => decodeTile(scan.source.buffer)));
+  const scaled = await Promise.all(
     trueSizeScales(
-      decoded.map((tile, index) => ({
+      decoded.map<CollageTileTrueSize>((tile, index) => ({
         stored: { width: tile.width, height: tile.height },
-        original: sources[index].originalSize ?? null,
+        original: scans[index].source.originalSize ?? null,
       }))
     ).map((scale, index) => rescaleTile(decoded[index], scale))
   );
+
+  // The gap the pairs are spaced by is the collage's own, asked for before they are joined. Safe to
+  // ask this early: it is taken of tile *heights*, and joining a cell changes only its width.
+  const cells: DecodedTile[][] = sources.map(() => []);
+  scaled.forEach((tile, index) => cells[scans[index].cell].push(tile));
+  const gap = collageGap(
+    cells.map((cell) => ({
+      width: 0,
+      height: cell.reduce((tallest, tile) => Math.max(tallest, tile.height), 0),
+    })),
+    style.gapPercent
+  );
+  const tiles = await Promise.all(
+    cells.map((cell) =>
+      cell.length > 1
+        ? joinPair(cell[0], cell[1], pairedCellGap(gap), style.background)
+        : cell[0]
+    )
+  );
+
   const layout = layOutCollage(tiles, style);
   const canvas = await compositeCanvas(
     tiles,

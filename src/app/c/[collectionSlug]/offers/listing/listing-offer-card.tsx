@@ -17,6 +17,7 @@ import { normalizeDescriptionFormat } from "@/lib/description-format";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
 import type { ListingCardBlocker } from "@/lib/offer-photo-readiness";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
+import { PLAN_IMAGE_SIDE_LABELS } from "@/lib/offer-photo-plan";
 import { useOfferDetail, useOfferPhotoPlan, useInvalidateOffers } from "../use-offers-query";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import type { AssistantHandoff } from "../assistant-handoff";
@@ -135,7 +136,10 @@ function photoDownloadUrl(collectionId: string, photoId: string, fileName: strin
 
 /** What the image is, in one line — the same wording the offer's Photos card uses. */
 function imageTitle(image: OfferPhotoImage): string {
-  const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
+  const side =
+    image.side && image.side in PLAN_IMAGE_SIDE_LABELS
+      ? PLAN_IMAGE_SIDE_LABELS[image.side as keyof typeof PLAN_IMAGE_SIDE_LABELS]
+      : null;
   const what = image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", ");
   return [image.fileName.replace(/\.[^.]+$/, ""), side, what || "Attachment"]
     .filter(Boolean)

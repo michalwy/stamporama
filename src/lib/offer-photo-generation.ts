@@ -18,8 +18,9 @@ import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import {
+  pairedTrueScaledSizes,
   resolveCollageColumns,
-  trueScaledSizes,
+  type CollagePlannedTileSize,
   type CollageTileTrueSize,
 } from "./collage-layout";
 import { normalizeCollageGridMode } from "./collage-template-rules";
@@ -30,6 +31,7 @@ import {
   type PlanAttachment,
   type PlannedAttachment,
   type PlannedCollage,
+  type PlanImageSide,
 } from "./offer-photo-plan";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
 import { renderTitleTemplate } from "./offer-title-template";
@@ -135,7 +137,9 @@ export interface OfferPhotoImage {
   /** `collage` for a group of set copies; `copy_photo` / `upload` / `manual_collage` for a manual
    * attachment (#313, #331). */
   source: string;
-  side: "front" | "back" | null;
+  /** `front` / `back`, or `paired` for the one image whose cells hold both (#694); null for an
+   * attachment. */
+  side: PlanImageSide | null;
   /** Links the front/back pair rendered from the same copies. */
   pairKey: string | null;
   setIds: string[];
@@ -182,9 +186,13 @@ export interface OfferPhotoExcludedSet {
   reason: OfferPhotoExcludedReason;
 }
 
-/** A side the current plan cannot produce, named so it can be fixed (#314). */
+/**
+ * What the current plan could not draw, named so it can be fixed (#314). For `front` / `back` the
+ * whole side was lost to the missing scans; for `paired` (#694) the named copies have no scan at all
+ * and so appear in no cell, and the image itself is lost only when every copy is named.
+ */
 export interface OfferPhotoSkippedSide {
-  side: "front" | "back";
+  side: PlanImageSide;
   setLabels: string[];
   /** How many copies are in the group. */
   copyCount: number;
@@ -209,7 +217,7 @@ export interface OfferPhotoPlannedImage {
   /** `collage` for a planned group; `copy_photo` / `upload` / `manual_collage` for a manual
    * attachment (#313, #331). */
   source: "collage" | AttachmentSource;
-  side: "front" | "back" | null;
+  side: PlanImageSide | null;
   /** Set for an attachment: what to drag, rename or remove. Null for a generated group. */
   attachmentId: string | null;
   /** The collector's caption for an attachment; null for a generated group. */
@@ -838,7 +846,7 @@ export async function getOfferPhotoPlanState(
     sortOrder: e.sortOrder,
     token: e.token,
     source: e.source,
-    side: e.side === "front" || e.side === "back" ? e.side : null,
+    side: e.side === "front" || e.side === "back" || e.side === "paired" ? e.side : null,
     pairKey: e.pairKey,
     setIds: e.setIds,
     itemIds: e.itemIds,
@@ -1461,7 +1469,7 @@ interface RenderedImage {
   /** `collage` for a planned group; `copy_photo` / `upload` / `manual_collage` for a manual
    * attachment (#313, #331). */
   source: "collage" | AttachmentSource;
-  side: "front" | "back" | null;
+  side: PlanImageSide | null;
   pairKey: string | null;
   setIds: string[];
   itemIds: string[];
@@ -1473,8 +1481,22 @@ interface RenderedImage {
 async function tileSource(
   photoId: string,
   labels: TileLabelTexts | null,
-  inputs: GenerationInputs
+  inputs: GenerationInputs,
+  /** The reverse sharing this cell in paired mode (#694); null for every other tile. */
+  pairedPhotoId?: string | null
 ): Promise<CollageTileSource> {
+  return {
+    ...(await scanSource(photoId, inputs)),
+    labels,
+    pair: pairedPhotoId ? await scanSource(pairedPhotoId, inputs) : null,
+  };
+}
+
+/** One scan's bytes and the size it was uploaded at — a tile's own, or its cell-mate's (#694). */
+async function scanSource(
+  photoId: string,
+  inputs: GenerationInputs
+): Promise<{ buffer: Buffer; originalSize: { width: number; height: number } | null }> {
   const source = inputs.sourceById.get(photoId);
   if (!source) {
     // The plan was built from the same read, so a missing source is a bug, not a race.
@@ -1484,7 +1506,6 @@ async function tileSource(
     // `work` (#591): a tile's bytes are decoded and composed here, and the same sources are read
     // again on every regeneration while the collector tunes the collage.
     buffer: await readFullBytes(source, "work"),
-    labels,
     // Null on anything uploaded before the originals were recorded; the renderer reads that as
     // "never downscaled", which is what it assumed of every scan until then.
     originalSize:
@@ -1572,9 +1593,12 @@ async function renderTiles(
  * decide the shape. A tile whose row is missing its dimensions comes back `0 × 0`, which the
  * resolver reads as "no usable sizes" and answers on the count alone, exactly as #413 did.
  */
-function plannedTileSizes(image: PlannedCollage, inputs: GenerationInputs): CollageTileTrueSize[] {
-  return image.tiles.map((tile) => {
-    const source = inputs.sourceById.get(tile.photoId);
+function plannedTileSizes(
+  image: PlannedCollage,
+  inputs: GenerationInputs
+): CollagePlannedTileSize[] {
+  const sizeOf = (photoId: string): CollageTileTrueSize => {
+    const source = inputs.sourceById.get(photoId);
     return {
       stored: { width: source?.width ?? 0, height: source?.height ?? 0 },
       original:
@@ -1582,10 +1606,17 @@ function plannedTileSizes(image: PlannedCollage, inputs: GenerationInputs): Coll
           ? { width: source.originalWidth, height: source.originalHeight }
           : null,
     };
-  });
+  };
+  return image.tiles.map((tile) => ({
+    main: sizeOf(tile.photoId),
+    // A paired cell (#694) is scored as the one wide tile it composites to, so `auto` fits three
+    // pairs across a row where it would have fitted six single scans.
+    pair: tile.pairedPhotoId ? sizeOf(tile.pairedPhotoId) : null,
+  }));
 }
 
-/** A planned collage group: every tile is a copy's scan, annotated from that copy's own data. */
+/** A planned collage group: every tile is a copy's scan — or, in paired mode (#694), the copy's two
+ * scans joined into one cell — annotated from that copy's own data. */
 async function renderPlannedCollage(
   image: PlannedCollage,
   index: number,
@@ -1593,7 +1624,14 @@ async function renderPlannedCollage(
 ): Promise<RenderedImage> {
   const sources: CollageTileSource[] = [];
   for (const tile of image.tiles) {
-    sources.push(await tileSource(tile.photoId, inputs.tileLabels.get(tile.itemId) ?? null, inputs));
+    sources.push(
+      await tileSource(
+        tile.photoId,
+        inputs.tileLabels.get(tile.itemId) ?? null,
+        inputs,
+        tile.pairedPhotoId
+      )
+    );
   }
   return {
     // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`,
@@ -1601,7 +1639,7 @@ async function renderPlannedCollage(
     // read off the photo rows, so the grid is chosen before any scan is decoded.
     ...(await renderTiles(
       sources,
-      resolveCollageColumns(trueScaledSizes(plannedTileSizes(image, inputs)), {
+      resolveCollageColumns(pairedTrueScaledSizes(plannedTileSizes(image, inputs)), {
         gridMode: inputs.collage!.collageGridMode,
         rows: inputs.collage!.collageRows,
         columns: inputs.collage!.collageColumns,

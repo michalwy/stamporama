@@ -561,6 +561,7 @@ Offer photos put several stamps on one image. How many fit sensibly is a propert
 A template holds:
 
 - **Grid** — how the two numbers below are read. **Fixed grid** fills every row to the number of columns you typed and leaves the last row as short as it needs to be. **Automatic** treats them as limits only and arranges each collage from however many stamps it actually holds: under a 3 × 3 template, four stamps come out 2 × 2 and five come out 3 + 2, instead of a full row with one stamp trailing under it. Pick automatic when your offers vary in size, which is most of them — it is what saves editing the template between listings. Templates you made before this existed are on the fixed grid.
+- **Front and back in one cell** — whether each cell holds a stamp's *two* scans side by side, under one label, instead of a single scan. Off by default. It changes what a cell holds, never the grid: a 3 × 3 template still fits nine stamps to an image, each one twice as wide. See [paired front and back](offers.md#paired-front-and-back) for what it does to a listing.
 - **Rows** and **Columns** (**Max rows** / **Max columns** on the automatic grid) — the collage's capacity. Their product is how many stamps go on one image in either grid.
 - **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.
 - **Label strip (% of image)** — the height of the strip drawn below each stamp for its labels, and with it the size of the label text. Takes tenths (`1.5`, or `1,5`), because the difference between a readable caption and one shouting over the stamps is well under a whole percent; **1–2%** is the usual range. Set it to **0** for no strip.
@@ -584,6 +585,7 @@ Five things are worth knowing:
   stamp.
 - **Rows × columns is a maximum, not a frame.** A set of four copies under a 5 × 4 template produces a one-row image sized to its contents, not a padded 5 × 4 canvas.
 - **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
+- **Pairing only refines a listing that already photographs both sides.** The template says how the two scans are arranged; the offer (and the platform it was created on) says which sides are photographed at all. A paired template turns a listing set to *Front and back* into *Front and back, paired* and leaves a *Front only* or *Back only* one exactly as it was — it never quietly adds the other side.
 
 A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the [platform itself](contacts.md#offer-photos).
 

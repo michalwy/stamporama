@@ -42,12 +42,28 @@ describe("parseCollageTemplateInput", () => {
     assert.deepEqual(result.value, {
       name: "Small definitives",
       gridMode: "fixed",
+      pairSides: false,
       rows: 5,
       columns: 4,
       gapPercent: 5,
       background: "#ffffff",
       labelPercent: 1.5,
     });
+  });
+
+  it("reads the pairing flag off the checkbox, absent being unticked (#694)", () => {
+    const on = parseCollageTemplateInput({ ...VALID, pairSides: "on" });
+    assert.ok(on.ok);
+    assert.equal(on.value.pairSides, true);
+
+    // Browsers post nothing at all for an unticked box, so the absence is the answer.
+    const off = parseCollageTemplateInput({ ...VALID, pairSides: "" });
+    assert.ok(off.ok);
+    assert.equal(off.value.pairSides, false);
+    // Not sent at all — the shape the create form posts when the box was never touched.
+    const absent = parseCollageTemplateInput(VALID);
+    assert.ok(absent.ok);
+    assert.equal(absent.value.pairSides, false);
   });
 
   it("reads the grid mode, defaulting to fixed (#413)", () => {

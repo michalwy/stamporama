@@ -62,6 +62,22 @@
 //   so a group yields two images — or one, when the other side is incomplete. Nothing may assume a
 //   group has two members.
 //
+// Paired cells (#694)
+// -------------------
+// `photoSides: "paired"` photographs exactly the scans `both` does and arranges them differently: a
+// group yields **one** image whose every cell holds a copy's front and back side by side, instead of
+// a collage of fronts and a separate one of backs. The grid is untouched — a cell is simply wider —
+// so capacity, grouping and the platform's limits all read as they always did, and a paired group
+// costs one upload slot rather than two.
+//
+// The all-or-nothing rule does **not** apply here, and deliberately: a cell pairs whatever its copy
+// has. Both scans give a paired cell, one scan gives a narrower single-scan cell in the same collage,
+// and the image is never lost over an unscanned reverse — the gap is visible in the picture itself,
+// which is the thing the rule exists to guarantee for the other modes. What *is* reported is a copy
+// with **no scan at all**: that one contributes no cell and would otherwise vanish from the listing
+// unremarked (#314). A group where no copy has a scan produces no image, and the report names all of
+// them.
+//
 // Ordering, and what actually gets uploaded
 // -----------------------------------------
 // - Group order follows the explicit set order (#306); tile order inside a group follows copy order.
@@ -164,12 +180,29 @@ export interface OfferPhotoPlanInput {
 
 // ── Output ───────────────────────────────────────────────────────────────────
 
+/** A scan side a copy can have. */
 export type PlanSide = "front" | "back";
+
+/** What one group renders as: one of the two sides on its own, or `paired` — both of them, in one
+ * image whose cells each hold a copy's front and back side by side (#694). */
+export type PlanImageSide = PlanSide | "paired";
+
+/** What an image's side is called on screen. `paired` names both, because the image *is* both: one
+ * cell per stamp, holding its front and its back (#694). */
+export const PLAN_IMAGE_SIDE_LABELS: Record<PlanImageSide, string> = {
+  front: "Front",
+  back: "Back",
+  paired: "Front + back",
+};
 
 /** One tile of a collage: the photo to composite and the copy whose data annotates it (#312). */
 export interface PlannedTile {
   itemId: string;
   photoId: string;
+  /** The second scan drawn beside `photoId` in the same cell, in paired mode (#694). Null
+   * everywhere else — including for a paired copy that has only one of its two scans, whose cell is
+   * a single-scan one like any other. When it is set, `photoId` is the front and this is the back. */
+  pairedPhotoId?: string | null;
 }
 
 /** What every planned image carries, whatever produced it. */
@@ -186,7 +219,7 @@ interface PlannedImageBase {
 /** A collage to render (#310) — including the 1×1 case. */
 export interface PlannedCollage extends PlannedImageBase {
   kind: "collage";
-  side: PlanSide;
+  side: PlanImageSide;
   /** Groups sharing a key are the front/back pair rendered from the same copies. Stable within one
    * plan only — it is a pairing marker, not an identity. */
   groupKey: string;
@@ -219,7 +252,7 @@ export type PlannedImage = PlannedCollage | PlannedAttachment;
 
 /** The stable token of a collage side — the copies it shows, sorted so tile order does not change
  * it, prefixed by the side so a front and its back stay distinct. */
-export function collageToken(side: PlanSide, itemIds: readonly string[]): string {
+export function collageToken(side: PlanImageSide, itemIds: readonly string[]): string {
   return `c:${side}:${[...itemIds].sort().join(",")}`;
 }
 
@@ -229,18 +262,24 @@ export function attachmentToken(attachmentId: string): string {
 }
 
 /**
- * A side a group could not produce, because at least one of its copies has no scan for that side
- * (#314). Reported rather than dropped in silence: the collector's fix is to scan the missing
- * reverses, and they can only do that if they are told which ones.
+ * Copies a group could not draw, and the image it cost (#314). Reported rather than dropped in
+ * silence: the collector's fix is to scan the missing reverses, and they can only do that if they
+ * are told which ones.
+ *
+ * For `front` and `back` the rule is all-or-nothing, so an entry always means the whole side was
+ * lost. For `paired` (#694) it means the named copies have **no scan at all** and so appear in no
+ * cell; the image itself still renders from the copies that do — unless none of them does, which is
+ * the case where every copy is named.
  */
 export interface SkippedSide {
-  side: PlanSide;
+  side: PlanImageSide;
   /** The group's key — the same value the group's other side carries as `groupKey`. */
   groupKey: string;
   setIds: string[];
   /** Every copy in the group, in tile order. */
   itemIds: string[];
-  /** The copies that have no photo for this side. Always a non-empty subset of `itemIds`. */
+  /** The copies that have no photo for this side — or, in paired mode, none at all. Always a
+   * non-empty subset of `itemIds`. */
   missingItemIds: string[];
 }
 
@@ -268,15 +307,71 @@ export function isUploaded(image: PlannedImage): boolean {
 
 // ── Engine ───────────────────────────────────────────────────────────────────
 
-/** The sides to attempt, in emission order. */
-function sidesFor(photoSides: PhotoSides): PlanSide[] {
+/** The images to attempt per group, in emission order. `paired` is one image, not two (#694). */
+function sidesFor(photoSides: PhotoSides): PlanImageSide[] {
   if (photoSides === "front") return ["front"];
   if (photoSides === "back") return ["back"];
+  if (photoSides === "paired") return ["paired"];
   return ["front", "back"];
 }
 
 function photoFor(copy: PlanCopy, side: PlanSide): string | null {
   return side === "front" ? copy.frontPhotoId : copy.backPhotoId;
+}
+
+/** One image a group would produce, before it is given its group key and its set ids. */
+interface GroupImage {
+  side: PlanImageSide;
+  /** The cells, in copy order. Empty when the image cannot be drawn at all. */
+  tiles: PlannedTile[];
+  /** The copies this image cannot draw: with no scan for the side, or — in paired mode — with no
+   * scan at all. Empty when every copy is covered. */
+  missingItemIds: string[];
+  /** Whether the image is drawn. Distinct from `missingItemIds` being empty: a paired image renders
+   * around the copies it cannot draw, where a single-sided one does not. */
+  produced: boolean;
+}
+
+/**
+ * What one group of copies produces, per attempted side. The single place that answers it: the
+ * grouping arithmetic (#521) counts the upload slots a group costs, and the plan below renders the
+ * images — and the two must never disagree about which images exist.
+ *
+ * The two rules meet here rather than being written twice:
+ *
+ * - `front` / `back` — **all or nothing**. Every copy needs a scan for that side, and one that does
+ *   not cancels the side for the whole group. Every copy is still examined, so the report can name
+ *   all of them rather than the first.
+ * - `paired` (#694) — **per copy**. A copy with both scans gets a paired cell, one with a single
+ *   scan gets a single-scan cell, and one with neither gets no cell and is named. The image is drawn
+ *   as long as one cell survives.
+ */
+function groupImages(
+  copies: readonly PlanCopy[],
+  sides: readonly PlanImageSide[]
+): GroupImage[] {
+  return sides.map((side) => {
+    const tiles: PlannedTile[] = [];
+    const missingItemIds: string[] = [];
+
+    if (side === "paired") {
+      for (const copy of copies) {
+        const front = copy.frontPhotoId;
+        const back = copy.backPhotoId;
+        if (front && back) tiles.push({ itemId: copy.itemId, photoId: front, pairedPhotoId: back });
+        else if (front ?? back) tiles.push({ itemId: copy.itemId, photoId: (front ?? back)! });
+        else missingItemIds.push(copy.itemId);
+      }
+      return { side, tiles, missingItemIds, produced: tiles.length > 0 };
+    }
+
+    for (const copy of copies) {
+      const photoId = photoFor(copy, side);
+      if (photoId) tiles.push({ itemId: copy.itemId, photoId });
+      else missingItemIds.push(copy.itemId);
+    }
+    return { side, tiles, missingItemIds, produced: missingItemIds.length === 0 };
+  });
 }
 
 /** A group of copies destined for one collage (or one front/back pair of collages). */
@@ -331,16 +426,14 @@ function groupOf(entries: readonly SingleEntry[]): CopyGroup {
  */
 function groupSlotCost(
   copies: readonly PlanCopy[],
-  sides: readonly PlanSide[],
+  sides: readonly PlanImageSide[],
   unpublished: ReadonlySet<string>
 ): number {
-  let cost = 0;
-  for (const side of sides) {
-    if (!copies.every((copy) => photoFor(copy, side))) continue;
-    if (unpublished.has(collageToken(side, copies.map((c) => c.itemId)))) continue;
-    cost += 1;
-  }
-  return cost;
+  return groupImages(copies, sides).filter(
+    (image) =>
+      image.produced &&
+      !unpublished.has(collageToken(image.side, image.tiles.map((t) => t.itemId)))
+  ).length;
 }
 
 /** What the single-copy pool costs when its first `k` copies stand alone and the rest are chunked. */
@@ -348,7 +441,7 @@ function poolSlotCost(
   singles: readonly SingleEntry[],
   k: number,
   capacity: number,
-  sides: readonly PlanSide[],
+  sides: readonly PlanImageSide[],
   unpublished: ReadonlySet<string>
 ): number {
   let cost = 0;
@@ -369,7 +462,7 @@ function singlesThatFit(
   singles: readonly SingleEntry[],
   budget: number,
   capacity: number,
-  sides: readonly PlanSide[],
+  sides: readonly PlanImageSide[],
   unpublished: ReadonlySet<string>
 ): number {
   for (let k = singles.length; k > 0; k -= 1) {
@@ -380,7 +473,7 @@ function singlesThatFit(
 
 interface GroupingOptions {
   capacity: number;
-  sides: readonly PlanSide[];
+  sides: readonly PlanImageSide[];
   unpublished: ReadonlySet<string>;
   /** #521's rule; off is the grouping as it stood before it. */
   preferSingles: boolean;
@@ -455,44 +548,37 @@ function buildGroups(sets: readonly PlanSet[], options: GroupingOptions): CopyGr
   return groups;
 }
 
-/** What one group yields: an image per side whose photos are complete, front before back, plus the
- * sides it could not produce. */
+/** What one group yields: an image per side it can draw — front before back, or the single paired
+ * image (#694) — plus what it could not draw. */
 interface GroupPlan {
   key: string;
   images: PlannedCollage[];
   skipped: SkippedSide[];
 }
 
-function renderGroup(group: CopyGroup, sides: PlanSide[], groupKey: string): GroupPlan {
+function renderGroup(group: CopyGroup, sides: PlanImageSide[], groupKey: string): GroupPlan {
   const images: PlannedCollage[] = [];
   const skipped: SkippedSide[] = [];
-  for (const side of sides) {
-    const tiles: PlannedTile[] = [];
-    const missingItemIds: string[] = [];
-    for (const copy of group.copies) {
-      const photoId = photoFor(copy, side);
-      // All or nothing: one missing photo cancels this side for the whole group. Every copy is still
-      // examined, so the report can name all of them and not just the first.
-      if (photoId) tiles.push({ itemId: copy.itemId, photoId });
-      else missingItemIds.push(copy.itemId);
-    }
-    if (missingItemIds.length > 0) {
+  for (const image of groupImages(group.copies, sides)) {
+    // Reported and rendered are independent questions (#694): a paired image draws around the copies
+    // it cannot draw, and names them anyway — they would otherwise leave the listing unremarked.
+    if (image.missingItemIds.length > 0) {
       skipped.push({
-        side,
+        side: image.side,
         groupKey,
         setIds: group.setIds,
         itemIds: group.copies.map((c) => c.itemId),
-        missingItemIds,
+        missingItemIds: image.missingItemIds,
       });
-      continue;
     }
+    if (!image.produced) continue;
     images.push({
       kind: "collage",
-      side,
+      side: image.side,
       groupKey,
-      token: collageToken(side, tiles.map((t) => t.itemId)),
+      token: collageToken(image.side, image.tiles.map((t) => t.itemId)),
       setIds: group.setIds,
-      tiles,
+      tiles: image.tiles,
       // Publishing and the limit are decided once, over the whole ordered plan, so grouping stays
       // about grouping.
       publish: true,

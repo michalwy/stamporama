@@ -214,3 +214,77 @@ describe("renderCollage", () => {
     await assert.rejects(() => renderCollage([], style, noLimits), EmptyCollageError);
   });
 });
+
+// Paired cells (#694) --------------------------------------------------------
+
+describe("renderCollage paired cells", () => {
+  it("joins a copy's two scans into one tile, spaced by half the collage's gap", async () => {
+    const front = await scan(100, 100);
+    const back = await scan(80, 100);
+    const rendered = await renderCollage(
+      [{ ...front, pair: { buffer: back.buffer } }],
+      style,
+      noLimits
+    );
+
+    // Gap is 10% of the 100-tall cell, so 10 px; the two scans sit 5 apart inside it.
+    const [tile] = rendered.layout.tiles;
+    assert.equal(rendered.layout.gap, 10);
+    assert.equal(tile.width, 100 + 5 + 80);
+    assert.equal(tile.height, 100);
+    // One cell, one row, one label strip — the pair is a tile like any other from here on.
+    assert.equal(rendered.layout.rowCount, 1);
+    assert.equal(tile.label.width, tile.width);
+  });
+
+  it("centres the shorter scan of a cell against the taller", async () => {
+    const rendered = await renderCollage(
+      [{ ...(await scan(100, 140)), pair: { buffer: (await scan(100, 100)).buffer } }],
+      style,
+      noLimits
+    );
+
+    const [tile] = rendered.layout.tiles;
+    assert.equal(tile.height, 140);
+  });
+
+  it("puts both members of a pair on the collage's one common scale", async () => {
+    // The back was uploaded at twice the size it is stored at, so the whole image is scaled against
+    // it: the pair's front and the unpaired scan beside it both come down by half, and the clamped
+    // back is left where it is rather than interpolated back up.
+    const rendered = await renderCollage(
+      [
+        {
+          ...(await scan(100, 100)),
+          pair: { buffer: (await scan(100, 100)).buffer, originalSize: { width: 200, height: 200 } },
+        },
+        await scan(100, 100),
+      ],
+      { ...style, columns: 2 },
+      noLimits
+    );
+
+    const [pairCell, single] = rendered.layout.tiles;
+    assert.equal(single.width, 50);
+    // The median of the two cell heights (100 and 50) is 50, so the gap is 5 and the in-cell one 3.
+    assert.equal(rendered.layout.gap, 5);
+    assert.equal(pairCell.width, 50 + 3 + 100);
+    assert.equal(pairCell.height, 100);
+  });
+
+  it("renders a mixed page: paired cells beside a copy scanned on one side only", async () => {
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(100, 100)), pair: { buffer: (await scan(100, 100)).buffer } },
+        await scan(100, 100),
+      ],
+      style,
+      noLimits
+    );
+
+    const [paired, lone] = rendered.layout.tiles;
+    assert.equal(paired.width, 100 + 5 + 100);
+    assert.equal(lone.width, 100);
+    assert.equal(rendered.layout.rowCount, 1);
+  });
+});

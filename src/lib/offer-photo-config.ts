@@ -30,8 +30,16 @@ import {
   parseBoundedInteger,
 } from "./collage-template-rules";
 
-/** Which scan sides a listing's photos include. */
-export const PHOTO_SIDES = ["front", "back", "both"] as const;
+/**
+ * Which scan sides a listing's photos include, and how the two are arranged.
+ *
+ * `both` and `paired` (#694) photograph exactly the same scans and differ only in the arrangement:
+ * `both` renders a collage of fronts and a separate one of backs, while `paired` renders **one**
+ * collage whose every cell holds a copy's front and back side by side. Pairing is therefore a
+ * refinement of "both sides", never a fifth thing to choose — which is why it lives here beside
+ * them rather than as a flag that could contradict a front-only listing.
+ */
+export const PHOTO_SIDES = ["front", "back", "both", "paired"] as const;
 export type PhotoSides = (typeof PHOTO_SIDES)[number];
 
 /** The side a platform (and so a new offer) starts on — the front alone is the common case. */
@@ -41,6 +49,7 @@ export const PHOTO_SIDES_LABELS: Record<PhotoSides, string> = {
   front: "Front only",
   back: "Back only",
   both: "Front and back",
+  paired: "Front and back, paired",
 };
 
 /** Narrow a stored/submitted value to a known side, falling back to the default. */
@@ -49,6 +58,29 @@ export function normalizePhotoSides(raw: string | null | undefined): PhotoSides 
   return (PHOTO_SIDES as readonly string[]).includes(value)
     ? (value as PhotoSides)
     : DEFAULT_PHOTO_SIDES;
+}
+
+/** Whether this answer photographs a stamp's two scans at all — `both` and `paired` alike (#694). */
+export function includesBothSides(sides: PhotoSides): boolean {
+  return sides === "both" || sides === "paired";
+}
+
+/**
+ * The sides a collage template's pairing flag (#694) resolves an answer to.
+ *
+ * The two settings answer **different questions** and this is where they meet: the platform (or the
+ * offer) says *which* sides to photograph, the template says *how* the two are arranged. So pairing
+ * only ever moves between the two both-sides answers — a paired template turns `both` into `paired`
+ * and an unpaired one turns `paired` back into `both` — and a front-only or back-only listing is
+ * returned untouched. Neither setting can therefore contradict the other, whichever is edited: a
+ * paired template on a front-only platform simply has nothing to arrange.
+ *
+ * Total, so it is the one rule both the platform's seeding (#308) and the offer dialog's template
+ * picker apply.
+ */
+export function applyCollagePairing(sides: PhotoSides, pairSides: boolean): PhotoSides {
+  if (!includesBothSides(sides)) return sides;
+  return pairSides ? "paired" : "both";
 }
 
 // ── Platform limits ──────────────────────────────────────────────────────────

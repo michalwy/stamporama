@@ -23,6 +23,7 @@ import {
 import {
   PHOTO_SIDES,
   PHOTO_SIDES_LABELS,
+  applyCollagePairing,
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "@/lib/offer-photo-config";
@@ -188,7 +189,10 @@ export function PhotoSettingsDialog({
     };
   }, [collectionId]);
 
-  /** Copy a template's numbers onto the offer — the same seeding the platform does at creation. */
+  /** Copy a template's numbers onto the offer — the same seeding the platform does at creation.
+   * The pairing flag (#694) reaches the sides select above rather than the numbers below, because
+   * that is where the offer says it: `applyCollagePairing` moves between the two both-sides answers
+   * and leaves a front-only or back-only listing alone, exactly as seeding does. */
   function applyTemplate(templateId: string) {
     if (!templateId) {
       setCollage(EMPTY_COLLAGE);
@@ -196,6 +200,7 @@ export function PhotoSettingsDialog({
     }
     const t = templates.find((row) => row.id === templateId);
     if (!t) return;
+    setPhotoSides((sides) => applyCollagePairing(sides, t.pairSides));
     setCollage({
       collageGridMode: normalizeCollageGridMode(t.gridMode),
       collageRows: String(t.rows),
@@ -285,10 +290,26 @@ export function PhotoSettingsDialog({
               />
             </div>
           </div>
-          <span style={{ ...HINT, display: "block", margin: "-0.75rem 0 1.25rem" }}>
+          <span
+            style={{
+              ...HINT,
+              display: "block",
+              margin: photoSides === "paired" ? "-0.75rem 0 0.375rem" : "-0.75rem 0 1.25rem",
+            }}
+          >
             Written under each stamp, one flush left and one flush right at the same size. A single
             one is centred; both blank leaves the tiles unlabelled.
           </span>
+          {/* Said here rather than in the option's name (#694): what pairing changes is the picture,
+              and the one thing worth knowing before generating is that a half-scanned copy still
+              appears — it is not the all-or-nothing rule the other modes follow. */}
+          {photoSides === "paired" && (
+            <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
+              Paired puts each stamp&rsquo;s two scans side by side in one cell under one label, so a
+              group is a single image instead of a page of fronts and a page of backs. A copy scanned
+              on one side only takes a narrower cell in the same collage.
+            </span>
+          )}
 
           <p style={SECTION_LABEL}>Collage</p>
 

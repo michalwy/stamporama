@@ -80,6 +80,18 @@ export const MAX_COLLAGE_LABEL_PERCENT = 25;
 export const COLLAGE_LABEL_DECIMALS = 1;
 export const COLLAGE_LABEL_STEP = 0.1;
 
+/**
+ * Whether one cell holds a stamp's **two scans side by side** rather than a single scan (#694).
+ *
+ * The arrangement belongs to the template because it is part of the look a collector settles on and
+ * reuses — "my paired layout" is a template, not a decision to retake per listing. What it cannot
+ * decide is *which* sides get photographed: that is the offer's (and the platform's) answer, and
+ * pairing only refines it. `applyCollagePairing` in `offer-photo-config.ts` is where the two meet.
+ *
+ * Off for a new template, which is what every template written before this renders as.
+ */
+export const DEFAULT_COLLAGE_PAIR_SIDES = false;
+
 /** What a new template starts at: a comfortable margin, and a caption at a percent and a half of the
  * image — the middle of the band above, readable on a marketplace listing at any output size. */
 export const DEFAULT_COLLAGE_GAP_PERCENT = 5;
@@ -101,6 +113,9 @@ export interface CollageTemplateInput {
   name: string;
   /** How `rows` / `columns` are read (#413): an exact grid, or bounds the renderer solves within. */
   gridMode: CollageGridMode;
+  /** Whether a cell holds a stamp's front and back side by side (#694). A cell, not an image: the
+   * grid above is unchanged by it — each cell is simply wider. */
+  pairSides: boolean;
   rows: number;
   columns: number;
   /** Space between tiles, rows and around the collage, as a percent of the stamp height. */
@@ -114,6 +129,13 @@ export interface CollageTemplateInput {
 export type CollageTemplateParseResult =
   | { ok: true; value: CollageTemplateInput }
   | { ok: false; message: string };
+
+/** Whether a checkbox came back ticked. Browsers post nothing at all for an unticked box, so the
+ * absence *is* the answer — the same reading every other checkbox in the app takes. */
+function isChecked(raw: string | undefined): boolean {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "on" || value === "true" || value === "1";
+}
 
 /**
  * Normalises a user-typed colour to lowercase `#rrggbb`. Accepts a missing `#` and the 3-digit
@@ -173,6 +195,8 @@ export function parseBoundedDecimal(raw: string, label: string, min: number, max
 export function parseCollageTemplateInput(raw: {
   name: string;
   gridMode?: string;
+  /** A checkbox, so absent is unticked (#694) — the form always posts the field it does have. */
+  pairSides?: string;
   rows: string;
   columns: string;
   gapPercent: string;
@@ -222,6 +246,7 @@ export function parseCollageTemplateInput(raw: {
     value: {
       name,
       gridMode,
+      pairSides: isChecked(raw.pairSides),
       rows: rows.value,
       columns: columns.value,
       gapPercent: gapPercent.value,

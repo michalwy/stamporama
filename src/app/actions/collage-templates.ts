@@ -28,6 +28,7 @@ function readForm(formData: FormData) {
   return parseCollageTemplateInput({
     name: str("name"),
     gridMode: str("gridMode"),
+    pairSides: str("pairSides"),
     rows: str("rows"),
     columns: str("columns"),
     gapPercent: str("gapPercent"),

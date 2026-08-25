@@ -118,6 +118,7 @@ import {
 import { offerScreenUrl } from "./app-url";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 import {
+  applyCollagePairing,
   normalizePhotoSides,
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
@@ -301,6 +302,7 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
         where: { id: platform.defaultCollageTemplateId },
         select: {
           gridMode: true,
+          pairSides: true,
           rows: true,
           columns: true,
           gapPercent: true,
@@ -310,7 +312,13 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
       })
     : null;
   return {
-    photoSides: normalizePhotoSides(platform.photoSides),
+    // The platform says *which* sides; its template says how the two are arranged (#694), so a
+    // paired template upgrades a both-sides platform to `paired` and leaves a front-only or
+    // back-only one exactly as it is. See `applyCollagePairing`.
+    photoSides: applyCollagePairing(
+      normalizePhotoSides(platform.photoSides),
+      template?.pairSides ?? false
+    ),
     photoPreferSingles: platform.photoPreferSingles,
     photoLabelLeftTemplate: platform.tileLabelLeftTemplate?.trim() || null,
     photoLabelRightTemplate: platform.tileLabelRightTemplate?.trim() || null,

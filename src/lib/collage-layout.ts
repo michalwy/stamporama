@@ -110,6 +110,49 @@ export function trueScaledSizes(tiles: readonly CollageTileTrueSize[]): CollageT
   }));
 }
 
+/**
+ * One tile as the plan names it: the scan drawn in it and, in paired mode (#694), the reverse drawn
+ * beside it in the same cell. `pair` is null for every other mode — and for a copy in paired mode
+ * that has only one of its two scans, which is a single-scan cell like any other.
+ */
+export interface CollagePlannedTileSize {
+  main: CollageTileTrueSize;
+  pair: CollageTileTrueSize | null;
+}
+
+/**
+ * The sizes paired cells measure as (#694) — the two scans joined, side by side.
+ *
+ * The scaling is solved over **every** scan on the image, both members of every pair included, and
+ * only then joined: `trueSizeScales` normalises against the worst-shrunk tile, so measuring the
+ * pairs on their own would put each cell on a scale of its own and undo the very thing it repairs.
+ *
+ * The in-cell gap is left out, exactly as `autoGridCost` leaves out the gap between cells and for
+ * the same reason: it shifts every candidate by nearly the same amount and cannot be known before
+ * the sizes it is a share of are.
+ */
+export function pairedTrueScaledSizes(
+  tiles: readonly CollagePlannedTileSize[]
+): CollageTileSize[] {
+  const flat = tiles.flatMap((tile) => (tile.pair ? [tile.main, tile.pair] : [tile.main]));
+  const scaled = trueScaledSizes(flat);
+  const sizes: CollageTileSize[] = [];
+  let at = 0;
+  for (const tile of tiles) {
+    const main = scaled[at++];
+    if (!tile.pair) {
+      sizes.push(main);
+      continue;
+    }
+    const pair = scaled[at++];
+    sizes.push({
+      width: main.width + pair.width,
+      height: Math.max(main.height, pair.height),
+    });
+  }
+  return sizes;
+}
+
 /** The capacity an offer carries, and how to read it (#413). */
 export interface CollageGrid {
   gridMode: CollageGridMode;
@@ -307,6 +350,33 @@ function medianHeight(sizes: readonly CollageTileSize[]): number {
   return heights[Math.floor((heights.length - 1) / 2)];
 }
 
+/**
+ * The gap these tiles are laid out with, in pixels — the rule `layOutCollage` applies below, named
+ * so the paired renderer (#694) can space a cell's two scans by a share of the very same number
+ * before it joins them. It is safe to ask *before* joining: a pair's height is the taller of its two
+ * scans and the gap is taken of heights alone, so the answer does not move when the widths do.
+ */
+export function collageGap(sizes: readonly CollageTileSize[], gapPercent: number): number {
+  if (sizes.length === 0) return 0;
+  return Math.max(0, Math.round((medianHeight(sizes) * Math.max(0, gapPercent)) / 100));
+}
+
+/**
+ * How much of that gap separates the two scans **inside** a paired cell (#694).
+ *
+ * Half. The pair has to read as one stamp seen from both sides rather than as two stamps: at the
+ * full gap a cell is indistinguishable from two neighbouring tiles and the pairing says nothing,
+ * and at zero the two scans touch and their pale margins run together. A share rather than a
+ * setting of its own — it is a property of the spacing the collector already chose, and one more
+ * number to tune would not be answering a different question.
+ */
+export const PAIR_GAP_SHARE = 0.5;
+
+/** The space between a paired cell's two scans, from the collage's own gap. */
+export function pairedCellGap(gap: number): number {
+  return Math.max(0, Math.round(gap * PAIR_GAP_SHARE));
+}
+
 /** The share of the canvas's height all the strips together may take. A rail, not a setting: a
  * caption that is 20% of the image is a fine thing to ask for on a single stamp and an impossible
  * one on a ten-row page, and the layout has to stay solvable either way. */
@@ -366,7 +436,7 @@ export function layOutCollage(
   }
 
   const referenceHeight = medianHeight(sizes);
-  const gap = Math.max(0, Math.round((referenceHeight * Math.max(0, style.gapPercent)) / 100));
+  const gap = collageGap(sizes, style.gapPercent);
   const columns = Math.max(1, Math.round(style.columns));
 
   const rows = chunk(sizes, columns).map((row) => ({

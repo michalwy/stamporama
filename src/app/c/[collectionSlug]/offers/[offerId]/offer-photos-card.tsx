@@ -18,6 +18,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { BulkCopyPhotoAttachResult } from "@/lib/offer-photo-attachments";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
+import { PLAN_IMAGE_SIDE_LABELS } from "@/lib/offer-photo-plan";
 import { Icon } from "@/app/icons";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
@@ -188,9 +189,16 @@ function photoDownloadUrl(collectionId: string, photoId: string, fileName: strin
   return `${photoUrl(collectionId, photoId, "full")}?download=${encodeURIComponent(fileName)}`;
 }
 
+/** What a collage's side is called in a title; null for an attachment, which has none. */
+function sideName(side: string | null): string | null {
+  return side && side in PLAN_IMAGE_SIDE_LABELS
+    ? PLAN_IMAGE_SIDE_LABELS[side as keyof typeof PLAN_IMAGE_SIDE_LABELS]
+    : null;
+}
+
 /** What the image is, in one line: its number, its side, and the copies it shows. */
 function imageTitle(image: OfferPhotoImage): string {
-  const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
+  const side = sideName(image.side);
   const what = image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", ");
   return [image.fileName.replace(/\.[^.]+$/, ""), side, what || "Attachment"]
     .filter(Boolean)
@@ -371,7 +379,7 @@ function PlanPreview({
  * number is the one it will actually carry, so an entry outside the upload set shows none — a
  * position in the list is not a slot in the listing. */
 function plannedTitle(image: OfferPhotoPlannedImage, uploadIndex: number | null): string {
-  const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
+  const side = sideName(image.side);
   const what =
     image.title ??
     (image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", "));
@@ -674,9 +682,13 @@ function ExcludedNotice({
 }
 
 /**
- * Sides the plan could not produce (#314). Deliberately loud: a set of eight losing its back collage
+ * What the plan could not draw (#314). Deliberately loud: a set of eight losing its back collage
  * over one missing reverse scan is invisible in the preview — the image that is not there looks
  * exactly like an image nobody asked for.
+ *
+ * Paired groups (#694) are the one case where the image usually survives, so the sentence is about
+ * the *copies* that fell out of it rather than about a side that is missing: a stamp with no scan at
+ * all simply takes no cell, and nothing in the picture says it was ever meant to be there.
  */
 function SkippedNotice({ skipped }: { skipped: OfferPhotoPlanView["plan"]["skipped"] }) {
   if (skipped.length === 0) return null;
@@ -694,10 +706,29 @@ function SkippedNotice({ skipped }: { skipped: OfferPhotoPlanView["plan"]["skipp
     >
       {skipped.map((group, index) => (
         <p key={index} style={{ ...NOTE, color: "var(--color-warning)" }}>
-          No {group.side} image for {group.setLabels.join(", ") || "this group"} —{" "}
-          {group.missingCopyLabels.length} of {group.copyCount}{" "}
-          {group.copyCount === 1 ? "copy has" : "copies have"} no {group.side} scan (
-          {group.missingCopyLabels.join(", ")}).
+          {group.side === "paired" ? (
+            group.missingCopyLabels.length === group.copyCount ? (
+              <>
+                No image for {group.setLabels.join(", ") || "this group"} — none of its{" "}
+                {group.copyCount} {group.copyCount === 1 ? "copy has" : "copies have"} a scan (
+                {group.missingCopyLabels.join(", ")}).
+              </>
+            ) : (
+              <>
+                {group.missingCopyLabels.length} of {group.copyCount} copies{" "}
+                {group.missingCopyLabels.length === 1 ? "is" : "are"} missing from the paired image
+                for {group.setLabels.join(", ") || "this group"} — no scan on either side (
+                {group.missingCopyLabels.join(", ")}).
+              </>
+            )
+          ) : (
+            <>
+              No {group.side} image for {group.setLabels.join(", ") || "this group"} —{" "}
+              {group.missingCopyLabels.length} of {group.copyCount}{" "}
+              {group.copyCount === 1 ? "copy has" : "copies have"} no {group.side} scan (
+              {group.missingCopyLabels.join(", ")}).
+            </>
+          )}
         </p>
       ))}
     </div>
@@ -1013,15 +1044,25 @@ export function OfferPhotosCard({
                   </span>
                 </Tooltip>
               ))}
-            {/* Collapsed, this chip is the only trace of a side that could not be rendered. */}
+            {/* Collapsed, this chip is the only trace of what could not be rendered. A paired plan
+                (#694) usually still has its image, so it counts incomplete groups rather than lost
+                sides — the two never mix, since the mode is one answer for the whole offer. */}
             {plan.plan.skipped.length > 0 &&
-              tinted(
-                "warning",
-                plan.plan.skipped.length === 1
-                  ? "1 side skipped"
-                  : `${plan.plan.skipped.length} sides skipped`,
-                "A group has no complete set of scans for that side — expand for which copies"
-              )}
+              (plan.plan.skipped.every((s) => s.side === "paired")
+                ? tinted(
+                    "warning",
+                    plan.plan.skipped.length === 1
+                      ? "1 group incomplete"
+                      : `${plan.plan.skipped.length} groups incomplete`,
+                    "Some copies have no scan at all and so take no cell — expand for which"
+                  )
+                : tinted(
+                    "warning",
+                    plan.plan.skipped.length === 1
+                      ? "1 side skipped"
+                      : `${plan.plan.skipped.length} sides skipped`,
+                    "A group has no complete set of scans for that side — expand for which copies"
+                  ))}
             {stored > 0 && (
               <span style={{ ...NOTE, fontSize: "0.75rem" }}>
                 {stored} image{stored === 1 ? "" : "s"} · {formatBytes(storedBytes)}

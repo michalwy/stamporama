@@ -29,6 +29,8 @@ export interface CollageTemplateData {
   name: string;
   /** `fixed` | `auto` (#413) — how `rows` / `columns` are read. */
   gridMode: string;
+  /** Whether a cell holds a stamp's front and back side by side (#694). */
+  pairSides: boolean;
   rows: number;
   columns: number;
   gapPercent: number;
@@ -49,6 +51,7 @@ export async function getCollageTemplates(
       id: true,
       name: true,
       gridMode: true,
+      pairSides: true,
       rows: true,
       columns: true,
       gapPercent: true,
