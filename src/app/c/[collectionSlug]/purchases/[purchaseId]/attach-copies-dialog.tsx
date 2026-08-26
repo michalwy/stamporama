@@ -130,7 +130,7 @@ export function AttachCopiesDialog({
     for (const c of copies) counts.set(c.issuedYear, (counts.get(c.issuedYear) ?? 0) + 1);
     return [...counts.entries()]
       .map(([y, count]) => ({ year: y, count }))
-      .sort((a, b) => (a.year === null ? 1 : b.year === null ? -1 : b.year - a.year));
+      .sort((a, b) => (a.year === null ? 1 : b.year === null ? -1 : a.year - b.year));
   }, [copies]);
 
   const visibleCopies = useMemo(() => {

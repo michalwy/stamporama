@@ -980,8 +980,8 @@ export interface YearFacet {
 }
 
 /** Distinct years present in the issue list for the given filters (year filter
- *  itself is ignored), each with a count. Sorted descending, null ("No year")
- *  last. */
+ *  itself is ignored), each with a count. Sorted ascending, null ("No year")
+ *  last (#703). */
 export async function listIssueYearFacets(
   ownerId: string,
   collectionId: string,
@@ -997,9 +997,12 @@ export async function listIssueYearFacets(
   return groups
     .map((g) => ({ year: g.year, count: g._count._all }))
     .sort((a, b) => {
+      // Oldest first (#703): the facet is a timeline of the collection, and a collector scanning it
+      // for a period reads it the way the album is arranged. "No year" stays last either way — it is
+      // not a point on that line.
       if (a.year === null) return 1;
       if (b.year === null) return -1;
-      return b.year - a.year;
+      return a.year - b.year;
     });
 }
 

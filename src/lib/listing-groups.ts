@@ -142,7 +142,7 @@ export interface YearCount {
  * Year facets for the rail: how many offers each year would show, counted the way the filter counts
  * — an offer contributes to a year only when **all** its copies are on it, so the facets can never
  * promise more than clicking them delivers. Faceted like every other list: the year's own dimension
- * is ignored, the area selection is not. Descending, "No year" last.
+ * is ignored, the area selection is not. Ascending, "No year" last (#703).
  */
 export function offerYearFacets(
   offers: GroupableOffer[],
@@ -160,8 +160,11 @@ export function offerYearFacets(
   return [...counts.entries()]
     .map(([year, count]) => ({ year, count }))
     .sort((a, b) => {
+      // Oldest first (#703): the facet is a timeline of the collection, and a collector scanning it
+      // for a period reads it the way the album is arranged. "No year" stays last either way — it is
+      // not a point on that line.
       if (a.year === null) return 1;
       if (b.year === null) return -1;
-      return b.year - a.year;
+      return a.year - b.year;
     });
 }

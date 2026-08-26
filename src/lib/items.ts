@@ -3178,7 +3178,7 @@ export interface ItemYearFacet {
 
 /** Distinct issued years (of the linked stamps) present in the copy list for the
  * given filters (year filter itself is ignored), each with a count of matching
- * copies. Sorted descending, null ("No year") last. Mirrors the stamps list year
+ * copies. Sorted ascending, null ("No year") last (#703). Mirrors the stamps list year
  * facets (#142); the year lives on the related stamp so counts are aggregated in
  * memory rather than via `groupBy` (which cannot group by a relation field). */
 export async function listItemYearFacets(
@@ -3205,8 +3205,11 @@ export async function listItemYearFacets(
   return [...counts.entries()]
     .map(([year, count]) => ({ year, count }))
     .sort((a, b) => {
+      // Oldest first (#703): the facet is a timeline of the collection, and a collector scanning it
+      // for a period reads it the way the album is arranged. "No year" stays last either way — it is
+      // not a point on that line.
       if (a.year === null) return 1;
       if (b.year === null) return -1;
-      return b.year - a.year;
+      return a.year - b.year;
     });
 }

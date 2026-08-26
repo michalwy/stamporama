@@ -143,7 +143,7 @@ describe("buildOfferGroups", () => {
 });
 
 describe("offerYearFacets", () => {
-  it("counts years descending with no-year last, ignoring Mixed offers", () => {
+  it("counts years ascending with no-year last, ignoring Mixed offers", () => {
     const rows = [
       offer(["pl", 1960]),
       offer(["pl", 1960]),
@@ -153,8 +153,8 @@ describe("offerYearFacets", () => {
     ];
 
     assert.deepEqual(offerYearFacets(rows), [
-      { year: 1961, count: 1 },
       { year: 1960, count: 2 },
+      { year: 1961, count: 1 },
       { year: null, count: 1 },
     ]);
   });

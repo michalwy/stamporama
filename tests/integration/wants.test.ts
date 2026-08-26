@@ -1023,11 +1023,11 @@ describe("listWantYearFacets", () => {
   });
   after(() => cleanup(f.userId));
 
-  it("counts by the wanted stamp's issue year, newest first and 'no year' last", async () => {
+  it("counts by the wanted stamp's issue year, oldest first and 'no year' last", async () => {
     const facets = await listWantYearFacets(f.userId, f.collectionId);
     assert.deepEqual(facets, [
-      { year: 1921, count: 1 },
       { year: 1920, count: 2 },
+      { year: 1921, count: 1 },
       { year: null, count: 1 },
     ]);
   });

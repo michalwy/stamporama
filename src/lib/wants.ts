@@ -967,7 +967,7 @@ export interface WantYearFacet {
  *
  * A projection rather than a `groupBy`: the year lives on the related `Stamp`, which Prisma cannot
  * group by, and one nullable int per matching want is small enough that reaching for raw SQL would
- * cost more than it saves. Newest first, "no year" last, as everywhere else.
+ * cost more than it saves. Oldest first, "no year" last, as everywhere else (#703).
  */
 export async function listWantYearFacets(
   ownerId: string,
@@ -987,9 +987,12 @@ export async function listWantYearFacets(
   return [...counts.entries()]
     .map(([year, count]) => ({ year, count }))
     .sort((a, b) => {
+      // Oldest first (#703): the facet is a timeline of the collection, and a collector scanning it
+      // for a period reads it the way the album is arranged. "No year" stays last either way — it is
+      // not a point on that line.
       if (a.year === null) return 1;
       if (b.year === null) return -1;
-      return b.year - a.year;
+      return a.year - b.year;
     });
 }
 
