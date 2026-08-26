@@ -40,6 +40,11 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
+  MATCH_ELEMENT_ID,
+  useAssistantMatch,
+  useAssistantMatchSignal,
+} from "@/app/c/[collectionSlug]/offers/assistant-match-handoff";
+import {
   APPLY_ELEMENT_ID,
   useAssistantApply,
   useAssistantPresent,
@@ -65,6 +70,14 @@ import {
 // morning's, and nothing on the rows themselves would say so. A list with no import yet gets the
 // import offered rather than a report drawn: comparing against an empty snapshot would announce
 // that the whole collection is missing from Colnect.
+//
+// **It drives two Assistant handoffs, and they are different jobs.** The apply run (#689) writes
+// list membership on Colnect; the *match* handoff (#423) is the offer card's, reused verbatim here
+// — a stamp with no item-ID is the whole `not-comparable` bucket, and matching one from the row
+// closes the gap that put it there. They are separate elements because an answer to one must not
+// overwrite the answer to the other, and the match one rings a doorbell rather than reporting: a
+// match may well be written for a stamp this screen never handed over, and the report is re-read
+// either way.
 
 const NOTHING: ColnectReportRow[] = [];
 
@@ -118,6 +131,13 @@ export function ColnectReportPanel({
     start: startApplyRun,
     dismiss: dismissApplyRun,
   } = useAssistantApply();
+  // Matching a stamp from a row (#423). The same handoff the offer card drives, on its own element.
+  const {
+    handoff: matchHandoff,
+    nodeRef: matchNodeRef,
+    start: startMatch,
+    dismiss: dismissMatch,
+  } = useAssistantMatch();
   const [isPending, startTransition] = useTransition();
 
   const { data: lists = [], isPending: loadingLists } = useColnectReportLists(collectionId);
@@ -149,6 +169,13 @@ export function ColnectReportPanel({
   const conditionsById = useMemo(
     () => new Map(conditions.map((condition) => [condition.id, condition])),
     [conditions]
+  );
+
+  // A match was written — by this screen's own Link or by the collector matching a Colnect page
+  // from the toolbar icon. Either way a stamp that had no item-ID may now have one, which moves it
+  // out of `not-comparable` and into the comparison: the report is the thing that has gone stale.
+  useAssistantMatchSignal(
+    useCallback(() => invalidate(collectionId), [invalidate, collectionId])
   );
 
   const toggleBucket = useCallback((value: string) => {
@@ -537,6 +564,7 @@ export function ColnectReportPanel({
                     onMarkDone={markDone}
                     onFix={openFix}
                     onAdopt={canAdopt ? adoptRow : null}
+                    onLinkColnect={assistantPresent ? startMatch : null}
                     onIgnore={(target) => {
                       if (target.ignored) saveIgnore(target, "", false);
                       else setIgnoring(target);
@@ -568,6 +596,16 @@ export function ColnectReportPanel({
       <div id={APPLY_ELEMENT_ID} ref={applyNodeRef} style={{ display: "none" }}>
         {applyHandoff?.payload ?? ""}
       </div>
+
+      {/* The match handoff's own node (#423) — a second element rather than a second task on the
+          one above, so an answer to a match never lands where a run's progress is read. */}
+      <div id={MATCH_ELEMENT_ID} ref={matchNodeRef} hidden>
+        {matchHandoff?.payload ?? ""}
+      </div>
+
+      {matchHandoff && (
+        <ColnectMatchStrip handoff={matchHandoff} onDismiss={dismissMatch} />
+      )}
 
       {applyHandoff && (
         <ColnectApplyProgress handoff={applyHandoff} onDismiss={dismissApplyRun} />
@@ -768,6 +806,47 @@ function ColnectApplyProgress({
         onClick={onDismiss}
       >
         {finished ? "Dismiss" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * What the Assistant is doing with a **Link** press (#423), while it does it.
+ *
+ * It says one thing and stops at *opened*: what happens in the match window is the collector's own
+ * work, and its answer comes back on the doorbell rather than here — a match may be written for a
+ * stamp this handoff never named. The strip is the acknowledgement that the press landed, which a
+ * window opening behind the browser would otherwise be the only sign of.
+ */
+function ColnectMatchStrip({
+  handoff,
+  onDismiss,
+}: {
+  handoff: { label: string | null; message: string | null };
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      style={{
+        ...PANEL,
+        padding: "0.625rem 1rem",
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+      }}
+    >
+      <Icon name="assistant" />
+      <div style={{ flex: 1, minWidth: 0, fontSize: "0.875rem" }}>
+        {handoff.message ??
+          (handoff.label ? `Opening the search for ${handoff.label}…` : "Opening the search…")}
+      </div>
+      <button
+        type="button"
+        style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
+        onClick={onDismiss}
+      >
+        Dismiss
       </button>
     </div>
   );

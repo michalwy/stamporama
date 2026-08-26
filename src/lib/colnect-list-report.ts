@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS } from "./colnect-conditions";
+import { AREA_PATH_SEPARATOR } from "./area-path";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import {
   colnectListSourceShape,
@@ -45,6 +46,14 @@ import {
 // checked against anything. It carries no decision and no done mark either, and cannot: both are
 // keyed by the Colnect id it does not have.
 //
+// **The local side's country is the area's whole path**, not the leaf's name. A collection files
+// Poland's stamps under `Poland › People's Republic`, and a report saying only *People's Republic*
+// leaves the collector reading a row about a country the row never names. The path is built in the
+// query rather than on the client because this one string is the row's label, the country facet and
+// the filter's value all at once — deriving it in the UI would leave the chips saying one thing and
+// the rows another. The Colnect side still states the export's own `Country` verbatim: no mapping
+// is invented between the two.
+//
 // **A row also carries its *candidate*, which is a different question from its local side** (#687).
 // The local side is narrowed by the predicate, so an `only-colnect` row has none by construction —
 // and that says nothing about whether the collection holds the stamp. It very often does, untagged,
@@ -84,8 +93,8 @@ export interface ColnectReportList {
 /** What the report is narrowed by. */
 export interface ColnectReportFilters {
   buckets?: ColnectListBucket[];
-  /** Country as the row states it — the stamp's area where the row has a local side, the export's
-   *  own `Country` where it does not. */
+  /** Country as the row states it — the stamp's whole area path where the row has a local side,
+   *  the export's own `Country` where it does not. */
   countries?: string[];
   /** Show rows the collector has put away: marked done on Colnect, or accepted as a standing
    *  divergence. Off by default, since the point of putting one away is not seeing it again. */
@@ -105,6 +114,10 @@ export interface ColnectReportRow {
   stampId: string | null;
   stampName: string | null;
   issuedYear: number | null;
+  /** The issue the stamp is filed under, and the year that issue states. What identifies a stamp
+   *  with no name of its own — which on a Colnect list is most of them. */
+  issueName: string | null;
+  issueYear: number | null;
   /** The stamp's primary area, for resolving catalog-vendor display on the client. */
   areaId: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
@@ -307,7 +320,20 @@ function differences(input: {
       : Prisma.sql`SELECT NULL::text AS stamp_id, NULL::int AS spare WHERE FALSE`;
 
   return Prisma.sql`
-    WITH local_rows AS (${localSide(input.collectionId, input.source)}),
+    WITH RECURSIVE
+    -- Every area's whole breadcrumb, the same string buildAreaPath prints on every other screen.
+    -- Recursive because an area knows only its parent, while the collector reads the path.
+    area_path AS (
+      SELECT a."id" AS id, a."name"::text AS path
+      FROM "collection_area" a
+      WHERE a."collectionId" = ${input.collectionId} AND a."parentId" IS NULL
+      UNION ALL
+      SELECT c."id", (p.path || ${AREA_PATH_SEPARATOR} || c."name")::text
+      FROM "collection_area" c
+      JOIN area_path p ON p.id = c."parentId"
+      WHERE c."collectionId" = ${input.collectionId}
+    ),
+    local_rows AS (${localSide(input.collectionId, input.source)}),
     -- Every Colnect id this collection holds, whatever the predicate says about it. The report's
     -- local side is narrowed by the predicate and therefore cannot answer "is this item a stamp we
     -- hold?" for a row only Colnect has — which is the one question a fix on such a row needs.
@@ -338,9 +364,13 @@ function differences(input: {
       JOIN "stamp" s ON s."id" = l.stamp_id
       LEFT JOIN grade_map gm ON gm.condition_id = l.condition_id
       LEFT JOIN LATERAL (
-        SELECT a."name" AS name
+        -- The path where the tree resolved one, the bare name where it did not: an area whose
+        -- parent chain is broken still names itself, and a null here would drop the row out of
+        -- every country facet.
+        SELECT COALESCE(ap.path, a."name") AS name
         FROM "stamp_collection_area" sca
         JOIN "collection_area" a ON a."id" = sca."collectionAreaId"
+        LEFT JOIN area_path ap ON ap.id = a."id"
         WHERE sca."stampId" = s."id"
         ORDER BY sca."isPrimary" DESC, a."name" ASC
         LIMIT 1
@@ -492,6 +522,14 @@ export async function listColnectReportRows(
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+          // The issue is what names a stamp that has no name of its own, which on a Colnect list
+          // is most of them. One membership: a stamp is filed under one issue in practice, and the
+          // row has space for one label.
+          issueMemberships: {
+            select: { issue: { select: { name: true, year: true } } },
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+          },
         },
       })
     : [];
@@ -509,6 +547,8 @@ export async function listColnectReportRows(
         stampId: row.stamp_id,
         stampName: stamp?.name ?? null,
         issuedYear: stamp?.issuedYear ?? null,
+        issueName: stamp?.issueMemberships[0]?.issue.name ?? null,
+        issueYear: stamp?.issueMemberships[0]?.issue.year ?? null,
         areaId:
           primary?.collectionAreaId ?? stamp?.stampAreaLinks[0]?.collectionAreaId ?? null,
         catalogNumbers: stamp?.catalogNumbers ?? [],

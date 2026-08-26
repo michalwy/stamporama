@@ -388,6 +388,8 @@ async function snapshotRow(
     stampId: null,
     stampName: null,
     issuedYear: null,
+    issueName: null,
+    issueYear: null,
     areaId: null,
     catalogNumbers: [],
     photos: [],

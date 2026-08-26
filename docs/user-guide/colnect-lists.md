@@ -72,7 +72,17 @@ and the row comes back under **Grade** — because it still disagrees.
 
 Filter by bucket and by country; each bucket chip carries how many rows it holds under whatever else
 you have filtered by. Every row links out to Colnect — the item's own page where the ID is known, a
-search on its first catalog number where it is not.
+search on its first catalog number where it is not. Where the [Assistant](assistant.md) is running,
+**Link** sits beside that search: it opens the search and matches the stamp for you, and the Colnect
+ID lands back on the report on its own — which moves the row out of *Not comparable* on the next
+read.
+
+A row names its stamp the way the rest of the app does: catalog numbers, then the stamp's name. A
+stamp with no name of its own is named by **the issue it is filed under and that issue's year**,
+which is what most of a Colnect list looks like. The country is the stamp's **whole area path** —
+`Poland › People's Republic`, not the leaf on its own — and the country filter lists the same paths.
+Rows that exist only on Colnect keep the export's own country, untranslated: no mapping is invented
+between Colnect's country names and your area names.
 
 The row's **⋮** menu offers two ways to put a row away, and the difference between them matters:
 

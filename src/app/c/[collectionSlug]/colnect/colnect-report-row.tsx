@@ -13,8 +13,11 @@ import {
   type ColnectListSourceOfTruth,
   type ColnectLocalFix,
 } from "@/lib/colnect-list-sync-rules";
+import { colnectSearchUrl } from "@/lib/colnect-link";
+import { Icon } from "@/app/icons";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
-import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import { ColnectChip, colnectSearchQueryFor } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
@@ -30,6 +33,18 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 // is known, a search on the first catalog number where it is not. The local half of the row is the
 // app's own `StampIdentity`, which already draws that chip; a row only Colnect has draws it
 // directly, since there is no stamp for the identity to be about.
+//
+// **Beside that search sits Link**, the offer card's own pairing (#423): Search opens the page and
+// leaves the rest to the collector, while Link takes the same two steps for them in the Assistant
+// and writes the item-ID back here. It sits beside the search rather than replacing it because a
+// browser without the Assistant still has Search — and it is drawn only where the Assistant is
+// actually scripting this origin, so it is never a button that silently does nothing. The whole
+// `not-comparable` bucket is stamps with no item-ID, which is precisely the gap Link closes: a row
+// linked here stops being uncheckable and joins the comparison on the next read.
+//
+// **A stamp with no name of its own is named by its issue**, year and all. Most of a Colnect list
+// is such stamps, and a column of italic `(unnamed)` identifies nothing — the issue and its year
+// are what the collector recognises, so that is what stands in the name's place.
 
 const CHIP: React.CSSProperties = {
   display: "inline-flex",
@@ -45,6 +60,25 @@ const CHIP: React.CSSProperties = {
 const MUTED: React.CSSProperties = {
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
+};
+
+/** The Link button, shaped like the Colnect chip it sits beside so the pair reads as one
+ *  affordance rather than a chip and a control. Dashed for the same reason the chip is: what it
+ *  reaches is somebody else's site. */
+const LINK_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  fontFamily: "monospace",
+  fontSize: "0.6875rem",
+  padding: "0.05rem 0.35rem",
+  border: "1px dashed var(--color-border-strong)",
+  borderRadius: "0.25rem",
+  background: "var(--color-bg-page)",
+  color: "var(--color-text-secondary)",
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+  flexShrink: 0,
 };
 
 const SIDE: React.CSSProperties = {
@@ -69,6 +103,21 @@ function proposal(bucket: string, sourceOfTruth: ColnectListSourceOfTruth): stri
   return sourceOfTruth === "local" ? "Remove it on Colnect" : "Adopt it here";
 }
 
+/**
+ * How a stamp with no name of its own is identified: the issue it is filed under, with the year
+ * that issue states — falling back to the stamp's own issued year where the issue states none.
+ * Null where the collection knows neither, which is a row the catalog chips carry alone.
+ *
+ * Not `issueLabel` from the stamp picker: that one prints `(unnamed)` for an issue with no name,
+ * which is the very placeholder this replaces.
+ */
+function issueText(row: ColnectReportRow): string | null {
+  const name = row.issueName?.trim() || null;
+  const year = row.issueYear ?? row.issuedYear;
+  if (name && year) return `${name} (${year})`;
+  return name ?? (year ? String(year) : null);
+}
+
 /** The icon a fix is drawn with, from the app's own vocabulary (ADR-0030). Clearing takes something
  *  away, setting puts it back, and narrowing a want is an edit of what it accepts. */
 const FIX_ICON: Record<ColnectLocalFix, "hidden" | "check" | "edit"> = {
@@ -91,6 +140,7 @@ export function ColnectReportRowView({
   onIgnore,
   onFix,
   onAdopt,
+  onLinkColnect,
 }: {
   row: ColnectReportRow;
   collectionId: string;
@@ -107,6 +157,12 @@ export function ColnectReportRowView({
   onFix: (row: ColnectReportRow, fix: ColnectLocalFix) => void;
   /** Adopting a Colnect-only wish into a want (#688), where the list is one that admits it. */
   onAdopt: ((row: ColnectReportRow) => void) | null;
+  /**
+   * Handing the stamp's Colnect search to the Assistant to be matched (#423's Link, here). Null
+   * where the Assistant is not scripting this origin — the button is then absent rather than dead,
+   * and the Search chip beside it still takes the collector to the same page by hand.
+   */
+  onLinkColnect: ((url: string, label: string | null) => void) | null;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -114,6 +170,18 @@ export function ColnectReportRowView({
     ? (conditionsById.get(row.localConditionId)?.abbreviation ?? null)
     : null;
   const hidden = row.done || row.ignored;
+  const issue = issueText(row);
+
+  // The search the Link button hands over — the same one the chip beside it opens, built the same
+  // way `StampIdentity` builds it, so the two cannot point at different pages. Only a stamp with no
+  // item-ID has one at all; with an id there is a page, and nothing left to match.
+  const primaryCN = primaryVendorId
+    ? (row.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
+    : null;
+  const searchQuery = row.colnectId
+    ? null
+    : colnectSearchQueryFor(primaryCN ?? row.catalogNumbers[0] ?? null, vendorMap);
+  const searchUrl = colnectSearchUrl(searchQuery);
 
   const actions: RowAction[] = [];
   const stampHref = row.stampId ?? row.candidateStampId;
@@ -220,16 +288,32 @@ export function ColnectReportRowView({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           <span style={{ ...CHIP, fontWeight: 600 }}>{colnectListBucketLabel(row.bucket)}</span>
           {row.stampId ? (
-            <StampIdentity
-              stamp={{
-                name: row.stampName,
-                catalogNumbers: row.catalogNumbers,
-                colnectId: row.colnectId,
-              }}
-              vendorMap={vendorMap}
-              primaryVendorId={primaryVendorId}
-              size="small"
-            />
+            <>
+              <StampIdentity
+                stamp={{
+                  name: row.stampName,
+                  catalogNumbers: row.catalogNumbers,
+                  colnectId: row.colnectId,
+                }}
+                vendorMap={vendorMap}
+                primaryVendorId={primaryVendorId}
+                size="small"
+                // The issue stands in for a name the stamp does not have; where it knows neither,
+                // nothing is printed and the catalog chips carry the row on their own.
+                unnamed={issue}
+              />
+              {onLinkColnect && searchUrl && (
+                <Tooltip content="Open that search and match it in the Assistant, without leaving this report. The item-ID appears here on its own.">
+                  <button
+                    type="button"
+                    onClick={() => onLinkColnect(searchUrl, searchQuery)}
+                    style={LINK_BTN}
+                  >
+                    <Icon name="assistant" size="xs" /> Link
+                  </button>
+                </Tooltip>
+              )}
+            </>
           ) : (
             <>
               <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>
@@ -251,6 +335,9 @@ export function ColnectReportRowView({
             <span style={MUTED}>Colnect </span>
             {holding(row.colnectQuantity, row.colnectGrade)}
           </span>
+          {/* Where the name slot above already says the issue, saying it again here would be the
+              same fact twice; a named stamp has no such slot, so it lands on this line instead. */}
+          {row.stampName && issue && <span style={MUTED}>{issue}</span>}
           {row.country && <span style={MUTED}>{row.country}</span>}
           {/* Colnect's own numbers, where the row came from the file — the way to recognise an item
               the collection has never heard of, since there is no stamp to draw chips off. */}

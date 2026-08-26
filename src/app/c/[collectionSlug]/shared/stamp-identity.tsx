@@ -24,6 +24,7 @@ export function StampIdentity({
   primaryVendorId,
   size = "medium",
   href,
+  unnamed = "(unnamed)",
 }: {
   stamp: StampIdentityData;
   vendorMap: Map<string, AreaCatalogEntry>;
@@ -40,6 +41,16 @@ export function StampIdentity({
    * mean "copy this number" and "open this on Colnect".
    */
   href?: string;
+  /**
+   * What stands in for a stamp with **no name of its own**. Defaults to the italic `(unnamed)`
+   * placeholder; a screen where something else is what the collector recognises the stamp by — the
+   * Colnect list report, where it is the issue the stamp is filed under — passes that instead, and
+   * `null` prints nothing at all.
+   *
+   * It keeps the placeholder's muted italic either way, because whatever it says is **not** the
+   * stamp's name and a row printing an issue in the name's own weight would claim it was.
+   */
+  unnamed?: string | null;
 }) {
   const primaryCN = primaryVendorId
     ? (stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
@@ -84,13 +95,15 @@ export function StampIdentity({
           style={STAMP_SECONDARY_CHIP}
         />
       ))}
-      {href ? (
-        <Link href={href} style={{ ...nameStyle, textDecoration: "none" }}>
-          {stamp.name ?? "(unnamed)"}
-        </Link>
-      ) : (
-        <span style={nameStyle}>{stamp.name ?? "(unnamed)"}</span>
-      )}
+      {stamp.name || unnamed ? (
+        href ? (
+          <Link href={href} style={{ ...nameStyle, textDecoration: "none" }}>
+            {stamp.name ?? unnamed}
+          </Link>
+        ) : (
+          <span style={nameStyle}>{stamp.name ?? unnamed}</span>
+        )
+      ) : null}
       <SubtypeChip subtype={stamp.subtype ?? null} size={size} />
       <ColnectChip colnectId={stamp.colnectId} searchQuery={searchQuery} size={size} />
     </span>

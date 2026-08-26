@@ -624,3 +624,54 @@ describe("The local candidate behind a Colnect-only row (#687)", () => {
     assert.equal(row?.candidateCopies, null, "there is no flag to set — a want is created instead");
   });
 });
+
+// What a row calls the stamp when the stamp calls itself nothing, and what it calls the place the
+// stamp is filed under. Both are the same complaint about the same screen: a column of italic
+// `(unnamed)` rows under a bare leaf area identifies nothing, and the collection knows better on
+// both counts. Last in the file because it adds a stamp to the Swap list, which every count above
+// is asserted against.
+describe("How a report row identifies its stamp (#686)", () => {
+  it("names the whole area path and the issue behind an unnamed stamp", async () => {
+    const child = await prisma.collectionArea.create({
+      data: { collectionId: f.collectionId, name: "People's Republic", parentId: f.areaId },
+    });
+    const issue = await prisma.issue.create({
+      data: {
+        collectionId: f.collectionId,
+        collectionAreaId: child.id,
+        issueNo: 1,
+        name: "A Thousand Years",
+        year: 1966,
+      },
+    });
+    const unnamed = await prisma.stamp.create({
+      data: {
+        collectionId: f.collectionId,
+        // No name of its own, which is what most of a Colnect list looks like.
+        colnectId: null,
+        stampAreaLinks: { create: [{ collectionAreaId: child.id, isPrimary: true }] },
+        issueMemberships: { create: [{ issueId: issue.id }] },
+      },
+    });
+    await copy(unnamed.id, f.mnhId);
+
+    const page = await listColnectReportRows(f.userId, f.collectionId, SWAP_LT, {
+      buckets: ["not-comparable"],
+    });
+    const row = page.rows.find((r) => r.stampId === unnamed.id);
+    assert.equal(row?.country, "Poland › People's Republic", "the path, not the leaf");
+    assert.equal(row?.issueName, "A Thousand Years");
+    assert.equal(row?.issueYear, 1966);
+
+    // The facet has to state the same string the rows do, or ticking it would hide them.
+    const countries = await getColnectReportCountries(f.userId, f.collectionId, SWAP_LT);
+    assert.ok(
+      countries.some((c) => c.country === "Poland › People's Republic"),
+      "the country facet lists what the rows carry"
+    );
+    const filtered = await listColnectReportRows(f.userId, f.collectionId, SWAP_LT, {
+      countries: ["Poland › People's Republic"],
+    });
+    assert.equal(filtered.rows.length, 1, "and filtering by it finds the row");
+  });
+});
