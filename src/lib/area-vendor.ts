@@ -265,7 +265,7 @@ export function buildAreaVendorMaps(
     const base = (areaId ? vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
     const overrides = issueId ? prefixByIssue.get(issueId) : undefined;
     if (!overrides || overrides.size === 0) return base;
-    const cacheKey = `${areaId ?? ""} ${issueId}`;
+    const cacheKey = `${areaId ?? ""}\u0000${issueId}`;
     const cached = overridden.get(cacheKey);
     if (cached) return cached;
     const next = new Map(base);

@@ -427,7 +427,7 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
       });
       continue;
     }
-    const key = `${s.prefix} ${s.from} ${ordinal.kind}`;
+    const key = `${s.prefix}\u0000${s.from}\u0000${ordinal.kind}`;
     const group = foldable.get(key);
     if (group) group.push(s);
     else foldable.set(key, [s]);
@@ -483,7 +483,7 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   others.forEach((o, index) => {
     if (!o.roman) return;
     const entry: RomanEntry = { index, ...o.roman };
-    const key = `${entry.prefix} ${entry.suffix}`;
+    const key = `${entry.prefix}\u0000${entry.suffix}`;
     const group = byNumbering.get(key);
     if (group) group.push(entry);
     else byNumbering.set(key, [entry]);
@@ -513,7 +513,7 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   for (const single of romanSingles) {
     const ordinal = parseSuffixOrdinal(single.suffix);
     if (!ordinal) continue;
-    const key = `${single.prefix} ${single.numeral} ${ordinal.kind}`;
+    const key = `${single.prefix}\u0000${single.numeral}\u0000${ordinal.kind}`;
     const group = bySuffixFamily.get(key);
     if (group) group.push({ entry: single, ordinal: ordinal.value });
     else bySuffixFamily.set(key, [{ entry: single, ordinal: ordinal.value }]);
@@ -567,7 +567,7 @@ export function compactCatalogNumberGroups(
   const groups = new Map<string, { vendorAbbr: string; areaPrefix: string | null; numbers: string[] }>();
   const order: string[] = [];
   for (const cn of entries) {
-    const key = `${cn.vendorId} ${cn.areaPrefix ?? ""}`;
+    const key = `${cn.vendorId}\u0000${cn.areaPrefix ?? ""}`;
     let g = groups.get(key);
     if (!g) {
       g = { vendorAbbr: cn.vendorAbbr, areaPrefix: cn.areaPrefix, numbers: [] };
@@ -775,10 +775,10 @@ function tidyLine(rendered: string): string {
   return rendered
     // An empty slot *between* two separators keeps the first one (with its original spacing) and
     // loses the second — `{name} - {certificate} - {year}` must not collapse to `Mercury1850`.
-    .replace(/(\s*[-–·/,:;=]\s*) \s*[-–·/,:;=]\s*/g, "$1")
+    .replace(/(\s*[-–·/,:;=]\s*)\u0000\s*[-–·/,:;=]\s*/g, "$1")
     // Otherwise drop a separator immediately before an empty slot, then one immediately after it.
-    .replace(/\s*[-–·/,:;=]\s* /g, EMPTY_MARK)
-    .replace(/ \s*[-–·/,:;=]\s*/g, EMPTY_MARK)
+    .replace(/\s*[-–·/,:;=]\s*\u0000/g, EMPTY_MARK)
+    .replace(/\u0000\s*[-–·/,:;=]\s*/g, EMPTY_MARK)
     .replace(/[\u0000\u0003]/g, "") // remove the markers themselves
     .replace(/\(\s*\)/g, "") // empty parens left by an emptied token
     .replace(/\[\s*\]/g, "") // empty brackets
@@ -950,7 +950,7 @@ function legendKey(copy: TitleTemplateCopy, over: LegendOver): string | null {
   const fields = copy as unknown as Record<string, string | null | undefined>;
   const name = fields[nameField]?.trim() ?? "";
   const abbr = fields[abbrField]?.trim() ?? "";
-  return name || abbr ? `${name} ${abbr}` : null;
+  return name || abbr ? `${name}\u0000${abbr}` : null;
 }
 
 /** One scope per distinct condition / certificate status / format used by the copies in `scope`

@@ -2315,10 +2315,10 @@ async function computeMergeConflicts(
     }),
   ]);
 
-  const targetKeys = new Set(targetNumbers.map((n) => `${n.catalogVendorId} ${n.number}`));
+  const targetKeys = new Set(targetNumbers.map((n) => `${n.catalogVendorId}\u0000${n.number}`));
   const conflictKeys = new Map<string, { catalogVendorId: string; number: string }>();
   for (const n of sourceNumbers) {
-    const key = `${n.catalogVendorId} ${n.number}`;
+    const key = `${n.catalogVendorId}\u0000${n.number}`;
     if (targetKeys.has(key)) {
       conflictKeys.set(key, { catalogVendorId: n.catalogVendorId, number: n.number });
     }
