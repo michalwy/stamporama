@@ -17,7 +17,7 @@ Your choice is saved in the browser and persists across sessions. It does not re
 ## Confirmations
 
 When an action finishes and you cannot see the result from where you are standing, Stamporama says so
-in a small note at the bottom right of the screen. It carries a **link to what changed** wherever
+in a small note at the top right of the screen. It carries a **link to what changed** wherever
 there is somewhere to go — the copy you just saved, the purchase you edited, the issue that has moved
 to another area — so getting back to it is one click rather than a search.
 

@@ -39,8 +39,13 @@ import { Icon, type IconName } from "@/app/icons";
  *
  * Shape
  * -----
- * - **Bottom right**, above everything (`Z_INDEX`), portalled to `<body>` so no scrolling ancestor's
- *   `overflow` can clip it — the same call `MultiSelectFilter` makes.
+ * - **Top right** (#702), above everything (`Z_INDEX`), portalled to `<body>` so no scrolling
+ *   ancestor's `overflow` can clip it — the same call `MultiSelectFilter` makes. The corner the eye
+ *   is already in: a confirmation arrives while the collector is looking at the screen that caused
+ *   it, not at the far edge of the window.
+ * - **Newest nearest the corner.** The stack grows *downwards* from the top, so a toast never moves
+ *   once it is on screen — an older one being dropped or dismissed below it cannot shift the one
+ *   being read, or the link inside it, out from under the pointer.
  * - **`aria-live="polite"`**, on a region that exists before any toast does. A live region created at
  *   the same moment as its first message is a region screen readers do not announce.
  * - **Auto-dismissed**, and a toast carrying a link is given longer, because it is the only kind
@@ -125,8 +130,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((input: ToastInput) => {
     const id = nextId.current++;
     // Newest first, and capped: an action taken in a loop (a bulk add, a run of row actions) must
-    // not stack a column of toasts up the screen. What is dropped is the oldest, which is the one
-    // whose link the collector has already had the chance to follow.
+    // not stack a column of toasts down the screen. What is dropped is the oldest, which is the one
+    // whose link the collector has already had the chance to follow — and it is furthest from the
+    // corner, so dropping it never shifts the newer ones.
     setToasts((current) => [{ ...input, id }, ...current].slice(0, MAX_VISIBLE));
   }, []);
 
@@ -173,7 +179,7 @@ function ToastViewport({
       style={{
         position: "fixed",
         right: "1.25rem",
-        bottom: "1.25rem",
+        top: "1.25rem",
         zIndex: Z_INDEX,
         display: "flex",
         flexDirection: "column",
