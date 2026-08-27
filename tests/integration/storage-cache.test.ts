@@ -227,6 +227,27 @@ describe("local storage cache (#591)", () => {
     assert.equal(files.length, keys.length);
   });
 
+  it("bounds disk when the populates overlap, not only when they are one at a time", async () => {
+    // A collage run populates several sources at once, and that is where the cap used to slip: an
+    // eviction pass takes its total at the start, so a populate arriving mid-pass was answered by a
+    // pass that could not see the object it had just added. The bound is over the cache once every
+    // populate has returned and a sweep has run — no window, whatever the order.
+    const remote = new CountingStorage();
+    const storage = new CachingStorage(remote);
+    await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        storage.put(`${COLLECTION}/burst-${i}/full.jpg`, blob(MB, i), MIME, "work")
+      )
+    );
+    await sweepStorageCache();
+
+    const usage = await storageCacheUsage();
+    assert.ok(
+      usage.bytes <= usage.maxBytes,
+      `held ${usage.bytes} B against a ${usage.maxBytes} B cap`
+    );
+  });
+
   it("keeps the object that was used most recently, not the one written most recently", async () => {
     const remote = new CountingStorage();
     const storage = new CachingStorage(remote);

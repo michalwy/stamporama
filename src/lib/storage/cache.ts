@@ -5,6 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { prisma } from "../db";
 import { dataDir } from "./filesystem";
 import { bytesToEvict, cacheLowWaterBytes, cacheMaxBytes } from "./cache-rules";
+import { scheduleEviction, type EvictionSchedule } from "./cache-eviction-queue";
 import type {
   ResolveResult,
   Storage,
@@ -221,7 +222,9 @@ export class CachingStorage implements Storage {
       create: { backend: this.backend, key, sizeBytes },
       update: { sizeBytes, lastUsedAt: new Date() },
     });
-    void evictIfOverCap();
+    // Not awaited: the writer must not wait on the bookkeeping. Caught all the same, because an
+    // unhandled rejection from a cache is a process-level failure over scratch bytes.
+    void evictIfOverCap().catch(() => {});
   }
 
   /** Drop a cached copy and its row, in that order and best-effort. */
@@ -335,12 +338,14 @@ export async function clearStorageCacheForCollection(
   return removeEntries(rows);
 }
 
-// Eviction is serialized on this process: two passes running at once would both read the same
-// total and evict twice as much as either needed. Pinned to `globalThis` for the reason `db.ts` and
-// the GCS binding are — a module-level `let` resets on every `next dev` hot reload, which would let
-// a second pass start beside the one already running.
+// Eviction is scheduled rather than merely serialized, and `cache-eviction-queue.ts` carries the
+// reasoning: a caller reaches it because it has just added bytes, so joining a pass whose total
+// predates them would answer "bring the cache back under the cap" with a pass that cannot see the
+// object which pushed it over. Pinned to `globalThis` for the reason `db.ts` and the GCS binding
+// are — a module-level `let` resets on every `next dev` hot reload, which would let a second pass
+// start beside the one already running.
 const globalForCache = globalThis as unknown as {
-  storageCacheEviction?: Promise<StorageCacheSweep>;
+  storageCacheEviction?: EvictionSchedule<StorageCacheSweep>;
 };
 
 /**
@@ -350,16 +355,11 @@ const globalForCache = globalThis as unknown as {
  * Called after every populate rather than only on a timer: an hourly pass alone would leave disk
  * bounded by *how much was written in an hour*, which for card scans is the whole problem. The cap
  * check is one `SUM`, and the pass itself does nothing at all while the cache is inside it.
+ *
+ * Awaiting what this returns means *the cache has been measured since I called*.
  */
 export function evictIfOverCap(): Promise<StorageCacheSweep> {
-  if (globalForCache.storageCacheEviction) {
-    return globalForCache.storageCacheEviction;
-  }
-  const run = evictOnce().finally(() => {
-    globalForCache.storageCacheEviction = undefined;
-  });
-  globalForCache.storageCacheEviction = run;
-  return run;
+  return scheduleEviction((globalForCache.storageCacheEviction ??= {}), evictOnce);
 }
 
 async function evictOnce(): Promise<StorageCacheSweep> {
