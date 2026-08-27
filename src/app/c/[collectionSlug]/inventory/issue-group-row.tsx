@@ -7,6 +7,11 @@ import type {
   IssueGroupRow as IssueGroupRowData,
 } from "@/lib/items";
 import { NO_ISSUE } from "@/lib/issue-groups";
+import { Icon } from "@/app/icons";
+import {
+  SET_COMPLETENESS_CHIP,
+  SET_COMPLETENESS_CHIP_COMPLETE,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   InventoryCopyList,
@@ -34,17 +39,42 @@ const MUTED: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
-const COMPLETENESS_CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
+/**
+ * The hover behind a completeness chip (#670): what the chip is about, then its figures **in an
+ * aligned two-column block**, then the caveat.
+ *
+ * It was one run-on sentence with the numbers set in bold inside it, and the numbers are the reason
+ * anybody opens it — a fraction and a set count read out mid-clause are slower than the chip that
+ * was already on screen. Label left, figure right and right-aligned, so `3/5` and `2` line up under
+ * each other exactly as the issue page's own completeness grid sets them out; the scope sentence
+ * follows in muted text, where a caveat belongs, rather than trailing the figures in the same voice.
+ *
+ * **The complete-set count prints even at zero.** On the chip line a zero is noise (#594 drops the
+ * whole chip), but here the figure has been asked for: *held the set once over* and *held five of
+ * the eight* are different answers, and a row that vanishes at zero makes the reader guess which one
+ * they got.
+ */
+const TIP_TITLE: React.CSSProperties = { fontWeight: 600, marginBottom: "0.25rem" };
+
+const TIP_GRID: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "auto auto",
+  columnGap: "0.75rem",
+  rowGap: "0.1rem",
+  alignItems: "baseline",
+};
+
+const TIP_LABEL: React.CSSProperties = { color: "var(--color-text-secondary)" };
+
+const TIP_FIGURE: React.CSSProperties = {
+  textAlign: "right",
   fontVariantNumeric: "tabular-nums",
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
+  fontWeight: 600,
+};
+
+const TIP_NOTE: React.CSSProperties = {
+  marginTop: "0.35rem",
+  color: "var(--color-text-muted)",
 };
 
 /**
@@ -63,8 +93,10 @@ const COMPLETENESS_CHIP: React.CSSProperties = {
  * would otherwise put six zeros on every row, and a zero here is not the information the row exists
  * to carry — the missing conditions are the white space.
  *
- * A **complete** condition is tinted `success` and says so, #563's chip again: the whole point of
- * scanning the list is finding the sets that are finished.
+ * A **complete** condition is filled and ticked rather than merely tinted (#671): the whole point of
+ * scanning the list is finding the sets that are finished, so the finished ones are what the line
+ * has to hand over without being read. The treatment is `SET_COMPLETENESS_CHIP_COMPLETE`, shared
+ * with #563's lot header, which states the same fact about a different set of copies.
  *
  * The figures are counted over **the copies this list is showing**, filters and all, which is the
  * decision that separates this from every other completeness reading in the app and is why the
@@ -97,30 +129,26 @@ function ChecklistCompletenessChips({
             key={c.conditionId}
             content={
               <>
-                <strong>
-                  {c.owned}/{entry.requiredCount}
-                </strong>{" "}
-                of <strong>{entry.name}</strong> held in {c.name} ({c.abbreviation})
-                {c.completeSets > 0 && (
-                  <>
-                    {" — "}
-                    <strong>{c.completeSets}</strong> complete set
-                    {c.completeSets === 1 ? "" : "s"}
-                  </>
-                )}
-                .{" "}
-                Counted over <strong>the copies this list is showing</strong>: every filter in force
-                applies, so narrowing the list narrows this figure too.
+                <div style={TIP_TITLE}>
+                  {entry.name} · {c.name} ({c.abbreviation})
+                </div>
+                <div style={TIP_GRID}>
+                  <span style={TIP_LABEL}>Held</span>
+                  <span style={TIP_FIGURE}>
+                    {c.owned}/{entry.requiredCount}
+                  </span>
+                  <span style={TIP_LABEL}>Complete sets</span>
+                  <span style={TIP_FIGURE}>{c.completeSets}</span>
+                </div>
+                <div style={TIP_NOTE}>
+                  Counted over the copies this list is showing — every filter in force applies, so
+                  narrowing the list narrows these figures too.
+                </div>
               </>
             }
           >
-            <span
-              style={{
-                ...COMPLETENESS_CHIP,
-                borderColor: complete ? "var(--color-success)" : undefined,
-                color: complete ? "var(--color-success)" : "var(--color-text-secondary)",
-              }}
-            >
+            <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
+              {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
               {c.abbreviation || c.name} {c.owned}/{entry.requiredCount}
             </span>
           </Tooltip>

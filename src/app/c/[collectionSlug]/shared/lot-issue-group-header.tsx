@@ -4,7 +4,11 @@ import { useState } from "react";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
-import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import {
+  SET_COMPLETENESS_CHIP,
+  SET_COMPLETENESS_CHIP_COMPLETE,
+  STAMP_SECONDARY_CHIP,
+} from "./chip-styles";
 import { IssueTitle, IssueCatalogChips, StampCountBadge } from "./issue-view";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -45,12 +49,19 @@ const CHIP: React.CSSProperties = {
  * would be counted once, for a figure answering neither.
  *
  * **No catalog number is printed on the chip at all** (#572). The chip carries the figure and how
- * far off it is — `6/6 — complete` or `12/30 · 18 missing` — and the *names* live entirely in the
+ * far off it is — `✓ 6/6` or `12/30 · 18 missing` — and the *names* live entirely in the
  * popover. #563 printed three of them inline with a `+N more` tail, and the truncation turned out
  * to be the problem rather than the fix: three numbers out of eighteen are nothing the collector can
  * act on, so the line was paying width for something it did not deliver, on a header already
  * carrying an area, a title, catalogue numbers and a stamp count. The count stays, since `12/30`
  * alone leaves *how many am I still short* to be worked out by subtraction.
+ *
+ * **Complete is the shared chip treatment** (#671) — `SET_COMPLETENESS_CHIP_COMPLETE`, filled in
+ * `success` and ticked, the very state the Copies list's per-condition chips take. The tick took
+ * over from the "— complete" this chip used to spell: the words were there because a border tint
+ * alone was too quiet to be the whole statement, and a filled chip with a glyph is not. One
+ * treatment across both surfaces, since a finished set should not look like an achievement on one
+ * screen and a slightly greener number on the other.
  *
  * **The popover draws the gap as chips**, one per missing stamp in the issue's own hand-set stamp
  * order (#549) — the header's own catalogue vocabulary rather than a comma-joined string inside a
@@ -103,26 +114,18 @@ function SetCompletenessLine({
       }
       align="start"
     >
-      <span
-        style={{
-          ...CHIP,
-          flexShrink: 0,
-          borderColor: complete ? "var(--color-success)" : undefined,
-          color: complete ? "var(--color-success)" : "var(--color-text-secondary)",
-        }}
-      >
+      <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
+        {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
         {named && (
           <span style={{ color: "var(--color-text-muted)" }}>{entry.name} </span>
         )}
         {entry.owned}/{entry.requiredCount}
-        {complete ? (
-          " — complete"
-        ) : entry.missingCount > 0 ? (
+        {!complete && entry.missingCount > 0 && (
           <>
             {" · "}
             {entry.missingCount} missing
           </>
-        ) : null}
+        )}
         {entry.fromHere > 0 && (
           <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
             {" · "}

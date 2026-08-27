@@ -1054,7 +1054,9 @@ click puts it back.
 header also carries one figure per [checklist](collections.md#checklists) the issue has — the
 answer to *can I list this series as one set yet?*:
 
-- **6/6 — complete** — you hold a for-sale copy of every stamp on that checklist.
+- **✓ 6/6**, filled green and ticked — you hold a for-sale copy of every stamp on that checklist.
+  The same mark a complete condition gets on the [Copies list](inventory.md) grouped by issue, so a
+  finished set looks the same wherever you meet one.
 - **12/30 · 18 missing** — you do not, and eighteen is how many more you need.
 
 The chip carries the figures and nothing else. **Which** stamps are missing is in the hover:

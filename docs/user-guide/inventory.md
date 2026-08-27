@@ -1009,12 +1009,15 @@ under two series.
 
 Under the issue's name, the group header says how far its [checklists](collections.md) have got,
 **condition by condition** — `MNH 3/5`, `U 5/5`, one chip per condition you hold something of. A
-condition you own the whole set in is tinted green. Conditions you hold none of get no chip at all:
-the ones on the line are the ones there is something to say about.
+condition you own the whole set in is **filled green and ticked** (`✓ U 5/5`), so the finished ones
+jump out of a long list without your reading each fraction. Conditions you hold none of get no chip
+at all: the ones on the line are the ones there is something to say about.
 
-Hover a chip for the full sentence — which checklist it is talking about, the condition spelled out,
-and **how many complete sets** you could assemble from those copies (the figure that says whether a
-duplicate is a spare or the only one you have).
+Hover a chip for the figures behind it: the checklist and condition it is talking about, then
+**Held** (the same fraction the chip shows) and **how many complete sets** you could assemble from
+those copies — the figure that says whether a duplicate is a spare or the only one you have. The two
+figures are set out one per line with the numbers aligned, so they read at a glance; the note about
+what is being counted follows underneath.
 
 These figures are counted over **the copies this list is showing**. Every filter in force applies, so
 a list narrowed to one klaser tells you how complete the set is *in that klaser* — not how complete
