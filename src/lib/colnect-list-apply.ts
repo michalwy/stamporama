@@ -1,6 +1,11 @@
 import "server-only";
 import { prisma } from "./db";
-import { listColnectReportKeys, setColnectReportDone } from "./colnect-list-report";
+import {
+  listColnectReportKeys,
+  readColnectLocalCondQty,
+  setColnectReportDone,
+  type ColnectCondQtyRow,
+} from "./colnect-list-report";
 import type { ColnectReportFilters } from "./colnect-list-report";
 import {
   isColnectListDifferenceKind,
@@ -16,9 +21,20 @@ import {
 // then carries out on a colnect.com page, one throttled request at a time. See ADR-0042 for the
 // decision and its risks; `docs/agents/extension.md` for the run itself.
 //
-// **Membership only.** Quantity and grade are deliberately out: `POST /item/col` can carry them
-// (`act=x_cond_qty`), and a bulk run that silently re-graded three thousand entries from a file is
-// a different and much larger claim than *this is on the list or it is not*.
+// **An addition carries the quantity and the grades this side holds** (#704, amending ADR-0042).
+// It used to carry membership and nothing else, on the reasoning that a stamp with copies of two
+// grades has no single Colnect grade to send. Colnect holds *several* conditions per list entry, so
+// it does have one — two rows — and, more to the point, not writing a grade is not the same as
+// leaving it alone: on an entry the run has just created, silence hands the decision to the list's
+// own defaults, which is how `Here 2 × MNH` landed over there as `1 × MNH`.
+//
+// Entries **already** on the list are still not touched. Correcting those needs to read what Colnect
+// currently holds, and the one call that could is `act=check&val=+`, which was verified on
+// 2026-08-27 to *reset* an existing entry to the list defaults rather than report it. Correcting
+// those is #705, and it starts by settling what an export says Colnect holds.
+//
+// A condition this collection has never mapped to a Colnect grade (#404) is **not written and is
+// reported** — the collector's rule, and the same refusal to guess the report's own grade silence is.
 //
 // **A removal is guarded by the snapshot's age; an addition is not.** They are not symmetrical acts.
 // Adding something the collection holds *now* is right whatever the file's age — the local side was
@@ -49,6 +65,12 @@ export interface ColnectApplyItem {
   /** The bucket it came from, carried so that applying it can mark **that** difference done on the
    *  report (#686) rather than guessing at a kind. */
   kind: string;
+  /** What this side holds, a row per grade (#704) — Colnect's own condition ids. Present only on an
+   *  addition, and empty where no grade can be stated. */
+  rows?: ColnectCondQtyRow[];
+  /** A count to state where no grade can be: a stamp whose open wants name no single condition. The
+   *  run writes it against whatever grade Colnect's own entry carries and leaves that grade alone. */
+  ungraded?: number;
 }
 
 /**
@@ -78,6 +100,11 @@ export interface ColnectApplyWorklist {
   removalsAllowed: boolean;
   /** Why removals were dropped, in a sentence the screen prints. Null where they were not. */
   removalsRefused: string | null;
+  /** Additions holding copies in a condition with no Colnect mapping (#404, #704). Their grade is
+   *  not written and not guessed; this is what the dialog says so before an hour-long run. */
+  unmappedConditions: number;
+  /** That, as a sentence, or null where there are none. */
+  unmappedConditionsNote: string | null;
 }
 
 /** Raised when a worklist is asked for a list that cannot produce one. */
@@ -158,6 +185,23 @@ export async function getColnectApplyWorklist(
     }
   }
 
+  // What each addition should land as (#704). One query for the whole worklist rather than one per
+  // item: a first Swap pass is thousands of additions, and the run reads this once before it starts.
+  // Removals carry none — there is nothing to state about an entry that is going away.
+  const held = await readColnectLocalCondQty(
+    ownerId,
+    collectionId,
+    lt,
+    additions.map((item) => item.colnectId)
+  );
+  let unmappedConditions = 0;
+  for (const item of additions) {
+    const local = held.get(item.colnectId);
+    item.rows = local?.rows ?? [];
+    if (local?.ungraded) item.ungraded = local.ungraded;
+    if (local?.unmapped) unmappedConditions += 1;
+  }
+
   const takenAt = mapping.snapshot.exportedAt ?? mapping.snapshot.importedAt;
   const ageDays = ageInDays(takenAt, now);
   const removalsAllowed = ageDays <= COLNECT_APPLY_MAX_SNAPSHOT_AGE_DAYS;
@@ -175,6 +219,11 @@ export async function getColnectApplyWorklist(
       ageDays,
     },
     removalsAllowed,
+    unmappedConditions,
+    unmappedConditionsNote:
+      unmappedConditions === 0
+        ? null
+        : `${unmappedConditions} of the additions ${unmappedConditions === 1 ? "holds a copy" : "hold copies"} in a condition you have not mapped to a Colnect grade. Those copies are left out of what is written rather than guessed at — map the condition under Settings → Colnect if you want them counted.`,
     removalsRefused:
       removalsAllowed || removals.length === 0
         ? null

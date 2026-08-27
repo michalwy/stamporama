@@ -21,12 +21,24 @@ export const APPLY_ELEMENT_ID = "stamporama-assistant-colnect-apply";
 /** Which way one item goes on Colnect — `+` onto the list, `-` off it. Colnect's own `val`. */
 export type ApplyDirection = "+" | "-";
 
+/** One `(grade, count)` row of a Colnect list entry — Colnect's own condition ids, 1 MNH … 5 CTO. */
+export interface ApplyCondQty {
+  cond: number;
+  qty: number;
+}
+
 /** One thing to do. `kind` is the report bucket it came from, carried so the instance can mark
  *  *that* difference done as the item lands rather than guessing at a kind. */
 export interface ApplyItem {
   colnectId: string;
   direction: ApplyDirection;
   kind: string;
+  /** What this side holds, a row per grade (#704). On an addition only, and empty where no grade can
+   *  be stated — every copy in a condition this collection has never mapped (#404). */
+  rows?: ApplyCondQty[];
+  /** A count to state where no grade can be: a stamp whose open wants name no single condition. It
+   *  goes against whatever grade Colnect's own entry already carries, leaving that grade alone. */
+  ungraded?: number;
 }
 
 /**
@@ -123,8 +135,29 @@ export function parseApplyHandoff(raw: string | null | undefined): ApplyHandoff 
     const colnectId = typeof item?.colnectId === "string" ? item.colnectId.trim() : "";
     const direction = item?.direction;
     if (!colnectId || (direction !== "+" && direction !== "-")) return [];
+    // A malformed row is dropped rather than kept half-read: a count written against a grade that
+    // came through as `NaN` is the kind of quiet wrongness #704 exists to end.
+    const rows = Array.isArray(item.rows)
+      ? item.rows.flatMap((raw): ApplyCondQty[] => {
+          const row = raw as Record<string, unknown>;
+          const cond = typeof row?.cond === "number" ? row.cond : NaN;
+          const qty = typeof row?.qty === "number" ? row.qty : NaN;
+          if (!Number.isInteger(cond) || cond < 0 || !Number.isInteger(qty) || qty < 1) return [];
+          return [{ cond, qty }];
+        })
+      : [];
+    const ungraded =
+      typeof item.ungraded === "number" && Number.isInteger(item.ungraded) && item.ungraded > 0
+        ? item.ungraded
+        : undefined;
     return [
-      { colnectId, direction, kind: typeof item.kind === "string" ? item.kind : "only-local" },
+      {
+        colnectId,
+        direction,
+        kind: typeof item.kind === "string" ? item.kind : "only-local",
+        rows,
+        ...(ungraded === undefined ? {} : { ungraded }),
+      },
     ];
   });
   if (items.length === 0) return null;

@@ -31,10 +31,22 @@ import {
   parseApplyHandoff,
   type ApplyHandoffState,
 } from "../core/colnect-apply-handoff";
+import {
+  EXPORT_ELEMENT_ID,
+  EXPORT_MESSAGE_ATTRIBUTE,
+  EXPORT_REPORT_ATTRIBUTE,
+  EXPORT_REQUEST_ATTRIBUTE,
+  EXPORT_STATE_ATTRIBUTE,
+  parseExportHandoff,
+  type ExportHandoffState,
+} from "../core/colnect-export-handoff";
 import type {
   ColnectApplyProgressNotice,
   ColnectApplyRequest,
   ColnectApplyResponse,
+  ColnectExportProgressNotice,
+  ColnectExportRequest,
+  ColnectExportResponse,
   ListedNotice,
   ListedResponse,
   ListRequest,
@@ -50,8 +62,9 @@ import type {
 //
 // It carries tasks from the instance's own screens to the background worker, and the outcomes back
 // onto the page: a listing task from the bulk listing workspace (#322/#407), a stamp to match
-// (#423), and — since #689 — a Colnect list difference to apply. It never touches the instance's
-// data, never reads a token, and runs on no other origin.
+// (#423), a Colnect list difference to apply (#689) and, since #690, a request to fetch a Colnect
+// list export. It never touches the instance's data, never reads a token, and runs on no other
+// origin.
 
 declare global {
   interface Window {
@@ -106,6 +119,7 @@ function report(
 let lastListingPayload: string | null = null;
 let lastMatchPayload: string | null = null;
 let lastApplyPayload: string | null = null;
+let lastExportPayload: string | null = null;
 
 /** Read the element; hand a task the extension has not seen before to the worker. */
 async function pump(): Promise<void> {
@@ -266,6 +280,61 @@ async function pumpApply(): Promise<void> {
   if (!res.ok) reportApply(handoff.requestId, "error", res.error);
 }
 
+// ── The Colnect export handoff (#690) ────────────────────────────────────────
+// The same two motions on a fifth node, and its own `handled` set. It is the one handoff that
+// **reads** Colnect rather than writing to it: the file the collector used to download by hand comes
+// back through the worker and straight into the instance, and what lands here is a sentence.
+
+const exportsHandled = new Set<string>();
+
+function exportElement(): HTMLElement | null {
+  return document.getElementById(EXPORT_ELEMENT_ID);
+}
+
+function reportExport(
+  requestId: string,
+  state: ExportHandoffState,
+  message: string,
+  report?: unknown
+): void {
+  const el = exportElement();
+  if (!el) return; // the collector navigated on; the import lands on the instance regardless
+  el.setAttribute(EXPORT_REQUEST_ATTRIBUTE, requestId);
+  el.setAttribute(EXPORT_STATE_ATTRIBUTE, state);
+  el.setAttribute(EXPORT_MESSAGE_ATTRIBUTE, message);
+  if (report) el.setAttribute(EXPORT_REPORT_ATTRIBUTE, JSON.stringify(report));
+  else el.removeAttribute(EXPORT_REPORT_ATTRIBUTE);
+}
+
+async function pumpExport(): Promise<void> {
+  const el = exportElement();
+  if (!el) return;
+  const raw = el.textContent;
+  if (raw === lastExportPayload) return;
+  lastExportPayload = raw;
+  const handoff = parseExportHandoff(raw);
+  if (!handoff || exportsHandled.has(handoff.requestId)) return;
+  exportsHandled.add(handoff.requestId);
+
+  reportExport(handoff.requestId, "running", "Opening Colnect…");
+
+  let res: ColnectExportResponse;
+  try {
+    res = (await chrome.runtime.sendMessage({
+      type: "colnect-export",
+      task: handoff.task,
+      requestId: handoff.requestId,
+    } satisfies ColnectExportRequest)) as ColnectExportResponse;
+  } catch (e) {
+    // Reported and left alone, exactly as the pumps above are: the answer lands on the node the
+    // request came in on, so an id forgotten on failure is picked straight back up by the mutation
+    // the failure itself caused. A press of the button mints a new id, which is what a retry is.
+    reportExport(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
+    return;
+  }
+  if (!res.ok) reportExport(handoff.requestId, "error", res.error);
+}
+
 /**
  * Whether this page is still following `requestId` — which is what decides who activates the offer
  * (#412).
@@ -340,9 +409,18 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
     reportApply(msg.requestId, msg.state, msg.message, msg.report);
   });
 
+  // How a refresh went (#690), on its own node. Minutes rather than hours — Colnect builds the file
+  // and the instance replaces the snapshot — but the same rule: dropped where the screen has moved
+  // on, because the snapshot on the instance is the record, not this attribute.
+  chrome.runtime.onMessage.addListener((msg: ColnectExportProgressNotice) => {
+    if (msg?.type !== "colnect-export-progress") return;
+    reportExport(msg.requestId, msg.state, msg.message, msg.report);
+  });
+
   void pump();
   void pumpMatch();
   void pumpApply();
+  void pumpExport();
 
   // The elements are written by a click inside a client-rendered screen, so they appear (and are
   // rewritten for the next offer) long after load. Watching the whole document is the cheap, obvious
@@ -364,6 +442,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
       void pump();
       void pumpMatch();
       void pumpApply();
+      void pumpExport();
     });
   }).observe(document.documentElement, {
     childList: true,

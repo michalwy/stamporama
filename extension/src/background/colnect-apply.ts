@@ -7,6 +7,7 @@ import {
 import type {
   ColnectApplyProgressNotice,
   ColnectApplyResponse,
+  ColnectCondQtyRequest,
   ColnectWriteRequest,
   ColnectWriteResponse,
 } from "../core/messages";
@@ -14,8 +15,13 @@ import {
   COLNECT_WRITE_INTERVAL_MS,
   classifyColnectListWrite,
   colnectWriteBackoffMs,
+  planColnectCondQty,
+  readColnectEntryRows,
+  type ColnectCondQty,
+  type ColnectCondQtyStep,
 } from "../platform/colnect/list-write";
 import { getActiveProfile, normalizeBaseUrl } from "../core/profile";
+import { colnectTab } from "./colnect-tab";
 import {
   readApplyRun,
   runAdvanced,
@@ -48,15 +54,23 @@ import {
 // **What lands is marked done on the report as it lands**, in small batches, so the two screens
 // never disagree about what was carried out. A crash mid-run leaves the report describing exactly
 // what got through.
+//
+// **An addition is then corrected to what this side holds** (#704). Colnect answers the membership
+// call with the entry it just made — at the list's own defaults, which is how `2 × MNH` here landed
+// as `1 × MNH` there — so the run reads that answer, plans the difference in `list-write.ts`, and
+// sends only the calls that difference needs. Usually none: a Swap list whose default is `1/MNH` is
+// already right for most additions, and that is what keeps a run's length honest.
+//
+// The corrections happen **before the cursor moves**, which makes an interrupted item safe to redo:
+// re-running the membership call resets the entry to the defaults and the corrections then land
+// again, so the end state is the same either way. That matters because `act=check&val=+` on an
+// entry that already exists is a *reset* rather than a re-assertion — verified on 2026-08-27, which
+// is also why entries the run did not create are still left alone.
 
 /** How many done marks are posted to the instance at once. Small, because the point of the mark is
  *  that the report never overstates what is still to do; a batch is only here so a run paced at one
  *  write every other second does not open a second connection beside each of them. */
 const MARK_BATCH = 10;
-
-/** Where the run writes from. Any Colnect page will do — the call is same-origin and says which
- *  item it is about — so an already-open tab is reused before one is opened. */
-const COLNECT_HOME = "https://colnect.com/en";
 
 /** The one run in flight, if this worker is the one running it. `null` between items only when
  *  nothing is running: two runs would be two paces on one account, and the measured safe rate is a
@@ -170,6 +184,12 @@ async function drive(start: ApplyRun): Promise<void> {
         return;
       }
 
+      // Correct what was just created, before the cursor moves (#704). A failure here is the item's
+      // own and never the run's: membership landed, which is the difference the report is about.
+      if (outcome.status === "applied" && item.direction === "+") {
+        await correct(tabId, item, run.lt, outcome.entry);
+      }
+
       run = runAdvanced(run, outcome.status === "applied" ? "applied" : "changed");
       await writeApplyRun(run);
       // Only what actually landed is claimed done. A `changed` item is one Colnect no longer holds
@@ -209,24 +229,68 @@ async function writeOne(tabId: number, item: ApplyItem, lt: number) {
   if (!res?.ok) {
     return { status: "stopped" as const, reason: res?.error ?? "The Colnect page answered nothing." };
   }
-  return classifyColnectListWrite(res.status, {
+  const outcome = classifyColnectListWrite(res.status, {
     get: (name) => (name.toLowerCase() === "retry-after" ? res.retryAfter : null),
   });
+  // The entry Colnect made of it, where it made one — quantities indexed by condition id. Read here
+  // rather than at the call site so the body never travels further than it has to.
+  return outcome.status === "applied"
+    ? { ...outcome, entry: readColnectEntryRows(res.body) }
+    : { ...outcome, entry: null };
 }
 
-/** A Colnect tab to write from: one already open by preference, a new one otherwise. Reusing is not
- *  only tidier — a page the collector already has loaded is one they are already signed in on. */
-async function colnectTab(): Promise<number | null> {
+/**
+ * Make the entry Colnect just created say what this side holds (#704).
+ *
+ * Paced like every other write, because they are the same requests to the same server. Nothing here
+ * stops the run: the membership *did* land, and that is the difference the report was about — a
+ * grade that could not be corrected is one wrong entry, reported by the next export, and not a
+ * reason to abandon two thousand items behind it.
+ */
+async function correct(
+  tabId: number,
+  item: ApplyItem,
+  lt: number,
+  entry: ColnectCondQty[] | null
+): Promise<void> {
+  // No answer to plan against. Colnect said something this build cannot read, and correcting an
+  // entry whose state is unknown would be guessing at exactly the scale #704 is about.
+  if (entry === null) return;
+
+  const desired: ColnectCondQty[] =
+    item.rows && item.rows.length > 0
+      ? item.rows
+      : // No grade can be stated. Where this side still knows the count — a stamp whose open wants
+        // name no single condition — it goes against whatever grade Colnect's own entry carries, so
+        // the number is corrected and the grade left exactly as it was.
+        item.ungraded && entry.length === 1
+        ? [{ cond: entry[0].cond, qty: item.ungraded }]
+        : [];
+
+  for (const step of planColnectCondQty(entry, desired)) {
+    await sleep(COLNECT_WRITE_INTERVAL_MS);
+    if (!(await condQty(tabId, item.colnectId, lt, step))) return;
+  }
+}
+
+/** One correction, performed by the page. False where it did not land — the caller stops correcting
+ *  *this* item and carries on with the run. */
+async function condQty(
+  tabId: number,
+  colnectId: string,
+  lt: number,
+  step: ColnectCondQtyStep
+): Promise<boolean> {
   try {
-    const open = await chrome.tabs.query({ url: "*://*.colnect.com/*" });
-    const existing = open.find((tab) => tab.id !== undefined);
-    if (existing?.id !== undefined) return existing.id;
-    const created = await chrome.tabs.create({ url: COLNECT_HOME, active: false });
-    if (created.id === undefined) return null;
-    await waitForLoad(created.id);
-    return created.id;
+    const res = (await chrome.tabs.sendMessage(tabId, {
+      type: "colnect-cond-qty",
+      colnectId,
+      lt,
+      step,
+    } satisfies ColnectCondQtyRequest)) as ColnectWriteResponse;
+    return res?.ok === true && res.status >= 200 && res.status < 300;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -281,31 +345,6 @@ async function report(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Wait for a freshly opened tab to finish loading, so the content script is in it. */
-function waitForLoad(tabId: number): Promise<void> {
-  return new Promise((resolve) => {
-    const done = () => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      clearTimeout(timer);
-      resolve();
-    };
-    const listener = (id: number, info: chrome.tabs.OnUpdatedInfo) => {
-      if (id === tabId && info.status === "complete") done();
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-    // Finite: a Colnect page that never settles still has a document, and the first write will say
-    // so far more usefully than waiting for ever would.
-    const timer = setTimeout(done, 30_000);
-    // It may already have settled between `create` and this listener going on.
-    void chrome.tabs.get(tabId).then(
-      (tab) => {
-        if (tab.status === "complete") done();
-      },
-      () => done()
-    );
-  });
 }
 
 /** The origin of a URL, or null. */

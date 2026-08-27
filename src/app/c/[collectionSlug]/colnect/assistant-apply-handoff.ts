@@ -16,6 +16,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // this screen: what has landed is recorded on the server as it lands, and closing the tab loses the
 // progress bar rather than the run.
 //
+// Since #704 an addition also carries the quantity and the grades this side holds, which is why an
+// item is more than a Colnect id and a direction.
+//
 // Mirrored by hand in `extension/src/core/colnect-apply-handoff.ts` — separate builds, no import
 // path between them.
 
@@ -148,7 +151,15 @@ export function useAssistantApply() {
       collectionId: string;
       lt: number;
       label: string;
-      items: { colnectId: string; direction: "+" | "-"; kind: string }[];
+      items: {
+        colnectId: string;
+        direction: "+" | "-";
+        kind: string;
+        /** What this side holds, a row per grade (#704) — Colnect's own condition ids. */
+        rows?: { cond: number; qty: number }[];
+        /** A count to state where no grade can be, against whatever grade Colnect's entry carries. */
+        ungraded?: number;
+      }[];
     }) => {
       const requestId =
         typeof crypto !== "undefined" && "randomUUID" in crypto

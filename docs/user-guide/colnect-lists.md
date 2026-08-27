@@ -4,7 +4,8 @@ Colnect keeps lists of its own — **Collection**, **Swap**, **Wish** and **Sell
 another collector reads before offering you anything. Keeping one in step with what you actually
 hold is a loop, because Colnect offers no way to push data into it: **export the list, load the file
 here, look at what differs, fix whichever side is wrong.** The **Colnect** screen in the sidebar is
-where the middle two happen.
+where the middle two happen — and with the [Assistant](assistant.md) running, the export can be
+fetched for you as well.
 
 Which of your own things each list stands for, and which side wins when the two disagree, is set up
 first under [Settings → Colnect → Colnect list sync](collections.md#colnect-list-sync). A list you
@@ -14,6 +15,24 @@ have not switched on does not appear here.
 
 On Colnect, open the list and press **Export list**; Colnect mails you a CSV or offers it for
 download. Back here, press **Load an export** and pick the file.
+
+### Without the download
+
+Where the [Assistant](assistant.md) is installed and connected to this collection, **Refresh from
+Colnect** in the header does the whole of that for you: it asks Colnect for this list's export in
+this browser, signed in as you, and loads the file here as soon as it comes back. It is the same
+request pressing **Export list** makes and the same file — you simply never see it.
+
+Colnect takes its time building a long list, so a Wish refresh is a minute or two. If anything goes
+wrong — Colnect refuses, the file cannot be read, your session has lapsed — **nothing is replaced**:
+the export you already had is left exactly as it was, and the report goes on comparing against it.
+And because nobody is watching to say *yes, that is the right list*, a file that comes back naming a
+**different** list is refused rather than loaded.
+
+**Load an export** stays where it is. It is the way through the day Colnect changes that request,
+and it is the only way at all in a browser without the Assistant.
+
+### What the dialog asks
 
 The file says which list it is, so you usually have nothing to answer: every row of an export names
 the lists that stamp sits on, and the one the most rows name is the list you exported. Where that
@@ -86,8 +105,9 @@ between Colnect's country names and your area names.
 
 The row's **⋮** menu offers two ways to put a row away, and the difference between them matters:
 
-- **Mark done on Colnect** — *I have already fixed this over there.* Nothing here can talk to
-  Colnect, so this is a claim rather than a fact, and it holds only until the next import. If the
+- **Mark done on Colnect** — *I have already fixed this over there.* Stamporama itself never talks
+  to Colnect — only the Assistant does, in your browser — so this is a claim rather than a fact, and
+  it holds only until the next import. If the
   row comes back in the next export, it was not actually done, and the report says so.
 - **Ignore** — *this difference is fine and always will be.* A judgement about your collection, so
   it survives every future import. You can add a note saying why.
@@ -165,7 +185,8 @@ The button appears only when the Assistant is installed and connected to this co
 it shows what will be sent before anything is:
 
 - how many items go **onto** the list and how many come **off** it;
-- that it is **membership only** — never a quantity, never a grade, never a note;
+- that an item it **adds** lands with your count and your grades, while anything already on the list
+  keeps its own — and that no note is ever written;
 - roughly how long it will take.
 
 It is slow on purpose. Colnect starts refusing requests above about four a second, and comfortably
@@ -180,10 +201,37 @@ item *because the file said so*, and if that file is a fortnight old you may wel
 item over there on purpose since. So a run against an export more than a week old sends its
 additions and leaves its removals out, and says so. Load a fresh export and run it again.
 
+### What an addition lands as
+
+Colnect keeps a **row per grade** on a list entry, so a stamp you hold as two mint and one used goes
+on as two rows — `2 MNH` and `1 U` — not as one row with a guess in it. That is read from your own
+copies through your [condition mapping](collections.md#colnect-condition-mapping), so what appears
+over there is what the report says you hold.
+
+Where a copy is in a condition you have **not** mapped to a Colnect grade, it is simply left out of
+what is written rather than guessed at, and the confirmation tells you how many additions that
+affects before the run starts. Map the condition under Settings → Colnect if you want those copies
+counted.
+
+On the **Wish** list a want that accepts several conditions states no single grade, so only the count
+is written and whatever grade Colnect chose is left alone.
+
+**Items already on the list are not touched.** If the report shows one with the wrong count or the
+wrong grade — the **Quantity** and **Grade** buckets — the run leaves it exactly as it is, and you
+correct it on Colnect yourself. That is not caution for its own sake: there is no way to ask Colnect
+what an entry currently holds without overwriting it, so a run that tried would be guessing at the
+one thing it must not guess about.
+
+Before this, an addition landed at whatever the list's own defaults are — usually `1` and `MNH` —
+whatever the report said. That was the bug, and it is why an entry the Assistant creates is now
+corrected while one it finds is left alone: on a new entry there is nothing to preserve, so saying
+nothing is not the same as leaving it be.
+
 Two things this cannot do, and does not pretend to:
 
 - **Colnect does not document any of this.** The Assistant is doing exactly what your click on the
   list checkbox does, but Colnect never promised those requests would keep working. If they change,
   the run stops and tells you — it never guesses — and everything else here carries on unaffected.
   You can always fix a row by hand from the report, which is what the whole screen did before.
-- It changes nothing about quantity or grade. Those stay yours.
+- It changes no note, and it changes nothing at all about an entry that was already on the list.
+  Those stay yours.

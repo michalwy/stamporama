@@ -6,7 +6,11 @@ import {
   classifyColnectListWrite,
   colnectListWriteBody,
   colnectWriteBackoffMs,
+  colnectCondQtyBody,
+  planColnectCondQty,
+  readColnectEntryRows,
   retryAfterMs,
+  type ColnectCondQtyStep,
 } from "./list-write";
 
 // The one request in this repo that **changes** something in a Colnect account (#689, ADR-0042).
@@ -111,5 +115,138 @@ describe("colnectWriteBackoffMs (#689)", () => {
       null,
       "Colnect has said no often enough; the run pauses and the collector starts it again"
     );
+  });
+});
+
+// ── Quantity and grade (#704) ────────────────────────────────────────────────
+//
+// Shapes read off `m.115.js` and verified live against one item on 2026-08-27. Asserted here for
+// `colnectListWriteBody`'s reason and one more: the live check cost the collector a wrong entry on a
+// real list before it was restored, and it is not something to run again to find out what changed.
+
+describe("readColnectEntryRows (#704)", () => {
+  it("reads the array of quantities Colnect indexes by condition id", () => {
+    assert.deepEqual(readColnectEntryRows("[0,0,0,0,1,0]"), [{ cond: 4, qty: 1 }], "one Used");
+    assert.deepEqual(readColnectEntryRows("[0,8,0,0,2,0]"), [
+      { cond: 1, qty: 8 },
+      { cond: 4, qty: 2 },
+    ]);
+  });
+
+  it("reads an object keyed the same way, since Colnect's own handler cannot tell them apart", () => {
+    assert.deepEqual(readColnectEntryRows('{"1":3}'), [{ cond: 1, qty: 3 }]);
+  });
+
+  it("answers null for anything that is not an answer about an entry", () => {
+    assert.equal(readColnectEntryRows(""), null);
+    assert.equal(readColnectEntryRows('"limit"'), null, "the list is full");
+    assert.equal(readColnectEntryRows("<!doctype html>"), null);
+  });
+
+  it("keeps no zero rows — a grade with no copies is not a row", () => {
+    assert.deepEqual(readColnectEntryRows("[0,0,0,0,0,0]"), []);
+  });
+});
+
+describe("planColnectCondQty (#704)", () => {
+  it("plans nothing where this side can state no grade at all", () => {
+    assert.deepEqual(
+      planColnectCondQty([{ cond: 1, qty: 1 }], []),
+      [],
+      "unmapped is reported, not guessed"
+    );
+  });
+
+  it("plans nothing where Colnect's defaults already landed it right", () => {
+    assert.deepEqual(planColnectCondQty([{ cond: 1, qty: 1 }], [{ cond: 1, qty: 1 }]), []);
+  });
+
+  it("corrects the count alone, in one call, where only the count is wrong", () => {
+    assert.deepEqual(planColnectCondQty([{ cond: 1, qty: 1 }], [{ cond: 1, qty: 4 }]), [
+      { act: "quantity", cond: 1, qty: 4 },
+    ]);
+  });
+
+  it("re-grades the default row rather than removing it and adding another", () => {
+    assert.deepEqual(planColnectCondQty([{ cond: 1, qty: 1 }], [{ cond: 4, qty: 1 }]), [
+      { act: "cond", cond: 4, qty: 1, previousCond: 1, qtyOnly: false },
+      { act: "quantity", cond: 4, qty: 1 },
+    ]);
+  });
+
+  it("gives a stamp of two grades the two rows Colnect can hold", () => {
+    assert.deepEqual(
+      planColnectCondQty([{ cond: 1, qty: 1 }], [
+        { cond: 1, qty: 2 },
+        { cond: 4, qty: 1 },
+      ]),
+      [
+        { act: "cond", cond: 4, qty: 1, previousCond: null, qtyOnly: false },
+        { act: "quantity", cond: 1, qty: 2 },
+        { act: "quantity", cond: 4, qty: 1 },
+      ]
+    );
+  });
+
+  it("drops a grade Colnect holds that this side does not, once nothing needs its row", () => {
+    assert.deepEqual(
+      planColnectCondQty(
+        [
+          { cond: 1, qty: 1 },
+          { cond: 5, qty: 2 },
+        ],
+        [{ cond: 1, qty: 1 }]
+      ),
+      [{ act: "x_cond_qty", cond: 5 }]
+    );
+  });
+
+  it("marks a re-graded row that stated no grade with Colnect's own x_qty_only", () => {
+    assert.deepEqual(planColnectCondQty([{ cond: 0, qty: 3 }], [{ cond: 2, qty: 3 }]), [
+      { act: "cond", cond: 2, qty: 3, previousCond: null, qtyOnly: true },
+      { act: "quantity", cond: 2, qty: 3 },
+    ]);
+  });
+});
+
+describe("colnectCondQtyBody (#704)", () => {
+  const body = (step: ColnectCondQtyStep) =>
+    new URLSearchParams(colnectCondQtyBody({ colnectId: "127455", lt: 5, step }));
+
+  it("sends a nested val for a grade, the way jQuery serialises Colnect's own object", () => {
+    const sent = body({ act: "cond", cond: 1, qty: 8, previousCond: 4, qtyOnly: false });
+    assert.equal(sent.get("act"), "cond");
+    assert.equal(sent.get("id"), "127455");
+    assert.equal(sent.get("cat"), "20");
+    assert.equal(sent.get("lt"), "5");
+    assert.equal(sent.get("val[qty]"), "8");
+    assert.equal(sent.get("val[cond]"), "1");
+    assert.equal(sent.get("val[x_prev_cond]"), "4", "which row is being re-graded");
+    assert.equal(sent.get("val[x_qty_only]"), null);
+  });
+
+  it("leaves x_prev_cond off an added row — its absence is what makes it an addition", () => {
+    const sent = body({ act: "cond", cond: 4, qty: 1, previousCond: null, qtyOnly: false });
+    assert.equal(sent.get("val[x_prev_cond]"), null);
+    assert.equal(sent.get("val[cond]"), "4");
+  });
+
+  it("carries x_qty_only where the row it replaces stated a count and no grade", () => {
+    const sent = body({ act: "cond", cond: 2, qty: 3, previousCond: null, qtyOnly: true });
+    assert.equal(sent.get("val[x_qty_only]"), "true");
+  });
+
+  it("sends a count against the row its grade identifies", () => {
+    const sent = body({ act: "quantity", cond: 1, qty: 8 });
+    assert.equal(sent.get("act"), "quantity");
+    assert.equal(sent.get("val[qty]"), "8");
+    assert.equal(sent.get("val[cond]"), "1");
+  });
+
+  it("removes a row with a scalar val, the way membership takes one", () => {
+    const sent = body({ act: "x_cond_qty", cond: 5 });
+    assert.equal(sent.get("act"), "x_cond_qty");
+    assert.equal(sent.get("val"), "5");
+    assert.equal(sent.get("val[cond]"), null, "not the nested form — this act does not take one");
   });
 });

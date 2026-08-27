@@ -45,6 +45,7 @@ import {
 } from "./listing";
 import { handleRegistrationClick } from "./registration";
 import { resumeColnectApply, runColnectApply } from "./colnect-apply";
+import { runColnectExport } from "./colnect-export";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
@@ -413,6 +414,16 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // an hour and a half, and nothing is going to hold a message channel open for that.
   if (msg?.type === "colnect-apply") {
     runColnectApply(msg.task, msg.requestId, sender.tab)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    return true;
+  }
+
+  // "Fetch this list from Colnect and load it here" (#690) — the same shape as the apply handoff
+  // and, unlike it, a **read**: it asks for the file Colnect's own *Export list* button asks for.
+  // It answers as soon as it is under way, because Colnect takes its time building a long list.
+  if (msg?.type === "colnect-export") {
+    runColnectExport(msg.task, msg.requestId, sender.tab)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     return true;

@@ -52,11 +52,22 @@ import type {
   OrderLookupResponse,
   ColnectWriteRequest,
   ColnectWriteResponse,
+  ColnectCondQtyRequest,
+  ColnectExportFetchRequest,
+  ColnectExportFetchResponse,
 } from "../core/messages";
 import {
   COLNECT_LIST_WRITE_PATH,
+  colnectCondQtyBody,
   colnectListWriteBody,
 } from "../platform/colnect/list-write";
+import {
+  colnectExportFileName,
+  colnectLangFromPath,
+  colnectListExportFields,
+  colnectListExportPath,
+  readColnectListExportAnswer,
+} from "../platform/colnect/list-export";
 import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
@@ -614,23 +625,45 @@ if (!window.__stamporamaAssistantLoaded) {
   chrome.runtime.onMessage.addListener(
     (msg: ColnectWriteRequest, _sender, sendResponse: (r: ColnectWriteResponse) => void) => {
       if (msg?.type !== "colnect-write") return;
-      void fetch(COLNECT_LIST_WRITE_PATH, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: colnectListWriteBody({
+      void postToColnect(
+        colnectListWriteBody({
           colnectId: msg.colnectId,
           lt: msg.lt,
           direction: msg.direction,
-        }),
-        // The collector's own session, which is the only authority this ever runs under.
-        credentials: "include",
-      })
-        .then((res) =>
-          sendResponse({ ok: true, status: res.status, retryAfter: res.headers.get("retry-after") })
-        )
-        .catch((e: unknown) =>
-          sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
-        );
+        })
+      ).then(sendResponse);
+      return true;
+    }
+  );
+
+  // Correcting one condition row of a list entry (#704) — the quantity and the grade an addition
+  // should have landed with. Here rather than in the worker for the membership call's reason
+  // exactly, and answered the same way: the status and the body as they came, never a judgement.
+  chrome.runtime.onMessage.addListener(
+    (msg: ColnectCondQtyRequest, _sender, sendResponse: (r: ColnectWriteResponse) => void) => {
+      if (msg?.type !== "colnect-cond-qty") return;
+      void postToColnect(
+        colnectCondQtyBody({ colnectId: msg.colnectId, lt: msg.lt, step: msg.step })
+      ).then(sendResponse);
+      return true;
+    }
+  );
+
+  // Asking Colnect for one list's export, and reading the file back (#690). **This one reads**: it
+  // is the request Colnect's own *Export list* button makes, and nothing in the account changes.
+  //
+  // It happens here for the write's reason all the same — the call is authenticated by session
+  // cookie and nothing else, so it has to be same-origin from a document the collector is signed in
+  // on — and the file is fetched from this same document, because the URL Colnect answers with is
+  // authenticated the same way. A cross-origin file this page is not allowed to read is a refusal
+  // with a sentence, not a silent empty snapshot: the manual upload is still there, which is
+  // precisely why it was kept (#690).
+  chrome.runtime.onMessage.addListener(
+    (msg: ColnectExportFetchRequest, _sender, sendResponse: (r: ColnectExportFetchResponse) => void) => {
+      if (msg?.type !== "colnect-export-fetch") return;
+      void fetchColnectExport(msg.lt).then(sendResponse, (e: unknown) =>
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
+      );
       return true;
     }
   );
@@ -682,4 +715,68 @@ if (!window.__stamporamaAssistantLoaded) {
   void markOwnListings()
     .catch(() => {})
     .finally(() => watchForNewListings());
+}
+
+/**
+ * Ask Colnect to build one list's export and read the CSV back (#690).
+ *
+ * Two calls, both the collector's own: the request Colnect's button makes, and the file it answers
+ * with. Every failure is a sentence rather than a partial result — the instance replaces a snapshot
+ * with what comes back, so "some of the file" is the one outcome that must never reach it.
+ */
+async function fetchColnectExport(lt: number): Promise<ColnectExportFetchResponse> {
+  const body = new FormData();
+  for (const [name, value] of colnectListExportFields(lt)) body.append(name, value);
+
+  const asked = await fetch(colnectListExportPath(colnectLangFromPath(location.pathname)), {
+    method: "POST",
+    body,
+    // The collector's own session, which is the only authority this ever runs under.
+    credentials: "include",
+  });
+  if (!asked.ok) {
+    return { ok: false, error: `Colnect answered HTTP ${asked.status} to the export request.` };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await asked.json();
+  } catch {
+    // Colnect's own handler parses this as JSON too; anything else is a sign-in page or an outage.
+    return { ok: false, error: "Colnect did not answer the export request with an export." };
+  }
+  const answer = readColnectListExportAnswer(payload);
+  if (!answer.ok) return { ok: false, error: answer.message };
+
+  const file = await fetch(answer.url, { credentials: "include" });
+  if (!file.ok) {
+    return { ok: false, error: `The export file could not be read (HTTP ${file.status}).` };
+  }
+  const text = await file.text();
+  if (!text.trim()) return { ok: false, error: "Colnect answered with an empty export file." };
+  return { ok: true, fileName: colnectExportFileName(answer.url, lt), text };
+}
+
+/**
+ * One form post to Colnect's inventory endpoint, on the collector's own session (#689, #704).
+ *
+ * The body is always built by `platform/colnect/list-write.ts` — this only carries it — and what
+ * comes back is passed on as it came: the status, `Retry-After`, and the body, which since #704
+ * carries the entry Colnect made of an addition. The page reports; the worker decides.
+ */
+async function postToColnect(body: string): Promise<ColnectWriteResponse> {
+  try {
+    const res = await fetch(COLNECT_LIST_WRITE_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      // The collector's own session, which is the only authority this ever runs under.
+      credentials: "include",
+    });
+    // Read before answering: a body left unread is the one thing the worker cannot ask for again.
+    const text = await res.text().catch(() => "");
+    return { ok: true, status: res.status, retryAfter: res.headers.get("retry-after"), body: text };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

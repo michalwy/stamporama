@@ -215,11 +215,25 @@ function entryFor(row: ColnectListRow, listName: string) {
  * columns for, and defaults to the one the file suggests. They are two parameters because they are
  * two questions — a collector may well import the file's `"Test Swap FROM"` column into the list
  * they call Swap — and collapsing them would make the second unanswerable.
+ *
+ * `requireFileNamesList` refuses a file whose own likeliest list is not this mapping's, and exists
+ * for the one caller that has nobody to ask: the Assistant's refresh (#690) fetches the export
+ * itself, so there is no screen showing what the file turned out to be and no collector to say *yes,
+ * that one*. The import **replaces**, so a file that came back naming another list — Colnect
+ * answering the wrong request, a list renamed there — would silently swap one list's snapshot for
+ * another's and report every row of both as a difference. A collector picking a file keeps the
+ * freedom the two parameters exist for; a refresh nobody is watching does not get it.
  */
 export async function importColnectListSnapshot(
   ownerId: string,
   collectionId: string,
-  input: { lt: number; fileName: string; text: string; listName?: string }
+  input: {
+    lt: number;
+    fileName: string;
+    text: string;
+    listName?: string;
+    requireFileNamesList?: boolean;
+  }
 ): Promise<ColnectListImportResult> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -238,6 +252,13 @@ export async function importColnectListSnapshot(
   // The file's own suggestion, unless the collector said otherwise. `""` is a real answer — a file
   // naming no list at all is one unnamed list — so this falls back only on `undefined`.
   const listName = input.listName ?? file.suggestedList ?? "";
+
+  if (input.requireFileNamesList && !sameListName(listName, mapping.label)) {
+    throw new ColnectListImportError(
+      `That export is of ${listName ? `“${listName}”` : "no named list"}, not ${mapping.label}. ` +
+        `Nothing was replaced — load it by hand if it really is the ${mapping.label} list.`
+    );
+  }
 
   const onList = file.rows.flatMap((row) => {
     const entry = entryFor(row, listName);

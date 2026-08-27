@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { resolveCollectionOwner } from "@/lib/route-auth";
 import {
   ColnectListImportError,
   importColnectListSnapshot,
@@ -17,6 +16,12 @@ import {
 // sent both times rather than parked on the server between them — a Wish export is a few megabytes
 // and reading it twice costs less than owning a temporary copy of it, and there is no window in
 // which a half-finished import exists.
+//
+// **The Assistant posts here too** (#690), which is why the authorization is session-or-token: the
+// extension fetches the export from Colnect in the collector's own browser and hands the very same
+// multipart body straight over, so both routes into a snapshot run one importer with one set of
+// rules about what an export means. It sends `requireList`, which the dialog never does — a refresh
+// nobody is watching must not replace one list's snapshot with another list's file.
 
 /** A ceiling before a byte is parsed. Colnect's export runs about a kilobyte per stamp across its
  *  thirty-nine columns, so this holds a list of tens of thousands — the Wish list read on
@@ -27,10 +32,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { collectionId } = await params;
+  const ownerId = await resolveCollectionOwner(request, collectionId);
+  if (!ownerId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let form: FormData;
   try {
@@ -61,22 +65,18 @@ export async function POST(
   try {
     const text = await file.text();
     if (!commit) {
-      const preview = await previewColnectListFile(
-        session.user.id,
-        collectionId,
-        file.name,
-        text
-      );
+      const preview = await previewColnectListFile(ownerId, collectionId, file.name, text);
       return NextResponse.json(preview, { status: 200 });
     }
     if (lt === null || !Number.isFinite(lt)) {
       return NextResponse.json({ error: "Which list is this file?" }, { status: 400 });
     }
-    const result = await importColnectListSnapshot(session.user.id, collectionId, {
+    const result = await importColnectListSnapshot(ownerId, collectionId, {
       lt,
       fileName: file.name,
       text,
       listName,
+      requireFileNamesList: form.get("requireList") !== null,
     });
     return NextResponse.json(result, { status: 200 });
   } catch (err) {

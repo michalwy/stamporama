@@ -15,6 +15,12 @@ import type {
   ApplyHandoffState,
   ApplyTask,
 } from "./colnect-apply-handoff";
+import type { ColnectCondQtyStep } from "../platform/colnect/list-write";
+import type {
+  ExportHandoffReport,
+  ExportHandoffState,
+  ExportTask,
+} from "./colnect-export-handoff";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -287,9 +293,64 @@ export interface ColnectWriteRequest {
   direction: ApplyDirection;
 }
 export type ColnectWriteResponse =
-  /** The HTTP status, classified by the worker through `platform/colnect/list-write.ts` — the page
-   *  reports what happened and never decides what it means. */
-  | { ok: true; status: number; retryAfter: string | null }
+  /** The HTTP status and the answer's body, classified by the worker through
+   *  `platform/colnect/list-write.ts` — the page reports what happened and never decides what it
+   *  means. The body matters since #704: Colnect answers `act=check&val=+` with the entry it made,
+   *  as quantities indexed by condition id, which is what the correction is planned against. */
+  | { ok: true; status: number; retryAfter: string | null; body: string }
+  | { ok: false; error: string };
+
+// background → content script on a **colnect.com** page: correct one condition row of a list entry
+// (#704). The membership call's sibling, and deliberately a message of its own: `act` and `val` are
+// a different shape, and one request type meaning four acts is how a body comes to be built in two
+// places. The step is decided in the worker (`planColnectCondQty`) and the body built in the page
+// from the same pure module, so `list-write.ts` stays the only place either is spelled.
+export interface ColnectCondQtyRequest {
+  type: "colnect-cond-qty";
+  colnectId: string;
+  lt: number;
+  step: ColnectCondQtyStep;
+}
+
+// instance content script (on the Colnect report screen) → background: "fetch this list from Colnect
+// and load it here" (#690). The manual export — open Colnect, press the button, find the file,
+// upload it — is the only step of the loop the collector was still doing by hand.
+//
+// It goes through the worker because the file has two ends that the page has neither of: a
+// colnect.com tab to ask from, and the instance's own bearer token to post the result on. The page
+// gets back a sentence and a count; the bytes never touch it.
+export interface ColnectExportRequest {
+  type: "colnect-export";
+  task: ExportTask;
+  /** The handoff this is, echoed back so the page can tell an answer from a leftover. */
+  requestId: string;
+}
+export type ColnectExportResponse = { ok: true } | { ok: false; error: string };
+
+// background → instance content script: how the refresh went (#690), carried back onto the node the
+// task came in on. Fire-and-forget, as the apply run's progress is: the collector may have navigated
+// away, and the snapshot on the instance is the real record either way.
+export interface ColnectExportProgressNotice {
+  type: "colnect-export-progress";
+  requestId: string;
+  state: ExportHandoffState;
+  message: string;
+  report: ExportHandoffReport | null;
+}
+
+// background → content script on a **colnect.com** page: ask Colnect for one list's export and read
+// the file back (#690).
+//
+// It happens in the page rather than in the worker for the write's reason (`ColnectWriteRequest`):
+// the call is authenticated by the collector's session cookie and nothing else, so it has to be
+// same-origin from a document they are signed in on. The file itself is fetched from the same
+// document, since the URL Colnect answers with is authenticated the same way.
+export interface ColnectExportFetchRequest {
+  type: "colnect-export-fetch";
+  lt: number;
+}
+export type ColnectExportFetchResponse =
+  | { ok: true; fileName: string; text: string }
   | { ok: false; error: string };
 
 export type BackgroundRequest =
@@ -453,6 +514,7 @@ export type BackgroundMessage =
   | OrderLookupRequest
   | OrderImportRequest
   | ColnectApplyRequest
+  | ColnectExportRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

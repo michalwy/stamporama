@@ -2,6 +2,7 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { setColnectListMapping } from "../../src/lib/colnect-list-sync";
+import { setColnectConditionMapping } from "../../src/lib/colnect";
 import { importColnectListSnapshot } from "../../src/lib/colnect-list-snapshot";
 import { listColnectReportRows, setColnectReportIgnored } from "../../src/lib/colnect-list-report";
 import {
@@ -27,6 +28,9 @@ interface Fixtures {
   collectionId: string;
   areaId: string;
   mnhId: string;
+  usedId: string;
+  /** Deliberately never mapped to a Colnect grade, which is a third answer (#404, #704). */
+  faultyId: string;
 }
 
 let f: Fixtures;
@@ -78,14 +82,14 @@ async function stamp(colnectId: string, name: string): Promise<string> {
   return created.id;
 }
 
-async function copy(stampId: string, forTrade = true): Promise<void> {
+async function copy(stampId: string, forTrade = true, conditionId?: string): Promise<void> {
   itemNo += 1;
   await prisma.item.create({
     data: {
       collectionId: f.collectionId,
       itemNo,
       stampId,
-      conditionId: f.mnhId,
+      conditionId: conditionId ?? f.mnhId,
       inCollection: true,
       forTrade,
       deliveryState: "delivered",
@@ -136,7 +140,25 @@ before(async () => {
     },
   });
 
-  f = { userId, collectionId: collection.id, areaId: area.id, mnhId: mnh.id };
+  const used = await prisma.stampCondition.create({
+    data: { collectionId: collection.id, name: "Used", abbreviation: "U", sortOrder: 1 },
+  });
+  const faulty = await prisma.stampCondition.create({
+    data: { collectionId: collection.id, name: "Faulty", abbreviation: "F", sortOrder: 2 },
+  });
+
+  f = {
+    userId,
+    collectionId: collection.id,
+    areaId: area.id,
+    mnhId: mnh.id,
+    usedId: used.id,
+    faultyId: faulty.id,
+  };
+
+  // `Faulty` is left unmapped on purpose: a grade this collection has never told Colnect about.
+  await setColnectConditionMapping(userId, mnh.id, "1");
+  await setColnectConditionMapping(userId, used.id, "4");
 
   await setColnectListMapping(f.userId, f.collectionId, SWAP_LT, {
     source: "items_for_trade",
@@ -354,5 +376,98 @@ describe("What a worklist refuses (#689)", () => {
       () => getColnectApplyWorklist(f.userId, f.collectionId, 5, {}, NOW),
       ColnectApplyError
     );
+  });
+});
+
+// **What an addition should land as on Colnect (#704).**
+//
+// Only a database can answer these: that the copies are broken down by grade through the
+// collection's own `ColnectConditionMapping`, that two of its conditions meaning one Colnect grade
+// are summed rather than fighting, that a condition it has never mapped is counted apart and never
+// guessed at, and that a want-backed list states a count without a grade where its wants disagree.
+describe("What an addition carries with it (#704)", () => {
+  it("breaks the copies down by grade, in Colnect's own condition ids", async () => {
+    const held = await stamp("7001", "Two mint, one used");
+    await copy(held, true, f.mnhId);
+    await copy(held, true, f.mnhId);
+    await copy(held, true, f.usedId);
+    await load(SWAP_LT, [], FRESH);
+
+    const worklist = await getColnectApplyWorklist(f.userId, f.collectionId, SWAP_LT, {}, NOW);
+    const item = worklist.items.find((i) => i.colnectId === "7001");
+    assert.deepEqual(item?.rows, [
+      { cond: 1, qty: 2 },
+      { cond: 4, qty: 1 },
+    ]);
+    assert.equal(worklist.unmappedConditions, 0);
+    assert.equal(worklist.unmappedConditionsNote, null);
+  });
+
+  it("leaves a condition it has never mapped out of what is written, and says so", async () => {
+    const held = await stamp("7002", "One mint, one faulty");
+    await copy(held, true, f.mnhId);
+    await copy(held, true, f.faultyId);
+    await load(SWAP_LT, [], FRESH);
+
+    const worklist = await getColnectApplyWorklist(f.userId, f.collectionId, SWAP_LT, {}, NOW);
+    assert.deepEqual(
+      worklist.items.find((i) => i.colnectId === "7002")?.rows,
+      [{ cond: 1, qty: 1 }],
+      "the faulty copy is not guessed at"
+    );
+    assert.equal(worklist.unmappedConditions, 1);
+    assert.match(worklist.unmappedConditionsNote ?? "", /have not mapped/);
+  });
+
+  it("carries nothing to write where every copy is in an unmapped condition", async () => {
+    const held = await stamp("7003", "Faulty only");
+    await copy(held, true, f.faultyId);
+    await load(SWAP_LT, [], FRESH);
+
+    const worklist = await getColnectApplyWorklist(f.userId, f.collectionId, SWAP_LT, {}, NOW);
+    const item = worklist.items.find((i) => i.colnectId === "7003");
+    assert.deepEqual(item?.rows, []);
+    assert.equal(item?.ungraded, undefined);
+    assert.equal(worklist.unmappedConditions, 1);
+  });
+
+  it("carries no rows on a removal — there is nothing to state about an entry going away", async () => {
+    const gone = await stamp("7004", "Not for trade any more");
+    await copy(gone, false);
+    await load(SWAP_LT, [{ colnectId: "7004" }], FRESH);
+
+    const worklist = await getColnectApplyWorklist(f.userId, f.collectionId, SWAP_LT, {}, NOW);
+    const item = worklist.items.find((i) => i.colnectId === "7004");
+    assert.equal(item?.direction, "-");
+    assert.equal(item?.rows, undefined);
+  });
+
+  it("states a want's grade where its conditions agree on one, and only the count where they do not", async () => {
+    const agreed = await stamp("7005", "Wanted mint");
+    const split = await stamp("7006", "Wanted either way");
+    await prisma.want.create({
+      data: {
+        collectionId: f.collectionId,
+        stampId: agreed,
+        conditions: { create: [{ conditionId: f.mnhId }] },
+      },
+    });
+    await prisma.want.create({
+      data: {
+        collectionId: f.collectionId,
+        stampId: split,
+        conditions: { create: [{ conditionId: f.mnhId }, { conditionId: f.usedId }] },
+      },
+    });
+    await load(WISH_LT, [], FRESH);
+
+    // Wish is `sourceOfTruth: colnect`, so the run only ever adds — which is all #704 is about.
+    const worklist = await getColnectApplyWorklist(f.userId, f.collectionId, WISH_LT, {}, NOW);
+    assert.deepEqual(worklist.items.find((i) => i.colnectId === "7005")?.rows, [
+      { cond: 1, qty: 1 },
+    ]);
+    const either = worklist.items.find((i) => i.colnectId === "7006");
+    assert.deepEqual(either?.rows, [], "two acceptable conditions state no single grade");
+    assert.equal(either?.ungraded, 1, "the count is still a fact, and is written against Colnect's own grade");
   });
 });

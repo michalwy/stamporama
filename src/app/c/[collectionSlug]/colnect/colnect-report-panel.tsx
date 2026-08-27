@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -49,6 +49,7 @@ import {
   useAssistantApply,
   useAssistantPresent,
 } from "./assistant-apply-handoff";
+import { EXPORT_ELEMENT_ID, useAssistantExport } from "./assistant-export-handoff";
 import { ColnectImportDialog } from "./colnect-import-dialog";
 import { ColnectReportRowView } from "./colnect-report-row";
 import {
@@ -131,6 +132,14 @@ export function ColnectReportPanel({
     start: startApplyRun,
     dismiss: dismissApplyRun,
   } = useAssistantApply();
+  // Fetching the export from Colnect rather than downloading it by hand (#690). Its own element,
+  // because a refresh is routinely asked for while a run above is still going.
+  const {
+    handoff: exportHandoff,
+    nodeRef: exportNodeRef,
+    start: startRefresh,
+    dismiss: dismissRefresh,
+  } = useAssistantExport();
   // Matching a stamp from a row (#423). The same handoff the offer card drives, on its own element.
   const {
     handoff: matchHandoff,
@@ -177,6 +186,15 @@ export function ColnectReportPanel({
   useAssistantMatchSignal(
     useCallback(() => invalidate(collectionId), [invalidate, collectionId])
   );
+
+  // A refresh landed a new snapshot (#690) — the same staleness an import through the dialog causes,
+  // and invalidated the same way. Keyed on the request as well as the state so a re-render of a
+  // finished refresh does not re-read the whole report every time.
+  const refreshedRequest = exportHandoff?.state === "done" ? exportHandoff.requestId : null;
+  const refreshing = exportHandoff?.state === "running" || exportHandoff?.state === "importing";
+  useEffect(() => {
+    if (refreshedRequest) invalidate(collectionId);
+  }, [refreshedRequest, invalidate, collectionId]);
 
   const toggleBucket = useCallback((value: string) => {
     setBuckets((current) =>
@@ -457,6 +475,28 @@ export function ColnectReportPanel({
               </button>
             </Tooltip>
           )}
+          {selected && assistantPresent && (
+            <Tooltip content="Ask Colnect for this list's export in this browser and load it here — the same file the Export list button gives you, without the download.">
+              <button
+                type="button"
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  cursor: refreshing ? "default" : "pointer",
+                  opacity: refreshing ? 0.6 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  fontWeight: 600,
+                }}
+                disabled={refreshing}
+                onClick={() =>
+                  startRefresh({ collectionId, lt: selected.lt, label: selected.label })
+                }
+              >
+                <Icon name="assistant" /> Refresh from Colnect
+              </button>
+            </Tooltip>
+          )}
           <input
             ref={fileInput}
             type="file"
@@ -493,7 +533,17 @@ export function ColnectReportPanel({
             Nothing to compare {selected?.label} against yet
           </div>
           <div style={MUTED}>
-            Open the list on Colnect, press <strong>Export list</strong>, and load the file here.
+            {assistantPresent ? (
+              <>
+                Press <strong>Refresh from Colnect</strong> and the Assistant will fetch the export
+                for you — or open the list on Colnect, press <strong>Export list</strong>, and load
+                the file here yourself.
+              </>
+            ) : (
+              <>
+                Open the list on Colnect, press <strong>Export list</strong>, and load the file here.
+              </>
+            )}{" "}
             Until then there is no Colnect side — and a report against an empty one would claim the
             whole collection is missing from the list.
           </div>
@@ -597,6 +647,12 @@ export function ColnectReportPanel({
         {applyHandoff?.payload ?? ""}
       </div>
 
+      {/* The refresh's own node (#690) — the task goes out as text, the outcome comes back as
+          attributes, and the export itself never passes through here. */}
+      <div id={EXPORT_ELEMENT_ID} ref={exportNodeRef} style={{ display: "none" }}>
+        {exportHandoff?.payload ?? ""}
+      </div>
+
       {/* The match handoff's own node (#423) — a second element rather than a second task on the
           one above, so an answer to a match never lands where a run's progress is read. */}
       <div id={MATCH_ELEMENT_ID} ref={matchNodeRef} hidden>
@@ -609,6 +665,10 @@ export function ColnectReportPanel({
 
       {applyHandoff && (
         <ColnectApplyProgress handoff={applyHandoff} onDismiss={dismissApplyRun} />
+      )}
+
+      {exportHandoff && (
+        <ColnectRefreshStrip handoff={exportHandoff} onDismiss={dismissRefresh} />
       )}
 
       {applying && (
@@ -690,6 +750,9 @@ function ColnectApplyDialog({
 }) {
   // At one write every 1.6 seconds. Stated in whole minutes, rounded up: a run is measured in
   // "leave it going", not in seconds.
+  // Counted over the items, not over the requests. A correction (#704) is another write at the same
+  // pace, but how many an item needs is only knowable once Colnect has answered — and an estimate
+  // that assumed the worst would read as an hour longer than the run usually is.
   const minutes = worklist ? Math.max(1, Math.ceil((worklist.items.length * 1.6) / 60)) : 0;
   return (
     <DialogShell title={`Apply on Colnect${worklist ? ` — ${worklist.label}` : ""}`} onClose={onClose}>
@@ -705,16 +768,22 @@ function ColnectApplyDialog({
             </p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.375rem" }}>
               <li style={{ fontSize: "0.875rem" }}>
-                <strong>Membership only.</strong>
-                <span style={MUTED}> No quantity, no grade, no notes — those stay yours to set.</span>
+                <strong>An addition lands with your count and your grades.</strong>
+                <span style={MUTED}>
+                  {" "}
+                  Colnect keeps a row per grade, so two mint copies and one used go on as two rows.
+                  Items already on the list are not touched — neither their count nor their grade —
+                  and no note is ever written.
+                </span>
               </li>
               <li style={{ fontSize: "0.875rem" }}>
                 <strong>About {minutes} {minutes === 1 ? "minute" : "minutes"}.</strong>
                 <span style={MUTED}>
                   {" "}
                   Paced to roughly one change every other second, which is what Colnect tolerates
-                  without complaint. Leave it running; if it is interrupted it carries on from where
-                  it stopped, and each item is ticked off here as it lands.
+                  without complaint, and a little longer where the count or grade of an addition needs
+                  correcting too. Leave it running; if it is interrupted it carries on from where it
+                  stopped, and each item is ticked off here as it lands.
                 </span>
               </li>
               <li style={{ fontSize: "0.875rem" }}>
@@ -722,6 +791,20 @@ function ColnectApplyDialog({
                 <span style={MUTED}> — {worklist.snapshot.fileName}, {worklist.snapshot.ageDays} days old.</span>
               </li>
             </ul>
+            {worklist.unmappedConditionsNote && (
+              <p
+                style={{
+                  margin: "1rem 0 0",
+                  padding: "0.5rem 0.625rem",
+                  borderRadius: "0.375rem",
+                  background: "var(--color-bg-muted)",
+                  fontSize: "0.875rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                {worklist.unmappedConditionsNote}
+              </p>
+            )}
             {worklist.removalsRefused && (
               <p
                 style={{
@@ -799,6 +882,53 @@ function ColnectApplyProgress({
             />
           </div>
         )}
+      </div>
+      <button
+        type="button"
+        style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
+        onClick={onDismiss}
+      >
+        {finished ? "Dismiss" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * How a refresh from Colnect is going (#690) — a strip, for the run strip's reason.
+ *
+ * No progress bar: Colnect builds the file in its own time and says nothing while it does, so a bar
+ * would be an animation pretending to know something. What it says instead is which of the three
+ * steps is happening, and — when it fails — that the snapshot the report is drawn from is untouched.
+ */
+function ColnectRefreshStrip({
+  handoff,
+  onDismiss,
+}: {
+  handoff: { state: string; label: string; message: string | null };
+  onDismiss: () => void;
+}) {
+  const finished = handoff.state === "done" || handoff.state === "error";
+  return (
+    <div
+      style={{
+        ...PANEL,
+        padding: "0.625rem 1rem",
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+      }}
+    >
+      <Icon name="assistant" />
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: "0.875rem",
+          color: handoff.state === "error" ? "var(--color-error)" : undefined,
+        }}
+      >
+        {handoff.message ?? `Asking Colnect for the ${handoff.label} export…`}
       </div>
       <button
         type="button"

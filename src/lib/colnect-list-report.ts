@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { COLNECT_CONDITIONS } from "./colnect-conditions";
+import { COLNECT_CONDITIONS, isColnectConditionValue } from "./colnect-conditions";
 import { AREA_PATH_SEPARATOR } from "./area-path";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import {
@@ -67,6 +67,33 @@ import {
 const GRADE_VALUES = Prisma.join(
   COLNECT_CONDITIONS.map((grade) => Prisma.sql`(${grade.value}::text, ${grade.abbrev}::text)`)
 );
+
+/** One `(grade, count)` row of a Colnect list entry, in Colnect's own condition ids (#704). */
+export interface ColnectCondQtyRow {
+  cond: number;
+  qty: number;
+}
+
+/** What this collection holds for one Colnect item, as a run needs to state it (#704). */
+export interface ColnectLocalCondQty {
+  /** A row per grade this side can state. Summed where two of its conditions mean one Colnect grade. */
+  rows: ColnectCondQtyRow[];
+  /** Copies (or wants) whose condition this collection has never mapped (#404). Never written, and
+   *  reported instead — the collector's rule. */
+  unmapped: number;
+  /** Wants that name no single grade between them. The count is written against whatever grade
+   *  Colnect's entry already carries; the grade itself is left alone. */
+  ungraded: number;
+}
+
+/** One grouped row out of the two queries above, before it is folded into a {@link ColnectLocalCondQty}. */
+interface CondQtyRow {
+  cid: string | null;
+  colnect_value: string | null;
+  /** False only on a want-backed list, where the stamp's open wants name no single condition. */
+  agreed: boolean;
+  qty: number;
+}
 
 /** How many rows one page of the report holds. */
 export const COLNECT_REPORT_PAGE_SIZE = 50;
@@ -245,6 +272,106 @@ export async function getColnectReportLists(
         }
       : null,
   }));
+}
+
+/**
+ * What this collection holds for each of a set of Colnect items, **broken down by grade** (#704).
+ *
+ * The report's own local side (below) reduces a stamp to one count and, where the copies agree, one
+ * condition — which is all a *comparison* needs. A **write** needs more: Colnect holds a row per
+ * grade on a list entry, up to one for each, so two mint copies and one used are two rows over there
+ * and not an unanswerable question. This is that breakdown, for the items a run is about to add.
+ *
+ * The predicate is the same one, spelled in the same place, for the reason the whole module is one
+ * query: a second idea of *which copies count* would be a run acting on rows the screen never showed.
+ *
+ * A condition with **no `ColnectConditionMapping`** (#404) is counted apart and never guessed at —
+ * the collector's own rule for it is *do not send it, say so*. Two of this collection's conditions
+ * mapping to one Colnect grade is not a problem here, only in the reverse direction the report reads
+ * (#687): both are that grade, so their copies are summed into its row.
+ */
+export async function readColnectLocalCondQty(
+  ownerId: string,
+  collectionId: string,
+  lt: number,
+  colnectIds: readonly string[]
+): Promise<Map<string, ColnectLocalCondQty>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const answer = new Map<string, ColnectLocalCondQty>();
+  if (colnectIds.length === 0) return answer;
+
+  const mapping = await readMapping(collectionId, lt);
+  if (!mapping) return answer;
+  const shape = colnectListSourceShape(mapping.source as ColnectListSource);
+  const ids = [...new Set(colnectIds)];
+
+  const rows =
+    shape.kind === "copies"
+      ? await prisma.$queryRaw<CondQtyRow[]>`
+          SELECT NULLIF(TRIM(s."colnectId"), '') AS cid,
+                 m."colnectValue" AS colnect_value,
+                 TRUE AS agreed,
+                 COUNT(*)::int AS qty
+          FROM "item" i
+          JOIN "stamp" s ON s."id" = i."stampId"
+          LEFT JOIN "colnect_condition_mapping" m
+                 ON m."collectionId" = ${collectionId}
+                AND m."stampConditionId" = i."conditionId"
+          WHERE i."collectionId" = ${collectionId}
+            AND i.${Prisma.raw(`"${shape.flag}"`)} = TRUE
+            AND i."deliveryState" = 'delivered'
+            AND i."disposedAt" IS NULL
+            AND NULLIF(TRIM(s."colnectId"), '') = ANY(${ids})
+          GROUP BY 1, 2`
+      : // A want states a grade only where it names exactly one acceptable condition, and a stamp's
+        // open wants only where they all do and all agree — `local_side`'s sentence, kept identical.
+        // `agreed` false is *this side names no single grade*, which is a different answer from an
+        // unmapped one and is acted on differently.
+        await prisma.$queryRaw<CondQtyRow[]>`
+          WITH per_stamp AS (
+            SELECT w."stampId" AS stamp_id,
+                   COUNT(DISTINCT w."id")::int AS qty,
+                   CASE
+                     WHEN COUNT(DISTINCT wc."conditionId") = 1
+                      AND COUNT(wc."conditionId") = COUNT(DISTINCT w."id")
+                     THEN MIN(wc."conditionId")
+                   END AS condition_id
+            FROM "want" w
+            LEFT JOIN "want_condition" wc ON wc."wantId" = w."id"
+            WHERE w."collectionId" = ${collectionId}
+              AND w."closedAt" IS NULL
+            GROUP BY w."stampId"
+          )
+          SELECT NULLIF(TRIM(s."colnectId"), '') AS cid,
+                 m."colnectValue" AS colnect_value,
+                 (p.condition_id IS NOT NULL) AS agreed,
+                 p.qty AS qty
+          FROM per_stamp p
+          JOIN "stamp" s ON s."id" = p.stamp_id
+          LEFT JOIN "colnect_condition_mapping" m
+                 ON m."collectionId" = ${collectionId}
+                AND m."stampConditionId" = p.condition_id
+          WHERE NULLIF(TRIM(s."colnectId"), '') = ANY(${ids})`;
+
+  for (const row of rows) {
+    if (!row.cid || row.qty <= 0) continue;
+    const held = answer.get(row.cid) ?? { rows: [], unmapped: 0, ungraded: 0 };
+    const cond = row.colnect_value === null ? null : Number(row.colnect_value);
+    if (row.agreed === false) {
+      // The wants disagree. The count is still a fact and the grade is not, so the run states the
+      // one and leaves the other to whatever Colnect's entry already says.
+      held.ungraded += row.qty;
+    } else if (cond === null || !Number.isInteger(cond) || !isColnectConditionValue(String(cond))) {
+      held.unmapped += row.qty;
+    } else {
+      const existing = held.rows.find((r) => r.cond === cond);
+      if (existing) existing.qty += row.qty;
+      else held.rows.push({ cond, qty: row.qty });
+    }
+    answer.set(row.cid, held);
+  }
+  for (const held of answer.values()) held.rows.sort((a, b) => a.cond - b.cond);
+  return answer;
 }
 
 /**
