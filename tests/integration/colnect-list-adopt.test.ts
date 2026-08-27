@@ -220,7 +220,11 @@ describe("Adopting a wish list into wants (#688)", () => {
     const run = await applyColnectAdoption(f.userId, f.collectionId, WISH_LT);
     assert.equal(run.created, 1);
     assert.equal(run.withCondition, 0);
-    assert.equal(await prisma.wantCondition.count(), 0, "a want that accepts anything says so");
+    assert.equal(
+      await prisma.wantCondition.count({ where: { want: { collectionId: f.collectionId } } }),
+      0,
+      "a want that accepts anything says so"
+    );
   });
 
   it("takes no condition where two of this collection's conditions claim one Colnect grade", async () => {
@@ -233,7 +237,10 @@ describe("Adopting a wish list into wants (#688)", () => {
       const run = await applyColnectAdoption(f.userId, f.collectionId, WISH_LT);
       assert.equal(run.created, 1);
       assert.equal(run.withCondition, 0, "no single answer, so none is invented");
-      assert.equal(await prisma.wantCondition.count(), 0);
+      assert.equal(
+        await prisma.wantCondition.count({ where: { want: { collectionId: f.collectionId } } }),
+        0
+      );
     } finally {
       await prisma.colnectConditionMapping.deleteMany({
         where: { collectionId: f.collectionId, stampConditionId: f.ctoId },
