@@ -50,6 +50,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | Trades, trade sections and lines, balancing, the trade lifecycle | [`docs/agents/trades.md`](docs/agents/trades.md) |
 | Stamps, issues, formats, subtypes, catalog numbers, checklists, wants | [`docs/agents/catalog-and-stamps.md`](docs/agents/catalog-and-stamps.md) |
 | Copies list, grouping, duplicates, copy counts, detail pages | [`docs/agents/inventory-lists.md`](docs/agents/inventory-lists.md) |
+| The Overview screen: Value and Progress tiles, their reads and links | [`docs/agents/overview.md`](docs/agents/overview.md) |
 | Dialogs, escape handling, sidebar, settings placement, notifications | [`docs/agents/ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, expansion, reordering, tooltips, icons, tokens, toast | [`docs/agents/ui-patterns.md`](docs/agents/ui-patterns.md) |
 | Backlog review workflow | [`docs/agents/backlog-review.md`](docs/agents/backlog-review.md) |

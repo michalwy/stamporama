@@ -1825,10 +1825,40 @@ export async function realizedProceedsForItems(
   collectionId: string,
   itemIds: string[]
 ): Promise<RealizedProceeds> {
-  const empty: RealizedProceeds = { total: 0, resolved: new Set(), unresolved: new Set() };
-  if (itemIds.length === 0) return empty;
+  const byGroup = await realizedProceedsByGroup(
+    collectionId,
+    new Map(itemIds.map((id) => [id, ""]))
+  );
+  return byGroup.get("") ?? { total: 0, resolved: new Set(), unresolved: new Set() };
+}
 
-  const asked = new Set(itemIds);
+/**
+ * {@link realizedProceedsForItems} attributed per group, in **one** allocation pass (#650): the
+ * Overview's purchase-ROI tile asks the question of every purchase at once, and running the
+ * per-items read per purchase would load every touched sale once per purchase — the N+1 the tile
+ * rules forbid. `groupOf` maps each asked-about copy to its group key (the purchase id, for that
+ * tile); the whole-line shortcut is judged **per group**, so a line made entirely of one group's
+ * copies is carried whole exactly as the single-group read carries it, and a line mixing groups is
+ * split by the same catalogue weights for each.
+ *
+ * Every group key in `groupOf` gets an entry, an untouched one the empty figure — a purchase
+ * nothing has sold from is a zero, not an absence. Ownership is the caller's to assert.
+ */
+export async function realizedProceedsByGroup(
+  collectionId: string,
+  groupOf: Map<string, string>
+): Promise<Map<string, RealizedProceeds>> {
+  const result = new Map<string, RealizedProceeds>();
+  const totalsCents = new Map<string, number>();
+  for (const group of groupOf.values()) {
+    if (!result.has(group)) {
+      result.set(group, { total: 0, resolved: new Set(), unresolved: new Set() });
+      totalsCents.set(group, 0);
+    }
+  }
+  const itemIds = [...groupOf.keys()];
+  if (itemIds.length === 0) return result;
+
   const sales = await prisma.sale.findMany({
     where: { collectionId, lines: { some: { items: { some: { itemId: { in: itemIds } } } } } },
     select: {
@@ -1844,7 +1874,7 @@ export async function realizedProceedsForItems(
       lines: { select: { id: true, price: true, items: { select: { itemId: true } } } },
     },
   });
-  if (sales.length === 0) return empty;
+  if (sales.length === 0) return result;
 
   // Only a mixed line needs catalogue weights, but resolving them once for every copy on every
   // touched sale is one query against N — the weights are the same rule the sale screen uses.
@@ -1854,9 +1884,6 @@ export async function realizedProceedsForItems(
   );
 
   // Accumulated in whole cents: a sum of 2-dp shares is exact there and drifts in floats.
-  let totalCents = 0;
-  const resolved = new Set<string>();
-  const unresolved = new Set<string>();
   for (const sale of sales) {
     const gross = sale.lines.reduce((sum, l) => sum + Number(l.price), 0);
     const { handling } = resolveBuyerHandling(sale.buyerHandling, sale.buyerPaidTotal, gross);
@@ -1883,20 +1910,32 @@ export async function realizedProceedsForItems(
     const netById = new Map(nets.map((n) => [n.id, n.netBase]));
 
     for (const line of sale.lines) {
-      const attributed = attributeLineToPurchase(
-        netById.get(line.id) ?? Number(line.price),
-        line.items.map((i) => ({
-          id: i.itemId,
-          catalogPrice: valuations.get(i.itemId)?.baseAmount ?? null,
-        })),
-        (itemId) => asked.has(itemId)
-      );
-      for (const id of attributed.unresolvedItemIds) unresolved.add(id);
-      for (const id of attributed.resolvedItemIds) resolved.add(id);
-      totalCents += Math.round(attributed.proceeds * 100);
+      const lineItems = line.items.map((i) => ({
+        id: i.itemId,
+        catalogPrice: valuations.get(i.itemId)?.baseAmount ?? null,
+      }));
+      // The groups this line touches — each gets its own attribution over the same line, so the
+      // carried-whole rule is judged against that group's copies alone.
+      const groups = new Set<string>();
+      for (const i of line.items) {
+        const group = groupOf.get(i.itemId);
+        if (group !== undefined) groups.add(group);
+      }
+      for (const group of groups) {
+        const attributed = attributeLineToPurchase(
+          netById.get(line.id) ?? Number(line.price),
+          lineItems,
+          (itemId) => groupOf.get(itemId) === group
+        );
+        const entry = result.get(group)!;
+        for (const id of attributed.unresolvedItemIds) entry.unresolved.add(id);
+        for (const id of attributed.resolvedItemIds) entry.resolved.add(id);
+        totalsCents.set(group, totalsCents.get(group)! + Math.round(attributed.proceeds * 100));
+      }
     }
   }
-  return { total: totalCents / 100, resolved, unresolved };
+  for (const [group, cents] of totalsCents) result.get(group)!.total = cents / 100;
+  return result;
 }
 
 /** How one copy left the collection — the sale it went out on, from the copy's own side (#517). */

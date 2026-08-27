@@ -598,6 +598,98 @@ async function loadCatalogRanges(
   return result;
 }
 
+// ── The Overview's open-wants tile (#651) ────────────────────────────────────
+
+/** The open-wants gap as the Overview tile states it (#651): how much of the want list nothing in
+ * hand satisfies, and what the catalogue says that gap is worth. */
+export interface OpenWantGapSummary {
+  baseCurrency: string;
+  /** Open wants, whatever is held against them. */
+  openCount: number;
+  /** Open wants with **no acceptable copy in hand** — nothing in `held` or `to_sort` satisfies the
+   * acceptance. A want is an acceptance criterion, not a disposition (ADR-0032): "open" alone only
+   * means the collector has not closed it, while this is the count of real gaps. */
+  gapCount: number;
+  /** …of which a satisfying copy is already ordered or in transit — a gap being closed by a parcel,
+   * which is a different answer from an untouched one to "should I be bidding on this". */
+  onTheWayCount: number;
+  /** Σ of the gap wants' catalogue ranges, min and max — a want accepts a *set* of combinations,
+   * so the gap's size is a range, not a number (`wantCatalogRange`'s own reasoning). */
+  gapMinBase: string;
+  gapMaxBase: string;
+  /** Gap wants inside the range vs. those whose accepted combinations carry no usable price —
+   * counted apart, never zeroed, so a catalogue gap cannot shrink the stated one. */
+  pricedGapCount: number;
+  unpricedGapCount: number;
+}
+
+/**
+ * One pass over every open want: the matching copies decide which wants are gaps, and only the
+ * gaps are priced (`loadCatalogRanges` batches per stamp, so this costs one pricing pass, not one
+ * per want).
+ */
+export async function openWantGapSummary(
+  ownerId: string,
+  collectionId: string
+): Promise<OpenWantGapSummary> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [rows, baseCurrency] = await Promise.all([
+    prisma.want.findMany({ where: { collectionId, closedAt: null }, select: WANT_SELECT }),
+    getCollectionBaseCurrency(collectionId),
+  ]);
+
+  const countedCopies = await loadCountedCopies(collectionId, rows.map((r) => r.stampId));
+  const copiesByStamp = new Map<string, CountedCopy[]>();
+  for (const copy of countedCopies) {
+    const list = copiesByStamp.get(copy.stampId);
+    if (list) list.push(copy);
+    else copiesByStamp.set(copy.stampId, [copy]);
+  }
+
+  const gaps: WantRow[] = [];
+  let onTheWayCount = 0;
+  for (const row of rows) {
+    const acceptance: WantAcceptance = {
+      stampId: row.stampId,
+      conditionIds: row.conditions.map((c) => c.conditionId),
+      certificateStatusIds: row.certificateStatuses.map((c) => c.certificateStatusId),
+      formatIds: row.formats.map((f) => f.formatId),
+    };
+    const matching = (copiesByStamp.get(row.stampId) ?? []).filter((c) =>
+      wantMatchesCopy(acceptance, c)
+    );
+    const buckets = tally(matching);
+    // In hand is held **or** to-sort — a copy on the desk answers "have I got this" either way,
+    // the same fold the want chip makes.
+    if (buckets.held + buckets.toSort > 0) continue;
+    gaps.push(row);
+    if (buckets.ordered + buckets.inTransit > 0) onTheWayCount += 1;
+  }
+
+  const ranges = await loadCatalogRanges(collectionId, gaps);
+  let minCents = 0;
+  let maxCents = 0;
+  let pricedGapCount = 0;
+  for (const gap of gaps) {
+    const range = ranges.get(gap.id);
+    if (!range) continue;
+    pricedGapCount += 1;
+    minCents += Math.round(Number(range.minBase) * 100);
+    maxCents += Math.round(Number(range.maxBase) * 100);
+  }
+
+  return {
+    baseCurrency,
+    openCount: rows.length,
+    gapCount: gaps.length,
+    onTheWayCount,
+    gapMinBase: (minCents / 100).toFixed(2),
+    gapMaxBase: (maxCents / 100).toFixed(2),
+    pricedGapCount,
+    unpricedGapCount: gaps.length - pricedGapCount,
+  };
+}
+
 // ── The want marker on the catalogue lists (#532) ────────────────────────────
 
 /** One open want, as a catalogue row's popover states it: the three axes already resolved to words,
