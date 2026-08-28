@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   CATALOG_IMPORT_MAX_STAMPS_PER_ROW,
+  collectCatalogImportNumbers,
   planCatalogImport,
   readCatalogImportFile,
   type CatalogImportContext,
@@ -332,5 +333,32 @@ describe("a mixed file is classified whole (#716)", () => {
       errors: 3,
       stampsToCreate: 5,
     });
+  });
+});
+
+describe("the numbers a file asks about (#717)", () => {
+  it("collects every parsed spec's numbers, deduped and in row order", () => {
+    const file = read(
+      [
+        "Year,Name,Numbers",
+        "1918,Chain breakers,1-3",
+        '1919,Overprints,"3, 10"',
+        "1920,Blocks,BL1",
+      ].join("\n") + "\n"
+    );
+    assert.deepEqual(collectCatalogImportNumbers(file, MAPPING), ["1", "2", "3", "10", "BL1"]);
+  });
+
+  it("skips rows the plan will refuse outright, so the query is not widened for them", () => {
+    const file = read(
+      [
+        "Year,Name,Numbers",
+        "1918,Fine,1",
+        "1919,Unparseable,1-2-3",
+        "1920,Blank,",
+        `1921,Too many,1-${CATALOG_IMPORT_MAX_STAMPS_PER_ROW + 1}`,
+      ].join("\n") + "\n"
+    );
+    assert.deepEqual(collectCatalogImportNumbers(file, MAPPING), ["1"]);
   });
 });

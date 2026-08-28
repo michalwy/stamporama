@@ -12,7 +12,11 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
-import { computeIssueRangeSuggestions, type IssueRangeSuggestion } from "./catalog-number";
+import {
+  AUTO_CREATE_MAX_STAMPS,
+  computeIssueRangeSuggestions,
+  type IssueRangeSuggestion,
+} from "./catalog-number";
 import {
   recomputeIssueSortKeys,
   recomputeStampSortKeys,
@@ -1515,11 +1519,20 @@ export interface AutoCreateStampsInput {
 }
 
 /** Validate a range auto-create request before any writes. Shared by issue creation
- *  (#70) and post-creation bulk add (#219). */
-function assertAutoCreateInput(input: AutoCreateStampsInput): void {
+ *  (#70) and post-creation bulk add (#219).
+ *
+ *  `maxStamps` is a parameter rather than the constant because the ceiling is a property of the
+ *  *door*, not of the write: `AUTO_CREATE_MAX_STAMPS` exists because a long positionally-matched
+ *  run is a poor idea in a dialog where every stamp is about to be typed over, which says nothing
+ *  about a CSV import (#716), whose whole point is the bulk path and which brings its own
+ *  per-row ceiling. */
+function assertAutoCreateInput(
+  input: AutoCreateStampsInput,
+  maxStamps: number = AUTO_CREATE_MAX_STAMPS
+): void {
   const { count, vendors } = input;
   if (count < 1) throw new Error("Range must include at least one stamp.");
-  if (count > 50) throw new Error("Range cannot exceed 50 stamps.");
+  if (count > maxStamps) throw new Error(`Range cannot exceed ${maxStamps} stamps.`);
   if (vendors.length === 0) throw new Error("At least one catalog vendor must be selected.");
   if (vendors.some((v) => v.numbers.length !== count)) {
     throw new Error("Each vendor must supply one catalog number per stamp.");
@@ -1608,6 +1621,9 @@ export async function createIssue(
      * value removes that language's row; languages absent from the record are left untouched. */
     translations?: TranslationValueMap;
     autoCreateStamps?: AutoCreateStampsInput;
+    /** Ceiling on `autoCreateStamps.count`; see {@link assertAutoCreateInput}. Defaults to the
+     * dialog's `AUTO_CREATE_MAX_STAMPS`. */
+    maxAutoCreateStamps?: number;
   }
 ): Promise<{ id: string }> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -1624,7 +1640,7 @@ export async function createIssue(
     );
   }
 
-  if (data.autoCreateStamps) assertAutoCreateInput(data.autoCreateStamps);
+  if (data.autoCreateStamps) assertAutoCreateInput(data.autoCreateStamps, data.maxAutoCreateStamps);
 
   const created = await prisma.$transaction(async (tx) => {
     const issue = await tx.issue.create({
@@ -1682,12 +1698,13 @@ export async function addStampRangeToIssue(
   ownerId: string,
   collectionId: string,
   issueId: string,
-  input: AutoCreateStampsInput
+  input: AutoCreateStampsInput,
+  maxStamps?: number
 ): Promise<void> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  assertAutoCreateInput(input);
+  assertAutoCreateInput(input, maxStamps);
 
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
@@ -1752,6 +1769,40 @@ export async function updateIssue(
 }
 
 /**
+ * Fill an issue's **empty** name / year and touch nothing else (#717).
+ *
+ * The CSV import's fill rule: a file may supply what an issue never had, and may never overwrite
+ * what it has. {@link updateIssue} cannot express that — it is the edit dialog's write and replaces
+ * the whole record, catalog ranges and prefixes included — so a "fill" through it would silently
+ * blank an issue's numbering because the file's row said nothing about it.
+ *
+ * The emptiness test lives in the `where` clause rather than in a read before the write, so the
+ * never-overwrite rule holds by construction rather than by how close together the two ran. A field
+ * passed as null is simply not written: the file said nothing there.
+ */
+export async function fillIssueDetails(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  data: { name?: string | null; year?: number | null }
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  const name = data.name?.trim() || null;
+  if (name) {
+    // An issue "has no name" when the column is null *or* blank — the same test the plan applied.
+    await prisma.issue.updateMany({
+      where: { id: issueId, OR: [{ name: null }, { name: "" }] },
+      data: { name },
+    });
+  }
+  if (data.year != null) {
+    await prisma.issue.updateMany({ where: { id: issueId, year: null }, data: { year: data.year } });
+  }
+}
+
+/**
  * Declared-range coverage suggestions for one issue: for each vendor whose member
  * stamps extend the issue's First–Last range, a proposal to widen it. Empty when
  * every declared range still covers its members. See {@link computeIssueRangeSuggestions}.
@@ -1770,10 +1821,19 @@ export async function getIssueRangeSuggestions(
       where: { id: issueId },
       select: {
         catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
-        members: {
+        // The declared range is measured against the issue's **set**, which since #531 is its
+        // checklists' stamps — a member on no checklist of this issue is the optional extra that
+        // `requiredForCompleteness = false` used to mark. That column was selected here until #717
+        // needed this function to work: it went away with #531, and Prisma rejects the query
+        // outright, so every suggestion this ever offered was an exception the action swallowed.
+        // Same leftover `moveStampNode` carried until #549's tests reached it.
+        checklists: {
           select: {
-            requiredForCompleteness: true,
-            stamp: { select: { catalogNumbers: { select: { catalogVendorId: true, number: true } } } },
+            stamps: {
+              select: {
+                stamp: { select: { catalogNumbers: { select: { catalogVendorId: true, number: true } } } },
+              },
+            },
           },
         },
       },
@@ -1782,13 +1842,17 @@ export async function getIssueRangeSuggestions(
   ]);
   if (!issue) return [];
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
-  return computeIssueRangeSuggestions(
-    issue.catalogNumbers,
-    issue.members
-      .filter((m) => m.requiredForCompleteness)
-      .flatMap((m) => m.stamp.catalogNumbers),
-    vendorAbbrev
-  );
+  // Deduped: one stamp may sit on two of the issue's checklists (basic and specialized), and its
+  // number would otherwise be listed twice as falling outside the declared range.
+  const memberNumbers = new Map<string, { catalogVendorId: string; number: string }>();
+  for (const checklist of issue.checklists) {
+    for (const entry of checklist.stamps) {
+      for (const cn of entry.stamp.catalogNumbers) {
+        memberNumbers.set(`${cn.catalogVendorId} ${cn.number}`, cn);
+      }
+    }
+  }
+  return computeIssueRangeSuggestions(issue.catalogNumbers, [...memberNumbers.values()], vendorAbbrev);
 }
 
 /** Upsert a single vendor's declared First–Last range on an issue (used to apply a

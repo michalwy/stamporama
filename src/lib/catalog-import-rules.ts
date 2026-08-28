@@ -307,6 +307,34 @@ function readYear(raw: string): { year: number | null } | { error: string } {
   return { year };
 }
 
+/**
+ * Every catalog number the file asks about, deduped and in the order the rows state them.
+ *
+ * This is what the caller loads the collection's side by (`ExistingCatalogNumber`) before it can
+ * classify anything: the coarse `(vendor, number in […])` filter #85's duplicate check uses. It
+ * lives here rather than in the caller because the answer is *the parse* — which cells are specs
+ * and what each one generates — and a second implementation of that would be a second dialect by
+ * another name.
+ *
+ * A row whose spec does not parse, or asks for more stamps than
+ * {@link CATALOG_IMPORT_MAX_STAMPS_PER_ROW} allows, contributes nothing: {@link planCatalogImport}
+ * refuses it outright, so loading what it names would widen the query for a row that will never be
+ * written.
+ */
+export function collectCatalogImportNumbers(
+  file: CatalogImportFile,
+  mapping: CatalogImportMapping
+): string[] {
+  const seen = new Set<string>();
+  for (const record of file.rows) {
+    const spec = parseCatalogNumberSpec(cell(record.fields, mapping.spec));
+    if ("error" in spec) continue;
+    if (spec.numbers.length > CATALOG_IMPORT_MAX_STAMPS_PER_ROW) continue;
+    for (const number of spec.numbers) seen.add(number);
+  }
+  return [...seen];
+}
+
 /** Where a number is already spoken for: by an earlier row of this file, or by the collection. */
 type Claim =
   | { by: "file"; line: number }
