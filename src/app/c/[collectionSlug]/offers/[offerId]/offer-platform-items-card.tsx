@@ -88,7 +88,9 @@ import { Icon } from "@/app/icons";
 // row that has a variant line does not get the button as well: the name is already the trigger.
 //
 // The heading also carries **+ CV all** (#720): the last column's dialog with every row stacked, one
-// input per catalog, one Save. A komplet is a page of `+ CV` buttons, each opening a dialog and each
+// figure per row in the area's primary catalog (#593's rule), one Save. A row there is drawn as a
+// list draws a stamp — photo, chips, issue — since it is read against a paper catalogue rather than
+// against the platform's, and the picture is what finds the page. A komplet is a page of `+ CV` buttons, each opening a dialog and each
 // closed again before the next — and the rows are already keyed on exactly what a catalog value is
 // recorded against, so the list that names the gaps is where they can all be typed at once. The
 // per-row button stays: one gap noticed while reading a row is still one dialog. The grid lists
@@ -287,6 +289,12 @@ export function OfferPlatformItemsCard({
   // recorded against, so the same dialog stacked is the whole listing priced in one sitting. Every
   // row goes in and a recorded value is prefilled — the card itself still shows only the gap, but a
   // grid opened to type into is where a figure entered wrong is corrected rather than re-noticed.
+  //
+  // A row is handed over as the **copy** the per-row `+ CV` would be opened with, not as the card's
+  // own summary of it: the dialog draws the stamp the way a list draws it — photo, chips, issue —
+  // because it is read against a paper catalogue and the picture is the fastest way to find the
+  // page. An **unpriced** copy is preferred where the row has one, so the key being priced is the
+  // one that is actually missing, exactly as the per-row button picks it.
   const copyByStampCondition = useMemo(() => {
     const map = new Map<string, ItemListItem>();
     for (const copy of copies) {
@@ -297,8 +305,12 @@ export function OfferPlatformItemsCard({
   }, [copies]);
   const bulkPriceRows = useMemo<OfferCatalogValueRow[]>(
     () =>
-      items.map((item) => {
-        const copy = copyByStampCondition.get(`${item.stampId}|${item.conditionId}`) ?? null;
+      items.flatMap((item) => {
+        const key = `${item.stampId}|${item.conditionId}`;
+        const copy = unpricedBy.get(key) ?? copyByStampCondition.get(key) ?? null;
+        // No copy of that stamp on this offer is nothing to price: the value is recorded against a
+        // stamp × condition, and the copy is what carries both here.
+        if (!copy) return [];
         // Where the operative figure is the **tree's** and not this stamp's, the row is locked
         // (#627): the rollup's own value (#238/#616), or nothing at all where a variant carries no
         // price (#617) and which variant is cheapest is not known. Pricing the umbrella there does
@@ -306,26 +318,16 @@ export function OfferPlatformItemsCard({
         // offering an input that looks like the answer.
         const rollup: OfferCatalogValueRow["rollup"] = item.unpricedVariantStampId
           ? { amount: null, currency: null, variant: null }
-          : copy?.value.sourceStampId
+          : copy.value.sourceStampId
             ? {
                 amount: copy.value.amount,
                 currency: copy.value.currency,
                 variant: item.catalogItemVariant,
               }
             : null;
-        return {
-          stampId: item.stampId,
-          conditionId: item.conditionId,
-          certificateStatusId: item.certificateStatusId,
-          label: item.label,
-          stampName: item.stampName,
-          conditionName: item.conditionName,
-          copyCount: item.copyCount,
-          unpriced: copy?.value.unpriced ?? false,
-          rollup,
-        };
+        return [{ copy, copyCount: item.copyCount, rollup }];
       }),
-    [items, copyByStampCondition]
+    [items, copyByStampCondition, unpricedBy]
   );
   /** Rows carrying the card's own `+ CV` — what the header chip counts, so the two agree. */
   const unpricedCount = items.filter(
@@ -923,6 +925,8 @@ export function OfferPlatformItemsCard({
       {pricingAll && (
         <OfferCatalogValuesDialog
           rows={bulkPriceRows}
+          collectionId={collectionId}
+          areas={areas}
           onClose={() => setPricingAll(false)}
           onSaved={() => void invalidateAll(collectionId)}
         />

@@ -840,9 +840,19 @@ posted; anywhere else it is simply a gap in those stamps' own records, and the c
 
 A big offer is a page of **+ CV** buttons, each opening a dialog and each closed again before the
 next. The heading therefore carries **+ CV all**, and it is the same dialog with the rows stacked:
-one line per stamp and condition, one column per catalog, and a single **Save** at the end. Work
-down a catalog column with **Tab** — that is how a paper catalogue is read, one book at a time — and
-press **Enter** when you are done.
+one line per stamp and condition, one figure each, and a single **Save** at the end. Work down the
+column with **Tab** — it skips straight from one figure to the next — and press **Enter** when you
+are done.
+
+Each row is the stamp the way a list shows it: its **photo**, its catalogue chips, its name, and the
+issue and area underneath. You are reading this against a paper catalogue open at a page, and the
+picture is the quickest way to be sure you are looking at the right stamp before copying a figure
+for it.
+
+There is **one column, your area's primary catalog** — the one the valuation and the closing checks
+read. Its name and edition sit in the heading when every row shares it, and beside each figure when
+the offer spans areas with different catalogues. To record a value in another catalogue, use the
+row's own **+ CV**, which still offers all of them.
 
 Unlike the card itself, the grid lists **every** row and fills in the values you already have, so a
 figure entered wrong is corrected in the same pass instead of being noticed again next time. The
@@ -858,7 +868,7 @@ typed is lost.
 A row **listed under a variant** is not typed into. Its value is the lowest of that stamp's
 variants, so the grid shows that figure with a `≈` and names where it came from; a row whose
 variants are not all priced says so instead, and is closed from **Price variants** on the card. If
-you do mean to price such a stamp directly, the 🔓 beside its condition turns the row into inputs —
+you do mean to price such a stamp directly, the 🔓 beside its condition turns the row into an input —
 its own price then overrides the rolled-up one.
 
 A stamp with **no Colnect item-ID** and no variant to fall back on cannot have a page of its own

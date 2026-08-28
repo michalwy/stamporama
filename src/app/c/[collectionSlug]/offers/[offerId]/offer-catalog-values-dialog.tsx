@@ -12,8 +12,13 @@ import {
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { ItemListItem } from "@/lib/items";
 import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
 
 /**
@@ -21,14 +26,28 @@ import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
  *
  * The offer's Items card already answers *which* rows have no catalog value, one amber `+ CV` per
  * row — and a komplet is a page of them, each opening a dialog, each closed again before the next.
- * This is that dialog with the rows stacked: one line per `stamp × condition`, one input per
- * catalog, the whole listing typed from the paper catalogue in one sitting.
+ * This is that dialog with the rows stacked: one line per `stamp × condition`, one figure per row,
+ * the whole listing typed from the paper catalogue in one sitting.
  *
  * It **reuses the per-row save** (`quickSetCatalogPrices`, #147/#170) row by row rather than writing
  * prices of its own, so a value set here is set the one way it is ever set: the latest edition of
- * each catalog, in that catalog's currency, at the **single** — a catalogue quotes singles, and a
+ * the catalog, in that catalog's currency, at the **single** — a catalogue quotes singles, and a
  * multiple is that figure times its format's factor. The per-row `+ CV` stays exactly where it is:
  * one gap noticed while reading a row is still one dialog, and this one is for the walk.
+ *
+ * **A row is the stamp as a list draws it** — its photo, its catalogue chips, its name, its issue
+ * and its area — and not the card's own one-line summary. The card is read *against* the platform's
+ * catalogue, where a number is all that is needed to find the row again; this is read against a
+ * paper catalogue, open at a page, and the collector has to recognise the stamp in their hand
+ * before they can copy a figure for it. Which is why the picture is here and not there: it is the
+ * fastest thing to match a stamp by, and no number ever printed identifies it as quickly.
+ *
+ * **One column: the primary catalog** — #593's rule, and for its reason. The per-row dialog prices
+ * every vendor active on the area and stays exactly where it is for that case, but a grid of a
+ * listing's worth of rows is scanned rather than read, the primary is the only catalogue the
+ * closing checks and the valuation ever ask about, and a second and third column of mostly empty
+ * inputs is what stops the one that matters from being filled in. A row whose area names no primary
+ * catalog with an edition simply has nothing to type into, and says so.
  *
  * **Every row is listed, and a recorded value is prefilled.** The card shows gaps and never figures,
  * because a figure is not what that card is read for; a grid opened to type into is, and a wrong one
@@ -42,32 +61,28 @@ import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
  * what "in one pass" means. Every amount is parsed before anything is written, and a refusal
  * part-way through keeps the dialog open with the rows that did go in marked as saved.
  *
- * **Tab walks down a column** (#626/#232), as it does in both other price grids: a catalogue is read
- * one book at a time down the page, and a grid whose neighbours disagree about Tab is a grid whose
- * muscle memory is wrong half the time. Enter submits, which is the way out of a dialog opened to
- * fill it in (#634's rule, in this dialog's own idiom).
+ * **Tab walks down the column** (#626/#232), skipping the chips and locks between the inputs: a
+ * catalogue is copied figure after figure, and the row's own controls are not stops on that walk.
+ * Enter submits, which is the way out of a dialog opened to fill it in (#634's rule, in this
+ * dialog's own idiom).
  *
  * **An umbrella row is locked** (#627). Where the copy is valued at the lowest of its variants
  * (#238/#616), or where that rollup could not be taken at all because a variant carries no price
  * (#617), the operative figure is the *tree's* and not this stamp's: an open input on such a row
  * reads as one more gap to fill while what it would record is an override of a computed figure. The
  * row shows the rolled-up value `≈`-prefixed and names the variant it came from; the 🔓 turns it
- * back into inputs, because pricing an umbrella directly is a legitimate act — just not the default.
+ * back into an input, because pricing an umbrella directly is a legitimate act — just not the
+ * default.
  */
 export interface OfferCatalogValueRow {
-  stampId: string;
-  conditionId: string;
-  certificateStatusId: string | null;
-  /** What the card's first column prints — the stamp's catalogue numbers, or its name. */
-  label: string;
-  stampName: string | null;
-  conditionName: string;
+  /**
+   * The copy the row is drawn from *and* priced at: its stamp, condition and certificate are the
+   * key, and its photos, numbers and issue are what the row prints. The offer's own copies, which
+   * the card already holds — the same subject the per-row `+ CV` is opened with.
+   */
+  copy: ItemListItem;
   /** How many of the offer's copies this row stands for, as the card counts them. */
   copyCount: number;
-  /** The card's own gap: no catalog value reaches this copy. Marked, never inferred from the grid —
-   *  the two answers are different (a copy can be valued through a rollup or a format factor), and
-   *  the card and the dialog must not disagree about which rows are the work. */
-  unpriced: boolean;
   /** Set where the copy's figure is **not** its own stamp's: the lowest of its variants (#238/#616),
    *  or nothing at all where a variant carries no price (#617). Null on an ordinary row and on an
    *  umbrella priced directly, both of which are simply typed into. */
@@ -80,16 +95,18 @@ function rowKey(row: { stampId: string; conditionId: string; certificateStatusId
   return `${row.stampId}~${row.conditionId}~${row.certificateStatusId ?? ""}`;
 }
 
-function cellKey(rowId: string, catalogNameId: string) {
-  return `${rowId}~${catalogNameId}`;
-}
-
 export function OfferCatalogValuesDialog({
   rows,
+  collectionId,
+  areas,
   onClose,
   onSaved,
 }: {
   rows: OfferCatalogValueRow[];
+  /** Whose photos the thumbnails address, and whose issue prefixes the chips resolve through. */
+  collectionId: string;
+  /** For the per-area vendor maps the catalogue chips are drawn from. */
+  areas: CollectionAreaData[];
   onClose: () => void;
   /** Called after a save that wrote something — the card's gaps and the offer's totals both move. */
   onSaved: () => void;
@@ -98,9 +115,9 @@ export function OfferCatalogValuesDialog({
   const subjects = useMemo(
     () =>
       rows.map((r) => ({
-        stampId: r.stampId,
-        conditionId: r.conditionId,
-        certificateStatusId: r.certificateStatusId,
+        stampId: r.copy.stampId,
+        conditionId: r.copy.conditionId,
+        certificateStatusId: r.copy.certificateStatusId,
       })),
     [rows]
   );
@@ -119,7 +136,7 @@ export function OfferCatalogValuesDialog({
   });
 
   return (
-    <DialogShell title="Catalog values" onClose={onClose} maxWidth="min(64rem, 95vw)">
+    <DialogShell title="Catalog values" onClose={onClose} maxWidth="min(60rem, 95vw)">
       {isLoading ? (
         <DialogBody>
           <p style={MUTED}>Loading…</p>
@@ -133,6 +150,8 @@ export function OfferCatalogValuesDialog({
       ) : data ? (
         <CatalogValuesGrid
           rows={rows}
+          collectionId={collectionId}
+          areas={areas}
           catalogs={data.catalogs}
           context={data.rows}
           onClose={onClose}
@@ -145,26 +164,41 @@ export function OfferCatalogValuesDialog({
 
 function CatalogValuesGrid({
   rows,
+  collectionId,
+  areas,
   catalogs,
   context,
   onClose,
   onSaved,
 }: {
   rows: OfferCatalogValueRow[];
+  collectionId: string;
+  areas: CollectionAreaData[];
   catalogs: BulkQuickPriceCatalog[];
   context: BulkQuickPriceRow[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const byRow = useMemo(() => new Map(context.map((r) => [rowKey(r), r])), [context]);
+  const catalogById = useMemo(
+    () => new Map(catalogs.map((c) => [c.catalogNameId, c])),
+    [catalogs]
+  );
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
-  /** What the server holds, cell by cell. It parts company with what is on screen only between the
+  /** The one catalog a row is priced in here: its area's effective primary, where it has an edition
+   *  to land on. Null is a row with nothing to type into, which the cell says outright. */
+  const primaryFor = (row: OfferCatalogValueRow) =>
+    byRow.get(rowKey(row.copy))?.primaryCatalogNameId ?? null;
+
+  /** What the server holds, row by row. It parts company with what is on screen only between the
    *  typing and the submit, which is the whole of this dialog's draft. */
   const [saved, setSaved] = useState<Map<string, string>>(() => {
     const map = new Map<string, string>();
     for (const r of context) {
-      for (const [catalogNameId, amount] of Object.entries(r.amounts)) {
-        map.set(cellKey(rowKey(r), catalogNameId), amount);
+      if (r.primaryCatalogNameId && r.amounts[r.primaryCatalogNameId] != null) {
+        map.set(rowKey(r), r.amounts[r.primaryCatalogNameId]);
       }
     }
     return map;
@@ -177,25 +211,17 @@ function CatalogValuesGrid({
 
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
 
-  /** The catalogs a row may be priced in — the columns its own area carries. Empty where the stamp
-   *  is linked to no area, or to one with no catalog that has an edition. */
-  const catalogsFor = (row: OfferCatalogValueRow) => byRow.get(rowKey(row))?.catalogNameIds ?? [];
-  const isLocked = (row: OfferCatalogValueRow) => row.rollup !== null && !unlocked.has(rowKey(row));
+  const isLocked = (row: OfferCatalogValueRow) =>
+    row.rollup !== null && !unlocked.has(rowKey(row.copy));
 
-  /** Every cell that can be typed in, **down each catalog column in turn** (#626). A locked row is
-   *  absent, so unlocking one puts its cells into the walk and nothing else has to know. */
+  /** Every cell that can be typed in, in the card's own row order (#626 with one column). A locked
+   *  row is absent, so unlocking one puts its cell into the walk and nothing else has to know. */
   const navOrder = useMemo(() => {
-    const order: string[] = [];
-    for (const catalog of catalogs) {
-      for (const row of rows) {
-        if (isLocked(row)) continue;
-        if (!catalogsFor(row).includes(catalog.catalogNameId)) continue;
-        order.push(cellKey(rowKey(row), catalog.catalogNameId));
-      }
-    }
-    return order;
+    return rows.flatMap((row) =>
+      !isLocked(row) && primaryFor(row) ? [rowKey(row.copy)] : []
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalogs, rows, byRow, unlocked]);
+  }, [rows, byRow, unlocked]);
 
   /** Open the cursor in the first cell of the walk (#634): the dialog is opened to type into, and
    *  `DialogShell`'s own pass runs while the grid is still loading. Once — a row unlocked under the
@@ -211,10 +237,10 @@ function CatalogValuesGrid({
     setValues((prev) => new Map(prev).set(key, value));
 
   /**
-   * What this submit would write: per row, the cells whose figure differs from what the server
-   * holds. A cell equal to the recorded value writes nothing — walking a filled grid with Tab is the
-   * ordinary way to read one — and a **blank** cell is left alone rather than deleted: removing a
-   * price is an act on the stamp's Prices tab, where what is being removed is on screen.
+   * What this submit would write: the rows whose figure differs from what the server holds. A row
+   * equal to the recorded value writes nothing — walking a filled grid with Tab is the ordinary way
+   * to read one — and a **blank** one is left alone rather than deleted: removing a price is an act
+   * on the stamp's Prices tab, where what is being removed is on screen.
    */
   const changed = useMemo(() => {
     const out: Array<{
@@ -224,24 +250,18 @@ function CatalogValuesGrid({
       entries: Array<{ catalogNameId: string; amount: string }>;
     }> = [];
     for (const row of rows) {
-      const id = rowKey(row);
-      const entries: Array<{ catalogNameId: string; amount: string }> = [];
-      for (const catalogNameId of catalogsFor(row)) {
-        const key = cellKey(id, catalogNameId);
-        const typed = (values.get(key) ?? "").trim();
-        if (typed === "") continue;
-        const normalized = formatAmount(typed);
-        if (normalized === (saved.get(key) ?? "")) continue;
-        entries.push({ catalogNameId, amount: typed });
-      }
-      if (entries.length > 0) {
-        out.push({
-          stampId: row.stampId,
-          conditionId: row.conditionId,
-          certificateStatusId: row.certificateStatusId,
-          entries,
-        });
-      }
+      const catalogNameId = primaryFor(row);
+      if (!catalogNameId) continue;
+      const key = rowKey(row.copy);
+      const typed = (values.get(key) ?? "").trim();
+      if (typed === "") continue;
+      if (formatAmount(typed) === (saved.get(key) ?? "")) continue;
+      out.push({
+        stampId: row.copy.stampId,
+        conditionId: row.copy.conditionId,
+        certificateStatusId: row.copy.certificateStatusId,
+        entries: [{ catalogNameId, amount: typed }],
+      });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,9 +281,7 @@ function CatalogValuesGrid({
       setSaved((prev) => {
         const next = new Map(prev);
         for (const row of changed.slice(0, r.savedRows)) {
-          for (const entry of row.entries) {
-            next.set(cellKey(rowKey(row), entry.catalogNameId), formatAmount(entry.amount));
-          }
+          next.set(rowKey(row), formatAmount(row.entries[0].amount));
         }
         return next;
       });
@@ -275,10 +293,10 @@ function CatalogValuesGrid({
   }
 
   /**
-   * **Tab** steps down the catalog column and on to the next (#626); Shift reverses, and at either
-   * end the browser takes over so focus can leave the grid the ordinary way. **Enter** submits the
-   * dialog, which is its own way out (#634) — a form's default, stated here only so the two keys are
-   * read together.
+   * **Tab** steps down the column (#626), skipping the chips and locks between the inputs; Shift
+   * reverses, and at either end the browser takes over so focus can leave the grid the ordinary
+   * way. **Enter** submits the dialog, which is its own way out (#634) — a form's default, stated
+   * here only so the two keys are read together.
    */
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>, key: string) {
     if (e.key !== "Tab") return;
@@ -304,7 +322,11 @@ function CatalogValuesGrid({
     );
   }
 
-  const missing = rows.filter((r) => r.unpriced).length;
+  const missing = rows.filter((r) => r.copy.value.unpriced).length;
+  /** The catalog every row is priced in, when they agree — then it is named once in the heading
+   *  instead of on every row. A grid spanning areas names each row's own book beside its input. */
+  const primaryIds = new Set(rows.map(primaryFor).filter((id): id is string => id !== null));
+  const sharedCatalog = primaryIds.size === 1 ? catalogById.get([...primaryIds][0]) : undefined;
 
   return (
     <form
@@ -313,10 +335,11 @@ function CatalogValuesGrid({
     >
       <DialogBody>
         <p style={{ ...MUTED, margin: "0 0 0.75rem" }}>
-          Every stamp in this offer, one row per condition. Each figure is saved on the latest
-          edition of its catalog for that condition × certificate, as the <strong>single&apos;s</strong>{" "}
-          value — a multiple is derived from it by that format&apos;s factor. Tab moves down a
-          catalog column; a blank cell records nothing and removes nothing.
+          Every stamp in this offer, one row per condition, priced in the{" "}
+          <strong>primary catalog</strong> of its area. Each figure is saved on that catalog&apos;s
+          latest edition for the row&apos;s condition × certificate, as the{" "}
+          <strong>single&apos;s</strong> value — a multiple is derived from it by that format&apos;s
+          factor. Tab moves down the column; a blank cell records nothing and removes nothing.
           {missing > 0 && (
             <>
               {" "}
@@ -328,162 +351,202 @@ function CatalogValuesGrid({
           )}
         </p>
 
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", fontSize: "0.8125rem", width: "100%" }}>
-            <thead>
-              <tr>
-                <th style={TH_STAMP}>Stamp</th>
-                <th style={TH_STAMP}>Condition</th>
-                {catalogs.map((c) => (
-                  <th key={c.catalogNameId} style={TH_CATALOG}>
-                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                      <span style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>
-                        {c.catalogLabel}
-                      </span>
-                      <span style={{ fontWeight: 400 }}>
-                        {c.vendorAbbreviation} · {c.editionYear} · {c.currency}
+        <table style={{ borderCollapse: "collapse", fontSize: "0.8125rem", width: "100%" }}>
+          <thead>
+            <tr>
+              <th style={TH_LEFT}>Stamp</th>
+              <th style={TH_LEFT}>Condition</th>
+              <th style={TH_VALUE}>
+                <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                  <span style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>
+                    {sharedCatalog ? sharedCatalog.catalogLabel : "Catalog value"}
+                  </span>
+                  {sharedCatalog && (
+                    <span style={{ fontWeight: 400 }}>
+                      {sharedCatalog.vendorAbbreviation} · {sharedCatalog.editionYear} ·{" "}
+                      {sharedCatalog.currency}
+                    </span>
+                  )}
+                </span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const copy = row.copy;
+              const key = rowKey(copy);
+              const locked = isLocked(row);
+              const catalogNameId = primaryFor(row);
+              const catalog = catalogNameId ? catalogById.get(catalogNameId) : undefined;
+              const issueLabel = copy.issueName
+                ? `${copy.issueName}${copy.issueYear ? ` (${copy.issueYear})` : ""}`
+                : null;
+              const areaName = copy.areaId ? (areaNameById.get(copy.areaId) ?? null) : null;
+              return (
+                <tr key={key} style={{ borderTop: "1px solid var(--color-border)" }}>
+                  {/* The stamp as a list draws it: the picture first, because that is what the
+                      collector matches against the page of the catalogue in front of them, and the
+                      shared identity beside it so the chips, the name and the Colnect link read the
+                      same here as on every other screen. */}
+                  <td style={TD_STAMP}>
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <PhotoThumb
+                        collectionId={collectionId}
+                        photos={copy.photos}
+                        reserveWhenEmpty
+                        size="4rem"
+                      />
+                      <span
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.125rem",
+                          minWidth: 0,
+                        }}
+                      >
+                        <StampIdentity
+                          stamp={{
+                            name: copy.stampName,
+                            catalogNumbers: copy.catalogNumbers,
+                            colnectId: copy.colnectId,
+                            subtype: copy.subtype,
+                          }}
+                          vendorMap={vendorMapFor(copy.areaId, copy.issueId)}
+                          primaryVendorId={
+                            copy.areaId ? (primaryVendorByArea.get(copy.areaId) ?? null) : null
+                          }
+                          size="small"
+                        />
+                        {(issueLabel || areaName) && (
+                          <span style={MUTED}>
+                            {[issueLabel, areaName].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
                       </span>
                     </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const id = rowKey(row);
-                const applicable = catalogsFor(row);
-                const locked = isLocked(row);
-                return (
-                  <tr key={id}>
-                    <td style={TD_STAMP}>
-                      <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.4rem" }}>
-                        <span style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{row.label}</span>
-                        {row.stampName && (
-                          <span
-                            style={{
-                              color: "var(--color-text-muted)",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              maxWidth: "16rem",
-                            }}
-                          >
-                            {row.stampName}
-                          </span>
-                        )}
-                        {row.copyCount > 1 && (
-                          <Tooltip
-                            content={`${row.copyCount} copies of this stamp in this condition are in the offer.`}
-                          >
-                            <span style={MUTED}>×{row.copyCount}</span>
-                          </Tooltip>
-                        )}
-                        {/* The card's own gap, in the card's own amber — so the rows that are the
-                            work read the same way in both places. */}
-                        {row.unpriced && (
-                          <Tooltip content="No catalog value reaches this copy yet. This is one of the rows the card marks with + CV.">
-                            <span style={GAP_CHIP}>no value</span>
-                          </Tooltip>
-                        )}
+                  </td>
+                  <td style={TD_CONDITION}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={{ color: "var(--color-text-primary)" }}>
+                        {copy.conditionName}
                       </span>
-                    </td>
-                    <td style={{ ...TD_STAMP, color: "var(--color-text-muted)" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                        {row.conditionName}
-                        {row.rollup && (
-                          // The lock, and a toggle both ways: a row locked again is a row whose
-                          // rolled-up figure is legible once more (#627).
-                          <Tooltip
-                            content={
-                              unlocked.has(id)
-                                ? "Locking this row again shows what its variants roll up to. Anything already recorded on it stays recorded."
-                                : "Unlock to price this stamp directly. Its own price overrides the lowest-variant figure — which is what the listing is derived from."
-                            }
-                          >
-                            <button
-                              type="button"
-                              aria-label={`${unlocked.has(id) ? "Lock" : "Unlock"} ${row.label}`}
-                              aria-pressed={unlocked.has(id)}
-                              onClick={() =>
-                                setUnlocked((prev) => {
-                                  const next = new Set(prev);
-                                  if (!next.delete(id)) next.add(id);
-                                  return next;
-                                })
-                              }
-                              style={LOCK_BTN}
-                            >
-                              <Icon name={unlocked.has(id) ? "unlocked" : "locked"} size="xs" />
-                            </button>
-                          </Tooltip>
-                        )}
-                      </span>
-                    </td>
-                    {locked ? (
-                      // One cell across the columns rather than a figure repeated under each: the
-                      // rolled-up value came from one variant's own catalogue row, and printing it
-                      // under every column would claim each of them recorded it.
-                      <td style={TD_CELL} colSpan={catalogs.length}>
+                      {copy.certificateStatusName && <span>· {copy.certificateStatusName}</span>}
+                      {copy.formatAbbreviation && <span>· {copy.formatAbbreviation}</span>}
+                      {row.copyCount > 1 && (
+                        <Tooltip
+                          content={`${row.copyCount} copies of this stamp in this condition are in the offer.`}
+                        >
+                          <span>×{row.copyCount}</span>
+                        </Tooltip>
+                      )}
+                      {/* The card's own gap, in the card's own amber — so the rows that are the
+                          work read the same way in both places. */}
+                      {copy.value.unpriced && (
+                        <Tooltip content="No catalog value reaches this copy yet. This is one of the rows the card marks with + CV.">
+                          <span style={GAP_CHIP}>no value</span>
+                        </Tooltip>
+                      )}
+                      {row.rollup && (
+                        // The lock, and a toggle both ways: a row locked again is a row whose
+                        // rolled-up figure is legible once more (#627).
                         <Tooltip
                           content={
-                            row.rollup?.amount
-                              ? "The lowest price among this stamp's variants — computed, not recorded, and what this listing stands under. Unlock the row to price the stamp itself instead."
-                              : "No variant of this stamp is priced at this condition, so which one is cheapest — and so which one this would be listed under — is not known. Price the tree from the row's Price variants button."
+                            unlocked.has(key)
+                              ? "Locking this row again shows what its variants roll up to. Anything already recorded on it stays recorded."
+                              : "Unlock to price this stamp directly. Its own price overrides the lowest-variant figure — which is what the listing is derived from."
                           }
                         >
-                          <span style={{ ...CELL_READONLY, ...ROLLED_UP }}>
-                            {row.rollup?.amount
-                              ? `≈${row.rollup.amount}${row.rollup.currency ? ` ${row.rollup.currency}` : ""}${
-                                  row.rollup.variant ? ` from ${row.rollup.variant}` : ""
-                                }`
-                              : "priced through its variants"}
-                          </span>
+                          <button
+                            type="button"
+                            aria-label={`${unlocked.has(key) ? "Lock" : "Unlock"} ${
+                              copy.stampName ?? copy.catalogNumbers[0]?.number ?? "this stamp"
+                            }`}
+                            aria-pressed={unlocked.has(key)}
+                            onClick={() =>
+                              setUnlocked((prev) => {
+                                const next = new Set(prev);
+                                if (!next.delete(key)) next.add(key);
+                                return next;
+                              })
+                            }
+                            style={LOCK_BTN}
+                          >
+                            <Icon name={unlocked.has(key) ? "unlocked" : "locked"} size="xs" />
+                          </button>
                         </Tooltip>
-                      </td>
-                    ) : (
-                      catalogs.map((c) => {
-                        const key = cellKey(id, c.catalogNameId);
-                        if (!applicable.includes(c.catalogNameId)) {
-                          return (
-                            <td key={c.catalogNameId} style={TD_CELL}>
-                              <Tooltip
-                                content={`${c.catalogLabel} is not a catalog of this stamp's area${
-                                  byRow.get(id)?.areaName ? ` (${byRow.get(id)!.areaName})` : ""
-                                }, so a value cannot be recorded in it here.`}
-                              >
-                                <span style={CELL_READONLY}>—</span>
-                              </Tooltip>
-                            </td>
-                          );
+                      )}
+                    </span>
+                  </td>
+                  <td style={TD_VALUE}>
+                    {locked ? (
+                      <Tooltip
+                        content={
+                          row.rollup?.amount
+                            ? "The lowest price among this stamp's variants — computed, not recorded, and what this listing stands under. Unlock the row to price the stamp itself instead."
+                            : "No variant of this stamp is priced at this condition, so which one is cheapest — and so which one this would be listed under — is not known. Price the tree from the row's Price variants button."
                         }
-                        return (
-                          <td key={c.catalogNameId} style={TD_CELL}>
-                            <NumericInput
-                              ref={(el) => {
-                                inputRefs.current.set(key, el);
-                              }}
-                              aria-label={`${row.label} ${row.conditionName} ${c.catalogLabel}`}
-                              value={values.get(key) ?? ""}
-                              onChange={(e) => setValue(key, e.target.value)}
-                              onBlur={(e) => {
-                                const normalized = formatAmount(e.currentTarget.value.trim());
-                                if (normalized !== e.currentTarget.value) setValue(key, normalized);
-                              }}
-                              onKeyDown={(e) => handleKeyDown(e, key)}
-                              disabled={isSaving}
-                              placeholder="—"
-                              style={CELL_INPUT}
-                            />
-                          </td>
-                        );
-                      })
+                      >
+                        <span style={{ ...CELL_READONLY, ...ROLLED_UP }}>
+                          {row.rollup?.amount
+                            ? `≈${row.rollup.amount}${
+                                row.rollup.currency ? ` ${row.rollup.currency}` : ""
+                              }${row.rollup.variant ? ` from ${row.rollup.variant}` : ""}`
+                            : "priced through its variants"}
+                        </span>
+                      </Tooltip>
+                    ) : !catalog ? (
+                      <Tooltip
+                        content={`${
+                          areaName ?? "This stamp's area"
+                        } has no primary catalog with an edition, so there is nothing for a value to be recorded on. Set one up on the Catalog screen.`}
+                      >
+                        <span style={CELL_READONLY}>—</span>
+                      </Tooltip>
+                    ) : (
+                      <span
+                        style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
+                      >
+                        <NumericInput
+                          ref={(el) => {
+                            inputRefs.current.set(key, el);
+                          }}
+                          aria-label={`${copy.stampName ?? copy.catalogNumbers[0]?.number ?? "Stamp"} ${
+                            copy.conditionName
+                          } catalog value`}
+                          value={values.get(key) ?? ""}
+                          onChange={(e) => setValue(key, e.target.value)}
+                          onBlur={(e) => {
+                            const normalized = formatAmount(e.currentTarget.value.trim());
+                            if (normalized !== e.currentTarget.value) setValue(key, normalized);
+                          }}
+                          onKeyDown={(e) => handleKeyDown(e, key)}
+                          disabled={isSaving}
+                          placeholder="—"
+                          style={CELL_INPUT}
+                        />
+                        {/* Named per row only where the rows disagree — with one book for the whole
+                            grid it is in the heading, and repeating it on every line would be the
+                            same fact printed thirty times. */}
+                        {!sharedCatalog && (
+                          <span style={{ ...MUTED, fontSize: "0.6875rem" }}>
+                            {catalog.catalogLabel} · {catalog.editionYear} · {catalog.currency}
+                          </span>
+                        )}
+                      </span>
                     )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </DialogBody>
       <DialogFooter>
         <DialogSecondaryButton onClick={onClose} disabled={isSaving}>
@@ -541,12 +604,12 @@ const CELL_INPUT: React.CSSProperties = {
   background: "var(--color-bg-elevated)",
   boxSizing: "border-box",
   minHeight: "1.75rem",
-  width: "6rem",
+  width: "7rem",
   textAlign: "right",
 };
 
 /** A cell that is not a control: every box metric the input has, and a transparent border in place
- *  of its visible one, so locking a row does not shift the columns beside it. */
+ *  of its visible one, so locking a row does not shift the column beside it. */
 const CELL_READONLY: React.CSSProperties = {
   display: "block",
   padding: "0.25rem 0.375rem",
@@ -572,7 +635,7 @@ const LOCK_BTN: React.CSSProperties = {
   lineHeight: 1,
 };
 
-const TH_STAMP: React.CSSProperties = {
+const TH_LEFT: React.CSSProperties = {
   textAlign: "left",
   padding: "0.25rem 1rem 0.375rem 0",
   color: "var(--color-text-muted)",
@@ -580,20 +643,28 @@ const TH_STAMP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const TH_CATALOG: React.CSSProperties = {
+const TH_VALUE: React.CSSProperties = {
   textAlign: "right",
-  padding: "0.25rem 0.375rem 0.375rem",
+  padding: "0.25rem 0 0.375rem",
   color: "var(--color-text-muted)",
   fontWeight: 500,
   whiteSpace: "nowrap",
 };
 
 const TD_STAMP: React.CSSProperties = {
-  padding: "0.15rem 1rem 0.15rem 0",
-  whiteSpace: "nowrap",
+  padding: "0.375rem 1rem 0.375rem 0",
   color: "var(--color-text-primary)",
 };
 
-const TD_CELL: React.CSSProperties = {
-  padding: "0.15rem 0.375rem",
+const TD_CONDITION: React.CSSProperties = {
+  padding: "0.375rem 1rem 0.375rem 0",
+  color: "var(--color-text-muted)",
+  whiteSpace: "nowrap",
+  verticalAlign: "middle",
+};
+
+const TD_VALUE: React.CSSProperties = {
+  padding: "0.375rem 0",
+  verticalAlign: "middle",
+  width: "1%",
 };
