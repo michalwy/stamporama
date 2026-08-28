@@ -836,6 +836,31 @@ readable with the card collapsed, which is where you are looking before you have
 for the platform you have named as Colnect, *N not matched* is also what stops the offer being
 posted; anywhere else it is simply a gap in those stamps' own records, and the chip says so.
 
+### Pricing the whole offer in one go
+
+A big offer is a page of **+ CV** buttons, each opening a dialog and each closed again before the
+next. The heading therefore carries **+ CV all**, and it is the same dialog with the rows stacked:
+one line per stamp and condition, one column per catalog, and a single **Save** at the end. Work
+down a catalog column with **Tab** — that is how a paper catalogue is read, one book at a time — and
+press **Enter** when you are done.
+
+Unlike the card itself, the grid lists **every** row and fills in the values you already have, so a
+figure entered wrong is corrected in the same pass instead of being noticed again next time. The
+rows with nothing recorded are marked *no value*, in the same amber as the buttons in the list, and
+the heading's own count says how many there are. A blank cell records nothing and removes nothing:
+to delete a price, use the stamp's **Prices** tab, where you can see what you are deleting.
+
+Each figure is saved exactly where the per-row dialog would put it — the latest edition of that
+catalog, for that condition, as the **single's** value. If something is refused part-way through,
+the dialog stays open and the rows that were already saved show their new figures, so nothing you
+typed is lost.
+
+A row **listed under a variant** is not typed into. Its value is the lowest of that stamp's
+variants, so the grid shows that figure with a `≈` and names where it came from; a row whose
+variants are not all priced says so instead, and is closed from **Price variants** on the card. If
+you do mean to price such a stamp directly, the 🔓 beside its condition turns the row into inputs —
+its own price then overrides the rolled-up one.
+
 A stamp with **no Colnect item-ID** and no variant to fall back on cannot have a page of its own
 here, so its **Catalog** link becomes **Search** — Colnect's own catalogue search for that stamp's
 leading catalog number, in the form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the

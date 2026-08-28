@@ -9,6 +9,10 @@ import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-di
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { ListedVariantDialog } from "./listed-variant-dialog";
+import {
+  OfferCatalogValuesDialog,
+  type OfferCatalogValueRow,
+} from "./offer-catalog-values-dialog";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
@@ -82,6 +86,15 @@ import { Icon } from "@/app/icons";
 // the choice reachable on the two rows the derivation could not answer: an unpriced tree, and an
 // umbrella whose own catalogue price won the valuation. Both entry points open the same dialog, and a
 // row that has a variant line does not get the button as well: the name is already the trigger.
+//
+// The heading also carries **+ CV all** (#720): the last column's dialog with every row stacked, one
+// input per catalog, one Save. A komplet is a page of `+ CV` buttons, each opening a dialog and each
+// closed again before the next — and the rows are already keyed on exactly what a catalog value is
+// recorded against, so the list that names the gaps is where they can all be typed at once. The
+// per-row button stays: one gap noticed while reading a row is still one dialog. The grid lists
+// **every** row and prefills what is recorded, unlike the card itself, since it is opened to type
+// into and that is where a figure entered wrong is corrected rather than re-noticed; only the gaps
+// are marked, off this card's own answer so the two cannot disagree about which rows are the work.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
@@ -268,6 +281,58 @@ export function OfferPlatformItemsCard({
   const unpricedFor = (item: OfferPlatformItem) =>
     unpricedBy.get(`${item.stampId}|${item.conditionId}`) ?? null;
 
+  // ── The same gap, for the whole offer at once (#720) ───────────────────────
+  // A komplet is a page of `+ CV` buttons, each opening a dialog and each closed again before the
+  // next; the rows are already `stamp × condition`, which is exactly what a catalog value is
+  // recorded against, so the same dialog stacked is the whole listing priced in one sitting. Every
+  // row goes in and a recorded value is prefilled — the card itself still shows only the gap, but a
+  // grid opened to type into is where a figure entered wrong is corrected rather than re-noticed.
+  const copyByStampCondition = useMemo(() => {
+    const map = new Map<string, ItemListItem>();
+    for (const copy of copies) {
+      const key = `${copy.stampId}|${copy.conditionId}`;
+      if (!map.has(key)) map.set(key, copy);
+    }
+    return map;
+  }, [copies]);
+  const bulkPriceRows = useMemo<OfferCatalogValueRow[]>(
+    () =>
+      items.map((item) => {
+        const copy = copyByStampCondition.get(`${item.stampId}|${item.conditionId}`) ?? null;
+        // Where the operative figure is the **tree's** and not this stamp's, the row is locked
+        // (#627): the rollup's own value (#238/#616), or nothing at all where a variant carries no
+        // price (#617) and which variant is cheapest is not known. Pricing the umbrella there does
+        // not close the gap — the rollup reads the variants — so the grid says so rather than
+        // offering an input that looks like the answer.
+        const rollup: OfferCatalogValueRow["rollup"] = item.unpricedVariantStampId
+          ? { amount: null, currency: null, variant: null }
+          : copy?.value.sourceStampId
+            ? {
+                amount: copy.value.amount,
+                currency: copy.value.currency,
+                variant: item.catalogItemVariant,
+              }
+            : null;
+        return {
+          stampId: item.stampId,
+          conditionId: item.conditionId,
+          certificateStatusId: item.certificateStatusId,
+          label: item.label,
+          stampName: item.stampName,
+          conditionName: item.conditionName,
+          copyCount: item.copyCount,
+          unpriced: copy?.value.unpriced ?? false,
+          rollup,
+        };
+      }),
+    [items, copyByStampCondition]
+  );
+  /** Rows carrying the card's own `+ CV` — what the header chip counts, so the two agree. */
+  const unpricedCount = items.filter(
+    (item) => !item.unpricedVariantStampId && unpricedFor(item) !== null
+  ).length;
+  const [pricingAll, setPricingAll] = useState(false);
+
   // ── The stamp behind a row ─────────────────────────────────────────────────
   // A row is `stamp × condition` and the card is read while checking that stamp against the
   // platform's own catalogue (#676) — which is exactly when a number recorded wrong, or a name never
@@ -443,6 +508,32 @@ export function OfferPlatformItemsCard({
             </button>
           </Tooltip>
         )}
+        {/* The other gap, taken in one pass (#720). The rows are already `stamp × condition`, so the
+            card that names every gap is also where they can all be typed at once — the same dialog
+            the rows open, stacked. Amber and counted while any row is missing a value, plain once
+            none are: with nothing to close it is a way back to a figure entered wrong, which is a
+            correction and not work to do. */}
+        <Tooltip
+          content={
+            unpricedCount > 0
+              ? "Enter catalog values for every stamp in this offer in one dialog — the rows with none are marked."
+              : "Every stamp here has a catalog value. Open the grid to read or correct them, all in one place."
+          }
+        >
+          <button
+            type="button"
+            onClick={() => setPricingAll(true)}
+            style={{
+              ...HEADER_CHIP,
+              ...(unpricedCount > 0
+                ? ATTENTION
+                : { color: "var(--color-text-secondary)", background: "var(--color-bg-elevated)" }),
+              cursor: "pointer",
+            }}
+          >
+            {unpricedCount > 0 ? `+ CV all (${unpricedCount})` : "Catalog values"}
+          </button>
+        </Tooltip>
         {/* Drawn whether or not the Assistant is here, unlike **Link all** beside it: a stale row is
             stale however the match was made, and the collector who linked a stamp somewhere else is
             exactly the one looking at an unchanged card. An icon alone — it re-reads what is already
@@ -825,6 +916,16 @@ export function OfferPlatformItemsCard({
             );
           })}
         </ul>
+      )}
+
+      {/* Every item of the offer on one grid (#720) — the per-row `+ CV` stacked, saved through the
+          same per-row write, so a value entered here is entered the one way it is ever entered. */}
+      {pricingAll && (
+        <OfferCatalogValuesDialog
+          rows={bulkPriceRows}
+          onClose={() => setPricingAll(false)}
+          onSaved={() => void invalidateAll(collectionId)}
+        />
       )}
 
       {/* The variant price grid (#618), over the whole tree of whichever umbrella was pressed. */}

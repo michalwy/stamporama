@@ -1593,6 +1593,225 @@ async function resolvePrimaryAreaName(stampId: string): Promise<string | null> {
   return link?.collectionArea.name ?? null;
 }
 
+/** One subject of the bulk quick-price grid (#720): the key a catalog value is recorded against,
+ *  minus the catalog itself. The same key {@link getQuickCatalogPriceContext} answers for one row. */
+export interface BulkQuickPriceSubject {
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+}
+
+/** One **column** of that grid: a catalog somewhere in the subjects' areas, at its latest edition —
+ *  which is the edition {@link quickSetCatalogPrices} writes to, so the figure read back and the
+ *  figure written are the same row. */
+export interface BulkQuickPriceCatalog {
+  catalogNameId: string;
+  catalogLabel: string;
+  vendorAbbreviation: string;
+  editionYear: number;
+  currency: string;
+}
+
+/** One **row**: the subject as asked for, the catalogs that actually apply to its stamp, and what is
+ *  on file for it at the single. */
+export interface BulkQuickPriceRow {
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+  /** The columns this row has an input in — the catalogs effective on its stamp's own area. A
+   *  column outside it is not a catalog this value could be recorded in, so the cell is not an
+   *  input at all. */
+  catalogNameIds: string[];
+  /** The effective primary catalog of that area, where it is one of the above — the field the
+   *  per-row dialog focuses first, and the one the closing checks read. */
+  primaryCatalogNameId: string | null;
+  /** The single's recorded amount per catalog (2-dp strings), for the catalogs that have one. */
+  amounts: Record<string, string>;
+  /** The area those catalogs came from, for orientation on a grid spanning several. */
+  areaName: string | null;
+}
+
+/**
+ * The quick catalog-price editor's context for **many** subjects at once (#720) — the offer-wide
+ * grid's read, where {@link getQuickCatalogPriceContext} is the per-row dialog's.
+ *
+ * It is the bulk shape of that read and not a second rule: the same catalogs (every book effective
+ * on the stamp's own area, #675, unioned with the area's effective primary), the same latest
+ * edition per catalog, and the same single-only row — a catalogue quotes singles, and the grid
+ * writes through `quickSetCatalogPrices` exactly as the one-row dialog does.
+ *
+ * The two things it does *not* carry are the one-row dialog's reference panels — every other
+ * recorded price, and the shown format's derivation. A grid of thirty rows has no room for either,
+ * and both are one click away on the row's own `+ CV`.
+ *
+ * Columns are the **union** across the rows, because a komplet spans areas and a column per row's
+ * area would be a grid nobody could scan; a row simply has no input under a catalog its own area
+ * does not carry. They are ordered primary-first — a catalog primary for *some* row's area — then
+ * by vendor and name, the per-row dialog's own order.
+ */
+export async function getBulkQuickCatalogPriceContext(
+  ownerId: string,
+  subjects: BulkQuickPriceSubject[]
+): Promise<{ catalogs: BulkQuickPriceCatalog[]; rows: BulkQuickPriceRow[] }> {
+  if (subjects.length === 0) return { catalogs: [], rows: [] };
+  const stampIds = [...new Set(subjects.map((s) => s.stampId))];
+
+  const stamps = await prisma.stamp.findMany({
+    where: { id: { in: stampIds } },
+    select: {
+      id: true,
+      collectionId: true,
+      stampAreaLinks: {
+        select: { collectionAreaId: true, isPrimary: true, collectionArea: { select: { name: true } } },
+      },
+    },
+  });
+  if (stamps.length === 0) throw new Error("Stamp not found.");
+  const collectionId = stamps[0].collectionId;
+  // One collection per grid: the caller is a single offer, and a mixed list would be one
+  // authorization check standing for two collections.
+  if (stamps.some((s) => s.collectionId !== collectionId)) {
+    throw new Error("These stamps are not all in one collection.");
+  }
+  await assertCollectionOwner(ownerId, collectionId);
+
+  /** The stamp's primary (or only) area link — the one every other read resolves catalogs on. */
+  const linkOf = (stampId: string) => {
+    const stamp = stamps.find((s) => s.id === stampId);
+    return stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0] ?? null;
+  };
+
+  const [primaryByArea, booksByArea] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    buildEffectiveAreaCatalogMap(collectionId),
+  ]);
+
+  /** Per area, the catalogs the grid may write to there — `resolveAreaCatalogTargets`' own set. */
+  const candidatesByArea = new Map<string, Set<string>>();
+  for (const stampId of stampIds) {
+    const areaId = linkOf(stampId)?.collectionAreaId ?? null;
+    if (!areaId || candidatesByArea.has(areaId)) continue;
+    const ids = new Set<string>(booksByArea.get(areaId) ?? []);
+    const primary = primaryByArea.get(areaId);
+    if (primary) ids.add(primary);
+    candidatesByArea.set(areaId, ids);
+  }
+
+  const allCandidateIds = [...new Set([...candidatesByArea.values()].flatMap((s) => [...s]))];
+  if (allCandidateIds.length === 0) return { catalogs: [], rows: [] };
+
+  const catalogRows = await prisma.catalogName.findMany({
+    where: { id: { in: allCandidateIds } },
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+      vendor: { select: { abbreviation: true } },
+      catalogEditions: { select: { id: true, year: true }, orderBy: { year: "desc" }, take: 1 },
+    },
+  });
+  /** Only a catalog with an edition can hold a price, exactly as the per-row read has it. */
+  const withEdition = catalogRows.flatMap((c) => {
+    const edition = c.catalogEditions[0];
+    return edition
+      ? [
+          {
+            catalogNameId: c.id,
+            catalogLabel: c.name,
+            vendorAbbreviation: c.vendor.abbreviation,
+            editionId: edition.id,
+            editionYear: edition.year,
+            currency: c.currency,
+          },
+        ]
+      : [];
+  });
+  const editionOf = new Map(withEdition.map((c) => [c.catalogNameId, c.editionId]));
+  const primaryIds = new Set(
+    [...candidatesByArea.keys()].flatMap((areaId) => {
+      const primary = primaryByArea.get(areaId);
+      return primary && editionOf.has(primary) ? [primary] : [];
+    })
+  );
+
+  const catalogs: BulkQuickPriceCatalog[] = withEdition
+    .map((c) => ({
+      catalogNameId: c.catalogNameId,
+      catalogLabel: c.catalogLabel,
+      vendorAbbreviation: c.vendorAbbreviation,
+      editionYear: c.editionYear,
+      currency: c.currency,
+    }))
+    .sort((a, b) => {
+      const ap = primaryIds.has(a.catalogNameId) ? 0 : 1;
+      const bp = primaryIds.has(b.catalogNameId) ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return (
+        a.vendorAbbreviation.localeCompare(b.vendorAbbreviation) ||
+        a.catalogLabel.localeCompare(b.catalogLabel)
+      );
+    });
+
+  // The single's rows only (`formatId: null`), on the editions the grid writes to: what a catalogue
+  // quotes, and the one row `quickSetCatalogPrices` ever touches.
+  const prices = await prisma.stampCatalogPrice.findMany({
+    where: {
+      stampId: { in: stampIds },
+      catalogEditionId: { in: [...editionOf.values()] },
+      formatId: null,
+    },
+    select: {
+      stampId: true,
+      catalogEditionId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      price: true,
+    },
+  });
+  const priceKey = (
+    stampId: string,
+    editionId: string,
+    conditionId: string,
+    certId: string | null
+  ) => `${stampId}~${editionId}~${conditionId}~${certId ?? ""}`;
+  const priceByKey = new Map(
+    prices.map((p) => [
+      priceKey(p.stampId, p.catalogEditionId, p.conditionId, p.certificateStatusId),
+      p.price.toFixed(2),
+    ])
+  );
+
+  const rows = subjects.map((subject) => {
+    const link = linkOf(subject.stampId);
+    const areaId = link?.collectionAreaId ?? null;
+    const applicable = areaId ? (candidatesByArea.get(areaId) ?? new Set<string>()) : new Set<string>();
+    const catalogNameIds = catalogs
+      .map((c) => c.catalogNameId)
+      .filter((id) => applicable.has(id));
+    const amounts: Record<string, string> = {};
+    for (const catalogNameId of catalogNameIds) {
+      const editionId = editionOf.get(catalogNameId);
+      if (!editionId) continue;
+      const amount = priceByKey.get(
+        priceKey(subject.stampId, editionId, subject.conditionId, subject.certificateStatusId ?? null)
+      );
+      if (amount != null) amounts[catalogNameId] = amount;
+    }
+    const primary = areaId ? (primaryByArea.get(areaId) ?? null) : null;
+    return {
+      stampId: subject.stampId,
+      conditionId: subject.conditionId,
+      certificateStatusId: subject.certificateStatusId ?? null,
+      catalogNameIds,
+      primaryCatalogNameId: primary && catalogNameIds.includes(primary) ? primary : null,
+      amounts,
+      areaName: link?.collectionArea.name ?? null,
+    };
+  });
+
+  return { catalogs, rows };
+}
+
 /** One catalog value to set from the quick-price editor: a raw amount for a specific catalog
  * (by `catalogNameId`), which resolves to that catalog's latest edition and currency. */
 export interface QuickCatalogPriceEntry {

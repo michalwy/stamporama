@@ -15,12 +15,19 @@ import {
   deleteStampCatalogNumber,
   getStampCatalogPrices,
   getStampPriceDetails,
+  getBulkQuickCatalogPriceContext,
   getQuickCatalogPriceContext,
   quickSetCatalogPrices,
   getStampTranslations,
   STAMP_TRANSLATION_FIELDS,
 } from "@/lib/stamps";
-import type { StampSubtypeAssignment, QuickCatalogPriceContext } from "@/lib/stamps";
+import type {
+  BulkQuickPriceCatalog,
+  BulkQuickPriceRow,
+  BulkQuickPriceSubject,
+  StampSubtypeAssignment,
+  QuickCatalogPriceContext,
+} from "@/lib/stamps";
 import {
   applyStampPhotoChangeSet,
   listStampPhotos,
@@ -120,6 +127,100 @@ export async function quickSetCatalogPricesAction(
       message: e instanceof Error ? e.message : "Failed to set the catalog price.",
     };
   }
+}
+
+/** Result of loading the bulk quick-price grid's context (#720): its columns and one row per
+ *  subject, with whatever is already recorded. */
+export type BulkQuickPriceContextState =
+  | { status: "success"; catalogs: BulkQuickPriceCatalog[]; rows: BulkQuickPriceRow[] }
+  | { status: "error"; message: string };
+
+/** Load the quick catalog-price context for many `stamp × condition × certificate` subjects at once
+ *  (#720) — the offer-wide grid's read. One round trip for a whole listing, where the per-row dialog
+ *  makes one per row; see `getBulkQuickCatalogPriceContext` for what it deliberately leaves out. */
+export async function getBulkQuickCatalogPriceContextAction(
+  subjects: BulkQuickPriceSubject[]
+): Promise<BulkQuickPriceContextState> {
+  const session = await getSession();
+  try {
+    const { catalogs, rows } = await getBulkQuickCatalogPriceContext(session.user.id, subjects);
+    return { status: "success", catalogs, rows };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Could not load catalog context.",
+    };
+  }
+}
+
+/** One row of a bulk save: a subject and the amounts typed for it, raw from the inputs. */
+export interface BulkQuickPriceRowInput extends BulkQuickPriceSubject {
+  entries: Array<{ catalogNameId: string; amount: string }>;
+}
+
+/** How a bulk save ended. `savedRows` is stated on both outcomes because a refusal part-way through
+ *  has already written the rows before it — the grid reloads on that number rather than guessing. */
+export type BulkQuickPriceSaveState =
+  | { status: "success"; savedRows: number }
+  | { status: "error"; message: string; savedRows: number };
+
+/**
+ * Set catalog values for **many** subjects in one submit (#720), each row landing exactly where the
+ * per-row quick editor would put it: `quickSetCatalogPrices`, the latest edition of each catalog, at
+ * the single. One save for a whole listing, which is the walk the offer's Items card exists to end.
+ *
+ * Every amount is **parsed before anything is written**: a typo in the last row must not leave the
+ * first ten written and the grid claiming success. A row with no non-blank entry is *skipped* rather
+ * than refused — a grid lists rows the collector may have nothing to say about, unlike the one-row
+ * dialog where an empty submit is a mistake. A blank cell therefore records nothing and **deletes
+ * nothing**: removing a price is an act on the stamp's own Prices tab, where what is being removed
+ * is on screen.
+ *
+ * The writes are sequential and a failure stops there, reporting how many rows went in. Nothing is
+ * rolled back: each row is an independent fact, and unwriting nine good rows because the tenth's
+ * catalog vanished would throw away exactly the typing this dialog exists to save.
+ */
+export async function quickSetCatalogPricesBulkAction(
+  rows: BulkQuickPriceRowInput[]
+): Promise<BulkQuickPriceSaveState> {
+  const session = await getSession();
+  const parsed: Array<{ row: BulkQuickPriceRowInput; entries: Array<{ catalogNameId: string; amount: number }> }> =
+    [];
+  for (const row of rows) {
+    const entries: Array<{ catalogNameId: string; amount: number }> = [];
+    for (const e of row.entries) {
+      if (!e.amount.trim()) continue;
+      const n = Number(normalizeDecimalInput(e.amount));
+      if (!Number.isFinite(n) || n < 0) {
+        return { status: "error", message: "Enter a valid non-negative amount.", savedRows: 0 };
+      }
+      entries.push({ catalogNameId: e.catalogNameId, amount: n });
+    }
+    if (entries.length > 0) parsed.push({ row, entries });
+  }
+  if (parsed.length === 0) {
+    return { status: "error", message: "Enter at least one catalog value.", savedRows: 0 };
+  }
+  let savedRows = 0;
+  for (const { row, entries } of parsed) {
+    try {
+      await quickSetCatalogPrices(
+        session.user.id,
+        row.stampId,
+        row.conditionId,
+        row.certificateStatusId,
+        entries
+      );
+      savedRows += 1;
+    } catch (e) {
+      return {
+        status: "error",
+        message: e instanceof Error ? e.message : "Failed to set the catalog prices.",
+        savedRows,
+      };
+    }
+  }
+  return { status: "success", savedRows };
 }
 
 // Price cells are serialized as `catalogPrice_<editionId>~<conditionId>~<certId>~<formatId>`
