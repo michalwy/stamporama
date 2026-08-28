@@ -34,6 +34,8 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
+import { CatalogImportDialog } from "./catalog-import-dialog";
+import { Icon } from "@/app/icons";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import {
   useIssuesInfinite,
@@ -91,6 +93,7 @@ const FORM_STYLE: React.CSSProperties = {
 type DialogState =
   | { kind: "none" }
   | { kind: "create-issue" }
+  | { kind: "import-catalog" }
   | {
       kind: "edit-issue";
       issue: IssueListItem;
@@ -515,6 +518,30 @@ export function IssuesListPanel({
           >
             + Add issue
           </button>
+          {/* The bulk door onto the same thing (#716–#718): a whole country's catalogue typed in a
+              spreadsheet, rather than one issue at a time in the dialog beside it. Secondary, since
+              it is the rarer of the two. */}
+          <button
+            type="button"
+            onClick={() => openDialog({ kind: "import-catalog" })}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.3rem",
+              padding: "0.375rem 0.875rem",
+              background: "var(--color-bg-elevated)",
+              color: "var(--color-text-primary)",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "0.375rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Icon name="import" size="sm" />
+            Import CSV
+          </button>
           <ConditionPriceSwitcher
             conditions={conditions}
             value={displayConditionId}
@@ -612,6 +639,18 @@ export function IssuesListPanel({
           error={error}
           onClose={closeDialog}
           onSubmit={handleCreateIssueSubmit}
+        />
+      )}
+
+      {dialog.kind === "import-catalog" && (
+        <CatalogImportDialog
+          collectionId={collectionId}
+          areas={areas}
+          defaultAreaId={filterAreaId}
+          // Its own close, not `closeDialog`: the import owns its pending state and refuses to be
+          // dismissed mid-write itself, where `closeDialog` would consult the *panel's* transition,
+          // which this dialog never enters.
+          onClose={() => setDialog({ kind: "none" })}
         />
       )}
 

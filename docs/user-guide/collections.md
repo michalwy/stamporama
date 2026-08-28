@@ -211,6 +211,31 @@ If a generated number would duplicate one already in the collection, a warning a
 
 When the primary catalog spans a run of stamps — say Fischer `100-103` — entering just a **single number** for another catalog completes it to the same span when you leave the field: type Michel `200` and it becomes `200-203`, four stamps matching Fischer. It only ever fires on a lone number, so a list of ranges you composed yourself is never rewritten, and you can overwrite the result whenever a catalog's numbering doesn't line up one-to-one.
 
+## Importing a catalog from a CSV
+
+When you already have a country's issues written down — a spreadsheet, a list you typed from a printed catalogue — you can load the whole thing at once instead of adding issues one at a time. **Import CSV** sits in the **Issues** toolbar, next to **+ Add issue**.
+
+**What the file looks like.** One row per issue: its **year**, its **name**, and the **catalog numbers** that issue covers. The numbers are written [exactly the way the **Add issue** dialog takes them](#writing-the-numbers) — `2820-2822`, `2895A-2897A, 2895B-2897B`, `3025-3027, BL48` — so an imported issue gets the same stamps that dialog would have created. The first row is read as the **header**; commas, semicolons and tabs are all understood, so a spreadsheet saved by a Polish Excel works as-is. Only the numbers column is required: a file of nothing but years and numbers is a perfectly ordinary catalogue listing.
+
+There is **no fixed set of column names** — you say which column is which in the dialog — so you can import a file you wrote for yourself, in your own language, without renaming anything.
+
+The dialog walks four steps:
+
+1. **The file, and where it goes.** Pick a file from disk, or paste the rows straight into the box below — they are two ways in to the same import, and everything after this point is identical. Choose the **area** the issues belong to: the file itself carries no country, so one import fills one area, a file per country. The dialog names the catalog those numbers will be filed under — the area's **primary catalog**, with its prefix, so you can see that `200` will become `Mi·PL 200` before anything is read. An area with no primary catalog set cannot take an import; set one first in [**Settings → Areas**](#catalog-settings-numbering-and-price-sources).
+2. **Which column is which.** Every column the file has is listed with the first few values under it, and three boxes below assign **catalog numbers** (required), **year** and **issue name** (both optional). Familiar header names are pre-selected as a starting point — always worth a glance, never a rule.
+3. **What this would do.** One line per row of the file, each naming its outcome before anything is written:
+   - **New issue** — nothing in the collection holds these numbers, so the issue is created with all its stamps.
+   - **Fill** — the numbers belong to an issue you already have. Only the **missing** numbers are added, and an **empty** name or year is filled in from the file. Anything already filled is left exactly as it is.
+   - **Already holds all of these** — you have imported this row before, and it changes nothing.
+   - **Skipped**, with the reason: numbers that don't parse, an impossible year, numbers spread across **two** existing issues (an import never merges issues), a number an earlier row of the same file already claimed, or a row asking for more than 200 stamps — which is nearly always a mis-mapped column.
+
+   A skipped row never blocks the rest of the file. On a very long file the table draws the first thousand rows, but the counts above it cover every row and **every skipped row is listed** however far down it sits.
+4. **Import.** Rows are written one at a time, so a row that fails partway through the file doesn't undo the ones before it or stop the ones after. The result names what happened: issues created, issues filled in, stamps created, rows already imported, rows skipped, and — separately — any row that failed while being written, with its line number.
+
+The preview and the import are the same reading of your collection, taken twice: what the preview promises is what the import does. If something changed in the collection while the preview was on screen, the import re-judges it rather than writing on an old answer.
+
+Numbers that would duplicate one you already hold are the ordinary **Fill** case here, not a warning — that is what makes re-running the same file safe. A number held by a stamp that sits on **no** issue is skipped instead, since there is nothing to fill in.
+
 ## Adding a stamp range to an existing issue
 
 You can bulk-add stamps to an issue after it was created, the same way they are generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want and enter the numbers for each in [the same notation](#writing-the-numbers) the create dialog uses (`100-105`, or `2895A-2897A, 2895B-2897B`); the dialog shows how many stamps will be created, with a short preview. Entering a lone number for a secondary catalog completes it to the primary's span, exactly as on the create form. When more than one catalog is selected, each must come to the same number of stamps, since they are matched by position. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
