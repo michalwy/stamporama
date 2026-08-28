@@ -4,7 +4,6 @@ import {
   findOrdersModuleForUrl,
 } from "../platform/modules";
 import {
-  attachListingPhotos,
   fillListing,
   prepareListing,
   resolveListedUrlInDocument,
@@ -30,9 +29,7 @@ import { getProfileStore } from "../core/profile";
 import { markIconUrl as iconUrl } from "../core/mark";
 import type { PlatformOrder } from "../platform/orders";
 import type {
-  AttachPhotoPayload,
-  AttachPhotosRequest,
-  AttachPhotosResponse,
+  ListingPhotoPayload,
   DetectedNotice,
   CaptureRequest,
   CaptureResponse,
@@ -169,10 +166,13 @@ function extractHere(withImages: boolean) {
  * A failing `prepare` replaces the fill's own error, because it is the more specific of the two: "no
  * category, so there is no form to open" says what to do, where "the form has not loaded" does not.
  */
-async function fillHere(task: ListingTask): Promise<FillResponse> {
+async function fillHere(
+  task: ListingTask,
+  photos: readonly ListingPhotoFile[]
+): Promise<FillResponse> {
   const prepared = await prepareListing(task, document, location.href);
   if (!prepared.ok) return { ok: false, error: prepared.error };
-  const result = fillListing(task, document, location.href);
+  const result = await fillListing(task, document, location.href, photos);
   if (result.ok) {
     watchForSubmit();
     watchForListedUrl(result.moduleId);
@@ -263,7 +263,7 @@ function watchForListedUrl(moduleId: string): void {
  * because this is the realm the form lives in: the object a page's uploader receives should have been
  * made by the same window as the page it is handed to.
  */
-function toFile(photo: AttachPhotoPayload): ListingPhotoFile {
+function toFile(photo: ListingPhotoPayload): ListingPhotoFile {
   const binary = atob(photo.data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -565,26 +565,10 @@ if (!window.__stamporamaAssistantLoaded) {
   chrome.runtime.onMessage.addListener(
     (msg: FillRequest, _sender, sendResponse: (r: FillResponse) => void) => {
       if (msg?.type !== "fill") return;
-      void fillHere(msg.task).then(sendResponse);
+      void fillHere(msg.task, msg.photos.map(toFile)).then(sendResponse);
       // Answered asynchronously: a marketplace whose form is reached through its own entry pages is
-      // walked there first (#493), and that is a wait on the site rather than a DOM pass.
-      return true;
-    }
-  );
-
-  // The pictures, once the form is filled (#411). Deliberately a second message and deliberately
-  // last: Colnect's uploader posts each picture the moment it is handed over, before the sale is
-  // saved, so the form in front of the collector is complete before anything is written there.
-  chrome.runtime.onMessage.addListener(
-    (msg: AttachPhotosRequest, _sender, sendResponse: (r: AttachPhotosResponse) => void) => {
-      if (msg?.type !== "attach-photos") return;
-      void attachListingPhotos(msg.moduleId, document, location.href, msg.photos.map(toFile))
-        .then(sendResponse)
-        .catch((e: unknown) =>
-          sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
-        );
-      // Answered asynchronously: a marketplace may ask something about the pictures the moment it
-      // takes them, and the uploader is not done until that is answered (#493).
+      // walked there first (#493), it may be filled a step at a time (#719), and both are waits on
+      // the site rather than DOM passes.
       return true;
     }
   );

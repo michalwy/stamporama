@@ -239,14 +239,31 @@ function copyLabel(item: ListingTaskItem): string {
 }
 
 /**
- * Fill the sale form from `task`, and stop before Save.
+ * Fill the sale form from `task`, hand the run's `photos` over **last**, and stop before Save.
  *
  * Per item, keyed by the `20_<colnectId>` id the form uses, this writes the copy's condition
  * translated through the collection's Colnect mapping (#404). Per listing, it writes the price, the
  * number of sets, the short description and the private note. Everything else the form holds is left
  * exactly as Colnect served it.
+ *
+ * **The pictures are the last thing that happens**, and that ordering is now this module's own to
+ * keep (#719): Colnect's uploader posts each picture the moment it is handed over, before the sale is
+ * saved (#402), so it is the first thing in a run that writes to the marketplace at all — and it
+ * happens with an otherwise complete form already in front of the collector. The shell used to
+ * impose that order for everybody; it stopped being able to, because Allegro's wizard refuses to be
+ * filled any further until it has a picture, so where they go is asked of the form being filled.
+ *
+ * The picture step **cannot fail the fill**: everything above it is written and stays written, and a
+ * picture the uploader will not take is one the collector drags in from the offer's ZIP. So it is
+ * caught here and reported as a skip, which is exactly what the shell did with it before.
  */
-export function fillColnectSaleForm(doc: Document, task: ListingTask): ListingFillOutcome {
+export async function fillColnectSaleForm(
+  doc: Document,
+  task: ListingTask,
+  photos: readonly ListingPhotoFile[] = [],
+  /** Passed straight to {@link attachColnectPictures}; only ever set by tests. */
+  opts: { removalTimeoutMs?: number; removalPollMs?: number } = {}
+): Promise<ListingFillOutcome> {
   const report = new FillReport();
 
   warnOnSeparateListings(doc, report);
@@ -257,7 +274,18 @@ export function fillColnectSaleForm(doc: Document, task: ListingTask): ListingFi
   writeText(doc, report, FIELD.description, "Short description", task.description);
   writeText(doc, report, FIELD.privateNote, "Private note", task.privateNote);
 
-  return report.outcome();
+  const filled = report.outcome();
+  if (photos.length === 0) return filled;
+  try {
+    const pictures = await attachColnectPictures(doc, photos, opts);
+    return {
+      filled: [...filled.filled, ...pictures.filled],
+      skipped: [...filled.skipped, ...pictures.skipped],
+    };
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return { filled: filled.filled, skipped: [...filled.skipped, { field: PICTURES_FIELD, reason }] };
+  }
 }
 
 /** One condition select per **declared** item. A copy the form has no fieldset for is a second copy
@@ -625,7 +653,7 @@ export const colnectListing: PlatformListing = {
   editUrl: colnectSaleEditUrl,
   isFormUrl: isColnectSaleFormUrl,
   isFormDocument: isColnectSaleFormDocument,
+  takesPhotos: true,
   fill: fillColnectSaleForm,
   listedUrl: colnectListedSaleUrl,
-  attachPhotos: attachColnectPictures,
 };

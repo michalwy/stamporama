@@ -107,7 +107,7 @@ export function selectListingPhotos(
   budgetBytes: number = LISTING_PHOTO_BUDGET_BYTES
 ): ListingPhotoSelection {
   const module = resolveListingModule(task);
-  if (!module.ok || !module.module.listing.attachPhotos) return { images: [], skipped: [] };
+  if (!module.ok || !module.module.listing.takesPhotos) return { images: [], skipped: [] };
 
   const { status, images } = task.photos;
   if (status !== "ready") {
@@ -164,7 +164,7 @@ export type ListingFillResult =
     };
 
 /**
- * Fill `doc` — the page at `url` — from `task`, through the task's own module.
+ * Fill `doc` — the page at `url` — from `task` and the run's `photos`, through the task's own module.
  *
  * The page is checked against the module's own `isFormUrl` first: the collector may have navigated
  * on, or the platform may have answered with a sign-in page, and filling a form that is not the sale
@@ -174,8 +174,20 @@ export type ListingFillResult =
  * the sale form's and its contents are not, which is what an anti-bot interstitial looks like from
  * here — a page on its way to becoming the form. It is reported as `retry`, so the wiring waits for
  * the reload rather than filling nothing and calling it a fill.
+ *
+ * **The pictures go in here** (#719), which is why this is async and why the bytes cross with the
+ * task rather than in a message of their own. Where in the form they land is the module's, and the
+ * two modules answer differently: Colnect's uploader posts each picture the moment it is handed over
+ * (#402) so its fill leaves them until the very end, while Allegro's wizard refuses to be filled any
+ * further until it has one, so its fill hands them over in the middle. Both are true of the form
+ * being filled and neither is a rule this shell can hold.
  */
-export function fillListing(task: ListingTask, doc: Document, url: string): ListingFillResult {
+export async function fillListing(
+  task: ListingTask,
+  doc: Document,
+  url: string,
+  photos: readonly ListingPhotoFile[] = []
+): Promise<ListingFillResult> {
   const module = resolveListingModule(task);
   if (!module.ok) return module;
   const { listing } = module.module;
@@ -194,7 +206,7 @@ export function fillListing(task: ListingTask, doc: Document, url: string): List
       ok: true,
       moduleId: module.module.id,
       moduleName: module.module.name,
-      outcome: listing.fill(doc, task),
+      outcome: await listing.fill(doc, task, photos),
     };
   } catch (e) {
     return { ok: false, error: messageOf(e) };
@@ -235,53 +247,6 @@ export async function prepareListing(
     return { ok: true, advanced: true };
   } catch (e) {
     return { ok: false, error: messageOf(e) };
-  }
-}
-
-export type ListingPhotoResult =
-  | { ok: true; outcome: ListingFillOutcome }
-  | { ok: false; error: string };
-
-/**
- * Attach `photos` to the form in `doc` — the last step of a run, after {@link fillListing} (#411).
- *
- * Keyed on a **module id** rather than on a task, as {@link resolveListedUrl} is and for a milder
- * version of the same reason: the bytes are what crosses to the page here, and re-sending the whole
- * task beside a handful of megabytes to re-derive one module would be paying twice for one answer.
- *
- * The page is checked the same way the fill checks it, and for a sharper reason: Colnect's uploader
- * posts a picture the moment it is handed over (#402), so the one page pictures may ever go to is the
- * sale form this task was filled into.
- *
- * A module with no uploader answers with an **empty report** rather than a refusal — {@link
- * selectListingPhotos} has already fetched nothing for it, and there is nothing to say.
- *
- * Awaits the module, since a marketplace may not be finished with the pictures when it has taken
- * them: Allegro asks a question about them in a dialog of its own (#493).
- */
-export async function attachListingPhotos(
-  moduleId: string,
-  doc: Document,
-  url: string,
-  photos: readonly ListingPhotoFile[]
-): Promise<ListingPhotoResult> {
-  const module = findModuleById(moduleId);
-  if (!module || !canList(module)) {
-    return { ok: false, error: `This Assistant has no module "${moduleId}" to attach pictures with.` };
-  }
-  const { listing } = module;
-  if (!listing.isFormUrl(url)) {
-    return { ok: false, error: `This page is not ${module.name}'s listing form.` };
-  }
-  if (!listing.attachPhotos || photos.length === 0) {
-    return { ok: true, outcome: { filled: [], skipped: [] } };
-  }
-  try {
-    return { ok: true, outcome: await listing.attachPhotos(doc, photos) };
-  } catch (e) {
-    // The form itself is filled and stays filled — this is the one step whose failure the collector
-    // answers by dragging the offer's ZIP in, so it is reported as a skip rather than as a refusal.
-    return { ok: true, outcome: { filled: [], skipped: [{ field: PHOTOS_FIELD, reason: messageOf(e) }] } };
   }
 }
 

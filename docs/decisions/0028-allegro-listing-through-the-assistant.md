@@ -43,6 +43,11 @@ before the alternative appears is a dead end for the collector who does not have
 
 ### 2. What the module fills is Allegro's **legacy** sale form
 
+> **Superseded by ADR-0043.** Allegro retired the legacy form (#719); the module now drives the
+> recommerce wizard. The closing prediction below was half right — the newer form is a second
+> mapping inside this module, but the neutral interface did move, because that form will not be
+> filled past its picture step without the pictures.
+
 Allegro runs two sale forms, and a Regular account is pushed to the newer one. Every direct
 navigation to the legacy address — with a `?categoryId=`, and even to a draft's own `/restore` —
 answers with `…/recommerce/formularz-wystawiania/produkt`. The legacy one-screen form loads only when
@@ -109,6 +114,10 @@ Two things ride in that section for the form's sake:
 
 ### 6. The module drives Allegro's entry sequence, through one new optional half-member
 
+> **Superseded by ADR-0043 §2.** `prepare` survives, with this meaning and a much shorter walk;
+> everything it did *on* the form has moved into the fill, a control's existence on the wizard
+> following from a value the fill itself writes.
+
 Getting to Allegro's form is a sequence and only its ends are page loads: *recommerce landing* →
 (load) → *product search* → SZUKAJ → *Kontynuuj bez wybierania produktu* → the **category modal** →
 the category number → (load) → the form. The middle steps are network round-trips inside one
@@ -142,6 +151,10 @@ value the collector would then have to type by hand is the category number — t
 feature exists to stop them looking up.
 
 ### 6a. The pictures are answered for, and the answer is always "no"
+
+> **Superseded in part by ADR-0043 §1 and §5.** The answer is unchanged and is still given. What
+> moved is where the pictures go in: `attachPhotos` is gone and the run's pictures are handed to
+> `fill`, each module placing them where its own form asks for them.
 
 Allegro opens a dialog the moment files reach its uploader, asking which of them should carry an
 **"AI" watermark** under the AI Act. The Assistant confirms it with **nothing ticked**.
@@ -199,6 +212,9 @@ rather than only when the page is not the form.
 `listedUrl` recognises `/oferta/<slug>-<id>`, the shape #355's capture half already matches and the
 one #467 finds a sold listing by. That much is unchanged, and it is what makes a listing posted
 through the Assistant matched back to its offer exactly as a hand-posted one is.
+
+> **Extended by ADR-0043 §6.** Everything below still holds; the wizard's own confirmation was not
+> observed, so `#thank-you-page` is now one of two shapes the same rule recognises.
 
 What is new is **where the address is found**. #412 reads it off the tab's navigations, which is the
 whole answer on Colnect, where Save lands on the new entry. Allegro never navigates: a submitted form

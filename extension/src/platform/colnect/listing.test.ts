@@ -299,9 +299,9 @@ describe("the sale form URL", () => {
 });
 
 describe("filling the form", () => {
-  it("fills every mapped field and leaves the pre-filled ones alone", () => {
+  it("fills every mapped field and leaves the pre-filled ones alone", async () => {
     const doc = docOf(formHtml(["111", "222"]));
-    const outcome = fillColnectSaleForm(
+    const outcome = await fillColnectSaleForm(
       doc,
       task([item("111"), item("222", { value: "4", label: "U - Used" })], { quantity: 3 })
     );
@@ -334,9 +334,9 @@ describe("filling the form", () => {
     ]);
   });
 
-  it("fills the rest of the form when a condition is unmapped, and says which copy", () => {
+  it("fills the rest of the form when a condition is unmapped, and says which copy", async () => {
     const doc = docOf(formHtml(["111", "222"]));
-    const outcome = fillColnectSaleForm(
+    const outcome = await fillColnectSaleForm(
       doc,
       task([item("111"), item("222", { value: null, name: "On cover" })])
     );
@@ -352,19 +352,19 @@ describe("filling the form", () => {
     ]);
   });
 
-  it("names the second copy of a stamp the entry cannot declare twice", () => {
+  it("names the second copy of a stamp the entry cannot declare twice", async () => {
     const doc = docOf(formHtml(["111"]));
-    const outcome = fillColnectSaleForm(doc, task([item("111"), item("111")]));
+    const outcome = await fillColnectSaleForm(doc, task([item("111"), item("111")]));
 
     assert.equal(value(doc, "new_sale[cond_20_111]"), "1");
     assert.equal(outcome.skipped.length, 1);
     assert.match(outcome.skipped[0].reason, /already listed above/);
   });
 
-  it("refuses a text past Colnect's own limit rather than truncating it", () => {
+  it("refuses a text past Colnect's own limit rather than truncating it", async () => {
     const doc = docOf(formHtml(["111"]));
     const long = "x".repeat(137);
-    const outcome = fillColnectSaleForm(doc, task([item("111")], { description: long }));
+    const outcome = await fillColnectSaleForm(doc, task([item("111")], { description: long }));
 
     assert.equal(value(doc, "new_sale[sale_description_id]"), "");
     assert.deepEqual(outcome.skipped, [
@@ -377,9 +377,9 @@ describe("filling the form", () => {
     assert.equal(value(doc, "new_sale[price]"), "40.00");
   });
 
-  it("says nothing about a text the offer does not carry", () => {
+  it("says nothing about a text the offer does not carry", async () => {
     const doc = docOf(formHtml(["111"]));
-    const outcome = fillColnectSaleForm(
+    const outcome = await fillColnectSaleForm(
       doc,
       task([item("111")], { description: null, privateNote: null })
     );
@@ -390,9 +390,9 @@ describe("filling the form", () => {
     );
   });
 
-  it("reports a ticked separate-listings box without unticking it", () => {
+  it("reports a ticked separate-listings box without unticking it", async () => {
     const doc = docOf(formHtml(["111"], { separateListings: true }));
-    const outcome = fillColnectSaleForm(doc, task([item("111")]));
+    const outcome = await fillColnectSaleForm(doc, task([item("111")]));
 
     assert.equal(
       doc.querySelector(`[name="new_sale[options][]"]`)?.hasAttribute("checked"),
@@ -402,9 +402,9 @@ describe("filling the form", () => {
     assert.match(outcome.skipped[0].reason, /Untick it/);
   });
 
-  it("reports a field the form does not hold instead of failing the whole fill", () => {
+  it("reports a field the form does not hold instead of failing the whole fill", async () => {
     const doc = docOf(formHtml([]));
-    const outcome = fillColnectSaleForm(doc, task([item("111")]));
+    const outcome = await fillColnectSaleForm(doc, task([item("111")]));
 
     assert.deepEqual(
       outcome.skipped.map((s) => s.field),

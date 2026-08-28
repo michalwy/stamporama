@@ -270,9 +270,43 @@ export interface PlatformListing {
    * with a reason worth showing.
    */
   prepare?(doc: Document, task: ListingTask): Promise<void>;
-  /** Fill the form in `doc` from `task`, and stop. Never submits, and never touches a field the
-   *  task has nothing to say about (#410). Throws only on unexpected DOM. */
-  fill(doc: Document, task: ListingTask): ListingFillOutcome;
+  /**
+   * Fill the form in `doc` from `task` and from the run's `photos`, and stop. Never submits, and
+   * never touches a field the task has nothing to say about (#410). Throws only on unexpected DOM.
+   *
+   * The **pictures are part of the fill** rather than a step after it (#719). They used to be their
+   * own member, called last, because Colnect's uploader posts each picture the moment it is handed
+   * over (#402) and the safest moment for that is with an otherwise complete form in front of the
+   * collector. That ordering is still the right one — it is just not the *shell's* to impose, because
+   * a marketplace may refuse to be filled any further until it has them: Allegro's wizard will not
+   * leave its second step without a picture, so a run that saved the pictures for last never reached
+   * the price. So the shell hands them to the fill, and **each module places them where its own form
+   * asks for them** — Colnect's at the very end, Allegro's in the middle, both of them saying so.
+   *
+   * `photos` is what the run could actually carry (#411) and is routinely **empty**: an offer with no
+   * rendered pictures, a platform whose form has no uploader, a fetch that failed. An empty set is
+   * not a gap and is reported by the shell where it is one — a module simply attaches nothing.
+   *
+   * May answer **asynchronously**, because filling is not always one DOM pass: a form served as a
+   * wizard is filled a step at a time and each step is a round-trip (#719), and an uploader may ask
+   * a question the moment it is handed the files. A module with nothing to wait for returns its
+   * report directly, as Colnect's does, and pays nothing for this.
+   */
+  /**
+   * Whether this platform's sale form has a picture uploader at all (#411).
+   *
+   * A fact about the marketplace, and the shell's own gate: a form with no uploader costs the run no
+   * bytes — nothing is fetched from the instance and nothing is reported about pictures, because a
+   * form this module fills completely has no gap in it. It used to be implied by a module carrying an
+   * `attachPhotos` member; with the pictures folded into {@link fill} (#719) the fact has to be
+   * stated, since every module has a `fill`.
+   */
+  takesPhotos?: boolean;
+  fill(
+    doc: Document,
+    task: ListingTask,
+    photos: readonly ListingPhotoFile[]
+  ): ListingFillOutcome | Promise<ListingFillOutcome>;
   /**
    * The **listed entry's own URL**, when `url` is the page a submitted sale form landed on — and
    * null for every other page (#412).
@@ -302,28 +336,4 @@ export interface PlatformListing {
    * just posted.
    */
   listedUrlInDocument?(doc: Document): string | null;
-  /**
-   * Put the offer's rendered images into the form's own uploader, in upload order, and stop (#411).
-   *
-   * **Optional**, like the listing half itself: a sale form with no pictures is a form this module
-   * fills completely, and the shell then fetches no bytes and says nothing about photos. The absence
-   * is a fact about the platform, not a gap.
-   *
-   * Called **after** {@link fill} and never instead of it. On Colnect the uploader posts each
-   * picture the moment it is handed over — before the sale is saved (#402) — so this is the last
-   * thing that happens in a run, with the filled form already in front of the collector: everything
-   * that can still be decided has been decided by the time anything is written to the marketplace.
-   *
-   * Reports rather than throws, exactly as {@link fill} does: a picture the uploader will not take is
-   * one the collector drags in from the offer's ZIP, and the rest of the filled form must survive it.
-   *
-   * May answer **asynchronously**, because handing pictures over is not always the end of it: Allegro
-   * opens a dialog the moment the files arrive (its AI-watermark question, #493) and the uploader is
-   * not done until that dialog is answered. A module with nothing to wait for returns its report
-   * directly, as Colnect's does, and pays nothing for this.
-   */
-  attachPhotos?(
-    doc: Document,
-    photos: readonly ListingPhotoFile[]
-  ): ListingFillOutcome | Promise<ListingFillOutcome>;
 }

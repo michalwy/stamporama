@@ -419,47 +419,63 @@ differently.
 
 What happens when you press it:
 
-1. Allegro's sale form opens in a new tab. If Allegro shows you its newer step-by-step form, the
-   Assistant follows the *"dotychczasowy formularz"* link on it, gets past the product catalogue —
-   your stamps are not in it, and nothing is ever filed against a catalogue product — and types the
-   offer's **category number** into Allegro's own *Nr kategorii* field. That is what opens the form
-   in the right category.
-2. The form is **unfolded** where it needs to be: the rest of the category's parameters come out from
-   behind *więcej parametrów*, the description editor is woken up (Allegro does not create it until
-   something clicks into it), and an auction offer gets *licytacja* ticked, which is what grows the
-   opening-price field.
-3. Then it is filled: the title, every category parameter the offer has an answer for, the
-   description, the price (or the starting price on an auction), the number of sets, and the delivery
-   price list, handling time, listing duration, automatic re-listing and returns from the listing
-   profile.
-4. It stops there. You check it and press Allegro's own **wystaw** yourself, and the offer then goes
-   **Ready → Active** with the listing's address recorded, exactly as it does on Colnect.
+1. Allegro's sale form opens in a new tab. It is a **five-step wizard** — the product, the pictures
+   and description, the details, the delivery, and a summary — and the Assistant walks the whole of
+   it. It first runs Allegro's product search with your listing's own title and takes the *"Mojego
+   produktu tu nie ma"* way past it: your stamps are not in Allegro's catalogue, and nothing is ever
+   filed against a catalogue product.
+2. On the **Zdjęcia i opis** step it writes the title, picks the offer's **category** by walking
+   Allegro's own list of category names down to it, unfolds the rest of that category's parameters
+   from behind *Pokaż więcej*, answers each of them, writes the description, and hands your pictures
+   to Allegro's uploader.
+3. On **Szczegóły** it ticks Kup teraz or Licytacja, writes the price (or the starting price and the
+   auction's duration), the number of sets, and whether the listing re-lists itself; on **Dostawa**
+   it picks the delivery price list, the handling time and the returns conditions from the listing
+   profile — fetching a price list from *Inne zapisane dostawy* if Allegro is not showing it.
+4. It stops on the **summary**. You check it and press Allegro's own **Wystaw na Allegro** yourself,
+   and the offer then goes **Ready → Active** with the listing's address recorded, exactly as it does
+   on Colnect.
 
-Two things it leaves to you, and says so in the report:
+Two things about this form are worth knowing before you press ⚡:
+
+- **Allegro will not let anything past *Zdjęcia i opis* without a picture.** An offer with none is
+  already refused before ⚡ opens anything, so this only shows up when the pictures could not be
+  fetched from Stamporama on the day: the Assistant fills what it can, stops there, and tells you so
+  in Allegro's own words, with everything it wrote still on the form.
+- **Allegro fixes a Kup teraz listing at 30 days.** There is no duration to choose on the new form,
+  so a listing profile's duration only ever applies to an auction — and the report says so rather
+  than dropping it quietly.
+
+Three things it leaves to you, and says so in the report:
 
 - **the sending address** — Allegro takes it from your account rather than from the form, so the
   Assistant states what the profile says it should read and you check the line the form already
   shows;
 - **a parameter Allegro could not be asked about** — the answers are stored as Allegro's own value
   ids and the form wants their labels, so if Allegro is unreachable when the offer is handed over,
-  that parameter is named rather than guessed at.
+  that parameter is named rather than guessed at;
+- **a category the offer knows only by number.** Allegro's new form has no field to type a category
+  number into — it is picked from a list of names — so the Assistant needs the category's full path,
+  which is stored the moment the category is matched or chosen. An older offer that has only the
+  number is reported rather than filed under Allegro's own suggestion; press ↻ on the **On Allegro**
+  card to re-match it, and list again.
 
-**When you post it, the offer goes live here by itself.** Allegro does not open the listing after
-*wystaw* — it turns the form into *Oferta jest przygotowana*, with the offer's address as a link and
-the same address still in the browser bar. The Assistant watches that page, takes the address from
-it, and Stamporama moves the offer **Ready → Active** with the listing date and the URL recorded. The
-offer is still awaiting Allegro's own review at that point, which is Allegro's normal course: the
-listing exists and that is where it will be.
+**When you post it, the offer goes live here by itself.** The Assistant watches the page it filled
+for Allegro's confirmation, takes the listing's address from it, and Stamporama moves the offer
+**Ready → Active** with the listing date and the URL recorded. The offer may still be awaiting
+Allegro's own review at that point, which is Allegro's normal course: the listing exists and that is
+where it will be.
 
-**The "AI" watermark question is answered for you, with nothing ticked.** Allegro asks, as the
-pictures go in, which of them should be marked as generated or altered by AI. Your offer's pictures
-are photographs of your stamps, so the honest answer is none — the Assistant confirms Allegro's own
-default and never ticks a box on your behalf. The report says so.
+**The "AI" watermark question, if Allegro asks it, is answered for you with nothing ticked.** Your
+offer's pictures are photographs of your stamps, so the honest answer is none — the Assistant
+confirms Allegro's own default and never ticks a box on your behalf.
 
 **Opening the form creates a draft on Allegro.** That is Allegro's own doing — its form is
-draft-backed from the moment a category is chosen, exactly as when you open it by hand — so a listing
-you start and abandon leaves one behind. They are listed under *Kontynuuj wystawianie* the next time
-the form opens, with **Usuń** beside each.
+draft-backed from the moment the product search runs, exactly as when you open it by hand — so a
+listing you start and abandon leaves one behind. They are listed under *Kontynuuj wystawianie* the
+next time the form opens, with **Usuń** beside each. The Assistant never presses **Usuń**: if that
+prompt is showing when it arrives, it answers *Chcę wystawić nową ofertę* and leaves your drafts
+alone.
 
 It refuses the same things the API path refuses — no category, no listing profile, no price, no
 pictures, an over-long title — because those are facts about the listing rather than about the API.

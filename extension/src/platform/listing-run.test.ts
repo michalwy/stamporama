@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerPlatformModule, findListingModule, moduleReports } from "./registry";
 import {
-  attachListingPhotos,
   fillListing,
   resolveListedUrl,
   resolveListingTarget,
@@ -23,8 +22,14 @@ const listingModule: PlatformModule = {
     formUrl: (task) => `https://fake.test/sell?offer=${task.offerId}`,
     isFormUrl: (url) => url.startsWith("https://fake.test/sell"),
     isFormDocument: () => true,
-    fill: (_doc, task) => ({
-      filled: [{ field: "Price", value: `${task.price} ${task.currency}` }],
+    takesPhotos: true,
+    fill: (_doc, task, photos) => ({
+      filled: [
+        { field: "Price", value: `${task.price} ${task.currency}` },
+        ...(photos.length > 0
+          ? [{ field: "Pictures", value: photos.map((p) => p.file.name).join(", ") }]
+          : []),
+      ],
       skipped: [{ field: "Title", reason: "FakeMarket has no title field." }],
     }),
     editUrl: (task) => {
@@ -32,10 +37,6 @@ const listingModule: PlatformModule = {
       return `${task.listingUrl}/edit`;
     },
     listedUrl: (url) => (url.startsWith("https://fake.test/listing/") ? url : null),
-    attachPhotos: (_doc, photos) => ({
-      filled: [{ field: "Pictures", value: photos.map((p) => p.file.name).join(", ") }],
-      skipped: [],
-    }),
   },
 };
 
@@ -171,8 +172,8 @@ test("an update with no listing to go back to is refused by the module", () => {
   assert.match(target.ok ? "" : target.error, /needs the listing's address/);
 });
 
-test("filling reports what went in and what did not", () => {
-  const result = fillListing(task("fake-market"), noDoc, "https://fake.test/sell?offer=o1&step=2");
+test("filling reports what went in and what did not", async () => {
+  const result = await fillListing(task("fake-market"), noDoc, "https://fake.test/sell?offer=o1&step=2");
   assert.equal(result.ok, true);
   assert.deepEqual(result.ok ? result.outcome.filled : null, [
     { field: "Price", value: "40.00 PLN" },
@@ -182,13 +183,13 @@ test("filling reports what went in and what did not", () => {
   ]);
 });
 
-test("a page that is not the sale form is refused, never filled", () => {
-  const result = fillListing(task("fake-market"), noDoc, "https://fake.test/account/login");
+test("a page that is not the sale form is refused, never filled", async () => {
+  const result = await fillListing(task("fake-market"), noDoc, "https://fake.test/account/login");
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /not FakeMarket's listing form/);
 });
 
-test("the sale form's address without the sale form on it is a wait, not a refusal", () => {
+test("the sale form's address without the sale form on it is a wait, not a refusal", async () => {
   // The anti-bot interstitial (#419): the URL is the form's own and the document is not, so the
   // answer says "not yet" rather than filling nothing and calling it filled.
   registerPlatformModule({
@@ -205,18 +206,18 @@ test("the sale form's address without the sale form on it is a wait, not a refus
       listedUrl: () => null,
     },
   });
-  const result = fillListing(task("guarded-market"), noDoc, "https://guarded.test/sell");
+  const result = await fillListing(task("guarded-market"), noDoc, "https://guarded.test/sell");
   assert.equal(result.ok, false);
   assert.equal(result.ok ? undefined : result.retry, true);
   assert.match(result.ok ? "" : result.error, /has not served the listing form/);
 });
 
-test("a page that is not the sale form at all is refused outright, never retried", () => {
-  const result = fillListing(task("fake-market"), noDoc, "https://fake.test/account/login");
+test("a page that is not the sale form at all is refused outright, never retried", async () => {
+  const result = await fillListing(task("fake-market"), noDoc, "https://fake.test/account/login");
   assert.equal(result.ok ? undefined : result.retry, undefined);
 });
 
-test("a module throwing on unexpected DOM comes back as a refusal", () => {
+test("a module throwing on unexpected DOM comes back as a refusal", async () => {
   registerPlatformModule({
     id: "broken-market",
     name: "BrokenMarket",
@@ -233,7 +234,7 @@ test("a module throwing on unexpected DOM comes back as a refusal", () => {
       },
     },
   });
-  const result = fillListing(task("broken-market"), noDoc, "https://broken.test/sell");
+  const result = await fillListing(task("broken-market"), noDoc, "https://broken.test/sell");
   assert.deepEqual(result, { ok: false, error: "Price field not found." });
 });
 
@@ -328,33 +329,29 @@ test("one image larger than the whole budget still goes, rather than nothing goi
   );
 });
 
-test("pictures are attached through the module that filled the form", async () => {
-  const result = await attachListingPhotos("fake-market", noDoc, "https://fake.test/sell?offer=o1", [
+test("the run's pictures go in through the module that fills the form", async () => {
+  const result = await fillListing(task("fake-market"), noDoc, "https://fake.test/sell?offer=o1", [
     photoFile("o-01.jpg"),
     photoFile("o-02.jpg"),
   ]);
-  assert.deepEqual(result, {
-    ok: true,
-    outcome: { filled: [{ field: "Pictures", value: "o-01.jpg, o-02.jpg" }], skipped: [] },
-  });
-});
-
-test("pictures never go to a page that is not the sale form", async () => {
-  const result = await attachListingPhotos("fake-market", noDoc, "https://fake.test/account/login", [
-    photoFile("o-01.jpg"),
+  assert.deepEqual(result.ok ? result.outcome.filled : null, [
+    { field: "Price", value: "40.00 PLN" },
+    { field: "Pictures", value: "o-01.jpg, o-02.jpg" },
   ]);
-  assert.equal(result.ok, false);
-  assert.match(result.ok ? "" : result.error, /not FakeMarket's listing form/);
 });
 
-test("a module with no uploader answers with an empty report, not a refusal", async () => {
-  const result = await attachListingPhotos("no-pictures-market", noDoc, "https://no-pictures.test/sell", [
-    photoFile("o-01.jpg"),
-  ]);
-  assert.deepEqual(result, { ok: true, outcome: { filled: [], skipped: [] } });
+test("a marketplace whose form takes no pictures costs the run no bytes", () => {
+  // Silence, not a skip: a form with no uploader is one the Assistant fills completely, and
+  // reporting a gap would invent one (#411).
+  const selection = selectListingPhotos(
+    task("no-pictures-market", {
+      photos: { status: "ready", outOfDate: false, images: [image("o-01.jpg", 1000)] },
+    })
+  );
+  assert.deepEqual(selection, { images: [], skipped: [] });
 });
 
-test("a module throwing while attaching leaves the filled form standing", async () => {
+test("a module throwing while filling never posts a half-filled listing as a success", async () => {
   registerPlatformModule({
     id: "broken-pictures-market",
     name: "BrokenPicturesMarket",
@@ -363,26 +360,20 @@ test("a module throwing while attaching leaves the filled form standing", async 
       formUrl: () => "https://broken-pictures.test/sell",
       isFormUrl: () => true,
       isFormDocument: () => true,
-      fill: () => ({ filled: [], skipped: [] }),
-      listedUrl: () => null,
-      attachPhotos: () => {
+      takesPhotos: true,
+      fill: () => {
         throw new Error("The uploader is not on this page.");
       },
+      listedUrl: () => null,
     },
   });
-  const result = await attachListingPhotos(
-    "broken-pictures-market",
+  const result = await fillListing(
+    task("broken-pictures-market"),
     noDoc,
     "https://broken-pictures.test/sell",
     [photoFile("o-01.jpg")]
   );
-  assert.deepEqual(result, {
-    ok: true,
-    outcome: {
-      filled: [],
-      skipped: [{ field: "Pictures", reason: "The uploader is not on this page." }],
-    },
-  });
+  assert.deepEqual(result, { ok: false, error: "The uploader is not on this page." });
 });
 
 // ── Reading the listing back (#412) ──────────────────────────────────────────

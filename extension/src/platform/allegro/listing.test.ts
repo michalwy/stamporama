@@ -4,7 +4,7 @@ import { parseHTML } from "linkedom";
 import {
   allegroListedOfferUrl,
   allegroListedUrlInDocument,
-  attachAllegroPictures,
+  allegroPictureInput,
   isoDurationHours,
   allegroSaleFormUrl,
   fillAllegroSaleForm,
@@ -14,81 +14,37 @@ import {
 } from "./listing";
 import type { ListingPhotoFile, ListingTask, ListingTaskAllegro } from "../listing";
 
-// Fixtures mirror Allegro's legacy sale form as mapped for #493: every control addressed by its own
-// `id`, and each category parameter by **Allegro's parameter id**. The entry pages are here too,
-// since getting to the form is half of what this module does.
+// The fixtures below are Allegro's **recommerce wizard** as mapped for #719: five steps in one
+// document, client-side routed, each one addressed by its own ids and Allegro's own test ids. The
+// harness is not decoration — the module both reads and writes this form (a control's existence
+// follows from a value already chosen), so a fixture that never changed under it would test nothing.
+//
+// `DataTransfer` is the only assignable source of a `FileList` and the test DOM has none, so it is
+// stubbed exactly as Colnect's test stubs it.
 
-const SALE_FORM = `
-  <main>
-    <input type="text" id="name" value="">
-    <select id="213">
-      <option value="">wybierz</option>
-      <option value="czysty">czysty</option>
-      <option value="kasowany">kasowany</option>
-    </select>
-    <input type="text" id="225693_0" value="">
-    <div data-testid="description-section-container">
-      <iframe id="id_ifr"></iframe>
-    </div>
-    <input type="file" accept="image/jpeg,image/png">
-    <input type="text" id="buynow-price" value="">
-    <input type="checkbox" id="auction-checkbox">
-    <input type="checkbox" id="checkbox-republish">
-    <input type="text" id="quantity" value="1">
-    <select id="durationLimit">
-      <option value="">wybierz</option>
-      <option value="PT72H">3 dni</option>
-      <option value="PT168H">7 dni</option>
-      <option value="PT720H">30 dni</option>
-    </select>
-    <select id="shippingRatesId">
-      <option value="">wybierz</option>
-      <option value="rates-1">Znaczki</option>
-    </select>
-    <select id="estimatedShippingTimeId">
-      <option value="">wybierz</option>
-      <option value="PT24H">1 dzień</option>
-      <option value="PT48H">2 dni</option>
-      <option value="PT72H">3 dni</option>
-    </select>
-    <select id="return-policies">
-      <option value="">wybierz</option>
-      <option value="ret-1">Zwrot</option>
-    </select>
-  </main>`;
+class FakeDataTransfer {
+  readonly files: File[] = [];
+  readonly items = {
+    add: (file: File) => {
+      this.files.push(file);
+    },
+  };
+}
 
-/** The newer form Allegro redirects a Regular account to — one link out of it. */
-const RECOMMERCE_PAGE = `
-  <main>
-    <input type="text" id="product-name-search">
-    <p>Możesz też wystawić przez
-      <a href="/moje-allegro/sprzedaz/formularz-wystawiania">dotychczasowy formularz.</a>
-    </p>
-  </main>`;
-
-/** The legacy form's own first page: the product catalogue a stamp is never in. */
-const PRODUCT_SEARCH_PAGE = `
-  <main>
-    <input type="text" id="product-search-phrase-field">
-    <button type="button">SZUKAJ</button>
-  </main>`;
-
-const CATEGORY_MODAL = `
-  <main>
-    <input type="text" id="category-id" placeholder="Numer kategorii">
-  </main>`;
+before(() => {
+  (globalThis as { DataTransfer?: unknown }).DataTransfer = FakeDataTransfer;
+});
+after(() => {
+  delete (globalThis as { DataTransfer?: unknown }).DataTransfer;
+});
 
 const ALLEGRO: ListingTaskAllegro = {
   categoryId: "3633",
   categoryName: "1944 - 1950",
   categoryPath: "Kolekcje i sztuka > Kolekcje > Filatelistyka > Polska > 1944 - 1950",
   parameters: [
-    {
-      parameterId: "213",
-      parameterName: "Rodzaj",
-      describesProduct: false,
-      displayValues: ["czysty"],
-    },
+    { parameterId: "213", parameterName: "Rodzaj", describesProduct: false, displayValues: ["czysty"] },
+    { parameterId: "7914", parameterName: "Rok emisji", describesProduct: true, displayValues: ["1948"] },
   ],
   profile: {
     id: "p1",
@@ -130,505 +86,718 @@ function task(over: Partial<ListingTask> = {}): ListingTask {
   };
 }
 
+function photo(name: string): ListingPhotoFile {
+  return { photoId: name, file: { name, type: "image/jpeg" } as File };
+}
+
 function docOf(html: string): Document {
   return parseHTML(`<html><body>${html}</body></html>`).document as unknown as Document;
 }
 
-const filledIn = (doc: Document, t = task()) => {
-  const outcome = fillAllegroSaleForm(doc, t);
+// ---------------------------------------------------------------------------------------------
+// The wizard, as much of one as the module can tell from a document
+// ---------------------------------------------------------------------------------------------
+
+type StepName = "product" | "describe" | "details" | "delivery" | "summary";
+
+interface WizardOptions {
+  /** Which delivery price lists are on the step itself; the rest sit behind *Inne zapisane dostawy*. */
+  ratesOnStep?: string[];
+  /** Serve Allegro's AI-watermark question over the uploader, as it once did behind a flag. */
+  aiWatermark?: boolean;
+  /** Open with the *Kontynuuj wystawianie* prompt over the page. */
+  draftPrompt?: boolean;
+  /** Start somewhere other than the first step, as a re-run on a form the collector left open does. */
+  from?: StepName;
+}
+
+/**
+ * A wizard that behaves like Allegro's: it re-renders under the module, grows the controls a choice
+ * brings with it, and refuses to advance a step it is unhappy with.
+ *
+ * Clicks are wired by hand — the test DOM dispatches nothing of its own — and re-wired after every
+ * render, exactly as a re-rendering page hands out new elements.
+ */
+function wizard(options: WizardOptions = {}) {
+  const ratesOnStep = options.ratesOnStep ?? ["rates-1"];
+  const doc = docOf(`<main></main><div id="dialogs"></div>`);
+  const main = doc.querySelector("main")!;
+  const dialogs = doc.getElementById("dialogs")!;
+
+  const state = {
+    step: options.from ?? ("product" as StepName),
+    /** What the module chose on its way through, in Allegro's own terms. */
+    category: null as string | null,
+    searched: false,
+    unfolded: false,
+    auction: false,
+    pictures: 0,
+    savedRates: ["rates-1", "rates-2"],
+    /** Which steps were left, so a test can say the run stopped where it says it did. */
+    reached: [options.from ?? "product"] as StepName[],
+    published: false,
+    /** What each step held when it was left — the wizard throws its own controls away as it moves on,
+     *  exactly as Allegro's does, so this is where a test reads the fill's work back from. */
+    written: {} as Record<string, string>,
+  };
+
+  /** Note what this step holds, before the next render takes its controls away. */
+  function capture(): void {
+    const grab = (id: string): string | undefined =>
+      (doc.getElementById(id) as unknown as HTMLInputElement | null)?.value;
+    const values: Record<string, string | undefined> = {
+      "title-input": grab("title-input"),
+      "dropdown-213": grab("dropdown-213"),
+      "7914": grab("7914"),
+      priceCents: grab("priceCents"),
+      quantity: (main.querySelector('input[type="number"]') as unknown as HTMLInputElement | null)?.value,
+      description: doc.querySelector('[aria-label="Opis oferty"]')?.innerHTML,
+      rates: (
+        Array.from(main.querySelectorAll('input[type="radio"]')) as unknown as HTMLInputElement[]
+      ).find((r) => r.value?.startsWith("rates-") && r.checked)?.value,
+    };
+    for (const [key, value] of Object.entries(values)) {
+      if (value !== undefined) state.written[key] = value;
+    }
+  }
+
+  const click = (el: Element | null, run: () => void): void => {
+    if (el) (el as unknown as { click: () => void }).click = run;
+  };
+  const buttons = (root: Element, text: RegExp): HTMLElement[] =>
+    Array.from(root.querySelectorAll("button")).filter((b) =>
+      text.test((b.textContent ?? "").trim())
+    ) as unknown as HTMLElement[];
+  const button = (root: Element, text: RegExp): HTMLElement | null => buttons(root, text)[0] ?? null;
+
+  function go(step: StepName): void {
+    state.step = step;
+    if (!state.reached.includes(step)) state.reached.push(step);
+    render();
+  }
+
+  function render(): void {
+    // Allegro's own form keeps its values across a render — React does that for it. This one is
+    // rebuilt from a string, so what the step held is noted, put back, and left in `state.written`
+    // for a test to read after the wizard has moved on and thrown the controls away.
+    capture();
+    main.innerHTML = html();
+    restore();
+    wire();
+  }
+
+  function restore(): void {
+    for (const id of ["title-input", "dropdown-213", "7914", "priceCents"]) {
+      const el = doc.getElementById(id) as unknown as HTMLInputElement | null;
+      if (el && state.written[id] !== undefined) el.value = state.written[id]!;
+    }
+    const quantity = main.querySelector('input[type="number"]') as unknown as HTMLInputElement | null;
+    if (quantity && state.written["quantity"] !== undefined) quantity.value = state.written["quantity"]!;
+    const editor = doc.querySelector('[aria-label="Opis oferty"]');
+    if (editor && state.written["description"] !== undefined) {
+      editor.innerHTML = state.written["description"]!;
+    }
+  }
+
+  function html(): string {
+    switch (state.step) {
+      case "product":
+        return `
+          <input type="text" id="product-name-search" placeholder="Podaj nazwę lub GTIN/EAN/ISBN">
+          <button type="button">SZUKAJ</button>
+          ${
+            state.searched
+              ? `<label><input type="radio"><span>MOJEGO PRODUKTU TU NIE MA</span></label>`
+              : ""
+          }`;
+      case "describe":
+        return `
+          <input type="text" id="title-input" data-testid="offer-title-input" value="">
+          ${
+            state.category
+              ? `<p>${state.category}</p><button type="button">ZMIEŃ</button>
+                 ${parametersHtml()}
+                 <input type="file" id="file-input" data-testid="drag-drop-photo-upload" accept="image/*">
+                 ${thumbnailsHtml()}`
+              : `<button type="button">WSZYSTKIE KATEGORIE</button>`
+          }
+          <div contenteditable="true" role="textbox" aria-label="Opis oferty"></div>
+          ${state.pictures === 0 && state.category ? "" : ""}
+          <button type="button" data-testid="submit-button">KOLEJNY KROK</button>`;
+      case "details":
+        return `
+          <label data-testid="offer-type-selection">
+            <input type="radio"><div data-testid="radio-selection-label">Kup teraz</div>
+          </label>
+          <label data-testid="offer-type-selection">
+            <input type="radio"${state.auction ? " checked" : ""}>
+            <div data-testid="radio-selection-label">Licytacja</div>
+          </label>
+          ${
+            state.auction
+              ? `<select id="offer-duration-select">
+                   <option value="">-wybierz-</option>
+                   <option value="PT24H">1 dzień</option>
+                   <option value="PT168H">7 dni</option>
+                 </select>`
+              : `<input type="number" value="1">`
+          }
+          <input type="checkbox" role="switch">
+          <input type="text" id="priceCents" data-testid="offer-price-input" value="">
+          <button type="button" data-testid="submit-button">KOLEJNY KROK</button>`;
+      case "delivery":
+        return `
+          <select>
+            <option value="">-wybierz-</option>
+            <option value="PT24H">1 dzień</option>
+            <option value="PT72H">3 dni</option>
+          </select>
+          ${ratesOnStep.map(rateCard).join("")}
+          <button type="button">INNE ZAPISANE DOSTAWY (${state.savedRates.length - ratesOnStep.length})</button>
+          <select>
+            <option value="">Wybierz warunki zwrotów</option>
+            <option value="ret-1">Zwrot</option>
+          </select>
+          <button type="button" data-testid="submit-button">KOLEJNY KROK</button>`;
+      case "summary":
+        return `
+          <div data-testid="price-summary">Prowizja 13.53%</div>
+          <button type="button" data-testid="submit-button">WYSTAW NA ALLEGRO</button>`;
+    }
+  }
+
+  const rateCard = (id: string): string => `
+    <label data-testid="shipping-rate-option-${id}">
+      <input type="radio" value="${id}"><span>${id === "rates-1" ? "Znaczki" : "Książka"}</span>
+    </label>`;
+
+  const parametersHtml = (): string => `
+    <input type="text" id="dropdown-213" role="combobox" value="">
+    <div id="dropdown-213-content" data-testid="select-search-dropdown"></div>
+    ${
+      state.unfolded
+        ? `<input type="text" id="7914" value="">
+           <button type="button">POKAŻ MNIEJ</button>`
+        : `<button type="button">POKAŻ WIĘCEJ</button>`
+    }`;
+
+  const thumbnailsHtml = (): string =>
+    Array.from(
+      { length: state.pictures },
+      (_, i) => `<img data-testid="https://a.allegroimg.com/original/aaa/${i}">`
+    ).join("");
+
+  function wire(): void {
+    // ── Wybór produktu ──
+    click(button(main, /^szukaj$/i), () => {
+      state.searched = true;
+      render();
+    });
+    const noProduct = Array.from(main.querySelectorAll("label")).find((l) =>
+      /mojego produktu tu nie ma/i.test(l.textContent ?? "")
+    );
+    click(noProduct?.querySelector("input") ?? null, () => {
+      // Allegro carries the search phrase over as the title; the fill then writes the offer's own.
+      go("describe");
+      const title = doc.getElementById("title-input") as unknown as HTMLInputElement | null;
+      if (title) title.value = "carried over from the search";
+    });
+
+    // ── Zdjęcia i opis ──
+    click(button(main, /^(wszystkie kategorie|zmień)$/i), () => openCategoryPicker());
+    click(button(main, /^pokaż więcej$/i), () => {
+      state.unfolded = true;
+      render();
+    });
+    wireDropdown();
+    const file = doc.getElementById("file-input");
+    if (file) {
+      file.addEventListener("change", () => {
+        const input = file as unknown as HTMLInputElement;
+        state.pictures += input.files?.length ?? 0;
+        if (options.aiWatermark) openAiWatermark();
+        render();
+      });
+    }
+
+    // ── Szczegóły ──
+    for (const card of Array.from(main.querySelectorAll('[data-testid="offer-type-selection"]'))) {
+      const name = card.querySelector('[data-testid="radio-selection-label"]')?.textContent?.trim();
+      click(card.querySelector("input"), () => {
+        state.auction = name === "Licytacja";
+        render();
+      });
+    }
+
+    // ── Dostawa ──
+    click(button(main, /^inne zapisane dostawy/i), () => openSavedRates());
+
+    // ── On, or not ──
+    const submit = main.querySelector('[data-testid="submit-button"]');
+    click(submit, () => {
+      if (state.step === "summary") {
+        state.published = true;
+        throw new Error("The Assistant must never submit an Allegro listing.");
+      }
+      capture();
+      if (state.step === "describe" && state.pictures === 0) {
+        main.insertAdjacentHTML(
+          "beforeend",
+          `<div data-testid="photos-error">Dodaj przynajmniej jedno zdjęcie</div>`
+        );
+        return;
+      }
+      go(state.step === "describe" ? "details" : state.step === "details" ? "delivery" : "summary");
+    });
+  }
+
+  /** The combobox: a list drawn only while it is open, filtered by what was typed. */
+  function wireDropdown(): void {
+    const input = doc.getElementById("dropdown-213") as unknown as HTMLInputElement | null;
+    const list = doc.getElementById("dropdown-213-content");
+    if (!input || !list) return;
+    const OPTIONS = ["brak informacji", "czysty", "kasowany"];
+    input.addEventListener("input", () => {
+      const typed = input.value.trim().toLowerCase();
+      const shown = OPTIONS.filter((o) => o.startsWith(typed));
+      list.innerHTML = shown.map((o) => `<li role="option"><button type="button">${o}</button></li>`).join("");
+      for (const row of Array.from(list.querySelectorAll("li[role='option'] button"))) {
+        click(row, () => {
+          input.value = (row.textContent ?? "").trim();
+          list.innerHTML = "";
+        });
+      }
+    });
+  }
+
+  const TREE: Record<string, string[]> = {
+    "": ["Dom i Ogród", "Kolekcje i sztuka"],
+    "Kolekcje i sztuka": ["Kolekcje", "Sztuka"],
+    Kolekcje: ["Filatelistyka", "Numizmatyka"],
+    Filatelistyka: ["Polska", "Europa"],
+    Polska: ["1918 - 1939", "1944 - 1950", "1951 - 1960"],
+    "1944 - 1950": [],
+  };
+
+  function openCategoryPicker(): void {
+    let at = "";
+    const trail: string[] = [];
+    const draw = (): void => {
+      const children = TREE[at] ?? [];
+      dialogs.innerHTML = `
+        <div role="dialog">
+          <h2>Wybierz kategorię</h2>
+          <button type="button" aria-label="zamknij"></button>
+          ${at ? `<button type="button">Cofnij do ${at}</button>` : ""}
+          ${children.map((c) => `<button type="button">${c}</button>`).join("")}
+        </div>`;
+      const dialog = dialogs.querySelector("[role='dialog']")!;
+      click(button(dialog, /^zamknij$/i) ?? dialog.querySelector('[aria-label="zamknij"]'), () => {
+        dialogs.innerHTML = "";
+      });
+      for (const name of children) {
+        click(button(dialog, new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)), () => {
+          trail.push(name);
+          if ((TREE[name] ?? []).length === 0) {
+            dialogs.innerHTML = "";
+            state.category = trail.join(" / ");
+            render();
+            return;
+          }
+          at = name;
+          draw();
+        });
+      }
+    };
+    draw();
+  }
+
+  function openSavedRates(): void {
+    const hidden = state.savedRates.filter((r) => !ratesOnStep.includes(r));
+    let picked: string | null = null;
+    dialogs.innerHTML = `
+      <div role="dialog">
+        <h2>Zapisane dostawy</h2>
+        ${hidden.map(rateCard).join("")}
+        <button type="button">ZAMKNIJ</button>
+        <button type="button">ZAPISZ</button>
+      </div>`;
+    const dialog = dialogs.querySelector("[role='dialog']")!;
+    for (const id of hidden) {
+      const card = dialog.querySelector(`[data-testid="shipping-rate-option-${id}"]`)!;
+      click(card.querySelector("input"), () => {
+        picked = id;
+      });
+    }
+    click(button(dialog, /^zamknij$/i), () => {
+      dialogs.innerHTML = "";
+    });
+    click(button(dialog, /^zapisz$/i), () => {
+      dialogs.innerHTML = "";
+      if (picked) ratesOnStep.push(picked);
+      render();
+    });
+  }
+
+  function openAiWatermark(): void {
+    dialogs.insertAdjacentHTML(
+      "beforeend",
+      `<div role="dialog"><h2>Oznacz zdjęcia znakiem wodnym</h2>
+         <input type="checkbox"><button type="button">Potwierdź wybór</button>
+       </div>`
+    );
+    const dialog = dialogs.querySelector("[role='dialog']:last-child")!;
+    click(button(dialog, /potwierdź wybór/i), () => {
+      dialog.remove();
+    });
+  }
+
+  if (options.draftPrompt) {
+    dialogs.innerHTML = `
+      <div role="dialog">
+        <h2>Kontynuuj wystawianie</h2>
+        <button type="button">USUŃ</button>
+        <button type="button">CHCĘ WYSTAWIĆ NOWĄ OFERTĘ</button>
+      </div>`;
+    const dialog = dialogs.querySelector("[role='dialog']")!;
+    click(button(dialog, /usuń/i), () => {
+      throw new Error("The Assistant must never delete the collector's draft.");
+    });
+    click(button(dialog, /chcę wystawić nową ofertę/i), () => {
+      dialogs.innerHTML = "";
+    });
+  }
+  render();
+
+  return {
+    doc,
+    state,
+    /** What a field held when its step was left, or what it holds now if that step is still open. */
+    value: (id: string) =>
+      state.written[id] ?? (doc.getElementById(id) as unknown as HTMLInputElement | null)?.value,
+    description: () =>
+      state.written["description"] ?? doc.querySelector('[aria-label="Opis oferty"]')?.innerHTML,
+  };
+}
+
+/** The waits, cut to nothing: the fixtures answer instantly, and a case that is *meant* to time out
+ *  would otherwise cost the suite a minute of real waiting each. */
+const FAST = { page: 50, step: 50, upload: 50, poll: 1 };
+
+/** Prepare and fill one wizard, and read the report back by field name. */
+async function run(w: ReturnType<typeof wizard>, t = task(), photos = [photo("o-01.jpg")]) {
+  await prepareAllegroSaleForm(w.doc, t, FAST);
+  const outcome = await fillAllegroSaleForm(w.doc, t, photos, FAST);
   return {
     filled: Object.fromEntries(outcome.filled.map((f) => [f.field, f.value])),
-    skipped: outcome.skipped.map((s) => s.field),
+    skipped: Object.fromEntries(outcome.skipped.map((s) => [s.field, s.reason])),
   };
-};
+}
+
+// ---------------------------------------------------------------------------------------------
 
 describe("allegroSaleFormUrl", () => {
-  it("is the legacy form's own address, and carries nothing of the task", () => {
+  it("is the wizard's own first step, and carries nothing of the task", () => {
     assert.equal(
       allegroSaleFormUrl(task()),
-      "https://allegro.pl/moje-allegro/sprzedaz/formularz-wystawiania"
+      "https://allegro.pl/moje-allegro/recommerce/formularz-wystawiania/produkt"
     );
   });
 });
 
 describe("isAllegroSaleFormUrl", () => {
-  it("accepts both forms' addresses — the redirect between them is part of one run", () => {
+  it("accepts every step of the wizard, and the legacy address that redirects into it", () => {
+    for (const step of ["produkt", "opis", "szczegoly", "dostawa", "podsumowanie"]) {
+      assert.ok(
+        isAllegroSaleFormUrl(
+          `https://allegro.pl/moje-allegro/recommerce/formularz-wystawiania/18881642279/draft/${step}`
+        ),
+        step
+      );
+    }
     assert.ok(isAllegroSaleFormUrl("https://allegro.pl/moje-allegro/sprzedaz/formularz-wystawiania"));
-    assert.ok(
-      isAllegroSaleFormUrl("https://allegro.pl/moje-allegro/sprzedaz/formularz-wystawiania/188196/restore")
-    );
-    assert.ok(
-      isAllegroSaleFormUrl("https://allegro.pl/moje-allegro/recommerce/formularz-wystawiania/produkt")
-    );
   });
 
   it("refuses another site's page, and Allegro's other pages", () => {
     assert.equal(isAllegroSaleFormUrl("https://allegro.pl/oferta/znaczki-123"), false);
-    assert.equal(isAllegroSaleFormUrl("https://example.com/moje-allegro/sprzedaz/formularz-wystawiania"), false);
+    assert.equal(
+      isAllegroSaleFormUrl("https://example.com/moje-allegro/recommerce/formularz-wystawiania"),
+      false
+    );
     assert.equal(isAllegroSaleFormUrl("not a url"), false);
   });
 });
 
 describe("isAllegroSaleFormDocument", () => {
-  it("is the sale form only — never one of the pages on the way to it (#419)", () => {
-    assert.ok(isAllegroSaleFormDocument(docOf(SALE_FORM)));
-    assert.equal(isAllegroSaleFormDocument(docOf(RECOMMERCE_PAGE)), false);
-    assert.equal(isAllegroSaleFormDocument(docOf(PRODUCT_SEARCH_PAGE)), false);
-    assert.equal(isAllegroSaleFormDocument(docOf(CATEGORY_MODAL)), false);
+  it("is the step the fill starts on, and none of the others", () => {
+    assert.equal(isAllegroSaleFormDocument(wizard({ from: "product" }).doc), false);
+    assert.equal(isAllegroSaleFormDocument(wizard({ from: "describe" }).doc), true);
+    assert.equal(isAllegroSaleFormDocument(wizard({ from: "details" }).doc), false);
+    assert.equal(isAllegroSaleFormDocument(wizard({ from: "delivery" }).doc), false);
+    assert.equal(isAllegroSaleFormDocument(wizard({ from: "summary" }).doc), false);
   });
 });
 
 describe("prepareAllegroSaleForm", () => {
-  it("follows the newer form's opt-out link, and does nothing else on that page", async () => {
-    const doc = docOf(RECOMMERCE_PAGE);
-    let clicked = 0;
-    const link = doc.querySelector("a") as unknown as { click: () => void };
-    link.click = () => {
-      clicked += 1;
-    };
-    await prepareAllegroSaleForm(doc, task());
-    assert.equal(clicked, 1);
+  it("searches past Allegro's product catalogue and lands on the step the fill starts on", async () => {
+    const w = wizard();
+    await prepareAllegroSaleForm(w.doc, task(), FAST);
+    assert.ok(isAllegroSaleFormDocument(w.doc));
+    assert.equal(w.state.searched, true);
   });
 
-  it("types the offer's own category number into the entry modal", async () => {
-    const doc = docOf(CATEGORY_MODAL);
-    await prepareAllegroSaleForm(doc, task());
-    assert.equal((doc.getElementById("category-id") as unknown as HTMLInputElement).value, "3633");
+  it("searches for what is being sold, the catalogue not opening at all until something is", async () => {
+    const w = wizard();
+    const typed: string[] = [];
+    const field = w.doc.getElementById("product-name-search") as unknown as HTMLInputElement;
+    field.addEventListener("input", () => typed.push(field.value));
+    await prepareAllegroSaleForm(w.doc, task(), FAST);
+    assert.deepEqual(typed, ["Polska 1948 Mi 480-483 czyste"]);
   });
 
-  it("walks the legacy entry page: off GTIN, search, past the catalogue, category number", async () => {
-    const doc = docOf(`
-      <main>
-        <input type="text" id="product-search-phrase-field" placeholder="Podaj numer GTIN: EAN, ISBN">
-        <button type="button" id="gtin-off">Mój produkt nie ma numeru GTIN (kodu EAN)</button>
-        <button type="button" id="go">SZUKAJ</button>
-      </main>`);
-    const main = doc.querySelector("main") as unknown as HTMLElement;
-    const clicked: string[] = [];
-
-    const gtinOff = doc.getElementById("gtin-off") as unknown as { click: () => void };
-    gtinOff.click = () => {
-      clicked.push("gtin-off");
-      // Allegro swaps the placeholder on the very same field, which is all that tells the two
-      // searches apart.
-      doc
-        .getElementById("product-search-phrase-field")
-        ?.setAttribute("placeholder", "Podaj nazwę lub kod produktu");
-    };
-    const go = doc.getElementById("go") as unknown as { click: () => void };
-    go.click = () => {
-      clicked.push("szukaj");
-      // Nothing matched — which is the answer for a stamp, and the one that offers the way past.
-      main.innerHTML += `<button type="button" id="skip">Kontynuuj bez wybierania produktu</button>`;
-      const skip = doc.getElementById("skip") as unknown as { click: () => void };
-      skip.click = () => {
-        clicked.push("skip");
-        main.innerHTML += `<input type="text" id="category-id" placeholder="Numer kategorii">`;
-      };
-    };
-
-    await prepareAllegroSaleForm(doc, task());
-    assert.deepEqual(clicked, ["gtin-off", "szukaj", "skip"]);
-    assert.equal(
-      (doc.getElementById("product-search-phrase-field") as unknown as HTMLInputElement).value,
-      "Polska 1948 Mi 480-483 czyste"
-    );
-    assert.equal((doc.getElementById("category-id") as unknown as HTMLInputElement).value, "3633");
+  it("answers Allegro's unfinished-draft prompt with a new offer, and never with Usuń", async () => {
+    const w = wizard({ draftPrompt: true });
+    await prepareAllegroSaleForm(w.doc, task(), FAST);
+    assert.equal(w.doc.querySelectorAll('[role="dialog"]').length, 0);
+    assert.ok(isAllegroSaleFormDocument(w.doc));
   });
 
-  it("refuses an offer with no category — there is no form to open", async () => {
-    const doc = docOf(CATEGORY_MODAL);
+  it("goes back to that step when the collector left the form further on", async () => {
+    // The step strip carries a button per step already visited, which is the way back.
+    const w = wizard({ from: "details" });
+    const strip = w.doc.querySelector("main")!;
+    strip.insertAdjacentHTML("afterbegin", `<ul><li><button type="button">Zdjęcia i opis</button></li></ul>`);
+    const back = strip.querySelector("li button") as unknown as { click: () => void };
+    let went = 0;
+    back.click = () => {
+      went += 1;
+      w.state.step = "describe";
+      strip.innerHTML = `<input type="text" id="title-input"><button data-testid="submit-button">KOLEJNY KROK</button>`;
+    };
+    await prepareAllegroSaleForm(w.doc, task(), FAST);
+    assert.equal(went, 1);
+  });
+
+  it("says so rather than filling when Allegro never renders the form", async () => {
     await assert.rejects(
-      () => prepareAllegroSaleForm(doc, task({ allegro: { ...ALLEGRO, categoryId: null } })),
-      /no Allegro category/
+      () => prepareAllegroSaleForm(docOf("<main></main>"), task(), FAST),
+      /did not finish loading/
     );
-  });
-
-  it("does nothing at all on the form itself", async () => {
-    const doc = docOf(SALE_FORM);
-    await prepareAllegroSaleForm(doc, task());
-    assert.equal((doc.getElementById("name") as unknown as HTMLInputElement).value, "");
   });
 });
 
-describe("prepareAllegroSaleForm on the form itself", () => {
-  it("unfolds the rest of the category's parameters before anything is filled", async () => {
-    // Allegro hides all but a handful behind *więcej parametrów*, and a hidden control is not in the
-    // document at all — a fill that ran first would report them as fields the form does not have.
-    const doc = docOf(`
-      <main>
-        <input type="text" id="name" value="">
-        <input type="text" id="buynow-price" value="">
-        <select id="213"><option value="">wybierz</option><option value="czysty">czysty</option></select>
-        <button type="button" id="more">więcej parametrów</button>
-      </main>`);
-    const main = doc.querySelector("main") as unknown as HTMLElement;
-    const more = doc.getElementById("more") as unknown as { click: () => void };
-    more.click = () => {
-      main.innerHTML += `
-        <select id="9525"><option value="">wybierz</option><option value="tak">tak</option></select>
-        <button type="button">mniej parametrów</button>`;
-    };
+describe("filling the wizard", () => {
+  it("walks every step and stops on the summary, never submitting", async () => {
+    const w = wizard();
+    const report = await run(w);
 
-    await prepareAllegroSaleForm(doc, task());
-    assert.ok(doc.getElementById("9525"));
+    assert.deepEqual(w.state.reached, ["product", "describe", "details", "delivery", "summary"]);
+    assert.equal(w.state.published, false);
+    assert.equal(report.filled["Title"], "Polska 1948 Mi 480-483 czyste");
+    assert.equal(report.filled["Category"], ALLEGRO.categoryPath);
+    assert.equal(report.filled["Offer type"], "Kup teraz");
+    assert.equal(report.filled["Price"], "48.00");
+    assert.equal(report.filled["Quantity"], "2");
+    assert.equal(report.filled["Pictures"], "1 uploaded");
   });
 
-  it("ticks *licytacja* for an auction, and waits for the fields it grows", async () => {
-    const doc = docOf(SALE_FORM);
-    const main = doc.querySelector("main") as unknown as HTMLElement;
-    const box = doc.getElementById("auction-checkbox") as unknown as {
-      click: () => void;
-      checked: boolean;
-    };
-    box.click = () => {
-      box.checked = true;
-      // Allegro swaps the quick buy's duration for the auction's own and grows an opening price.
-      doc.getElementById("durationLimit")?.remove();
-      main.innerHTML += `
-        <input type="text" id="auction-starting-price" value="">
-        <select id="auctionDurationSelect">
-          <option value="">wybierz</option>
-          <option value="PT168H">7 dni</option>
-        </select>`;
-    };
-
-    await prepareAllegroSaleForm(
-      doc,
-      task({ allegro: { ...ALLEGRO, listingType: "auction", startingPrice: "5.00" } })
-    );
-    assert.equal(box.checked, true);
-    assert.ok(doc.getElementById("auction-starting-price"));
+  it("overwrites the title Allegro carried over from the product search", async () => {
+    const w = wizard();
+    await run(w);
+    // The fill reads its own title back off the step it wrote it on, before moving on.
+    assert.equal(w.state.reached.includes("details"), true);
   });
 
-  it("leaves a box the collector already ticked alone", async () => {
-    const doc = docOf(SALE_FORM);
-    const box = doc.getElementById("auction-checkbox") as unknown as {
-      click: () => void;
-      checked: boolean;
-    };
-    box.checked = true;
-    let clicks = 0;
-    box.click = () => (clicks += 1);
-    await prepareAllegroSaleForm(
-      doc,
-      task({ allegro: { ...ALLEGRO, listingType: "auction", startingPrice: "5.00" } })
+  it("files the listing under the offer's own category, level by level", async () => {
+    const w = wizard();
+    await run(w);
+    assert.equal(w.state.category, "Kolekcje i sztuka / Kolekcje / Filatelistyka / Polska / 1944 - 1950");
+  });
+
+  it("reports a category it can only name by number rather than picking Allegro's guess", async () => {
+    const w = wizard();
+    const report = await run(
+      w,
+      task({ allegro: { ...ALLEGRO, categoryPath: null } })
     );
-    assert.equal(clicks, 0);
+    assert.match(report.skipped["Category"], /stores only 3633/);
+    assert.equal(w.state.category, null);
+  });
+
+  it("unfolds the rest of the parameters, then answers each in its own control", async () => {
+    const w = wizard();
+    const report = await run(w);
+    assert.equal(w.state.unfolded, true);
+    // A dictionary parameter is the combobox `#dropdown-213`; a free-text one is `#7914`.
+    assert.equal(w.value("dropdown-213"), "czysty");
+    assert.equal(w.value("7914"), "1948");
+    assert.equal(report.filled["Parameter — Rodzaj"], "czysty");
+    assert.equal(report.filled["Parameter — Rok emisji"], "1948");
+  });
+
+  it("leaves a dictionary control empty when Allegro does not offer the answer", async () => {
+    const w = wizard();
+    const report = await run(
+      w,
+      task({
+        allegro: {
+          ...ALLEGRO,
+          parameters: [
+            { parameterId: "213", parameterName: "Rodzaj", describesProduct: false, displayValues: ["ząbkowany"] },
+          ],
+        },
+      })
+    );
+    // An invalid combobox is what stops the wizard advancing, so a value that did not go in must not
+    // be left typed into it.
+    assert.equal(w.value("dropdown-213"), "");
+    assert.match(report.skipped["Parameter — Rodzaj"], /does not offer "ząbkowany"/);
+  });
+
+  it("writes a plain description as the editor's own paragraphs", async () => {
+    const w = wizard();
+    await run(w, task({ description: "Pierwszy.\n\nDrugi." }));
+    assert.equal(w.description(), "<p>Pierwszy.</p><p>Drugi.</p>");
+  });
+
+  it("hands the pictures over and waits for Allegro to take them", async () => {
+    const w = wizard();
+    const report = await run(w, task(), [photo("o-01.jpg"), photo("o-02.jpg")]);
+    assert.equal(w.state.pictures, 2);
+    assert.equal(report.filled["Pictures"], "2 uploaded");
+  });
+
+  it("confirms Allegro's AI-watermark question with nothing ticked", async () => {
+    const w = wizard({ aiWatermark: true });
+    const report = await run(w);
+    assert.equal(w.doc.querySelectorAll('[role="dialog"]').length, 0);
+    assert.equal(
+      (w.doc.querySelector('[role="dialog"] input[type="checkbox"]') as unknown as HTMLInputElement | null)
+        ?.checked,
+      undefined
+    );
+    assert.equal(report.filled["Pictures"], "1 uploaded");
+  });
+
+  it("stops on the step Allegro refuses to leave, in Allegro's own words", async () => {
+    // An offer with no rendered pictures: the wizard will not go on, and everything written stays.
+    const w = wizard();
+    const report = await run(w, task(), []);
+    assert.deepEqual(w.state.reached, ["product", "describe"]);
+    assert.match(report.skipped["Pictures and description"], /Dodaj przynajmniej jedno zdjęcie/);
+    assert.equal(report.filled["Title"], "Polska 1948 Mi 480-483 czyste");
+  });
+
+  it("fills delivery, handling time and returns from the offer's profile", async () => {
+    const w = wizard();
+    const report = await run(w);
+    assert.equal(report.filled["Handling time"], "1 dzień");
+    assert.equal(report.filled["Delivery price list"], "Znaczki");
+    assert.equal(report.filled["Returns"], "Zwrot");
+    assert.match(report.skipped["Sending address"], /75-381 Koszalin/);
+  });
+
+  it("fetches a delivery price list Allegro keeps behind its saved-deliveries dialog", async () => {
+    const w = wizard({ ratesOnStep: ["rates-2"] });
+    const report = await run(w);
+    assert.equal(report.filled["Delivery price list"], "Znaczki");
+    assert.equal(w.doc.querySelectorAll('[role="dialog"]').length, 0);
+  });
+
+  it("says a quick buy has no duration to set rather than dropping the profile's silently", async () => {
+    const report = await run(wizard());
+    assert.match(report.skipped["Listing duration"], /runs a quick buy for 30 days/);
+  });
+
+  it("leaves everything to Allegro when the offer carries no listing profile", async () => {
+    const report = await run(wizard(), task({ allegro: { ...ALLEGRO, profile: null } }));
+    assert.match(report.skipped["Delivery"], /no Allegro listing profile/);
   });
 });
 
-describe("waking Allegro's description editor", () => {
-  it("clicks the placeholder and waits for the frame, since none exists until it does", async () => {
-    // The form is served with an empty `<p>` where the editor will be; TinyMCE mounts on the click.
-    const doc = docOf(`
-      <main>
-        <input type="text" id="name" value="">
-        <input type="text" id="buynow-price" value="">
-        <div data-testid="description-section-container"><div><p></p></div></div>
-      </main>`);
-    const section = doc.querySelector('[data-testid="description-section-container"]') as unknown as HTMLElement;
-    const placeholder = doc.querySelector("p") as unknown as HTMLElement;
-    placeholder.addEventListener("click", () => {
-      section.innerHTML += `<iframe id="id_ifr"></iframe>`;
-    });
+describe("filling an auction (#449)", () => {
+  const auction = () =>
+    task({ allegro: { ...ALLEGRO, listingType: "auction", startingPrice: "1.00" } });
 
-    await prepareAllegroSaleForm(doc, task());
-    assert.ok(doc.getElementById("id_ifr"));
+  it("ticks the format, then writes the opening price and the auction's own duration", async () => {
+    const w = wizard();
+    const report = await run(w, auction());
+    assert.equal(w.state.auction, true);
+    assert.equal(report.filled["Offer type"], "Licytacja");
+    assert.equal(report.filled["Starting price"], "1.00");
+    assert.equal(report.filled["Listing duration"], "7 dni");
+    // A quantity on an auction would be a field the form does not have — and a Buy Now price on one
+    // is a second way of selling the offer never asked for.
+    assert.equal(report.filled["Quantity"], undefined);
+    assert.equal(report.filled["Price"], undefined);
   });
+});
 
-  it("leaves it shut for an offer with no description to write", async () => {
-    const doc = docOf(`
-      <main>
-        <input type="text" id="name" value="">
-        <input type="text" id="buynow-price" value="">
-        <div data-testid="description-section-container"><div><p></p></div></div>
-      </main>`);
-    let clicks = 0;
-    (doc.querySelector("p") as unknown as HTMLElement).addEventListener("click", () => (clicks += 1));
-    await prepareAllegroSaleForm(doc, task({ description: null }));
-    assert.equal(clicks, 0);
+describe("never submitting (#408)", () => {
+  it("refuses the summary's own button, which Allegro gives the same test id", async () => {
+    const w = wizard({ from: "summary" });
+    // The button reads *Wystaw na Allegro*; the fill must find no way on from here.
+    const outcome = await fillAllegroSaleForm(w.doc, task(), [photo("o-01.jpg")], FAST);
+    assert.equal(w.state.published, false);
+    assert.ok(outcome.skipped.length > 0);
+  });
+});
+
+describe("allegroPictureInput", () => {
+  it("is Allegro's own uploader, by test id and then by what it accepts", () => {
+    assert.ok(
+      allegroPictureInput(docOf(`<input type="file" data-testid="drag-drop-photo-upload">`))
+    );
+    assert.ok(allegroPictureInput(docOf(`<input type="file" accept="image/jpeg,image/png">`)));
+    assert.equal(allegroPictureInput(docOf(`<input type="file" accept=".pdf">`)), null);
   });
 });
 
 describe("isoDurationHours", () => {
-  it("reads Allegro's two notations for one duration as the same length", () => {
-    // The profile holds what the API takes; the form offers the other spelling.
-    assert.equal(isoDurationHours("P3D"), isoDurationHours("PT72H"));
-    assert.equal(isoDurationHours("PT0S"), 0);
-    assert.equal(isoDurationHours("P14D"), 336);
-    assert.equal(isoDurationHours("PT30M"), 0.5);
-    assert.equal(isoDurationHours("nonsense"), null);
-    assert.equal(isoDurationHours("P"), null);
+  it("reads the notations Allegro's API and its form each use for one length", () => {
+    assert.equal(isoDurationHours("P3D"), 72);
+    assert.equal(isoDurationHours("PT72H"), 72);
+    assert.equal(isoDurationHours("PT0S"), 0); // *natychmiast*, which Allegro does offer.
+    assert.equal(isoDurationHours("P1M"), null);
+    assert.equal(isoDurationHours(""), null);
   });
 });
 
-describe("fillAllegroSaleForm", () => {
-  it("fills the title, price, quantity and the profile's three ids", () => {
-    const doc = docOf(SALE_FORM);
-    const { filled } = filledIn(doc);
-    assert.equal(filled["Title"], "Polska 1948 Mi 480-483 czyste");
-    assert.equal(filled["Price"], "48.00");
-    assert.equal(filled["Quantity"], "2");
-    assert.equal(filled["Delivery price list"], "Znaczki");
-    assert.equal(filled["Handling time"], "1 dzień");
-    assert.equal(filled["Listing duration"], "7 dni");
-    assert.equal(filled["Returns"], "Zwrot");
-    assert.equal((doc.getElementById("buynow-price") as unknown as HTMLInputElement).value, "48.00");
-    assert.equal((doc.getElementById("shippingRatesId") as unknown as HTMLSelectElement).value, "rates-1");
-  });
-
-  it("answers a category parameter in the control Allegro named after it", () => {
-    const doc = docOf(SALE_FORM);
-    const { filled } = filledIn(doc);
-    assert.equal(filled["Parameter — Rodzaj"], "czysty");
-    assert.equal((doc.getElementById("213") as unknown as HTMLSelectElement).value, "czysty");
-  });
-
-  it("answers a text parameter through Allegro's own row suffix", () => {
-    const doc = docOf(SALE_FORM);
-    const t = task({
-      allegro: {
-        ...ALLEGRO,
-        parameters: [
-          { parameterId: "225693", parameterName: "EAN", describesProduct: true, displayValues: ["590"] },
-        ],
-      },
-    });
-    filledIn(doc, t);
-    assert.equal((doc.getElementById("225693_0") as unknown as HTMLInputElement).value, "590");
-  });
-
-  it("names a parameter it has no Allegro label for rather than guessing one", () => {
-    const doc = docOf(SALE_FORM);
-    const t = task({
-      allegro: {
-        ...ALLEGRO,
-        parameters: [
-          { parameterId: "213", parameterName: "Rodzaj", describesProduct: false, displayValues: [] },
-        ],
-      },
-    });
-    const { skipped } = filledIn(doc, t);
-    assert.ok(skipped.includes("Parameter — Rodzaj"));
-    const select = doc.getElementById("213") as unknown as HTMLSelectElement;
-    assert.equal(Array.from(select.options).some((o) => o.selected), false);
-  });
-
-  it("writes the description into the editor's own frame", () => {
-    const doc = docOf(SALE_FORM);
-    const frame = doc.getElementById("id_ifr") as unknown as { contentDocument: Document };
-    const inner = parseHTML("<html><body></body></html>").document;
-    frame.contentDocument = inner as unknown as Document;
-    filledIn(doc);
-    assert.match(inner.body.innerHTML, /Zestaw czterech znaczków\./);
-  });
-
-  it("says the sending address cannot be set, and what it should read", () => {
-    const doc = docOf(SALE_FORM);
-    const outcome = fillAllegroSaleForm(doc, task());
-    const address = outcome.skipped.find((s) => s.field === "Sending address");
-    assert.ok(address);
-    assert.match(address.reason, /75-381 Koszalin/);
-  });
-
-  it("matches a handling time Allegro spells differently from its own API", () => {
-    // The profile holds `P3D` because that is what `POST /sale/product-offers` takes; the form
-    // offers `PT72H`. A string match would select nothing and leave the default standing.
-    const doc = docOf(SALE_FORM);
-    const t = task({ allegro: { ...ALLEGRO, profile: { ...ALLEGRO.profile!, handlingTime: "P3D" } } });
-    filledIn(doc, t);
+describe("reading the listing back (#412)", () => {
+  it("recognises a published offer's own address, without its tracking parameters", () => {
     assert.equal(
-      (doc.getElementById("estimatedShippingTimeId") as unknown as HTMLSelectElement).value,
-      "PT72H"
+      allegroListedOfferUrl("https://allegro.pl/oferta/znaczki-polska-1948-16883421?bi_s=ads"),
+      "https://allegro.pl/oferta/znaczki-polska-1948-16883421"
     );
+    assert.equal(allegroListedOfferUrl("https://allegro.pl/oferta/"), null);
+    assert.equal(allegroListedOfferUrl("https://allegro.pl/moje-allegro/sprzedaz"), null);
   });
 
-  it("opens an auction at its starting price, and never as a quick buy", () => {
-    const doc = docOf(`
-      ${SALE_FORM}
-      <input type="text" id="auction-starting-price" value="">
-      <select id="auctionDurationSelect">
-        <option value="">wybierz</option>
-        <option value="PT168H">7 dni</option>
-      </select>`);
-    const t = task({
-      allegro: { ...ALLEGRO, listingType: "auction", startingPrice: "5.00" },
-    });
-    const { filled } = filledIn(doc, t);
-    assert.equal(filled["Starting price"], "5.00");
+  it("reads the URL off a confirmation that replaced the form without navigating", () => {
+    const legacy = docOf(
+      `<div id="thank-you-page"><a href="https://allegro.pl/oferta/znaczki-16883421">Zobacz ofertę</a></div>`
+    );
     assert.equal(
-      (doc.getElementById("auction-starting-price") as unknown as HTMLInputElement).value,
-      "5.00"
+      allegroListedUrlInDocument(legacy),
+      "https://allegro.pl/oferta/znaczki-16883421"
     );
-    // A Buy Now price on an auction is a second way of selling the offer never asked for.
-    assert.equal((doc.getElementById("buynow-price") as unknown as HTMLInputElement).value, "");
-    // The auction has its own duration select — the quick buy's is not on the form at all.
+
+    const wizardConfirmation = docOf(
+      `<main><h1>Oferta jest przygotowana</h1>
+         <a href="https://allegro.pl/oferta/znaczki-16883421">Zobacz ofertę</a></main>`
+    );
     assert.equal(
-      (doc.getElementById("auctionDurationSelect") as unknown as HTMLSelectElement).value,
-      "PT168H"
+      allegroListedUrlInDocument(wizardConfirmation),
+      "https://allegro.pl/oferta/znaczki-16883421"
     );
   });
 
-  it("sets automatic re-listing to what the profile says, in both directions", () => {
-    const doc = docOf(SALE_FORM);
-    const box = doc.getElementById("checkbox-republish") as unknown as {
-      click: () => void;
-      checked: boolean;
-    };
-    box.checked = false;
-    let clicks = 0;
-    box.click = () => {
-      clicks += 1;
-      box.checked = !box.checked;
-    };
-
-    const { filled } = filledIn(doc);
-    assert.equal(clicks, 1);
-    assert.equal(box.checked, true);
-    assert.equal(filled["Automatic re-listing"], "on");
-
-    // Already in the wanted state — a click here would toggle it back off.
-    clicks = 0;
-    filledIn(doc);
-    assert.equal(clicks, 0);
-    assert.equal(box.checked, true);
-  });
-
-  it("says nothing about a duration a profile does not state", () => {
-    const doc = docOf(SALE_FORM);
-    const t = task({ allegro: { ...ALLEGRO, profile: { ...ALLEGRO.profile!, durationLimit: null } } });
-    const { filled, skipped } = filledIn(doc, t);
-    assert.equal(filled["Listing duration"], undefined);
-    assert.equal(skipped.includes("Listing duration"), false);
-  });
-});
-
-describe("allegroListedUrlInDocument", () => {
-  // Allegro does not navigate when a form is posted: the same document becomes *Oferta jest
-  // przygotowana*, carrying the offer's link, with the address bar still on the sale form.
-  const THANK_YOU = `
-    <main>
-      <div id="thank-you-page">
-        <h2>Oferta jest przygotowana</h2>
-        <span>Gdy ją zatwierdzimy, będzie opublikowana pod linkiem:
-          <a href="https://allegro.pl/oferta/18819972918">https://allegro.pl/oferta/18819972918</a>
-        </span>
-        <a href="/moje-allegro/sprzedaz/obsluga-ofert/moj-asortyment">Mój asortyment</a>
-      </div>
-    </main>`;
-
-  it("reads the listing's address out of Allegro's own confirmation", () => {
-    assert.equal(
-      allegroListedUrlInDocument(docOf(THANK_YOU)),
-      "https://allegro.pl/oferta/18819972918"
-    );
-  });
-
-  it("says nothing while the form is still a form", () => {
-    assert.equal(allegroListedUrlInDocument(docOf(SALE_FORM)), null);
-  });
-
-  it("ignores a page's other links — only an offer's own address is the listing", () => {
-    const doc = docOf(`
-      <main>
-        <div id="thank-you-page">
-          <a href="/moje-allegro/sprzedaz/obsluga-ofert/moj-asortyment">Mój asortyment</a>
-          <a href="https://allegro.pl/pomoc">Pomoc</a>
-        </div>
-      </main>`);
-    assert.equal(allegroListedUrlInDocument(doc), null);
-  });
-});
-
-describe("allegroListedOfferUrl", () => {
-  it("recognises the published offer, and drops what is not part of its address", () => {
-    assert.equal(
-      allegroListedOfferUrl("https://allegro.pl/oferta/znaczki-polska-1948-16959191999?utm_source=x"),
-      "https://allegro.pl/oferta/znaczki-polska-1948-16959191999"
-    );
-  });
-
-  it("is null for the sale form it was just filled into, and for anything else", () => {
-    assert.equal(
-      allegroListedOfferUrl("https://allegro.pl/moje-allegro/sprzedaz/formularz-wystawiania"),
-      null
-    );
-    assert.equal(allegroListedOfferUrl("https://example.com/oferta/123"), null);
-  });
-});
-
-// ── The pictures, and the question Allegro asks about them (#411/#493) ────────
-//
-// `DataTransfer` is the only assignable source of a `FileList` and the test DOM has none, so it is
-// stubbed exactly as Colnect's test stubs it.
-
-class FakeDataTransfer {
-  readonly files: File[] = [];
-  readonly items = {
-    add: (file: File) => {
-      this.files.push(file);
-    },
-  };
-}
-
-function photo(name: string): ListingPhotoFile {
-  return { photoId: name, file: { name, type: "image/jpeg" } as File };
-}
-
-/** The dialog Allegro opens over the upload, with every box unticked as it serves it. */
-const AI_DIALOG = `
-  <div role="dialog">
-    <h1 id="modal-title">Oznacz zdjęcia znakiem wodnym „AI”</h1>
-    <input id="checkbox-1" type="checkbox">
-    <button type="button">Anuluj</button>
-    <button type="button">Potwierdź wybór</button>
-  </div>`;
-
-describe("attaching the offer's pictures", () => {
-  before(() => {
-    (globalThis as { DataTransfer?: unknown }).DataTransfer = FakeDataTransfer;
-  });
-  after(() => {
-    delete (globalThis as { DataTransfer?: unknown }).DataTransfer;
-  });
-
-  it("hands the images to the form's own uploader", async () => {
-    const doc = docOf(SALE_FORM);
-    // A form Allegro never opens the dialog on — the ordinary case, the marking being behind a
-    // feature flag. The wait is cut short here rather than in the module, which has a person to
-    // serve.
-    const outcome = await attachAllegroPictures(doc, [photo("o-01.jpg"), photo("o-02.jpg")], 50);
-    const input = doc.querySelector('input[type="file"]') as unknown as { files: File[] };
-    assert.deepEqual(
-      input.files.map((f) => f.name),
-      ["o-01.jpg", "o-02.jpg"]
-    );
-    assert.equal(outcome.skipped.length, 0);
-    assert.match(outcome.filled[0].value, /2 handed/);
-  });
-
-  it("confirms Allegro's AI-watermark dialog without marking a single picture", async () => {
-    const doc = docOf(SALE_FORM);
-    const main = doc.querySelector("main") as unknown as HTMLElement;
-    let confirmed = 0;
-    // Allegro opens it the moment the files arrive — which is what `change` stands for here.
-    (doc.querySelector('input[type="file"]') as unknown as HTMLElement).addEventListener(
-      "change",
-      () => {
-        main.innerHTML += AI_DIALOG;
-        const buttons = Array.from(doc.querySelectorAll("button")) as unknown as {
-          textContent: string;
-          click: () => void;
-        }[];
-        const confirm = buttons.find((b) => /Potwierdź wybór/.test(b.textContent));
-        if (confirm) confirm.click = () => (confirmed += 1);
-      }
-    );
-
-    const outcome = await attachAllegroPictures(doc, [photo("o-01.jpg")]);
-    assert.equal(confirmed, 1);
-    assert.equal(doc.getElementById("checkbox-1")?.hasAttribute("checked"), false);
-    assert.match(outcome.filled[0].value, /none marked as AI/);
+  it("says nothing while the page is still a step of the wizard", () => {
+    // A link to somebody else's offer on a form being filled is not the listing that was just posted.
+    const w = wizard({ from: "describe" });
+    w.doc
+      .querySelector("main")!
+      .insertAdjacentHTML("beforeend", `<a href="https://allegro.pl/oferta/inna-oferta-1">Podobne</a>`);
+    assert.equal(allegroListedUrlInDocument(w.doc), null);
   });
 });

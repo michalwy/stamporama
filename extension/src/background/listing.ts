@@ -1,12 +1,11 @@
 import "../platform/modules"; // registers the shipped platform modules into this bundle's registry
 import { resolveListedUrl, resolveListingTarget, selectListingPhotos } from "../platform/listing-run";
 import type {
-  AttachPhotosRequest,
-  AttachPhotosResponse,
   FillRequest,
   FillResponse,
   ListedNotice,
   ListedResponse,
+  ListingPhotoPayload,
   ListResponse,
 } from "../core/messages";
 import type { ListingFillOutcome, ListingSkippedField, ListingTask } from "../platform/listing";
@@ -82,18 +81,16 @@ export async function runListingTask(
 
   try {
     await waitForLoad(tab.id);
-    const res = await fillThroughReloads(tab.id, task);
-    if (!res.ok) return { ok: false, error: res.error };
 
-    // The form is filled and the collector takes over. What they do next — Save, or nothing at all —
-    // happens in their own time, long after this worker has been unloaded, so the wait is written
-    // down rather than held (#412). Written **before** the pictures go in: uploading them takes
-    // seconds during which the collector can already press Save, and this record is what turns that
-    // into a listed URL.
+    // The wait for a Save is written down **before** the fill (#412/#719), not after it. The pictures
+    // now go in during the fill rather than after it (Allegro's form refuses to be filled past them),
+    // so the marketplace can already have been written to — and the collector can already have
+    // pressed Save — while the fill is still running. A record written afterwards would miss exactly
+    // that listing. It names the module the target resolved, which is the same module that fills.
     await rememberPendingListing({
       tabId: tab.id,
-      moduleId: res.moduleId,
-      moduleName: res.moduleName,
+      moduleId: target.moduleId,
+      moduleName: target.moduleName,
       formUrl: target.url,
       offerId: task.offerId,
       collectionId: task.collectionId,
@@ -106,20 +103,25 @@ export async function runListingTask(
       filledAt: Date.now(),
     });
 
-    // Pictures last, and only now: Colnect posts each one the moment it is handed over, before the
-    // sale is saved (#402), so this is the first thing in the run that writes to the marketplace at
-    // all — and it happens with a filled form already in front of the collector.
-    const outcome = mergeOutcomes(
-      res.outcome,
-      await attachPhotos(tab.id, res.moduleId, await photos)
-    );
+    // The pictures are awaited here rather than mid-run: they were started before the tab was opened
+    // and the form's own load is what they were overlapped with, so by now they are usually in hand.
+    const loaded = await photos;
+    const res = await fillThroughReloads(tab.id, task, loaded.photos);
+    if (!res.ok) {
+      // Nothing was filled, so nothing on this page is this offer's listing — and a record left
+      // behind would write a stranger's Save back to it.
+      await forgetPendingListing(tab.id);
+      return { ok: false, error: res.error };
+    }
 
     return {
       ok: true,
       moduleId: res.moduleId,
       moduleName: res.moduleName,
       formUrl: target.url,
-      outcome,
+      // The loader's own report always comes back, whether or not there was anything to hand over:
+      // a plan still rendering and a fetch that failed are both things the collector fixes elsewhere.
+      outcome: mergeOutcomes({ filled: [], skipped: loaded.skipped }, res.outcome),
     };
   } catch (e) {
     return { ok: false, error: message(e) };
@@ -140,13 +142,17 @@ export async function runListingTask(
  * because a page that never becomes the form (a sign-in, a challenge the collector has to solve) must
  * end in the error it already has rather than in a spinner.
  */
-async function fillThroughReloads(tabId: number, task: ListingTask): Promise<FillResponse> {
+async function fillThroughReloads(
+  tabId: number,
+  task: ListingTask,
+  photos: ListingPhotoPayload[]
+): Promise<FillResponse> {
   let last: FillResponse = { ok: false, error: "The listing form never loaded." };
   for (let attempt = 1; attempt <= FILL_ATTEMPTS; attempt += 1) {
     // Armed **before** the attempt: an interstitial can reload while the fill message is in flight,
     // and a watcher started afterwards would have missed the one event it exists to catch.
     const reload = watchNextLoad(tabId);
-    last = await fillOnce(tabId, task);
+    last = await fillOnce(tabId, task, photos);
     if (last.ok || !last.retry) {
       reload.cancel();
       return last;
@@ -160,7 +166,11 @@ async function fillThroughReloads(tabId: number, task: ListingTask): Promise<Fil
 /** One injection and one fill on whatever the tab is showing now. A messaging failure is reported as
  *  **retryable**: the usual cause is the page navigating out from under the message, which is the very
  *  thing {@link fillThroughReloads} is waiting for. */
-async function fillOnce(tabId: number, task: ListingTask): Promise<FillResponse> {
+async function fillOnce(
+  tabId: number,
+  task: ListingTask,
+  photos: ListingPhotoPayload[]
+): Promise<FillResponse> {
   try {
     // The declared content script covers the marketplace's own origin, but a tab that was already
     // open before an extension reload never ran it — the popup injects for the same reason. The
@@ -169,6 +179,7 @@ async function fillOnce(tabId: number, task: ListingTask): Promise<FillResponse>
     return (await chrome.tabs.sendMessage(tabId, {
       type: "fill",
       task,
+      photos,
     } satisfies FillRequest)) as FillResponse;
   } catch (e) {
     return { ok: false, error: message(e), retry: true };
@@ -179,7 +190,7 @@ async function fillOnce(tabId: number, task: ListingTask): Promise<FillResponse>
  *  not — the plan's own reasons and the fetch's failures together, since the collector fixes each of
  *  them somewhere different. */
 interface LoadedListingPhotos {
-  photos: AttachPhotosRequest["photos"];
+  photos: ListingPhotoPayload[];
   skipped: ListingSkippedField[];
 }
 
@@ -213,39 +224,6 @@ async function loadListingPhotos(
     return { photos: fetched.photos, skipped: [...selection.skipped, ...fetched.skipped] };
   } catch (e) {
     return refused(`Stamporama would not hand the pictures over: ${message(e)}`);
-  }
-}
-
-/**
- * Hand the fetched pictures to the page that now holds the filled form, and report what it did with
- * them (#411).
- *
- * Nothing fetched is not silence in itself — the plan may have had reasons — so the loader's own
- * report always comes back, whether or not there was anything to attach.
- */
-async function attachPhotos(
-  tabId: number,
-  moduleId: string,
-  loaded: LoadedListingPhotos
-): Promise<ListingFillOutcome> {
-  const reported: ListingFillOutcome = { filled: [], skipped: loaded.skipped };
-  if (loaded.photos.length === 0) return reported;
-  try {
-    const res = (await chrome.tabs.sendMessage(tabId, {
-      type: "attach-photos",
-      moduleId,
-      photos: loaded.photos,
-    } satisfies AttachPhotosRequest)) as AttachPhotosResponse;
-    if (!res.ok) {
-      reported.skipped.push({ field: "Pictures", reason: res.error });
-      return reported;
-    }
-    return mergeOutcomes(reported, res.outcome);
-  } catch (e) {
-    // The tab may have been closed while the bytes were on their way — the collector's own answer to
-    // a listing they changed their mind about, and one that has posted nothing.
-    reported.skipped.push({ field: "Pictures", reason: message(e) });
-    return reported;
   }
 }
 

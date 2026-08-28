@@ -9,84 +9,103 @@ import type {
 } from "../listing";
 import { allegroOfferId } from "./parse";
 
-// The Allegro half of the listing capability (#493, part of #155): walk Allegro's own entry pages to
-// its sale form, then fill the form from the neutral task (#405) plus the offer's Allegro section
-// (#494). Everything Allegro-specific — the addresses, the element ids, the entry sequence — lives
-// here and nowhere else.
+// The Allegro half of the listing capability (#493, part of #155; rewritten for the new form in
+// #719): walk Allegro's own entry page to its sale form, then fill the form from the neutral task
+// (#405) plus the offer's Allegro section (#494). Everything Allegro-specific — the addresses, the
+// element ids, the order the steps come in — lives here and nowhere else.
 //
 // **Why a form at all**, when #477 already publishes through the API: `POST /sale/product-offers` is
 // open to business accounts only, and a private seller's grant is refused the first time a listing
 // goes out (ADR-0027 §4c). The API path stays and stays the better one where it works; this is the
 // path that works today.
 //
-// Three rules shape the module:
+// Allegro withdrew its legacy one-screen form (#719). What every account is served now is the
+// **recommerce wizard**: five steps in a single document, client-side routed, and nothing between
+// them is a page load — `…/formularz-wystawiania/<draft>/draft/{produkt,opis,szczegoly,dostawa,
+// podsumowanie}`. One content-script lifetime therefore drives the whole of it, which is the one
+// piece of luck in the change.
 //
-//   • **Nothing is submitted.** Filling stops before *wystaw i zaakceptuj warunki*; the collector
-//     clicks Allegro's own button.
+// Four rules shape the module:
+//
+//   • **Nothing is submitted.** Filling stops on *Podsumowanie*; the collector clicks Allegro's own
+//     *Wystaw na Allegro*. That button carries the **same** `data-testid` as *Kolejny krok* on every
+//     earlier step, which is the single most dangerous fact on this page — see {@link nextStepButton}.
 //   • **No class names, ever** (#355's rule for this marketplace). Every class on an Allegro page is
-//     hashed per build. What is used instead are the form's **element ids**, which are the site's own
-//     field vocabulary — and, for the category parameters, *Allegro's own parameter ids*: the control
-//     answering parameter `213` is `#213`. A mapping this direct is why the form is worth filling.
+//     hashed per build. What is used instead are element ids, Allegro's own test ids, and — for the
+//     category parameters — *Allegro's own parameter ids*: the control answering parameter `213` is
+//     `#dropdown-213` where it is a dictionary and `#213` where it is free text.
 //   • **Nothing pre-filled is overwritten** unless the offer has something to say about it. A form
 //     Allegro served with the collector's own defaults in it is theirs.
-//
-// Two forms exist and a Regular account is pushed to the newer one. Every direct navigation to the
-// legacy address answers with `…/recommerce/formularz-wystawiania/produkt`; the one-screen legacy
-// form loads only when *that* page's own opt-out link is followed. So the module drives the entry
-// (see {@link prepareAllegroSaleForm}) rather than pretending the address is enough.
+//   • **A control's existence follows from a value.** The parameters, the picture uploader and the
+//     auction's own fields do not exist until a category or a format has been chosen. This is why
+//     the fill both reads and writes, step by step, and why it is asynchronous.
 
 const HOST = "allegro.pl";
 
-/** The legacy one-screen sale form. Opening it is what starts a run, redirect and all. */
-const SALE_FORM_URL = `https://${HOST}/moje-allegro/sprzedaz/formularz-wystawiania`;
+/** Where a run starts: the wizard's own first step. The legacy address still redirects here, but
+ *  opening it costs a redirect and lands in the same place, so it is not what we ask for. */
+const SALE_FORM_URL = `https://${HOST}/moje-allegro/recommerce/formularz-wystawiania/produkt`;
 
-/** The ids the legacy form addresses its own fields by (mapped 2026-08-05). */
+/** The ids and test ids the wizard addresses its own fields by (mapped 2026-08-28). */
 const FIELD = {
-  /** The category number, in the entry modal — typing it is what opens the form in that category. */
-  categoryId: "category-id",
-  title: "name",
-  price: "buynow-price",
-  quantity: "quantity",
-  shippingRates: "shippingRatesId",
-  handlingTime: "estimatedShippingTimeId",
-  returnPolicy: "return-policies",
-  /** How long a quick buy runs. An auction has **its own** select and this one is not on the form at
-   *  all while the format is ticked — the two are never both present. */
-  duration: "durationLimit",
-  auction: "auction-checkbox",
-  auctionStartingPrice: "auction-starting-price",
-  auctionDuration: "auctionDurationSelect",
-  republish: "checkbox-republish",
-  /** TinyMCE's editable document, inside the description section. */
-  descriptionFrame: "id_ifr",
+  /** *Wybór produktu*: one field for a name and a GTIN alike. */
+  productSearch: "product-name-search",
+  title: "title-input",
+  /** The asking price on a quick buy and the **opening** price on an auction — one field, renamed by
+   *  the format rather than replaced, which is why the two are written through the same id. */
+  price: "priceCents",
+  /** How long an auction runs. A quick buy has no such field at all on this form: Allegro fixes it
+   *  at 30 days and says so beside the format. */
+  auctionDuration: "offer-duration-select",
 } as const;
 
-/** The description section's own container — the one place on this form that is addressed by a test
- *  id rather than by an element id, Allegro giving its editor no id of its own. */
-const DESCRIPTION_SECTION = '[data-testid="description-section-container"]';
+const TESTID = {
+  /** *Kolejny krok* — **and** *Wystaw na Allegro* on the summary. Never clicked without both guards
+   *  in {@link nextStepButton}. */
+  submit: "submit-button",
+  /** One card per format on *Szczegóły*, the format's name inside it. */
+  offerType: "offer-type-selection",
+  offerTypeName: "radio-selection-label",
+  /** One card per saved delivery price list, named by **Allegro's own `shippingRatesId`** — which is
+   *  exactly what the listing profile stores (#486), so this is a direct match and not a lookup. */
+  shippingRate: "shipping-rate-option-",
+  photoInput: "drag-drop-photo-upload",
+  /** The fee panel, which only the summary has. */
+  priceSummary: "price-summary",
+} as const;
 
-/** The product-search field of the legacy entry page — the step before the category modal. */
-const PRODUCT_SEARCH = "product-search-phrase-field";
+/** Allegro's description editor: a same-origin `contenteditable` (tiptap/ProseMirror), where the
+ *  legacy form had TinyMCE inside an iframe. */
+const DESCRIPTION = '[contenteditable="true"][aria-label="Opis oferty"]';
+
+/** A thumbnail Allegro has accepted. The element carries the **uploaded image's own URL** as its test
+ *  id, which is the one thing that cannot exist before the upload finished — so it is what the picture
+ *  step waits for. */
+const UPLOADED_PICTURE = '[data-testid^="https://"]';
+
+/** Every field-level complaint the wizard renders, by the suffix Allegro names them all with
+ *  (`photos-error`, and its siblings). Read only when a step refuses to advance, so that what is
+ *  reported is the form's own words rather than our guess at them. */
+const VALIDATION_ERROR = '[data-testid$="-error"]';
 
 // ---------------------------------------------------------------------------------------------
-// Where the form is, and what it is
+// Where the form is, and which of its steps this is
 // ---------------------------------------------------------------------------------------------
 
 /**
  * The sale form's address.
  *
- * Nothing about the task goes into it: Allegro's form is not addressed by what is being sold, and
- * the one value that *would* narrow it — the category — is typed into the entry modal rather than
- * carried in a query (a `?categoryId=` is dropped along with the rest of the URL by the redirect).
- * So this is a constant, and the work of getting to the right form is {@link prepareAllegroSaleForm}'s.
+ * Nothing about the task goes into it. Allegro's form is not addressed by what is being sold, and the
+ * one value that would narrow it — the category — is chosen from a name tree rather than carried in a
+ * query. So this is a constant, and the work of getting to the fillable step is {@link
+ * prepareAllegroSaleForm}'s.
  */
 export function allegroSaleFormUrl(_task: ListingTask): string {
   return SALE_FORM_URL;
 }
 
-/** True for either sale form's address — the legacy one and the newer *recommerce* one Allegro
- *  redirects a Regular account to, since a redirect is exactly what {@link allegroSaleFormUrl}'s own
- *  address answers with. Both are pages this run passes through. */
+/** True for the wizard's address and for the legacy one it replaced — the old address still answers
+ *  with a redirect into the wizard, and a collector who has it bookmarked lands there. */
 export function isAllegroSaleFormUrl(url: string): boolean {
   const parsed = parseUrl(url);
   if (!parsed) return false;
@@ -96,16 +115,37 @@ export function isAllegroSaleFormUrl(url: string): boolean {
   );
 }
 
+/** The wizard's steps, in the order it walks them. */
+type Step = "product" | "describe" | "details" | "delivery" | "summary";
+
 /**
- * True when this document **is** the legacy sale form, rather than one of the pages on the way to it
- * (#419's question, asked of a marketplace that answers its own address with three different pages).
+ * Which step this document is showing, or null while it is still rendering.
  *
- * Structural, over two controls the fill is about to write: the title and the asking price. Both
- * together rather than either alone, because the entry pages carry a search field and a modal and
- * neither of them is a form to fill — and because a single id is a thinner promise than the pair.
+ * Structural, over a control each step has and no other does — never over the address, which the
+ * wizard rewrites as it goes and which a fresh load does **not** restore: opening a draft's own
+ * `…/draft/opis` serves an empty *Zdjęcia i opis*, the draft's values living in the page rather than
+ * in the URL. The address is where the collector is; this is what is on the screen.
+ *
+ * The summary is asked first because it is the one step nothing may be written into.
+ */
+function whichStep(doc: Document): Step | null {
+  if (doc.querySelector(byTestId(TESTID.priceSummary))) return "summary";
+  if (byId(doc, FIELD.title)) return "describe";
+  if (byId(doc, FIELD.price)) return "details";
+  if (doc.querySelector(`[data-testid^="${TESTID.shippingRate}"]`)) return "delivery";
+  if (byId(doc, FIELD.productSearch)) return "product";
+  return null;
+}
+
+/**
+ * True when this document **is** the step the fill starts on (#419's question).
+ *
+ * That step is *Zdjęcia i opis*, and the test is its title field: the entry page carries a search box
+ * and no form to fill, and the wizard's later steps are reached by filling this one rather than by
+ * being landed on. {@link prepareAllegroSaleForm} is what gets a page here.
  */
 export function isAllegroSaleFormDocument(doc: Document): boolean {
-  return byId(doc, FIELD.title) !== null && byId(doc, FIELD.price) !== null;
+  return whichStep(doc) === "describe";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -113,193 +153,162 @@ export function isAllegroSaleFormDocument(doc: Document): boolean {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * How long the entry page itself is waited for.
+ * How long each kind of wait is given, and how often it looks.
  *
- * Deliberately large. Allegro's legacy form is a React app that renders **long** after its document
- * has loaded — half a minute is normal, and a page that is still blank is not a page that is not
- * coming. The content script arrives on the load event, so without this wait every step below would
- * be decided against an empty `<main>` and the run would fail on a page that was merely slow.
+ * `page` is deliberately large: Allegro's form is a React app that renders **long** after its
+ * document has loaded — half a minute is normal, and a page that is still blank is not a page that is
+ * not coming. The content script arrives on the load event, so without it every decision below would
+ * be made against an empty `<main>` and a run would fail on a page that was merely slow. `step` is one
+ * round-trip inside a rendered page — a search, a modal, the wizard moving on — and `upload` is
+ * longer than either, those being the run's only large requests.
+ *
+ * `filter` is deliberately **short**, and is the one wait that is not "how long could this take". A
+ * combobox that is going to answer a typed phrase answers it in milliseconds; one that does not answer
+ * has not opened, and the way out of that is {@link chooseFromDropdown}'s second attempt rather than
+ * more waiting. Measured against the live form: a control that filtered did so in 19 ms, and one that
+ * had not opened was still silent after six seconds. A long wait here only delays the fallback that
+ * works, once per parameter.
+ *
+ * Overridable, but **only ever by tests**, exactly as Colnect's picture removal is: they have no
+ * Allegro to answer them, and a case that is *meant* to time out would otherwise cost a minute of
+ * real waiting each. The shell calls both entry points with the arguments the interface states.
  */
-const PAGE_TIMEOUT_MS = 60_000;
+export interface AllegroWaits {
+  page?: number;
+  step?: number;
+  upload?: number;
+  filter?: number;
+  poll?: number;
+}
 
-/** How long one step *inside* a rendered page is waited for — a search round-trip, a modal opening. */
-const STEP_TIMEOUT_MS = 20_000;
-const POLL_MS = 250;
+type Waits = Required<AllegroWaits>;
+
+const DEFAULT_WAITS: Waits = { page: 60_000, step: 20_000, upload: 90_000, filter: 2_000, poll: 250 };
+
+const waitsOf = (waits: AllegroWaits | undefined): Waits => ({ ...DEFAULT_WAITS, ...waits });
 
 /**
- * Walk this page one step closer to the sale form (#493).
+ * Walk this page to the step the fill starts on (#493/#719).
  *
- * The entry is a sequence and only its ends are navigations: *recommerce landing* → (load) → *product
- * search* → SZUKAJ → *Kontynuuj bez wybierania produktu* → the **category modal** → the category
- * number → (load) → the sale form. The middle steps happen inside one document and are asynchronous,
- * which is why this exists at all: `fill` is synchronous DOM work and cannot wait for a search.
+ * The entry is short now and none of it is a page load: *Wybór produktu* → a search → *Mojego
+ * produktu tu nie ma* → *Zdjęcia i opis*. It stays separate from the fill for the reason it always
+ * did — nothing here writes a value from the offer into a listing, it is navigation — and it stays
+ * asynchronous because a search is a round-trip.
  *
- * It is deliberately **not** a fill. Nothing it does is a value from the offer except the category —
- * which is not a field on the form at all, but the thing that decides which form there is. It stops
- * as soon as it has caused a navigation, the document then being on its way out.
+ * The search phrase is the listing's own title, for one reason: Allegro will not offer the way past
+ * its catalogue until a search has been run, and a search for what is actually being sold is the one
+ * phrase that could also, occasionally, be useful. Nothing is ever chosen from the results: a listing
+ * filed against Allegro's catalogue product is the catalog path this app deliberately does not take
+ * (ADR-0026, #477's non-goals).
  *
- * The search phrase is the listing's own title, for one reason: Allegro will not offer *Kontynuuj bez
- * wybierania produktu* until a search has been run, and a search for what is actually being sold is
- * the one phrase that could also, occasionally, be useful.
+ * Idempotent at every step, because a re-run may find the page anywhere in the wizard: a collector
+ * who was already working on it, or a fill that came back for a second attempt.
  */
-export async function prepareAllegroSaleForm(doc: Document, task: ListingTask): Promise<void> {
+export async function prepareAllegroSaleForm(
+  doc: Document,
+  task: ListingTask,
+  options?: AllegroWaits
+): Promise<void> {
+  const waits = waitsOf(options);
   // **Wait for the page before reading it.** Everything below is a decision about which of Allegro's
-  // pages this is, and an app that has not rendered yet looks exactly like a page with none of them
-  // on it — which is how a slow render turns into "the sale form could not be opened".
-  const landmark = await waitFor(doc, () => whichPage(doc), PAGE_TIMEOUT_MS);
-  if (!landmark) {
+  // steps this is, and an app that has not rendered yet looks exactly like a page on none of them —
+  // which is how a slow render turns into "the sale form could not be opened".
+  const step = await waitFor(doc, () => whichStep(doc), waits.page, waits.poll);
+  if (!step) {
     throw new Error("Allegro's sale form did not finish loading, so the Assistant could not fill it.");
   }
-  // On the form itself, preparing means **revealing what is folded away**: Allegro serves a short
-  // list of parameters behind *więcej parametrów*, and an auction's own fields do not exist until the
-  // format is ticked. Both are React re-renders, which is the whole reason this step is async and the
-  // fill is not.
-  if (landmark === "form") {
-    await revealEveryParameter(doc);
-    await openAuctionFields(doc, task);
-    await mountDescriptionEditor(doc, task);
+
+  // Allegro may open over the form with an unfinished draft it wants continued. It is a backdrop over
+  // the whole page, so nothing below would reach anything until it is answered — and the only answer
+  // this may give is *a new offer*: the other control on it **deletes** the collector's draft.
+  await startANewOffer(doc, waits);
+
+  if (step === "product") {
+    await searchPastTheProductCatalogue(doc, task, waits);
     return;
   }
-
-  // The newer form. Its opt-out link is the only way back to the one-screen form, and following it
-  // is a full page load, so this is the whole of this document's part.
-  if (landmark === "recommerce") {
-    legacyFormLink(doc)?.click();
-    return;
-  }
-
-  const category = task.allegro?.categoryId?.trim();
-  if (!category) {
-    throw new Error(
-      "This offer has no Allegro category, so there is no form to open — set one on the offer's Allegro card."
-    );
-  }
-
-  // The category modal may already be open (a re-run on a page the collector left there).
-  if (landmark === "search") {
-    await searchPastTheProductCatalogue(doc, task);
-  }
-
-  const field = await waitFor(doc, () => byId<HTMLInputElement>(doc, FIELD.categoryId));
-  if (!field) {
-    throw new Error("Allegro did not offer its category field, so the sale form could not be opened.");
-  }
-  writeValue(field, category);
-  submitField(field);
+  // Anywhere past the first step, the fill starts by going back to the one it writes first. The step
+  // strip carries a button per step already visited, which is the collector's own way back.
+  if (step !== "describe") await goBackToDescribe(doc, waits);
 }
 
-/**
- * Unfold the rest of the category's parameters.
- *
- * Allegro shows a handful and hides the rest behind *więcej parametrów* — and a hidden control is not
- * in the document at all, so a fill that ran first would report half this category's answers as
- * fields the form does not have. The button names its own state (it reads *mniej parametrów* once
- * everything is out), which is what this waits for.
- *
- * Silent when there is no such button: a category whose parameters all fit needs no unfolding.
- */
-async function revealEveryParameter(doc: Document): Promise<void> {
-  const more = buttonMatching(doc, /^więcej parametrów$/i);
-  if (!more) return;
-  more.click();
-  await waitFor(doc, () => buttonMatching(doc, /^mniej parametrów$/i), STEP_TIMEOUT_MS);
-}
-
-/**
- * Tick *licytacja* for an offer that is an auction (#449), and wait for the fields that appear with
- * it.
- *
- * The format is not a field but a **reshaping**: ticking it grows an opening price and a minimum
- * price, and swaps the quick buy's duration select for the auction's own — none of which exists in
- * the document beforehand. So it belongs here rather than in the fill, and the fill can then write
- * those fields as plainly as any other.
- *
- * A quick buy touches none of this, and a box already ticked is left alone: this is the collector's
- * form and the click is only ever the one they would have made.
- */
-async function openAuctionFields(doc: Document, task: ListingTask): Promise<void> {
-  if (task.allegro?.listingType !== "auction") return;
-  const checkbox = byId<HTMLInputElement>(doc, FIELD.auction);
-  if (!checkbox || checkbox.checked) return;
-  checkbox.click();
-  await waitFor(doc, () => byId(doc, FIELD.auctionStartingPrice), STEP_TIMEOUT_MS);
-}
-
-/**
- * Wake Allegro's description editor up, so there is something to write the description into.
- *
- * The form is served with the description as an **empty placeholder** — a bare `<p>` in the section
- * container and no editor at all. TinyMCE mounts only when the collector puts the cursor there, and
- * until it does there is no `iframe#id_ifr`, which is why a fill running first reported the
- * description as a field the page does not have.
- *
- * So the placeholder is clicked exactly as a collector clicks it, and this waits for the frame. The
- * click is on the innermost node of the section's own container (addressed by test id, the one thing
- * on this form Allegro gives no element id) rather than on anything named by a class — those are
- * hashed per build (#355).
- *
- * Skipped for an offer with no description: an editor nobody is going to type into is a control the
- * collector never asked to have opened.
- */
-async function mountDescriptionEditor(doc: Document, task: ListingTask): Promise<void> {
-  if (!task.description?.trim()) return;
-  if (byId(doc, FIELD.descriptionFrame)) return;
-  const section = doc.querySelector<HTMLElement>(DESCRIPTION_SECTION);
-  if (!section) return;
-
-  const target = deepestChild(section);
-  // `click()` rather than a `MouseEvent` of our own: it is the element's own native click, so it
-  // carries whatever the page expects of one, and it is the same primitive every other click in this
-  // module uses. The two around it are for an editor that mounts on the press rather than the
-  // release — TinyMCE has done both.
-  dispatch(target, "mousedown");
-  target.click?.();
-  dispatch(target, "mouseup");
-  target.focus?.();
-  await waitFor(doc, () => byId(doc, FIELD.descriptionFrame), STEP_TIMEOUT_MS);
-}
-
-/** The node a click on this section would actually land on — its first leaf. */
-function deepestChild(element: HTMLElement): HTMLElement {
-  let node = element;
-  while (node.firstElementChild) node = node.firstElementChild as HTMLElement;
-  return node;
+/** Answer Allegro's *Kontynuuj wystawianie* prompt with **a new offer**, and never with the other
+ *  button on it: *Usuń* throws away a draft the collector started and this run knows nothing about.
+ *  Silent when no such dialog is open, which is the ordinary case. */
+async function startANewOffer(doc: Document, waits: Waits): Promise<void> {
+  const start = dialogControl(doc, /kontynuuj wystawianie/i, /chcę wystawić nową ofertę/i);
+  if (!start) return;
+  start.click();
+  await waitFor(
+    doc,
+    () => (dialogTitled(doc, /kontynuuj wystawianie/i) ? null : true),
+    waits.step,
+    waits.poll
+  );
 }
 
 /**
  * Get past the product catalogue, which a stamp is never in.
  *
- * Allegro opens its legacy form on *Co chcesz sprzedać?* and will not let anything through until a
- * product search has been run — the *Kontynuuj bez wybierania produktu* link appears only with the
- * results. Nothing is chosen from those results: a listing filed against Allegro's catalogue product
- * is the catalog path this app deliberately does not take (ADR-0026, #477's non-goals).
+ * The step will not let anything through until a search has been run: *Mojego produktu tu nie ma*
+ * appears only with the results, and picking it is what opens *Zdjęcia i opis* — carrying the phrase
+ * over as the title, which the fill then overwrites with the offer's own.
  */
-async function searchPastTheProductCatalogue(doc: Document, task: ListingTask): Promise<void> {
-  // The page opens on its **GTIN** search, and the two searches share one field — same id, different
-  // placeholder — so a title typed into it is looked up as a barcode and finds nothing in a way that
-  // does not offer the way past. Switching first is what makes the search the one being run.
-  const byName = buttonMatching(doc, /nie ma numeru GTIN/i);
-  if (byName) {
-    byName.click();
-    await waitFor(doc, () => (searchesByName(doc) ? true : null), STEP_TIMEOUT_MS);
-  }
-
-  const search = byId<HTMLInputElement>(doc, PRODUCT_SEARCH);
-  if (!search) {
-    throw new Error("Allegro's sale form did not open on a page the Assistant recognises.");
-  }
+async function searchPastTheProductCatalogue(
+  doc: Document,
+  task: ListingTask,
+  waits: Waits
+): Promise<void> {
+  const search = byId<HTMLInputElement>(doc, FIELD.productSearch);
+  if (!search) throw new Error("Allegro's sale form did not open on a page the Assistant recognises.");
   writeValue(search, task.title);
+
   const searchButton = buttonMatching(doc, /^szukaj$/i);
   if (!searchButton) throw new Error("Allegro's product search has no search button on this page.");
   searchButton.click();
 
-  const skip = await waitFor(doc, () => linkMatching(doc, /kontynuuj bez wybierania produktu/i));
+  const skip = await waitFor(doc, () => noSuchProductControl(doc), waits.step, waits.poll);
   if (!skip) {
     throw new Error(
       "Allegro did not offer to continue without a catalogue product, so the sale form could not be opened."
     );
   }
   skip.click();
+  if (!(await onDescribe(doc, waits))) {
+    throw new Error("Allegro did not open its listing form after the product search.");
+  }
+}
+
+/** *Mojego produktu tu nie ma* — a radio dressed as a card, so the clickable thing is the input. */
+function noSuchProductControl(doc: Document): HTMLElement | null {
+  for (const label of Array.from(doc.querySelectorAll<HTMLElement>("label"))) {
+    if (!/mojego produktu tu nie ma/i.test(label.textContent ?? "")) continue;
+    return label.querySelector<HTMLElement>('input[type="radio"]') ?? label;
+  }
+  return null;
+}
+
+/** Back to *Zdjęcia i opis* from wherever the page is, through the step strip's own button. */
+async function goBackToDescribe(doc: Document, waits: Waits): Promise<void> {
+  const back = stepButton(doc, /^zdjęcia i opis$/i);
+  if (!back) throw new Error("Allegro's listing form is open past the step the Assistant fills first.");
+  back.click();
+  if (!(await onDescribe(doc, waits))) {
+    throw new Error("Allegro would not go back to the step the Assistant fills first.");
+  }
+}
+
+/** Wait for the wizard to be showing the step the fill starts on. */
+function onDescribe(doc: Document, waits: Waits): Promise<true | null> {
+  return waitFor(doc, () => (whichStep(doc) === "describe" ? true : null), waits.step, waits.poll);
+}
+
+/** One step of the wizard's own strip. Only steps already visited are buttons there; the rest are
+ *  plain text, which is exactly the distinction wanted. The strip is rendered twice (Allegro draws one
+ *  for each width), so the first match is taken. */
+function stepButton(doc: Document, name: RegExp): HTMLElement | null {
+  const buttons = Array.from(doc.querySelectorAll<HTMLElement>("li button"));
+  return buttons.find((b) => name.test((b.textContent ?? "").trim())) ?? null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -319,50 +328,54 @@ class FillReport {
     this.skipped.push({ field, reason });
   }
 
-  /** Write a value into the control with this id, or say why it could not be written. `display` is
-   *  what the report shows, which for a category parameter is Allegro's own label. */
+  /** Write a value into the text field with this id, or say why it could not be written. */
   write(doc: Document, id: string, label: string, value: string, display = value): void {
     const el = byId<FormField>(doc, id);
     if (!el) {
-      this.skip(label, `Allegro's form has no ${label.toLowerCase()} field on this page.`);
+      this.skip(label, `Allegro's form has no ${label.toLowerCase()} field on this step.`);
       return;
     }
     if (el.disabled) {
       this.skip(label, "Allegro has this field switched off on this form.");
       return;
     }
-    const select = asSelect(el);
-    if (select) {
-      // Pick the option rather than assigning: a value the form does not offer would otherwise be
-      // swallowed silently, and here it is the one thing worth refusing on.
-      const option = Array.from(select.options).find((o) => o.value === value);
-      if (!option) {
-        this.skip(label, `Allegro's form does not offer "${display}" here.`);
-        return;
-      }
-      option.selected = true;
-      dispatch(select, "input");
-      dispatch(select, "change");
-    } else {
-      writeValue(el, value);
-    }
+    writeValue(el, value);
     this.fill(label, display);
   }
 
   /**
-   * Write an **ISO-8601 duration** into a select, matched by how long it is rather than by the
-   * string.
+   * Choose an option in a native `select`, matched on its **value**.
    *
-   * The two are not the same question here. Allegro's API and Allegro's sale form state the very
-   * same durations in different notations — the profile holds `P3D` because that is what
+   * Picking the option rather than assigning the value: one the form does not offer would otherwise
+   * be swallowed silently, and here it is the one thing worth refusing on.
+   */
+  choose(select: HTMLSelectElement | null, label: string, value: string, display = value): boolean {
+    if (!select) {
+      this.skip(label, `Allegro's form has no ${label.toLowerCase()} field on this step.`);
+      return false;
+    }
+    const option = Array.from(select.options).find((o) => o.value === value);
+    if (!option) {
+      this.skip(label, `Allegro's form does not offer "${display}" here.`);
+      return false;
+    }
+    selectOption(select, option);
+    this.fill(label, display);
+    return true;
+  }
+
+  /**
+   * Choose an **ISO-8601 duration** in a select, matched by how long it is rather than by the string.
+   *
+   * The two are not the same question here. Allegro's API and Allegro's sale form state the very same
+   * durations in different notations — the profile holds `P3D` because that is what
    * `POST /sale/product-offers` takes (#486), and the form offers `PT72H` — so a plain string match
    * silently selects nothing and leaves the form's default standing, which is exactly how a handling
    * time of three days went out as one day.
    */
-  writeDuration(doc: Document, id: string, label: string, iso: string): void {
-    const select = asSelect(byId<FormField>(doc, id));
+  chooseDuration(select: HTMLSelectElement | null, label: string, iso: string): void {
     if (!select) {
-      this.skip(label, `Allegro's form has no ${label.toLowerCase()} field on this page.`);
+      this.skip(label, `Allegro's form has no ${label.toLowerCase()} field on this step.`);
       return;
     }
     const wanted = isoDurationHours(iso);
@@ -374,9 +387,7 @@ class FillReport {
       this.skip(label, `Allegro's form does not offer ${label.toLowerCase()} "${iso}" here.`);
       return;
     }
-    option.selected = true;
-    dispatch(select, "input");
-    dispatch(select, "change");
+    selectOption(select, option);
     this.fill(label, option.textContent?.trim() || option.value);
   }
 
@@ -406,23 +417,181 @@ export function isoDurationHours(iso: string): number | null {
 }
 
 /**
- * Fill the sale form from `task`, and stop before *wystaw*.
+ * Fill the wizard from `task` and `photos`, and stop on *Podsumowanie* (#719).
  *
- * The order is the form's own, top to bottom, so a collector watching it fill sees it fill the way
- * they would have typed it: the title, the category's parameters, the description, the price and
- * quantity, then delivery and returns.
+ * Three steps are written, in the wizard's own order, and each one is left by the form's own
+ * *Kolejny krok*: *Zdjęcia i opis* (title, category, parameters, pictures, description), *Szczegóły*
+ * (format, price, quantity, re-listing) and *Dostawa* (handling time, delivery price list, returns).
+ * The fourth step is the summary, and the module's work ends the moment it is reached.
+ *
+ * **The pictures go in here**, in the middle, and that is not a preference: the wizard refuses to
+ * leave *Zdjęcia i opis* without one, so a run that saved them for last — as the shell used to make
+ * every module do (#411) — would never reach the price. Handing them over is therefore the first
+ * thing in the run that writes to the marketplace at all, which is worth knowing and is why the
+ * report says so.
+ *
+ * **A step that will not advance ends the fill**, with Allegro's own complaint about it in the
+ * report: everything written so far stays written and in front of the collector, and the honest thing
+ * is to say which step it stopped on rather than to keep clicking.
  */
-export function fillAllegroSaleForm(doc: Document, task: ListingTask): ListingFillOutcome {
+export async function fillAllegroSaleForm(
+  doc: Document,
+  task: ListingTask,
+  photos: readonly ListingPhotoFile[] = [],
+  options?: AllegroWaits
+): Promise<ListingFillOutcome> {
+  const waits = waitsOf(options);
   const report = new FillReport();
   const allegro = task.allegro ?? null;
 
   report.write(doc, FIELD.title, "Title", task.title);
-  fillParameters(doc, allegro, report);
+
+  // The category first, and everything else on this step after it: the parameters and the picture
+  // uploader do not exist in the document until Allegro knows what is being sold.
+  if (await chooseCategory(doc, allegro, report, waits)) {
+    await revealEveryParameter(doc, waits);
+    await fillParameters(doc, allegro, report, waits);
+  }
   fillDescription(doc, task, report);
-  fillPricing(doc, task, allegro, report);
-  fillProfile(doc, allegro, report);
+  await attachPictures(doc, photos, report, waits);
+
+  if (!(await advance(doc, "describe", "Pictures and description", report, waits))) {
+    return report.outcome();
+  }
+
+  await fillDetails(doc, task, allegro, report, waits);
+  if (!(await advance(doc, "details", "Details", report, waits))) return report.outcome();
+
+  await fillDelivery(doc, allegro, report, waits);
+  await advance(doc, "delivery", "Delivery", report, waits);
 
   return report.outcome();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 1 — Zdjęcia i opis
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * File the listing under the offer's own category, by walking Allegro's name tree.
+ *
+ * The legacy form took the **number**, which is what the offer stores and what every other part of
+ * this app speaks in. The new picker has no such field: it is a modal that drills down one level at a
+ * time, and the only thing it can be driven by is the category's **name path** — which is why
+ * `categoryPath` (#494, the breadcrumb walked up from the node itself) is the value read here and the
+ * id is not.
+ *
+ * An offer that holds a category **id but no path** is therefore reported rather than guessed at.
+ * Allegro offers a category of its own on this step, suggested from the title, and ticking it would
+ * file somebody's stamps under a category nobody chose — the fill's whole promise is that what goes
+ * into the form is what the offer says.
+ *
+ * The category is set even when one is already showing: the picker is the same modal either way
+ * (*Wszystkie kategorie* when nothing is chosen, *Zmień* when something is), and walking the path is
+ * cheaper than reading a breadcrumb and deciding whether it means the same thing.
+ *
+ * Answers whether the category is in — everything else on this step depends on it.
+ */
+async function chooseCategory(
+  doc: Document,
+  allegro: ListingTaskAllegro | null,
+  report: FillReport,
+  waits: Waits
+): Promise<boolean> {
+  const label = "Category";
+  const path = splitCategoryPath(allegro?.categoryPath);
+  if (path.length === 0) {
+    report.skip(
+      label,
+      allegro?.categoryId
+        ? `Allegro's new form picks a category from a list of names rather than by number, and this offer stores only ${allegro.categoryId} — re-match the category on the offer's Allegro card, then list again.`
+        : "This offer has no Allegro category — set one on the offer's Allegro card."
+    );
+    return false;
+  }
+
+  const open = buttonMatching(doc, /^(wszystkie kategorie|zmień)$/i);
+  if (!open) {
+    report.skip(label, "Allegro's form has no category picker on this step.");
+    return false;
+  }
+  open.click();
+  if (!(await waitFor(doc, () => categoryPicker(doc), waits.step, waits.poll))) {
+    report.skip(label, "Allegro's category picker would not open to the Assistant.");
+    return false;
+  }
+
+  for (const name of path) {
+    const picker = categoryPicker(doc);
+    const entry = picker && categoryEntry(picker, name);
+    if (!entry) {
+      report.skip(label, `Allegro's category list has no "${name}" where this offer expects it.`);
+      // A picker left half way down somebody else's tree is worse than one that was never opened.
+      closeDialog(doc, categoryPicker(doc));
+      return false;
+    }
+    entry.click();
+    // Each level is a round-trip; the last one closes the modal instead of drawing another level.
+    await waitFor(
+      doc,
+      () => (categoryEntry(categoryPicker(doc), name) ? null : true),
+      waits.step,
+      waits.poll
+    );
+  }
+
+  // The parameters this category asks are what proves it landed — a picker that closed on nothing
+  // would otherwise be reported as a category that went in.
+  const settled = await waitFor(
+    doc,
+    () => (buttonMatching(doc, /^zmień$/i) ? true : null),
+    waits.step,
+    waits.poll
+  );
+  if (!settled) {
+    report.skip(label, "Allegro did not take the category the Assistant chose.");
+    return false;
+  }
+  report.fill(label, allegro?.categoryPath ?? path.join(" > "));
+  return true;
+}
+
+/** A category breadcrumb as its own levels. Stored as `A > B > C` (#494) and rendered by Allegro with
+ *  a different separator, so the string is split rather than compared. */
+function splitCategoryPath(path: string | null | undefined): string[] {
+  return (path ?? "")
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function categoryPicker(doc: Document): HTMLElement | null {
+  return dialogTitled(doc, /wybierz kategorię/i);
+}
+
+/** One level's entry in the picker, by its exact name — the level list carries a *Cofnij do …* button
+ *  too, which contains a category's name without being it. */
+function categoryEntry(picker: HTMLElement | null, name: string): HTMLElement | null {
+  if (!picker) return null;
+  const buttons = Array.from(picker.querySelectorAll<HTMLElement>("button"));
+  return buttons.find((b) => (b.textContent ?? "").trim() === name) ?? null;
+}
+
+/**
+ * Unfold the rest of the category's parameters.
+ *
+ * Allegro shows a handful and hides the rest behind *Pokaż więcej* — and a hidden control is not in
+ * the document at all, so a fill that ran first would report half this category's answers as fields
+ * the form does not have. The button names its own state (it reads *Pokaż mniej* once everything is
+ * out), which is what this waits for.
+ *
+ * Silent when there is no such button: a category whose parameters all fit needs no unfolding.
+ */
+async function revealEveryParameter(doc: Document, waits: Waits): Promise<void> {
+  const more = buttonMatching(doc, /^pokaż więcej$/i);
+  if (!more) return;
+  more.click();
+  await waitFor(doc, () => buttonMatching(doc, /^pokaż mniej$/i), waits.step, waits.poll);
 }
 
 /**
@@ -432,16 +601,17 @@ export function fillAllegroSaleForm(doc: Document, task: ListingTask): ListingFi
  * the product half because `POST /sale/product-offers` refuses it there; this form asks for both, in
  * one list, and a collector filling it by hand would answer both.
  *
- * A `select` is matched on the option's **text**, since that is what this form submits, which is why
- * the answers travel with their display value beside the dictionary ids the API takes. A parameter
- * with no display value — Allegro unreachable when the task was built — is named rather than
- * guessed at.
+ * Two shapes, and the id says which: a dictionary parameter is the combobox `#dropdown-<id>` and a
+ * free-text one is `#<id>`. The dictionary is answered by its **displayed text**, which is why the
+ * answers travel with their display value beside the dictionary ids the API takes; a parameter with
+ * no display value — Allegro unreachable when the task was built — is named rather than guessed at.
  */
-function fillParameters(
+async function fillParameters(
   doc: Document,
   allegro: ListingTaskAllegro | null,
-  report: FillReport
-): void {
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
   for (const parameter of allegro?.parameters ?? []) {
     const label = `Parameter — ${parameter.parameterName ?? parameter.parameterId}`;
     const [value] = parameter.displayValues;
@@ -449,15 +619,14 @@ function fillParameters(
       report.skip(label, "Allegro could not be asked what this answer is called on its own form.");
       continue;
     }
-    // A dictionary parameter is a select under the parameter's own id; a text one is that id with
-    // Allegro's own `_0` row suffix, the form allowing several rows per parameter.
-    const select = byId<FormField>(doc, parameter.parameterId);
-    const id = select ? parameter.parameterId : `${parameter.parameterId}_0`;
-    if (!byId(doc, id)) {
+    if (byId(doc, dropdownId(parameter.parameterId))) {
+      await chooseFromDropdown(doc, parameter.parameterId, label, value, report, waits);
+    } else if (byId(doc, parameter.parameterId)) {
+      report.write(doc, parameter.parameterId, label, value);
+    } else {
       report.skip(label, "This category's form on Allegro has no field for that parameter.");
       continue;
     }
-    report.write(doc, id, label, value);
     // Several values in one control is Allegro's `multipleChoices`, which this form answers with one
     // row per value — worth naming rather than silently posting the first.
     if (parameter.displayValues.length > 1) {
@@ -469,13 +638,70 @@ function fillParameters(
   }
 }
 
+const dropdownId = (parameterId: string): string => `dropdown-${parameterId}`;
+
 /**
- * The description, into TinyMCE's own editable document.
+ * Answer one dictionary parameter, the way the collector answers it.
  *
- * Allegro's description editor is an `<iframe>` (same-origin, `#id_ifr`) holding a `<body>` the
- * editor writes into, and there is no textarea to set instead: the value is read out of that document
- * when the form is posted. So the text goes in as **HTML**, through the frame's own body, followed by
- * an `input` event — which is what the editor listens for to notice a change it did not make itself.
+ * The control is not a `select` but a **combobox**: an `<input role="combobox">` whose list is drawn
+ * into `#dropdown-<id>-content` only while it is open, as `li[role="option"]` rows. So the value
+ * cannot be assigned — it has to be typed and then chosen, which is also what makes the choice
+ * verifiable.
+ *
+ * Typed first because that is what filters the list, and Allegro's own display value is what the row
+ * reads. That attempt is given a **short** wait (`waits.filter`): a control that is going to answer
+ * answers at once, and a silent one has not opened rather than being slow — Allegro mounts a
+ * dictionary's options on the first input the control sees, so the *second* write is routinely what
+ * opens it. Clearing the field is therefore both the fallback and the opener, and it asks for the
+ * whole list, which also finds an option whose text differs from the display value by more than the
+ * filter allows.
+ *
+ * **The field is left empty on a failure.** A combobox holding text that matches no option is an
+ * invalid field, and an invalid field is what stops the wizard advancing three lines later — for a
+ * value we already know did not go in.
+ */
+async function chooseFromDropdown(
+  doc: Document,
+  parameterId: string,
+  label: string,
+  value: string,
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
+  const input = byId<HTMLInputElement>(doc, dropdownId(parameterId));
+  if (!input) {
+    report.skip(label, "This category's form on Allegro has no field for that parameter.");
+    return;
+  }
+  const options = (): HTMLElement | null => {
+    const list = byId<HTMLElement>(doc, `${dropdownId(parameterId)}-content`);
+    if (!list) return null;
+    const rows = Array.from(list.querySelectorAll<HTMLElement>('li[role="option"] button'));
+    return rows.find((row) => (row.textContent ?? "").trim() === value) ?? null;
+  };
+
+  writeValue(input, value);
+  let option = await waitFor(doc, options, waits.filter, waits.poll);
+  if (!option) {
+    writeValue(input, "");
+    option = await waitFor(doc, options, waits.step, waits.poll);
+  }
+  if (!option) {
+    writeValue(input, "");
+    report.skip(label, `Allegro's form does not offer "${value}" here.`);
+    return;
+  }
+  option.click();
+  report.fill(label, value);
+}
+
+/**
+ * The description, into Allegro's own editor.
+ *
+ * It is a same-origin `contenteditable` (tiptap/ProseMirror) rather than the iframe TinyMCE used to
+ * put here, and it is in the document from the start — no click is needed to bring it to life. The
+ * text goes in as **HTML**, followed by an `input` event, which is what the editor listens for to
+ * notice a change it did not make itself.
  *
  * The text is written as it stands. It arrives already in the format the offer stores (#319) and
  * Allegro's own field takes a small set of tags, so a description that renders as markup here is the
@@ -486,19 +712,13 @@ function fillDescription(doc: Document, task: ListingTask, report: FillReport): 
   const text = task.description?.trim();
   if (!text) return; // Nothing to say — an empty description is not a gap.
 
-  const section = doc.querySelector(DESCRIPTION_SECTION);
-  const frame = byId<HTMLIFrameElement>(doc, FIELD.descriptionFrame);
-  if (!section || !frame) {
+  const editor = doc.querySelector<HTMLElement>(DESCRIPTION);
+  if (!editor) {
     report.skip(label, "Allegro's description editor is not on this page — paste it in yourself.");
     return;
   }
-  const body = frame.contentDocument?.body;
-  if (!body) {
-    report.skip(label, "Allegro's description editor would not open to the Assistant.");
-    return;
-  }
-  body.innerHTML = task.descriptionFormat === "plain" ? paragraphs(text) : text;
-  dispatch(body, "input");
+  editor.innerHTML = task.descriptionFormat === "plain" ? paragraphs(text) : text;
+  dispatch(editor, "input");
   report.fill(label, text);
 }
 
@@ -518,51 +738,258 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+const PICTURES_FIELD = "Pictures";
+
 /**
- * What it is being sold for, and how many there are.
+ * Hand the offer's rendered images to the wizard's own uploader, in upload order (#411).
  *
- * The two formats (#449) write different fields, and the *wrong* one being written is the mistake
- * worth avoiding: an auction's opening price in the quick-buy field would be an asking price nobody
- * meant, and a quick buy's price in the opening one would put the listing up for bidding. The format
- * itself is ticked in {@link openAuctionFields} before this runs, which is what puts the auction's
- * own fields in the document.
+ * This is the **first thing in the run that writes to Allegro**: the uploader posts each file the
+ * moment it is handed over, and the thumbnails that come back carry the uploaded image's own URL —
+ * which is exactly what is waited for here, an upload still in flight being the ordinary reason the
+ * next step refuses.
  *
- * An auction's `#buynow-price` is deliberately left **empty**: filled, it would add a Buy Now price
- * to the auction, which is a second way of selling the offer never asked for.
+ * It cannot be moved later. Allegro will not leave this step without a picture, so a run with none
+ * stops here — reported plainly, since the fix is in Stamporama (the offer's rendered pictures) and
+ * not on this form.
  */
-function fillPricing(
+async function attachPictures(
+  doc: Document,
+  photos: readonly ListingPhotoFile[],
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
+  if (photos.length === 0) return; // The shell has already said why (#411).
+
+  const input = allegroPictureInput(doc);
+  if (!input) {
+    report.skip(PICTURES_FIELD, "Allegro's picture uploader is not on this step.");
+    return;
+  }
+  const before = uploadedPictures(doc);
+  putFiles(input, photos.map((p) => p.file));
+  dispatch(input, "change");
+
+  const arrived = await waitFor(
+    doc,
+    () => {
+      // Answered while waiting rather than after: Allegro has asked an AI-Act question over its
+      // uploader before, behind a flag, and a dialog nobody answers is an upload that never finishes.
+      declineAiWatermark(doc);
+      return uploadedPictures(doc) >= before + photos.length ? true : null;
+    },
+    waits.upload,
+    waits.poll
+  );
+  if (!arrived) {
+    report.skip(
+      PICTURES_FIELD,
+      `Allegro took ${uploadedPictures(doc) - before} of ${photos.length} pictures before the Assistant stopped waiting — add the rest from the offer's ZIP.`
+    );
+    return;
+  }
+  report.fill(PICTURES_FIELD, `${photos.length} uploaded`);
+}
+
+/** How many pictures Allegro has taken — counted by the thumbnails it stamps with the uploaded
+ *  image's own address, which cannot exist before the upload finished. */
+function uploadedPictures(doc: Document): number {
+  return doc.querySelectorAll(UPLOADED_PICTURE).length;
+}
+
+/** The dialog Allegro has opened over a picture upload: the AI Act marking question. */
+const AI_WATERMARK_TITLE = /znakiem wodnym/i;
+
+/**
+ * Confirm Allegro's AI-watermark dialog with **nothing ticked**, if it is open.
+ *
+ * Allegro asks which pictures should carry an "AI" watermark under the AI Act. Every box starts
+ * unticked, which is the truthful answer for an offer's pictures: they are photographs of stamps,
+ * rendered by Stamporama from those photographs, and nothing in that path is generative. So this
+ * confirms the default rather than choosing anything — **the one thing it must never do is tick a
+ * box**, since that would put a claim on the listing that the collector did not make and that is not
+ * true.
+ *
+ * Matched on the dialog's own **title**, not on the button alone: *Potwierdź wybór* is a button
+ * Allegro could put on any dialog, and confirming the wrong one is a click nobody asked for.
+ *
+ * It was not served on the new form when it was mapped (#719) — it is behind a flag — so its absence
+ * is the ordinary case and costs one query per poll.
+ */
+function declineAiWatermark(doc: Document): void {
+  dialogControl(doc, AI_WATERMARK_TITLE, /potwierdź wybór/i)?.click();
+}
+
+/** The wizard's picture input, behind its drop area — Allegro's own test id, with the `accept` a
+ *  picture uploader carries as the fallback. */
+export function allegroPictureInput(doc: Document): HTMLInputElement | null {
+  const named = doc.querySelector<HTMLInputElement>(`input${byTestId(TESTID.photoInput)}`);
+  if (named) return named;
+  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+  return inputs.find((el) => /jpe?g|png|gif|image/i.test(el.getAttribute("accept") ?? "")) ?? null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 2 — Szczegóły
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * What it is being sold as, for how much, and how many there are.
+ *
+ * The **format is a reshaping** rather than a field: ticking *Licytacja* grows a duration select and
+ * an opening price and takes the quantity away, none of which is in the document beforehand. So it is
+ * chosen first and everything after it is read from the form the choice produced.
+ *
+ * One thing is deliberately **not** written on an auction: *Dodaj Licytację z opcją Kup teraz*. A Buy
+ * Now price on an auction is a second way of selling that the offer never asked for.
+ *
+ * A quick buy has no duration on this form at all — Allegro fixes it at 30 days and says so beside
+ * the format — so a profile's `durationLimit` only ever reaches an auction, and is reported rather
+ * than silently dropped.
+ */
+async function fillDetails(
   doc: Document,
   task: ListingTask,
   allegro: ListingTaskAllegro | null,
-  report: FillReport
-): void {
-  if (allegro?.listingType === "auction") {
-    report.write(
-      doc,
-      FIELD.auctionStartingPrice,
-      "Starting price",
-      allegro.startingPrice ?? task.price
-    );
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
+  const auction = allegro?.listingType === "auction";
+  await chooseOfferType(doc, auction, report, waits);
+
+  if (auction) {
+    const profile = allegro?.profile;
+    if (profile?.durationLimit) {
+      report.chooseDuration(
+        selectById(doc, FIELD.auctionDuration),
+        "Listing duration",
+        profile.durationLimit
+      );
+    }
+    report.write(doc, FIELD.price, "Starting price", allegro?.startingPrice ?? task.price);
   } else {
+    if (allegro?.profile?.durationLimit) {
+      report.skip(
+        "Listing duration",
+        "Allegro's new form runs a quick buy for 30 days and offers no choice — the profile's duration only applies to an auction."
+      );
+    }
     report.write(doc, FIELD.price, "Price", task.price);
+    writeQuantity(doc, task.quantity, report);
   }
-  report.write(doc, FIELD.quantity, "Quantity", String(task.quantity));
+
+  // A switch the profile decides, so it is written in **both** directions rather than only turned on:
+  // a profile that says "do not re-list" is an answer, and leaving Allegro's control as served would
+  // make it depend on what Allegro happened to serve.
+  if (allegro?.profile) {
+    setSwitch(doc, allegro.profile.autoRepublish, "Automatic re-listing", report);
+  }
 }
+
+/** Tick *Kup teraz* or *Licytacja*, and wait for the fields the choice brings with it. A format
+ *  already chosen is left alone — the click is only ever the one the collector would have made. */
+async function chooseOfferType(
+  doc: Document,
+  auction: boolean,
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
+  const label = "Offer type";
+  const name = auction ? "Licytacja" : "Kup teraz";
+  const radio = offerTypeRadio(doc, name);
+  if (!radio) {
+    report.skip(label, `Allegro's form does not offer "${name}" on this step.`);
+    return;
+  }
+  if (!radio.checked) {
+    radio.click();
+    // What the choice grows: an auction's own duration select, a quick buy's quantity.
+    await waitFor(
+      doc,
+      () => (auction ? selectById(doc, FIELD.auctionDuration) : quantityInput(doc)),
+      waits.step,
+      waits.poll
+    );
+  }
+  report.fill(label, name);
+}
+
+function offerTypeRadio(doc: Document, name: string): HTMLInputElement | null {
+  for (const card of Array.from(doc.querySelectorAll<HTMLElement>(byTestId(TESTID.offerType)))) {
+    const shown = card.querySelector(byTestId(TESTID.offerTypeName))?.textContent?.trim() ?? "";
+    if (shown !== name) continue;
+    return card.querySelector<HTMLInputElement>('input[type="radio"]');
+  }
+  return null;
+}
+
+/**
+ * How many sets there are.
+ *
+ * The control is the step's own number spinner and Allegro gives it no id, so it is found by being
+ * the only `input[type="number"]` on the step — and **only** while it is the only one, because a
+ * second number field appearing here is a form this module has not been shown, and writing the
+ * quantity into it would be worse than saying so.
+ */
+function writeQuantity(doc: Document, quantity: number, report: FillReport): void {
+  const label = "Quantity";
+  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="number"]'));
+  if (inputs.length !== 1) {
+    report.skip(
+      label,
+      inputs.length === 0
+        ? "Allegro's form has no quantity field on this step."
+        : "Allegro's form has more than one number field on this step — set the quantity yourself."
+    );
+    return;
+  }
+  writeValue(inputs[0]!, String(quantity));
+  report.fill(label, String(quantity));
+}
+
+/**
+ * Put the re-listing switch into the state the profile asks for.
+ *
+ * Clicked rather than assigned, because the control belongs to a React form and a `checked` set
+ * behind its back is a value the next render throws away — and never clicked when it already reads
+ * what it should, since a click is a toggle and would then undo the very thing it is asked for.
+ */
+function setSwitch(doc: Document, wanted: boolean, label: string, report: FillReport): void {
+  const switches = Array.from(
+    doc.querySelectorAll<HTMLInputElement>('input[type="checkbox"][role="switch"]')
+  );
+  if (switches.length !== 1) {
+    report.skip(label, `Allegro's form has no ${label.toLowerCase()} switch on this step.`);
+    return;
+  }
+  const box = switches[0]!;
+  const checked = typeof box.checked === "boolean" ? box.checked : box.hasAttribute("checked");
+  if (checked !== wanted) box.click();
+  report.fill(label, wanted ? "on" : "off");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 3 — Dostawa
+// ---------------------------------------------------------------------------------------------
 
 /**
  * Delivery, handling time and returns, from the offer's listing profile (#486).
  *
- * The three ids the profile stores **are** the option values of these three selects, so this is a
- * straight write and not a translation. The sending address is not: Allegro keeps it as an account
- * setting behind a *ZMIEŃ* dialog rather than as a field, so the profile's city and post code are
- * *reported* — the collector checks the line the form already shows, which is the only thing that can
- * honestly be done about a value with nowhere to go.
+ * Two of the profile's three ids **are** Allegro's own: `shippingRatesId` is the test id of the price
+ * list's card and `returnPolicyId` is the value of the returns option, so both are direct matches
+ * rather than translations. The handling time is a duration and is matched by length (see
+ * {@link FillReport.chooseDuration}).
+ *
+ * The sending address is not a field here either: Allegro keeps it as an account setting behind
+ * *Zmień adres wysyłki*, so the profile's city and post code are *reported* — the collector checks the
+ * line the form already shows, which is the only thing that can honestly be done about a value with
+ * nowhere to go.
  */
-function fillProfile(
+async function fillDelivery(
   doc: Document,
   allegro: ListingTaskAllegro | null,
-  report: FillReport
-): void {
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
   const profile = allegro?.profile;
   if (!profile) {
     report.skip(
@@ -571,38 +998,17 @@ function fillProfile(
     );
     return;
   }
-  report.write(
-    doc,
-    FIELD.shippingRates,
-    "Delivery price list",
-    profile.shippingRatesId,
-    profile.shippingRatesName ?? profile.shippingRatesId
-  );
-  report.writeDuration(doc, FIELD.handlingTime, "Handling time", profile.handlingTime);
-  // The two duration selects are never both on the form: ticking *licytacja* replaces one with the
-  // other, so which one this writes follows the format rather than being a second decision.
-  if (profile.durationLimit) {
-    const auction = allegro?.listingType === "auction";
-    report.writeDuration(
-      doc,
-      auction ? FIELD.auctionDuration : FIELD.duration,
-      "Listing duration",
-      profile.durationLimit
-    );
-  }
+
+  report.chooseDuration(handlingTimeSelect(doc), "Handling time", profile.handlingTime);
+  await chooseShippingRates(doc, profile.shippingRatesId, profile.shippingRatesName, report, waits);
   if (profile.returnPolicyId) {
-    report.write(
-      doc,
-      FIELD.returnPolicy,
+    report.choose(
+      selectOfferingValue(doc, profile.returnPolicyId),
       "Returns",
       profile.returnPolicyId,
       profile.returnPolicyName ?? profile.returnPolicyId
     );
   }
-  // A tickbox the profile decides, so it is written in **both** directions rather than only ticked:
-  // a profile that says "do not re-list" is an answer, and leaving Allegro's box as served would make
-  // it depend on what Allegro happened to serve.
-  setCheckbox(doc, FIELD.republish, profile.autoRepublish, "Automatic re-listing", report);
 
   report.skip(
     "Sending address",
@@ -610,111 +1016,172 @@ function fillProfile(
   );
 }
 
-// ---------------------------------------------------------------------------------------------
-// Pictures, and the listing that comes out the other end
-// ---------------------------------------------------------------------------------------------
-
-const PICTURES_FIELD = "Pictures";
-
 /**
- * Hand the offer's rendered images to the form's own uploader, in upload order (#411), and answer the
- * question Allegro asks about them.
+ * Tick the profile's delivery price list.
  *
- * The file input is found structurally, like Colnect's: it is the one control on this form Allegro
- * gives no id, and an `accept` naming picture types is what identifies it.
- *
- * Handed over **last** in a run, after every other field is in, exactly as Colnect's are. What
- * Allegro's uploader then does with them was not established: thumbnails appear straight away, which
- * looks like Colnect's immediate AJAX upload rather than a set held until the offer is created. The
- * ordering is written for the stricter of the two readings — by the time anything could reach the
- * marketplace, the filled form is already in front of the collector.
- *
- * **Asynchronous** because of {@link declineAiWatermark}: the pictures are not in until the dialog
- * Allegro opens over them has been answered.
+ * Allegro shows three of the account's saved lists and keeps the rest behind *Inne zapisane dostawy*,
+ * a dialog of its own — so a list that is not on the step is fetched from there and saved back onto
+ * it, which is exactly the two clicks a collector makes.
  */
-export async function attachAllegroPictures(
+async function chooseShippingRates(
   doc: Document,
-  photos: readonly ListingPhotoFile[],
-  dialogTimeoutMs: number = AI_DIALOG_TIMEOUT_MS
-): Promise<ListingFillOutcome> {
-  const report = new FillReport();
-  if (photos.length === 0) return report.outcome();
+  ratesId: string,
+  ratesName: string | null,
+  report: FillReport,
+  waits: Waits
+): Promise<void> {
+  const label = "Delivery price list";
+  const display = ratesName ?? ratesId;
 
-  const input = allegroPictureInput(doc);
-  if (!input) {
-    report.skip(PICTURES_FIELD, "Allegro's picture uploader is not on this page.");
-    return report.outcome();
+  let card = shippingRateCard(doc, ratesId);
+  if (!card) {
+    const more = buttonMatching(doc, /^inne zapisane dostawy/i);
+    if (!more) {
+      report.skip(label, `Allegro's form does not offer "${display}" on this step.`);
+      return;
+    }
+    more.click();
+    const saved = await waitFor(
+      doc,
+      () => dialogTitled(doc, /zapisane dostawy/i),
+      waits.step,
+      waits.poll
+    );
+    const inDialog = saved && shippingRateCard(saved, ratesId);
+    if (!inDialog) {
+      closeDialog(doc, saved);
+      report.skip(label, `Allegro's saved delivery lists do not include "${display}".`);
+      return;
+    }
+    tickCard(inDialog);
+    dialogControl(doc, /zapisane dostawy/i, /^zapisz$/i)?.click();
+    card = await waitFor(doc, () => shippingRateCard(doc, ratesId), waits.step, waits.poll);
+    if (!card) {
+      report.skip(label, `Allegro did not bring "${display}" onto the form.`);
+      return;
+    }
   }
-  putFiles(input, photos.map((p) => p.file));
-  dispatch(input, "change");
 
-  const marked = await declineAiWatermark(doc, dialogTimeoutMs);
-  report.fill(
-    PICTURES_FIELD,
-    marked
-      ? `${photos.length} handed to Allegro's uploader, none marked as AI`
-      : `${photos.length} handed to Allegro's uploader`
-  );
-  return report.outcome();
+  tickCard(card);
+  report.fill(label, display);
 }
 
-/** The dialog Allegro opens over a picture upload, by its own title — the AI Act marking question. */
-const AI_WATERMARK_TITLE = /znakiem wodnym/i;
+function shippingRateCard(root: Document | HTMLElement, ratesId: string): HTMLElement | null {
+  return root.querySelector<HTMLElement>(`[data-testid="${TESTID.shippingRate}${ratesId}"]`);
+}
 
-/** How long Allegro is given to open that dialog. It is behind a feature flag on the form, so its
- *  absence is the ordinary case and not a failure — hence short. */
-const AI_DIALOG_TIMEOUT_MS = 8_000;
+/** Choose one of the cards this step is a list of — the clickable thing inside is the radio. */
+function tickCard(card: HTMLElement): void {
+  const radio = card.querySelector<HTMLInputElement>('input[type="radio"]');
+  if (!radio) return;
+  if (!radio.checked) radio.click();
+}
 
 /**
- * Confirm Allegro's AI-watermark dialog with **nothing ticked**, and say whether it appeared.
+ * The handling-time select — the one on this step whose every option is an ISO-8601 duration.
  *
- * Allegro opens it the moment files reach the uploader, asking which pictures should carry an "AI"
- * watermark under the AI Act. Every box starts unticked, which is the truthful answer for an offer's
- * pictures: they are photographs of stamps, rendered by Stamporama from those photographs, and
- * nothing in that path is generative. So this confirms the default rather than choosing anything —
- * **the one thing it must never do is tick a box**, since that would put a claim on the listing that
- * the collector did not make and that is not true.
- *
- * Matched on the dialog's own **title**, not on the button alone: *Potwierdź wybór* is a button
- * Allegro could put on any dialog, and confirming the wrong one is a click nobody asked for.
+ * Allegro gives neither select on this step an id, and the other one lists return policies, so what
+ * tells them apart is what they are lists **of**. That is a sturdier test than a position: a step that
+ * grows a third select does not silently move the handling time.
  */
-async function declineAiWatermark(doc: Document, timeoutMs: number): Promise<boolean> {
-  const confirm = await waitFor(doc, () => aiWatermarkConfirm(doc), timeoutMs);
-  if (!confirm) return false;
-  confirm.click();
-  return true;
-}
-
-/** The confirm button of that dialog, or null while it is not open. */
-function aiWatermarkConfirm(doc: Document): HTMLElement | null {
-  for (const dialog of Array.from(doc.querySelectorAll<HTMLElement>('[role="dialog"]'))) {
-    const title = dialog.querySelector("#modal-title")?.textContent ?? "";
-    if (!AI_WATERMARK_TITLE.test(title)) continue;
-    const buttons = Array.from(dialog.querySelectorAll<HTMLElement>("button"));
-    return buttons.find((b) => /potwierdź wybór/i.test((b.textContent ?? "").trim())) ?? null;
+function handlingTimeSelect(doc: Document): HTMLSelectElement | null {
+  for (const select of Array.from(doc.querySelectorAll<HTMLSelectElement>("select"))) {
+    const values = Array.from(select.options)
+      .map((o) => o.value)
+      .filter(Boolean);
+    if (values.length > 0 && values.every((v) => isoDurationHours(v) !== null)) return select;
   }
   return null;
 }
 
-/** The form's picture input, behind its drop area. */
-export function allegroPictureInput(doc: Document): HTMLInputElement | null {
-  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="file"]'));
-  return (
-    inputs.find((el) => /jpe?g|png|gif|image/i.test(el.getAttribute("accept") ?? "")) ??
-    inputs[0] ??
-    null
-  );
+/** The select on this page that offers `value` — how the returns policy is found, its id being
+ *  Allegro's own and therefore the surest thing to look for. */
+function selectOfferingValue(doc: Document, value: string): HTMLSelectElement | null {
+  const selects = Array.from(doc.querySelectorAll<HTMLSelectElement>("select"));
+  return selects.find((s) => Array.from(s.options).some((o) => o.value === value)) ?? null;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Moving between the steps
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Leave `from` for the next step, and say so when the form will not let go.
+ *
+ * `from` is passed rather than read so the caller's own idea of where it is has to agree with the
+ * page's — a fill that thought it was on *Szczegóły* while the page had moved on would otherwise
+ * click a button on a step it never wrote to.
+ *
+ * A refusal is reported in **Allegro's own words**: the wizard renders a complaint per field it is
+ * unhappy about, and "Dodaj przynajmniej jedno zdjęcie" tells the collector more than any sentence
+ * this module could compose. Everything already written stays written; the fill simply ends there.
+ */
+async function advance(
+  doc: Document,
+  from: Step,
+  label: string,
+  report: FillReport,
+  waits: Waits
+): Promise<boolean> {
+  if (whichStep(doc) !== from) {
+    report.skip(label, "Allegro's form moved on before the Assistant had finished this step.");
+    return false;
+  }
+  const next = nextStepButton(doc);
+  if (!next) {
+    report.skip(label, "Allegro's form has no way on from this step.");
+    return false;
+  }
+  next.click();
+  const moved = await waitFor(doc, () => (whichStep(doc) === from ? null : true), waits.step, waits.poll);
+  if (moved) return true;
+
+  const complaints = validationErrors(doc);
+  report.skip(
+    label,
+    complaints.length > 0
+      ? `Allegro would not go on from this step: ${complaints.join("; ")}`
+      : "Allegro would not go on from this step."
+  );
+  return false;
+}
+
+/**
+ * The *Kolejny krok* button — and **never** *Wystaw na Allegro*.
+ *
+ * Allegro gives both the same `data-testid`, which is the one fact on this page that could turn a
+ * fill into a published listing. Nothing is submitted here or anywhere in this module (#408), so the
+ * button is checked twice over: {@link advance} refuses to click on any step but the three it writes,
+ * and this refuses any button whose own words say it posts the listing. Either guard alone would do;
+ * both are here because the cost of being wrong is a listing the collector never saw.
+ */
+function nextStepButton(doc: Document): HTMLElement | null {
+  const button = doc.querySelector<HTMLElement>(`button${byTestId(TESTID.submit)}`);
+  if (!button) return null;
+  if (/wystaw/i.test((button.textContent ?? "").trim())) return null;
+  return button;
+}
+
+/** Everything the wizard is complaining about, in the order it draws them. */
+function validationErrors(doc: Document): string[] {
+  return Array.from(doc.querySelectorAll<HTMLElement>(VALIDATION_ERROR))
+    .map((el) => (el.textContent ?? "").trim())
+    .filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The listing that comes out the other end
+// ---------------------------------------------------------------------------------------------
 
 /**
  * The listed offer's own URL, once the form has been submitted (#412) — null for every other page.
  *
- * Allegro answers a published listing by navigating to `/oferta/<slug>-<id>`, which is the very shape
- * the capture half already recognises (#355) and the one #467 matches a synced listing on. So a
- * listing posted this way is found by exactly the rule a hand-posted one is.
+ * Allegro answers a published listing with `/oferta/<slug>-<id>`, which is the very shape the capture
+ * half already recognises (#355) and the one #467 matches a synced listing on. So a listing posted
+ * this way is found by exactly the rule a hand-posted one is.
  *
- * Query and fragment are dropped: this is stored on the offer as the listing's address, and a
- * campaign parameter Allegro appended is not part of that record.
+ * Query and fragment are dropped: this is stored on the offer as the listing's address, and a campaign
+ * parameter Allegro appended is not part of that record.
  */
 export function allegroListedOfferUrl(url: string): string | null {
   const parsed = parseUrl(url);
@@ -725,28 +1192,30 @@ export function allegroListedOfferUrl(url: string): string | null {
   return `${parsed.origin}${parsed.pathname}`;
 }
 
-/** The thank-you page Allegro renders **in place** of the form once it is submitted. A stable id, and
- *  the one thing that tells this document apart from the form it was a moment ago. */
+/** The legacy form's confirmation, which it rendered **in place** of itself. Still recognised: it
+ *  costs one `getElementById` and it is the one landmark that was ever observed with certainty. */
 const THANK_YOU_PAGE = "thank-you-page";
 
 /**
  * The listing's URL as Allegro's own confirmation states it (#412/#493).
  *
- * Allegro does not navigate when a form is posted: the same document re-renders into *Oferta jest
- * przygotowana*, which carries the offer's address as a link and leaves the address bar on the sale
- * form. So this is where the URL is, and reading it is what lets the offer go live here.
+ * Allegro's legacy form did not navigate when it was posted: the same document re-rendered into
+ * *Oferta jest przygotowana*, carrying the offer's address as a link and leaving the address bar on
+ * the form. So this is where the URL was, and reading it is what let the offer go live here.
  *
- * Scoped to the confirmation itself, and every link in it is put through {@link
- * allegroListedOfferUrl}: what is wanted is an `/oferta/<id>` and nothing else, and a link found
- * elsewhere on the page is not the listing that was just posted.
- *
- * The offer it names is **awaiting Allegro's review** — the page says so — but it exists and this is
- * its address, which is exactly what the write-back records.
+ * The wizard's confirmation was **not observed** — reading it would have meant publishing a listing
+ * from the collector's own account — so the rule is written to survive either shape it takes. It is
+ * asked only of the page the form was filled into, and only once that page has **stopped being any
+ * step of the wizard**: a document at the form's address that is no longer the form, carrying a link
+ * to an `/oferta/<id>`, is a listing that was just posted and nothing else. If Allegro navigates to
+ * the offer instead, the run never needs this at all — the background reads a listed URL off the
+ * tab's own navigations (#412).
  */
 export function allegroListedUrlInDocument(doc: Document): string | null {
-  const page = byId<HTMLElement>(doc, THANK_YOU_PAGE);
-  if (!page) return null;
-  for (const anchor of Array.from(page.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+  const legacy = byId<HTMLElement>(doc, THANK_YOU_PAGE);
+  const scope = legacy ?? (whichStep(doc) === null ? doc.querySelector<HTMLElement>("main") : null);
+  if (!scope) return null;
+  for (const anchor of Array.from(scope.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
     const listed = allegroListedOfferUrl(anchor.href);
     if (listed) return listed;
   }
@@ -757,31 +1226,9 @@ export function allegroListedUrlInDocument(doc: Document): string | null {
 // DOM helpers
 // ---------------------------------------------------------------------------------------------
 
-/**
- * Put a tickbox into the state `wanted`, and say so.
- *
- * Clicked rather than assigned, because the box belongs to a React form and a `checked` set behind
- * its back is a value the next render throws away — and never clicked when it already reads what it
- * should, since a click is a toggle and would then undo the very thing it is asked for.
- */
-function setCheckbox(
-  doc: Document,
-  id: string,
-  wanted: boolean,
-  label: string,
-  report: FillReport
-): void {
-  const box = byId<HTMLInputElement>(doc, id);
-  if (!box) {
-    report.skip(label, `Allegro's form has no ${label.toLowerCase()} box on this page.`);
-    return;
-  }
-  const checked = typeof box.checked === "boolean" ? box.checked : box.hasAttribute("checked");
-  if (checked !== wanted) box.click();
-  report.fill(label, wanted ? "on" : "off");
-}
-
 type FormField = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+const byTestId = (testId: string): string => `[data-testid="${testId}"]`;
 
 function parseUrl(url: string): URL | null {
   try {
@@ -801,8 +1248,9 @@ function byId<T extends Element>(doc: Document, id: string): T | null {
   return (doc.getElementById(id) as T | null) ?? null;
 }
 
-/** A `<select>`, without an `instanceof` against a global the test DOM does not install. */
-function asSelect(el: FormField | null): HTMLSelectElement | null {
+/** A `<select>` by id, without an `instanceof` against a global the test DOM does not install. */
+function selectById(doc: Document, id: string): HTMLSelectElement | null {
+  const el = byId<FormField>(doc, id);
   return el && "options" in el ? (el as HTMLSelectElement) : null;
 }
 
@@ -812,6 +1260,13 @@ function dispatch(el: Element, type: string): void {
   const view = el.ownerDocument?.defaultView as { Event?: typeof Event } | null;
   const Ctor = view?.Event ?? Event;
   el.dispatchEvent(new Ctor(type, { bubbles: true }));
+}
+
+/** Choose one option of a native select, and tell the page. */
+function selectOption(select: HTMLSelectElement, option: HTMLOptionElement): void {
+  option.selected = true;
+  dispatch(select, "input");
+  dispatch(select, "change");
 }
 
 /**
@@ -837,40 +1292,36 @@ function writeValue(el: FormField, value: string): void {
   dispatch(el, "change");
 }
 
-/** Enter, as the category field's own submit — it has no button of its own. Silent where the realm
- *  has no `KeyboardEvent` at all: the value is written either way, and a test DOM is not a browser. */
-function submitField(el: FormField): void {
-  const view = el.ownerDocument?.defaultView as { KeyboardEvent?: typeof KeyboardEvent } | null;
-  const Ctor =
-    view?.KeyboardEvent ?? (globalThis as { KeyboardEvent?: typeof KeyboardEvent }).KeyboardEvent;
-  if (!Ctor) return;
-  for (const type of ["keydown", "keypress", "keyup"]) {
-    el.dispatchEvent(new Ctor(type, { key: "Enter", bubbles: true }));
+/** An open dialog by its own heading — the only thing that tells Allegro's modals apart, every one of
+ *  them being `[role="dialog"]` and every class on them hashed. */
+function dialogTitled(doc: Document, title: RegExp): HTMLElement | null {
+  for (const dialog of Array.from(doc.querySelectorAll<HTMLElement>('[role="dialog"]'))) {
+    const heading = dialog.querySelector("h1, h2, h3, #modal-title")?.textContent ?? "";
+    if (title.test(heading)) return dialog;
   }
-}
-
-/** Whether the shared search field is asking for a **name** rather than a barcode — the placeholder
- *  being the only thing that differs between Allegro's two searches. */
-function searchesByName(doc: Document): boolean {
-  const field = byId<HTMLInputElement>(doc, PRODUCT_SEARCH);
-  return field !== null && !/GTIN/i.test(field.placeholder ?? "");
-}
-
-/** Which of Allegro's pages this is, or null while it is still rendering — the one question every
- *  step of {@link prepareAllegroSaleForm} is a branch of. */
-function whichPage(doc: Document): "form" | "category" | "search" | "recommerce" | null {
-  if (isAllegroSaleFormDocument(doc)) return "form";
-  if (byId(doc, FIELD.categoryId)) return "category";
-  if (byId(doc, PRODUCT_SEARCH)) return "search";
-  if (legacyFormLink(doc)) return "recommerce";
   return null;
 }
 
-/** The one link out of the newer form and into the legacy one. Matched on its text, since it is the
- *  only anchor in the page's own `<main>` and its address is the same one that redirected here. */
-function legacyFormLink(doc: Document): HTMLAnchorElement | null {
-  const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>("main a"));
-  return links.find((a) => /dotychczasowy formularz/i.test(a.textContent ?? "")) ?? null;
+/** One named control inside one named dialog. Both halves matter: *Potwierdź wybór* and *Zapisz* are
+ *  buttons Allegro puts on more than one modal, and pressing the wrong one is a click nobody asked
+ *  for. */
+function dialogControl(doc: Document, title: RegExp, control: RegExp): HTMLElement | null {
+  const dialog = dialogTitled(doc, title);
+  if (!dialog) return null;
+  const buttons = Array.from(dialog.querySelectorAll<HTMLElement>("button"));
+  return buttons.find((b) => control.test((b.textContent ?? "").trim())) ?? null;
+}
+
+/** Shut a dialog this module opened and could not use — through its own close control, and never by
+ *  anything that would decide something inside it. */
+function closeDialog(_doc: Document, dialog: HTMLElement | null): void {
+  if (!dialog) return;
+  const buttons = Array.from(dialog.querySelectorAll<HTMLElement>("button"));
+  const close = buttons.find((b) => {
+    const label = b.getAttribute("aria-label") ?? b.getAttribute("title") ?? "";
+    return /zamknij/i.test(label) || /^zamknij$/i.test((b.textContent ?? "").trim());
+  });
+  close?.click();
 }
 
 function buttonMatching(doc: Document, pattern: RegExp): HTMLElement | null {
@@ -878,11 +1329,9 @@ function buttonMatching(doc: Document, pattern: RegExp): HTMLElement | null {
   return buttons.find((b) => pattern.test((b.textContent ?? "").trim())) ?? null;
 }
 
-function linkMatching(doc: Document, pattern: RegExp): HTMLElement | null {
-  const nodes = Array.from(
-    doc.querySelectorAll<HTMLElement>("main a, main button, main [role='button']")
-  );
-  return nodes.find((n) => pattern.test((n.textContent ?? "").trim())) ?? null;
+/** The step's quantity spinner, used as a landmark while the format's own fields appear. */
+function quantityInput(doc: Document): HTMLInputElement | null {
+  return doc.querySelector<HTMLInputElement>('input[type="number"]');
 }
 
 /** Wait for `find` to answer, or give up. Polling rather than a `MutationObserver` because what is
@@ -891,7 +1340,8 @@ function linkMatching(doc: Document, pattern: RegExp): HTMLElement | null {
 async function waitFor<T>(
   doc: Document,
   find: () => T | null,
-  timeoutMs = STEP_TIMEOUT_MS
+  timeoutMs: number,
+  pollMs: number
 ): Promise<T | null> {
   const view = doc.defaultView ?? (globalThis as unknown as Window);
   const deadline = Date.now() + timeoutMs;
@@ -899,7 +1349,7 @@ async function waitFor<T>(
     const found = find();
     if (found) return found;
     if (Date.now() >= deadline) return null;
-    await new Promise<void>((resolve) => view.setTimeout(resolve, POLL_MS));
+    await new Promise<void>((resolve) => view.setTimeout(resolve, pollMs));
   }
 }
 
@@ -915,14 +1365,14 @@ function putFiles(input: HTMLInputElement, files: File[]): void {
   input.files = dt.files;
 }
 
-/** The Allegro module's listing half (#493). */
+/** The Allegro module's listing half (#493, rewritten for the recommerce wizard in #719). */
 export const allegroListing: PlatformListing = {
   formUrl: allegroSaleFormUrl,
   isFormUrl: isAllegroSaleFormUrl,
   isFormDocument: isAllegroSaleFormDocument,
   prepare: prepareAllegroSaleForm,
+  takesPhotos: true,
   fill: fillAllegroSaleForm,
   listedUrl: allegroListedOfferUrl,
   listedUrlInDocument: allegroListedUrlInDocument,
-  attachPhotos: attachAllegroPictures,
 };

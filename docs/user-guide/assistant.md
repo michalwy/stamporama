@@ -329,17 +329,27 @@ Colnect serves the same form at an edit address, so its listings can be updated 
 cannot, and is corrected on Allegro's own screen. The details are in the
 [offers guide](offers.md#update-via-assistant).
 
-### Allegro's form is a longer walk
+### Allegro's form is a walk through five steps
 
 Colnect's sale form is at an address, and opening it is the whole of getting there. Allegro's is not:
-it answers that address with its newer step-by-step form, whose *"dotychczasowy formularz"* link
-leads to a product search that has to be run before Allegro will offer to continue without a
-catalogue product — and only then does it ask for the category.
+its form is a **five-step wizard** — the product, the pictures and description, the details, the
+delivery, and a summary — and each step has to be filled before it lets you on to the next.
 
-The Assistant walks all of that itself, and the one thing it types on the way is the offer's own
-**category number**, which is what opens the form in the right category. You do not choose a product
-from Allegro's catalogue at any point: your stamps are not in it, and a listing filed against
-somebody else's product is not what the offer says it is.
+The Assistant walks all of it. It runs Allegro's product search with your listing's own title and
+takes the *"Mojego produktu tu nie ma"* way past it: you do not choose a product from Allegro's
+catalogue at any point, because your stamps are not in it and a listing filed against somebody else's
+product is not what the offer says it is. It then fills the description step, picks the offer's
+**category** by walking Allegro's own list of category names down to it, hands your pictures to
+Allegro's uploader, and carries on through the price and the delivery — stopping on the summary,
+with **Wystaw na Allegro** left for you to press.
+
+Two things follow from the way that form works, and both show up in the report:
+
+- **Allegro will not go past the pictures step without a picture.** An Allegro offer with none is
+  refused before ⚡ opens anything, so this only shows up when the pictures could not be fetched on
+  the day — the Assistant fills what it can, stops there, and says so.
+- **Allegro fixes a Buy Now listing at 30 days.** The form offers no choice, so a listing profile's
+  duration only ever applies to an auction.
 
 What it fills once it is there, and the three things it leaves to you, are in the
 [Allegro guide](allegro.md#listing-through-the-assistant).

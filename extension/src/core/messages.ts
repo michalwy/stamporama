@@ -40,6 +40,24 @@ export type ExtractResponse =
 export interface FillRequest {
   type: "fill";
   task: ListingTask;
+  /** The offer's rendered images, travelling **with** the task (#719). They used to be a second
+   *  message sent after the fill, so that nothing reached a marketplace until the form was otherwise
+   *  complete — a rule Colnect's uploader needs (#402) and the shell used to hold for everybody. It
+   *  cannot: Allegro's wizard will not be filled past its picture step without them. So the bytes
+   *  cross once, with the task, and each module places them where its own form asks for them.
+   *
+   *  Base64, because extension messaging is JSON and a `File` does not survive it. The page turns
+   *  them back into `File`s, which is also where they belong — the form is there. */
+  photos: ListingPhotoPayload[];
+}
+
+/** One image on its way to a sale form (#411). */
+export interface ListingPhotoPayload {
+  photoId: string;
+  fileName: string;
+  mime: string;
+  /** The image's bytes, base64. */
+  data: string;
 }
 export type FillResponse =
   | { ok: true; moduleId: string; moduleName: string; outcome: ListingFillOutcome }
@@ -47,31 +65,6 @@ export type FillResponse =
    *  own address with something that reloads itself into it, so the worker waits for the next load
    *  and asks again instead of reporting a fill that never happened. */
   | { ok: false; error: string; retry?: boolean };
-
-// background → content script, **after** the fill and on the same page (#411): the offer's rendered
-// images, for the module to hand to the form's own uploader. A second message rather than part of
-// `FillRequest`, because the two steps must be ordered — Colnect uploads a picture the moment it is
-// handed over, before the sale is saved, so nothing goes to the marketplace until the form the
-// collector is looking at is otherwise complete.
-//
-// The bytes are base64: extension messaging is JSON, and a `File` does not survive it. The page turns
-// them back into `File`s, which is also where they belong — the form is there.
-export interface AttachPhotosRequest {
-  type: "attach-photos";
-  /** The module that filled this page, as its own answer named it. */
-  moduleId: string;
-  photos: AttachPhotoPayload[];
-}
-export interface AttachPhotoPayload {
-  photoId: string;
-  fileName: string;
-  mime: string;
-  /** The image's bytes, base64. */
-  data: string;
-}
-export type AttachPhotosResponse =
-  | { ok: true; outcome: ListingFillOutcome }
-  | { ok: false; error: string };
 
 // capture window → content script (in the tab holding the auction, #355). The same shape as
 // `extract`, for the same reason: reading a page is DOM work and happens where the DOM is. A refusal
