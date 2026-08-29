@@ -206,9 +206,10 @@ export function AddVariantRangeDialog({
                   color: "var(--color-text-muted)",
                 }}
               >
-                Suffixes on their own (<code>a-f</code>, <code>a, c, e</code>, <code>I-III</code>)
-                are read against {baseNumber ? <strong>{baseNumber}</strong> : "the base number"};
-                full numbers work too.
+                Suffixes on their own (<code>a-f</code>, <code>A-C</code>, <code>I-III</code>,
+                <code>a, c, e</code>) are read against{" "}
+                {baseNumber ? <strong>{baseNumber}</strong> : "the base number"}; full numbers work
+                too.
               </div>
 
               {subtypes.length > 0 && (

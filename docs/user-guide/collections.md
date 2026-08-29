@@ -196,6 +196,8 @@ Type the numbers the way the catalog prints them: a range with a dash, several r
 
 The third row is the case a single range cannot express: one series printed in two variants, six stamps in all. The fourth is a series issued with a souvenir block. Stamps are created **in the order you typed them**.
 
+A range can vary the **number** (`2820-2822`) or the **suffix** (`423a-423c`, `423A-423C`, `12I-12III`), never both at once. Suffixes run over lowercase letters, uppercase letters and Roman numerals, and both ends of one range have to be the same kind. Uppercase letters and Roman numerals overlap on `I V X L C D M`, and the tie is settled for the **pair**: `423C-423F` is four lettered stamps because `F` spells no numeral, while `12I-12V` stays the five numerals it reads as. Where both readings hold — `423C-423D` — the numerals win; write those two out (`423C, 423D`) if you meant letters.
+
 The **series range** the issue records is worked out for you, and is deliberately not the same thing as the stamps: **suffixes are dropped and the prefix is kept**, from the lowest number to the highest. That is the range you see on the issue row and search by, while the stamps keep their full numbers. A line under the field shows both, so you can check what you are about to create before you save.
 
 A range can only ever be *one* numbering, so when you mix them — an ordinary run plus a block — the range follows the **ordinary numbering** and the block still becomes a stamp; it just doesn't stretch the range. It is the same rule the app uses when it [notices an issue's stamps have outgrown its range](#keeping-an-issues-catalog-range-in-step-with-its-stamps). A catalog whose numbers are *only* blocks records a block range (`BL48-BL50`).
@@ -289,9 +291,10 @@ You can write the numbers in full — `240a-240f`, or `240a, 240c` — but you d
 
 - `a-f` → `240a` … `240f`
 - `a, c, e` → `240a`, `240c`, `240e`
+- `A-F` → `240A` … `240F`
 - `I-III` → `240I`, `240II`, `240III`
 
-Ranges run over the same two sequences the rest of the app knows, lowercase letters `a`–`z` and Roman numerals, and both ends of one have to be the same kind. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
+Ranges run over the same sequences the rest of the app knows — lowercase letters, uppercase letters and Roman numerals — under [the same rules](#writing-the-numbers) the issue's own range field follows, so `A-F` under `240` is `240A` … `240F`. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
 
 Pick the **Subtype** every stamp in the run should carry — it starts on the one you used last, exactly as the single add dialog does — and the dialog shows how many stamps it will create, with a preview of the numbers and the same [duplicate check](duplicate-catalog-numbers.md) the other range dialog runs.
 

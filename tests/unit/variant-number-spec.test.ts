@@ -27,6 +27,27 @@ describe("parseVariantNumberSpec — the base number is understood (#722)", () =
     assert.deepEqual(numbers("I-III"), ["240I", "240II", "240III"]);
   });
 
+  it("enumerates uppercase-letter suffixes", () => {
+    assert.deepEqual(numbers("A-B"), ["240A", "240B"]);
+    assert.deepEqual(numbers("A-D"), ["240A", "240B", "240C", "240D"]);
+    // The tie with Roman numerals is settled for the **pair**: `F` spells no numeral, so the whole
+    // range is letters even though `C` alone would have read as 100.
+    assert.deepEqual(numbers("C-F"), ["240C", "240D", "240E", "240F"]);
+    assert.deepEqual(numbers("P-S"), ["240P", "240Q", "240R", "240S"]);
+  });
+
+  it("keeps a Roman-valid pair Roman", () => {
+    // Both ends spell canonical numerals, so this stays the numeral run it always was — even
+    // though the letters would also have made sense. Writing them out ("I, J") says otherwise.
+    assert.deepEqual(numbers("I-V"), [
+      "240I",
+      "240II",
+      "240III",
+      "240IV",
+      "240V",
+    ]);
+  });
+
   it("mixes the two forms in one spec", () => {
     assert.deepEqual(numbers("a-b, 241a"), ["240a", "240b", "241a"]);
   });
@@ -44,15 +65,17 @@ describe("parseVariantNumberSpec — the base number is understood (#722)", () =
   });
 
   it("rejects a range whose ends sit on different sequences", () => {
-    assert.match(String(numbers("a-III")), /letters, or both Roman numerals/);
+    assert.match(String(numbers("a-III")), /Unrecognized suffix sequence/);
+    assert.match(String(numbers("a-C")), /Unrecognized suffix sequence/);
   });
 
   it("rejects a descending range", () => {
     assert.equal(numbers("f-a"), "First suffix must be ≤ Last suffix.");
+    assert.equal(numbers("D-A"), "First suffix must be ≤ Last suffix.");
   });
 
   it("rejects a suffix sequence it cannot enumerate", () => {
-    assert.match(String(numbers("P-S")), /letters a–z or Roman numerals/);
+    assert.match(String(numbers("CKB-KB")), /Unrecognized suffix sequence/);
   });
 
   it("rejects a half-bare range rather than guessing which axis it is on", () => {

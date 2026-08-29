@@ -205,6 +205,17 @@ describe("resolveCatalogRange + generateCatalogNumbers", () => {
     assert.deepEqual(expand("12I", "12III"), ["12I", "12II", "12III"]);
   });
 
+  it("expands an uppercase-letter suffix range (#722)", () => {
+    assert.deepEqual(expand("423A", "423C"), ["423A", "423B", "423C"]);
+    // Settled for the pair, not per end: `F` spells no numeral, so `C` is a letter here.
+    assert.deepEqual(expand("423C", "423F"), ["423C", "423D", "423E", "423F"]);
+    assert.deepEqual(expand("BL7P", "BL7S"), ["BL7P", "BL7Q", "BL7R", "BL7S"]);
+  });
+
+  it("keeps a Roman-valid suffix pair Roman (#722)", () => {
+    assert.deepEqual(expand("12I", "12V"), ["12I", "12II", "12III", "12IV", "12V"]);
+  });
+
   it("varies the base while keeping a constant letter suffix", () => {
     assert.deepEqual(expand("40A", "50A").slice(0, 3), ["40A", "41A", "42A"]);
     assert.equal((expand("40A", "50A") as string[]).length, 11);
@@ -256,6 +267,11 @@ describe("resolveCatalogRange + generateCatalogNumbers", () => {
   it("rejects a descending range", () => {
     assert.match(expand("105", "100") as string, /≤/);
     assert.match(expand("100c", "100a") as string, /≤/);
+    assert.match(expand("100D", "100A") as string, /≤/);
+  });
+
+  it("rejects a suffix pair whose ends sit on different sequences (#722)", () => {
+    assert.match(expand("100a", "100C") as string, /suffix sequence/);
   });
 });
 

@@ -204,7 +204,14 @@ export function parseCatalogSearch(
 //   • base   — "100"–"105", "BL120"–"BL123", "40A"–"50A" (suffix "A" constant)
 //   • letter — "423a"–"423c" (base "423" constant, suffix a→c)
 //   • roman  — "12I"–"12II"  (base "12" constant, suffix I→II)
+//   • upper  — "423A"–"423C" (base "423" constant, suffix A→C)
 // A First value on its own (no Last) always increments the varying dimension.
+//
+// `upper` and `roman` overlap on the seven letters a numeral is spelt with, and the tie is settled
+// **for the pair, not for each end**: a range is Roman only when *both* ends spell a canonical
+// numeral, so "I"–"V" stays the numeral run it always was while "A"–"D" and "C"–"F" are letters.
+// Only a pair that is Roman-valid throughout ("C"–"D") is read as numerals against the collector's
+// likely intent, and there it is unresolvable — writing the values out ("C, D") says which is meant.
 //
 // A number that is *itself* a Roman numeral ("I"–"VIII", #383) carries no digits
 // at all, so it never reaches the three-part split. It is recognized ahead of it
@@ -277,6 +284,12 @@ function parseLetter(input: string): number | null {
   return input.charCodeAt(0) - 96;
 }
 
+/** A single uppercase letter (A–Z) as a 1-based index, or null. */
+function parseUpperLetter(input: string): number | null {
+  if (!/^[A-Z]$/.test(input)) return null;
+  return input.charCodeAt(0) - 64;
+}
+
 /**
  * Where a suffix sits in its own sequence, as a 1-based ordinal — the same two schemes an
  * auto-generate range enumerates (#150): lowercase letters `a`–`z` and canonical Roman numerals.
@@ -295,14 +308,39 @@ export function parseSuffixOrdinal(
 
 /**
  * How a resolved range enumerates its values. `base` reapplies a constant prefix
- * and suffix around an incrementing number; `letter`/`roman` hold a constant
+ * and suffix around an incrementing number; `letter`/`upper`/`roman` hold a constant
  * prefix+base and enumerate a suffix sequence. A `roman` scheme with an empty
  * `base` is a bare Roman-numeral range (#383) — the numeral is the whole number.
  */
 export type CatalogRangeScheme =
   | { kind: "base"; prefix: string; suffix: string; from: number }
   | { kind: "letter"; prefix: string; base: string; from: number }
+  | { kind: "upper"; prefix: string; base: string; from: number }
   | { kind: "roman"; prefix: string; base: string; from: number };
+
+/** The sequence a suffix range runs over, and where its ends sit on it. Shared by
+ *  {@link resolveCatalogRange}'s suffix-varying branch and {@link parseVariantNumberSpec}, which
+ *  ask the same question of two suffixes — one having split them out of full catalog numbers, the
+ *  other having been handed them on their own. Roman is tried before uppercase letters and settled
+ *  across **both** ends, so "I"–"V" is a numeral run and "A"–"D" a lettered one. */
+function resolveSuffixRange(
+  fromSuffix: string,
+  toSuffix: string
+): { kind: "letter" | "upper" | "roman"; from: number; span: number } | { error: string } {
+  const pairs: [(v: string) => number | null, "letter" | "roman" | "upper"][] = [
+    [parseLetter, "letter"],
+    [parseRoman, "roman"],
+    [parseUpperLetter, "upper"],
+  ];
+  for (const [parse, kind] of pairs) {
+    const from = parse(fromSuffix);
+    const to = parse(toSuffix);
+    if (from === null || to === null) continue;
+    if (from > to) return { error: "First suffix must be ≤ Last suffix." };
+    return { kind, from, span: to - from + 1 };
+  }
+  return { error: "Unrecognized suffix sequence (use letters a–z, A–Z, or Roman numerals)." };
+}
 
 export interface ResolvedCatalogRange {
   scheme: CatalogRangeScheme;
@@ -370,31 +408,21 @@ export function resolveCatalogRange(
     return { error: "First and Last must vary only the number or only the suffix, not both." };
   }
 
-  const fromLetter = parseLetter(first.suffix);
-  const toLetter = parseLetter(last.suffix);
-  if (fromLetter !== null && toLetter !== null) {
-    if (fromLetter > toLetter) return { error: "First suffix must be ≤ Last suffix." };
-    return {
-      scheme: { kind: "letter", prefix: first.prefix, base: first.base, from: fromLetter },
-      span: toLetter - fromLetter + 1,
-    };
-  }
-
-  const fromRoman = parseRoman(first.suffix);
-  const toRomanValue = parseRoman(last.suffix);
-  if (fromRoman !== null && toRomanValue !== null) {
-    if (fromRoman > toRomanValue) return { error: "First suffix must be ≤ Last suffix." };
-    return {
-      scheme: { kind: "roman", prefix: first.prefix, base: first.base, from: fromRoman },
-      span: toRomanValue - fromRoman + 1,
-    };
-  }
-
-  return { error: "Unrecognized suffix sequence (use letters a–z or Roman numerals)." };
+  const suffixes = resolveSuffixRange(first.suffix, last.suffix);
+  if ("error" in suffixes) return suffixes;
+  return {
+    scheme: {
+      kind: suffixes.kind,
+      prefix: first.prefix,
+      base: first.base,
+      from: suffixes.from,
+    },
+    span: suffixes.span,
+  };
 }
 
 /** Render a single scalar position of a scheme back to a catalog-number string.
- * `base` reapplies the constant prefix/suffix around the number; `letter`/`roman`
+ * `base` reapplies the constant prefix/suffix around the number; `letter`/`upper`/`roman`
  * hold prefix+base constant and render the suffix at that position. Leading zeros
  * are not preserved (the scalar is numeric), matching {@link generateCatalogNumbers}. */
 export function formatSchemeValue(scheme: CatalogRangeScheme, value: number): string {
@@ -403,6 +431,9 @@ export function formatSchemeValue(scheme: CatalogRangeScheme, value: number): st
   }
   if (scheme.kind === "letter") {
     return `${scheme.prefix}${scheme.base}${String.fromCharCode(96 + value)}`;
+  }
+  if (scheme.kind === "upper") {
+    return `${scheme.prefix}${scheme.base}${String.fromCharCode(64 + value)}`;
   }
   return `${scheme.prefix}${scheme.base}${toRoman(value)}`;
 }
@@ -539,10 +570,11 @@ export function parseCatalogNumberSpec(input: string): CatalogNumberSpec | { err
 // guessed — `240a-c` is read as a full number against a suffix and rejected as such — because the
 // two halves of a range have to agree about which axis they are on.
 //
-// A suffix *range* enumerates over the sequences the app already knows, lowercase letters and
-// Roman numerals (`parseSuffixOrdinal`). A **lone** suffix is taken literally instead, so a base
-// that is itself a variant takes the suffixes its catalogue actually prints: `309A` + `P` is
-// `309AP`, which no sequence would have produced.
+// A suffix *range* goes through `resolveSuffixRange`, the same resolution the issue-level range
+// field uses, so it runs over the sequences the app already knows: lowercase letters, uppercase
+// letters and Roman numerals. A **lone** suffix is taken literally instead, so a base that is
+// itself a variant takes the suffixes its catalogue actually prints: `309A` + `P` is `309AP`,
+// which no sequence would have produced.
 
 /** Expand a variant spec typed under `baseNumber` — the base stamp's number in the catalogue the
  *  variants are being numbered in — into the catalog numbers it generates, in the order typed.
@@ -584,17 +616,10 @@ export function parseVariantNumberSpec(
       numbers.push(`${base}${parts[0]}`);
       continue;
     }
-    const from = parseSuffixOrdinal(parts[0]);
-    const to = parseSuffixOrdinal(parts[1]);
-    if (!from || !to) {
-      return { error: "A suffix range runs over letters a–z or Roman numerals (e.g. a-f, I-III)." };
-    }
-    if (from.kind !== to.kind) {
-      return { error: "Both ends of a suffix range must be letters, or both Roman numerals." };
-    }
-    if (from.value > to.value) return { error: "First suffix must be ≤ Last suffix." };
-    const scheme: CatalogRangeScheme = { kind: from.kind, prefix: "", base, from: from.value };
-    numbers.push(...generateCatalogNumbers(scheme, to.value - from.value + 1));
+    const range = resolveSuffixRange(parts[0], parts[1]);
+    if ("error" in range) return range;
+    const scheme: CatalogRangeScheme = { kind: range.kind, prefix: "", base, from: range.from };
+    numbers.push(...generateCatalogNumbers(scheme, range.span));
   }
 
   if (numbers.length === 0) return { error: "Enter at least one variant number." };
@@ -640,7 +665,9 @@ function scalarInScheme(scheme: CatalogRangeScheme, parts: CatalogNumberParts): 
     return parseInt(parts.base, 10);
   }
   if (parts.base !== scheme.base) return null;
-  return scheme.kind === "letter" ? parseLetter(parts.suffix) : parseRoman(parts.suffix);
+  if (scheme.kind === "letter") return parseLetter(parts.suffix);
+  if (scheme.kind === "upper") return parseUpperLetter(parts.suffix);
+  return parseRoman(parts.suffix);
 }
 
 /** Structural parts of a *member* number, which may also be a bare Roman numeral (#383).
