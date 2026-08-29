@@ -478,7 +478,11 @@ export function OfferPlatformItemsCard({
           )}
         </button>
       </Tooltip>
-        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+        {/* Beside the heading rather than off at the card's right edge: every button these stand
+            with is a per-row one, and those sit a few centimetres from the title on a wide screen.
+            A card-wide action pinned to the far edge made the whole width a mouse journey between
+            two halves of the same job. */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
         {/* One press for the whole gap: the walk hands over the first stamp with no item-ID and, as
             each match lands, the next — which is the shape of the job, since a listing cannot be
             posted until none are left. */}
