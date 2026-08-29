@@ -20,7 +20,12 @@ import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-
 
 /** Row-actions-menu entry that opens the read-only inventory popup for a stamp or
  * issue (#110). Returns the menu action plus the dialog element to render at the
- * row level so it survives the menu closing. */
+ * row level so it survives the menu closing.
+ *
+ * `open` is the same opener the entry runs, exposed so a control *on* the row can reach the very
+ * same dialog — the copy count chip's click does (#721). Handing out the opener rather than letting
+ * the caller build a second popup is what keeps the chip and the `⋮` entry from drifting into two
+ * surfaces answering one question. */
 export function useInventoryPopupAction({
   collectionId,
   areas,
@@ -35,7 +40,7 @@ export function useInventoryPopupAction({
   target: InventoryPopupTarget;
   key?: string;
   label?: string;
-}): { action: RowAction; dialog: React.ReactNode } {
+}): { action: RowAction; dialog: React.ReactNode; open: () => void } {
   const [open, setOpen] = useState(false);
 
   const action: RowAction = {
@@ -55,7 +60,7 @@ export function useInventoryPopupAction({
     />
   ) : null;
 
-  return { action, dialog };
+  return { action, dialog, open: () => setOpen(true) };
 }
 
 /** What a new copy is seeded with: a specific stamp (pre-selected picker) or an issue

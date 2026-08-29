@@ -379,6 +379,9 @@ function StampTreeNode({
               vendorMap={vendorMap}
               primaryVendorId={primaryVendorId}
               onSetPrice={quickPrice.open ?? undefined}
+              // The copy count chip opens the very dialog the `⋮` entry above does (#721) — the
+              // chip is already pointing at those copies, so it should be the way to them.
+              onOpenCopies={copies.open}
             />
           </div>
         </div>

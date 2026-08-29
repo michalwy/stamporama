@@ -304,6 +304,9 @@ export function StampRow({
             copies={stamp.copies}
             variantCopies={stamp.variantCopies}
             size="medium"
+            // Same as the issue tree's (#721): hover previews the breakdown, click opens the
+            // row's own *View copies* dialog.
+            onOpenCopies={copies.open}
           />
           {/* Beside the copies held, because the two answer one question between them: what the
               collection has of this stamp, and what it is still after (#532). */}

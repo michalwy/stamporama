@@ -60,12 +60,18 @@ in the same vocabulary the copy rows use: green *in collection*, blue *for sale*
 trade*. The dots say only *that* a disposition is there, never how many copies carry it. Copies with
 no disposition at all get no dot.
 
-**Click the badge for the breakdown.** It opens a small panel listing each disposition with its
-figure, and the variants' share of it in a column of its own. The dispositions are markers, not
-slices — one copy can be both in the collection and for sale — so they are listed under the total
-rather than dividing it, and they will often add up to more (or, for copies carrying none, less)
-than the number of copies. That is exactly why they are not printed next to the total on the row:
-side by side they read as parts of it, and they are not.
+**Rest the pointer on the badge for the breakdown.** A small panel opens listing each disposition
+with its figure, and the variants' share of it in a column of its own. The dispositions are markers,
+not slices — one copy can be both in the collection and for sale — so they are listed under the
+total rather than dividing it, and they will often add up to more (or, for copies carrying none,
+less) than the number of copies. That is exactly why they are not printed next to the total on the
+row: side by side they read as parts of it, and they are not.
+
+**Click the badge to open the copies.** On the **Issues** list and the **Stamps** list the click
+opens the same read-only **View copies** window that the row's **⋮** menu opens, listing every copy
+behind the number. Hovering is the preview; clicking is the way in. In the stamp **pickers** and on
+the **detail pages** there is no such window to open, so the badge there previews on hover only and
+is not clickable.
 
 Three rules worth knowing:
 

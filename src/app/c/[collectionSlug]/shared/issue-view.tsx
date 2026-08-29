@@ -291,6 +291,7 @@ export function StampDetailLine({
   vendorMap,
   primaryVendorId,
   onSetPrice,
+  onOpenCopies,
 }: {
   node: StampNodeData;
   vendorMap: VendorMap;
@@ -298,6 +299,10 @@ export function StampDetailLine({
   /** When provided, an unpriced stamp shows a **+ catalog value** link in the price slot
    * (#341) — the same affordance the Copies list puts on an unpriced copy (#228). */
   onSetPrice?: () => void;
+  /** When provided, clicking the copy count chip opens the row's *View copies* dialog (#721).
+   * The pickers and the identify dialog that also draw this line have no such view, and pass
+   * nothing: the chip there previews on hover and is not a control. */
+  onOpenCopies?: () => void;
 }) {
   const primaryCN = primaryVendorId
     ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
@@ -351,7 +356,11 @@ export function StampDetailLine({
         searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
       />
       <SubtypeChip subtype={node.subtype} />
-      <CopyCountBadge copies={node.copies} variantCopies={node.variantCopies} />
+      <CopyCountBadge
+        copies={node.copies}
+        variantCopies={node.variantCopies}
+        onOpenCopies={onOpenCopies}
+      />
       {/* Beside the copies held: what the collection has of this stamp, and what it is still
           after (#532). */}
       <WantChip wants={node.wants} />
