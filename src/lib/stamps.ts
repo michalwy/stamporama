@@ -282,6 +282,22 @@ export async function getStampSubtypeAssignment(
   });
 }
 
+/** One stamp's number in one catalogue, or null when it carries none there (#722) — what a
+ *  variant range is written against when its suffixes are typed on their own. */
+export async function getStampCatalogNumber(
+  ownerId: string,
+  collectionId: string,
+  stampId: string,
+  catalogVendorId: string
+): Promise<string | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const row = await prisma.stampCatalogNumber.findFirst({
+    where: { stampId, catalogVendorId, stamp: { collectionId } },
+    select: { number: true },
+  });
+  return row?.number ?? null;
+}
+
 export async function getStamp(
   ownerId: string,
   stampId: string

@@ -273,6 +273,24 @@ Everything the tree decides follows immediately: which stamp counts as a variant
 
 To nest a *new* stamp **under an existing one**, use **Add child stamp** in that stamp's **⋮** menu — or **Add variant** on the stamp's own [detail page](detail-pages.md#the-stamp-page), which opens the same dialog. The dialog starts from the parent: its catalog numbers are copied in as a starting point, and the **Year** is pre-filled from the **parent stamp's own year** rather than the issue's — a variant or reprint is usually dated from the node it hangs under. (A root-level stamp still starts from the issue's year.) After you save, the parent node **opens by itself** so the new child is visible instead of hiding behind a collapsed arrow.
 
+#### Adding a range of variants
+
+When the catalogue splits one stamp into a lettered run — `240a` through `240f` — adding them one at a time is six passes through the same dialog for six stamps that differ in one character. **Add variant range…** in the stamp's **⋮** menu, or **Add range** on the [stamp's own page](detail-pages.md#the-stamp-page), creates the whole run in one save.
+
+There is one field of numbers, and it is for your area's **primary catalog** only: a second catalogue's variant lettering rarely runs alongside the first's, so filling it in from a range would be guesswork. Fill the other catalogues in per stamp afterwards, the way you always did.
+
+You can write the numbers in full — `240a-240f`, or `240a, 240c` — but you do not have to. A piece with no digits in it is read against the base stamp's own number, so under `240`:
+
+- `a-f` → `240a` … `240f`
+- `a, c, e` → `240a`, `240c`, `240e`
+- `I-III` → `240I`, `240II`, `240III`
+
+Ranges run over the same two sequences the rest of the app knows, lowercase letters `a`–`z` and Roman numerals, and both ends of one have to be the same kind. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
+
+Pick the **Subtype** every stamp in the run should carry — it starts on the one you used last, exactly as the single add dialog does — and the dialog shows how many stamps it will create, with a preview of the numbers and the same [duplicate check](duplicate-catalog-numbers.md) the other range dialog runs.
+
+Each variant comes out the way one added through the single dialog does: the base stamp as its parent, that subtype, the **base stamp's** year, no name, and — because a variant is not part of the issue's set — no [checklist](#checklists) tick. Everything else is filled in by editing the variants themselves.
+
 ### Issue and stamp names in other languages
 
 The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).

@@ -10,6 +10,7 @@ import {
   previewIssueDeletion,
   addStampToIssue,
   addStampRangeToIssue,
+  addVariantRangeToStamp,
   removeStampFromIssue,
   reorderIssueMembers,
   moveStampNode,
@@ -38,9 +39,10 @@ import { getChecklistEstimatedValue } from "@/lib/estimated-values";
 import type { ChecklistEstimatedValue } from "@/lib/estimated-values";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { parseTranslationValues } from "@/lib/translations";
-import { STAMP_TRANSLATION_FIELDS } from "@/lib/stamps";
+import { STAMP_TRANSLATION_FIELDS, getStampCatalogNumber } from "@/lib/stamps";
 import {
   parseCatalogNumberSpec,
+  parseVariantNumberSpec,
   AUTO_CREATE_MAX_STAMPS,
   type CatalogNumberSpec,
 } from "@/lib/catalog-number";
@@ -630,6 +632,65 @@ export async function addStampRangeToIssueAction(
     return { status: "success", issueId };
   } catch {
     return { status: "error", message: "Failed to add stamps. Please try again." };
+  }
+}
+
+/**
+ * Bulk-add a range of variants under one base stamp (#722).
+ *
+ * The spec is parsed **here** against the base stamp's own number in the chosen catalogue rather
+ * than trusting the numbers the dialog previewed: the client typed `a-f`, and what `a-f` means is a
+ * fact about a stored stamp.
+ */
+export async function addVariantRangeAction(
+  collectionId: string,
+  issueId: string,
+  parentStampId: string,
+  formData: FormData
+): Promise<IssueActionState> {
+  const session = await getSession();
+  const catalogVendorId = ((formData.get("catalogVendorId") as string | null) ?? "").trim();
+  if (!catalogVendorId) return { status: "error", message: "Select a catalog." };
+  const raw = ((formData.get("variantNumbers") as string | null) ?? "").trim();
+  const subtypeId = ((formData.get("subtypeId") as string | null) ?? "").trim() || null;
+
+  const baseNumber = await getStampCatalogNumber(
+    session.user.id,
+    collectionId,
+    parentStampId,
+    catalogVendorId
+  );
+  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "");
+  if ("error" in parsed) return { status: "error", message: parsed.error };
+  if (parsed.numbers.length > AUTO_CREATE_MAX_STAMPS) {
+    return { status: "error", message: `Range cannot exceed ${AUTO_CREATE_MAX_STAMPS} stamps.` };
+  }
+
+  // Block-mode duplicate guard (#85), with the issue supplying the prefix context (#377) — the
+  // same check the issue's own range dialog runs, over numbers that are about to become stamps.
+  const areaId = await getIssueAreaId(issueId);
+  const blockMessage = await enforceCandidateCatalogDuplicates(
+    session.user.id,
+    collectionId,
+    { areaId, issueId },
+    parsed.numbers.map((number) => ({ catalogVendorId, number }))
+  );
+  if (blockMessage) return { status: "error", message: blockMessage };
+
+  try {
+    await addVariantRangeToStamp(session.user.id, collectionId, issueId, parentStampId, {
+      catalogVendorId,
+      numbers: parsed.numbers,
+      subtypeId,
+    });
+    return { status: "success", issueId };
+  } catch (e) {
+    // The refusals name what the collector picked — a base stamp filed on another issue, a subtype
+    // from another collection — so they are worth saying rather than flattening into "try again".
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add variants. Please try again.",
+    };
   }
 }
 

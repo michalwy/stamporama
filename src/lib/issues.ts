@@ -1546,7 +1546,13 @@ function assertAutoCreateInput(
  *
  *  A generated range **is** the issue's set — that is what auto-creating from a catalog range
  *  means — so it lands on the issue's first checklist, creating one named after the issue when
- *  there is none. This is the flag's old `requiredForCompleteness: true` in checklist terms. */
+ *  there is none. This is the flag's old `requiredForCompleteness: true` in checklist terms.
+ *
+ *  Unless it hangs under a stamp: `parent` makes the same run a **variant range** (#722), and a
+ *  variant is not the issue's set. It is the *one* thing that changes — the checklist entry the
+ *  paragraph above is about is the only write the branch skips — which is why this is one function
+ *  and not two, and why the single add dialog leaves a child's checklists unticked for the same
+ *  reason. */
 async function createRangeStamps(
   tx: Prisma.TransactionClient,
   params: {
@@ -1555,15 +1561,23 @@ async function createRangeStamps(
     issueId: string;
     issuedYear: number | null;
     input: AutoCreateStampsInput;
+    /** The stamp the run hangs under, with the subtype every one of its children carries.
+     *  Absent for a root-level range. */
+    parent?: { stampId: string; subtypeId: string | null };
   }
 ): Promise<string[]> {
-  const { collectionId, areaId, issueId, issuedYear, input } = params;
+  const { collectionId, areaId, issueId, issuedYear, input, parent } = params;
   const { count, vendors } = input;
   const stampIds: string[] = [];
 
   for (let n = 0; n < count; n++) {
     const stamp = await tx.stamp.create({
-      data: { collectionId, issuedYear },
+      data: {
+        collectionId,
+        issuedYear,
+        parentId: parent?.stampId ?? null,
+        subtypeId: parent?.subtypeId ?? null,
+      },
       select: { id: true },
     });
     stampIds.push(stamp.id);
@@ -1584,11 +1598,13 @@ async function createRangeStamps(
     data: stampIds.map((stampId, i) => ({ issueId, stampId, sortOrder: rangeBase + i })),
   });
 
-  const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
-  await tx.checklistStamp.createMany({
-    data: stampIds.map((stampId) => ({ checklistId, stampId })),
-    skipDuplicates: true,
-  });
+  if (!parent) {
+    const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
+    await tx.checklistStamp.createMany({
+      data: stampIds.map((stampId) => ({ checklistId, stampId })),
+      skipDuplicates: true,
+    });
+  }
 
   const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
   for (let i = 0; i < stampIds.length; i++) {
@@ -1718,6 +1734,80 @@ export async function addStampRangeToIssue(
       issueId,
       issuedYear: issue?.year ?? null,
       input,
+    })
+  );
+  await recomputeStampSortKeys(collectionId, stampIds);
+}
+
+/**
+ * Add a run of **variants** under one base stamp (#722) — {@link addStampRangeToIssue} one level
+ * down. The numbers are prepared by the caller (`parseVariantNumberSpec`, which understands both
+ * `240a-240f` and the bare `a-f`), and every stamp created carries the same subtype, the way the
+ * single add dialog classifies one child at a time.
+ *
+ * The base stamp must be a member of `issueId`, the issue every tree operation is scoped to: a
+ * variant is filed where its parent is filed, and `IssueMember.sortOrder` is per-issue (#549).
+ * Beyond that the children come out exactly as the single dialog leaves them — the parent's year
+ * (#360), no name, no checklist entry — because it is the same stamp, typed once instead of six
+ * times.
+ */
+export async function addVariantRangeToStamp(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  parentStampId: string,
+  input: {
+    catalogVendorId: string;
+    /** Pre-generated catalog numbers, one per variant. */
+    numbers: string[];
+    /** The subtype every variant carries; the collection's default when null/omitted. */
+    subtypeId?: string | null;
+  }
+): Promise<void> {
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  assertAutoCreateInput(
+    { count: input.numbers.length, vendors: [{ catalogVendorId: input.catalogVendorId, numbers: input.numbers }] }
+  );
+
+  const parent = await prisma.stamp.findFirst({
+    where: { id: parentStampId, collectionId },
+    select: { id: true, issuedYear: true, issueMemberships: { where: { issueId }, select: { issueId: true } } },
+  });
+  if (!parent) throw new Error("Base stamp not found.");
+  if (parent.issueMemberships.length === 0) {
+    throw new Error("Base stamp is not a member of this issue.");
+  }
+
+  // The subtype the whole run carries, resolved once: the one chosen, or the collection's default
+  // — {@link addStampToIssue}'s own rule for a child stamp.
+  let subtypeId = input.subtypeId ?? null;
+  if (subtypeId) {
+    const sub = await prisma.stampSubtype.findFirst({
+      where: { id: subtypeId, collectionId },
+      select: { id: true },
+    });
+    if (!sub) throw new Error("Subtype not found in this collection.");
+  } else {
+    const def = await prisma.stampSubtype.findFirst({
+      where: { collectionId, isDefault: true },
+      select: { id: true },
+    });
+    subtypeId = def?.id ?? null;
+  }
+
+  const stampIds = await prisma.$transaction((tx) =>
+    createRangeStamps(tx, {
+      collectionId,
+      areaId: collectionAreaId,
+      issueId,
+      issuedYear: parent.issuedYear,
+      input: {
+        count: input.numbers.length,
+        vendors: [{ catalogVendorId: input.catalogVendorId, numbers: input.numbers }],
+      },
+      parent: { stampId: parentStampId, subtypeId },
     })
   );
   await recomputeStampSortKeys(collectionId, stampIds);

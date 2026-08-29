@@ -112,6 +112,8 @@ Offers. Only Details is always there.
   - **Add variant** opens the same add-stamp form the Issues list
     opens, with this stamp already set as the parent and its catalog numbers filled in for you to
     suffix (`309` → `309A`). The new variant joins the issue named in the line above.
+  - **Add range** adds a whole lettered run at once — `a-f` under `240` is six variants, saved
+    together. See [adding a range of variants](collections.md#adding-a-range-of-variants).
   - Each variant's `⋮` menu offers **Edit** — the same stamp form, subtype included — and
     **Delete**. *Open stamp page* and *Edit* are also on the row as hover icons.
   - **Reorder** turns on drag handles so the variants can be put in the order you want them listed,

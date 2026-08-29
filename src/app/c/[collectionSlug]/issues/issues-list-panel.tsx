@@ -15,6 +15,7 @@ import {
   deleteIssueAction,
   addStampToIssueAction,
   addStampRangeToIssueAction,
+  addVariantRangeAction,
   moveStampNodeAction,
   reparentStampNodeAction,
   moveIssueToAreaAction,
@@ -25,6 +26,10 @@ import {
 } from "@/app/actions/issues";
 import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
 import { AddStampRangeDialog } from "./add-stamp-range-dialog";
+import {
+  AddVariantRangeDialog,
+  type AddVariantRangeParent,
+} from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { MergeIssueDialog } from "./merge-issue-dialog";
 import { useToast } from "@/app/toast-provider";
 import { RangeExtendedDialog } from "./range-extended-dialog";
@@ -110,6 +115,7 @@ type DialogState =
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-issue-area"; issue: IssueListItem }
   | { kind: "add-stamp-range"; issue: IssueListItem }
+  | { kind: "add-variant-range"; issue: IssueListItem; parent: AddVariantRangeParent }
   | { kind: "merge-issue"; issue: IssueListItem }
   | {
       kind: "range-extended";
@@ -441,6 +447,8 @@ export function IssuesListPanel({
     onDelete: (issue) => openDialog({ kind: "delete-issue", issue }),
     onMoveIssueArea: (issue) => openDialog({ kind: "move-issue-area", issue }),
     onAddStampRange: (issue) => openDialog({ kind: "add-stamp-range", issue }),
+    onAddVariantRange: (issue, parent) =>
+      openDialog({ kind: "add-variant-range", issue, parent }),
     onMergeIssue: (issue) => openDialog({ kind: "merge-issue", issue }),
     onAddStamp: (issueId, parent) => openDialog({ kind: "add-stamp", issueId, parent }),
     onEditStamp: (issueId, stamp) =>
@@ -873,6 +881,49 @@ export function IssuesListPanel({
                   setActionState(result);
                   if (result.status === "success") {
                     await finishWithRangeCheck(dialog.issue.id, issueLabel);
+                  }
+                })
+              }
+            />
+          );
+        })()}
+
+      {dialog.kind === "add-variant-range" &&
+        (() => {
+          const areaId = dialog.issue.collectionAreaId;
+          const issueLabel =
+            (dialog.issue.name ?? "(unnamed)") +
+            (dialog.issue.year ? ` (${dialog.issue.year})` : "");
+          const { id: issueId } = dialog.issue;
+          const { stampId } = dialog.parent;
+          return (
+            <AddVariantRangeDialog
+              collectionId={collectionId}
+              issueId={issueId}
+              issueName={issueLabel}
+              areaId={areaId}
+              parent={dialog.parent}
+              vendors={[...vendorMapFor(areaId, issueId).values()]}
+              primaryVendorId={effectivePrimaryVendorId(areas, areaId)}
+              isPending={isPending}
+              error={error}
+              onClose={closeDialog}
+              onSubmit={(fd) =>
+                startTransition(async () => {
+                  const result = await addVariantRangeAction(
+                    collectionId,
+                    issueId,
+                    stampId,
+                    fd
+                  );
+                  setActionState(result);
+                  if (result.status === "success") {
+                    // Open the base stamp so the run it just gained is on screen (#359).
+                    setAutoExpandStamp((prev) => ({
+                      stampId,
+                      nonce: (prev?.nonce ?? 0) + 1,
+                    }));
+                    handleStampSuccess(issueId);
                   }
                 })
               }

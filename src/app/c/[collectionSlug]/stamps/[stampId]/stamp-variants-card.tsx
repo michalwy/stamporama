@@ -12,6 +12,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { ReorderModeButton } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import {
@@ -70,6 +71,7 @@ export function StampVariantsCard({
   const [dialog, setDialog] = useState<
     | { kind: "none" }
     | { kind: "add" }
+    | { kind: "add-range" }
     | { kind: "edit"; child: StampListItem }
     | { kind: "delete"; child: StampListItem }
   >({ kind: "none" });
@@ -154,15 +156,28 @@ export function StampVariantsCard({
                 />
               )}
               {!reordering && (
-                <button
-                  type="button"
-                  onClick={() => setDialog({ kind: "add" })}
-                  disabled={isPending}
-                  style={DETAIL_BUTTON}
-                >
-                  <Icon name="add" size="sm" />
-                  Add variant
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ kind: "add" })}
+                    disabled={isPending}
+                    style={DETAIL_BUTTON}
+                  >
+                    <Icon name="add" size="sm" />
+                    Add variant
+                  </button>
+                  {/* A whole lettered run at once (#722) — the same card, because it is the same
+                      operation typed once instead of six times. */}
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ kind: "add-range" })}
+                    disabled={isPending}
+                    style={DETAIL_BUTTON}
+                  >
+                    <Icon name="range" size="sm" />
+                    Add range
+                  </button>
+                </>
               )}
             </>
           ) : undefined
@@ -278,6 +293,38 @@ export function StampVariantsCard({
             startTransition(async () => {
               const { addStampToIssueAction } = await import("@/app/actions/issues");
               const result = await addStampToIssueAction(collectionId, issueId, fd);
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setError(result.message);
+            })
+          }
+        />
+      )}
+
+      {dialog.kind === "add-range" && treeIssue && (
+        <AddVariantRangeDialog
+          collectionId={collectionId}
+          issueId={treeIssue.id}
+          issueName={issueLabel(treeIssue)}
+          areaId={treeIssue.collectionAreaId}
+          parent={{
+            stampId: stamp.id,
+            name: stamp.name,
+            catalogNumbers: stamp.catalogNumbers,
+          }}
+          vendors={areaVendors}
+          primaryVendorId={maps.primaryVendorByArea.get(treeIssue.collectionAreaId) ?? null}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(fd) =>
+            startTransition(async () => {
+              const { addVariantRangeAction } = await import("@/app/actions/issues");
+              const result = await addVariantRangeAction(
+                collectionId,
+                treeIssue.id,
+                stamp.id,
+                fd
+              );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
             })

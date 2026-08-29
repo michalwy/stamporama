@@ -45,6 +45,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useChecklistsAction } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import type { AddVariantRangeParent } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
@@ -112,6 +113,8 @@ interface StampTreeNodeProps {
   expandStamp?: ExpandStampSignal | null;
   onEdit: (stampId: string) => void;
   onAddChild: (parentStampId: string) => void;
+  /** Add a whole lettered run of variants under this stamp at once (#722). */
+  onAddVariantRange: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
   onMove: (stampId: string) => void;
   /** Refile this stamp under a different stamp of the same issue, or at its top level (#656). */
@@ -144,6 +147,7 @@ function StampTreeNode({
   onPriceSaved,
   onEdit,
   onAddChild,
+  onAddVariantRange,
   onDelete,
   onMove,
   onReparent,
@@ -247,6 +251,14 @@ function StampTreeNode({
   const actions: RowAction[] = [
     detailPage,
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
+    // Right below its one-at-a-time sibling: the same addition, for the case where the catalogue
+    // splits this stamp into a lettered run (#722).
+    {
+      key: "add-variant-range",
+      label: "Add variant range…",
+      icon: "range",
+      onSelect: () => onAddVariantRange(node.stampId),
+    },
     { key: "move", label: "Move to another issue…", icon: "move", onSelect: () => onMove(node.stampId) },
     // Beside the move, because the two are the same correction at two scales (#656): one says this
     // stamp belongs to another issue, the other that it belongs *under another stamp* of this one.
@@ -397,6 +409,7 @@ function StampTreeNode({
               onPriceSaved={onPriceSaved}
               onEdit={onEdit}
               onAddChild={onAddChild}
+              onAddVariantRange={onAddVariantRange}
               onDelete={onDelete}
               onMove={onMove}
               onReparent={onReparent}
@@ -429,6 +442,9 @@ export interface IssueRowCallbacks {
   onAddStampRange: (issue: IssueListItem) => void;
   onMergeIssue: (issue: IssueListItem) => void;
   onAddStamp: (issueId: string, parent?: AddStampParent) => void;
+  /** A whole run of variants under one stamp (#722). Takes the issue rather than its id, because
+   *  the dialog needs the area and prefix context the row already resolved. */
+  onAddVariantRange: (issue: IssueListItem, parent: AddVariantRangeParent) => void;
   onEditStamp: (issueId: string, stamp: StampNodeData) => void;
   onDeleteStamp: (issueId: string, stampId: string, stampName: string) => void;
   onMoveStamp: (issueId: string, stampId: string) => void;
@@ -1023,6 +1039,16 @@ export function IssueRow({
                       stampId: parentStampId,
                       catalogNumbers: parentNode?.catalogNumbers ?? [],
                       issuedYear: parentNode?.issuedYear ?? null,
+                    });
+                  }}
+                  onAddVariantRange={(parentStampId) => {
+                    const parentNode = members?.find(
+                      (m) => m.stampId === parentStampId
+                    );
+                    callbacks.onAddVariantRange(issue, {
+                      stampId: parentStampId,
+                      name: parentNode?.name ?? null,
+                      catalogNumbers: parentNode?.catalogNumbers ?? [],
                     });
                   }}
                   onDelete={(stampId, stampName) =>

@@ -526,6 +526,87 @@ export function parseCatalogNumberSpec(input: string): CatalogNumberSpec | { err
   return { segments, numbers, declared: declaredRangeOf(segments) };
 }
 
+// ── Variant specs, written under a base stamp's number (#722) ────────────────
+//
+// A variant range is typed where the base number is already on screen: the collector is looking at
+// `240` and wants its colour variants `a` through `f`. Writing `240a-240f` there says the base
+// number twice for no reason, so the same spec may be typed as the **suffixes alone** — `a-f`,
+// `a, b, c`, `I-III` — and the base number is understood.
+//
+// The two forms are decided per comma-separated segment, on whether it carries a digit: a segment
+// with digits is an ordinary catalog number and goes through `parseCatalogNumberSpec`'s own
+// resolution, a segment without is a suffix sequence hung off the base. Nothing in between is
+// guessed — `240a-c` is read as a full number against a suffix and rejected as such — because the
+// two halves of a range have to agree about which axis they are on.
+//
+// A suffix *range* enumerates over the sequences the app already knows, lowercase letters and
+// Roman numerals (`parseSuffixOrdinal`). A **lone** suffix is taken literally instead, so a base
+// that is itself a variant takes the suffixes its catalogue actually prints: `309A` + `P` is
+// `309AP`, which no sequence would have produced.
+
+/** Expand a variant spec typed under `baseNumber` — the base stamp's number in the catalogue the
+ *  variants are being numbered in — into the catalog numbers it generates, in the order typed.
+ *
+ *  `baseNumber` may be empty, which is the state of a base stamp carrying no number in that
+ *  catalogue: the full-number form still works, and a bare suffix says so rather than silently
+ *  generating a number with nothing in front of it. */
+export function parseVariantNumberSpec(
+  input: string,
+  baseNumber: string
+): { numbers: string[] } | { error: string } {
+  const base = baseNumber.trim();
+  const numbers: string[] = [];
+
+  for (const piece of input.split(",")) {
+    if (!piece.trim()) continue;
+    const parts = piece.split(RANGE_SEPARATORS).map((p) => p.trim());
+    if (parts.length > 2) {
+      return { error: "Use one dash per range, and a comma between ranges (e.g. a-f, h)." };
+    }
+
+    // A segment carrying digits is a catalog number in full, resolved exactly as it would be in
+    // an issue's range field.
+    if (/\d/.test(piece)) {
+      const range = resolveCatalogRange(parts[0], parts[1] ?? null);
+      if ("error" in range) return range;
+      numbers.push(...generateCatalogNumbers(range.scheme, range.span ?? 1));
+      continue;
+    }
+
+    if (!base) {
+      return {
+        error: "This stamp has no number in that catalogue — write the variants' numbers in full.",
+      };
+    }
+
+    // Suffixes alone, against the base number.
+    if (parts.length === 1) {
+      numbers.push(`${base}${parts[0]}`);
+      continue;
+    }
+    const from = parseSuffixOrdinal(parts[0]);
+    const to = parseSuffixOrdinal(parts[1]);
+    if (!from || !to) {
+      return { error: "A suffix range runs over letters a–z or Roman numerals (e.g. a-f, I-III)." };
+    }
+    if (from.kind !== to.kind) {
+      return { error: "Both ends of a suffix range must be letters, or both Roman numerals." };
+    }
+    if (from.value > to.value) return { error: "First suffix must be ≤ Last suffix." };
+    const scheme: CatalogRangeScheme = { kind: from.kind, prefix: "", base, from: from.value };
+    numbers.push(...generateCatalogNumbers(scheme, to.value - from.value + 1));
+  }
+
+  if (numbers.length === 0) return { error: "Enter at least one variant number." };
+
+  const seen = new Set<string>();
+  for (const number of numbers) {
+    if (seen.has(number)) return { error: `${number} appears more than once.` };
+    seen.add(number);
+  }
+  return { numbers };
+}
+
 // ── Issue range coverage vs. member stamps (#…) ───────────────────────────────
 //
 // An issue declares a catalog range (First–Last) per vendor. Its member stamps
