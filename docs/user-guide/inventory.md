@@ -700,19 +700,29 @@ same offer. A copy that has already **sold** elsewhere can't be added at all.
 
 ### The same stamp in the same condition
 
-Listing the same stamp in the same condition twice is worth knowing about before you do it — some
-marketplaces (Colnect among them) refuse the second offer outright, others simply leave you with two
-competing listings. The picker points these out before you commit: an offer that already holds a
-**different** copy of one of the same stamps in the same condition carries an amber
-**same stamp + condition already here** marker, and the tooltip says how many of your copies it
-applies to.
+Offering the same thing twice is worth knowing about before you do it — some marketplaces (Colnect
+among them) refuse the second listing outright, others simply leave you with two competing entries.
+The picker points these out before you commit: an offer that already holds a set of **exactly the
+stamps you are adding, in exactly the same conditions**, through other copies, carries an amber
+**same set + condition already here** marker.
 
-The warning only ever states the fact — *these copies are already offered on platform X, same stamp
-and condition*. It does not claim a rule, because whether it blocks anything depends on the platform
-you are listing on.
+**"The same thing" means the whole composition, not a shared stamp.** A marketplace entry is what it
+lists taken together: on Colnect the series 1–3 and the single stamp 2 are two different items. So if
+an offer holds the series 1–3 and you pick out stamp 2 on its own, nothing is flagged — that single
+is its own entry and duplicates nothing. Pick all three and the warning appears. Reaching *past* the
+set is silent too: picking 1–4 against a listed 1–3 is a fourth thing again.
+
+Quantity is not part of the question. Picking two sets' worth of the same series still matches a
+single-set offer of it — that is the same entry offered more of, which is exactly the case worth a
+word. And an offer whose sets differ from one another is compared set by set: it conflicts if any one
+of its compositions is the one you picked, never by pooling them together.
+
+The warning only ever states the fact — *this is already offered on platform X, the same stamps in
+the same conditions*. It does not claim a rule, because whether it blocks anything depends on the
+platform you are listing on.
 
 When at least one offer conflicts, the left facet panel grows a **Conflicts** group with a
-**Same stamp + condition** entry and its count. Click it and the list narrows to just those offers;
+**Same set + condition** entry and its count. Click it and the list narrows to just those offers;
 clicking any **State** facet leaves it again. It appears only when something actually conflicts, so
 an ordinary add never grows a facet reading zero.
 
@@ -721,7 +731,7 @@ may have a reason (a deliberate re-list, a platform without the rule). Only the 
 *literally* already lists are ever dropped from an add.
 
 The **＋ Create new offer** form checks the same thing for the platform in its Platform field, and
-shows an amber banner naming the offers that already hold those stamps — including their offer
+shows an amber banner naming the offers that already list this composition — including their offer
 numbers, so you can go and look. Switching the platform re-asks the question. Offers in every live
 state count (**preparing, ready, active, paused**), so a duplicate is caught while both listings are
 still drafts.
@@ -764,11 +774,12 @@ is no longer on screen.
 ### Conflicts in the selection bar
 
 While the **Not offered on…** (or **Never listed on…**) filter names a platform, the bar also
-answers the [one-offer-per-stamp-per-condition](#the-same-stamp-in-the-same-condition) question for
-that platform: if a live offer there already lists one of the picked stamps in that condition, an
-amber line says how many copies are affected, and beside it is **Add to #12 instead** — one click to
-put the selection into that existing offer rather than creating a second listing for the same
-stamps. The tooltip on the warning lists every conflicting offer when there is more than one.
+answers the [already-offered](#the-same-stamp-in-the-same-condition) question for that platform: if a
+live offer there already lists **exactly what you have picked** — the same stamps, the same
+conditions — an amber line says *this is already offered on platform X in this condition*, and beside
+it is **Add to #12 instead** — one click to put the selection into that existing offer rather than
+making a second listing of the same thing. The tooltip on the warning lists every conflicting offer
+when there is more than one.
 
 While that warning is up, the bar's **＋ New offer** buttons and **Add selected to offer** turn amber
 too — the warning is easy to read past, and those are the buttons that would create the duplicate.
@@ -777,7 +788,7 @@ doing. They go back to normal as soon as the conflict does — when you change t
 **Add to #12 instead**.
 
 The shortcut opens the ordinary **Add to offer** picker with that offer already picked as the
-destination (as a **＋ New set** on it) **and the Same stamp + condition facet already on**, so the
+destination (as a **＋ New set** on it) **and the Same set + condition facet already on**, so the
 list shows the conflicting offers and nothing else. You can still change your mind — drop the copies
 into one of its existing sets, choose the packaging, or click a **State** facet to see every offer
 again and pick a different one.

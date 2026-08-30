@@ -1496,8 +1496,10 @@ export async function findOfferCollisions(
 
 // ── Stamp × condition collisions (#513) ─────────────────────────────────────
 
-/** A live offer that already lists the same stamp in the same condition as some of the copies being
- * added — through a *different* copy, since one it already holds is `containsItemIds`' fact. */
+/** A live offer holding a set of exactly the same stamps in exactly the same conditions as the
+ * copies being added (#732) — the marketplace entry a second of these copies would duplicate. The
+ * copies it accounts for are the *different* ones, since one it already holds is
+ * `containsItemIds`' fact. */
 export interface StampConditionCollision {
   offerId: string;
   offerNo: number;
@@ -1505,7 +1507,8 @@ export interface StampConditionCollision {
   platformId: string;
   platformName: string;
   state: OfferState;
-  /** Which of the candidate copies this offer would duplicate. */
+  /** Which of the candidate copies this offer would duplicate — the whole selection, bar the copies
+   * this offer is already the home of. */
   itemIds: string[];
 }
 
@@ -1518,8 +1521,12 @@ const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
  * `itemIds`, keyed by offer id. Shared by {@link findStampConditionCollisions} and
  * {@link listComposeTargets} so the picker's note and the selection bar's chip cannot disagree.
  *
- * One membership query, narrowed by the candidates' *stamps* — the condition is matched in memory
- * by {@link collidingItemIdsByOffer}, which is where the key lives.
+ * Two queries, because the rule compares **whole compositions** (#732) and not single copies: the
+ * first narrows to the sets holding one of the candidates' stamps, the second loads every copy in
+ * those sets. Reading only the members that share a stamp with the selection — which is what one
+ * query gives — would show a listed series 1–3 as `{2}` and match it against a `{2}` selection,
+ * reporting exactly the collision the rule exists to stop reporting. The comparison itself is
+ * {@link collidingItemIdsByOffer}, which is where the key lives.
  */
 async function collidingItemIds(
   collectionId: string,
@@ -1533,7 +1540,7 @@ async function collidingItemIds(
   });
   if (candidates.length === 0) return new Map();
 
-  const memberships = await prisma.offerSetItem.findMany({
+  const candidateSets = await prisma.offerSetItem.findMany({
     where: {
       item: { stampId: { in: [...new Set(candidates.map((c) => c.stampId))] } },
       offerSet: {
@@ -1545,8 +1552,16 @@ async function collidingItemIds(
         },
       },
     },
+    select: { offerSetId: true },
+    distinct: ["offerSetId"],
+  });
+  if (candidateSets.length === 0) return new Map();
+
+  const memberships = await prisma.offerSetItem.findMany({
+    where: { offerSetId: { in: candidateSets.map((s) => s.offerSetId) } },
     select: {
       itemId: true,
+      offerSetId: true,
       offerSet: { select: { offerId: true } },
       item: { select: { stampId: true, conditionId: true } },
     },
@@ -1556,6 +1571,7 @@ async function collidingItemIds(
     candidates.map((c) => ({ itemId: c.id, stampId: c.stampId, conditionId: c.conditionId })),
     memberships.map((m) => ({
       offerId: m.offerSet.offerId,
+      offerSetId: m.offerSetId,
       itemId: m.itemId,
       stampId: m.item.stampId,
       conditionId: m.item.conditionId,
@@ -1564,10 +1580,11 @@ async function collidingItemIds(
 }
 
 /**
- * Live offers that would end up listing the same stamp in the same condition twice (#513) —
- * Colnect refuses a second offer for a stamp in one condition, so this is the mistake worth
- * catching *before* the copies go on. A **warning**: nothing is blocked, and a collector listing
- * deliberately on two platforms passes `platformId` to ask about only the one that matters.
+ * Live offers that would end up listing the **same thing** twice (#513, narrowed by #732) — an
+ * offer already holding a set of exactly these stamps in exactly these conditions, which is the
+ * entry Colnect refuses a second of. Selecting one stamp out of a listed series is not that and
+ * reports nothing. A **warning**: nothing is blocked, and a collector listing deliberately on two
+ * platforms passes `platformId` to ask about only the one that matters.
  */
 export async function findStampConditionCollisions(
   ownerId: string,
@@ -4208,9 +4225,11 @@ export interface ComposeTargetOffer {
   /** Which of the copies being added are already listed somewhere in this offer (any set) — an
    * offer never lists the same copy twice, so a new set may not hold them either. */
   containsItemIds: string[];
-  /** Which of the copies being added this offer would duplicate by **stamp × condition** (#513):
-   * a *different* copy of the same stamp in the same condition is already listed here, which
-   * Colnect refuses. A warning the picker shows — never a reason to disable the destination. */
+  /** Which of the copies being added this offer would duplicate (#513, narrowed by #732): one of
+   * its sets already lists exactly these stamps in exactly these conditions through other copies,
+   * which is the entry Colnect refuses a second of. Empty where the overlap is partial — a single
+   * out of a listed series duplicates nothing. A warning the picker shows — never a reason to
+   * disable the destination. */
   collidingItemIds: string[];
 }
 

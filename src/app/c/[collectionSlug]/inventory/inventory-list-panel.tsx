@@ -745,8 +745,11 @@ export function InventoryListPanel({
     ]
   );
 
-  // The stamp × condition conflict for the selection (#513): live offers on the platform in scope
-  // that already list one of these stamps in this condition — which Colnect refuses a second time.
+  // The stamp × condition conflict for the selection (#513, narrowed by #732): live offers on the
+  // platform in scope that already list a set of exactly these stamps in exactly these conditions
+  // — the entry Colnect refuses a second of. A partial overlap is not one: listing one stamp out
+  // of a listed series is its own entry on the marketplace, and warning about it would fire on an
+  // ordinary, correct action.
   // Only asked while a platform *is* in scope (#506's shared reading of the platform filter): a
   // collision is always a collision on some platform, and with none named there is no listing being
   // planned to warn about.
@@ -762,10 +765,6 @@ export function InventoryListPanel({
   // The offer the bar's shortcut points at: the one accounting for the most of the selection, which
   // is how `findStampConditionCollisions` already orders them.
   const collisionOffer = selectionCollisions[0];
-  const collidingCopies = useMemo(
-    () => new Set(selectionCollisions.flatMap((c) => c.itemIds)).size,
-    [selectionCollisions]
-  );
 
   // Whether the whole selection is already set aside from the platform in scope — which is what the
   // bulk button offers to undo. "All of them", not "any": with a mixed selection the useful action
@@ -1066,19 +1065,18 @@ export function InventoryListPanel({
                   >
                     Clear
                   </button>
-                  {/* The conflict this selection would create on the platform in scope (#513):
-                      another live offer already lists one of these stamps in this condition, and
-                      Colnect refuses a second. Stated where the listing actions are, with the
-                      shortcut that resolves it — adding to that offer instead of making a new one.
-                      A warning beside the buttons, never a disabled button: the collector may know
-                      exactly what they are doing. */}
+                  {/* The conflict this selection would create on the platform in scope (#513,
+                      #732): another live offer already lists exactly these stamps in exactly these
+                      conditions, and Colnect refuses a second of that entry. Stated where the
+                      listing actions are, with the shortcut that resolves it — adding to that offer
+                      instead of making a new one. No count of copies: the rule is all-or-nothing on
+                      the whole composition, so it is always the whole selection. A warning beside
+                      the buttons, never a disabled button: the collector may know exactly what they
+                      are doing. */}
                   {collisionOffer && (
                     <Tooltip
                       content={selectionCollisions
-                        .map(
-                          (c) =>
-                            `${formatEntityNo(c.offerNo)} ${c.offerLabel} — ${c.itemIds.length} cop${c.itemIds.length === 1 ? "y" : "ies"}`
-                        )
+                        .map((c) => `${formatEntityNo(c.offerNo)} ${c.offerLabel}`)
                         .join(" · ")}
                     >
                       <span
@@ -1091,16 +1089,13 @@ export function InventoryListPanel({
                         }}
                       >
                         <Icon name="warning" size="sm" />
-                        {collidingCopies === 1
-                          ? "1 copy is"
-                          : `${collidingCopies} copies are`}{" "}
-                        already offered on {collisionOffer.platformName} in this condition
+                        This is already offered on {collisionOffer.platformName} in this condition
                       </span>
                     </Tooltip>
                   )}
                   {collisionOffer && (
                     <Tooltip
-                      content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of creating a second listing for the same stamps.`}
+                      content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of making a second listing of the same thing.`}
                     >
                       <button
                         type="button"

@@ -12,12 +12,15 @@ const copy = (itemId: string, stampId: string, conditionId: string): CollisionCo
   conditionId,
 });
 
+/** A copy listed on an offer. The set defaults to the offer's own id — the ordinary
+ * one-composition offer — so only the tests that care about sets have to name them. */
 const member = (
   offerId: string,
   itemId: string,
   stampId: string,
-  conditionId: string
-): OfferMemberCopy => ({ offerId, itemId, stampId, conditionId });
+  conditionId: string,
+  offerSetId = `${offerId}-set`
+): OfferMemberCopy => ({ offerId, offerSetId, itemId, stampId, conditionId });
 
 describe("collidingItemIdsByOffer", () => {
   it("reports a candidate whose stamp + condition another copy on the offer already holds", () => {
@@ -70,17 +73,83 @@ describe("collidingItemIdsByOffer", () => {
     assert.deepEqual(out.get("o1"), ["b"]);
   });
 
+  it("stays silent on one stamp out of a listed series — a single is not that entry (#732)", () => {
+    const series = [
+      member("o1", "p1", "s1", "mnh"),
+      member("o1", "p2", "s2", "mnh"),
+      member("o1", "p3", "s3", "mnh"),
+    ];
+    assert.equal(collidingItemIdsByOffer([copy("x", "s2", "mnh")], series).size, 0);
+  });
+
+  it("collides when the selection is the whole listed series (#732)", () => {
+    const series = [
+      member("o1", "p1", "s1", "mnh"),
+      member("o1", "p2", "s2", "mnh"),
+      member("o1", "p3", "s3", "mnh"),
+    ];
+    const out = collidingItemIdsByOffer(
+      [copy("x1", "s1", "mnh"), copy("x2", "s2", "mnh"), copy("x3", "s3", "mnh")],
+      series
+    );
+    assert.deepEqual(out.get("o1"), ["x1", "x2", "x3"]);
+  });
+
+  it("stays silent when the selection reaches past the listed set", () => {
+    const out = collidingItemIdsByOffer(
+      [copy("x1", "s1", "mnh"), copy("x2", "s2", "mnh"), copy("x3", "s3", "mnh")],
+      [member("o1", "p1", "s1", "mnh"), member("o1", "p2", "s2", "mnh")]
+    );
+    assert.equal(out.size, 0);
+  });
+
+  it("collides on several sets' worth of the same series — quantity is not the question", () => {
+    // Two prospective sets of 1–2: the same marketplace entry, offered more of.
+    const out = collidingItemIdsByOffer(
+      [
+        copy("x1", "s1", "mnh"),
+        copy("x2", "s2", "mnh"),
+        copy("y1", "s1", "mnh"),
+        copy("y2", "s2", "mnh"),
+      ],
+      [member("o1", "p1", "s1", "mnh"), member("o1", "p2", "s2", "mnh")]
+    );
+    assert.deepEqual(out.get("o1"), ["x1", "x2", "y1", "y2"]);
+  });
+
+  it("compares set by set, so a mixed offer matches on whichever set fits", () => {
+    const out = collidingItemIdsByOffer(
+      [copy("x", "s3", "mnh")],
+      [
+        member("o1", "p1", "s1", "mnh", "o1-a"),
+        member("o1", "p2", "s2", "mnh", "o1-a"),
+        member("o1", "p3", "s3", "mnh", "o1-b"),
+      ]
+    );
+    assert.deepEqual(out.get("o1"), ["x"]);
+  });
+
+  it("does not read an offer's sets as one pooled composition", () => {
+    // Its two sets are {s1} and {s2}; a selection of {s1,s2} is a third entry, not either of them.
+    const out = collidingItemIdsByOffer(
+      [copy("x", "s1", "mnh"), copy("y", "s2", "mnh")],
+      [member("o1", "p1", "s1", "mnh", "o1-a"), member("o1", "p2", "s2", "mnh", "o1-b")]
+    );
+    assert.equal(out.size, 0);
+  });
+
   it("groups per offer and omits offers with nothing to report", () => {
     const out = collidingItemIdsByOffer(
       [copy("x", "s1", "mnh"), copy("y", "s2", "used")],
       [
         member("o1", "p", "s1", "mnh"),
+        member("o1", "p2", "s2", "used"),
         member("o2", "q", "s3", "mnh"),
         member("o3", "r", "s1", "mnh"),
         member("o3", "s", "s2", "used"),
       ]
     );
-    assert.deepEqual(out.get("o1"), ["x"]);
+    assert.deepEqual(out.get("o1"), ["x", "y"]);
     assert.equal(out.has("o2"), false);
     assert.deepEqual(out.get("o3"), ["x", "y"]);
     assert.equal(out.size, 2);

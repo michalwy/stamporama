@@ -481,10 +481,10 @@ export function AddToOfferDialog({
                   would sit narrower than the state facets above it. */}
               <Tooltip
                 style={{ width: "100%" }}
-                content="Offers on this platform that already list one of these stamps in this condition, through a different copy."
+                content="Offers that already list exactly these stamps in these conditions, through other copies — the same entry as the one being made here."
               >
                 <FacetRow
-                  label="Same stamp + condition"
+                  label="Same set + condition"
                   active={conflictsActive}
                   onClick={() => setConflictsOnly(!conflictsActive)}
                   count={conflictCount}
@@ -636,12 +636,13 @@ export function AddToOfferDialog({
         zIndexBase={110}
         onPlatformChange={setCreatePlatformId}
         // The stamp × condition conflict, asked *before* the offer exists (#513): the platform
-        // already has an offer for this stamp in this condition. Stated as a fact and never as a
-        // platform rule (#524) — the dialog lists on whatever platform was picked, and only some
-        // marketplaces refuse the second listing. Advisory only: the submit is never blocked.
+        // already lists exactly this composition in these conditions (#732). Stated as a fact and
+        // never as a platform rule (#524) — the dialog lists on whatever platform was picked, and
+        // only some marketplaces refuse the second listing. Advisory only: the submit is never
+        // blocked.
         notice={
           createCollisions.length > 0 ? (
-            <CollisionNotice collisions={createCollisions} totalCopies={items.length} />
+            <CollisionNotice collisions={createCollisions} />
           ) : undefined
         }
         // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
@@ -680,21 +681,16 @@ export function AddToOfferDialog({
 }
 
 /**
- * The stamp × condition warning as a banner (#513): the offers on the platform being listed on
- * that already hold one of these stamps in this condition, and how many copies each accounts for.
+ * The stamp × condition warning as a banner (#513, narrowed by #732): the offers on the platform
+ * being listed on that already hold a set of exactly these stamps in exactly these conditions —
+ * the entry this form would make a second of.
  *
- * It names the offers rather than merely counting them — the collector's next move is to look at
- * the listing that already exists, and an offer number is what finds it. Advisory throughout:
- * nothing here disables a submit.
+ * No count of affected copies any more: the rule is all-or-nothing on the whole composition, so
+ * "how many" could only ever be "all of them". It names the offers rather than merely counting
+ * them — the collector's next move is to look at the listing that already exists, and an offer
+ * number is what finds it. Advisory throughout: nothing here disables a submit.
  */
-function CollisionNotice({
-  collisions,
-  totalCopies,
-}: {
-  collisions: StampConditionCollision[];
-  totalCopies: number;
-}) {
-  const affected = new Set(collisions.flatMap((c) => c.itemIds)).size;
+function CollisionNotice({ collisions }: { collisions: StampConditionCollision[] }) {
   return (
     <div
       style={{
@@ -710,20 +706,12 @@ function CollisionNotice({
     >
       <Icon name="warning" size="sm" />
       <div style={{ minWidth: 0 }}>
-        <strong>
-          {affected === totalCopies && totalCopies > 1
-            ? "These copies are"
-            : affected === 1
-              ? "One of these copies is"
-              : `${affected} of these copies are`}{" "}
-          already offered on {collisions[0].platformName}
-        </strong>{" "}
-        — the same stamp in the same condition, through a different copy.
+        <strong>This is already offered on {collisions[0].platformName}</strong> — a listing there
+        holds exactly these stamps in these conditions, through other copies.
         <ul style={{ margin: "0.375rem 0 0", paddingLeft: "1.1rem" }}>
           {collisions.map((c) => (
             <li key={c.offerId}>
               {formatEntityNo(c.offerNo)} {c.offerLabel} ({OFFER_STATE_LABEL[c.state].toLowerCase()})
-              {c.itemIds.length > 1 ? ` — ${c.itemIds.length} copies` : ""}
             </li>
           ))}
         </ul>
@@ -853,14 +841,16 @@ function OfferGroup({
                   : `— ${alreadyHere} of ${totalCopies} already listed here, and left out`}
               </span>
             )}
-            {/* The stamp × condition conflict (#513) — a different copy of the same stamp in the
-                same condition is already on this listing. A warning, not a gate: the destination
-                stays pickable and nothing is left out of the add. */}
+            {/* The stamp × condition conflict (#513, narrowed by #732) — this listing already holds
+                a set of exactly these stamps in exactly these conditions, through other copies,
+                which is the entry a marketplace refuses a second of. A partial overlap says
+                nothing: one stamp out of a listed series is its own entry. A warning, not a gate:
+                the destination stays pickable and nothing is left out of the add. */}
             {colliding > 0 && (
               <Tooltip
                 content={
-                  `${colliding === 1 ? "One of these copies is" : `${colliding} of these copies are`} the same stamp in the same condition as ` +
-                  "a copy already listed here, through a different copy."
+                  "This listing already holds exactly these stamps in these conditions, through " +
+                  "other copies — the same entry, offered twice."
                 }
               >
                 <span
@@ -874,10 +864,7 @@ function OfferGroup({
                     background: "var(--color-warning-soft)",
                   }}
                 >
-                  <Icon name="warning" size="xs" />{" "}
-                  {colliding === 1
-                    ? "same stamp + condition already here"
-                    : `${colliding} same stamp + condition already here`}
+                  <Icon name="warning" size="xs" /> same set + condition already here
                 </span>
               </Tooltip>
             )}
