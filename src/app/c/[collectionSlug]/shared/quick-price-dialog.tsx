@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   DialogShell,
   DialogBody,
@@ -231,7 +232,14 @@ export function QuickPriceDialog({
     return ap - bp;
   });
 
-  return (
+  // Portalled to the document, the way every dialog that can be opened **from inside another
+  // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
+  // against that panel — the shell centres itself with a transform, which makes it the containing
+  // block — and clipped by its `overflow: hidden`. The listing wizard (#730) opens this one from its
+  // first step, and the surfaces that opened it before are unaffected: the panel is fixed either way.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <DialogShell title="Set catalog value" onClose={onClose} maxWidth="32rem">
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
@@ -453,6 +461,7 @@ export function QuickPriceDialog({
           </div>
         </DialogFooter>
       </form>
-    </DialogShell>
+    </DialogShell>,
+    document.body
   );
 }

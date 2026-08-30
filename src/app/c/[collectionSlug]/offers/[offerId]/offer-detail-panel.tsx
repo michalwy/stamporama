@@ -36,6 +36,7 @@ import { PublishToAllegroButton } from "../allegro/publish-to-allegro";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferPlatformItemsCard } from "./offer-platform-items-card";
+import { OfferListingWizardDialog } from "./offer-listing-wizard-dialog";
 import { OfferAllegroCard } from "./offer-allegro-card";
 import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
@@ -58,6 +59,8 @@ import {
 } from "@/lib/offer-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import { isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { hasListingModule } from "@/lib/platform-modules";
+import { parseOfferListContext } from "../list-context";
 import { describeCommittedCopies } from "@/lib/trade-reservation-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -196,6 +199,13 @@ export function OfferDetailPanel({
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
   // URL so a refresh doesn't resurrect it.
   const [skippedNote, setSkippedNote] = useState(skippedParam);
+  // The listing wizard (#730). `?wizard=1` opens it on arrival, which is how the walk continues from
+  // the previous offer's **Next offer** — the link carries the flag exactly as it carries #429's
+  // filter context, so a batch is one unbroken walk rather than a dialog reopened by hand each time.
+  const [wizard, setWizard] = useState(searchParams.get("wizard") === "1");
+  // The list this offer was opened from, read here as well as on the page around it: the wizard's
+  // walk to the next offer follows the same one the next/previous strip does.
+  const listContext = parseOfferListContext(searchParams);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   // The Assistant handoff (#414), exactly as the bulk workspace drives it (#407): the hidden node
@@ -300,6 +310,17 @@ export function OfferDetailPanel({
   // photos (#311). `listingBlockers` would report `not-ready` here, which is the very thing this
   // click undoes.
   const listingFromPreparing = offer.state === "preparing" && advanceTo === "ready" && advanceReady;
+  // Why the listing wizard's last step cannot post this offer (#730), or null when it can. It is the
+  // header button's own condition, said as a sentence: what is missing at that point is a set or a
+  // price rather than a listing precondition — those the wizard names one by one from `blockers`.
+  const cannotListReason =
+    offer.state === "ready" || listingFromPreparing
+      ? null
+      : offer.sets.length === 0
+        ? "This offer holds no sets yet, so there is nothing to list."
+        : !pricedForAdvance
+          ? `Set ${isAuctionListing(offer.listingType) ? "a starting price" : "a price"} before this offer can be posted.`
+          : `An offer that is ${OFFER_STATE_LABEL[offer.state].toLowerCase()} cannot be posted from here.`;
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button. On an auction what is missing is the
   // **starting** price (#449) — the current one follows from it while nobody has bid — so the line
@@ -638,6 +659,24 @@ export function OfferDetailPanel({
                 </Tooltip>
               );
             })()}
+            {/* The guided walk through the three steps a listing session actually takes (#730):
+                items, price, post. Every one of them is on this screen already — the item card
+                below, the price beside this row, the Assistant button next to it — and the wizard is
+                the *order*, for the collector working through a batch rather than looking something
+                up. Offered while the offer is still being prepared or is ready to go, on any
+                platform the Assistant can list to: nothing in the three steps is one platform's. */}
+            {hasListingModule(offer.platformModule) &&
+              (offer.state === "preparing" || offer.state === "ready") && (
+                <Tooltip content="Walk this offer through its items, its price and posting it, one step at a time">
+                  <button
+                    type="button"
+                    onClick={() => setWizard(true)}
+                    style={ASSISTANT_BTN}
+                  >
+                    <Icon name="wizard" size="sm" /> Listing wizard
+                  </button>
+                </Tooltip>
+              )}
             {/* The same handoff the bulk workspace offers (#407/#414). A single listing is routinely
                 posted from here rather than from a batch, and a step offered on one screen only is
                 the step that gets skipped on the other — the same reasoning that made activation ask
@@ -1169,6 +1208,40 @@ export function OfferDetailPanel({
             setSelling(false);
             setSellingSet(null);
           }}
+        />
+      )}
+
+      {/* The listing wizard (#730). It drives *this* screen's handoff rather than starting one of its
+          own — the hidden element below is the only one the extension answers on — and writes the
+          price through the same `patch` the header's own field does, so a figure taken in the dialog
+          and one typed on the screen behind it are the same edit. */}
+      {wizard && (
+        <OfferListingWizardDialog
+          // Keyed on the offer so the walk to the next one starts its steps afresh: the dialog stays
+          // open across that navigation by design, and a step-three panel carried onto a new offer
+          // would be the wrong step over the wrong listing.
+          key={offerId}
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          offer={offer}
+          copies={copies}
+          areas={areas}
+          listContext={listContext}
+          assistantPresent={assistantPresent}
+          handoff={handoff}
+          handoffRunning={handoffRunning}
+          cannotListReason={cannotListReason}
+          listingBlockerCount={
+            offer.state === "ready" ? offer.listingBlockers.length : listingReadyBlockers.length
+          }
+          blockers={offer.state === "ready" ? offer.listingBlockers : listingReadyBlockers}
+          marksReady={listingFromPreparing}
+          generatesPhotos={photoGap}
+          isPending={isPending}
+          onList={listViaAssistant}
+          onDismissHandoff={dismissHandoff}
+          onPatchPrice={(field, value) => patch(field, value)}
+          onClose={() => setWizard(false)}
         />
       )}
 

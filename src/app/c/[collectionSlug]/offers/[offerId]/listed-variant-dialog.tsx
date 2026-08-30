@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -90,7 +91,14 @@ export function ListedVariantDialog({
     ? `${data.stampLabel}${data.stampName ? ` · ${data.stampName}` : ""} — ${data.conditionName}`
     : null;
 
-  return (
+  // Portalled to the document, the way every dialog that can be opened **from inside another
+  // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
+  // against that panel — the shell centres itself with a transform, which makes it the containing
+  // block — and clipped by its `overflow: hidden`. The listing wizard (#730) opens this one from its
+  // first step, and the surfaces that opened it before are unaffected: the panel is fixed either way.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <DialogShell title="Listed as" onClose={isSaving ? () => {} : onClose} maxWidth="min(40rem, 95vw)">
       <DialogBody>
         {isLoading ? (
@@ -150,7 +158,8 @@ export function ListedVariantDialog({
           </div>
         ) : null}
       </DialogBody>
-    </DialogShell>
+    </DialogShell>,
+    document.body
   );
 }
 

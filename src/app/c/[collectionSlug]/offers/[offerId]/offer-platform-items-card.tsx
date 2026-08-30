@@ -25,6 +25,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usesPlatformCatalogue } from "@/lib/platform-modules";
+import { listingItemGaps } from "@/lib/offer-listing-wizard";
 import { Icon } from "@/app/icons";
 
 // The offer's stamps and what **Colnect** knows each of them as (#423), each with the two pages a
@@ -109,6 +110,13 @@ const CARD: React.CSSProperties = {
   borderRadius: "0.75rem",
   background: "var(--color-bg-elevated)",
   padding: "1rem 1.5rem 1.25rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.625rem",
+};
+
+/** The same card with its box taken off (#730): the listing wizard's step is the box. */
+const EMBEDDED: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "0.625rem",
@@ -204,6 +212,7 @@ export function OfferPlatformItemsCard({
   collectionId,
   copies,
   areas,
+  embedded = false,
 }: {
   items: OfferPlatformItem[];
   /** Whose listing the hand-picked variants belong to — a choice is recorded on the offer, not on
@@ -222,6 +231,11 @@ export function OfferPlatformItemsCard({
   copies: ItemListItem[];
   /** For the vendor maps that dialog prices against. */
   areas: CollectionAreaData[];
+  /** Drawn as the body of something else — the listing wizard's first step (#730) — rather than as a
+   *  card of its own: no border, no padding of its own, and **always open**, the surface around it
+   *  having already decided that this is what is being looked at. The collapse memory is untouched,
+   *  since it is the detail screen's habit and the wizard is not a visit to that screen. */
+  embedded?: boolean;
 }) {
   // Whether an unmatched stamp is what stops *this* offer being posted (#493), or only a gap in the
   // stamp's own data. The rows are identical either way; the one thing that changes is how loudly
@@ -232,12 +246,15 @@ export function OfferPlatformItemsCard({
   // but a separate one, open by default, while the offer is still `preparing`: the two habits are
   // genuinely different, exactly as the photos card's are.
   const preparing = offerState === "preparing";
-  const [expanded, setExpanded] = usePersistentToggle(
+  const [storedExpanded, setExpanded] = usePersistentToggle(
     preparing
       ? "stamporama.offerPlatformItems.expanded.preparing"
       : "stamporama.offerPlatformItems.expanded",
     preparing
   );
+  // Embedded, the card is the whole of the step it is drawn in, so there is nothing for a collapse
+  // to reveal the rest of — and a remembered "shut" would open the wizard on an empty step.
+  const expanded = embedded || storedExpanded;
 
   // Handing a stamp over for matching. Offered only where the Assistant is actually scripting this
   // origin — the same honesty **List via Assistant** keeps (#407): without it, Link would be a button
@@ -329,10 +346,11 @@ export function OfferPlatformItemsCard({
       }),
     [items, copyByStampCondition, unpricedBy]
   );
-  /** Rows carrying the card's own `+ CV` — what the header chip counts, so the two agree. */
-  const unpricedCount = items.filter(
-    (item) => !item.unpricedVariantStampId && unpricedFor(item) !== null
-  ).length;
+  /** Rows carrying the card's own `+ CV` — what the header chip counts, so the two agree. Read
+   *  through the shared rule (#730) rather than restated here, since the listing wizard's first step
+   *  summarises this very card and a summary that disagreed with the heading under it would be
+   *  worse than no summary at all. */
+  const unpricedCount = listingItemGaps(items, copies).unpriced;
   const [pricingAll, setPricingAll] = useState(false);
 
   // ── The stamp behind a row ─────────────────────────────────────────────────
@@ -416,19 +434,55 @@ export function OfferPlatformItemsCard({
     dismiss();
   };
 
+  // The heading's own content, drawn either inside the collapse toggle or — embedded (#730) — on its
+  // own line: a chevron that collapses nothing is a control that lies about what pressing it does.
+  const heading = (
+    <>
+      <h3
+        style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
+      >
+        Items ({items.length})
+      </h3>
+      {/* Amber, and stated in the heading, because on a Colnect listing it is the one thing that
+          stops the offer being posted at all — and it is readable with the card shut, which is
+          where a collector who has not opened it yet is looking. Elsewhere the chip says the same
+          gap without the claim: an Allegro listing posts perfectly well unmatched, it just leaves
+          the stamp's own numbers and date unfillable (#669). */}
+      {linkable < items.length && (
+        <Tooltip
+          content={
+            catalogued
+              ? "These stamps carry no Colnect item-ID, so the listing cannot be posted yet. Link them from the rows below."
+              : "These stamps carry no Colnect item-ID, so nothing can be looked up for them — and their catalog numbers and dates cannot be filled in from it. Link them from the rows below."
+          }
+        >
+          <span style={{ ...HEADER_CHIP, ...ATTENTION }}>
+            {items.length - linkable} not matched
+          </span>
+        </Tooltip>
+      )}
+    </>
+  );
+
   return (
-    // Collapsed, the card is its header alone, so it drops the body's bottom padding.
-    <div style={expanded ? CARD : { ...CARD, padding: "0.875rem 1.5rem" }}>
+    // Collapsed, the card is its header alone, so it drops the body's bottom padding. Embedded, it
+    // has no chrome at all: the step around it is already the box.
+    <div style={embedded ? EMBEDDED : expanded ? CARD : { ...CARD, padding: "0.875rem 1.5rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-      {/* The whole heading is the toggle, as it is on the photos card, so the count and the
-          not-matched chip are all clickable and the header carries no separate button. */}
+      {embedded ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          {heading}
+        </div>
+      ) : (
+      /* The whole heading is the toggle, as it is on the photos card, so the count and the
+         not-matched chip are all clickable and the header carries no separate button. */
       <Tooltip
         content={expanded ? "Collapse" : "Show what Colnect knows about these stamps"}
         align="start"
       >
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => setExpanded(!storedExpanded)}
           aria-expanded={expanded}
           style={{
             display: "flex",
@@ -453,31 +507,10 @@ export function OfferPlatformItemsCard({
           >
             <Icon name="expand" size="sm" />
           </span>
-          <h3
-            style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
-          >
-            Items ({items.length})
-          </h3>
-          {/* Amber, and stated in the heading, because on a Colnect listing it is the one thing that
-              stops the offer being posted at all — and it is readable with the card shut, which is
-              where a collector who has not opened it yet is looking. Elsewhere the chip says the same
-              gap without the claim: an Allegro listing posts perfectly well unmatched, it just leaves
-              the stamp's own numbers and date unfillable (#669). */}
-          {linkable < items.length && (
-            <Tooltip
-              content={
-                catalogued
-                  ? "These stamps carry no Colnect item-ID, so the listing cannot be posted yet. Link them from the rows below."
-                  : "These stamps carry no Colnect item-ID, so nothing can be looked up for them — and their catalog numbers and dates cannot be filled in from it. Link them from the rows below."
-              }
-            >
-              <span style={{ ...HEADER_CHIP, ...ATTENTION }}>
-                {items.length - linkable} not matched
-              </span>
-            </Tooltip>
-          )}
+          {heading}
         </button>
       </Tooltip>
+      )}
         {/* Beside the heading rather than off at the card's right edge: every button these stand
             with is a per-row one, and those sit a few centimetres from the title on a wide screen.
             A card-wide action pinned to the far edge made the whole width a mouse journey between

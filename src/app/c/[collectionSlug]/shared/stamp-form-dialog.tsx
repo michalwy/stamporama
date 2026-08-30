@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
@@ -627,7 +628,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
     (props.mode === "add" && !autoCreateIssue && !selectedIssueId) ||
     (hasRangeExtension && rangeChoice === null);
 
-  return (
+  // Portalled to the document, the way every dialog that can be opened **from inside another
+  // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
+  // against that panel — the shell centres itself with a transform, which makes it the containing
+  // block — and clipped by its `overflow: hidden`. The listing wizard (#730) opens this one from its
+  // first step, and the surfaces that opened it before are unaffected: the panel is fixed either way.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <DialogShell
       title={title}
       onClose={onClose}
@@ -1186,6 +1194,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
           error={error}
         />
       </form>
-    </DialogShell>
+    </DialogShell>,
+    document.body
   );
 }

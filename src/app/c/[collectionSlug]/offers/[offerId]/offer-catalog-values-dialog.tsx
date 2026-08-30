@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
@@ -135,7 +136,14 @@ export function OfferCatalogValuesDialog({
     gcTime: 0,
   });
 
-  return (
+  // Portalled to the document, the way every dialog that can be opened **from inside another
+  // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
+  // against that panel — the shell centres itself with a transform, which makes it the containing
+  // block — and clipped by its `overflow: hidden`. The listing wizard (#730) opens this one from its
+  // first step, and the surfaces that opened it before are unaffected: the panel is fixed either way.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <DialogShell title="Catalog values" onClose={onClose} maxWidth="min(60rem, 95vw)">
       {isLoading ? (
         <DialogBody>
@@ -158,7 +166,8 @@ export function OfferCatalogValuesDialog({
           onSaved={onSaved}
         />
       ) : null}
-    </DialogShell>
+    </DialogShell>,
+    document.body
   );
 }
 

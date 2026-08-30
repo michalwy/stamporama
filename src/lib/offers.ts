@@ -3427,6 +3427,12 @@ export interface OfferDetail {
   suggestedPrice: string | null;
   /** Sets with no computable catalog value (excluded from the average). */
   suggestedUnpricedSets: number;
+  /** The platform's configured opening figure for an auction (#362, narrowed in #449/#553), in the
+   * platform's own currency; null where none is set or the platform lists quick buys. It seeded this
+   * offer's starting price at creation and is **not** re-applied anywhere — the listing wizard's
+   * price step (#730) offers it back only while the offer still carries no starting price of its
+   * own, which is the one case where nothing would otherwise answer the question. */
+  platformDefaultStartingPrice: string | null;
   sets: OfferDetailSet[];
   /** The sets summed and averaged (#378) — see {@link OfferSetsTotals}. */
   setsTotals: OfferSetsTotals;
@@ -3634,6 +3640,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxDescriptionLength: true,
           maxPrivateNoteLength: true,
           platformModule: true,
+          // The platform's own opening figure for an auction (#362/#553). Read here for the listing
+          // wizard's price step (#730) alone: it is a *creation-time* seed everywhere else, and the
+          // wizard is the one surface that asks the pricing question again after the offer exists.
+          defaultStartingPrice: true,
         },
       },
       // The set select is a superset of `LISTING_SETS_SELECT`, so this screen's own rows are what
@@ -3920,6 +3930,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformSale,
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
+    platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     sets,
     setsTotals,
     listingDate: offer.listingDate,

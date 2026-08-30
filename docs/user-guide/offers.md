@@ -1012,6 +1012,48 @@ reference you consult rarely. Click its heading either way — the heading count
 listing you are only skimming does not pay for the list. The two states are remembered separately, so
 collapsing it on a live listing does not shut it on the one you are building next.
 
+## The listing wizard
+
+Getting one offer up on a marketplace is three questions in a row — *is every stamp answered for*,
+*what am I asking for it*, *post it* — and the answers live in three different places on this screen:
+the Items card near the bottom, the price beside the title, the **List via Assistant** button in the
+header. **Listing wizard**, beside that button while the offer is **Preparing** or **Ready**, walks
+them in order without you scrolling between them.
+
+It opens as a dialog over the offer, with the three steps along the top. You can move between them in
+either direction at any time — they are an order to work in, not a set of locks — and Escape puts you
+back on the offer exactly where you were.
+
+**1 · Items.** The same Items card as on the screen behind, always open, with a line above it saying
+what is still missing: how many stamps carry no Colnect entry, and how many grades have no catalog
+value. Everything the card itself offers is here — **⚡ Link all**, **+ CV all**, the per-row Search,
+Catalog and **Listed as…** — so a gap noticed is a gap closed without leaving the step. The line is a
+**report and not a barrier**: **Next** works whatever it says. What actually stops a listing is said
+at the third step, by the Assistant's own refusal, and saying it twice in two voices would only make
+the two disagree.
+
+**2 · Price.** The offer's asking price — an auction's **starting price** — in one field, with what
+can be suggested for it beneath: the average catalog value per set, and, on an auction that still has
+none, the platform's own opening figure. **Use** takes either. Under that, every item with a link to
+what that stamp *in that grade* is being asked for on the platform right now, so a figure is checked
+against the market rather than guessed at. Typing a price here is the same edit as typing it on the
+screen behind.
+
+**3 · Publish.** What is about to go up — title, price, how many items in how many sets — then
+**⚡ List via Assistant**, which behaves exactly as it does in the header: it generates the listing
+photos first if they are not current, marks a **Preparing** offer **Ready** on its way out, and opens
+the platform's filled-in form in a new tab for you to submit. Anything still stopping it is spelled
+out in full here rather than in a hover hint. The Assistant's report appears in the step as it does on
+the offer.
+
+**Next offer** in the corner carries the walk on: it opens the next offer *in the wizard*, so a batch
+of listings is one unbroken session. Which offer is next follows the list you came from — if you
+opened this one from a filtered Offers list, the wizard steps along that same filter — and otherwise
+the next offer still **Preparing** on this platform. It is offered whether or not you posted this one,
+because an offer you have decided to come back to is exactly the one you want to step past.
+
+The wizard is offered on any platform the Assistant can list to, not Colnect alone.
+
 ## Bulk listing — posting a prepared batch
 
 Once you have several offers marked **Ready**, posting them is the same handful of motions over and
