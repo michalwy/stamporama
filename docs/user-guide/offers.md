@@ -828,6 +828,19 @@ so the values can be filled in from the one list that already names each stamp a
 rather than by scrolling the sets looking for which copy is unpriced. A row that is priced says
 nothing: this card shows gaps, never figures.
 
+A row whose value comes from a **variant tree** carries **Price variants** in that column, opening
+the [variant price grid](variant-prices.md) over that stamp's whole tree at the row's own condition.
+It appears wherever some variant of the stamp has no price at this grade — including on a stamp that
+is matched on the platform and lists under itself. That is the case the catalogue usually creates:
+Colnect has a page for the umbrella, so the offer links straight to it, while your catalogue prices
+only the variants and the value shown is rolled up from them. Pricing the tree from the offer is what
+this saves — the alternative was leaving the offer for the stamp's own screen. Where the stamp is
+*not* matched, the same button is the way out of a blocked offer and **+ CV** is not offered beside
+it: a price on the umbrella there would not answer which variant is cheapest, it would end the
+roll-up and take the listing off the variants entirely. Where it is matched, **+ CV** stays beside
+it — pricing the umbrella directly is a legitimate answer, marked `≈` for an estimate — and which of
+the two this stamp wants is yours to pick.
+
 Beside it, every row carries **Edit stamp**. This card is where you read your own numbers against
 somebody else's catalogue, so it is where a number typed wrong or a name never filled in gets
 noticed — and it opens the same stamp editor the Copies list and the Issues list open, so the

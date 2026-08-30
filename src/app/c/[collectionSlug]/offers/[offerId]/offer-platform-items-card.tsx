@@ -79,6 +79,14 @@ import { Icon } from "@/app/icons";
 // `+ CV` would not help either: the umbrella's own price is not what the rollup reads. That row gets
 // **Price variants** instead (#618) — the whole tree on one grid, which is what actually closes it.
 //
+// **Price variants is offered on every rolled-up row with a hole in it** (#734), including an
+// umbrella that carries its own item-ID and is listed under itself. Nothing is blocked there — the
+// derivation is never asked — but the catalogue prices only the variants all the same, and that row
+// used to offer `+ CV` on an umbrella the collector has no figure for and nothing else. It reads the
+// rollup's own coverage report off the copies (`CopyValuation.unpricedVariantIds`) rather than the
+// listing gap, and there `+ CV` **stays beside it**: an own price on a matched umbrella is an
+// ordinary uncertain valuation, not the end of a derivation the listing depends on.
+//
 // All of that is a **default**, and the card is where it is overridden. The variant's name on that
 // line is a button: it opens the picker over the umbrella's whole tree, and what is chosen is
 // recorded on *this offer* (`OfferListedVariant`), never on the stamp. A chosen variant then drops
@@ -203,6 +211,17 @@ const HEADER_CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** The axes a catalog value is recorded against (#616/#633) — a row's own key, and the key a copy's
+ *  valuation was reported at, so the two can be matched exactly rather than by `stamp × condition`
+ *  alone. */
+function valuationKey(r: {
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+  formatId: string | null;
+}): string {
+  return `${r.stampId}|${r.conditionId}|${r.certificateStatusId ?? ""}|${r.formatId ?? ""}`;
+}
 
 export function OfferPlatformItemsCard({
   items,
@@ -299,6 +318,28 @@ export function OfferPlatformItemsCard({
   }, [copies]);
   const unpricedFor = (item: OfferPlatformItem) =>
     unpricedBy.get(`${item.stampId}|${item.conditionId}`) ?? null;
+
+  // ── The same gap, one level down the tree (#734) ───────────────────────────
+  // A row whose value is **rolled up from its variants** (#238) can be missing a price without the
+  // row itself being unpriced, and pricing the umbrella is then the wrong answer: the catalogue
+  // prices the variants. The server names such a row only where the hole also *blocks the listing*
+  // (`unpricedVariantStampId`, #617) — which it does not on an umbrella that carries its own
+  // item-ID, since the derivation is never asked and the offer links straight to it. The pricing gap
+  // is there all the same, and it was reachable only from another screen. So the button follows the
+  // rollup's own coverage report (`CopyValuation.unpricedVariantIds`) off the copies this card has
+  // already loaded, and the listing gap keeps its own, stricter branch below.
+  //
+  // Keyed on the row's **whole** key and not on `stamp × condition`: coverage is reported at a
+  // `condition × certificate × format`, which is also the cell the grid is opened at, and a hole
+  // found at one certificate would otherwise open the grid on another's priced cell.
+  const treeGapKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const copy of copies) {
+      if (copy.value.unpricedVariantIds.length > 0) keys.add(valuationKey(copy));
+    }
+    return keys;
+  }, [copies]);
+  const hasUnpricedVariants = (item: OfferPlatformItem) => treeGapKeys.has(valuationKey(item));
 
   // ── The same gap, for the whole offer at once (#720) ───────────────────────
   // A komplet is a page of `+ CV` buttons, each opening a dialog and each closed again before the
@@ -795,37 +836,55 @@ export function OfferPlatformItemsCard({
                     it saves. Priced rows say nothing: the figure is still not this card's business. */}
                 <span style={CELL}>
                   {/* An umbrella whose tree is not fully priced (#618) is a different gap from an
-                      unpriced stamp, and it is the one that stops the listing outright: until every
-                      variant carries a price, *which* of them is cheapest is not known — which is
-                      also why such a row names no variant below it. It is offered ahead of `+ CV`
-                      and instead of it: pricing the umbrella itself would not close it, the tree
-                      being what the rollup reads. */}
-                  {item.unpricedVariantStampId ? (
-                    <>
-                      <Tooltip content="Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass.">
-                        <button
-                          type="button"
-                          // Narrowed to this row's own copy (#633): the tree is unlistable at one
-                          // `condition × certificate × format`, and that is the cell being asked for.
-                          // Narrowed in rows too (#679) — the umbrella being listed is the tree the
-                          // question is about, not whatever it happens to hang under.
-                          onClick={() =>
-                            variantPrices.open(
-                              { kind: "stamp", stampId: item.unpricedVariantStampId!, subtree: true },
-                              {
-                                conditionId: item.conditionId,
-                                certificateStatusId: item.certificateStatusId,
-                                formatId: item.formatId,
-                              }
-                            )
-                          }
-                          style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
-                        >
-                          Price variants
-                        </button>
-                      </Tooltip>
-                    </>
-                  ) : (
+                      unpriced stamp: the figure the row is read at comes from the variants, so the
+                      variants are where the missing price goes. It is raised on **two** rows, and
+                      the difference is what the two tooltips say.
+
+                      Where the derivation was asked — an umbrella carrying no item-ID of its own —
+                      it also stops the listing outright: until every variant is priced, *which* of
+                      them is cheapest is not known, which is also why such a row names no variant
+                      below it. There it is offered ahead of `+ CV` **and instead of it**: a price on
+                      the umbrella would not close the gap but end the rollup, turning one blocker
+                      into another and silently taking the listing off the cheapest variant.
+
+                      Where the umbrella carries its own item-ID (#734) the listing is already resolved
+                      against it and nothing is blocked — but the catalogue still prices only the
+                      variants, and until this the grid was reachable from another screen alone,
+                      while the row offered `+ CV` on an umbrella the collector has no figure for.
+                      So the button appears there too, and `+ CV` **stays beside it**: an own price
+                      on a matched umbrella is a legitimate, if uncertain, valuation (#238), and
+                      which of the two answers this stamp wants is the collector's to pick. */}
+                  {(item.unpricedVariantStampId || hasUnpricedVariants(item)) && (
+                    <Tooltip
+                      content={
+                        item.unpricedVariantStampId
+                          ? "Some variant of this stamp carries no catalog price, so which one is cheapest — and so which one this would be listed under — is not known yet. Price the whole tree in one pass."
+                          : "This stamp's catalog value is rolled up from its variants, and some of them carry no price. Price the whole tree in one pass, without leaving the offer."
+                      }
+                    >
+                      <button
+                        type="button"
+                        // Narrowed to this row's own copy (#633): the gap is at one
+                        // `condition × certificate × format`, and that is the cell being asked for.
+                        // Narrowed in rows too (#679) — the umbrella on this row is the tree the
+                        // question is about, not whatever it happens to hang under.
+                        onClick={() =>
+                          variantPrices.open(
+                            { kind: "stamp", stampId: item.stampId, subtree: true },
+                            {
+                              conditionId: item.conditionId,
+                              certificateStatusId: item.certificateStatusId,
+                              formatId: item.formatId,
+                            }
+                          )
+                        }
+                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      >
+                        Price variants
+                      </button>
+                    </Tooltip>
+                  )}
+                  {!item.unpricedVariantStampId &&
                     (() => {
                       const unpriced = unpricedFor(item);
                       if (!unpriced) return null;
@@ -845,8 +904,7 @@ export function OfferPlatformItemsCard({
                           </button>
                         </Tooltip>
                       );
-                    })()
-                  )}
+                    })()}
                   {/* Saying outright which variant this offer sells it as — the way out of a row the
                       derivation could not answer (extends #616). It appears only where there is no
                       variant *line* below: with one, the name on that line is the trigger, and a
