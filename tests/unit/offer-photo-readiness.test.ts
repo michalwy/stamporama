@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   evaluatePhotoReadiness,
+  isPhotoReadinessBlocker,
   type PhotoReadinessInput,
+  type ReadyBlocker,
 } from "../../src/lib/offer-photo-readiness";
 
 // The photo half of the ready gate (#311): an offer is not "assembled" while the images a buyer
@@ -63,5 +65,29 @@ describe("evaluatePhotoReadiness", () => {
     assert.deepEqual(codes(input({ status: "failed", storedCount: 0, outOfDate: true })), [
       "photos-missing",
     ]);
+  });
+});
+
+// #727: **List via Assistant** renders the photos itself on the way to the form, so it has to tell
+// the gate's photo half from the rest of it — that half is the one thing the click fixes.
+describe("isPhotoReadinessBlocker", () => {
+  it("claims every reason this module produces", () => {
+    const all = [
+      ...evaluatePhotoReadiness(input({ status: "none", storedCount: 0 })),
+      ...evaluatePhotoReadiness(input({ outOfDate: true })),
+      ...evaluatePhotoReadiness(input({ status: "queued" })),
+      ...evaluatePhotoReadiness(input({ status: "failed" })),
+    ];
+    assert.equal(all.length, 4);
+    assert.ok(all.every(isPhotoReadinessBlocker));
+  });
+
+  it("disclaims a reason about the goods or the texts", () => {
+    const others: ReadyBlocker[] = [
+      { code: "unmapped-condition", title: "", message: "", subjects: [], stampIds: [] },
+      { code: "missing-catalog-id", title: "", message: "", subjects: [], stampIds: [] },
+      { code: "title-too-long", title: "", message: "", subjects: [], stampIds: [] },
+    ];
+    assert.deepEqual(others.filter(isPhotoReadinessBlocker), []);
   });
 });

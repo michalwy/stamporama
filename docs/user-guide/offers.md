@@ -153,7 +153,9 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    an offer whose plan would render images but has none, whose stored images are *Out of date*, whose
    run failed, or whose run is still going cannot be marked ready — the button says which, and you fix
    it on the **Photos** card. An offer whose plan renders nothing at all (no collage configured and no
-   attachments) is asked nothing about photos. On the platform named as Colnect it also needs to pass the
+   attachments) is asked nothing about photos. **⚡ List via Assistant** beside it is the exception,
+   and deliberately: it generates the photos itself before it opens the form, so a missing plan never
+   disables *that* button — see [List via Assistant](#list-via-assistant). On the platform named as Colnect it also needs to pass the
    [listing preconditions](#what-the-assistant-cant-post) — every stamp matched, every condition
    mapped, the sets interchangeable — before it can be marked ready. On **every** platform, none of
    its texts may be [over the platform's cap](#how-long-the-text-may-be). For the same reason you cannot clear the price of an offer that is already **Ready**
@@ -1189,6 +1191,31 @@ number of sets and the two texts, and finally the offer's own pictures.
 **Nothing is submitted.** The form is filled and handed to you; you look it over and press the
 platform's own button.
 
+**The pictures are made first, if they need to be.** You don't have to generate them yourself before
+pressing this. If the offer's listing photos have never been generated, or were rendered before you
+last changed the offer, the run starts with them: the strip says *Generating this offer's listing
+photos…*, it waits for the run the [Photos card](#generating-the-photos) would have shown you, and
+then goes on to the form with the images it has just made. A run already under way is waited on
+rather than started again. It is the offer's own photo plan, unchanged — the same collages, the same
+order, the same names — so what reaches the marketplace is what the Photos card would have given you,
+only without the trip.
+
+If something is missing from the plan, it is **said and not hidden**: a group with no reverse scan
+loses its back collage, and that is listed in the report strip beside the fields the Assistant
+skipped. The listing still goes ahead with one picture fewer, because whether to go and scan the
+backs is your decision and not the app's.
+
+Two things do stop the run, and both say so instead of filling a form:
+
+- the photo run **failed** — whatever it reported is in the strip, and the Photos card is where it is
+  fixed;
+- the photo run produced **nothing to upload** — a listing whose pictures are simply absent is not
+  one you meant to post.
+
+If the run is still going after a few minutes the strip stops waiting and tells you so. Nothing is
+lost: the rendering carries on in the background, the Photos card follows it, and pressing the button
+again once it is done picks up from there.
+
 The pictures are attached **last**, once everything else is in — the same upload set, in the same
 order and under the same names as the offer's ZIP. Colnect posts each one as it is handed over, so
 going last is what keeps anything from reaching the marketplace before the form is complete in front
@@ -1229,12 +1256,17 @@ and self-activation included. That header's own **▲ Activate** stays there for
 hand.
 
 It is there while the offer is still **Preparing**, too, as soon as everything **Mark ready** asks
-for is satisfied — the same three checks and the same listing photos. Pressing it marks the offer
-ready and goes straight on to the form, because an offer that passes every check is one you have
-finished assembling, and pressing **Mark ready** first only to press this next decides nothing. The
-hover hint says so. While something is still missing, the button is disabled exactly as **Mark
-ready** is beside it, and that button's hint is where the reasons are listed. The bulk listing
-workspace is unchanged: it is a batch of Ready offers, which is what a batch is for.
+for is satisfied. Pressing it marks the offer ready and goes straight on to the form, because an
+offer that passes every check is one you have finished assembling, and pressing **Mark ready** first
+only to press this next decides nothing. The hover hint says what the press is about to do, in order.
+
+**Missing photos are not one of the things that stop it.** **Mark ready** beside it is still disabled
+until the images exist, but this button is not, because generating them is the first thing it does —
+it makes the pictures, marks the offer ready with them in place, and opens the form. What still
+disables it is the rest of that list: a stamp with no item-ID, a condition the platform has no grade
+for, sets that are not interchangeable, a text over the platform's cap. Those are yours to fix, and
+**Mark ready**'s own hint is where they are listed. The bulk listing workspace is unchanged: it is a
+batch of Ready offers, which is what a batch is for.
 
 ### Update via Assistant
 

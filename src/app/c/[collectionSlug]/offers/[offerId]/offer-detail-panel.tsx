@@ -57,6 +57,7 @@ import {
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
+import { isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { describeCommittedCopies } from "@/lib/trade-reservation-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -228,9 +229,18 @@ export function OfferDetailPanel({
     // Both cues are the same act on this screen — re-read the offer. They stay two callbacks
     // because the workspace only ever sees the first: a batch is scoped to Ready offers, so an
     // update run cannot happen there (#462).
-    { onActivated: onListingActivated, onUpdated: onListingActivated }
+    // The photo step (#727) is the same act a third time: the Photos card below is showing the plan
+    // the handoff has just re-rendered.
+    {
+      onActivated: onListingActivated,
+      onUpdated: onListingActivated,
+      onPhotosGenerated: onListingActivated,
+    }
   );
-  const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
+  const handoffRunning =
+    handoff?.state === "generating" ||
+    handoff?.state === "loading" ||
+    handoff?.state === "running";
 
   // The languages this collection lists in (#293), for regenerating the title in one of them (#297).
   const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
@@ -275,6 +285,13 @@ export function OfferDetailPanel({
     advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0) && pricedForAdvance;
   const readyBlockers = advanceReady && advanceTo === "ready" ? offer.readyBlockers : [];
   const canAdvance = advanceReady && readyBlockers.length === 0;
+  // The photo half of that gate, told apart from the rest (#727). **Mark ready** is still refused on
+  // it — `readyBlockers` above is whole — but **List via Assistant** is not: its first step is to
+  // render the images itself, so a photo gap is something the click *fixes* rather than a reason to
+  // withhold it. What is left is the gate's other half, which is nobody's errand but the
+  // collector's: a wrong grade or an over-long title is fixed before anything is posted.
+  const photoGap = readyBlockers.some(isPhotoReadinessBlocker);
+  const listingReadyBlockers = readyBlockers.filter((b) => !isPhotoReadinessBlocker(b));
   // Listing straight out of **Preparing** (#554): the collector who has just finished assembling an
   // offer wants to post it, and making them press **Mark ready** first is a click that decides
   // nothing. Offered under exactly the conditions that quick-advance is — the handoff marks the offer
@@ -379,10 +396,12 @@ export function OfferDetailPanel({
    * Hand this offer to the Assistant to post (#414), from **Preparing** as well as from Ready
    * (#554).
    *
-   * From Preparing the state goes first and the handoff follows: the listing kit is served only for a
-   * Ready offer (#405/#406), and the two steps are one act as far as the collector is concerned. A
-   * refused transition therefore stops the whole thing with its own message rather than leaving the
-   * Assistant to refuse it a second time in different words.
+   * From Preparing the state still goes before the kit — which is served only for a Ready offer
+   * (#405/#406) — but no longer before the *handoff*: it is the run's `prepare` step (#727), so it
+   * happens after the photos have been rendered and not before. That order is the whole point of
+   * putting it there: `preparing → ready` is refused while the listing photos are missing, which is
+   * exactly what the handoff's first step goes and fixes. A refused transition stops the run with
+   * its own message rather than leaving the Assistant to refuse it a second time in different words.
    *
    * No toast on the way through, unlike **Mark ready** itself: the state chip is right beside the
    * button that was pressed, and what the collector is waiting on is the report strip below.
@@ -393,15 +412,12 @@ export function OfferDetailPanel({
       void startHandoff(offerId);
       return;
     }
-    startTransition(async () => {
+    void startHandoff(offerId, "create", async () => {
       const { setOfferStateAction } = await import("@/app/actions/offers");
       const result = await setOfferStateAction(offerId, "ready");
-      if (result.status !== "success") {
-        setActionError(result.message);
-        return;
-      }
+      if (result.status !== "success") return result.message;
       invalidateAll(collectionId);
-      void startHandoff(offerId);
+      return null;
     });
   }
 
@@ -635,8 +651,11 @@ export function OfferDetailPanel({
                 platformModule={offer.platformModule}
                 present={assistantPresent}
                 blockerCount={
-                  offer.state === "ready" ? offer.listingBlockers.length : readyBlockers.length
+                  offer.state === "ready"
+                    ? offer.listingBlockers.length
+                    : listingReadyBlockers.length
                 }
+                generatesPhotos={photoGap}
                 busy={false}
                 running={handoffRunning}
                 disabled={isPending}

@@ -43,6 +43,27 @@ export type ListingCardBlocker = ListingBlocker | ListingTextLimitBlocker;
  *  surface renders one list. */
 export type ReadyBlocker = ListingCardBlocker | PhotoReadinessBlocker;
 
+/** The four codes above as a set, so a mixed list of ready-gate reasons can be told apart. */
+const PHOTO_READINESS_CODES = new Set<string>([
+  "photos-missing",
+  "photos-outdated",
+  "photos-generating",
+  "photos-failed",
+]);
+
+/**
+ * Whether one ready-gate reason is about the **photos** rather than about the goods or the texts.
+ *
+ * Asked by the surface that offers to *fix* the photo half on the spot (#727): **List via Assistant**
+ * generates the images itself on the way to the form, so a photo gap is no longer a reason to disable
+ * it — while a wrong grade or an over-long title still is. The codes are what every surface routes
+ * on, exactly as {@link ListingBlocker}'s are, so the question is answered from them and never from
+ * the blocker's wording.
+ */
+export function isPhotoReadinessBlocker(blocker: ReadyBlocker): blocker is PhotoReadinessBlocker {
+  return PHOTO_READINESS_CODES.has(blocker.code);
+}
+
 export interface PhotoReadinessInput {
   status: OfferPhotoGenerationStatus;
   /** The stored images were rendered from inputs that have since changed (#311). */

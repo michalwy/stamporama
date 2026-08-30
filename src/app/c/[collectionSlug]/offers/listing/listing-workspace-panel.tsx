@@ -222,9 +222,21 @@ export function ListingWorkspacePanel({
     },
     [collectionId, invalidateAll, ordered]
   );
+  // The photo step (#727) re-renders the offer's images, which is the expanded card's own photo
+  // strip — re-read the batch so it shows the set the form is about to be filled with.
+  const onPhotosGenerated = useCallback(
+    () => invalidateAll(collectionId),
+    [collectionId, invalidateAll]
+  );
   const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } =
-    useAssistantHandoff(collectionId, { onActivated: onListingActivated });
-  const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
+    useAssistantHandoff(collectionId, {
+      onActivated: onListingActivated,
+      onPhotosGenerated,
+    });
+  const handoffRunning =
+    handoff?.state === "generating" ||
+    handoff?.state === "loading" ||
+    handoff?.state === "running";
 
   function groupHeading(key: GroupKey): { label: string; hint?: string } {
     if (key.mixed) {

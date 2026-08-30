@@ -372,8 +372,12 @@ saved, so nothing reaches the marketplace until the filled form is in front of y
 thumbnails appear in Colnect's own uploader — that, rather than the report, is what says they arrived.
 
 If some of them can't be attached, the report says which and why, and the rest of the filled form is
-left alone: download the offer's ZIP and drag the missing ones in. The common reasons are that the
-offer's pictures haven't been generated in Stamporama yet, or are still rendering.
+left alone: download the offer's ZIP and drag the missing ones in.
+
+Pictures that were never generated are no longer one of the reasons: **⚡ List via Assistant**
+generates them before it opens the form, waits for the run and then goes on with the images it has
+just made. See [List via Assistant](offers.md#list-via-assistant) for what it does when that run
+fails or leaves a group out.
 
 ### When you post it, the offer goes live by itself
 

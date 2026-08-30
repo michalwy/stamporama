@@ -52,6 +52,7 @@ export function ListViaAssistantButton({
   running,
   disabled,
   marksReady,
+  generatesPhotos,
   style,
   onStart,
 }: {
@@ -67,6 +68,11 @@ export function ListViaAssistantButton({
    *  the hint, because a button that changes the offer's state as a side effect has to say so —
    *  everything else about the control is identical. */
   marksReady?: boolean;
+  /** This offer's listing photos are not current and this click generates them first (#727). Said in
+   *  the hint for `marksReady`'s reason exactly — the click is about to do something that used to be
+   *  a separate errand, and a wait nobody was told about reads as a hung button. Left unset by a
+   *  surface that does not know the photo state, which is not a claim that they are current. */
+  generatesPhotos?: boolean;
   style: React.CSSProperties;
   onStart: () => void;
 }) {
@@ -77,13 +83,20 @@ export function ListViaAssistantButton({
   const hint = assistantHint({ blockerCount, present, busy });
   const inert = hint !== null || running;
 
+  // What the click is about to do, in order, as one sentence: everything it does besides opening the
+  // form is a step that used to be a separate errand, and a button doing more than it says is how a
+  // wait gets read as a hang.
+  const steps = [
+    ...(generatesPhotos ? ["generate this offer's listing photos"] : []),
+    ...(marksReady ? ["mark it ready"] : []),
+    "open the platform's sale form in a new tab, filled in from this offer",
+  ].join(", then ");
+
   return (
     <Tooltip
       content={
         hint ??
-        (marksReady
-          ? "Mark this offer ready and open the platform's sale form in a new tab, filled in from it. Nothing is posted — you check it and submit it yourself."
-          : "Open this platform's sale form in a new tab, filled in from this offer. Nothing is posted — you check it and submit it yourself.")
+        `${steps[0].toUpperCase()}${steps.slice(1)}. Nothing is posted — you check it and submit it yourself.`
       }
     >
       <button
@@ -192,7 +205,10 @@ export function AssistantOutcome({
   // `listed` is *our* work in progress — the offer is being published — so it reads as busy, exactly
   // as fetching the kit does.
   const running =
-    handoff.state === "loading" || handoff.state === "running" || handoff.state === "listed";
+    handoff.state === "generating" ||
+    handoff.state === "loading" ||
+    handoff.state === "running" ||
+    handoff.state === "listed";
   const done =
     handoff.state === "filled" || handoff.state === "activated" || handoff.state === "updated";
   const tone =
@@ -287,6 +303,31 @@ export function AssistantOutcome({
             {listedUrl}
           </a>
         </p>
+      )}
+
+      {/* What this run's photo generation could not draw (#727/#314). Above the extension's own
+          skips because it happened first, and in the same warning tone: both are things the listing
+          went ahead without, each fixed somewhere different. */}
+      {handoff.notes.length > 0 && (
+        <ul
+          style={{
+            listStyle: "disc",
+            margin: 0,
+            paddingLeft: "1.75rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.125rem",
+          }}
+        >
+          {handoff.notes.map((note) => (
+            <li
+              key={note}
+              style={{ fontSize: "0.75rem", lineHeight: 1.5, color: "var(--color-warning)" }}
+            >
+              {note}
+            </li>
+          ))}
+        </ul>
       )}
 
       {report && report.skipped.length > 0 && (
