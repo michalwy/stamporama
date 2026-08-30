@@ -14,7 +14,7 @@ import {
   ScanValidationError,
   commitCut,
   deleteBatch,
-  listPurchaseScans,
+  listScans,
   proposeCut,
   purgeFinishedScanSheets,
   recutBatch,
@@ -96,7 +96,7 @@ describe("retained-scan retention (#578)", () => {
       purchasedAt: "2026-02-01",
     });
     await createLot(userId, purchase.id, 100);
-    const sheet = await uploadSheet(userId, purchase.id, {
+    const sheet = await uploadSheet(userId, { purchaseId: purchase.id }, {
       source: await card(),
       mime: "image/png",
       side: "front",
@@ -240,7 +240,7 @@ describe("retained-scan retention (#578)", () => {
     assert.ok(sheet.purgedAt, "the row survives the purge, saying it was purged");
     assert.equal(sheet.sizeBytes, 0, "and stops counting bytes it no longer holds");
 
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     assert.equal(batches[0].tiles.length, 2, "the record of what the card held is untouched");
     assert.equal(batches[0].front?.purged, true);
   });
@@ -254,7 +254,7 @@ describe("retained-scan retention (#578)", () => {
     await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
 
     await assert.rejects(
-      () => recutBatch(userId, purchaseId, 1),
+      () => recutBatch(userId, { purchaseId }, 1),
       (err: unknown) =>
         err instanceof ScanValidationError && /scan has been deleted/i.test(err.message)
     );
@@ -276,7 +276,7 @@ describe("retained-scan retention (#578)", () => {
     for (const id of tileIds) await discardTile(userId, id);
     await purgeFinishedScanSheets(aMomentFromNow(), { purchaseId });
 
-    await deleteBatch(userId, purchaseId, 1);
+    await deleteBatch(userId, { purchaseId }, 1);
     assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), 0);
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 0);
   });
@@ -292,7 +292,7 @@ describe("retained-scan retention (#578)", () => {
     assert.equal(await originalExists(sheetId), true);
 
     // And a re-cut is available again, since nothing was swept.
-    await recutBatch(userId, purchaseId, 1);
+    await recutBatch(userId, { purchaseId }, 1);
   });
 
   it("never sweeps a batch with a tile parked on it (#597)", async () => {

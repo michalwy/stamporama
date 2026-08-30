@@ -9,8 +9,10 @@ import {
   OPEN_TILE_STATES,
   ScanAuthError,
   ScanValidationError,
-  assertScanPurchaseOwner,
+  assertScanCollectionOwner,
   isOpenTileState,
+  scanOwnerWhere,
+  type ScanOwner,
 } from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 
@@ -26,7 +28,13 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
  *   (#121), the internal copy number (#268), the format (#573) and the dispositions (#160) are
  *   that function's, and a second implementation of them here would be a second set to keep right.
  *
- * - **An existing copy on the order** — the auction path. A purchase settled from a won auction
+ * - **An existing copy** — the auction path. On an order that is every copy of the **purchase**
+ *   still needing photographs; on a card scanned outside any order (#725) it is every copy of the
+ *   **collection**, which is the same rule read at the level the card belongs to: what is being
+ *   matched against is the copies this card's pieces could be, and digitising a shelf is exactly
+ *   the case where most of them are already recorded and only lack pictures.
+ *
+ *   The auction path proper: a purchase settled from a won auction
  *   sale already holds identified copies, because the contents were described in order to bid;
  *   those copies need **photographs, not identification**, and picking from named lines is less
  *   desk work than identifying from scratch. Settlement is deliberately not changed to produce tiles
@@ -171,9 +179,14 @@ export async function identifyTilesAsNewCopies(
   // tile named twice would otherwise create two copies and give the second one no images, the images
   // having moved to the first.
   const tiles = await loadSelectedTiles(ownerId, tileIds);
-  const lotId = await resolveTileLot(tiles[0].purchaseId, input.lotId);
+  // Which lot — or, for a card that belongs to no order (#725), no lot at all. A purchase-less
+  // tile's copy is one that was never bought: `intakeStamps` writes it `delivered` with a null
+  // cost basis, which is what `Item.lotId` being nullable has always meant.
+  const target = tiles[0].purchaseId
+    ? { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) }
+    : { collectionId: tiles[0].collectionId };
 
-  const copies = await intakeStamps(ownerId, lotId, {
+  const copies = await intakeStamps(ownerId, target, {
     stampId: input.stampId,
     copies: tiles.length,
     conditionId: input.conditionId,
@@ -259,6 +272,11 @@ async function resolveTileLot(
  * arriving in one envelope and scanned on one card, and the old same-lot rule made most of them
  * unreachable from the tile in front of the collector. This path asks nothing about lots because
  * the copy already has one — it is only *creating* a copy that has to name one.
+ *
+ * **A card that belongs to no order widens it to the collection** (#725) — not a relaxation but the
+ * same sentence at the level that card exists at. There is no parcel to be "on", and the copies
+ * being matched against while digitising a shelf are simply the ones already recorded; the
+ * collection check above is what keeps it from being wider than that.
  */
 export async function assignTileToCopy(
   ownerId: string,
@@ -272,12 +290,21 @@ export async function assignTileToCopy(
     select: {
       id: true,
       itemNo: true,
+      collectionId: true,
       lot: { select: { purchaseId: true } },
       photos: { select: { role: true } },
     },
   });
   if (!item) throw new ScanAuthError("Copy not found or access denied.");
-  if (item.lot?.purchaseId !== tile.purchaseId) {
+  if (item.collectionId !== tile.collectionId) {
+    throw new ScanAuthError("Copy not found or access denied.");
+  }
+  // On an order, the copy has to be **on that order** — #586's rule, and the one that makes the
+  // candidate list the settled parcel's own lines. A card that belongs to no order (#725) has no
+  // such narrowing to make: the collection is the level it exists at, so the collection is the set
+  // it may hand its pictures to, which is the same sentence read one level up rather than a second
+  // rule.
+  if (tile.purchaseId && item.lot?.purchaseId !== tile.purchaseId) {
     throw new ScanValidationError("That copy is not on this order.");
   }
 
@@ -450,7 +477,7 @@ export async function discardTiles(
         note: note?.trim() || tile.note,
       },
     });
-    await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
+    await stampBatchIfFinished(tile, tile.batchNo);
   }
 }
 
@@ -560,12 +587,8 @@ export async function addTileCandidate(
   stampId: string
 ): Promise<void> {
   const tiles = await loadSelectedTiles(ownerId, tileIds);
-  const purchase = await prisma.purchase.findUniqueOrThrow({
-    where: { id: tiles[0].purchaseId },
-    select: { collectionId: true },
-  });
   const stamp = await prisma.stamp.findFirst({
-    where: { id: stampId, collectionId: purchase.collectionId },
+    where: { id: stampId, collectionId: tiles[0].collectionId },
     select: { id: true },
   });
   if (!stamp) throw new ScanValidationError("That stamp is not in this collection.");
@@ -654,7 +677,7 @@ export async function returnTilesToQueue(ownerId: string, tileIds: string[]): Pr
   for (const tile of tiles) await restoreTile(tile);
 }
 
-async function restoreTile(tile: { id: string; purchaseId: string; batchNo: number }) {
+async function restoreTile(tile: ScanOwner & { id: string; batchNo: number }) {
   await prisma.scanTile.update({
     where: { id: tile.id },
     data: { state: "unidentified", note: null },
@@ -669,7 +692,7 @@ async function restoreTile(tile: { id: string; purchaseId: string; batchNo: numb
   // never let it be stamped in the first place, so this is a no-op on that path and the guard on
   // `batchDoneAt: { not: null }` says so.
   await prisma.scanSheet.updateMany({
-    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
+    where: { ...scanOwnerWhere(tile), batchNo: tile.batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
 }
@@ -690,10 +713,10 @@ async function consumeTile(tileId: string, itemId: string): Promise<void> {
     return tx.scanTile.update({
       where: { id: tileId },
       data: { state: "consumed", itemId },
-      select: { purchaseId: true, batchNo: true },
+      select: { collectionId: true, purchaseId: true, batchNo: true },
     });
   });
-  await stampBatchIfFinished(tile.purchaseId, tile.batchNo);
+  await stampBatchIfFinished(tile, tile.batchNo);
 }
 
 /**
@@ -749,17 +772,17 @@ async function seedStampImage(ownerId: string, itemId: string): Promise<void> {
  * Written on the batch's **sheets** because that is what the sweep will delete, and only where it
  * is not already set, so a batch finished with twice keeps the first moment.
  */
-async function stampBatchIfFinished(purchaseId: string, batchNo: number): Promise<void> {
+async function stampBatchIfFinished(owner: ScanOwner, batchNo: number): Promise<void> {
   // **A batch with a parked tile is not finished with** (#597). That tile is still going to become
   // a copy, and the retention sweep taking the card's scan would remove the very picture the
   // collector is coming back to it for — so both outstanding states count here, and the list is
   // `scan-sheets.ts`' one rather than a second reading of what "still waiting" means.
   const waiting = await prisma.scanTile.count({
-    where: { purchaseId, batchNo, state: { in: [...OPEN_TILE_STATES] } },
+    where: { ...scanOwnerWhere(owner), batchNo, state: { in: [...OPEN_TILE_STATES] } },
   });
   if (waiting > 0) return;
   await prisma.scanSheet.updateMany({
-    where: { purchaseId, batchNo, batchDoneAt: null },
+    where: { ...scanOwnerWhere(owner), batchNo, batchDoneAt: null },
     data: { batchDoneAt: new Date() },
   });
 }
@@ -771,6 +794,7 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
     where: { id: tileId },
     select: {
       id: true,
+      collectionId: true,
       purchaseId: true,
       batchNo: true,
       state: true,
@@ -782,7 +806,7 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
-  await assertScanPurchaseOwner(ownerId, tile.purchaseId);
+  await assertScanCollectionOwner(ownerId, tile.collectionId);
   return tile;
 }
 
@@ -813,8 +837,15 @@ async function loadSelectedTiles(ownerId: string, tileIds: string[]) {
   }
   const tiles: Awaited<ReturnType<typeof loadOpenTile>>[] = [];
   for (const tileId of tileIds) tiles.push(await loadOpenTile(ownerId, tileId));
-  if (tiles.some((t) => t.purchaseId !== tiles[0].purchaseId)) {
-    throw new ScanValidationError("Those tiles are not all on this order.");
+  // Both halves of the owner, since #725: two tiles of one collection can still belong to
+  // different orders, and one of them belonging to no order at all is a third case. A selection is
+  // a pass over **one card's** pieces, and a card has exactly one owner.
+  if (
+    tiles.some(
+      (t) => t.collectionId !== tiles[0].collectionId || t.purchaseId !== tiles[0].purchaseId
+    )
+  ) {
+    throw new ScanValidationError("Those tiles are not all on the same card.");
   }
   return tiles;
 }

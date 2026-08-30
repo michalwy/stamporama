@@ -5,32 +5,24 @@ import { ScanAuthError, ScanValidationError, type SheetSide } from "@/lib/scan-s
 import { openScanUpload } from "@/lib/scan-uploads";
 
 /**
- * Open a chunked card-scan upload (#590).
+ * Open a chunked card-scan upload with **no order behind it** (#725).
  *
- * The scan itself never crosses this route — only its description does, which is what lets the size
- * and the format be refused *before* 200 MB have been sent. The answer carries the chunk size this
- * instance is configured for, so the client is told how to send the file rather than having to know
- * (`STAMPORAMA_UPLOAD_CHUNK_KB` is the operator's dial, and a client with the number compiled in
- * would ignore it).
- *
- * The parts, the finalize and the abort are at `/api/collections/[collectionId]/scan-sheets/uploads/[uploadId]`
- * (#725) — a chunk is addressed by its upload and never needed the order in its path, so one pair of
- * routes serves both this and the purchase-less open beside it.
- *
- * `side=front` with no `batchNo` opens a new batch and `side=back` names the batch its front is in,
- * exactly as the single-request route did — the questions the upload answers are unchanged, they
- * are just asked at the start instead of alongside the bytes.
+ * The order's twin of this lives under `purchases/[purchaseId]/scan-sheets/uploads` and differs in
+ * exactly one thing: which owner it hands `openScanUpload`. Everything after the open — the parts,
+ * the finalize, the assembled sheet — is the same pair of routes under
+ * `scan-sheets/uploads/[uploadId]`, because a chunk is addressed by its upload and has never had an
+ * opinion about who the card belongs to.
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ collectionId: string; purchaseId: string }> }
+  { params }: { params: Promise<{ collectionId: string }> }
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { purchaseId } = await params;
+  const { collectionId } = await params;
 
   let body: unknown;
   try {
@@ -70,7 +62,7 @@ export async function POST(
   const label = typeof input.label === "string" ? input.label : null;
 
   try {
-    const opened = await openScanUpload(session.user.id, { purchaseId }, {
+    const opened = await openScanUpload(session.user.id, { collectionId }, {
       mime: input.mime,
       side,
       batchNo,
@@ -83,9 +75,8 @@ export async function POST(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     if (err instanceof ScanValidationError) {
-      // A scan over `MAX_UPLOAD_BYTES` is refused with the status a too-large upload has always been
-      // refused with, even though nothing has been sent yet: it is the same answer to the same
-      // question, and the client's error path should not have to learn a second one.
+      // Same status a too-large upload has always been refused with, even though nothing has been
+      // sent yet: one answer to one question, and the client's error path should not learn a second.
       const tooLarge = err.message.includes("too large");
       return NextResponse.json({ error: err.message }, { status: tooLarge ? 413 : 400 });
     }

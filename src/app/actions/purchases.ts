@@ -355,7 +355,7 @@ export async function intakeStampsAction(
     // Deliberately **not** raising the want review here (ADR-0032 §7): intake creates copies as
     // `ordered`, or `to_sort` when the order has already arrived, and neither is a copy in the
     // collector's hands. The review comes when one is marked `delivered`.
-    await intakeStamps(session.user.id, lotId, {
+    await intakeStamps(session.user.id, { lotId }, {
       stampId,
       checklistId,
       conditionId,

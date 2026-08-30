@@ -110,7 +110,7 @@ describe("intake records a copy's format (#573)", () => {
 
   it("writes the chosen format onto the copy, and reports it back", async () => {
     const lotId = await openLot();
-    const [copy] = await intakeStamps(userId, lotId, {
+    const [copy] = await intakeStamps(userId, { lotId }, {
       stampId,
       conditionId,
       formatId: block4Id,
@@ -123,14 +123,14 @@ describe("intake records a copy's format (#573)", () => {
 
   it("records a single when no format is named", async () => {
     const lotId = await openLot();
-    const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
     assert.equal(await formatOf(copy.itemId), null);
     assert.equal(copy.formatId, null);
   });
 
   it("drops a format on a whole-checklist intake: one format cannot fit many stamps", async () => {
     const lotId = await openLot();
-    const copies = await intakeStamps(userId, lotId, {
+    const copies = await intakeStamps(userId, { lotId }, {
       checklistId,
       conditionId,
       formatId: block4Id,
@@ -160,7 +160,7 @@ describe("intake records a copy's format (#573)", () => {
   it("refuses a format from another collection", async () => {
     const lotId = await openLot();
     await assert.rejects(
-      intakeStamps(userId, lotId, { stampId, conditionId, formatId: foreignFormatId }),
+      intakeStamps(userId, { lotId }, { stampId, conditionId, formatId: foreignFormatId }),
       /Format not found in this collection/
     );
   });

@@ -18,7 +18,7 @@ import {
   ScanValidationError,
   commitCut,
   countParkedTiles,
-  listPurchaseScans,
+  listScans,
   recutBatch,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
@@ -125,7 +125,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     tileIds: string[];
   }> {
     const { purchaseId, lotId } = await newOrder();
-    const sheet = await uploadSheet(userId, purchaseId, {
+    const sheet = await uploadSheet(userId, { purchaseId }, {
       source: await card(),
       mime: "image/png",
       side: "front",
@@ -278,7 +278,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // …and the card's strip can still draw the tile, because the read points it at the photo's new
     // owner. A consumed tile used to render an empty square while a discarded one kept its image —
     // the tile that went well looking more broken than the one that became nothing.
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     const consumed = batches[0].tiles.find((t) => t.id === tileIds[0]);
     assert.equal(consumed?.frontPhotoId, null, "the tile itself no longer owns a photo");
     assert.equal(
@@ -383,7 +383,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // #566 wrote this guard before the state that triggers it existed. Here it is a genuine
     // identification that arms it, and what it protects is a copy's front image: re-cutting
     // deletes the tiles, and the copy's `Photo` row would go with the tile that no longer owns it.
-    await assert.rejects(() => recutBatch(userId, purchaseId, 1), ScanValidationError);
+    await assert.rejects(() => recutBatch(userId, { purchaseId }, 1), ScanValidationError);
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 2);
   });
 
@@ -426,7 +426,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     const outcome = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
     await prisma.item.delete({ where: { id: outcome.itemId } });
 
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     const orphan = batches[0].tiles.find((t) => t.id === tileIds[0]);
     // `SetNull`, so the tile survives the copy — and stays `consumed`, because its images left with
     // the copy and there is nothing to go back to. This is the one square the card draws empty, and
@@ -502,7 +502,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(history, [{ fromStampId: baseStampId, toStampId: variantAId }]);
 
     // The tile still says what it became, now naming the stamp it actually is.
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     const tile = batches[0].tiles.find((t) => t.id === tileIds[0]);
     assert.equal(tile?.state, "consumed");
     assert.equal(tile?.item?.stampId, variantAId);
@@ -830,7 +830,7 @@ describe("identifying scan tiles into copies (#567)", () => {
       1,
       "a parked tile stops being re-offered as waiting"
     );
-    assert.equal(await countParkedTiles(purchaseId), 1);
+    assert.equal(await countParkedTiles({ collectionId, purchaseId }), 1);
     assert.equal(
       (await getPurchaseDetail(userId, purchaseId))?.parkedTileCount,
       1,
@@ -886,7 +886,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // The same stamp twice is what a second press of it in the picker means — the pair is the row.
     await addTileCandidate(userId, [tileIds[0]], variantAId);
 
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     const parked = batches[0].tiles.find((t) => t.id === tileIds[0])!;
     assert.deepEqual(
       parked.candidates.map((c) => c.stampId),
@@ -1127,7 +1127,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId: describedStampId, conditionId });
     await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
 
-    const { batches, fromAuction } = await listPurchaseScans(userId, purchaseId);
+    const { batches, fromAuction } = await listScans(userId, { purchaseId });
     assert.equal(fromAuction, true);
     const tiles = batches[0].tiles;
     assert.equal(tiles.find((t) => t.id === tileIds[0])?.outsideDescription, false);
@@ -1142,7 +1142,7 @@ describe("identifying scan tiles into copies (#567)", () => {
   it("says nothing about an order that came from no auction", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
-    const { batches, fromAuction } = await listPurchaseScans(userId, purchaseId);
+    const { batches, fromAuction } = await listScans(userId, { purchaseId });
     assert.equal(fromAuction, false);
     // No description exists, so no tile can disagree with one — the absence of lines must not read
     // as "every stamp here was undescribed".

@@ -54,6 +54,11 @@ import { VARIANT_FLAG_SELECT } from "./variant-classification";
  *   arrives as one shipment and is scanned on one or two cards, so nothing below this line names a
  *   lot: which lot a piece belongs to is not answerable until it has been identified, and
  *   `scan-tiles.ts` is where that answer lands.
+ * - **…and a card need not belong to a purchase at all** (#725). A stockbook already owned is
+ *   scanned the same way, so the owner of a sheet, a tile and an upload is the **collection**, with
+ *   the purchase an optional extra. Every scope below is a {@link ScanOwner} rather than a purchase
+ *   id; `{ purchaseId: null }` is not "any card in the collection" but exactly the purchase-less
+ *   ones, which is what makes one `where` serve both screens.
  */
 
 export class ScanAuthError extends Error {}
@@ -82,15 +87,63 @@ export function isOpenTileState(state: string): boolean {
 
 export type SheetSide = "front" | "back";
 
+// ── What a card hangs off ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The owner a caller **names** (#725): an order, or the collection itself.
+ *
+ * Two shapes rather than one nullable field, so a caller cannot pass a collection and a purchase
+ * together and cannot forget which of the two it meant. {@link assertScanOwner} resolves it into
+ * the {@link ScanOwner} everything below scopes by.
+ */
+export type ScanOwnerRef = { purchaseId: string } | { collectionId: string };
+
+/** The **resolved** owner. The collection is always known; the purchase only when the card came in
+ * one. Written onto every sheet, tile and upload, and used as the `where` for every read. */
+export interface ScanOwner {
+  collectionId: string;
+  purchaseId: string | null;
+}
+
+/**
+ * The scope fragment, and the reason a null purchase is spelled out rather than omitted:
+ * `{ collectionId, purchaseId: null }` selects the collection's **purchase-less** cards, while
+ * leaving the key out would select every card it has, an order's included. The two screens are
+ * different lists of the same table, so the difference has to be in the `where`.
+ */
+export function scanOwnerWhere(owner: ScanOwner): { collectionId: string; purchaseId: string | null } {
+  return { collectionId: owner.collectionId, purchaseId: owner.purchaseId };
+}
+
 // ── Authorization ─────────────────────────────────────────────────────────────────────────────
 
-/** Shared with `scan-tiles.ts` (#567), which works on the same purchases through the same check
- * rather than growing a second one that could drift from this. */
-export async function assertScanPurchaseOwner(
+/** Resolve and check whichever owner the caller named. */
+export async function assertScanOwner(ownerId: string, ref: ScanOwnerRef): Promise<ScanOwner> {
+  if ("purchaseId" in ref) {
+    const { collectionId } = await assertPurchaseOwner(ownerId, ref.purchaseId);
+    return { collectionId, purchaseId: ref.purchaseId };
+  }
+  await assertScanCollectionOwner(ownerId, ref.collectionId);
+  return { collectionId: ref.collectionId, purchaseId: null };
+}
+
+/** Shared with `scan-tiles.ts` (#567), which works on the same collections through the same check
+ * rather than growing a second one that could drift from this. A row carries its `collectionId`
+ * since #725, so this is the check every scan path passes — purchase or no purchase.
+ *
+ * Written here rather than imported from `collections.ts`, which imports enough of the app that a
+ * cycle would be one edit away; the query is two columns. */
+export async function assertScanCollectionOwner(
   ownerId: string,
-  purchaseId: string
-): Promise<{ collectionId: string }> {
-  return assertPurchaseOwner(ownerId, purchaseId);
+  collectionId: string
+): Promise<void> {
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!collection || collection.ownerId !== ownerId) {
+    throw new ScanAuthError("Collection not found or access denied.");
+  }
 }
 
 async function assertPurchaseOwner(
@@ -107,17 +160,14 @@ async function assertPurchaseOwner(
   return { collectionId: purchase.collectionId };
 }
 
-async function assertSheetOwner(
-  ownerId: string,
-  sheetId: string
-): Promise<{ collectionId: string; purchaseId: string }> {
+async function assertSheetOwner(ownerId: string, sheetId: string): Promise<ScanOwner> {
   const sheet = await prisma.scanSheet.findUnique({
     where: { id: sheetId },
-    select: { purchaseId: true },
+    select: { collectionId: true, purchaseId: true },
   });
   if (!sheet) throw new ScanAuthError("Scan sheet not found or access denied.");
-  const { collectionId } = await assertPurchaseOwner(ownerId, sheet.purchaseId);
-  return { collectionId, purchaseId: sheet.purchaseId };
+  await assertScanCollectionOwner(ownerId, sheet.collectionId);
+  return { collectionId: sheet.collectionId, purchaseId: sheet.purchaseId };
 }
 
 // ── Uploading a sheet ─────────────────────────────────────────────────────────────────────────
@@ -136,7 +186,7 @@ export interface UploadedSheet {
 }
 
 /**
- * Store a card scan against a **purchase** (#586).
+ * Store a card scan against a **purchase** (#586), or against the collection alone (#725).
  *
  * A **front** with no `batchNo` opens a new batch. A **back** always names the batch it belongs to,
  * because a back with no front is a scan of nothing this flow can use. Re-uploading a side replaces
@@ -150,7 +200,7 @@ export interface UploadedSheet {
  */
 export async function uploadSheet(
   ownerId: string,
-  purchaseId: string,
+  ref: ScanOwnerRef,
   input: {
     /** The scan's bytes, or the local file the chunked upload assembled them into (#590). A card
      * arriving in parts is assembled on disk and handed over as a **path**, so nothing between the
@@ -166,7 +216,8 @@ export async function uploadSheet(
     label?: string | null;
   }
 ): Promise<UploadedSheet> {
-  const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
+  const owner = await assertScanOwner(ownerId, ref);
+  const { collectionId } = owner;
 
   if ((await sourceSize(input.source)) > MAX_UPLOAD_BYTES) {
     throw new ScanValidationError("Scan is too large (max 200 MB).");
@@ -182,11 +233,14 @@ export async function uploadSheet(
 
   const batchNo =
     input.side === "front" && input.batchNo == null
-      ? await allocateBatchNo(purchaseId)
+      ? await allocateBatchNo(owner)
       : requireBatchNo(input);
 
-  const existing = await prisma.scanSheet.findUnique({
-    where: { purchaseId_batchNo_side: { purchaseId, batchNo, side: input.side } },
+  // `findFirst` and not `findUnique`: the uniqueness of a purchase-less batch is a **partial**
+  // index (see the migration), which Prisma has no compound key for. The database still refuses a
+  // duplicate; this read just cannot address it by name.
+  const existing = await prisma.scanSheet.findFirst({
+    where: { ...scanOwnerWhere(owner), batchNo, side: input.side },
     select: { id: true, storageBackend: true, storageKey: true, mime: true, label: true, _count: { select: { frontTiles: true, backTiles: true } } },
   });
   if (existing && existing._count.frontTiles + existing._count.backTiles > 0) {
@@ -194,7 +248,7 @@ export async function uploadSheet(
       "This side has already been cut. Re-cut the batch first to replace the scan."
     );
   }
-  if (input.side === "back") await assertBatchHasFront(purchaseId, batchNo);
+  if (input.side === "back") await assertBatchHasFront(owner, batchNo);
 
   // The batch's name belongs to the batch, so a sheet joining one takes the name already there and
   // a sheet replacing one keeps it: naming a card and then re-scanning its front must not quietly
@@ -203,7 +257,7 @@ export async function uploadSheet(
   const label =
     normalizeLabel(input.label) ??
     existing?.label ??
-    (await readBatchLabel(purchaseId, batchNo));
+    (await readBatchLabel(owner, batchNo));
 
   const id = randomUUID();
   const prefix = sheetPrefix(collectionId, id);
@@ -242,7 +296,8 @@ export async function uploadSheet(
       await tx.scanSheet.create({
         data: {
           id,
-          purchaseId,
+          collectionId,
+          purchaseId: owner.purchaseId,
           batchNo,
           side: input.side,
           label,
@@ -291,9 +346,9 @@ function requireBatchNo(input: { side: SheetSide; batchNo?: number }): number {
   return input.batchNo;
 }
 
-async function assertBatchHasFront(purchaseId: string, batchNo: number): Promise<void> {
-  const front = await prisma.scanSheet.findUnique({
-    where: { purchaseId_batchNo_side: { purchaseId, batchNo, side: "front" } },
+async function assertBatchHasFront(owner: ScanOwner, batchNo: number): Promise<void> {
+  const front = await prisma.scanSheet.findFirst({
+    where: { ...scanOwnerWhere(owner), batchNo, side: "front" },
     select: { id: true },
   });
   if (!front) throw new ScanValidationError("That batch has no front scan.");
@@ -303,9 +358,21 @@ async function assertBatchHasFront(purchaseId: string, batchNo: number): Promise
  * uploads racing cannot both take the same one (`allocateEntityNumber`'s rule, applied per
  * purchase). Per purchase rather than per lot (#586): the number names the card on the desk, and a
  * parcel of twenty small lots is scanned on one or two cards, not twenty. */
-async function allocateBatchNo(purchaseId: string): Promise<number> {
-  const updated = await prisma.purchase.update({
-    where: { id: purchaseId },
+/** The next batch number, off whichever counter owns the card (#725): the order's for a parcel,
+ * the collection's for a card scanned outside one. Two counters and not one shared sequence —
+ * merging them would renumber batches a collector has already written on physical cards, which is
+ * exactly what these counters exist to prevent (#268/#432). */
+async function allocateBatchNo(owner: ScanOwner): Promise<number> {
+  if (owner.purchaseId) {
+    const updated = await prisma.purchase.update({
+      where: { id: owner.purchaseId },
+      data: { nextScanBatchNo: { increment: 1 } },
+      select: { nextScanBatchNo: true },
+    });
+    return updated.nextScanBatchNo - 1;
+  }
+  const updated = await prisma.collection.update({
+    where: { id: owner.collectionId },
     data: { nextScanBatchNo: { increment: 1 } },
     select: { nextScanBatchNo: true },
   });
@@ -328,9 +395,9 @@ function normalizeLabel(label: string | null | undefined): string | null {
 }
 
 /** The name already on a batch, from whichever of its sheets still carries it. */
-async function readBatchLabel(purchaseId: string, batchNo: number): Promise<string | null> {
+async function readBatchLabel(owner: ScanOwner, batchNo: number): Promise<string | null> {
   const sheet = await prisma.scanSheet.findFirst({
-    where: { purchaseId, batchNo, label: { not: null } },
+    where: { ...scanOwnerWhere(owner), batchNo, label: { not: null } },
     select: { label: true },
   });
   return sheet?.label ?? null;
@@ -348,14 +415,14 @@ async function readBatchLabel(purchaseId: string, batchNo: number): Promise<stri
  */
 export async function setBatchLabel(
   ownerId: string,
-  purchaseId: string,
+  ref: ScanOwnerRef,
   batchNo: number,
   label: string | null
 ): Promise<{ label: string | null }> {
-  await assertPurchaseOwner(ownerId, purchaseId);
+  const owner = await assertScanOwner(ownerId, ref);
   const value = normalizeLabel(label);
   const { count } = await prisma.scanSheet.updateMany({
-    where: { purchaseId, batchNo },
+    where: { ...scanOwnerWhere(owner), batchNo },
     data: { label: value },
   });
   if (count === 0) throw new ScanValidationError("That batch has no scans to name.");
@@ -412,7 +479,7 @@ export async function commitCut(
   sheetId: string,
   boxes: readonly Box[]
 ): Promise<CutReport> {
-  const { collectionId, purchaseId } = await assertSheetOwner(ownerId, sheetId);
+  const owner = await assertSheetOwner(ownerId, sheetId);
 
   const sheet = await prisma.scanSheet.findUniqueOrThrow({
     where: { id: sheetId },
@@ -451,29 +518,21 @@ export async function commitCut(
   const crops = await cutSheet(original, ordered);
 
   return sheet.side === "front"
-    ? commitFrontCut({ collectionId, purchaseId, sheetId, batchNo: sheet.batchNo, ordered, crops })
-    : commitBackCut({
-        collectionId,
-        purchaseId,
-        sheetId,
-        batchNo: sheet.batchNo,
-        sheet,
-        ordered,
-        crops,
-      });
+    ? commitFrontCut({ owner, sheetId, batchNo: sheet.batchNo, ordered, crops })
+    : commitBackCut({ owner, sheetId, batchNo: sheet.batchNo, sheet, ordered, crops });
 }
 
 type Crops = Awaited<ReturnType<typeof cutSheet>>;
 
 async function commitFrontCut(args: {
-  collectionId: string;
-  purchaseId: string;
+  owner: ScanOwner;
   sheetId: string;
   batchNo: number;
   ordered: Box[];
   crops: Crops;
 }): Promise<CutReport> {
-  const { collectionId, purchaseId, sheetId, batchNo, ordered, crops } = args;
+  const { owner, sheetId, batchNo, ordered, crops } = args;
+  const { collectionId } = owner;
 
   const rows = ordered.map((box, i) => ({
     tileId: randomUUID(),
@@ -490,7 +549,8 @@ async function commitFrontCut(args: {
         await tx.scanTile.create({
           data: {
             id: r.tileId,
-            purchaseId,
+            collectionId,
+            purchaseId: owner.purchaseId,
             batchNo,
             position: r.position,
             frontSheetId: sheetId,
@@ -522,25 +582,26 @@ async function commitFrontCut(args: {
 }
 
 async function commitBackCut(args: {
-  collectionId: string;
-  purchaseId: string;
+  owner: ScanOwner;
   sheetId: string;
   batchNo: number;
   sheet: { width: number; height: number };
   ordered: Box[];
   crops: Crops;
 }): Promise<CutReport> {
-  const { collectionId, purchaseId, sheetId, batchNo, sheet, ordered, crops } = args;
+  const { owner, sheetId, batchNo, sheet, ordered, crops } = args;
+  const { collectionId } = owner;
+  const scope = scanOwnerWhere(owner);
 
-  const frontSheet = await prisma.scanSheet.findUniqueOrThrow({
-    where: { purchaseId_batchNo_side: { purchaseId, batchNo, side: "front" } },
+  const frontSheet = await prisma.scanSheet.findFirstOrThrow({
+    where: { ...scope, batchNo, side: "front" },
     select: { width: true, height: true },
   });
 
   // Only front tiles that still have no back take part: a batch's back scan can be cut more than
   // once across re-cuts, and a tile already carrying a back is not looking for one.
   const frontTiles = await prisma.scanTile.findMany({
-    where: { purchaseId, batchNo, frontSheetId: { not: null }, backSheetId: null },
+    where: { ...scope, batchNo, frontSheetId: { not: null }, backSheetId: null },
     select: { id: true, position: true, frontX: true, frontY: true, frontW: true, frontH: true },
     orderBy: { position: "asc" },
   });
@@ -557,7 +618,7 @@ async function commitBackCut(args: {
   // Back-only tiles are appended after everything already in the batch, so an existing tile's
   // position — which the collector has been reading off the screen — never shifts under it.
   const maxPosition = await prisma.scanTile.aggregate({
-    where: { purchaseId, batchNo },
+    where: { ...scope, batchNo },
     _max: { position: true },
   });
   let nextPosition = (maxPosition._max.position ?? -1) + 1;
@@ -583,7 +644,8 @@ async function commitBackCut(args: {
           await tx.scanTile.create({
             data: {
               id: r.tileId,
-              purchaseId,
+              collectionId,
+              purchaseId: owner.purchaseId,
               batchNo,
               position: r.position,
               backSheetId: sheetId,
@@ -614,7 +676,7 @@ async function commitBackCut(args: {
   }
 
   const frontCount = await prisma.scanTile.count({
-    where: { purchaseId, batchNo, frontSheetId: { not: null } },
+    where: { ...scope, batchNo, frontSheetId: { not: null } },
   });
 
   return {
@@ -786,10 +848,16 @@ export async function pairTilesManually(
     loadTile(backTileId),
     loadTile(frontTileId),
   ]);
-  if (backTile.purchaseId !== frontTile.purchaseId) {
-    throw new ScanValidationError("Both tiles must be on the same order.");
+  if (
+    backTile.collectionId !== frontTile.collectionId ||
+    backTile.purchaseId !== frontTile.purchaseId
+  ) {
+    // Both halves of the check, because since #725 "the same owner" is a pair: two tiles of one
+    // collection can still belong to different orders, and a purchase-less tile must not be
+    // dragged onto a parcel's card or the other way about.
+    throw new ScanValidationError("Both tiles must be on the same card.");
   }
-  await assertPurchaseOwner(ownerId, backTile.purchaseId);
+  await assertScanCollectionOwner(ownerId, backTile.collectionId);
 
   if (backTile.frontSheetId != null) {
     throw new ScanValidationError("Only a tile with no front image can be paired onto another.");
@@ -848,7 +916,8 @@ export async function pairTilesManually(
  */
 export async function unpairTileBack(ownerId: string, tileId: string): Promise<void> {
   const tile = await loadTile(tileId);
-  await assertPurchaseOwner(ownerId, tile.purchaseId);
+  await assertScanCollectionOwner(ownerId, tile.collectionId);
+  const scope = scanOwnerWhere(tile);
 
   if (tile.backSheetId == null) {
     throw new ScanValidationError("That tile has no back image to unpair.");
@@ -864,13 +933,14 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
   // is what the collector reads off the strip to find a piece in the tray, so nothing already on
   // screen may shift because a back was taken off one square.
   const maxPosition = await prisma.scanTile.aggregate({
-    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo },
+    where: { ...scope, batchNo: tile.batchNo },
     _max: { position: true },
   });
 
   await prisma.$transaction(async (tx) => {
     const freed = await tx.scanTile.create({
       data: {
+        collectionId: tile.collectionId,
         purchaseId: tile.purchaseId,
         batchNo: tile.batchNo,
         position: (maxPosition._max.position ?? -1) + 1,
@@ -902,7 +972,7 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
   // sweeps the retained scan of a batch that is. Same clearing `returnTilesToQueue` does, for the
   // same reason: the card must still be there for the piece the collector is coming back to.
   await prisma.scanSheet.updateMany({
-    where: { purchaseId: tile.purchaseId, batchNo: tile.batchNo, batchDoneAt: { not: null } },
+    where: { ...scope, batchNo: tile.batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
 }
@@ -912,6 +982,7 @@ async function loadTile(tileId: string) {
     where: { id: tileId },
     select: {
       id: true,
+      collectionId: true,
       purchaseId: true,
       batchNo: true,
       state: true,
@@ -947,27 +1018,28 @@ async function loadTile(tileId: string) {
  */
 export async function recutBatch(
   ownerId: string,
-  purchaseId: string,
+  ref: ScanOwnerRef,
   batchNo: number
 ): Promise<{ discarded: number }> {
-  await assertPurchaseOwner(ownerId, purchaseId);
+  const owner = await assertScanOwner(ownerId, ref);
 
   const purged = await prisma.scanSheet.count({
-    where: { purchaseId, batchNo, purgedAt: { not: null } },
+    where: { ...scanOwnerWhere(owner), batchNo, purgedAt: { not: null } },
   });
   if (purged > 0) {
     throw new ScanValidationError(PURGED_SCAN_MESSAGE);
   }
 
-  return { discarded: await clearBatchTiles(purchaseId, batchNo) };
+  return { discarded: await clearBatchTiles(owner, batchNo) };
 }
 
 /** The tile side of a re-cut, without the purged-scan guard — shared with `deleteBatch`, which is
  * still allowed on a batch whose scan has been swept: what it is deleting is the record, and a
  * record whose bytes are gone is no harder to throw away than one whose bytes are there. */
-async function clearBatchTiles(purchaseId: string, batchNo: number): Promise<number> {
+async function clearBatchTiles(owner: ScanOwner, batchNo: number): Promise<number> {
+  const scope = scanOwnerWhere(owner);
   const consumed = await prisma.scanTile.count({
-    where: { purchaseId, batchNo, state: "consumed" },
+    where: { ...scope, batchNo, state: "consumed" },
   });
   if (consumed > 0) {
     throw new ScanValidationError(
@@ -975,12 +1047,12 @@ async function clearBatchTiles(purchaseId: string, batchNo: number): Promise<num
     );
   }
 
-  const discarded = await deleteTiles({ purchaseId, batchNo });
+  const discarded = await deleteTiles({ ...scope, batchNo });
   // The batch is being drawn again, so it is no longer finished with (#567) — clearing the stamp
   // is what keeps #578 from sweeping away the original a re-cut is about to be taken from. A batch
   // whose tiles were all *discarded* is exactly the one that reaches here already stamped.
   await prisma.scanSheet.updateMany({
-    where: { purchaseId, batchNo, batchDoneAt: { not: null } },
+    where: { ...scope, batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
   return discarded;
@@ -993,16 +1065,17 @@ async function clearBatchTiles(purchaseId: string, batchNo: number): Promise<num
  */
 export async function deleteBatch(
   ownerId: string,
-  purchaseId: string,
+  ref: ScanOwnerRef,
   batchNo: number
 ): Promise<void> {
-  await assertPurchaseOwner(ownerId, purchaseId);
-  await clearBatchTiles(purchaseId, batchNo);
+  const owner = await assertScanOwner(ownerId, ref);
+  const scope = scanOwnerWhere(owner);
+  await clearBatchTiles(owner, batchNo);
   const sheets = await prisma.scanSheet.findMany({
-    where: { purchaseId, batchNo },
+    where: { ...scope, batchNo },
     select: { id: true, storageBackend: true, storageKey: true, mime: true },
   });
-  await prisma.scanSheet.deleteMany({ where: { purchaseId, batchNo } });
+  await prisma.scanSheet.deleteMany({ where: { ...scope, batchNo } });
   await Promise.all(
     sheets.map((s) => deleteSheetVariants(s.storageBackend, s.storageKey, s.mime))
   );
@@ -1010,7 +1083,11 @@ export async function deleteBatch(
 
 /** Delete tiles matching a scope, taking their photo bytes with them. Prisma's cascade drops the
  * `Photo` rows but never the files — the same split `deletePhotoBytesForItem` exists for. */
-async function deleteTiles(where: { purchaseId: string; batchNo?: number }): Promise<number> {
+async function deleteTiles(where: {
+  collectionId: string;
+  purchaseId: string | null;
+  batchNo?: number;
+}): Promise<number> {
   const photos = await prisma.photo.findMany({
     where: { tile: where },
     select: { storageBackend: true, storageKey: true, mime: true },
@@ -1165,7 +1242,7 @@ export async function purgeFinishedScanSheets(
     const sheets = await prisma.scanSheet.findMany({
       where: {
         ...(only ? { purchaseId: only.purchaseId } : {}),
-        purchase: { collectionId: collection.id },
+        collectionId: collection.id,
         purgedAt: null,
         batchDoneAt: { lt: cutoff },
       },
@@ -1294,41 +1371,51 @@ export interface ScanBatchData {
   doneAt: string | null;
 }
 
-export interface PurchaseScansData {
+export interface ScansData {
   batches: ScanBatchData[];
   /** Whether this purchase was settled from a won auction sale (ADR-0021) — which is what makes
    * "assign this tile to a copy the order already holds" the ordinary path rather than the
-   * exception: settlement created identified copies that need photographs, not identification. */
+   * exception: settlement created identified copies that need photographs, not identification.
+   * Always false for cards scanned outside an order (#725), which came from no sale at all. */
   fromAuction: boolean;
 }
 
-/** Every batch on a purchase, newest first — the shape the order's Card scans section renders and
- * the review editor reloads a previous cut from. */
-export async function listPurchaseScans(
-  ownerId: string,
-  purchaseId: string
-): Promise<PurchaseScansData> {
-  await assertPurchaseOwner(ownerId, purchaseId);
+/**
+ * Every batch of one owner, newest first — the shape the Card scans section renders and the review
+ * editor reloads a previous cut from.
+ *
+ * One function for both screens (#725). The order's version reads its auction description; the
+ * collection's has none to read, and asks for nothing an order-less card cannot answer.
+ */
+export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<ScansData> {
+  const owner = await assertScanOwner(ownerId, ref);
+  const scope = scanOwnerWhere(owner);
+  const purchaseId = owner.purchaseId;
 
   // The auction lines this parcel was described by, when it came from a settled sale. Read as a
   // set of stamp ids across **every** lot of the purchase, because the question asked of it is
   // whether the parcel held something its description never listed — and the parcel is the order,
-  // which is also the only level a card exists at.
-  const auctionLots = await prisma.auctionLot.findMany({
-    where: { purchaseLot: { purchaseId } },
-    select: { lines: { select: { stampId: true } } },
-  });
+  // which is also the only level a card exists at. A card with no order was described by nobody,
+  // so both reads are skipped rather than answered with an empty parcel's answers.
+  const auctionLots = purchaseId
+    ? await prisma.auctionLot.findMany({
+        where: { purchaseLot: { purchaseId } },
+        select: { lines: { select: { stampId: true } } },
+      })
+    : [];
   const describedStampIds = new Set(
     auctionLots.flatMap((l) => l.lines.map((line) => line.stampId))
   );
-  const auctionSale = await prisma.auctionSale.findUnique({
-    where: { purchaseId },
-    select: { id: true },
-  });
+  const auctionSale = purchaseId
+    ? await prisma.auctionSale.findUnique({
+        where: { purchaseId },
+        select: { id: true },
+      })
+    : null;
 
   const [sheets, tiles] = await Promise.all([
     prisma.scanSheet.findMany({
-      where: { purchaseId },
+      where: scope,
       select: {
         id: true,
         batchNo: true,
@@ -1345,7 +1432,7 @@ export async function listPurchaseScans(
       orderBy: { batchNo: "desc" },
     }),
     prisma.scanTile.findMany({
-      where: { purchaseId },
+      where: scope,
       select: {
         id: true,
         batchNo: true,
@@ -1510,8 +1597,8 @@ function boxOrNull(
  * existing `N to sort`: a tile has no stamp, so no catalogue price, so no weight in any lot's cost
  * split. Discarded tiles are deliberately not counted: a discarded tile is evidence, not a queue
  * item (#567). */
-export async function countUnidentifiedTiles(purchaseId: string): Promise<number> {
-  return prisma.scanTile.count({ where: { purchaseId, state: "unidentified" } });
+export async function countUnidentifiedTiles(owner: ScanOwner): Promise<number> {
+  return prisma.scanTile.count({ where: { ...scanOwnerWhere(owner), state: "unidentified" } });
 }
 
 /** How many tiles on an order are **parked** (#597) — set aside because the piece cannot be told
@@ -1519,8 +1606,26 @@ export async function countUnidentifiedTiles(purchaseId: string): Promise<number
  * apart from the waiting ones on purpose: both are outstanding work, but only one of them is work
  * that can be done now, and folding them together would put the parked pieces back into the sweep
  * they were parked to leave. */
-export async function countParkedTiles(purchaseId: string): Promise<number> {
-  return prisma.scanTile.count({ where: { purchaseId, state: "parked" } });
+export async function countParkedTiles(owner: ScanOwner): Promise<number> {
+  return prisma.scanTile.count({ where: { ...scanOwnerWhere(owner), state: "parked" } });
+}
+
+/** What the Card scans header says before the batches are fetched (#725) — the three figures the
+ * order's own screen gets from `getPurchaseDetail`, for an owner that has no detail page to get
+ * them from. Server-rendered with the screen, so the section can say what is inside while still
+ * collapsed. */
+export async function getScanCounts(
+  ownerId: string,
+  ref: ScanOwnerRef
+): Promise<{ unidentifiedTileCount: number; parkedTileCount: number; scanSheetCount: number }> {
+  const owner = await assertScanOwner(ownerId, ref);
+  const scope = scanOwnerWhere(owner);
+  const [unidentifiedTileCount, parkedTileCount, scanSheetCount] = await Promise.all([
+    prisma.scanTile.count({ where: { ...scope, state: "unidentified" } }),
+    prisma.scanTile.count({ where: { ...scope, state: "parked" } }),
+    prisma.scanSheet.count({ where: scope }),
+  ]);
+  return { unidentifiedTileCount, parkedTileCount, scanSheetCount };
 }
 
 /** Resolve a sheet for the serving route: its owning collection + owner for the auth check, plus
@@ -1549,15 +1654,14 @@ export async function getSheetForServing(sheetId: string): Promise<{
       width: true,
       height: true,
       purgedAt: true,
-      purchase: {
-        select: { collectionId: true, collection: { select: { ownerId: true } } },
-      },
+      collectionId: true,
+      collection: { select: { ownerId: true } },
     },
   });
   if (!sheet) return null;
   return {
-    collectionId: sheet.purchase.collectionId,
-    ownerId: sheet.purchase.collection.ownerId,
+    collectionId: sheet.collectionId,
+    ownerId: sheet.collection.ownerId,
     storageBackend: sheet.storageBackend,
     storageKey: sheet.storageKey,
     mime: sheet.mime,

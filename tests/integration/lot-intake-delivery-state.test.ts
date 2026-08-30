@@ -86,19 +86,19 @@ describe("intake delivery state follows the order's status (#564)", () => {
 
   it("creates a copy `ordered` while the order is still preparing", async () => {
     const { lotId } = await purchaseWithStatus("preparing");
-    const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
     assert.equal(await deliveryStateOf(copy.itemId), "ordered");
   });
 
   it("creates a copy `ordered` while the order is in transit", async () => {
     const { lotId } = await purchaseWithStatus("in_transit");
-    const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
     assert.equal(await deliveryStateOf(copy.itemId), "ordered");
   });
 
   it("creates a copy `to_sort` once the order has arrived", async () => {
     const { lotId } = await purchaseWithStatus("arrived");
-    const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
     assert.equal(await deliveryStateOf(copy.itemId), "to_sort");
     // Landing in `to_sort` says "in hand, not filed" — it is not a shortcut into the collection.
     const item = await prisma.item.findUniqueOrThrow({
@@ -110,7 +110,7 @@ describe("intake delivery state follows the order's status (#564)", () => {
 
   it("applies to a whole-checklist intake, copy for copy", async () => {
     const { lotId } = await purchaseWithStatus("arrived");
-    const copies = await intakeStamps(userId, lotId, { checklistId, conditionId });
+    const copies = await intakeStamps(userId, { lotId }, { checklistId, conditionId });
     assert.equal(copies.length, 2);
     for (const copy of copies) {
       assert.equal(await deliveryStateOf(copy.itemId), "to_sort");
@@ -134,9 +134,9 @@ describe("intake delivery state follows the order's status (#564)", () => {
 
   it("reads the status at intake time, not at lot creation time", async () => {
     const { purchaseId, lotId } = await purchaseWithStatus("preparing");
-    const [before] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [before] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
     await setPurchaseStatus(userId, purchaseId, "arrived");
-    const [after] = await intakeStamps(userId, lotId, { stampId, conditionId });
+    const [after] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
 
     assert.equal(await deliveryStateOf(before.itemId), "ordered");
     assert.equal(await deliveryStateOf(after.itemId), "to_sort");

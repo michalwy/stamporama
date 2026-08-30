@@ -25,10 +25,15 @@ import {
   returnTilesToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
+import type { ScanOwnerRef } from "@/lib/scan-sheets";
 
 // Scan sheet ingest actions (#566, ADR-0033). JSON-shaped, like everything else under
 // `src/app/actions/`; the one binary boundary — uploading the scan itself — is a route handler
 // (ADR-0011's rule, unchanged).
+//
+// The batch-level verbs take a `ScanOwnerRef` rather than a purchase id (#725), because a card can
+// belong to an order or to nothing but the collection. The tile-level ones take tile ids and are
+// unchanged: a tile carries its own owner, and the server reads it rather than believing a caller.
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -123,12 +128,12 @@ export async function unpairTileBackAction(tileId: string): Promise<ScanActionSt
 /** Throw away a batch's tiles, keeping its scans, so the cut can be drawn again. Refused once a
  * tile has become a copy — see `recutBatch`. */
 export async function recutBatchAction(
-  purchaseId: string,
+  owner: ScanOwnerRef,
   batchNo: number
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await recutBatch(session.user.id, purchaseId, batchNo);
+    await recutBatch(session.user.id, owner, batchNo);
     return { status: "success" };
   } catch (e) {
     return {
@@ -423,12 +428,12 @@ export async function returnTilesToQueueAction(tileIds: string[]): Promise<ScanA
 
 /** Delete a batch outright: its tiles and its retained scans. */
 export async function deleteBatchAction(
-  purchaseId: string,
+  owner: ScanOwnerRef,
   batchNo: number
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await deleteBatch(session.user.id, purchaseId, batchNo);
+    await deleteBatch(session.user.id, owner, batchNo);
     return { status: "success" };
   } catch (e) {
     return {
@@ -446,13 +451,13 @@ export async function deleteBatchAction(
  * worked for a week and the strip of thumbnails is the only thing telling one from another.
  */
 export async function setBatchLabelAction(
-  purchaseId: string,
+  owner: ScanOwnerRef,
   batchNo: number,
   label: string
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await setBatchLabel(session.user.id, purchaseId, batchNo, label);
+    await setBatchLabel(session.user.id, owner, batchNo, label);
     return { status: "success" };
   } catch (e) {
     return {

@@ -1,4 +1,5 @@
 import type { UploadedSheet } from "@/lib/scan-sheets";
+import { scansApiBase, type ScanOwner } from "./use-scans-query";
 
 /**
  * Send a card scan in parts (#590).
@@ -43,19 +44,25 @@ export class SheetUploadError extends Error {}
 
 export async function uploadSheetInChunks(input: {
   collectionId: string;
-  purchaseId: string;
+  /** Whose card this is (#725) — the only thing the owner decides here is where the upload is
+   * **opened**. */
+  owner: ScanOwner;
   file: File;
   side: "front" | "back";
   batchNo?: number;
   label?: string | null;
   onProgress: (progress: SheetUploadProgress) => void;
 }): Promise<UploadedSheet> {
-  const base = `/api/collections/${input.collectionId}/purchases/${input.purchaseId}/scan-sheets/uploads`;
+  const openUrl = `${scansApiBase(input.collectionId, input.owner)}/uploads`;
+  // The parts, the finalize and the abort are addressed by the **upload**, which knows its own
+  // owner: one pair of routes serves both screens, and the order never belonged in their path
+  // (#725). Only the open has to say who the card is for.
+  const base = `/api/collections/${input.collectionId}/scan-sheets/uploads`;
 
   // Opened with the file's description alone. The size and the format are refused here if they are
   // going to be refused at all — after 200 MB have crossed the wire is the expensive place to learn
   // a scan is too large, and it is the failure this whole change exists to stop.
-  const openRes = await fetch(base, {
+  const openRes = await fetch(openUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

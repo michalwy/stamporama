@@ -681,7 +681,7 @@ describe("loadStampWantSummaries", () => {
       stampId: other.stamp.id,
       conditionId: other.used.id,
     });
-    await intakeStamps(other.userId, lot.id, {
+    await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.mnh.id,
     });
@@ -729,7 +729,7 @@ describe("loadStampWantSummaries", () => {
       data: { purchaseId: purchase.id, title: "Lot", price: "10.00", status: "open" },
       select: { id: true },
     });
-    await intakeStamps(other.userId, lot.id, {
+    await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.used.id,
     });
@@ -748,7 +748,7 @@ describe("loadStampWantSummaries", () => {
     assert.deepEqual(row.matchingCopies, { held: 0, toSort: 0, ordered: 0, inTransit: 0 });
 
     // A mint one on the way *does* count for it.
-    await intakeStamps(other.userId, lot.id, {
+    await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.mnh.id,
     });
@@ -769,7 +769,7 @@ describe("loadStampWantSummaries", () => {
       data: { purchaseId: purchase.id, title: "Lot", price: "10.00", status: "open" },
       select: { id: true },
     });
-    const [copy] = await intakeStamps(other.userId, lot.id, {
+    const [copy] = await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.used.id,
     });
@@ -790,7 +790,7 @@ describe("loadStampWantSummaries", () => {
     assert.deepEqual(byItem.entries[0].copies, { held: 0, toSort: 0, ordered: 0, inTransit: 0 });
 
     // A *second* copy of the same stamp is still counted on the first one's row.
-    const [other2] = await intakeStamps(other.userId, lot.id, {
+    const [other2] = await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.mnh.id,
     });
@@ -1121,7 +1121,7 @@ describe("the intake review (ADR-0032 §7)", () => {
 
   it("hands the copies it created to the review, and closes nothing on its own", async () => {
     const { ids: [id] } = await createWant(f.userId, f.collectionId, want(f));
-    const copies = await intakeStamps(f.userId, lotId, {
+    const copies = await intakeStamps(f.userId, { lotId }, {
       stampId: f.stamp.id,
       conditionId: f.used.id,
     });
@@ -1159,7 +1159,7 @@ describe("the intake review (ADR-0032 §7)", () => {
     });
 
     // Intake makes the copy `ordered` — bought, not here. Nothing has arrived to judge.
-    const created = await intakeStamps(other.userId, lot.id, {
+    const created = await intakeStamps(other.userId, { lotId: lot.id }, {
       stampId: other.stamp.id,
       conditionId: other.used.id,
     });
@@ -1211,7 +1211,7 @@ describe("the intake review (ADR-0032 §7)", () => {
   it("narrowing at intake keeps the want open and looking for something else", async () => {
     await prisma.want.deleteMany({ where: { collectionId: f.collectionId } });
     const { ids: [id] } = await createWant(f.userId, f.collectionId, want(f));
-    const copies = await intakeStamps(f.userId, lotId, {
+    const copies = await intakeStamps(f.userId, { lotId }, {
       stampId: f.stamp.id,
       conditionId: f.used.id,
     });
@@ -1242,7 +1242,7 @@ describe("the intake review (ADR-0032 §7)", () => {
     });
     await createWant(f.userId, f.collectionId, want(f, { stampId: f.otherStamp.id }));
 
-    const copies = await intakeStamps(f.userId, lotId, {
+    const copies = await intakeStamps(f.userId, { lotId }, {
       checklistId: checklist.id,
       conditionId: f.mnh.id,
     });

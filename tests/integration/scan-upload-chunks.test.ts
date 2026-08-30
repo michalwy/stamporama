@@ -118,7 +118,7 @@ describe("chunked card scan upload (#590)", () => {
     bytes: Buffer,
     opts: { side?: "front" | "back"; batchNo?: number; label?: string | null } = {}
   ) {
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: opts.side ?? "front",
       batchNo: opts.batchNo,
@@ -172,7 +172,7 @@ describe("chunked card scan upload (#590)", () => {
 
   it("keeps the parts on local disk and out of the storage backend", async () => {
     const bytes = await card();
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
@@ -193,7 +193,7 @@ describe("chunked card scan upload (#590)", () => {
 
   it("acknowledges a chunk it already holds, and refuses one that skips ahead", async () => {
     const bytes = await card();
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
@@ -229,7 +229,7 @@ describe("chunked card scan upload (#590)", () => {
 
   it("refuses a chunk that is not the size the upload expects", async () => {
     const bytes = await card();
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
@@ -243,7 +243,7 @@ describe("chunked card scan upload (#590)", () => {
 
   it("refuses an incomplete scan rather than storing a truncated card", async () => {
     const bytes = await card();
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
@@ -255,7 +255,7 @@ describe("chunked card scan upload (#590)", () => {
   it("refuses an oversized scan at the open, before a byte is sent", async () => {
     await assert.rejects(
       () =>
-        openScanUpload(userId, purchaseId, {
+        openScanUpload(userId, { purchaseId }, {
           mime: "image/png",
           side: "front",
           totalBytes: MAX_UPLOAD_BYTES + 1,
@@ -270,7 +270,7 @@ describe("chunked card scan upload (#590)", () => {
 
   it("leaves nothing behind when an upload is given up on", async () => {
     const bytes = await card();
-    const opened = await openScanUpload(userId, purchaseId, {
+    const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
@@ -285,13 +285,13 @@ describe("chunked card scan upload (#590)", () => {
 
   it("sweeps an upload that stopped arriving, and spares one still making progress", async () => {
     const bytes = await card();
-    const stale = await openScanUpload(userId, purchaseId, {
+    const stale = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,
     });
     await receiveScanChunk(userId, stale.id, 0, bytes.subarray(0, stale.chunkBytes));
-    const live = await openScanUpload(userId, purchaseId, {
+    const live = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: "front",
       totalBytes: bytes.byteLength,

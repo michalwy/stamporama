@@ -24,7 +24,7 @@ none of the rest was, and because the manual editor it feeds is the primitive, n
 
 ## Decisions
 
-### 1. A tile is its own entity, owned by the **purchase**; `Item` is not it
+### 1. A tile is its own entity, owned by the **purchase** — and, since #725, by the **collection** with the purchase optional; `Item` is not it
 
 `Item.stampId` is `NOT NULL` and stays that way, so an unidentified stub copy cannot be an `Item`.
 
@@ -200,10 +200,11 @@ and are corrected exactly as hand-drawn ones are. The geometry lives in one pure
 
 | Table | What it holds |
 | --- | --- |
-| `scan_sheet` | A retained card scan: purchase, `batchNo`, an optional `label` (#587), `side`, storage key + mime, original and `view` dimensions, size. Unique on `(purchaseId, batchNo, side)`. |
-| `scan_tile` | One region of one cut: purchase, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
+| `scan_sheet` | A retained card scan: **collection**, optional purchase (#725), `batchNo`, an optional `label` (#587), `side`, storage key + mime, original and `view` dimensions, size. Unique on `(purchaseId, batchNo, side)`, plus a partial unique on `(collectionId, batchNo, side) WHERE purchaseId IS NULL`. |
+| `scan_tile` | One region of one cut: **collection**, optional purchase, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
 | `photo.tileId` | Fourth owner. CHECK widened to `num_nonnulls(itemId, stampId, offerId, tileId) = 1`; partial unique `(tileId, role)`. |
-| `purchase.nextScanBatchNo` | Per-**purchase** batch sequence (#586). Not per collection, which would call a parcel's second card "batch 47", and not per lot, where the number named nothing. |
+| `purchase.nextScanBatchNo` | Per-**purchase** batch sequence (#586). Not per lot, where the number named nothing. |
+| `collection.nextScanBatchNo` | The twin of it for cards scanned outside any order (#725). |
 
 Both owner columns started as `lotId` and were moved by #586, existing rows migrating through their
 lot's purchase. The migration **renumbers**: numbers were unique per lot, so two lots of one order
@@ -515,3 +516,42 @@ then the close look is over anyway.
   deleted* and the batch still lists what the card held. The refusal earns its place on exactly one
   case — the batch whose tiles were **all discarded**, which is the only one a consumed tile is not
   already refusing for.
+
+## What #725 added: the owner is the collection, and the purchase is optional
+
+The same pass — scan a card, cut it, pair the backs, identify each piece — is worth exactly as much
+on **stamps already owned**: a shelf being digitised, a gift, an inheritance. None of that is a
+purchase, and inventing one to reach the flow would have put a fictional order in the Purchases list
+and in every ROI figure that reads it.
+
+**So the owner moved up.** `scan_sheet`, `scan_tile` and `scan_upload` carry a NOT NULL
+`collectionId` and a **nullable** `purchaseId`; existing rows were backfilled through their purchase,
+so nothing that already existed changed meaning. Every read scopes by the pair, and
+`{ collectionId, purchaseId: null }` is not "any card in the collection" but exactly the ones with no
+order — which is what makes one query serve two screens. Decision 1 is unchanged in substance: a tile
+is still its own entity and still not an `Item`; what moved is only which row it hangs off.
+
+**Two batch counters, not one.** `collection.nextScanBatchNo` numbers the purchase-less cards
+alongside `purchase.nextScanBatchNo`. Merging them into one per-collection sequence is tidier and was
+rejected: the migration would renumber every existing order's batches, and a batch number is written
+on a physical card. That is the same rule #268 and #432 state about copy and purchase numbers — a
+number a collector has quoted must not later mean something else.
+
+**The lot question disappears rather than being answered.** `intakeStamps` takes
+`{ lotId } | { collectionId }`, and with no lot the copy is created with a null `lotId`, a null
+`costBasis` and `deliveryState = delivered`. All three are shapes the app already had — it is what
+*Add copy* has always written — so nothing downstream needed an exclusion. Being lot-less also means
+the copy takes no part in any pool split, which is decision 1's argument arriving at the same place
+from the other direction.
+
+**Assigning widens to the collection.** *Assign this tile to a copy that already exists* narrows to
+the parcel on an order (#586) because a settled auction's card is matched against that parcel's
+described lines. A card with no parcel has nothing to narrow to, so it offers the collection's copies
+with the slot the tile needs still free — the same sentence one level up, not a relaxation of it.
+While digitising a shelf that is the common case: most pieces are already recorded and want
+photographs rather than identification.
+
+**Cards with an order and cards without are two lists, deliberately.** A parcel's cards stay on the
+order's screen, where the lot question and the auction assign path live; the purchase-less ones get
+their own screen under Inventory. One combined list would have had to explain, per row, which of two
+identification flows a tile is about.

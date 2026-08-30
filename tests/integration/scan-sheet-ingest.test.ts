@@ -16,7 +16,7 @@ import {
   commitCut,
   deleteBatch,
   getSheetForServing,
-  listPurchaseScans,
+  listScans,
   setBatchLabel,
   pairTilesManually,
   unpairTileBack,
@@ -222,7 +222,7 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    return uploadSheet(userId, purchaseId, { source: bytes, mime: "image/png", side: "front" });
+    return uploadSheet(userId, { purchaseId }, { source: bytes, mime: "image/png", side: "front" });
   }
 
   it("retains the scan at full size and derives a view for the editor", async () => {
@@ -316,7 +316,7 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    const back = await uploadSheet(userId, purchaseId, {
+    const back = await uploadSheet(userId, { purchaseId }, {
       source: backBytes,
       mime: "image/png",
       side: "back",
@@ -359,7 +359,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: FRONT_BOXES[0], colour: RED },
       { box: strayBox, colour: GREEN },
     ]);
-    const back = await uploadSheet(userId, purchaseId, {
+    const back = await uploadSheet(userId, { purchaseId }, {
       source: backBytes,
       mime: "image/png",
       side: "back",
@@ -415,7 +415,7 @@ describe("scan sheet ingest (#566)", () => {
       { box: FRONT_BOXES[0], colour: RED },
       { box: strayBox, colour: GREEN },
     ]);
-    const back = await uploadSheet(userId, purchaseId, {
+    const back = await uploadSheet(userId, { purchaseId }, {
       source: backBytes,
       mime: "image/png",
       side: "back",
@@ -474,7 +474,7 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
-    const back = await uploadSheet(userId, purchaseId, {
+    const back = await uploadSheet(userId, { purchaseId }, {
       source: backBytes,
       mime: "image/png",
       side: "back",
@@ -559,7 +559,7 @@ describe("scan sheet ingest (#566)", () => {
     const photos = await prisma.photo.findMany({ where: { tile: { purchaseId } } });
     assert.equal(photos.length, 3);
 
-    const { discarded } = await recutBatch(userId, purchaseId, 1);
+    const { discarded } = await recutBatch(userId, { purchaseId }, 1);
     assert.equal(discarded, 3);
 
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 0);
@@ -585,8 +585,8 @@ describe("scan sheet ingest (#566)", () => {
     const tile = await prisma.scanTile.findFirstOrThrow({ where: { purchaseId } });
     await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "consumed" } });
 
-    await assert.rejects(() => recutBatch(userId, purchaseId, 1), ScanValidationError);
-    await assert.rejects(() => deleteBatch(userId, purchaseId, 1), ScanValidationError);
+    await assert.rejects(() => recutBatch(userId, { purchaseId }, 1), ScanValidationError);
+    await assert.rejects(() => deleteBatch(userId, { purchaseId }, 1), ScanValidationError);
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 3);
 
     await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "unidentified" } });
@@ -645,7 +645,7 @@ describe("scan sheet ingest (#566)", () => {
     const front = await uploadFront(purchaseId);
     await commitCut(userId, front.id, FRONT_BOXES);
 
-    const { batches } = await listPurchaseScans(userId, purchaseId);
+    const { batches } = await listScans(userId, { purchaseId });
     assert.equal(batches.length, 1);
     assert.equal(batches[0].batchNo, 1);
     assert.equal(batches[0].label, null, "an unnamed card is null, not an empty string");
@@ -667,7 +667,7 @@ describe("scan sheet ingest (#566)", () => {
 
     // At upload, which is where the name is usually known — at the scanner.
     const bytes = await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: RED }]);
-    const front = await uploadSheet(userId, purchaseId, {
+    const front = await uploadSheet(userId, { purchaseId }, {
       source: bytes,
       mime: "image/png",
       side: "front",
@@ -677,7 +677,7 @@ describe("scan sheet ingest (#566)", () => {
 
     // A back joins a batch that is already named rather than arriving nameless beside it, so
     // either sheet answers for the batch exactly as `batchDoneAt` does.
-    const back = await uploadSheet(userId, purchaseId, {
+    const back = await uploadSheet(userId, { purchaseId }, {
       source: bytes,
       mime: "image/png",
       side: "back",
@@ -687,8 +687,8 @@ describe("scan sheet ingest (#566)", () => {
 
     // Afterwards is the half that matters: a card often turns out to need naming only once the
     // parcel has been left half-worked.
-    await setBatchLabel(userId, purchaseId, front.batchNo, "Zestawy 3–5");
-    let listed = await listPurchaseScans(userId, purchaseId);
+    await setBatchLabel(userId, { purchaseId }, front.batchNo, "Zestawy 3–5");
+    let listed = await listScans(userId, { purchaseId });
     assert.equal(listed.batches[0].label, "Zestawy 3–5");
     assert.equal(
       await prisma.scanSheet.count({ where: { purchaseId, label: "Zestawy 3–5" } }),
@@ -698,19 +698,19 @@ describe("scan sheet ingest (#566)", () => {
 
     // Blank un-names it rather than storing an empty string, which would read as a name nobody
     // can see.
-    await setBatchLabel(userId, purchaseId, front.batchNo, "   ");
-    listed = await listPurchaseScans(userId, purchaseId);
+    await setBatchLabel(userId, { purchaseId }, front.batchNo, "   ");
+    listed = await listScans(userId, { purchaseId });
     assert.equal(listed.batches[0].label, null);
 
     // The number is what a batch is found by, so it stays put through all of it.
     assert.equal(listed.batches[0].batchNo, front.batchNo);
 
     await assert.rejects(
-      () => setBatchLabel(userId, purchaseId, front.batchNo, "x".repeat(200)),
+      () => setBatchLabel(userId, { purchaseId }, front.batchNo, "x".repeat(200)),
       ScanValidationError
     );
     await assert.rejects(
-      () => setBatchLabel(userId, purchaseId, 99, "nothing there"),
+      () => setBatchLabel(userId, { purchaseId }, 99, "nothing there"),
       ScanValidationError
     );
 
@@ -780,7 +780,7 @@ describe("scan sheet ingest (#566)", () => {
     const sheetRow = await prisma.scanSheet.findUniqueOrThrow({ where: { id: sheet.id } });
     const photos = await prisma.photo.findMany({ where: { tile: { purchaseId } } });
 
-    await deleteBatch(userId, purchaseId, 1);
+    await deleteBatch(userId, { purchaseId }, 1);
     assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), 0);
     assert.equal(await sheetBytesExist(sheetRow), false);
     for (const p of photos) assert.equal(await photoBytesExist(p), false);
@@ -803,7 +803,7 @@ describe("scan sheet ingest (#566)", () => {
     const firstRow = await prisma.scanSheet.findUniqueOrThrow({ where: { id: first.id } });
 
     // Nothing has been cut yet, so the wrong file can simply be uploaded again.
-    const second = await uploadSheet(userId, purchaseId, {
+    const second = await uploadSheet(userId, { purchaseId }, {
       source: await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: BLUE }]),
       mime: "image/png",
       side: "front",
@@ -819,7 +819,7 @@ describe("scan sheet ingest (#566)", () => {
     const replacement = await card(SHEET_W, SHEET_H, [{ box: FRONT_BOXES[0], colour: RED }]);
     await assert.rejects(
       () =>
-        uploadSheet(userId, purchaseId, {
+        uploadSheet(userId, { purchaseId }, {
           source: replacement,
           mime: "image/png",
           side: "front",
@@ -836,7 +836,7 @@ describe("scan sheet ingest (#566)", () => {
     const orphanBack = await card(400, 400, []);
     await assert.rejects(
       () =>
-        uploadSheet(userId, purchaseId, {
+        uploadSheet(userId, { purchaseId }, {
           source: orphanBack,
           mime: "image/png",
           side: "back",

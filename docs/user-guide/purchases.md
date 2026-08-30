@@ -192,6 +192,10 @@ at once** and cut the scan into per-stamp **tiles**. Each stamp is then handled 
 
 Open an order and use **Add card scan** in its **Card scans** section, above the lots.
 
+For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — the same flow
+runs from [Card scans under Inventory](inventory.md#cataloguing-from-card-scans), with no order and
+no cost involved.
+
 **A card belongs to the whole order, not to one of its lots.** That is what the section sits at the
 order level for. A stockbook you bought as one lot is scanned onto one or two cards and reads exactly
 as you would expect; but twenty single stamps won at one auction become twenty lots on one purchase,

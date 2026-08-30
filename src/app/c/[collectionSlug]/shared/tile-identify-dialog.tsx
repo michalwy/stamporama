@@ -44,7 +44,11 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
-import { usePurchaseCopiesInfinite, type LotCopiesParams } from "./use-lot-copies-query";
+import {
+  useOwnerCopiesInfinite,
+  type LotCopiesParams,
+} from "@/app/c/[collectionSlug]/purchases/[purchaseId]/use-lot-copies-query";
+import type { ScanOwner } from "./use-scans-query";
 
 /**
  * A tile — or a **run of them** — and what can become of it (#567) — three ends, and since #597 one
@@ -179,7 +183,10 @@ interface Props {
   /** What this collection scans at (#598) — the scale the viewer's ruler and perforation gauge
    * convert with, prefilled into the measuring bar and correctable there for this sitting. */
   scanDpi: number;
-  purchaseId: string;
+  /** Whose card this is (#725) — an order's, or the collection's own. All this dialog does with it
+   * is choose the scope of the assign list: an order narrows to the parcel's copies, a card with no
+   * order offers the collection's. */
+  owner: ScanOwner;
   /** The tiles this dialog is about, in card order: one opened from the strip, or the run ticked on
    * it. Never empty. A run holds only tiles that are still to be identified, since those are the
    * only ones that get a tick box (`scan-tile-selection.ts`). */
@@ -274,7 +281,8 @@ type Mode = "identify" | "assign";
 const ASSIGN_LIST_STALE_MS = 30 * 1000;
 
 /**
- * The copies a tile could be assigned to: this **order's**, holding **none of the roles this tile
+ * The copies a tile could be assigned to: this card's owner's — the **order's**, or the whole
+ * **collection's** for a card that belongs to none (#725) — holding **none of the roles this tile
  * carries**.
  *
  * Derived from the tile rather than restated, and it is the same question `assignTileToCopy` asks
@@ -303,7 +311,7 @@ export function TileIdentifyDialog({
   collectionId,
   areas,
   scanDpi,
-  purchaseId,
+  owner,
   tiles,
   canIdentify,
   fromAuction,
@@ -392,9 +400,9 @@ export function TileIdentifyDialog({
   // one tile and "assign these fifteen" names no move; the query is disabled and the mode is
   // identify without waiting for anything.
   const roles = tile ? tilePhotoRoles(tile) : [];
-  const copies = usePurchaseCopiesInfinite(
+  const copies = useOwnerCopiesInfinite(
     collectionId,
-    purchaseId,
+    owner,
     assignParams(tile),
     !settled && tile != null,
     ASSIGN_LIST_STALE_MS
@@ -727,11 +735,16 @@ export function TileIdentifyDialog({
             // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
             // on identify meanwhile: a mode that arrives a moment later is a dialog that moves under
             // the hand of someone already reading it.
-            <Muted>Checking what this lot already holds…</Muted>
+            <Muted>
+              {owner.kind === "purchase"
+                ? "Checking what this lot already holds…"
+                : "Checking what the collection already holds…"}
+            </Muted>
           ) : mode === "assign" ? (
             <AssignList
               copies={candidates}
               roles={roles}
+              inOrder={owner.kind === "purchase"}
               fromAuction={fromAuction}
               disabled={pending}
               hasMore={copies.hasNextPage ?? false}
@@ -740,7 +753,11 @@ export function TileIdentifyDialog({
               onPick={(itemId) => tile && run(() => assignTileAction(tile.id, itemId), true)}
             />
           ) : (
-            <IdentifyIntro canIdentify={canIdentify} count={count} />
+            <IdentifyIntro
+              canIdentify={canIdentify}
+              count={count}
+              inOrder={owner.kind === "purchase"}
+            />
           )}
 
           {error && (
@@ -842,7 +859,10 @@ export function TileIdentifyDialog({
                   it the button is always here and always opens an empty list. */}
               {tile && candidates.length > 0 && (
                 <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
-                  <Icon name="link" size="sm" /> Assign to a copy on this order
+                  <Icon name="link" size="sm" />{" "}
+                  {owner.kind === "purchase"
+                    ? "Assign to a copy on this order"
+                    : "Assign to a copy already recorded"}
                 </DialogSecondaryButton>
               )}
               {unpairBack}
@@ -918,7 +938,18 @@ export function TileIdentifyDialog({
 
 /** What the dialog says when it opens on *identify*: one line, because the images above it are the
  * thing being read and the action is in the footer. */
-function IdentifyIntro({ canIdentify, count }: { canIdentify: boolean; count: number }) {
+function IdentifyIntro({
+  canIdentify,
+  count,
+  /** Whether this card came in a parcel (#725). All it changes is whether the sentence names the
+   * lot: a card scanned outside an order has none, so promising one would be describing a step the
+   * collector will never be shown. */
+  inOrder,
+}: {
+  canIdentify: boolean;
+  count: number;
+  inOrder: boolean;
+}) {
   return (
     <p
       style={{
@@ -929,10 +960,14 @@ function IdentifyIntro({ canIdentify, count }: { canIdentify: boolean; count: nu
     >
       {canIdentify
         ? count === 1
-          ? "Identify the piece from the catalogue — the lot it belongs to, condition, certificate and location follow, and these images move onto the copy it creates."
+          ? inOrder
+            ? "Identify the piece from the catalogue — the lot it belongs to, condition, certificate and location follow, and these images move onto the copy it creates."
+            : "Identify the piece from the catalogue — condition, certificate and location follow, and these images move onto the copy it creates. Nothing was bought, so the copy carries no cost."
           : // What the run's own answer creates, said before anything is created: one stamp, one
             // condition, one lot — and one copy per piece, each keeping its own pictures.
-            `Identify these ${count} pieces as one stamp — the lot, condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
+            inOrder
+            ? `Identify these ${count} pieces as one stamp — the lot, condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
+            : `Identify these ${count} pieces as one stamp — condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
         : count === 1
           ? "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify this tile, or assign the images to a copy the order already holds."
           : "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify these pieces — setting them aside and discarding them still work."}
@@ -945,6 +980,7 @@ function IdentifyIntro({ canIdentify, count }: { canIdentify: boolean; count: nu
 function AssignList({
   copies,
   roles,
+  inOrder,
   fromAuction,
   disabled,
   hasMore,
@@ -957,6 +993,9 @@ function AssignList({
   copies: ItemListItem[];
   /** The slots this tile needs, for the sentence that explains who is missing and why. */
   roles: TilePhotoRole[];
+  /** Whether the card came in a parcel (#725) — which is what decides the **scope** every sentence
+   * here names: the order's copies, or the collection's. */
+  inOrder: boolean;
   fromAuction: boolean;
   disabled: boolean;
   hasMore: boolean;
@@ -969,7 +1008,9 @@ function AssignList({
       <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
         {fromAuction
           ? "This order was settled from an auction sale, so its copies are the lines that were described in order to bid — across every lot won. Pick the one this tile shows."
-          : "Pick the copy this tile shows. Its images move onto that copy."}
+          : inOrder
+            ? "Pick the copy this tile shows. Its images move onto that copy."
+            : "Pick the copy this tile shows — any copy in the collection that still has the slot free. Its images move onto that copy."}
       </p>
       {/* Why a copy the collector knows is on this order may not be here — and it is about *this*
           tile, not about free slots in general. Said up front, because the alternative is
@@ -977,7 +1018,9 @@ function AssignList({
       <Muted>{listScope(roles)}</Muted>
       {copies.length === 0 && (
         <Muted>
-          No copy on this order can take it. Identify the tile as a new copy instead.
+          {inOrder
+            ? "No copy on this order can take it. Identify the tile as a new copy instead."
+            : "No copy in the collection can take it. Identify the tile as a new copy instead."}
         </Muted>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>

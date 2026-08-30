@@ -45,7 +45,7 @@ describe("storing sorted copies (#565/#571)", () => {
   async function addCopies(lotId: string, count: number): Promise<string[]> {
     const ids: string[] = [];
     for (let i = 0; i < count; i++) {
-      const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId });
+      const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
       ids.push(copy.itemId);
     }
     return ids;
@@ -59,7 +59,7 @@ describe("storing sorted copies (#565/#571)", () => {
   ): Promise<string[]> {
     const ids: string[] = [];
     for (let i = 0; i < count; i++) {
-      const [copy] = await intakeStamps(userId, lotId, {
+      const [copy] = await intakeStamps(userId, { lotId }, {
         stampId: issueStampId[issueId],
         conditionId,
       });

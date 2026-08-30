@@ -37,7 +37,7 @@ describe("bulk condition / certificate / format (#723)", () => {
     const lotId = await arrivedLot();
     const ids: string[] = [];
     for (let i = 0; i < count; i++) {
-      const [copy] = await intakeStamps(userId, lotId, { stampId, conditionId: usedId });
+      const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId: usedId });
       ids.push(copy.itemId);
     }
     return ids;

@@ -8,9 +8,11 @@ import { dataDir } from "./storage";
 import { isAcceptedMime, MAX_UPLOAD_BYTES } from "./photos/process";
 import { uploadTtlMs } from "./photos";
 import {
+  assertScanOwner,
   ScanAuthError,
   ScanValidationError,
   uploadSheet,
+  type ScanOwnerRef,
   type SheetSide,
   type UploadedSheet,
 } from "./scan-sheets";
@@ -122,7 +124,7 @@ function assembledPath(uploadId: string): string {
  */
 export async function openScanUpload(
   ownerId: string,
-  purchaseId: string,
+  ref: ScanOwnerRef,
   input: {
     mime: string;
     side: SheetSide;
@@ -131,13 +133,10 @@ export async function openScanUpload(
     totalBytes: number;
   }
 ): Promise<OpenedScanUpload> {
-  const purchase = await prisma.purchase.findUnique({
-    where: { id: purchaseId },
-    select: { collection: { select: { ownerId: true } } },
-  });
-  if (!purchase || purchase.collection.ownerId !== ownerId) {
-    throw new ScanAuthError("Purchase not found or access denied.");
-  }
+  // The same check the finished sheet will pass (#725), taken once at the open: an upload is
+  // staging for a `uploadSheet` call, so the two must not be able to disagree about who may write
+  // where. The resolved owner is written onto the row and handed straight back at finalize.
+  const owner = await assertScanOwner(ownerId, ref);
 
   if (!Number.isInteger(input.totalBytes) || input.totalBytes <= 0) {
     throw new ScanValidationError("No file provided.");
@@ -155,7 +154,8 @@ export async function openScanUpload(
   const chunkBytes = uploadChunkBytes();
   const upload = await prisma.scanUpload.create({
     data: {
-      purchaseId,
+      collectionId: owner.collectionId,
+      purchaseId: owner.purchaseId,
       side: input.side,
       batchNo: input.batchNo ?? null,
       label: input.label ?? null,
@@ -177,7 +177,8 @@ export async function openScanUpload(
 
 interface UploadRow {
   id: string;
-  purchaseId: string;
+  collectionId: string;
+  purchaseId: string | null;
   side: string;
   batchNo: number | null;
   label: string | null;
@@ -193,6 +194,7 @@ async function loadUpload(ownerId: string, uploadId: string): Promise<UploadRow>
     where: { id: uploadId },
     select: {
       id: true,
+      collectionId: true,
       purchaseId: true,
       side: true,
       batchNo: true,
@@ -202,10 +204,10 @@ async function loadUpload(ownerId: string, uploadId: string): Promise<UploadRow>
       chunkBytes: true,
       receivedChunks: true,
       receivedBytes: true,
-      purchase: { select: { collection: { select: { ownerId: true } } } },
+      collection: { select: { ownerId: true } },
     },
   });
-  if (!upload || upload.purchase.collection.ownerId !== ownerId) {
+  if (!upload || upload.collection.ownerId !== ownerId) {
     throw new ScanAuthError("Upload not found or access denied.");
   }
   return upload;
@@ -319,13 +321,19 @@ export async function finalizeScanUpload(
       }
     }, createWriteStream(scan));
 
-    return await uploadSheet(ownerId, upload.purchaseId, {
-      source: { path: scan },
-      mime: upload.mime,
-      side: upload.side as SheetSide,
-      batchNo: upload.batchNo ?? undefined,
-      label: upload.label,
-    });
+    return await uploadSheet(
+      ownerId,
+      upload.purchaseId
+        ? { purchaseId: upload.purchaseId }
+        : { collectionId: upload.collectionId },
+      {
+        source: { path: scan },
+        mime: upload.mime,
+        side: upload.side as SheetSide,
+        batchNo: upload.batchNo ?? undefined,
+        label: upload.label,
+      }
+    );
   } finally {
     await discardUpload(upload.id);
   }

@@ -2586,6 +2586,23 @@ export async function getPurchaseIntakePage(
   return getIntakePage(ownerId, collectionId, { lot: { purchaseId } }, opts);
 }
 
+/**
+ * One page of the **whole collection's** copies, on the same filters and ordering (#725).
+ *
+ * The scope a card scanned outside any order is matched against: *assign this tile to a copy that
+ * already exists* has no parcel to narrow to, so what it offers is every copy of the collection
+ * with the photo slot the tile carries still free. The empty scope is the point — the same read,
+ * the same `freePhotoSlots` filter, one level up — rather than a second list with its own idea of
+ * what a candidate is.
+ */
+export async function getCollectionIntakePage(
+  ownerId: string,
+  collectionId: string,
+  opts: LotIntakePageOptions = {}
+): Promise<PaginatedItemsResult> {
+  return getIntakePage(ownerId, collectionId, {}, opts);
+}
+
 /** One issue group within a lot, for the grouped-by-issue view's headers (#121/#172). */
 export interface LotIssueGroupSummary {
   /** Issue id, or `"__none__"` for copies with no issue. */

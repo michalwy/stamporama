@@ -830,12 +830,14 @@ export async function getCollectionPhotoStorageBytes(
       where: { offer: { collectionId } },
       _sum: { sizeBytes: true },
     }),
+    // Straight through `collectionId` since #725: a tile and a sheet carry it themselves, and a
+    // card scanned outside any order has no purchase to be reached through.
     prisma.photo.aggregate({
-      where: { tile: { purchase: { collectionId } } },
+      where: { tile: { collectionId } },
       _sum: { sizeBytes: true },
     }),
     prisma.scanSheet.aggregate({
-      where: { purchase: { collectionId } },
+      where: { collectionId },
       _sum: { sizeBytes: true },
     }),
   ]);

@@ -283,7 +283,18 @@ export function CollectionSidebar({
           href={`${base}/inventory`}
           icon={<Icon name="inventory" />}
           label="Inventory"
-          active={isActive(`${base}/inventory`)}
+          active={isActive(`${base}/inventory`, false, [`${base}/inventory/scans`])}
+        />
+        {/* Cataloguing from card scans with nothing bought (#725) — its own entry rather than an
+            action on the Copies list, because it is a pass that runs over days and dozens of cards
+            and has to be somewhere to come back to. It sits under Inventory for the same reason its
+            route does: what it produces is copies. Cards that came in a parcel stay on that order's
+            screen, where the lot question is. */}
+        <NavItem
+          href={`${base}/inventory/scans`}
+          icon={<Icon name="scan" />}
+          label="Card scans"
+          active={isActive(`${base}/inventory/scans`)}
         />
         <NavItem
           href={`${base}/locations`}

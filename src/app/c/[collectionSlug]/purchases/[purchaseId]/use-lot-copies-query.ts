@@ -49,6 +49,9 @@ export const lotCopiesKeys = {
     ["lot-copies", collectionId, lotId, "summary", filters] as const,
   purchaseList: (collectionId: string, purchaseId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "list", params] as const,
+  /** Every copy of the collection, for a scan tile with no order to narrow to (#725). */
+  collectionList: (collectionId: string, params: LotCopiesParams) =>
+    ["lot-copies", collectionId, "collection", "list", params] as const,
   purchaseSummary: (collectionId: string, purchaseId: string, filters: IntakeFilterParams) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters] as const,
   purchaseReturn: (collectionId: string, purchaseId: string) =>
@@ -189,6 +192,43 @@ export function usePurchaseCopiesInfinite(
         `/api/collections/${collectionId}/purchases/${purchaseId}/copies?${sp.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch purchase copies");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled,
+  });
+}
+
+/**
+ * The copies a **scan tile** may be assigned to, scoped to whichever owner the card belongs to
+ * (#725): an order's copies, or — for a card scanned outside any order — the collection's.
+ *
+ * One hook rather than two calls at the call site, because the choice is the tile dialog's only
+ * difference between the two screens and everything after it (the params, the key, the pages, the
+ * free-slot filter) is identical. The key carries the owner, so the two lists are two caches.
+ */
+export function useOwnerCopiesInfinite(
+  collectionId: string,
+  owner: { kind: "purchase"; purchaseId: string } | { kind: "collection" },
+  params: LotCopiesParams,
+  enabled = true,
+  staleTime = 0
+) {
+  const purchaseId = owner.kind === "purchase" ? owner.purchaseId : null;
+  return useInfiniteQuery<LotCopiesPage>({
+    queryKey: purchaseId
+      ? lotCopiesKeys.purchaseList(collectionId, purchaseId, params)
+      : lotCopiesKeys.collectionList(collectionId, params),
+    staleTime,
+    queryFn: async ({ pageParam }) => {
+      const sp = buildCopyParams(params, pageParam as string | undefined);
+      const res = await fetch(
+        purchaseId
+          ? `/api/collections/${collectionId}/purchases/${purchaseId}/copies?${sp.toString()}`
+          : `/api/collections/${collectionId}/copies?${sp.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch copies");
       return res.json();
     },
     initialPageParam: undefined as string | undefined,

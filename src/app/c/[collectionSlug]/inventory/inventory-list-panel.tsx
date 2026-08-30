@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -965,6 +966,28 @@ export function InventoryListPanel({
               </button>
             </Tooltip>
           )}
+          {/* The other way copies are added (#725): a whole stockbook card scanned, cut and
+              identified piece by piece. A **link** and not a dialog — the pass runs over days, so it
+              has its own screen — and it sits beside *Add copy* because the two answer the same
+              question: one stamp in the tweezers, or forty on a card. */}
+          <Tooltip content="Scan a whole stockbook card and identify its stamps into the collection — for cataloguing what is already owned.">
+            <Link
+              href={`/c/${collectionSlug}/inventory/scans`}
+              style={{
+                ...CONTROL_STYLE,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                textDecoration: "none",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="scan" size="sm" /> Scan a card
+            </Link>
+          </Tooltip>
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}

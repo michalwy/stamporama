@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -25,7 +24,6 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
-import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
@@ -78,26 +76,20 @@ import {
 } from "@/lib/delivery-state";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import {
-  useCollectionFormats,
   useCollectionLocations,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
-import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
-import { IntakeHoldingsLine } from "./intake-holdings-line";
-import { IntakeCatalogValueField } from "./intake-catalog-value";
+import { ScansCard } from "@/app/c/[collectionSlug]/shared/scans-card";
 import {
-  catalogValueEntry,
-  EMPTY_INTAKE_CATALOG_VALUE,
-  type IntakeCatalogValue,
-} from "@/lib/intake-catalog-value";
-import { PurchaseScansCard } from "./purchase-scans-card";
-import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
-import { useInvalidatePurchaseScans } from "./use-purchase-scans-query";
+  TileIdentifyChainDialogs,
+  useTileIdentifyChain,
+} from "@/app/c/[collectionSlug]/shared/tile-identify-chain";
+import { useInvalidateScans } from "@/app/c/[collectionSlug]/shared/use-scans-query";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -129,11 +121,7 @@ import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
 import {
   readLast,
   writeLast,
-  LS_LAST_CONDITION,
-  LS_LAST_CERT,
   LS_LAST_LOCATION,
-  LS_LAST_DISPOSITION,
-  LS_LAST_SCAN_LOT,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import {
   StampPickerBrowser,
@@ -145,19 +133,15 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
-import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Icon } from "@/app/icons";
-
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+import {
+  CHIP,
+  DISPOSITION_FLAGS,
+  DispositionChips,
+  INPUT_STYLE,
+  IntakeConditionDialog,
+  type PendingSelection,
+} from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 
 /** The label in front of a group of toolbar controls ("Group by", "Sort copies") — the same shape
  *  the offer and auction-sale toolbars use, which is what lets the three read as one control row. */
@@ -168,24 +152,6 @@ const TOOLBAR_LABEL: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.04em",
 };
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "0.5rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-};
-
-// The tree-select trigger defaults to a compact toolbar height (min-h-8). In the intake dialog
-// it sits beside an INPUT_STYLE ref field, so bump its min-height + vertical padding to line the
-// two controls up (mirrors the inventory copy form).
-const LOCATION_SELECT_BUTTON_CLASS = defaultTreeSelectButtonClassName
-  .replace("min-h-8", "min-h-9")
-  .replace("py-1", "py-2");
 
 const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
   preparing: { label: "Preparing", token: "muted" },
@@ -204,13 +170,6 @@ const PURCHASE_STATUS_ORDER = ["preparing", "in_transit", "arrived"];
 // outcomes (not_delivered, damaged) are off this path, so a copy in one shows no advance
 // button either.
 const DELIVERY_ADVANCE_ORDER = ["ordered", "in_transit", "to_sort", "delivered"];
-
-/** The disposition flags a lot copy can carry, in display order. */
-const DISPOSITION_FLAGS = [
-  { key: "inCollection", label: "In collection" },
-  { key: "forSale", label: "For sale" },
-  { key: "forTrade", label: "For trade" },
-] as const;
 
 /** The same three, as the order-level *Kept for* filter (#622). Labelled identically to the flags
  * above on purpose: the chip that files a copy *For sale* and the chip that shows only the for-sale
@@ -254,64 +213,6 @@ interface PurchaseDetailPanelProps {
   locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
-}
-
-/**
- * Everything one tile was identified as (#595) — the whole of the condition step's answers, plus the
- * stamp that got there.
- *
- * The catalogue value is deliberately **not** here. It is a fact about a stamp that is already
- * recorded, so the field prefills itself from what was written for this stamp × condition ×
- * certificate × format (#593); carrying a figure across would be typing the same price twice.
- */
-interface TileIdentification {
-  stampId: string;
-  /** The pick as the condition step's summary box words it. */
-  label: string;
-  /** The pick in one catalogue number, for an action that has to fit on a button. */
-  shortLabel: string;
-  conditionId: string;
-  certificateStatusId: string;
-  formatId: string;
-  locationId: string;
-  locationRef: string;
-  disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
-  lotId: string;
-}
-
-/**
- * A correction in flight: which tile is being identified again, and what its copy answers **now**.
- *
- * The prefill is built where the tile is — from `ScanTileData.item`, which the scans card already
- * holds — rather than fetched at the far end of the chain: it is the copy as the strip last read it,
- * and a second read three dialogs later would be a second answer to a question already in hand.
- * `stampId` rides along for the picker's *current* mark, so the tree says where the copy already
- * sits instead of leaving the collector to check it on the other side of the screen.
- */
-interface TileCorrection {
-  tileId: string;
-  stampId: string;
-  prefill: NonNullable<IntakeConditionDialogProps["prefill"]>;
-}
-
-/** The condition step's answers as the intake write is given them (#595). One field is absent from
- * the form when the collection defines no formats and another when it has no locations, so every
- * read falls back to the empty string — the same "not chosen" the fields themselves start at. */
-function tileAnswersFrom(fd: FormData): Omit<TileIdentification, "stampId" | "label" | "shortLabel"> {
-  const text = (key: string) => String(fd.get(key) ?? "");
-  return {
-    conditionId: text("conditionId"),
-    certificateStatusId: text("certificateStatusId"),
-    formatId: text("formatId"),
-    locationId: text("locationId"),
-    locationRef: text("locationRef"),
-    disposition: {
-      inCollection: text("inCollection") === "true",
-      forSale: text("forSale") === "true",
-      forTrade: text("forTrade") === "true",
-    },
-    lotId: text("lotId"),
-  };
 }
 
 export function PurchaseDetailPanel({
@@ -501,85 +402,12 @@ export function PurchaseDetailPanel({
     setSelection(dropDispositionContainers);
   }
 
-  /**
-   * Identifying a scan tile into a **new copy** (#567), which since #586 is the order's job rather
-   * than a lot card's — the card the tile came from belongs to the parcel, so the chain that turns
-   * one of its tiles into a copy has to start here.
-   *
-   * It is the same picker → condition chain every other intake goes through, deliberately: a second
-   * pair of those dialogs would be a second set of remembered choices. What rides with it is the
-   * tile and, once the condition step asks it, **which lot** the copy belongs to — the one question
-   * the re-parenting left to be answered at identification, where it is answerable at all.
-   */
-  const [tileStep, setTileStep] = useState<"none" | "picker" | "condition">("none");
-  /**
-   * The pieces this identification is about — one, or a whole run ticked on the strip (#596).
-   *
-   * A **list** rather than a piece, all the way down the chain, because with several ticked there is
-   * no single piece the step is about and picking the first to stand for the rest is exactly the
-   * mistake the aside exists to prevent. One tile is a list of one, so there is one path and not two.
-   */
-  const [tileIntake, setTileIntake] = useState<IdentifiedPiece[]>([]);
-  const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
-  /** The pick in one catalogue number, kept beside the selection because `PendingSelection` carries
-   * only the long form and the repeat action has a button's width to say it in. */
-  const [tileShortLabel, setTileShortLabel] = useState("");
-  /**
-   * How the **previous tile of this sitting** was identified (#595), so the next one can be
-   * identified the same way in one press. Component state, never storage: "this sitting" is exactly
-   * the life of this screen, and a record surviving a reload would offer to repeat a decision from
-   * another day.
-   *
-   * It is kept at all because **nothing recoverable holds it**. The remembered add-copy defaults
-   * (`add-copy-defaults.ts`) are collection-wide and any other add-copy overwrites them, and they
-   * carry no stamp, no format and no ref — which are precisely the three the previous tile's answers
-   * add. The two sets differ exactly when it matters: after the collector has changed something for
-   * this card.
-   */
-  const [lastTileIdentify, setLastTileIdentify] = useState<TileIdentification | null>(null);
-  /** The previous tile's answers, in the fields of the condition step, for the tile being repeated
-   * onto. Non-null only on the repeat path — the ordinary picker → condition chain must keep
-   * arriving at the remembered defaults and nothing else. */
-  const [tileRepeat, setTileRepeat] = useState<TileIdentification | null>(null);
-  /**
-   * The tile whose identification is being **corrected** — *Identify again* on a tile that already
-   * became a copy. Null on every ordinary intake, and what it changes is only the chain's two ends:
-   * the condition step opens on the copy's own answers instead of the remembered defaults, and the
-   * submit re-answers that copy instead of creating one.
-   *
-   * The whole middle — the picker, the issue and stamp dialogs it can open, the condition step's own
-   * fields, the catalogue value (#593), the piece beside all of them (#592) — is the identification's
-   * unchanged. Being wrong about which stamp a piece is usually means being wrong about what was
-   * read off it, so the correction has to be able to say everything the identification said; a
-   * stamp-only re-point would have sent the collector to the copies list for the other half of the
-   * same mistake.
-   */
-  const [tileCorrection, setTileCorrection] = useState<TileCorrection | null>(null);
-  const { invalidatePurchaseScans } = useInvalidatePurchaseScans();
-  function resetTileIntake() {
-    setTileStep("none");
-    setTileIntake([]);
-    setTileSelection(null);
-    setTileShortLabel("");
-    setTileRepeat(null);
-    setTileCorrection(null);
-    setError(undefined);
-  }
-  // The dictionaries the repeat action's own wording needs. Conditions arrive as a prop; formats
-  // are the one this screen does not have, fetched the way the condition step itself fetches them.
-  const { data: collectionFormats = [] } = useCollectionFormats(collectionId);
-  /** What *Same as the last* says it will do: the stamp, the condition, and the format when the
-   * piece was not a single. Named rather than implied — everything else this action fills is a
-   * field the collector would have found pre-filled anyway. */
-  const repeatSummary = lastTileIdentify
-    ? [
-        lastTileIdentify.shortLabel,
-        conditions.find((c) => c.id === lastTileIdentify.conditionId)?.abbreviation,
-        collectionFormats.find((f) => f.id === lastTileIdentify.formatId)?.abbreviation,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : "";
+
+  const { invalidateScans } = useInvalidateScans();
+  /** The picker → condition chain a scan tile is identified through (#567/#584/#595), shared with
+   * the collection's own card scans since #725. The screen keeps the runner and the error slot; the
+   * chain keeps where it is and what it is carrying. */
+  const tileChain = useTileIdentifyChain({ collectionId, conditions, setError });
 
   function run(
     fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
@@ -854,85 +682,20 @@ export function PurchaseDetailPanel({
 
           It is a section of the order rather than of the screen's copy views, so the by-lot / by-issue
           toggle below leaves it alone — how the copies are grouped is a question about copies. */}
-      <PurchaseScansCard
+      <ScansCard
         collectionId={collectionId}
         // For the picker a parked tile's shortlist is built from (#607) — the same one this panel
         // opens for the identification itself.
         areas={areas}
         scanDpi={scanDpi}
-        purchaseId={purchase.id}
+        owner={{ kind: "purchase", purchaseId: purchase.id }}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
-        onIdentifyTiles={(pieces, pick) => {
-          setTileIntake(pieces);
-          setTileRepeat(null);
-          setError(undefined);
-          if (pick) {
-            // The stamp is already known (#607): a candidate pressed on a parked tile's shortlist,
-            // or the parent offered in place of one. So the chain enters at the step the picker
-            // would have led to — with **no** prefill, unlike *Same as the last* (#595): what has
-            // been answered is the stamp and nothing else, and the condition, the format and the
-            // ref must arrive at the ordinary remembered defaults rather than at the previous
-            // tile's answers.
-            setTileSelection({ kind: "stamp", stampId: pick.stampId, label: pick.label });
-            setTileShortLabel(pick.shortLabel);
-            setTileStep("condition");
-            return;
-          }
-          setTileStep("picker");
-        }}
-        // *Identify again*: the same chain, over a tile that already became a copy. It enters at
-        // the picker like an ordinary identification — the stamp is the answer being corrected, so
-        // it is asked first — and what it carries is the copy's current answers, so the condition
-        // step opens on what the copy *is* rather than on defaults remembered from another card.
-        onReidentifyTile={(piece, copy) => {
-          setTileIntake([piece]);
-          setTileRepeat(null);
-          setError(undefined);
-          setTileCorrection({
-            tileId: piece.tileId,
-            stampId: copy.stampId,
-            prefill: {
-              conditionId: copy.conditionId,
-              certificateStatusId: copy.certificateStatusId ?? "",
-              formatId: copy.formatId ?? "",
-              locationId: copy.locationId ?? "",
-              locationRef: copy.locationRef ?? "",
-              disposition: {
-                inCollection: copy.inCollection,
-                forSale: copy.forSale,
-                forTrade: copy.forTrade,
-              },
-              // The lot is not asked on a correction — the copy has one, and moving it is a
-              // decision about money rather than about what the piece is — so this is the field
-              // `lotChoice` being absent leaves unread.
-              lotId: "",
-            },
-          });
-          setTileStep("picker");
-        }}
-        // *Same as the last* (#595): the picker is skipped, because its answer is the record, and
-        // the chain resumes at the step that would have followed it — with the fields filled and
-        // the ordinary confirm still to press.
-        repeatLast={
-          lastTileIdentify && {
-            summary: repeatSummary,
-            onRepeatTile: (pieces) => {
-              setTileIntake(pieces);
-              setTileSelection({
-                kind: "stamp",
-                stampId: lastTileIdentify.stampId,
-                label: lastTileIdentify.label,
-              });
-              setTileShortLabel(lastTileIdentify.shortLabel);
-              setTileRepeat(lastTileIdentify);
-              setError(undefined);
-              setTileStep("condition");
-            },
-          }
-        }
+        onIdentifyTiles={tileChain.onIdentifyTiles}
+        onReidentifyTile={tileChain.onReidentifyTile}
+        repeatLast={tileChain.repeatLast}
         onChanged={() => router.refresh()}
       />
 
@@ -1222,179 +985,31 @@ export function PurchaseDetailPanel({
         />
       )}
 
-      {/* Identifying a tile: pick the stamp (#567) */}
-      {tileStep === "picker" && tileIntake.length > 0 && (
-        <StampPickerBrowser
-          collectionId={collectionId}
-          areas={areas}
-          // The piece, for the whole of the identification and not only its first dialog (#592).
-          // The picker passes it on to the issue and stamp dialogs it opens, which is the deepest
-          // point of the chain and the one the collector reaches furthest from where they started.
-          // With a run ticked (#596) it is all of them, small — one stamp is being picked for every
-          // piece on screen, and this is where a wrong assertion is still free to be corrected.
-          aside={
-            <IdentifiedPieceAside
-              collectionId={collectionId}
-              pieces={tileIntake}
-              scanDpi={scanDpi}
-            />
-          }
-          asideWidth="26rem"
-          // Correcting an identification, the stamp the copy is pointing at now is marked on its own
-          // row: the tree is being read *against* that answer, and one that said nothing about where
-          // the copy already sits sends the collector to check on the other side of the screen.
-          // Pressing it is a complete answer — the condition and the rest may be what was wrong.
-          marked={
-            tileCorrection
-              ? {
-                  stampIds: new Set([tileCorrection.stampId]),
-                  label: "current",
-                  hint: "What this copy is identified as now",
-                }
-              : undefined
-          }
-          onPick={(picked: PickedStamp) => {
-            setTileSelection({
-              kind: "stamp",
-              stampId: picked.stampId,
-              label: pickedStampText(picked),
-            });
-            // The primary vendor's number leads `catalogLabels`, so the first of them is the one the
-            // collector thinks in; a stamp with no number at all falls back to its name (#595).
-            setTileShortLabel(picked.catalogLabels[0] ?? picked.name ?? "(unnamed stamp)");
-            setError(undefined);
-            setTileStep("condition");
-          }}
-          // A tile is one piece — one region of one card — so a whole-checklist expansion has
-          // nothing to attach its images to. Omitted rather than refused: the picker only draws the
-          // "add this whole set" buttons when it is given somewhere to send them, so entering from
-          // a tile simply never offers the answer that could not work.
-          onClose={resetTileIntake}
-        />
-      )}
 
-      {/* …then its condition, its lot, and everything else intake asks */}
-      {tileStep === "condition" && tileIntake.length > 0 && tileSelection && (
-        <IntakeConditionDialog
-          selection={tileSelection}
-          collectionId={collectionId}
-          scanDpi={scanDpi}
-          conditions={conditions}
-          certificateStatuses={certificateStatuses}
-          locations={locations}
-          isPending={isPending}
-          error={error}
-          // The tile's crops **are** this copy's front and back, so the uploader is out of the way:
-          // a second front would collide with the copy's one front slot.
-          hidePhotos
-          // *Used or mint?* is read off the piece, and gum and hinge marks are on its back — so the
-          // piece is beside the field asking, both sides, at the size the tile dialog showed it
-          // (#592). Only here: the two other entries into this dialog have no picture of the piece.
-          // Several pieces (#596) are all shown, which is where the collector's assertion that they
-          // are one stamp in one condition gets its last look before it becomes N copies.
-          pieces={tileIntake}
-          // What is about to exist, said before anything is created — the rule every bulk action on
-          // this screen follows.
-          copyCount={tileIntake.length}
-          submitLabel={
-            tileCorrection
-              ? // Never *Identify the tile*: nothing is created here, and a correction that read
-                // like an intake would leave the collector wondering whether they now hold two
-                // copies of the piece in their tweezers.
-                "Save the identification"
-              : tileIntake.length === 1
-                ? "Identify the tile"
-                : `Identify ${tileIntake.length} tiles`
-          }
-          // *Same as the last* (#595) arrives here with the previous tile's answers rather than
-          // through the picker. Null on every other route in, which is what keeps this an action and
-          // not a default.
-          prefill={tileCorrection ? tileCorrection.prefill : (tileRepeat ?? undefined)}
-          // The one question #586 left to identification. Only the order's **open** lots, since a
-          // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
-          // refusal.
-          lotChoice={
-            tileCorrection
-              ? // **Not asked on a correction.** The copy already belongs to a lot and takes its
-                // cost basis from it (ADR-0009 §3), so which lot it is on is a question about money
-                // rather than about what the piece is — and the identification is what is being
-                // corrected here. Offering the question would also mean quietly moving a copy off a
-                // closed lot, since only open ones can be offered. Absent is the shape this dialog
-                // already has for *the lot is not in question*, which is the stockbook case.
-                undefined
-              : {
-                  purchaseId: purchase.id,
-                  lots: purchase.lots
-                    .map((l, i) => ({
-                      id: l.id,
-                      label: l.title ?? `Lot ${i + 1}`,
-                      status: l.status,
-                    }))
-                    .filter((l) => l.status === "open"),
-                }
-          }
-          onBack={() => {
-            if (!isPending) {
-              setError(undefined);
-              // Backing out of a repeat retires it (#595). *Back* from here is the collector saying
-              // this tile is **not** the same as the last, so the stamp they pick next must arrive
-              // at the ordinary remembered defaults — a format left standing from the previous tile
-              // would be exactly the inherited value #573 refused.
-              setTileRepeat(null);
-              setTileStep("picker");
-            }
-          }}
-          onClose={resetTileIntake}
-          onSubmit={(fd) => {
-            setError(undefined);
-            if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
-            // Every ticked tile, in card order — the order the copies are created and numbered in
-            // (#596). Each one is handed its own tile's images by the write; nothing here is shared
-            // between them but the answers on this form.
-            const tileIds = tileIntake.map((p) => p.tileId);
-            // What the *next* tile can be identified as in one press (#595). Read off the submitted
-            // form rather than mirrored from the dialog's state: this is the same set of answers the
-            // write itself is given, so the two cannot describe different intakes. Recorded only on
-            // success, in `run`'s completion — an intake the server refused is not a decision that
-            // was taken.
-            const answers = tileAnswersFrom(fd);
-            const stampId = tileSelection.kind === "stamp" ? tileSelection.stampId : "";
-            const label = tileSelection.label;
-            const shortLabel = tileShortLabel;
-            const correction = tileCorrection;
-            run(
-              async () => {
-                const scans = await import("@/app/actions/scans");
-                // The same form either way, and the only thing that differs is what it lands on: a
-                // correction re-answers the copy the tile already became, an identification creates
-                // one. Both consume the same fields, which is what keeps the two one vocabulary.
-                const r = correction
-                  ? await scans.reidentifyTileAction(correction.tileId, fd)
-                  : await scans.identifyTilesAction(tileIds, fd);
-                if (r.status === "error") setError(r.message);
-                // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
-                // so both namespaces are re-read: the shared runner invalidates the copies, and this
-                // adds the scans, without which the strip keeps showing a tile that is already a
-                // copy. (`purchase-scans-card.tsx` states the rule the other outcomes follow.) A
-                // correction touches both for the same reason: the copy changed, and the tile's
-                // square is what says what it became.
-                else void invalidatePurchaseScans(collectionId);
-                return r;
-              },
-              () => {
-                // **A correction is not what *Same as the last* repeats** (#595). That action
-                // carries the previous *intake* onto the next tile, lot included, and a correction
-                // answers no lot at all — so recording one here would hand the next tile a blank
-                // lot that the step would silently resolve to the first one offered.
-                if (stampId && !correction) {
-                  setLastTileIdentify({ stampId, label, shortLabel, ...answers });
-                }
-                resetTileIntake();
-              }
-            );
-          }}
-        />
-      )}
+      {/* Identifying a tile: the stamp, then everything else intake asks (#567) */}
+      <TileIdentifyChainDialogs
+        chain={tileChain}
+        collectionId={collectionId}
+        areas={areas}
+        scanDpi={scanDpi}
+        conditions={conditions}
+        certificateStatuses={certificateStatuses}
+        locations={locations}
+        isPending={isPending}
+        error={error}
+        setError={setError}
+        // The one question #586 left to identification. Only the order's **open** lots, since a
+        // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
+        // refusal.
+        lotChoice={{
+          purchaseId: purchase.id,
+          lots: purchase.lots
+            .map((l, i) => ({ id: l.id, label: l.title ?? `Lot ${i + 1}`, status: l.status }))
+            .filter((l) => l.status === "open"),
+        }}
+        run={run}
+        onIdentified={() => void invalidateScans(collectionId)}
+      />
 
       {addingLot && (
         <LotDialog
@@ -1632,12 +1247,6 @@ interface LotCardProps {
   setSelection: React.Dispatch<React.SetStateAction<CopySelection>>;
   onRun: RunFn;
 }
-
-/** A stamp or a whole checklist chosen in the picker (#531), awaiting a condition/certificate
- * before its copies are created. */
-type PendingSelection =
-  | { kind: "stamp"; stampId: string; label: string }
-  | { kind: "checklist"; checklistId: string; label: string; requiredCount: number };
 
 type RunFn = (
   /** `copies` is what an intake returns (#532) — the panel's `run` takes the want review from it. */
@@ -4115,138 +3724,7 @@ function DispositionInline({
   );
 }
 
-/** The three disposition flags rendered as instant-toggle chips (#160). Shared by the per-copy
- * inline editor and the intake dialog: `values` holds the current on/off of each flag and
- * `onToggle` flips one. Purely presentational — the caller decides whether a toggle persists
- * immediately (per-copy) or updates form state (intake). */
-function DispositionChips({
-  values,
-  onToggle,
-  disabled,
-}: {
-  values: { inCollection: boolean; forSale: boolean; forTrade: boolean };
-  onToggle: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-      {DISPOSITION_FLAGS.map((d) => {
-        const on = values[d.key];
-        return (
-          <button
-            key={d.key}
-            type="button"
-            aria-pressed={on}
-            disabled={disabled}
-            onClick={() => onToggle(d.key, !on)}
-            style={{
-              ...CHIP,
-              cursor: disabled ? "default" : "pointer",
-              fontWeight: on ? 600 : 500,
-              color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-              borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-              background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-            }}
-          >
-            <Icon name={on ? "check" : "add"} size="xs" /> {d.label}
-          </button>
-        );
-      })}
-    </span>
-  );
-}
 
-interface IntakeConditionDialogProps {
-  selection: PendingSelection;
-  collectionId: string;
-  conditions: StampConditionData[];
-  certificateStatuses: CertificateStatusData[];
-  locations: LocationData[];
-  isPending: boolean;
-  error?: string;
-  /** Overrides the confirm-button label. Used by the "add lot with stamps" flow where this
-   * dialog only captures the choice and advances to the price step (so "Continue", not
-   * "Add copy"). Defaults to the copy-count label. */
-  submitLabel?: string;
-  /** Identifying a **scan tile** (#567): the tile's own crops become this copy's front and back,
-   * so the uploader is left out. Not cosmetic — front and back are singleton slots per copy, and
-   * an upload arriving beside the tile's crop would be a second front for the same copy. */
-  hidePhotos?: boolean;
-  /**
-   * The pieces this dialog is asking about, drawn beside the form (#592) — present only where there
-   * is a picture of **this** piece, which today is the scan-tile flow alone.
-   *
-   * Condition is *read off the piece*: the cancel decides used against mint, the gum and the hinge
-   * marks are on the back, the centring and the margins are on the front. Until #592 the picture
-   * was on the tile dialog and nowhere after it, so the collector answered from memory or went back
-   * — forty times per card.
-   *
-   * The stamp's **catalogue photo is deliberately not a fallback**. It is a picture of *a*
-   * specimen; beside a condition field it would invite reading a condition off the wrong stamp, and
-   * an intake with no scan behind it is better with nothing there.
-   *
-   * **Several** pieces (#596) are all drawn, small, rather than one of them standing for the rest —
-   * ticking them was the collector asserting they are one stamp in one condition, and this is the
-   * last place a mistake in that assertion costs a click instead of N copies.
-   */
-  pieces?: IdentifiedPiece[];
-  /** The collection's stated scan resolution (#598), for the measuring tools inside that viewer. */
-  scanDpi: number;
-  /**
-   * How many copies this submit is about to create (#596), when that is more than the selection
-   * itself says — a run of tiles identified as one stamp. Stated in the summary box and on the
-   * confirm button, before anything exists, as every other bulk action on this screen states it.
-   */
-  copyCount?: number;
-  /**
-   * The previous tile's answers, filled into every field this dialog holds (#595) — present only on
-   * *Same as the last*, which is why the fields below still read the remembered collection-wide
-   * defaults on every other route in.
-   *
-   * It leads those defaults wherever both have something to say, because the two differ exactly when
-   * it matters: after the collector has changed something for this card. And it fills the three the
-   * defaults have nothing to say about at all — the stamp (chosen one step back, so it arrives as
-   * the `selection`), the format and the in-location ref.
-   *
-   * The **format** being among them is not a reversal of #573. That decision is about what happens
-   * behind the collector's back: a value usually right may be remembered, one usually wrong must not
-   * be, because a wrong value nobody chose is invisible. Here the collector pressed a button that
-   * named the format it would apply, so nothing is inherited — it was asked for.
-   */
-  prefill?: {
-    conditionId: string;
-    certificateStatusId: string;
-    formatId: string;
-    locationId: string;
-    locationRef: string;
-    disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
-    lotId: string;
-  };
-  /**
-   * Which lot the created copy belongs to (#586) — asked only when identifying a scan tile, since
-   * every other entry into this dialog was reached *through* a lot and already knows.
-   *
-   * A copy takes its cost basis from a lot, and a card of a settled auction holds pieces belonging
-   * to a dozen of them, so the answer cannot come from the scan. It is asked **here**, beside the
-   * condition and the location, because this is the step that asks everything else about the copy —
-   * and it is remembered here for the same reason those are: a card, or a run of them, is worked
-   * through before the next is started, so the answer is stable across a long stretch of tiles.
-   *
-   * With **one** open lot nothing is asked: that is the stockbook case, which had no such question
-   * before the re-parenting and must not gain one.
-   */
-  lotChoice?: {
-    /** Scopes the remembered answer. A lot id means nothing on the next parcel, so remembering it
-     * per collection — as the condition and location are — would restore an id that is refused. */
-    purchaseId: string;
-    /** The order's **open** lots, in the order the cards are drawn in. A closed lot takes no new
-     * copy at all, so offering it would be offering a refusal. */
-    lots: { id: string; label: string; status: string }[];
-  };
-  onBack: () => void;
-  onClose: () => void;
-  onSubmit: (formData: FormData) => void;
-}
 
 // The last condition/certificate/location/disposition chosen for an add-copy are remembered
 // across every entry point (#121, #234) — see shared/add-copy-defaults (readLast/writeLast).
@@ -4260,500 +3738,3 @@ const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
 const LS_SORT_KEY = "stamporama:lot:sortKey";
 const LS_SORT_DIR = "stamporama:lot:sortDir";
 
-/** After a stamp or whole issue is picked, capture the condition (required) and certificate
- * (optional) that every created copy will share, then confirm the intake (#121). The last
- * choice is remembered and preselected for the next stamp. */
-function IntakeConditionDialog({
-  selection,
-  collectionId,
-  conditions,
-  certificateStatuses,
-  locations,
-  isPending,
-  error,
-  submitLabel,
-  hidePhotos,
-  pieces,
-  scanDpi,
-  copyCount,
-  prefill,
-  lotChoice,
-  onBack,
-  onClose,
-  onSubmit,
-}: IntakeConditionDialogProps) {
-  // Preselect the last-used values, ignoring any that no longer exist in this collection. A repeat
-  // (#595) leads them with the previous tile's own answers — validated the same way, since a
-  // condition deleted mid-sitting is the same missing id whichever of the two named it.
-  //
-  // Each field asks whether there *is* a prefill, never whether it has something in it: a previous
-  // tile with no certificate is an answer, and reading an empty one as "nothing to say" would let
-  // the remembered default put a certificate on a copy the collector asked to be the same as one
-  // without.
-  const [conditionId, setConditionId] = useState(() => {
-    const last = prefill ? prefill.conditionId : readLast(LS_LAST_CONDITION, collectionId);
-    return conditions.some((c) => c.id === last) ? last : "";
-  });
-  const [certId, setCertId] = useState(() => {
-    const last = prefill ? prefill.certificateStatusId : readLast(LS_LAST_CERT, collectionId);
-    return certificateStatuses.some((c) => c.id === last) ? last : "";
-  });
-  // The physical format of the piece being identified (#573) — a pair, a block, a strip — blank
-  // meaning *single*, which is a value and not a missing answer (`StampFormat`, ADR-0020).
-  //
-  // It is deliberately **not** remembered, unlike the condition, certificate, location and
-  // disposition around it, and that asymmetry is the point rather than an oversight to tidy up.
-  // Condition repeats down a stockbook page — a card is often all mint or all used — so restoring it
-  // saves hundreds of clicks. Format does not repeat: single is the default state of the world and a
-  // multiple is the exception, so a sticky format would mark every later single as a block of four
-  // until the collector noticed. That is this field's own reason for existing, inverted — and worse
-  // than what it replaces, because a format nobody chose is invisible where a missing one at least
-  // reads as *single*. The cost is one extra pick on a run of multiples; the gain is that a
-  // multiple is always something that was chosen.
-  //
-  // That guarantee is enforced **here**, and deliberately not left to the component tree. Both
-  // callers render this dialog conditionally today, so it unmounts on every return to the picker
-  // and `useState("")` would start fresh on its own — but that is a fact about how the dialog is
-  // mounted, not about formats, and someone keeping it mounted across a transition months from now
-  // would silently make the field sticky: the very behaviour this field rejected, reintroduced by a
-  // change that has nothing to do with it, and invisible to any test, since it is client state.
-  // So the reset rides on `selection`, which both callers rebuild at **every** pick — including a
-  // second pick of the same stamp, the block-of-four-then-singles run a key derived from the stamp
-  // id would sit right through.
-  //
-  // A repeat (#595) is the one thing that fills it, and it is not an exception to any of that: the
-  // collector pressed a button naming the format, which is a format that was chosen. The reset below
-  // still holds — a different pick clears it, including the pick that follows a repeat.
-  const [formatId, setFormatId] = useState(prefill?.formatId ?? "");
-  const [formatSelection, setFormatSelection] = useState(selection);
-  if (formatSelection !== selection) {
-    setFormatSelection(selection);
-    setFormatId("");
-  }
-  // Fetched here rather than threaded through the purchase screen, the reason the copy dialog
-  // fetches it: it is one more dictionary and the screens that need it are not the ones that have it.
-  const { data: formats = [] } = useCollectionFormats(collectionId);
-  const [locationId, setLocationId] = useState(() => {
-    const last = prefill ? prefill.locationId : readLast(LS_LAST_LOCATION, collectionId);
-    // Only restore an assignable location that still exists (grouping-only nodes and
-    // deleted ones fall back to none).
-    return locations.some((l) => l.id === last && l.assignable) ? last : "";
-  });
-  // Disposition preset for the copies this intake creates (#160): toggled instantly as chips,
-  // carried into the created copies on submit. Remembered per collection like the other
-  // choices, to speed up bulk intake.
-  const [disposition, setDisposition] = useState(() => {
-    if (prefill) return prefill.disposition;
-    const active = new Set(readLast(LS_LAST_DISPOSITION, collectionId).split(",").filter(Boolean));
-    return {
-      inCollection: active.has("inCollection"),
-      forSale: active.has("forSale"),
-      forTrade: active.has("forTrade"),
-    };
-  });
-  // The lot a tile's copy goes onto (#586), pre-filled with the last one answered for this order.
-  // A single open lot is used without being drawn at all — see `lotChoice`. A remembered lot that
-  // has since been closed or deleted falls back to the first one offered, which is the same call
-  // the condition and location above make about an id that no longer exists.
-  const lotOptions = lotChoice?.lots ?? [];
-  const [lotId, setLotId] = useState(() => {
-    if (!lotChoice || lotOptions.length === 0) return "";
-    const last = prefill
-      ? prefill.lotId
-      : readLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`);
-    return lotOptions.some((l) => l.id === last) ? last : lotOptions[0].id;
-  });
-  const asksForLot = lotChoice != null && lotOptions.length > 1;
-
-  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
-
-  // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
-  // into several distinct copies, so shared photos would be meaningless. The pending change-set
-  // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
-  // onto the FormData on submit; Save waits while any staged upload is still in flight.
-  const singleStamp = selection.kind === "stamp";
-  // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
-  const photos = singleStamp && !hidePhotos;
-  const photoValueRef = useRef<PhotoEditorValue>({
-    changeSet: { add: [], update: [], remove: [] },
-    uploading: false,
-  });
-  const [photosUploading, setPhotosUploading] = useState(false);
-  const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
-    photoValueRef.current = value;
-    setPhotosUploading(value.uploading);
-  }, []);
-
-  // The catalogue value typed while the paper catalogue is still open at this stamp (#593). Held in
-  // a ref for the reason the photo change-set is: the field re-reads on every change of condition,
-  // certificate or format, and nothing in this form depends on what is currently in it. Single-stamp
-  // intake only — a whole-checklist intake fans out across many stamps, and one figure could not be
-  // the catalogue value of all of them, which is the rule photos and the format field follow.
-  const catalogValueRef = useRef<IntakeCatalogValue>(EMPTY_INTAKE_CATALOG_VALUE);
-  const handleCatalogValueChange = useCallback((value: IntakeCatalogValue) => {
-    catalogValueRef.current = value;
-  }, []);
-  /** A failed price write, reported in the dialog's own footer beside the caller's errors. */
-  const [priceError, setPriceError] = useState<string | undefined>();
-  const [savingPrice, setSavingPrice] = useState(false);
-
-  // How the chosen condition × certificate reads, which is what the catalogue value is recorded
-  // against. Built here because this is where the dictionaries are; worded like the quick-price
-  // dialog's own badge, so the two surfaces name the same key the same way.
-  //
-  // The **format is not in it**, because the figure does not land on the chosen format: it is always
-  // the single's price, the way the quick-CV dialog on a copy row records it, with a multiple's value
-  // derived from it by the format's factor. Naming a format here would promise a row this never
-  // writes.
-  const subjectLabel = [
-    conditions.find((c) => c.id === conditionId)?.abbreviation,
-    certificateStatuses.find((c) => c.id === certId)?.abbreviation,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    writeLast(LS_LAST_CONDITION, collectionId, conditionId);
-    writeLast(LS_LAST_CERT, collectionId, certId);
-    writeLast(LS_LAST_LOCATION, collectionId, locationId);
-    writeLast(
-      LS_LAST_DISPOSITION,
-      collectionId,
-      DISPOSITION_FLAGS.filter((d) => disposition[d.key]).map((d) => d.key).join(",")
-    );
-    if (lotChoice && lotId) {
-      writeLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`, lotId);
-    }
-    const fd = new FormData(e.currentTarget);
-    if (lotChoice && lotId) fd.set("lotId", lotId);
-    fd.set("inCollection", String(disposition.inCollection));
-    fd.set("forSale", String(disposition.forSale));
-    fd.set("forTrade", String(disposition.forTrade));
-    if (photos) {
-      fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
-    }
-
-    // The catalogue value goes **before** the intake and on its own (#593). It is a fact about the
-    // *stamp* — it needs no copy to exist — so it is written here rather than folded into each of
-    // the three actions this dialog's submit reaches, two of which are server actions and the third
-    // of which does not create anything until a later step.
-    //
-    // Before, and blocking on failure, because a figure the collector read off the paper catalogue
-    // must not be dropped in silence; and safely retried, because the field prefills from what is
-    // now recorded, so a second attempt at a failed intake writes nothing a second time.
-    if (selection.kind === "stamp") {
-      const entry = catalogValueEntry(catalogValueRef.current);
-      if (entry) {
-        setSavingPrice(true);
-        setPriceError(undefined);
-        const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
-        // At the **single**, whatever the format field says — which is what the action does for
-        // every quick price now, the intake field included: the figure comes off a paper catalogue,
-        // which quotes singles, and a multiple's value is that figure times the format's factor.
-        const r = await quickSetCatalogPricesAction(selection.stampId, conditionId, certId || null, [
-          entry,
-        ]);
-        setSavingPrice(false);
-        if (r.status === "error") {
-          setPriceError(r.message);
-          return;
-        }
-      }
-    }
-    onSubmit(fd);
-  }
-  const count = selection.kind === "checklist" ? selection.requiredCount : 1;
-  const summary =
-    selection.kind === "checklist"
-      ? `Whole set: ${selection.label} — ${count} stamp${count === 1 ? "" : "s"}`
-      : selection.label;
-  const actionLabel = isPending
-    ? submitLabel
-      ? "Working…"
-      : "Adding…"
-    : savingPrice
-      ? "Saving the catalog value…"
-      : photosUploading
-      ? "Uploading photos…"
-      : (submitLabel ??
-        (selection.kind === "checklist"
-          ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
-          : "Add copy"));
-
-  // The picture beside the form rather than above it (#592): a thumbnail over a form this long
-  // pushes the fields it exists to serve off the screen. The form column keeps the width it was
-  // designed at, so the dialog reads identically with and without a piece — the picture is added
-  // beside it, and nothing about the questions moves.
-  const pieceAside =
-    pieces && pieces.some((p) => p.sides.length > 0) ? (
-      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
-    ) : undefined;
-
-  return (
-    <DialogShell
-      title="Set condition"
-      onClose={onClose}
-      // The same shape as the tile dialog one step back, which is where this picture was last seen:
-      // two surfaces showing the same scan at the same size is one habit rather than two.
-      maxWidth={pieceAside ? "min(96vw, 78rem)" : "36rem"}
-      height={pieceAside ? "min(90vh, 54rem)" : undefined}
-      aside={pieceAside}
-      asideWidth="min(46vw, 38rem)"
-    >
-      <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
-        <DialogBody>
-          <div
-            style={{
-              marginBottom: "1rem",
-              padding: "0.625rem 0.75rem",
-              borderRadius: "0.5rem",
-              background: "var(--color-bg-page)",
-              border: "1px solid var(--color-border)",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            {summary}
-            {/* What is about to exist, before anything is created (#596). It sits inside the box
-                that names the pick because it is a fact about *this* answer — one stamp, one
-                condition, one certificate, one format, one lot, and this many pieces of paper.
-                Silent for the ordinary single tile, which needs no count to read as one copy. */}
-            {copyCount != null && copyCount > 1 && (
-              <div style={{ marginTop: "0.25rem", color: "var(--color-text-primary)" }}>
-                <strong>{copyCount} copies</strong> will be created — one per tile, each keeping its
-                own pictures.
-              </div>
-            )}
-            {/* What the collection already holds of this stamp, and what it is still after (#562)
-                — inside the box that already names the pick, so the line reads as a fact about it
-                rather than as a second heading. Single-stamp intake only: a whole-checklist intake
-                fans out across many stamps and has no one stamp to report on, exactly as photos
-                below are single-stamp only (#148). */}
-            {selection.kind === "stamp" && (
-              <IntakeHoldingsLine
-                collectionId={collectionId}
-                stampId={selection.stampId}
-                conditions={conditions}
-                conditionId={conditionId}
-                certificateStatusId={certId}
-                formatId={formatId}
-              />
-            )}
-          </div>
-
-          {/* Which lot the copy belongs to (#586) — drawn only when the order has more than one
-              open, and **above** the condition because it is the question about *this* order that
-              the rest of the form is answered under. It is not a `name`d field: the submit writes
-              it explicitly alongside remembering it, so the two cannot fall out of step. */}
-          {asksForLot && (
-            <div style={{ marginBottom: "0.75rem" }}>
-              <LabelWithError htmlFor="intake-lot">Lot</LabelWithError>
-              <select
-                id="intake-lot"
-                value={lotId}
-                onChange={(e) => setLotId(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                {lotOptions.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-              <p
-                style={{
-                  margin: "0.25rem 0 0",
-                  fontSize: "0.75rem",
-                  color: "var(--color-text-muted)",
-                }}
-              >
-                One card can hold pieces from several lots, so this is asked per copy — and the last
-                answer leads, since a card is usually worked through before the next is started.
-              </p>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-condition">Condition</LabelWithError>
-              <select
-                id="intake-condition"
-                name="conditionId"
-                value={conditionId}
-                onChange={(e) => setConditionId(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                <option value="">— Select —</option>
-                {conditions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.abbreviation})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-cert">Certificate</LabelWithError>
-              <select
-                id="intake-cert"
-                name="certificateStatusId"
-                value={certId}
-                onChange={(e) => setCertId(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                <option value="">— None —</option>
-                {certificateStatuses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.abbreviation})
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Format (#573): the piece in the tweezers is a pair or a block as often as it is a
-                single, and this is the moment that is known — afterwards it is one copy edit per
-                piece, from memory, after the sorting pass. Single-stamp intake only, the rule
-                photos follow and for a stronger reason: a whole-checklist intake fans out across
-                many stamps and "block of four" could not be true of all of them. Absent entirely
-                until the collection defines formats, as the inventory list's own format controls
-                are — most collections never define any. */}
-            {singleStamp && formats.length > 0 && (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="intake-format">Format</LabelWithError>
-                <select
-                  id="intake-format"
-                  name="formatId"
-                  value={formatId}
-                  onChange={(e) => setFormatId(e.target.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  {/* No "single" row exists in the dictionary — a copy with no format *is* the
-                      single, exactly as no certificate means none. */}
-                  <option value="">— Single —</option>
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.abbreviation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
-              Directly under the row it is keyed on — a catalogue price belongs to a condition ×
-              certificate, and putting it anywhere else would leave the collector to work out which
-              of the answers above it follows. The format picked beside it is *not* one of those
-              answers: the figure always lands on the single, with a multiple's value derived from it.
-              One field, the primary catalogue only: the full quick-price dialog stays for the
-              multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
-              intake only, the rule photos and the format field follow — one figure cannot be the
-              catalogue value of a whole set's stamps. */}
-          {selection.kind === "stamp" && (
-            <IntakeCatalogValueField
-              stampId={selection.stampId}
-              conditionId={conditionId}
-              certificateStatusId={certId}
-              subjectLabel={subjectLabel}
-              // The condition row above is two controls, or three once the collection defines
-              // formats — the same count the row itself is built from, so the two cannot drift.
-              columns={singleStamp && formats.length > 0 ? 3 : 2}
-              disabled={isPending || savingPrice}
-              onChange={handleCatalogValueChange}
-            />
-          )}
-
-          {/* Storage location (#56/#121): optional at intake, shared by every created copy.
-              An in-location ref (#148) sits beside it, disabled until a location is chosen. */}
-          <div style={{ marginTop: "0.75rem" }}>
-            <LabelWithError htmlFor="intake-locationId-button">Location (optional)</LabelWithError>
-            {locations.length === 0 ? (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                No locations defined yet. Add some on the Locations screen to file copies away.
-              </p>
-            ) : (
-              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                <div style={{ flex: 3 }}>
-                  <LocationTreeSelect
-                    locations={locations}
-                    locationTree={locationTree}
-                    name="locationId"
-                    selectedId={locationId}
-                    onSelectedIdChange={setLocationId}
-                    onlyAssignableSelectable
-                    disabled={isPending}
-                    noneOptionLabel="— None"
-                    buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <input
-                    id="intake-locationRef"
-                    name="locationRef"
-                    type="text"
-                    placeholder="Ref, e.g. A234"
-                    // The one field here that is never remembered between intakes, and is filled by
-                    // a repeat all the same (#595): two duplicates worked through in a run go into
-                    // the same place in the same box, and the collector asked for the same again.
-                    // Uncontrolled, so this is the value the field opens with and nothing more.
-                    defaultValue={prefill?.locationRef}
-                    disabled={isPending || !locationId}
-                    {...NO_AUTOFILL}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Disposition (#160): preset where the copies land once sorted. Instant-toggle chips
-              — no separate save; the choice rides along on the intake submit. */}
-          <div style={{ marginTop: "0.75rem" }}>
-            <LabelWithError htmlFor="">Disposition (optional)</LabelWithError>
-            <div style={{ marginTop: "0.25rem" }}>
-              <DispositionChips
-                values={disposition}
-                disabled={isPending}
-                onToggle={(flag, value) => setDisposition((d) => ({ ...d, [flag]: value }))}
-              />
-            </div>
-          </div>
-
-          {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
-              distinct copies, so shared photos would be ambiguous. Eager staged uploads; the
-              pending change-set applies to the created copy on submit. Absent entirely when the
-              copy is being identified from a scan tile (#567), whose crops it already gets. */}
-          {photos && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <LabelWithError htmlFor="">Photos (optional)</LabelWithError>
-              <PhotoEditor
-                collectionId={collectionId}
-                initialPhotos={[]}
-                disabled={isPending}
-                onChange={handlePhotoChange}
-              />
-            </div>
-          )}
-
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-            Copies are added <strong>not yet in your collection</strong> (
-            <strong>to sort</strong> once the order has arrived, otherwise <strong>ordered</strong>).
-            Cost-basis stays pending until the lot is closed.
-          </p>
-        </DialogBody>
-        <DialogActions
-          actionLabel={actionLabel}
-          cancelLabel="Back"
-          onCancel={onBack}
-          disabled={isPending || !conditionId || photosUploading || savingPrice}
-          // The caller's error and this dialog's own read the same way, and only one can be
-          // standing: a failed catalogue write returns before the intake is attempted at all.
-          error={priceError ?? error}
-        />
-      </form>
-    </DialogShell>
-  );
-}

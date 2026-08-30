@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { listPurchaseScans } from "@/lib/scan-sheets";
+import { listScans } from "@/lib/scan-sheets";
 
 /**
  * An order's card scans.
+ *
+ * The collection's own purchase-less cards are the twin of this at
+ * `/api/collections/[collectionId]/scan-sheets` (#725).
  *
  * **The upload lives under `uploads/`** (#590), not here: a 1200 dpi card is 100–200 MB and no
  * ordinary deployment can carry that in one request body — nginx defaults `client_max_body_size` to
@@ -30,7 +33,7 @@ export async function GET(
 
   const { purchaseId } = await params;
   try {
-    return NextResponse.json(await listPurchaseScans(session.user.id, purchaseId));
+    return NextResponse.json(await listScans(session.user.id, { purchaseId }));
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

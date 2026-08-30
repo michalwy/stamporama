@@ -415,6 +415,35 @@ dialog described below, already pointed at the right stamp:
 Fill in the rest of the dialog as usual and save. The new copy appears on the Inventory
 screen, and any open **View copies** popup for that stamp or issue reflects it.
 
+## Cataloguing from card scans
+
+If you have a lot of stamps to enter — a shelf of stockbooks, a collection you inherited, a gift —
+typing them in one at a time is the slow way. **Card scans** (**Card scans** in the sidebar, or
+**Scan a card** beside **Add copy**) does it the other way round: scan a whole stockbook card, cut
+the scan into one piece per stamp, and identify each piece on screen afterwards. Each stamp is
+handled physically once — laid out and scanned — and everything after that happens at the keyboard.
+
+It is the same flow orders use, and the [Card scans section of the purchases
+guide](purchases.md#card-scans) describes all of it: how to lay a card out, how the cut editor
+works, how a second scan of the backs pairs onto the fronts, and what you can do with each piece —
+identify it as a new copy, give its pictures to a copy you already have, set it aside to check, or
+discard it with a note.
+
+Two differences, and both are things you are **not** asked:
+
+- **Nothing is filed against a purchase.** The copies you create here have no lot and no cost — they
+  were not bought, they were already yours. If the stamps did come in a parcel, scan them from that
+  order's screen instead, where the cost is worked out.
+- **You are never asked which lot a piece belongs to**, because there is no lot to choose.
+
+Cards you scan here are numbered separately from any order's — *Batch 1, 2, 3* on this screen counts
+only the cards you scanned outside a purchase — and they appear only here, never on an order.
+
+**Giving a scan to a copy you already have.** Most of a shelf being catalogued is often already
+recorded and only missing pictures. On each piece, **Assign to a copy already recorded** offers every
+copy in the collection whose front (or back) is still empty; pick one and the piece's images move
+onto it, with no new copy created.
+
 ## Adding a copy
 
 1. Click **Add copy**.

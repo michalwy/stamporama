@@ -113,6 +113,12 @@ model Collection {
   // what the partner's copy of the list is headed with — so reuse would be worse here than
   // anywhere: two different exchanges answering to "trade 7" is an argument waiting to happen.
   nextTradeNo    Int    @default(1)
+  // The batch sequence for cards scanned **outside any order** (#725) — the collection-level twin of
+  // `Purchase.nextScanBatchNo`. Two counters rather than one shared: a batch number names the
+  // physical card, and renumbering every existing order's batches to merge the sequences would move
+  // numbers a collector has already written on cards, which is exactly what these counters exist to
+  // prevent (#268/#432).
+  nextScanBatchNo Int   @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -136,6 +142,11 @@ model Collection {
   contacts        Contact[]
   locations       Location[]
   purchases       Purchase[]
+  // Card scans and the tiles cut from them (#566/#586, re-parented here by #725) — every one of
+  // them, whether or not it arrived in a parcel.
+  scanSheets      ScanSheet[]
+  scanTiles       ScanTile[]
+  scanUploads     ScanUpload[]
   offers          Offer[]
   sales           Sale[]
   shippingMethods ShippingMethod[]
@@ -2149,12 +2160,21 @@ model PurchaseLot {
 // browser cannot be handed a 30 Mpx image and the original must never be the thing on screen.
 model ScanSheet {
   id             String   @id @default(cuid())
-  /** The **purchase**, not one of its lots (#586). A card is scanned once and holds pieces
-   * belonging to any number of the parcel's lots; which lot a piece belongs to is not answerable
-   * until it has been identified, which is #567's step and not this one. */
-  purchaseId     String
+  /** The collection the card belongs to — **always**, whether or not it came in a parcel (#725).
+   * A scan hangs off the collection because that is the level a card on the desk exists at; the
+   * purchase below is which parcel it arrived in, when it arrived in one at all. Every read scopes
+   * by this rather than reaching for a collection through the purchase. */
+  collectionId   String
+  /** The **purchase**, not one of its lots (#586), or **null** for a card scanned outside any
+   * order (#725) — a stockbook already owned, a gift, an inheritance. A card is scanned once and
+   * holds pieces belonging to any number of the parcel's lots; which lot a piece belongs to is not
+   * answerable until it has been identified, which is #567's step and not this one. */
+  purchaseId     String?
   /** The cut this sheet belongs to: a front sheet, an optional back sheet, and the tiles cut
-   * from them. A per-purchase sequence taken from `Purchase.nextScanBatchNo`. */
+   * from them. A per-purchase sequence taken from `Purchase.nextScanBatchNo` — or, for a card with
+   * no purchase, a per-collection one from `Collection.nextScanBatchNo` (#725). Two counters
+   * rather than one: renumbering every existing order's batches would move numbers already written
+   * on physical cards. */
   batchNo        Int
   /** An optional short name for the card (#587) — *Klaser Polska 1*, *Zestawy 3–5*. The number
    * stays primary: it is assigned rather than chosen and it is what makes a batch findable, so
@@ -2194,11 +2214,18 @@ model ScanSheet {
   purgedAt       DateTime?
   createdAt      DateTime @default(now())
 
-  purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  purchase   Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   frontTiles ScanTile[] @relation("ScanTileFrontSheet")
   backTiles  ScanTile[] @relation("ScanTileBackSheet")
 
+  // A purchase's batches are unique by side here; the **purchase-less** ones cannot be, Postgres
+  // treating nulls as distinct, so the migration adds a partial unique index on
+  // `(collectionId, batchNo, side) WHERE "purchaseId" IS NULL` that Prisma has no syntax for. Both
+  // are enforced in the database; neither is used as a `findUnique` key any more (#725).
   @@unique([purchaseId, batchNo, side])
+  @@index([collectionId])
+  @@index([collectionId, batchNo])
   @@index([purchaseId])
   @@map("scan_sheet")
 }
@@ -2216,10 +2243,14 @@ model ScanSheet {
 // reopen the editor on the previous cut rather than an empty canvas.
 model ScanTile {
   id           String   @id @default(cuid())
-  /** The **purchase** (#586). A tile is an unidentified image, and which lot it belongs to is
-   * exactly the question identification answers — `itemId` below is where that answer lands, via
-   * the copy's own lot. */
-  purchaseId   String
+  /** The collection, always — the level the card exists at (#725). Mirrors `ScanSheet` for the
+   * same reason: a tile with no purchase still belongs somewhere, and every read scopes by this. */
+  collectionId String
+  /** The **purchase** (#586), or **null** for a card scanned outside any order (#725). A tile is an
+   * unidentified image, and which lot it belongs to is exactly the question identification
+   * answers — `itemId` below is where that answer lands, via the copy's own lot. A purchase-less
+   * tile's copy has no lot at all, and therefore no cost basis: the piece was already owned. */
+  purchaseId   String?
   batchNo      Int
   /** Reading order within the batch: rows by top edge within a tolerance taken from the median box
    * height, each row left to right. Assigned at commit and stable afterwards. */
@@ -2250,7 +2281,8 @@ model ScanTile {
   note         String?
   createdAt    DateTime @default(now())
 
-  purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  purchase   Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   item       Item?      @relation(fields: [itemId], references: [id], onDelete: SetNull)
   /** `Restrict`: a sheet cannot be deleted out from under the tiles cut from it. */
   frontSheet ScanSheet? @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
@@ -2263,6 +2295,9 @@ model ScanTile {
 
   // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
   // express check constraints.
+  @@index([collectionId])
+  @@index([collectionId, batchNo])
+  @@index([collectionId, state])
   @@index([purchaseId])
   @@index([purchaseId, batchNo])
   @@index([purchaseId, state])
@@ -2324,9 +2359,11 @@ model ScanTileCandidate {
 // on the same TTL by the same pass.
 model ScanUpload {
   id             String   @id @default(cuid())
-  /** The order the finished scan belongs to — and, through it, the collection every chunk request
-   * is checked against. */
-  purchaseId     String
+  /** The collection every chunk request is checked against — carried directly rather than reached
+   * through the purchase, since a card scanned outside any order has none (#725). */
+  collectionId   String
+  /** The order the finished scan belongs to, or null for a purchase-less card (#725). */
+  purchaseId     String?
   /** Everything the finalize step will hand `uploadSheet`, captured at open time: a chunk request
    * carries bytes and an index and nothing else. */
   side           String
@@ -2351,8 +2388,10 @@ model ScanUpload {
    * take longer than the TTL to send. */
   updatedAt      DateTime @updatedAt
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  purchase   Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
 
+  @@index([collectionId])
   @@index([purchaseId])
   @@index([updatedAt])
   @@map("scan_upload")
