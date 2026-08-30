@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  type ButtonHTMLAttributes,
+  type ComponentPropsWithRef,
+  type ReactNode,
+} from "react";
 
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
@@ -270,11 +277,13 @@ const baseBtn: React.CSSProperties = {
   border: "1px solid transparent",
 };
 
+/** `ComponentPropsWithRef` rather than plain attributes so a `ref` reaches the button: a grid whose
+ *  Tab walk ends at Save (#726) has to be able to put focus on it. */
 export function DialogPrimaryButton({
   type = "submit",
   style,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ComponentPropsWithRef<"button">) {
   return (
     <button
       type={type}

@@ -210,6 +210,7 @@ function CatalogValuesGrid({
   const [error, setError] = useState<string | undefined>();
 
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+  const saveRef = useRef<HTMLButtonElement | null>(null);
 
   const isLocked = (row: OfferCatalogValueRow) =>
     row.rollup !== null && !unlocked.has(rowKey(row.copy));
@@ -297,13 +298,27 @@ function CatalogValuesGrid({
    * reverses, and at either end the browser takes over so focus can leave the grid the ordinary
    * way. **Enter** submits the dialog, which is its own way out (#634) — a form's default, stated
    * here only so the two keys are read together.
+   *
+   * Off the **last** cell Tab goes to Save rather than to Cancel (#726): the footer draws Cancel
+   * first, so the browser's own order ends a filled grid on the button that throws it away. The
+   * walk is the way a column is typed, and its last step is the one that commits it. Save carries
+   * no figure of its own to lose, so a Shift-Tab straight back is the whole undo. With nothing to
+   * write Save is disabled and cannot hold focus — then the browser's order stands, and Cancel is
+   * the honest next stop.
    */
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>, key: string) {
     if (e.key !== "Tab") return;
     const idx = navOrder.indexOf(key);
     if (idx === -1) return;
     const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
-    if (nextIdx < 0 || nextIdx >= navOrder.length) return;
+    if (nextIdx >= navOrder.length) {
+      const save = saveRef.current;
+      if (!save || save.disabled) return;
+      e.preventDefault();
+      save.focus();
+      return;
+    }
+    if (nextIdx < 0) return;
     const target = inputRefs.current.get(navOrder[nextIdx]);
     if (!target) return;
     e.preventDefault();
@@ -554,7 +569,11 @@ function CatalogValuesGrid({
         </DialogSecondaryButton>
         <div style={{ position: "relative" }}>
           <ErrorBubble>{error}</ErrorBubble>
-          <DialogPrimaryButton type="submit" disabled={isSaving || changed.length === 0}>
+          <DialogPrimaryButton
+            ref={saveRef}
+            type="submit"
+            disabled={isSaving || changed.length === 0}
+          >
             {isSaving
               ? "Saving…"
               : changed.length === 0

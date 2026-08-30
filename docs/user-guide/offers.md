@@ -841,8 +841,8 @@ posted; anywhere else it is simply a gap in those stamps' own records, and the c
 A big offer is a page of **+ CV** buttons, each opening a dialog and each closed again before the
 next. The heading therefore carries **+ CV all**, and it is the same dialog with the rows stacked:
 one line per stamp and condition, one figure each, and a single **Save** at the end. Work down the
-column with **Tab** — it skips straight from one figure to the next — and press **Enter** when you
-are done.
+column with **Tab** — it skips straight from one figure to the next, and off the last one it lands on
+**Save** rather than on Cancel — and press **Enter** when you are done.
 
 Each row is the stamp the way a list shows it: its **photo**, its catalogue chips, its name, and the
 issue and area underneath. You are reading this against a paper catalogue open at a page, and the
