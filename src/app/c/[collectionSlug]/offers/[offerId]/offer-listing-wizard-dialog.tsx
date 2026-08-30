@@ -283,11 +283,15 @@ export function OfferListingWizardDialog({
   };
 
   return (
+    // No fixed `height`: the panel is as tall as the step in it, and the shell's own viewport cap
+    // takes over only once a step is longer than the screen — a long item list scrolls inside the
+    // body, everything else sits at its natural size. The three steps are genuinely different
+    // heights, and a panel held at the viewport's height left the short ones as a field or two
+    // stranded at the top of an empty box.
     <DialogShell
       title={`Listing wizard — ${offer.name ?? offer.label}`}
       onClose={onClose}
       maxWidth="60rem"
-      height="calc(100vh - 6rem)"
     >
       {/* The rail. Every step is reachable from every other one, in both directions: the steps are an
           order to work in, not a sequence of locks, and a collector who has just priced an offer and
