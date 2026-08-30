@@ -1130,11 +1130,11 @@ export function InventoryListPanel({
                   <div
                     style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                   >
-                    {/* Where these copies are kept, and what they are kept for (#682). One dialog
-                        for both, and the only bar action that acts on the *whole* selection: the
-                        listing ones beside it can only speak for the copies that are for sale and
-                        in hand. */}
-                    <Tooltip content="Move the selected copies to a storage location, and turn any of their disposition flags on or off — all in one pass.">
+                    {/* Where these copies are kept, what they are kept for (#682) and what they
+                        are (#723). One dialog for all of it, and the only bar action that acts on
+                        the *whole* selection: the listing ones beside it can only speak for the
+                        copies that are for sale and in hand. */}
+                    <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, and restate their condition, certificate or format — all in one pass.">
                       <button
                         type="button"
                         onClick={() => setDialog({ kind: "bulkEdit", items: selectedCopies })}
@@ -1944,13 +1944,17 @@ export function InventoryListPanel({
         />
       )}
 
-      {/* Where the selection is kept, and what it is kept for (#682). The intake screen's own bulk
-          write (#121/#565) over an id list: one action for both screens, so a copy filed from here
-          and one filed while its purchase was being sorted are written the same way. */}
+      {/* Where the selection is kept, what it is kept for (#682) and what it is (#723). The intake
+          screen's own bulk write (#121/#565) over an id list: one action for both screens, so a copy
+          filed from here and one filed while its purchase was being sorted are written the same
+          way. */}
       {dialog.kind === "bulkEdit" && (
         <BulkEditCopiesDialog
           copies={dialog.items}
           locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          formats={formats}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}

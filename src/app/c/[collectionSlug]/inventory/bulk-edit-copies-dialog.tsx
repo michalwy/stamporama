@@ -10,6 +10,9 @@ import {
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
+import type { StampConditionData } from "@/lib/conditions";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { StampFormatData } from "@/lib/stamp-formats";
 import type { BulkCopyChanges } from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -27,6 +30,27 @@ const HINT_STYLE: React.CSSProperties = {
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
 };
+
+const SELECT_STYLE: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "0.3rem 0.5rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+};
+
+/** The three identity axes' *leave as is*, as a `<select>` value. `""` so the untouched state needs
+ * no sentinel of its own — an axis nobody has answered is a blank select. */
+const KEEP = "";
+
+/** The **null** value on the two axes that have one — *no certificate*, *single*. It is a value
+ * here, not the absence of an answer (ADR-0006 §2; ADR-0020), so it needs a key of its own next to
+ * {@link KEEP}, which is the absence. Never leaves this module: the submit maps it back to `null`. */
+const NONE = "__none__";
 
 /** What the location half of the dialog is doing. Three states, not two: *leave as is* is what
  * makes the two halves independent, and clearing a location is a different act from choosing none
@@ -74,13 +98,24 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
 };
 
 /**
- * Change **where a batch of copies is kept, and what it is kept for** (#682), from the Copies
- * list's own selection (#373).
+ * Change **where a batch of copies is kept, what it is kept for, and what it is** (#682/#723), from
+ * the Copies list's own selection (#373).
  *
- * One dialog rather than two bar buttons, because the bar already carries four controls and these
- * two changes are routinely the same act — a drawer of duplicates is filed away *and* flagged for
- * trade in one pass. Each half may be left alone, so the dialog is equally the *move* action and
- * the *re-flag* action; it refuses to submit only when neither half says anything.
+ * One dialog rather than a bar button per axis, because the bar already carries four controls and
+ * these changes are routinely the same act — a drawer of duplicates is filed away *and* flagged for
+ * trade in one pass; a batch relabelled to a better grade is the batch whose certificate has just
+ * come back. Every section may be left alone, so the dialog is equally the *move* action, the
+ * *re-flag* action and the *re-grade* action; it refuses to submit only when no section says
+ * anything.
+ *
+ * The identity axes (#723) are `<select>`s rather than the segmented controls above them for the
+ * ordinary reason: a segmented control states every answer at once, which is right for three
+ * choices and wrong for a collection's twenty grades. Two of them carry a **null value** — *No
+ * certificate* and *Single* — as an option beside the real ones rather than as a *Clear* mode of
+ * their own: null is a value on those axes (ADR-0006 §2; ADR-0020), so it belongs in the same list,
+ * and the mode picker the location needs exists only because "no location" and "leave the location
+ * alone" are genuinely two acts there. Condition has no such option at all: `Item.conditionId` is
+ * not nullable, so its only two states are *leave alone* and a grade.
  *
  * The **ref rides with the location**, exactly as it does when a purchase is stored (#565): it
  * names a card *inside* a location, so it is offered only while one is being chosen, and a move
@@ -94,6 +129,9 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
 export function BulkEditCopiesDialog({
   copies,
   locations,
+  conditions,
+  certificateStatuses,
+  formats,
   isPending,
   error,
   onClose,
@@ -101,6 +139,13 @@ export function BulkEditCopiesDialog({
 }: {
   copies: ItemListItem[];
   locations: LocationData[];
+  /** The collection's grades (#723). Empty hides the section — there is nothing to change to. */
+  conditions: StampConditionData[];
+  /** The collection's certificate statuses (#723). Most collections define none, and the section is
+   *  absent entirely there, exactly as the list's own certificate filter is (#428). */
+  certificateStatuses: CertificateStatusData[];
+  /** The collection's physical formats (#723). Absent when none are defined, as above (#343). */
+  formats: StampFormatData[];
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -110,6 +155,10 @@ export function BulkEditCopiesDialog({
   const [locationId, setLocationId] = useState("");
   const [locationRef, setLocationRef] = useState("");
   const [flagOps, setFlagOps] = useState<Record<DispositionFlag, FlagOp>>(NO_FLAG_CHANGES);
+  // The three identity axes, each holding KEEP, NONE (where it has one) or a dictionary id.
+  const [conditionChoice, setConditionChoice] = useState(KEEP);
+  const [certificateChoice, setCertificateChoice] = useState(KEEP);
+  const [formatChoice, setFormatChoice] = useState(KEEP);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   const count = copies.length;
@@ -123,7 +172,50 @@ export function BulkEditCopiesDialog({
 
   const changesLocation = locationMode !== "keep";
   const locationAnswered = locationMode === "clear" || (locationMode === "move" && !!locationId);
-  const canApply = !isPending && (locationAnswered || changedFlags.length > 0);
+  // How much of the selection each answered identity axis would leave exactly as it is — the same
+  // number the disposition rows carry, and for the same reason: it is what says whether an apply is
+  // a re-grade or a no-op over copies that already read that way.
+  const identityAxes = [
+    {
+      key: "condition" as const,
+      label: "Condition",
+      choice: conditionChoice,
+      setChoice: setConditionChoice,
+      // A grade is never "none", so the option list is the dictionary and nothing else.
+      options: conditions.map((c) => ({ value: c.id, label: c.name })),
+      unchanged: copies.filter((c) => c.conditionId === conditionChoice).length,
+      available: conditions.length > 0,
+    },
+    {
+      key: "certificate" as const,
+      label: "Certificate",
+      choice: certificateChoice,
+      setChoice: setCertificateChoice,
+      options: [
+        { value: NONE, label: "No certificate" },
+        ...certificateStatuses.map((c) => ({ value: c.id, label: c.name })),
+      ],
+      unchanged: copies.filter(
+        (c) => (c.certificateStatusId ?? NONE) === certificateChoice
+      ).length,
+      available: certificateStatuses.length > 0,
+    },
+    {
+      key: "format" as const,
+      label: "Format",
+      choice: formatChoice,
+      setChoice: setFormatChoice,
+      options: [
+        { value: NONE, label: "Single" },
+        ...formats.map((f) => ({ value: f.id, label: f.name })),
+      ],
+      unchanged: copies.filter((c) => (c.formatId ?? NONE) === formatChoice).length,
+      available: formats.length > 0,
+    },
+  ].filter((axis) => axis.available);
+  const changedIdentity = identityAxes.filter((axis) => axis.choice !== KEEP);
+  const canApply =
+    !isPending && (locationAnswered || changedFlags.length > 0 || changedIdentity.length > 0);
 
   return (
     <DialogShell title={`Bulk edit — ${copiesLabel}`} onClose={onClose} maxWidth="30rem">
@@ -143,6 +235,15 @@ export function BulkEditCopiesDialog({
           // One write per flag the collector answered, and nothing at all for the ones left alone —
           // which is what lets "for trade on, for sale off" be the single act it reads as.
           for (const { flag } of changedFlags) changes[flag] = flagOps[flag] === "on";
+          // The sentinel is mapped back at this boundary and never travels: the wire carries a real
+          // id or an empty field, and an empty field is the null value the axis has (#723).
+          if (conditionChoice !== KEEP) changes.conditionId = conditionChoice;
+          if (certificateChoice !== KEEP) {
+            changes.certificateStatusId = certificateChoice === NONE ? null : certificateChoice;
+          }
+          if (formatChoice !== KEEP) {
+            changes.formatId = formatChoice === NONE ? null : formatChoice;
+          }
           onSubmit(changes);
         }}
       >
@@ -270,6 +371,67 @@ export function BulkEditCopiesDialog({
                 one on while turning another off is one act, applied together.
               </p>
             </div>
+
+            {/* What the copies **are** (#723): the grade, the certificate and the physical format.
+                The correction a mixed batch usually needs — a drawer relabelled to a better grade,
+                a run of pairs recorded as singles — done once instead of copy by copy. */}
+            {identityAxes.length > 0 && (
+              <div>
+                <LabelWithError>Condition, certificate and format</LabelWithError>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {identityAxes.map((axis) => (
+                    <div
+                      key={axis.key}
+                      style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}
+                    >
+                      <label
+                        htmlFor={`bulk-edit-${axis.key}`}
+                        style={{
+                          width: "7.5rem",
+                          flexShrink: 0,
+                          fontSize: "0.8125rem",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {axis.label}
+                      </label>
+                      <select
+                        id={`bulk-edit-${axis.key}`}
+                        value={axis.choice}
+                        onChange={(e) => axis.setChoice(e.target.value)}
+                        disabled={isPending}
+                        style={SELECT_STYLE}
+                      >
+                        <option value={KEEP}>Leave as is</option>
+                        {axis.options.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      {axis.choice !== KEEP && (
+                        <span
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {axis.unchanged === count
+                            ? `all ${count === 1 ? "of it" : "of them"} already`
+                            : `${axis.unchanged} of ${count} already`}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p style={HINT_STYLE}>
+                  Applied to every selected copy, whatever it reads now — this is the correction of a
+                  batch that was recorded wrong, not a filter. Catalog values are looked up per
+                  condition, so a re-graded copy is valued against its new grade from here on.
+                </p>
+              </div>
+            )}
           </div>
         </DialogBody>
         <DialogActions

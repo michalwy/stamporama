@@ -453,6 +453,15 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
   // The disposition's own "leave as is" (#274): no flag fields are sent, and the mark-sorted
   // default of `inCollection` is suppressed.
   if (str(formData, "keepDisposition") === "true") changes.keepDisposition = true;
+  // The three identity axes (#723). Condition has no "none" — a copy is always in some grade — so
+  // an empty field is read as *no opinion* rather than as a value; the other two follow the
+  // location's rule, where present-but-empty is the null value (no certificate, single).
+  const conditionId = optionalStr(formData, "conditionId");
+  if (conditionId) changes.conditionId = conditionId;
+  if (formData.has("certificateStatusId")) {
+    changes.certificateStatusId = optionalStr(formData, "certificateStatusId");
+  }
+  if (formData.has("formatId")) changes.formatId = optionalStr(formData, "formatId");
   return changes;
 }
 

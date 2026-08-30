@@ -23,6 +23,15 @@ export interface BulkCopyChanges {
   markSorted?: boolean;
   /** Mark-sorted only (#274): leave each copy's disposition untouched instead of writing one. */
   keepDisposition?: boolean;
+  /** The grade the copies are re-stated to (#723). A copy is always in some condition, so this
+   * axis has no "none" — only *leave alone* (absent) and a value. */
+  conditionId?: string;
+  /** The certificate status written on the copies (#723). Present-but-`null` is *no certificate*,
+   * a value on this axis rather than the absence of an answer (ADR-0006 §2). */
+  certificateStatusId?: string | null;
+  /** The physical format written on the copies (#723). Present-but-`null` is *single*
+   * (ADR-0020). */
+  formatId?: string | null;
 }
 
 /** Serialize {@link BulkCopyChanges} onto a form, for both the id-list and scoped bulk actions.
@@ -36,4 +45,12 @@ export function appendBulkChanges(fd: FormData, changes: BulkCopyChanges): void 
   if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
   if (changes.markSorted) fd.set("markSorted", "true");
   if (changes.keepDisposition) fd.set("keepDisposition", "true");
+  if (changes.conditionId) fd.set("conditionId", changes.conditionId);
+  // The two nullable axes travel the way the location does: a field that is **there and empty** is
+  // the "none" value (no certificate, single), and one that is absent leaves the axis alone. A
+  // sentinel string would have needed decoding on the far side and could collide with an id.
+  if (changes.certificateStatusId !== undefined) {
+    fd.set("certificateStatusId", changes.certificateStatusId ?? "");
+  }
+  if (changes.formatId !== undefined) fd.set("formatId", changes.formatId ?? "");
 }

@@ -967,6 +967,61 @@ export interface LotBulkChanges {
    * `delivered` transition still apply — this is the disposition's "leave as is", mirroring
    * the one the location picker already offers. Ignored when any flag is given. */
   keepDisposition?: boolean;
+  /**
+   * The grade every targeted copy is re-stated to (#723). No null: a copy is always in some
+   * condition (`Item.conditionId` is not nullable), so this axis has a *leave alone* and a value,
+   * and never a third "none".
+   */
+  conditionId?: string;
+  /** The certificate status written on the copies (#723). Present-but-`null` is *no certificate* —
+   * a value on this axis rather than the absence of an answer (ADR-0006 §2), which is exactly why
+   * it is `null` and not `undefined`: absent still means leave it alone. */
+  certificateStatusId?: string | null;
+  /** The physical format written on the copies (#723). Present-but-`null` is *single* (ADR-0020),
+   * the same distinction the certificate above draws. */
+  formatId?: string | null;
+}
+
+/** The three identity axes a bulk change can re-state (#723), as a group: they are validated
+ * together, written together, and are together the reason a bulk change can be more than a filing.
+ * True when `changes` names any of them. */
+function hasVariantChange(changes: LotBulkChanges): boolean {
+  return (
+    changes.conditionId !== undefined ||
+    changes.certificateStatusId !== undefined ||
+    changes.formatId !== undefined
+  );
+}
+
+/** Every dictionary row a bulk change names has to belong to the collection being written (#723).
+ * Unlike a location this is not about what the row *can* hold — the axes are plain lookups — but a
+ * foreign id would file the copies against another collection's grade, which no read would ever
+ * show back. Mirrors the copy form's own assertions (`items.ts`). */
+async function assertVariantDictionaries(
+  collectionId: string,
+  changes: LotBulkChanges
+): Promise<void> {
+  if (changes.conditionId) {
+    const condition = await prisma.stampCondition.findFirst({
+      where: { id: changes.conditionId, collectionId },
+      select: { id: true },
+    });
+    if (!condition) throw new Error("Condition not found in this collection.");
+  }
+  if (changes.certificateStatusId) {
+    const cert = await prisma.certificateStatus.findFirst({
+      where: { id: changes.certificateStatusId, collectionId },
+      select: { id: true },
+    });
+    if (!cert) throw new Error("Certificate status not found in this collection.");
+  }
+  if (changes.formatId) {
+    const format = await prisma.stampFormat.findFirst({
+      where: { id: changes.formatId, collectionId },
+      select: { id: true },
+    });
+    if (!format) throw new Error("Format not found in this collection.");
+  }
 }
 
 /** A ref addresses a place *inside* a location, so one arriving without a location to sit in is a
@@ -987,7 +1042,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
     changes.locationId === undefined &&
     !changes.deliveryState &&
     !hasDisposition &&
-    !changes.markSorted
+    !changes.markSorted &&
+    !hasVariantChange(changes)
   );
 }
 
@@ -1031,6 +1087,23 @@ async function applyLotBulkChanges(
                 : {}),
             }
           : { locationId: null, locationRef: null },
+      });
+    }
+    if (hasVariantChange(changes)) {
+      // The three identity axes in **one** write (#723): they are the same act — a batch relabelled
+      // as a better grade is routinely the batch whose certificate has just come back — and a
+      // separate `updateMany` each would be three passes over the same rows for one decision.
+      // A `null` here is a value (no certificate, single), which is why presence and not
+      // truthiness decides what is written.
+      await tx.item.updateMany({
+        where: baseWhere,
+        data: {
+          ...(changes.conditionId ? { conditionId: changes.conditionId } : {}),
+          ...(changes.certificateStatusId !== undefined
+            ? { certificateStatusId: changes.certificateStatusId }
+            : {}),
+          ...(changes.formatId !== undefined ? { formatId: changes.formatId } : {}),
+        },
       });
     }
     if (changes.deliveryState) {
@@ -1105,7 +1178,9 @@ function movesToDelivered(changes: LotBulkChanges): boolean {
  *    after `deliveryState`, so an explicit flag always wins);
  *  - `markSorted` → move to `delivered` + `inCollection` (or the given flags, or nothing at
  *    all with `keepDisposition`), but only from a not-yet-sorted state (already-sorted /
- *    damaged / not-delivered copies are left untouched).
+ *    damaged / not-delivered copies are left untouched);
+ *  - `conditionId` / `certificateStatusId` / `formatId` defined → re-state that identity axis on
+ *    every targeted copy (#723); `null` on the latter two is *no certificate* / *single*.
  * Returns the number of targeted copies. One transaction. For whole-lot/issue bulk actions
  * over a set too large to enumerate client-side, use {@link bulkUpdateLotItemsScoped}. */
 export async function bulkUpdateLotItems(
@@ -1135,6 +1210,7 @@ export async function bulkUpdateLotItems(
   const collectionId = [...collectionIds][0];
 
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
+  await assertVariantDictionaries(collectionId, changes);
 
   const delivered = await applyLotBulkChanges({ id: { in: ids } }, changes);
   return { count: ids.length, delivered };
@@ -1348,6 +1424,7 @@ export async function bulkUpdateLotItemsScoped(
   assertRefHasLocation(changes);
   if (isNoopBulk(changes)) return { count: 0, delivered: [] };
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
+  await assertVariantDictionaries(collectionId, changes);
 
   const where = await resolveLotBulkScope(collectionId, scope);
   const count = await prisma.item.count({ where });

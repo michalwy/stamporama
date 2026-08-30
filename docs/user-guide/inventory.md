@@ -384,6 +384,21 @@ value, storage, and any [photos](#photos)), but is **read-only** — it's for lo
 editing. Close it to return to the list exactly where you were; nothing navigates away.
 To edit or delete existing copies, use the **Inventory** screen.
 
+A row of **filters** sits above the copies, the same controls the Copies screen's own toolbar
+carries, for the stamps you hold many of:
+
+- **In collection**, **For sale**, **For trade** — click a chip to keep only the copies carrying
+  that flag. They combine: with both *For sale* and *For trade* on you get the copies that are
+  both.
+- **Condition**, **Delivery state**, **Format** and **Certificate** each open a checkbox list and
+  take several values at once ("the mint grades", "everything still on its way"). Ticking nothing
+  is no filter at all. **Single** and **No certificate** are tickable values like any other, since
+  a copy with no format or no certificate is a real answer rather than a missing one.
+- **Format** and **Certificate** appear only once your collection defines some.
+
+The filters are the popup's own: they are not remembered, so the next stamp's popup opens showing
+everything again.
+
 ## Adding a copy from the catalog
 
 You can record a new copy without leaving the Stamps or Issues list. Alongside
@@ -829,13 +844,15 @@ Press **Done** (or the button at the top again) to leave. Two things to know:
 
 ## Bulk editing the selection
 
-**Bulk edit…** in the selection bar changes **where the picked copies are kept** and **what they are
-kept for**, in one dialog. It is the fast way to re-organise physical storage after a re-shuffle, or
-to re-flag a batch you have just decided something about ("all of these are for trade now").
+**Bulk edit…** in the selection bar changes **where the picked copies are kept**, **what they are
+kept for** and **what they are**, in one dialog. It is the fast way to re-organise physical storage
+after a re-shuffle, to re-flag a batch you have just decided something about ("all of these are for
+trade now"), or to correct a batch that was recorded wrong ("these are all mint, not used").
 
-Both halves are optional and both start on **Leave as is**, so the dialog is equally the *move*
-action and the *re-flag* action. Nothing you leave alone is written at all — every copy keeps
-everything the dialog does not name. **Apply** stays greyed out until you have said something.
+Every section is optional and every one starts on **Leave as is**, so the dialog is equally the
+*move* action, the *re-flag* action and the *re-grade* action. Nothing you leave alone is written at
+all — every copy keeps everything the dialog does not name. **Apply** stays greyed out until you
+have said something.
 
 **Storage location** has three settings:
 
@@ -855,6 +872,22 @@ for trade at once), so answer as many as your change needs: moving a drawer from
 *For trade → On* **and** *For sale → Off*, set together and applied in one go. Every flag left on
 *Leave as is* is not written at all, so a mixed selection keeps whatever those flags said. Beside
 each flag you answer, the dialog says how many of the picked copies are already like that.
+
+**Condition, certificate and format** is the third section: one dropdown each, every one starting on
+**Leave as is**. Pick a value and it is written on **every** picked copy, whatever that copy reads
+now — this is the correction of a batch recorded wrong, not a filter. As with the flags above, the
+line beside each dropdown says how many of the picked copies already read that way, so you can see
+whether you are about to change anything.
+
+- **Condition** offers your collection's grades. There is no "none": a copy is always in some
+  condition. Catalog values are looked up per condition, so a re-graded copy is valued against its
+  new grade from then on.
+- **Certificate** offers **No certificate** alongside your collection's statuses — picking it takes
+  the certificate off the copies.
+- **Format** offers **Single** alongside your collection's formats — picking it records the copies
+  as ordinary singles rather than pairs or blocks.
+
+The certificate and format rows appear only once your collection defines some.
 
 Applying acts on every ticked copy, clears the selection (what has been dealt with should not invite
 doing it twice) and confirms with a toast — worth having on this list, where a moved or re-flagged
