@@ -131,6 +131,11 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // free one — and the domain drops it entirely unless the platform's default type is `auction`,
     // the field being hidden there.
     defaultStartingPrice: isPlatform ? str(formData, "defaultStartingPrice") || null : null,
+    // The platform's floor (#731), in its own currency. Same platform-only handling; blank
+    // normalises to null — no floor rather than a zero one — and unlike the figure above it is kept
+    // whatever the default listing type says, since it applies to any price the offer asks. Accepts
+    // either decimal separator (#233), like every other amount typed into this form.
+    minimumPrice: isPlatform ? normalizeDecimalInput(str(formData, "minimumPrice")) || null : null,
     // How a new offer on this platform is sold by default (#449) — which is also what decides whether
     // the figure above means anything. Blank is "no preference", which is not the same claim as
     // "quick buy" even though both behave that way.

@@ -76,6 +76,21 @@ is exactly what those two suggestions already answer.
 Both are read when the offer is created and never afterwards, so what they filled in stays yours to
 edit on the offer, and changing either here leaves offers already created untouched.
 
+Ticking **Platform** also reveals a **Minimum price** — the lowest figure worth listing on this
+platform once its own fees are paid, in the platform's currency. Unlike the starting price above it,
+it applies whatever the listing type is, and it applies for the whole life of an offer rather than
+only at creation.
+
+It fills in nothing by itself. It is a figure you ask back for: **Use minimum** appears beside the
+price on an offer's own screen and in the [listing wizard](offers.md#the-listing-wizard)'s price
+step, and sets the price to it in one click. Nothing is ever refused for being under it either —
+this is a floor you choose to drop to, not one the app holds you to, because clearing a lot at cost
+or giving something away is an ordinary thing to do.
+
+It is shown even when the suggested price above it is already higher, since a cheap common you mean
+to list at the floor is exactly what it was added for. Leave it empty for platforms with no such
+figure.
+
 Ticking **Seller** or **Auction house** reveals **Auction sale defaults** — the **currency**,
 **shipping**, and the two **buyer's premium** parts (a percentage and a per-lot fee) this seller
 normally trades on. They are **copied onto every new [auction sale](auctions.md)** with this seller

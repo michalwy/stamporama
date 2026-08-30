@@ -472,7 +472,36 @@ export function OfferListingWizardDialog({
                   )}
                 </div>
               )}
-              {!offer.suggestedPrice && !platformDefault && (
+              {/* The platform's floor (#731), last because it is the weakest claim of the three: the
+                  catalog value says what the goods are worth and the opening figure what this house
+                  does, while this says only what the platform's own fees make worth posting. Offered
+                  whether or not the figures above it already clear it — dropping deliberately to the
+                  floor on a cheap common is the case it was written for — and never as the default,
+                  which is what its own wording and its place at the bottom say. */}
+              {offer.platformMinimumPrice && (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <Tooltip
+                    content={`The lowest ${offer.platformName} is worth listing on, set on the platform`}
+                    align="start"
+                  >
+                    <span style={MUTED}>
+                      <Icon name="suggestion" size="sm" /> minimum {offer.platformMinimumPrice}{" "}
+                      {offer.currency}
+                    </span>
+                  </Tooltip>
+                  {draft !== offer.platformMinimumPrice && (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => takeSuggestion(offer.platformMinimumPrice!)}
+                      style={USE_BTN}
+                    >
+                      Use minimum
+                    </button>
+                  )}
+                </div>
+              )}
+              {!offer.suggestedPrice && !platformDefault && !offer.platformMinimumPrice && (
                 <p style={{ ...MUTED, margin: 0 }}>
                   Nothing here carries a catalog value, so there is no figure to suggest. The items
                   step is where those are entered.

@@ -122,6 +122,19 @@ const ASSISTANT_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** The quick-apply chip beside a figure the app is offering back — the catalog-value suggestion and
+ * the platform's floor (#731). One shape, because they are one control asked twice. */
+const USE_BTN: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-accent)",
+  color: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+  cursor: "pointer",
+};
+
 const QUICK_ADVANCE_BTN: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -327,6 +340,17 @@ export function OfferDetailPanel({
   // names that field instead.
   const blockedOnPrice = advanceTo !== null && !pricedForAdvance && offer.sets.length > 0;
   const missingPriceLabel = isAuctionListing(offer.listingType) ? "a starting price" : "a price";
+  // The figure the seller **states**, and the column that holds it — the same rule the listing
+  // wizard's price step follows. On a quick buy that is the asking price; on an auction it is the
+  // opening one, the price beside it being wherever the bidding has got to (#449). What the
+  // platform's floor (#731) is applied to, and compared against to decide whether applying it would
+  // change anything.
+  const askingPriceField = isAuctionListing(offer.listingType) ? "startingPrice" : "price";
+  const askingPrice = isAuctionListing(offer.listingType)
+    ? offer.startingPrice
+    : offer.price === "0.00"
+      ? null
+      : offer.price;
   // Going live is a publication (#399): the platform hands back a listing URL and this is the moment
   // it is in the clipboard, so activating asks for it exactly as the bulk listing workspace does
   // (#322) — but only while the offer carries none. One that already has a URL has nothing to hand
@@ -927,18 +951,41 @@ export function OfferDetailPanel({
                     type="button"
                     disabled={isPending}
                     onClick={() => patch("price", offer.suggestedPrice!)}
-                    style={{
-                      fontSize: "0.6875rem",
-                      fontWeight: 600,
-                      padding: "0.0625rem 0.375rem",
-                      borderRadius: "0.375rem",
-                      border: "1px solid var(--color-accent)",
-                      color: "var(--color-accent)",
-                      background: "var(--color-accent-soft)",
-                      cursor: "pointer",
-                    }}
+                    style={USE_BTN}
                   >
                     Use
+                  </button>
+                )}
+              </span>
+            )}
+            {/* The platform's floor (#731), under the suggestion because that is its standing: the
+                catalog value says what these stamps are worth, this says only what the platform's
+                fees make worth posting. It is shown whether or not the suggestion above already
+                clears it — a floor you are choosing to drop to is exactly the case it exists for —
+                but never *as* the recommendation, which is why it sits last and reads "minimum".
+
+                It writes the figure the seller **states**: the asking price on a quick buy, the
+                starting price on an auction, where the price above is wherever the bidding has got
+                to and is not the collector's to floor. */}
+            {editable && offer.platformMinimumPrice && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <Tooltip
+                  content={`The lowest ${offer.platformName} is worth listing on, set on the platform`}
+                  align="end"
+                >
+                  <span>
+                    <Icon name="suggestion" size="sm" /> minimum {offer.platformMinimumPrice}{" "}
+                    {offer.currency}
+                  </span>
+                </Tooltip>
+                {askingPrice !== offer.platformMinimumPrice && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => patch(askingPriceField, offer.platformMinimumPrice!)}
+                    style={USE_BTN}
+                  >
+                    Use minimum
                   </button>
                 )}
               </span>

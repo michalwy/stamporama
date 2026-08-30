@@ -115,6 +115,13 @@ export interface ContactData extends ContactRoles {
    * never seeded onto anything. Kept only while {@link defaultListingType} is
    * `auction`; a quick buy has no such figure. Only meaningful for the `platform` role. */
   defaultStartingPrice: string | null;
+  /** The floor this platform lists at (#731), a 2-dp string in the platform's own currency, or null
+   * when it states none — the normal case. **Advisory only**: nothing seeds it onto an offer, nothing
+   * clamps a price to it, and no gate refuses a price under it. It is offered back beside the price
+   * on the offer's screen and in the listing wizard's price step, one button away. Unlike
+   * {@link defaultStartingPrice} it is kept whatever {@link defaultListingType} says — a floor is a
+   * floor on whatever figure the seller states. Only meaningful for the `platform` role. */
+  minimumPrice: string | null;
   /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when
    * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
    * {@link defaultStartingPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
@@ -179,6 +186,7 @@ const CONTACT_SELECT = {
   descriptionFormat: true,
   titleLanguage: true,
   defaultStartingPrice: true,
+  minimumPrice: true,
   defaultListingType: true,
   maxPhotos: true,
   maxPhotoEdge: true,
@@ -203,12 +211,17 @@ const CONTACT_SELECT = {
  * {@link ContactData} except that the seller defaults are still `Decimal`s. */
 type ContactRow = Omit<
   ContactData,
-  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed" | "defaultStartingPrice"
+  | "defaultShippingCost"
+  | "buyerPremiumPercent"
+  | "buyerPremiumFixed"
+  | "defaultStartingPrice"
+  | "minimumPrice"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
   defaultStartingPrice: Decimal | null;
+  minimumPrice: Decimal | null;
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
@@ -220,6 +233,7 @@ function toContactData(row: ContactRow): ContactData {
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
     defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
+    minimumPrice: row.minimumPrice?.toFixed(2) ?? null,
   };
 }
 
@@ -298,6 +312,10 @@ export interface ContactCreateInput {
    * unparseable amount stores null — a platform with no default, not a free one — and so does any
    * value sent while `defaultListingType` is not `auction`. */
   defaultStartingPrice?: string | null;
+  /** The floor this platform lists at (#731), or null when it states none. A blank or unparseable
+   * amount stores null. Unlike {@link defaultStartingPrice} it survives whatever
+   * `defaultListingType` says: it is a floor on any figure the seller states, not an opening one. */
+  minimumPrice?: string | null;
   /** How a new offer on this platform is sold by default (#449), or null for "no preference". An
    * unknown value stores null rather than being coerced: a preference nobody stated is exactly what
    * null means, and it reads as `fixed` wherever it is used. */
@@ -510,6 +528,9 @@ export async function createContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         ...platformListingDefaults(data),
+        // The platform's floor (#731). Written on its own rather than through the helper above,
+        // because it is the one per-listing figure that does not depend on the listing type.
+        minimumPrice: amount(data.minimumPrice),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,
@@ -563,6 +584,9 @@ export async function updateContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         ...platformListingDefaults(data),
+        // The platform's floor (#731). Written on its own rather than through the helper above,
+        // because it is the one per-listing figure that does not depend on the listing type.
+        minimumPrice: amount(data.minimumPrice),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,

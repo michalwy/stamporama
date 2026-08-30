@@ -173,6 +173,14 @@ Next to the asking price the header shows a **suggested price** — the **averag
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
 **Use** applies it as the asking price in one click. It's a starting point; price as you see fit.
 
+Under it, where the platform has a [minimum price](contacts.md) set, sits that floor — the lowest
+figure that platform is worth listing on once its fees are paid. **Use minimum** applies it in one
+click, to the asking price on a quick buy and to the **starting** price on an auction, since that is
+the figure you state while the price above it is wherever the bidding has got to. It reads *minimum*
+rather than *suggested* on purpose: it is the price you fall back to, not the one being recommended,
+so it appears below the suggestion and stays available even when the suggestion is already higher.
+Nothing is ever refused for being under it.
+
 When the offer's currency differs from your collection's base currency, the asking price also shows
 a base-currency equivalent (**≈ 200 PLN**) — on both the offer list and its detail — converted at
 the **current** exchange rate, so you can compare offers across platforms at a glance.
@@ -1034,7 +1042,11 @@ the two disagree.
 
 **2 · Price.** The offer's asking price — an auction's **starting price** — in one field, with what
 can be suggested for it beneath: the average catalog value per set, and, on an auction that still has
-none, the platform's own opening figure. **Use** takes either. Under that, every item with a link to
+none, the platform's own opening figure. **Use** takes either. Last of the three, where the platform
+has one, comes its [minimum price](contacts.md) — what that marketplace is worth listing on at all —
+which **Use minimum** applies. It sits at the bottom because it is the weakest of the three claims:
+the catalog value says what the stamps are worth, the opening figure what that house does, the floor
+only what the platform costs to post on. Under that, every item with a link to
 what that stamp *in that grade* is being asked for on the platform right now, so a figure is checked
 against the market rather than guessed at. Typing a price here is the same edit as typing it on the
 screen behind.

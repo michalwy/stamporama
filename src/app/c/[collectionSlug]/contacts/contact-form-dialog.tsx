@@ -598,6 +598,31 @@ export function ContactFormDialog({
                   )}
                 </div>
 
+                {/* The floor this platform lists at (#731) — a row of its own, below the pair above,
+                    because it answers a different question. Those two describe how a *new* offer
+                    starts and are read once at creation; this one is a standing fact about the
+                    platform, asked back by hand every time a price is set, on an offer of any age.
+                    It is therefore not gated on the listing type the way the starting price is: a
+                    floor is a floor on whatever figure the seller states. */}
+                <div style={FIELD_GAP}>
+                  <LabelWithError htmlFor="contact-minimum-price">
+                    Minimum price (optional)
+                  </LabelWithError>
+                  <NumericInput
+                    id="contact-minimum-price"
+                    name="minimumPrice"
+                    defaultValue={contact?.minimumPrice ?? ""}
+                    placeholder="—"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    In the platform&apos;s currency — the lowest figure worth listing here once its
+                    fees are paid. It fills nothing on its own: a <strong>Use minimum</strong> button
+                    beside an offer&apos;s price applies it when you want it.
+                  </p>
+                </div>
+
                 {/* Listing templates (#210, #266, #267): what this platform's offer title, description
                     and private note are generated from. Kept in a dedicated dialog so the contact form
                     stays a contact form; carried on submit via hidden fields. */}

@@ -1,0 +1,21 @@
+-- The floor a platform lists at (#731).
+--
+-- A marketplace's own fees make listings below some figure not worth posting — 2 zł on Colnect is the
+-- case this was written for — and that figure is a property of the platform, stated once, not of each
+-- offer. It sits beside the platform's other per-listing defaults on the same contact row
+-- (`defaultStartingPrice` #362/#553, the title/description templates #210/#266, the photo and text
+-- limits #308/#403).
+--
+-- Nullable, and null on every existing row: no floor is the normal case, and inventing one for
+-- platforms nobody has answered for would put a number in front of the collector that nobody chose.
+--
+-- No currency column beside it, following `defaultStartingPrice`: the platform's `platformCurrency`
+-- (#196) is the one currency everything on it is denominated in, and a second one here could only
+-- disagree with it.
+--
+-- Not tied to `defaultListingType` the way `defaultStartingPrice` is (which the writers clear off a
+-- quick-buy platform): a floor is a floor on whatever figure the seller states, so it is kept and
+-- offered on both listing types.
+--
+-- DECIMAL(10, 2) like every other money column here.
+ALTER TABLE "contact" ADD COLUMN "minimumPrice" DECIMAL(10,2);

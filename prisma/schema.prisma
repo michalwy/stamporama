@@ -4160,6 +4160,21 @@ model Contact {
   // what the two suggestions above already answer, so a flat default there only ever said "5" about
   // stamps nobody had looked at. Not seeded onto anything: read at creation, then owned by the offer.
   defaultStartingPrice Decimal? @db.Decimal(10, 2)
+  // The floor this platform lists at (#731), in its own `platformCurrency` — "never below 2 zł on
+  // Colnect", the figure a marketplace's own fees make the cheapest listing worth posting. Unlike
+  // `defaultStartingPrice` it is **not** tied to `defaultListingType`: a floor is a floor on whatever
+  // figure the seller states, so it is offered on a quick buy's asking price and on an auction's
+  // starting price alike.
+  //
+  // It is **advisory, and never applied on its own**. Nothing seeds it, nothing clamps to it, and no
+  // gate refuses a price under it: the collector asks it back with one button beside the price, on
+  // the offer's screen and in the listing wizard's price step (#730). A floor that wrote itself into
+  // offers would be indistinguishable from a considered price the moment it had, and the whole point
+  // of a floor is that it is the price you fall back to, not the one you meant.
+  //
+  // No currency column of its own, for #553's reason: the platform already locks one (#196), and a
+  // second one could only ever disagree with it. Nullable — no floor is the normal case.
+  minimumPrice Decimal? @db.Decimal(10, 2)
   // How a new offer on this platform is sold by default (#449): `fixed` | `auction`. Read at
   // creation exactly as `defaultOfferPrice` is and then owned by the offer, which is what makes a
   // platform one only ever auctions on cost nothing per listing. Nullable — null is "no preference",
