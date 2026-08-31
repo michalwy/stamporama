@@ -7,6 +7,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
 import { createItem, getCollectionIntakePage } from "../../src/lib/items";
+import { getPhotoForServing } from "../../src/lib/photos";
 import { createLot } from "../../src/lib/lots";
 import { createPurchase } from "../../src/lib/purchases";
 import {
@@ -37,6 +38,8 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     `ordered`: nothing was bought and nothing is in transit;
 //   - the assign path widens to the **collection**, which is the same rule the order's version
 //     states one level up;
+//   - a tile's crops **serve**: the photo route resolved a tile's collection through its purchase,
+//     which is null here, so every tile on the screen drew a broken image;
 //   - and the ownership check still runs, now against the collection rather than through a
 //     purchase that may not exist.
 
@@ -177,6 +180,22 @@ describe("scanning into the collection, with no purchase (#725)", () => {
       tiles.every((t) => t.purchaseId === null && t.collectionId === collectionId),
       "the tiles inherit the sheet's owner, purchase and all"
     );
+  });
+
+  it("serves a tile's crops, which have no purchase to be reached through", async () => {
+    // The photo route resolves a polymorphic owner, and a tile used to reach its collection one hop
+    // further out — through its purchase (#586). With no purchase that hop returns null and the
+    // route answers 404, so the strip drew every tile as a broken image.
+    const { tileIds } = await cardWithTiles();
+    const photo = await prisma.photo.findFirstOrThrow({
+      where: { tileId: tileIds[0] },
+      select: { id: true },
+    });
+
+    const served = await getPhotoForServing(photo.id);
+    assert.ok(served, "a tile's crop resolves without a purchase behind it");
+    assert.equal(served.collectionId, collectionId);
+    assert.equal(served.ownerId, userId);
   });
 
   it("keeps the collection's batch numbers apart from an order's", async () => {

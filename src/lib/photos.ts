@@ -754,20 +754,15 @@ export async function getPhotoForServing(photoId: string): Promise<{
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       offer: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
-      // A tile reaches its collection one hop further out — through its purchase — because a tile
-      // belongs to the parcel it was scanned from (#586) rather than to the collection directly.
-      // Flattened here so every owner answers the same two questions.
-      tile: {
-        select: {
-          purchase: {
-            select: { collectionId: true, collection: { select: { ownerId: true } } },
-          },
-        },
-      },
+      // A tile carries its own `collectionId` since #725, so it answers the same two questions
+      // directly. It used to reach them **through its purchase** (#586) — which returned null the
+      // moment a card was scanned outside an order, so every tile on the collection's own Card
+      // scans screen served a 404 and the strip drew broken images.
+      tile: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
     },
   });
   if (!photo) return null;
-  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile?.purchase;
+  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile;
   if (!owner) return null;
   return {
     collectionId: owner.collectionId,
