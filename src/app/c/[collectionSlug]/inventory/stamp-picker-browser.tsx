@@ -15,12 +15,17 @@ import type {
   IssueChecklistSummary,
   StampNodeData,
 } from "@/lib/issues";
-import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
+import {
+  createIssueAction,
+  addStampToIssueAction,
+  addVariantRangeAction,
+} from "@/app/actions/issues";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -51,10 +56,12 @@ import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
- * area, or a new stamp / variant (parent set) in an issue. */
+ * area, a new stamp / variant (parent set) in an issue, or a whole lettered run of variants
+ * under one base stamp (#722). */
 type CreateState =
   | { kind: "issue"; areaId: string | null }
-  | { kind: "stamp"; issue: IssueListItem; parent?: StampNodeData };
+  | { kind: "stamp"; issue: IssueListItem; parent?: StampNodeData }
+  | { kind: "variant-range"; issue: IssueListItem; parent: StampNodeData };
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -171,7 +178,7 @@ export function StampPickerBrowser({
   // Only for the inline create dialogs' catalog-number labels: an issue may override its area's
   // prefix (#377), and the input a number is typed into should be labelled with the prefix that
   // number will carry. The list below resolves its own for the rows it renders.
-  const { vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  const { vendorMapFor, primaryVendorByArea } = useAreaVendorMaps(areas, collectionId);
 
   // Selecting a parent area brings its descendants' issues with it, unless the collector has
   // narrowed the scope to the node alone (#385) — the toggle is in the sidebar rendered below.
@@ -294,6 +301,22 @@ export function StampPickerBrowser({
     });
   }
 
+  function handleCreateVariantRange(issueId: string, parentStampId: string, fd: FormData) {
+    startTransition(async () => {
+      const result = await addVariantRangeAction(collectionId, issueId, parentStampId, fd);
+      if (result.status === "success") {
+        // Same as the single create above (#182): the run joins the issue's tree and the collector
+        // picks from it themselves — a range is added *so that* the right variant can be chosen,
+        // and which of the six that is, is the question the picker was opened to answer.
+        setCreate(null);
+        setCreateError(undefined);
+        invalidatePickerData(collectionId);
+      } else if (result.status === "error") {
+        setCreateError(result.message);
+      }
+    });
+  }
+
   // The parent item-form dialog panel uses `transform` for centering, which makes
   // it the containing block for `position: fixed` descendants — so an un-portaled
   // popup gets clipped to that dialog's box. Portal to <body> to escape it. The
@@ -359,6 +382,9 @@ export function StampPickerBrowser({
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
               onNewVariant={(issue, parent) => openCreate({ kind: "stamp", issue, parent })}
+              onNewVariantRange={(issue, parent) =>
+                openCreate({ kind: "variant-range", issue, parent })
+              }
             />
           </div>
         </div>
@@ -418,6 +444,32 @@ export function StampPickerBrowser({
                 />
               );
             })()}
+
+          {create.kind === "variant-range" &&
+            (() => {
+              const { issue, parent } = create;
+              return (
+                <AddVariantRangeDialog
+                  aside={aside}
+                  asideWidth={asideWidth}
+                  collectionId={collectionId}
+                  issueId={issue.id}
+                  issueName={issueLabel(issue.name, issue.year)}
+                  areaId={issue.collectionAreaId}
+                  parent={{
+                    stampId: parent.stampId,
+                    name: parent.name,
+                    catalogNumbers: parent.catalogNumbers,
+                  }}
+                  vendors={[...vendorMapFor(issue.collectionAreaId, issue.id).values()]}
+                  primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
+                  isPending={isPending}
+                  error={createError}
+                  onClose={closeCreate}
+                  onSubmit={(fd) => handleCreateVariantRange(issue.id, parent.stampId, fd)}
+                />
+              );
+            })()}
         </div>
       )}
     </>,
@@ -444,6 +496,7 @@ function IssueBrowser({
   onNewIssue,
   onNewStamp,
   onNewVariant,
+  onNewVariantRange,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
@@ -468,6 +521,7 @@ function IssueBrowser({
   onNewIssue: (areaId: string | null) => void;
   onNewStamp: (issue: IssueListItem) => void;
   onNewVariant: (issue: IssueListItem, parent: StampNodeData) => void;
+  onNewVariantRange: (issue: IssueListItem, parent: StampNodeData) => void;
 }) {
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 
@@ -566,6 +620,7 @@ function IssueBrowser({
               }
               onNewStamp={() => onNewStamp(issue)}
               onNewVariant={(parent) => onNewVariant(issue, parent)}
+              onNewVariantRange={(parent) => onNewVariantRange(issue, parent)}
             />
           ))}
           <InfiniteScrollSentinel
@@ -596,6 +651,7 @@ function PickIssueRow({
   marked,
   onNewStamp,
   onNewVariant,
+  onNewVariantRange,
 }: {
   collectionId: string;
   issue: IssueListItem;
@@ -618,6 +674,7 @@ function PickIssueRow({
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewStamp: () => void;
   onNewVariant: (parent: StampNodeData) => void;
+  onNewVariantRange: (parent: StampNodeData) => void;
 }) {
   const [userExpanded, setUserExpanded] = useState(defaultExpanded);
   const [hovered, setHovered] = useState(false);
@@ -861,6 +918,12 @@ function PickIssueRow({
                 onNewVariant={(parentStampId) => {
                   const parent = members.find((m) => m.stampId === parentStampId);
                   if (parent) onNewVariant(parent);
+                }}
+                // The range dialog numbers the run off the base stamp's own number in the area's
+                // primary catalogue, so it takes the node for the same reason.
+                onNewVariantRange={(parentStampId) => {
+                  const parent = members.find((m) => m.stampId === parentStampId);
+                  if (parent) onNewVariantRange(parent);
                 }}
                 marked={marked}
                 narrowed={!!matchedStampIds}

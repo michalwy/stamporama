@@ -18,8 +18,8 @@ import { Icon } from "@/app/icons";
  * area→issue→stamp Browse popup (#104) and the issue-scoped stamp picker for adding a copy
  * from the issue list (#111). Clicking the row selects it; the caret toggles children.
  *
- * `onNewVariant` is optional: the Browse popup passes it to expose inline "+ variant" create
- * (#105); the selection-only issue picker omits it. */
+ * `onNewVariant` / `onNewVariantRange` are optional: the Browse popup passes them to expose the
+ * inline "+ variant" and "+ range" creates (#105); the selection-only issue picker omits both. */
 export function SelectableStampNode({
   treeNode,
   depth,
@@ -29,6 +29,7 @@ export function SelectableStampNode({
   isLast,
   onPick,
   onNewVariant,
+  onNewVariantRange,
   narrowed,
   contextIds,
   marked,
@@ -41,6 +42,11 @@ export function SelectableStampNode({
   isLast: boolean;
   onPick: (node: StampNodeData, unknownVariant: boolean) => void;
   onNewVariant?: (parentStampId: string) => void;
+  /** Adds a whole lettered run under this stamp in one save (#722) — the same addition as
+   *  `onNewVariant`, for the case where the catalogue splits the stamp into `240a`…`240f`. Offered
+   *  wherever the single create is, so a collector who is already off the beaten path in a picker
+   *  does not have to leave it for the Issues list to type six suffixes. */
+  onNewVariantRange?: (parentStampId: string) => void;
   /**
    * Stamps the **caller has already taken** (#607), marked on their own rows with a chip saying so.
    *
@@ -214,6 +220,27 @@ export function SelectableStampNode({
                     </button>
                   </Tooltip>
                 )}
+
+                {/* Right beside its one-at-a-time sibling, as on the Issues list' row menu (#722):
+                    the same addition, for the case where the catalogue splits this stamp into a
+                    lettered run. */}
+                {onNewVariantRange && (
+                  <Tooltip
+                    content="Add a run of variants under this stamp"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewVariantRange(node.stampId);
+                      }}
+                      style={{ ...CREATE_LINK_STYLE, padding: "0.15rem 0.45rem" }}
+                    >
+                      + range
+                    </button>
+                  </Tooltip>
+                )}
               </div>
 
               <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
@@ -233,6 +260,7 @@ export function SelectableStampNode({
             isLast={isLast && i === children.length - 1}
             onPick={onPick}
             onNewVariant={onNewVariant}
+            onNewVariantRange={onNewVariantRange}
             narrowed={narrowed}
             contextIds={contextIds}
             marked={marked}

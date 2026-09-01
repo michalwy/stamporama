@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  LabelWithError,
+  type DialogAsideProps,
+} from "@/app/dialog-shell";
 import {
   parseVariantNumberSpec,
   formatCatalogNumber,
@@ -42,7 +48,7 @@ export interface AddVariantRangeParent {
   catalogNumbers: { catalogVendorId: string; number: string }[];
 }
 
-interface AddVariantRangeDialogProps {
+interface AddVariantRangeDialogProps extends DialogAsideProps {
   collectionId: string;
   issueId: string;
   /** The issue every variant is filed under, named the way the rest of the app names it. */
@@ -58,6 +64,8 @@ interface AddVariantRangeDialogProps {
 }
 
 export function AddVariantRangeDialog({
+  aside,
+  asideWidth,
   collectionId,
   issueId,
   issueName,
@@ -154,7 +162,15 @@ export function AddVariantRangeDialog({
     !isPending && !!vendor && numbers.length > 0 && !specError && !overLimit && !dupBlocking;
 
   return (
-    <DialogShell title="Add variant range" onClose={onClose} minHeight="22rem">
+    <DialogShell
+      title="Add variant range"
+      onClose={onClose}
+      minHeight="22rem"
+      // Opened from the stamp picker, this dialog covers the piece being identified; the picker
+      // carries the scan tile along the whole chain (#592), so it comes here too.
+      aside={aside}
+      asideWidth={asideWidth}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();

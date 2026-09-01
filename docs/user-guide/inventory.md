@@ -487,6 +487,10 @@ onto it, with no new copy created.
    - **+ variant** (next to any stamp in the tree) adds a child under that stamp, which likewise
      appears in the tree ready to pick. It sits at **any depth** — `3` takes `3a`, and `3a` takes
      `3a1` — the same as **Add child stamp** on the Issues list.
+   - **+ range** (beside it) adds a whole lettered run under that stamp in one save — `240a`
+     through `240f` — the same as **Add variant range…** on the Issues list. The run appears in the
+     tree ready to pick, and nothing is selected for you: which of the six the copy is, is the
+     question you opened the picker to answer.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
