@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  colnectItemIdInput,
   colnectMarketUrl,
   colnectSaleCode,
   colnectSearchUrl,
@@ -119,5 +120,37 @@ describe("colnectSaleCode", () => {
     assert.equal(colnectSaleCode(null), null);
     assert.equal(colnectSaleCode("   "), null);
     assert.equal(colnectSaleCode("market/sale/h5UXNh"), null);
+  });
+});
+
+describe("colnectItemIdInput", () => {
+  it("takes a bare item-ID as typed", () => {
+    assert.equal(colnectItemIdInput("1133075"), "1133075");
+    assert.equal(colnectItemIdInput("  1133075 "), "1133075");
+  });
+
+  it("reads the id out of a pasted Colnect stamp address, slug and all", () => {
+    assert.equal(
+      colnectItemIdInput("https://colnect.com/en/stamps/stamp/1133075-X-Poland"),
+      "1133075"
+    );
+    assert.equal(colnectItemIdInput("https://www.colnect.com/pl/stamps/stamp/136748"), "136748");
+    assert.equal(colnectItemIdInput("https://colnect.com/en/stamps/stamp/136748/"), "136748");
+  });
+
+  it("returns null for a Colnect stamp address naming no id", () => {
+    assert.equal(colnectItemIdInput("https://colnect.com/en/stamps/stamp/"), null);
+    assert.equal(colnectItemIdInput("https://colnect.com/en/stamps/list/catalog_code/PL+865"), null);
+  });
+
+  it("hands back anything that is not a Colnect address, trimmed", () => {
+    assert.equal(colnectItemIdInput("https://example.com/1133075"), "https://example.com/1133075");
+    assert.equal(colnectItemIdInput("not a url"), "not a url");
+  });
+
+  it("returns null for nothing typed", () => {
+    assert.equal(colnectItemIdInput(null), null);
+    assert.equal(colnectItemIdInput(undefined), null);
+    assert.equal(colnectItemIdInput("   "), null);
   });
 });

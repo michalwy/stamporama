@@ -115,3 +115,37 @@ export function colnectSaleCode(url: string | null | undefined): string | null {
   const edit = /^\/[a-z]{2}\/sell\/edit\/sale_id\/([^/]+)\/?$/.exec(u.pathname);
   return edit ? decodeURIComponent(edit[1]) : null;
 }
+
+// ── An item-ID typed in by hand (#741) ───────────────────────────────────────
+//
+// The collector who already found the stamp on Colnect has its page open, and what they reach for is
+// the address bar — so the field that records an item-ID takes the whole URL as readily as the bare
+// number. `colnectSaleCode` above reads an offer's listing out of an address for the same reason and
+// in the same way; this is the stamp's half of it.
+//
+// Deliberately **not** a validator: an item-ID is Colnect's identifier, not ours, and nothing here
+// knows which numbers exist. Anything that is not recognisably one of its addresses is handed back
+// trimmed, and Colnect itself is what says whether it names a stamp — the collector sees that answer
+// the moment the row's Catalog link opens.
+
+/**
+ * The item-ID out of what was typed: a Colnect stamp address (`/en/stamps/stamp/1133075-X-Poland`,
+ * the trailing slug optional) reduced to its number, and anything else simply trimmed. Null when
+ * nothing was typed, or when a Colnect stamp address carried no id at all.
+ */
+export function colnectItemIdInput(input: string | null | undefined): string | null {
+  const text = input?.trim();
+  if (!text) return null;
+  let u: URL;
+  try {
+    u = new URL(text);
+  } catch {
+    return text;
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return text;
+  // The slug after the id is Colnect's own decoration and identifies nothing (see the note on
+  // `colnectStampUrl`), so it is dropped rather than stored.
+  const stamp = /^\/[a-z]{2}\/stamps\/stamp\/(\d+)/.exec(u.pathname);
+  return stamp ? stamp[1] : null;
+}

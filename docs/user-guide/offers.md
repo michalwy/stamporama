@@ -852,9 +852,9 @@ these stamps, and that changes from things this screen does not see — a match 
 tab, a stamp you edited elsewhere. Press it and the card re-reads itself, without reloading the
 page.
 
-Both gaps are marked in **amber**: the *N not matched* count in the heading, and the **⚡ Link** and
-**+ CV** buttons in the rows. Amber is always something to *do* — Search is left plain, being a link
-to a page like Catalog and Market. A row with no amber on it is ready. The heading's count is
+Both gaps are marked in **amber**: the *N not matched* count in the heading, and the **⚡ Link**,
+**Enter ID** and **+ CV** buttons in the rows. Amber is always something to *do* — Search is left
+plain, being a link to a page like Catalog and Market. A row with no amber on it is ready. The heading's count is
 readable with the card collapsed, which is where you are looking before you have opened it. On an offer
 for the platform you have named as Colnect, *N not matched* is also what stops the offer being
 posted; anywhere else it is simply a gap in those stamps' own records, and the chip says so.
@@ -899,6 +899,35 @@ here, so its **Catalog** link becomes **Search** — Colnect's own catalogue sea
 leading catalog number, in the form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the
 catalogue abbreviation dropped exactly as when you copy the chip). It answers the question you had,
 and it is the first step of recording the item-ID that turns the row's real links on.
+
+### Typing in an item-ID you already know
+
+Sometimes you have already found the stamp on Colnect — you looked it up yourself, or its page is
+open in the next tab — and running a whole match just to record a number you are looking at is more
+ceremony than the job deserves. So every unmatched row carries **Enter ID** beside its **Search**,
+and pressing it opens a small field right there on the row.
+
+Type the item-ID, or **paste the stamp's Colnect address** — `colnect.com/en/stamps/stamp/1133075-…`
+works as well as `1133075`, since the address bar is what you have when you have found the page.
+**Enter** saves it, **Escape** closes the field, and clicking away leaves it as it is. The row then
+shows its **Catalog** and **Market** links like any other, and the *not matched* count in the heading
+drops by one.
+
+It is the same write the Assistant's own match makes, so the rules are the same. If the stamp turns
+out to have been matched to a *different* id in the meantime — from another tab, say — nothing is
+overwritten silently: the row says which id is already recorded and offers **Replace**, and it is
+your call.
+
+The one thing this does not do is fill anything else in. A match made from the item's own Colnect
+page brings that page's [catalog numbers](assistant.md#when-colnects-number-disagrees-with-yours) and
+its [date of issue](assistant.md#when-colnect-knows-the-date-and-you-dont) with it; a number typed
+into a field brings only itself, and the stamp's numbers and date stay exactly as they were.
+
+On a row [listed under a variant](#a-stamp-whose-variant-you-havent-identified), the field records
+the id against **that variant** — the entry the sale attaches to — and never against the umbrella
+above it. A row whose variant tree is not fully priced has no field at all: which variant it would be
+is precisely what is not known yet, so there is nothing to record an id against. Price the tree, or
+name the variant yourself, and the field appears on the line that names it.
 
 ### A stamp whose variant you haven't identified
 

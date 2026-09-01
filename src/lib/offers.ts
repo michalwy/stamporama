@@ -3600,6 +3600,16 @@ export interface OfferPlatformItem {
    * including one whose cheapest variant is merely unmatched — that is a gap in matching, fixed on
    * the platform's own pages. */
   unpricedVariantStampId: string | null;
+  /** The stamp an item-ID typed on this row is **recorded against** (#741) — the entry `searchUrl`
+   * looks for and the match handoff writes to, named outright so the card can write it without
+   * re-deriving which stamp the row is about. It is this row's own stamp, or the **variant** the row
+   * stands under where there is one: recording the umbrella's id from a variant's line would assert
+   * that the umbrella *is* that variant, which is the one thing not known about it (#616).
+   *
+   * Null on a row that is already matched — its id is a recorded fact, corrected where the stamp
+   * itself is edited and not from a list of links — and on a row standing under no nameable entry at
+   * all (#617's unpriced tree), where *which* variant this would be is exactly what is missing. */
+  matchStampId: string | null;
   /** How many of the offer's copies this row stands for. */
   copyCount: number;
 }
@@ -4140,6 +4150,16 @@ function platformItemsFor(
             : null,
         unpricedVariantStampId:
           resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
+        // Where a typed item-ID would go (#741): the same entry the search above looks for. An
+        // unmatched variant is that entry and the umbrella is not; an unpriced tree names none, so
+        // it offers no manual entry either — exactly as it offers no search.
+        matchStampId: colnectId
+          ? null
+          : resolved?.gap?.kind === "unpriced-variants"
+            ? null
+            : resolved?.gap?.kind === "unmatched-variant"
+              ? resolved.gap.stampId
+              : item.stampId,
         copyCount: 1,
       });
     }

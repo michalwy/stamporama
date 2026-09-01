@@ -112,6 +112,27 @@ import { Icon } from "@/app/icons";
 // that would otherwise have taken them to the market. An unmatched stamp does better than being
 // noticed: its Catalog link becomes a **Search** for the catalog number, which both answers the
 // question at hand and is the first step of recording the ID that would have answered it directly.
+//
+// And where the collector **already knows the ID** — they found the stamp on Colnect by hand, or
+// they are looking at its page in the next tab — **Enter ID** (#741) takes it right there on the row,
+// without the match/confirm walk (#250) for a single item. It stands beside `⚡ Link` rather than
+// replacing it: one is the fast path when the Assistant is scripting the page, the other is the way
+// in for a browser without it and for a collector who is simply faster than a search. Both are amber,
+// as `Price variants` and `+ CV` are on the same row — two routes out of one gap, and greying either
+// would say it is a link to a page, which neither is.
+//
+// It writes through `confirmColnectMatch`, the Assistant's own confirmation, so an id typed by hand
+// is recorded the one way an id is ever recorded — including its refusal to overwrite a different
+// existing one, which is answered inline with **Replace**. That refusal is not dead code on a card
+// that offers the field only where nothing is recorded: the row may have been matched in another tab
+// since this card was drawn, which is the very staleness the heading's Refresh exists for.
+//
+// The field is offered on **whatever the row's links act on** (`matchStampId`) — the variant where
+// the row stands under one, never the umbrella above it (#616) — and not at all on an unpriced tree
+// (#617), which names no entry to record an id against and offers no Search either.
+//
+// The `Search` link is *not* the trigger. It is a link to a page, and a link whose click does
+// something else is the fault #214 already ruled on; the field gets a control of its own.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -193,6 +214,21 @@ const ATTENTION: React.CSSProperties = {
   color: "var(--color-warning)",
   borderColor: "var(--color-warning-border, var(--color-warning))",
   background: "var(--color-warning-soft, var(--color-bg-page))",
+};
+
+/** The item-ID field itself (#741), sized to what it holds: a Colnect id is six or seven digits, and
+ *  a pasted address is read for its number and thrown away, so a box wide enough for a URL would be
+ *  a column of empty space on every row that never uses one. */
+const ID_INPUT: React.CSSProperties = {
+  width: "8.5rem",
+  padding: "0.125rem 0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.75rem",
+  fontFamily: "inherit",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  boxSizing: "border-box",
 };
 
 /** One box for both things in the heading — the count and the walk — so a `<span>` and a `<button>`
@@ -422,6 +458,51 @@ export function OfferPlatformItemsCard({
   });
   const [priceError, setPriceError] = useState<string | undefined>();
   const [isPricing, startPricing] = useTransition();
+  // ── An item-ID typed in by hand (#741) ─────────────────────────────────────
+  // One editor for the card, opened over the row that was pressed — the price grid's own constraint,
+  // and the shape the collector wants anyway: this is the quick answer for *one* item.
+  const [entering, setEntering] = useState<{ key: string; stampId: string; draft: string } | null>(
+    null
+  );
+  const [entryError, setEntryError] = useState<string | null>(null);
+  /** The id the stamp already carries, when the write was refused rather than made — the two-step
+   *  the Assistant's own confirmation takes (#250/#433), answered inline. */
+  const [entryConflict, setEntryConflict] = useState<string | null>(null);
+  const [savingId, startSavingId] = useTransition();
+  const openEntry = (key: string, stampId: string) => {
+    setEntryError(null);
+    setEntryConflict(null);
+    setEntering({ key, stampId, draft: "" });
+  };
+  const closeEntry = () => {
+    setEntering(null);
+    setEntryError(null);
+    setEntryConflict(null);
+  };
+  const saveEntry = (allowOverwrite = false) => {
+    const target = entering;
+    if (!target) return;
+    setEntryError(null);
+    setEntryConflict(null);
+    startSavingId(async () => {
+      const { setColnectItemIdAction } = await import("@/app/actions/colnect");
+      const r = await setColnectItemIdAction(
+        collectionId,
+        target.stampId,
+        target.draft,
+        allowOverwrite
+      );
+      if (r.status === "conflict") setEntryConflict(r.existingColnectId);
+      else if (r.status === "error") setEntryError(r.message);
+      else {
+        setEntering(null);
+        // The row's links, its blocker and the offer's own gate all read the id that was just
+        // written — the same one invalidation every other write on this card ends with.
+        void invalidateAll(collectionId);
+      }
+    });
+  };
+
   // Which row's variant is being chosen (extends #616). One dialog for the card, opened over the row
   // that was pressed — a hook cannot be called in a `.map`, the price grid's own constraint.
   const [choosingFor, setChoosingFor] = useState<OfferPlatformItem | null>(null);
@@ -695,6 +776,8 @@ export function OfferPlatformItemsCard({
             // thing that changes between the two placements is what the hints call the thing —
             // and on a variant's line, "this stamp" would name the wrong one.
             const subject = variant ? "variant" : "stamp";
+            const rowKey = `${item.stampId}|${item.conditionId}`;
+            const enteringHere = entering?.key === rowKey;
             const linksCell = (style?: React.CSSProperties) => (
               <span style={{ ...CELL, gap: "0.375rem", ...style }}>
                 {item.catalogUrl ? (
@@ -743,6 +826,78 @@ export function OfferPlatformItemsCard({
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
                   </Tooltip>
                 )}
+                {/* The other way out of the same gap (#741): the collector who already knows the
+                    id says so here, rather than searching for a page they have already found. It
+                    is offered on every unmatched row — including the one with no number to search
+                    by, where until now the card had nothing to offer at all — and acts on whatever
+                    the links above act on, which on a variant's line is the variant. */}
+                {item.matchStampId &&
+                  !item.catalogUrl &&
+                  (enteringHere ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                      {/* Blur does **not** commit, unlike the inline fields elsewhere (#292): the
+                          answer to this write can be a refusal with a Replace beside it, and a
+                          field that saved itself on the way to pressing Replace would have made
+                          the decision the button is asking about. */}
+                      <input
+                        autoFocus
+                        type="text"
+                        value={entering.draft}
+                        placeholder="item-ID or address"
+                        aria-label={`Colnect item-ID for ${item.catalogItemVariant ?? item.label}`}
+                        disabled={savingId}
+                        onChange={(e) => setEntering({ ...entering, draft: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEntry();
+                          } else if (e.key === "Escape") closeEntry();
+                        }}
+                        style={ID_INPUT}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEntry()}
+                        disabled={savingId || !entering.draft.trim()}
+                        style={{
+                          ...LINK,
+                          ...ATTENTION,
+                          fontFamily: "inherit",
+                          margin: 0,
+                          cursor: savingId ? "default" : "pointer",
+                          opacity: savingId || !entering.draft.trim() ? 0.6 : 1,
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeEntry}
+                        disabled={savingId}
+                        aria-label="Cancel"
+                        style={{
+                          ...LINK,
+                          fontFamily: "inherit",
+                          margin: 0,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Icon name="close" size="xs" />
+                      </button>
+                    </span>
+                  ) : (
+                    <Tooltip
+                      content={`Already know this ${subject}'s Colnect item-ID? Type it here — or paste its Colnect address — and the links appear.`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openEntry(rowKey, item.matchStampId!)}
+                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      >
+                        Enter ID
+                      </button>
+                    </Tooltip>
+                  ))}
                 {/* Market only where the entry *has* a page here. Without an item-ID it could never
                     have been anything but greyed out, and a dead chip beside Search says nothing
                     the line has not already said — the missing ID is the one fact, stated once.
@@ -1008,6 +1163,49 @@ export function OfferPlatformItemsCard({
                     {linksCell({ paddingTop: 0 })}
                     <span style={{ ...CELL, paddingTop: 0 }} />
                   </>
+                )}
+                {/* What came back from a typed item-ID (#741), on a line of its own across the whole
+                    grid: the links column is sized to its chips, and a sentence inside it would
+                    widen that column on every row of the card to say something about one of them.
+                    A **conflict** is amber and not red — nothing failed, the write was refused and
+                    is being offered again with the overwrite the Assistant's confirmation takes
+                    (#433) — and it names the id that is already there, since which one it is decides
+                    whether replacing it is right. */}
+                {enteringHere && (entryConflict || entryError) && (
+                  <span
+                    style={{
+                      ...CELL,
+                      gridColumn: "1 / -1",
+                      paddingTop: 0,
+                      paddingLeft: "1.25rem",
+                      fontSize: "0.75rem",
+                      color: entryConflict ? "var(--color-warning)" : "var(--color-error)",
+                    }}
+                  >
+                    {entryConflict ? (
+                      <>
+                        <span>
+                          This {subject} is already linked to Colnect item-ID {entryConflict}.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => saveEntry(true)}
+                          disabled={savingId}
+                          style={{
+                            ...LINK,
+                            ...ATTENTION,
+                            fontFamily: "inherit",
+                            margin: 0,
+                            cursor: savingId ? "default" : "pointer",
+                          }}
+                        >
+                          Replace
+                        </button>
+                      </>
+                    ) : (
+                      entryError
+                    )}
+                  </span>
                 )}
               </li>
             );

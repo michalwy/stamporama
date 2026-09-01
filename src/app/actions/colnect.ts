@@ -40,7 +40,10 @@ import type {
   ColnectListSourceOfTruth,
   ColnectLocalFix,
 } from "@/lib/colnect-list-sync-rules";
+import { colnectItemIdInput } from "@/lib/colnect-link";
 import {
+  ColnectMatchConflictError,
+  confirmColnectMatch,
   createColnectMapping,
   updateColnectMapping,
   deleteColnectMapping,
@@ -445,5 +448,51 @@ export async function deleteColnectMappingAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete mapping. Please try again." };
+  }
+}
+
+/** What recording an item-ID by hand (#741) came back as. `conflict` is the write **refused** —
+ *  the stamp already carries a different id — carrying it back so the collector can decide, which is
+ *  the same two-step the Assistant's own confirmation takes (#250/#433). */
+export type ColnectItemIdState =
+  | { status: "success" }
+  | { status: "conflict"; existingColnectId: string }
+  | { status: "error"; message: string };
+
+/**
+ * Record one stamp's Colnect item-ID as the collector typed it (#741) — the quick way in for
+ * somebody who already found the stamp on Colnect and does not want the match/confirm walk for a
+ * single item.
+ *
+ * It goes through {@link confirmColnectMatch}, the Assistant's own write, so an id recorded by hand
+ * is recorded the one way an id is ever recorded: same authorization, same collection scoping, same
+ * refusal to overwrite a different existing id without being told to.
+ *
+ * What it does **not** carry is the page: a match made from the item's own Colnect page brings that
+ * page's catalog numbers and its issue date with it (#280/#655), and typing a number into a field
+ * brings nothing. So no backfill is claimed here — the id is written, and the numbers and the date
+ * stay whatever the stamp already said.
+ */
+export async function setColnectItemIdAction(
+  collectionId: string,
+  stampId: string,
+  input: string,
+  allowOverwrite = false
+): Promise<ColnectItemIdState> {
+  const session = await getSession();
+  // A collector with the stamp's Colnect page open reaches for the address bar, so the field takes
+  // the whole URL as readily as the bare number.
+  const colnectId = colnectItemIdInput(input);
+  if (!colnectId) {
+    return { status: "error", message: "Enter a Colnect item-ID, or paste the stamp's Colnect address." };
+  }
+  try {
+    await confirmColnectMatch(session.user.id, collectionId, { colnectId, stampId, allowOverwrite });
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ColnectMatchConflictError) {
+      return { status: "conflict", existingColnectId: err.existingColnectId };
+    }
+    return { status: "error", message: "Failed to record the Colnect item-ID. Please try again." };
   }
 }
