@@ -167,9 +167,14 @@ export function AddVariantRangeDialog({
       onClose={onClose}
       minHeight="22rem"
       // Opened from the stamp picker, this dialog covers the piece being identified; the picker
-      // carries the scan tile along the whole chain (#592), so it comes here too.
+      // carries the scan tile along the whole chain (#592), so it comes here too. The aside is a
+      // fixed column and the form takes what is left, so the panel has to widen to make room —
+      // otherwise this dialog's narrow default cap squeezes the form to a few characters. Same
+      // shape as the issue and stamp dialogs the picker opens beside it.
       aside={aside}
       asideWidth={asideWidth}
+      maxWidth={aside ? "min(96vw, 56rem)" : undefined}
+      height={aside ? "min(90vh, 44rem)" : undefined}
     >
       <form
         onSubmit={(e) => {
