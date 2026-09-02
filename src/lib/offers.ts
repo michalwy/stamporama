@@ -455,7 +455,7 @@ const SET_ITEM_ORDER_SELECT = {
 
 /** Copy ids of a set, in effective order (#306). */
 function orderedItemIds(
-  items: readonly { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } }[]
+  items: readonly { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: string | null } } }[]
 ): string[] {
   return sortSetItems(
     items.map((li) => ({
@@ -467,7 +467,7 @@ function orderedItemIds(
 }
 
 /** A set's copies in effective order (#306) — explicit positions first, then catalog order. */
-function orderedItems<T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } }>(
+function orderedItems<T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: string | null } } }>(
   items: readonly T[]
 ): T[] {
   return [...items].sort((a, b) =>

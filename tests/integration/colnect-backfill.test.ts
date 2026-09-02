@@ -174,7 +174,11 @@ describe("Colnect catalog-number backfill", () => {
       where: { id: s.stamps.target },
       select: { primaryCatalogSortKey: true },
     });
-    assert.equal(after?.primaryCatalogSortKey, 3382, "the new lowest number drives the sort key");
+    assert.equal(
+      after?.primaryCatalogSortKey,
+      "0000003382",
+      "the new lowest number drives the sort key"
+    );
   });
 
   it("reports a disagreeing catalog as a conflict and never overwrites it", async () => {

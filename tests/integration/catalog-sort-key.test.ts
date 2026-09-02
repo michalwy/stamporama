@@ -9,7 +9,7 @@ import { updateCollectionArea } from "../../src/lib/areas";
 // that the issue list orders by it as a tiebreaker, and that an area primary-catalog change
 // bulk-recomputes the affected issues.
 
-async function keyOf(issueId: string): Promise<number | null> {
+async function keyOf(issueId: string): Promise<string | null> {
   const row = await prisma.issue.findUniqueOrThrow({
     where: { id: issueId },
     select: { primaryCatalogSortKey: true },
@@ -83,7 +83,7 @@ describe("catalog sort key maintenance", () => {
         { catalogVendorId: scVendorId, firstNumber: "45" }, // lower, but secondary
       ],
     });
-    assert.equal(await keyOf(id), 200);
+    assert.equal(await keyOf(id), "0000000200");
   });
 
   it("falls back to the lowest numeric when the issue has no primary-vendor number", async () => {
@@ -91,7 +91,7 @@ describe("catalog sort key maintenance", () => {
       name: "Fallback",
       catalogNumbers: [{ catalogVendorId: scVendorId, firstNumber: "45" }],
     });
-    assert.equal(await keyOf(id), 45);
+    assert.equal(await keyOf(id), "0000000045");
   });
 
   it("is null when the issue has no numeric catalog number", async () => {
@@ -103,7 +103,7 @@ describe("catalog sort key maintenance", () => {
     const { id } = await createIssue(userId, collectionId, areaId, { name: "Range later" });
     assert.equal(await keyOf(id), null);
     await setIssueCatalogRange(userId, collectionId, id, miVendorId, "310", "315");
-    assert.equal(await keyOf(id), 310);
+    assert.equal(await keyOf(id), "0000000310");
   });
 
   it("orders same-year issues by primary catalog number as the tiebreaker", async () => {
@@ -156,7 +156,7 @@ describe("catalog sort key maintenance", () => {
         { catalogVendorId: scVendorId, firstNumber: "12" },
       ],
     });
-    assert.equal(await keyOf(id), 900); // Michel leads
+    assert.equal(await keyOf(id), "0000000900"); // Michel leads
 
     // Repoint the area's leading vendor to Scott → the key should follow to Scott's number.
     await updateCollectionArea(userId, area.id, {
@@ -164,7 +164,38 @@ describe("catalog sort key maintenance", () => {
       primaryCatalogNameId: scCatalogName.id,
       primaryCatalogVendorId: scVendorId,
     });
-    assert.equal(await keyOf(id), 12);
+    assert.equal(await keyOf(id), "0000000012");
+  });
+
+  // The fault this key was reshaped for: Michel's Porto, block and Dienst families are written with
+  // a letter prefix, and a leading-digits integer sent every one of them to the number-less bucket
+  // at the end of the list, ordered by name — "P15" read before "P1—14".
+  it("orders each prefix family as its own block after the basic numbering", async () => {
+    const ts = Date.now();
+    const area = await prisma.collectionArea.create({
+      data: {
+        collectionId,
+        name: `Families ${ts}`,
+        primaryCatalogNameId: miCatalogNameId,
+        primaryCatalogVendorId: miVendorId,
+      },
+    });
+    // Created out of catalog order, and with the prefixed ones interleaved.
+    for (const n of ["P15", "Bl 3", "200", "P1", "15", "Bl 20"]) {
+      await createIssue(userId, collectionId, area.id, {
+        name: `Issue ${n}`,
+        catalogNumbers: [{ catalogVendorId: miVendorId, firstNumber: n }],
+      });
+    }
+    const page = await listIssuesPaginated(userId, collectionId, {
+      areaIds: [area.id],
+      sortBy: "catalogNumber",
+      sortDir: "asc",
+    });
+    assert.deepEqual(
+      page.items.map((i) => i.catalogNumbers[0]?.firstNumber),
+      ["15", "200", "Bl 3", "Bl 20", "P1", "P15"]
+    );
   });
 
   // The sort key follows the **vendor**, so swapping which volume prices the area moves nothing
@@ -187,18 +218,18 @@ describe("catalog sort key maintenance", () => {
       name: "Book only",
       catalogNumbers: [{ catalogVendorId: miVendorId, firstNumber: "700" }],
     });
-    assert.equal(await keyOf(id), 700);
+    assert.equal(await keyOf(id), "0000000700");
 
     await prisma.issue.update({
       where: { id },
-      data: { primaryCatalogSortKey: -1 },
+      data: { primaryCatalogSortKey: "stale" },
     });
     await updateCollectionArea(userId, area.id, {
       name: area.name,
       primaryCatalogNameId: otherMichelBook.id,
       primaryCatalogVendorId: miVendorId,
     });
-    assert.equal(await keyOf(id), -1);
+    assert.equal(await keyOf(id), "stale");
 
     // …and the vendor edit that *does* affect it still recomputes the subtree.
     await updateCollectionArea(userId, area.id, {
@@ -206,6 +237,6 @@ describe("catalog sort key maintenance", () => {
       primaryCatalogNameId: otherMichelBook.id,
       primaryCatalogVendorId: scVendorId,
     });
-    assert.equal(await keyOf(id), 700);
+    assert.equal(await keyOf(id), "0000000700");
   });
 });

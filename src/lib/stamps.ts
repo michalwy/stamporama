@@ -30,6 +30,7 @@ import {
 import { buildAreaPrefixNodes, effectivePrefixFor } from "./area-prefix";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
+import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
@@ -737,13 +738,8 @@ export async function listStampsPaginated(
       const primary = s * issueNameOf(a).localeCompare(issueNameOf(b));
       if (primary !== 0) return primary;
       // Tiebreaker: primary catalog number ascending, nulls last.
-      const ka = a.primaryCatalogSortKey;
-      const kb = b.primaryCatalogSortKey;
-      if (ka !== kb) {
-        if (ka === null) return 1;
-        if (kb === null) return -1;
-        return ka - kb;
-      }
+      const byCatalog = compareCatalogSortKeys(a.primaryCatalogSortKey, b.primaryCatalogSortKey);
+      if (byCatalog !== 0) return byCatalog;
       const n = (a.name ?? "").localeCompare(b.name ?? "");
       if (n !== 0) return n;
       return a.id.localeCompare(b.id);

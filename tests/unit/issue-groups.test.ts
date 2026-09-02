@@ -1,18 +1,25 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { compareIssueGroups, issueGroupLabel } from "../../src/lib/issue-groups";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // Grouping the Copies list by issue (#424). What is worth pinning down is the *reading order* — the
 // whole reason the grouping is paged in memory rather than in SQL, and the reason it can neither
 // repeat nor skip a group across a page boundary — and how a group is named.
 
 describe("compareIssueGroups", () => {
+  // Written as the catalog number a collector would read, encoded through the real formula.
   const g = (
     issueId: string | null,
     issueYear: number | null = null,
-    catalogSortKey: number | null = null,
+    catalogNumber: string | number | null = null,
     issueName: string | null = null
-  ) => ({ issueId, issueYear, catalogSortKey, issueName });
+  ) => ({
+    issueId,
+    issueYear,
+    catalogSortKey: catalogNumber === null ? null : catalogSortKeyOf(String(catalogNumber)),
+    issueName,
+  });
 
   it("orders by year, ascending — the Issues list's own order", () => {
     const sorted = [g("c", 1949), g("a", 1918), g("b", 1930)].sort(compareIssueGroups);

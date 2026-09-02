@@ -28,6 +28,7 @@ import {
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import { getStorage, variantKey } from "../../src/lib/storage";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // Bytes go through the filesystem backend, so point it at a throwaway directory rather than the repo's
 // `.data`. `dataDir()` reads the env var on every call, so setting it here — before any test body runs
@@ -182,7 +183,7 @@ describe("offer photo generation (#311)", () => {
       [100, 180],
     ].entries()) {
       const stamp = await prisma.stamp.create({
-        data: { collectionId, name: `Stamp ${index}`, primaryCatalogSortKey: index },
+        data: { collectionId, name: `Stamp ${index}`, primaryCatalogSortKey: catalogSortKeyOf(String(index)) },
       });
       const item = await createItem(userId, collectionId, {
         stampId: stamp.id,
@@ -544,7 +545,7 @@ describe("offer photo generation (#311)", () => {
   it("packs several offers into one ZIP, a folder each, skipping those with nothing to upload", async () => {
     // A second offer of the same batch: one copy, one front scan, its own generated image.
     const stamp = await prisma.stamp.create({
-      data: { collectionId, name: "Stamp bulk", primaryCatalogSortKey: 99 },
+      data: { collectionId, name: "Stamp bulk", primaryCatalogSortKey: catalogSortKeyOf("99") },
     });
     const item = await createItem(userId, collectionId, {
       stampId: stamp.id,

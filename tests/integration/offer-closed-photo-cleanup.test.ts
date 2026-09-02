@@ -25,6 +25,7 @@ import {
 } from "../../src/lib/offer-photo-generation";
 import { getStorage, variantKey } from "../../src/lib/storage";
 import { setCollectionClosedOfferPhotoTtl } from "../../src/lib/collections";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // As in the generation test: point the filesystem backend at a throwaway directory rather than the
 // repo's `.data`. `dataDir()` reads the env var on every call, so setting it before any test body
@@ -142,7 +143,7 @@ describe("closed-offer photo cleanup (#512)", () => {
     });
 
     const stamp = await prisma.stamp.create({
-      data: { collectionId, name: `Stamp closed-photos-${ts}`, primaryCatalogSortKey: 0 },
+      data: { collectionId, name: `Stamp closed-photos-${ts}`, primaryCatalogSortKey: catalogSortKeyOf("0") },
     });
     const item = await createItem(userId, collectionId, {
       stampId: stamp.id,
@@ -305,7 +306,7 @@ describe("closed-offer photo cleanup (#512)", () => {
       state: "preparing",
     });
     const stamp = await prisma.stamp.create({
-      data: { collectionId, name: `Stamp sold-${Date.now()}`, primaryCatalogSortKey: 1 },
+      data: { collectionId, name: `Stamp sold-${Date.now()}`, primaryCatalogSortKey: catalogSortKeyOf("1") },
     });
     const item = await createItem(userId, collectionId, {
       stampId: stamp.id,

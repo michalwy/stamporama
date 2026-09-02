@@ -28,6 +28,7 @@ import {
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import { getStorage, variantKey } from "../../src/lib/storage";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-offer-attachments-"));
 process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
@@ -173,7 +174,7 @@ describe("offer photo attachments (#313)", () => {
 
     const makeCopy = async (index: number) => {
       const stamp = await prisma.stamp.create({
-        data: { collectionId, name: `Stamp ${index}`, primaryCatalogSortKey: index },
+        data: { collectionId, name: `Stamp ${index}`, primaryCatalogSortKey: catalogSortKeyOf(String(index)) },
       });
       const item = await createItem(userId, collectionId, {
         stampId: stamp.id,
@@ -692,7 +693,7 @@ describe("one photo per copy (#434)", () => {
 
     const makeCopy = async (index: number, roles: readonly ("front" | "back")[]) => {
       const stamp = await prisma.stamp.create({
-        data: { collectionId, name: `Bulk stamp ${index}`, primaryCatalogSortKey: index },
+        data: { collectionId, name: `Bulk stamp ${index}`, primaryCatalogSortKey: catalogSortKeyOf(String(index)) },
       });
       const item = await createItem(userId, collectionId, {
         stampId: stamp.id,

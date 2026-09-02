@@ -17,6 +17,7 @@ import {
 } from "./variant-classification";
 import { unpricedVariantCells, type CoverageVariant } from "./variant-price-coverage";
 import type { RawCatalogPrice } from "./catalog-price";
+import { compareCatalogSortKeys } from "./catalog-sort-key";
 
 // The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
 //
@@ -236,11 +237,8 @@ function compareRows(
   if (ao !== undefined && bo !== undefined && ao !== bo) return ao - bo;
   if (ao !== undefined && bo === undefined) return -1;
   if (ao === undefined && bo !== undefined) return 1;
-  const ak = a.primaryCatalogSortKey;
-  const bk = b.primaryCatalogSortKey;
-  if (ak != null && bk != null && ak !== bk) return ak - bk;
-  if (ak != null && bk == null) return -1;
-  if (ak == null && bk != null) return 1;
+  const byCatalog = compareCatalogSortKeys(a.primaryCatalogSortKey, b.primaryCatalogSortKey);
+  if (byCatalog !== 0) return byCatalog;
   return a.id.localeCompare(b.id);
 }
 

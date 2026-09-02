@@ -14,6 +14,7 @@ import {
   duplicateOffer,
   OfferActionBlockedError,
 } from "../../src/lib/offers";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // Explicit ordering for offer sets and their copies (#306). Sets carry a non-null `sortOrder` the
 // collector controls by hand; copies carry a nullable one, where null means "derive from the
@@ -53,7 +54,7 @@ describe("offer set + copy ordering (#306)", () => {
     // Created high → low, so any catalog ordering is visibly different from creation order.
     const mk = async (name: string, key: number) => {
       const stamp = await prisma.stamp.create({
-        data: { collectionId, name, primaryCatalogSortKey: key },
+        data: { collectionId, name, primaryCatalogSortKey: catalogSortKeyOf(String(key)) },
       });
       return (await createItem(userId, collectionId, { stampId: stamp.id, conditionId: condition.id, forSale: true })).id;
     };

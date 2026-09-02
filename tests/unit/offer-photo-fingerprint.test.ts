@@ -5,6 +5,7 @@ import {
   type FingerprintCopy,
   type OfferPhotoFingerprintInput,
 } from "../../src/lib/offer-photo-fingerprint";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // The staleness signal behind persisted offer images (#311): a hash of everything the generator read.
 // What matters is not the digest itself but the two properties it needs — the same *effective* inputs
@@ -15,7 +16,13 @@ function copy(
   options: { front?: string | null; back?: string | null; sortOrder?: number | null; key?: number | null } = {}
 ): FingerprintCopy {
   const { front = `${itemId}-f`, back = `${itemId}-b`, sortOrder = null, key = null } = options;
-  return { itemId, sortOrder, catalogSortKey: key, frontPhotoId: front, backPhotoId: back };
+  return {
+    itemId,
+    sortOrder,
+    catalogSortKey: key === null ? null : catalogSortKeyOf(String(key)),
+    frontPhotoId: front,
+    backPhotoId: back,
+  };
 }
 
 const base: OfferPhotoFingerprintInput = {

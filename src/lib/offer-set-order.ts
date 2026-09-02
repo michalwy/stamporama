@@ -16,6 +16,8 @@
 // reset action clears the whole set back to null. The comparator still degrades sensibly if a
 // mixed state is ever reached — explicit positions come first, derived copies follow.
 
+import { compareCatalogSortKeys } from "./catalog-sort-key";
+
 /** The fields a set needs to be ordered within its offer. */
 export interface SetOrderRow {
   id: string;
@@ -27,7 +29,7 @@ export interface SetOrderRow {
 export interface SetItemOrderRow {
   itemId: string;
   sortOrder: number | null;
-  catalogSortKey: number | null;
+  catalogSortKey: string | null;
 }
 
 /** Sets in explicit order; `id` breaks ties so the result is total and stable. */
@@ -44,11 +46,8 @@ export function compareSetItems(a: SetItemOrderRow, b: SetItemOrderRow): number 
     if (b.sortOrder == null) return -1;
     return a.sortOrder - b.sortOrder;
   }
-  if (a.catalogSortKey !== b.catalogSortKey) {
-    if (a.catalogSortKey == null) return 1;
-    if (b.catalogSortKey == null) return -1;
-    return a.catalogSortKey - b.catalogSortKey;
-  }
+  const byCatalog = compareCatalogSortKeys(a.catalogSortKey, b.catalogSortKey);
+  if (byCatalog !== 0) return byCatalog;
   return a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0;
 }
 

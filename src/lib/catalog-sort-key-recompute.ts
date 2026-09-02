@@ -16,12 +16,12 @@ const CHUNK = 5000;
 /** Write the computed keys in bulk with a single `UPDATE ... FROM (VALUES ...)` per chunk. */
 async function applyKeys(
   table: "issue" | "stamp",
-  pairs: { id: string; key: number | null }[]
+  pairs: { id: string; key: string | null }[]
 ): Promise<void> {
   for (let i = 0; i < pairs.length; i += CHUNK) {
     const chunk = pairs.slice(i, i + CHUNK);
     const values = Prisma.join(
-      chunk.map((p) => Prisma.sql`(${p.id}, ${p.key}::int)`)
+      chunk.map((p) => Prisma.sql`(${p.id}, ${p.key}::text)`)
     );
     // The table name is a compile-time literal, never user input.
     const tbl = Prisma.raw(`"${table}"`);

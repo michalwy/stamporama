@@ -1703,11 +1703,15 @@ model Stamp {
   issuedMonth  Int?
   issuedYear   Int?
   createdAt    DateTime @default(now())
-  // Denormalized numeric sort key for catalog-number ordering (#181): the parsed number of the
-  // stamp's effective primary-catalog vendor (via its primary area link), else the lowest numeric
-  // across its numbers, else null (sorts last). Maintained on every write that changes the stamp's
-  // numbers or area link, and bulk-recomputed when an area's primary catalog changes. See ADR-0012.
-  primaryCatalogSortKey Int?
+  // Denormalized sort key for catalog-number ordering (#181): the encoded number of the stamp's
+  // effective primary-catalog vendor (via its primary area link), else the lowest key across its
+  // numbers, else null (sorts last). `<prefix><10-digit zero-padded number><suffix>`, lowercase —
+  // "200a" -> "0000000200a", "Bl 3" -> "bl0000000003" — so each numbering family sorts as its own
+  // block after the basic numbering. Stored as text `COLLATE "C"` (set by the migration, invisible
+  // to Prisma) so the database orders these keys byte by byte, exactly as the in-memory
+  // comparators do. Maintained on every write that changes the stamp's numbers or area link, and
+  // bulk-recomputed when an area's primary catalog changes. See ADR-0014.
+  primaryCatalogSortKey String?
   // Colnect Marketplace item-ID (#247, part of #155). Colnect has no API/import — every catalog
   // page exposes the numeric item-ID (header link `/en/stamps/stamp/<ID>-…`, `data-xid`). Stored
   // as a plain optional string, not through the catalog-vendor machinery: a Colnect item-ID is an
@@ -4456,11 +4460,16 @@ model Issue {
   year             Int?
   isAutoCreated    Boolean  @default(false)
   createdAt        DateTime @default(now())
-  // Denormalized numeric sort key for catalog-number ordering (#181): the parsed number of the
-  // issue's effective primary-catalog vendor, else the lowest numeric across its numbers, else
-  // null (sorts last). Maintained on every write that changes the issue's numbers or area, and
-  // bulk-recomputed when an area's effective primary catalog changes. See ADR-0012.
-  primaryCatalogSortKey Int?
+  // Denormalized sort key for catalog-number ordering (#181): the encoded number of the issue's
+  // effective primary-catalog vendor, else the lowest key across its numbers, else null (sorts
+  // last). `<prefix><10-digit zero-padded number><suffix>`, lowercase — "200" -> "0000000200",
+  // "P15" -> "p0000000015" — so each numbering family (Michel Bl, P, D) sorts as its own block
+  // after the basic numbering instead of landing in the number-less bucket. Stored as text
+  // `COLLATE "C"` (set by the migration, invisible to Prisma) so the database orders these keys
+  // byte by byte, exactly as the in-memory comparators do. Maintained on every write that changes
+  // the issue's numbers or area, and bulk-recomputed when an area's effective primary catalog
+  // changes. See ADR-0014.
+  primaryCatalogSortKey String?
 
   collection     Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)

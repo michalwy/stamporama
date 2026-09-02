@@ -11,6 +11,8 @@
 // list and their counts add up to it — a copy reported under three issues would make every count on
 // the screen a number that means nothing in particular.
 
+import { compareCatalogSortKeys } from "./catalog-sort-key";
+
 /** The `issueId` filter value standing for the copies whose stamp is in **no** issue. Null is a
  * value on this axis, and an absent filter means "any issue", which is the opposite of what the
  * issue-less group asks for. The same sentinel the lot intake's issue groups use (#172), so one
@@ -24,7 +26,7 @@ export interface SortableIssueGroup {
   issueId: string | null;
   issueYear: number | null;
   /** The denormalized primary-catalog sort key (ADR-0012), null when the issue carries no number. */
-  catalogSortKey: number | null;
+  catalogSortKey: string | null;
   issueName: string | null;
 }
 
@@ -52,11 +54,8 @@ export function compareIssueGroups(a: SortableIssueGroup, b: SortableIssueGroup)
   }
   // The primary catalog number is the implicit tiebreaker everywhere (#181, ADR-0012), and a
   // number-less issue sorts last within its year exactly as it does on the Issues list.
-  if (a.catalogSortKey !== b.catalogSortKey) {
-    if (a.catalogSortKey === null) return 1;
-    if (b.catalogSortKey === null) return -1;
-    return a.catalogSortKey - b.catalogSortKey;
-  }
+  const byCatalog = compareCatalogSortKeys(a.catalogSortKey, b.catalogSortKey);
+  if (byCatalog !== 0) return byCatalog;
   const byName = COLLATOR.compare(a.issueName ?? "", b.issueName ?? "");
   if (byName !== 0) return byName;
   return a.issueId < b.issueId ? -1 : a.issueId > b.issueId ? 1 : 0;

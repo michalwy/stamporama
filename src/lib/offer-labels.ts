@@ -36,7 +36,7 @@ export type StampLabelRow = {
   catalogNumbers: { number: string; catalogVendorId: string }[];
   stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
   issueMemberships: { issueId: string }[];
-  primaryCatalogSortKey: number | null;
+  primaryCatalogSortKey: string | null;
 };
 
 export type LabelSetItemRow = {

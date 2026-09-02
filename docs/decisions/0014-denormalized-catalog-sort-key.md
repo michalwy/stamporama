@@ -12,14 +12,17 @@ same year) still read in catalog-number order rather than an arbitrary one (#181
 
 The catalog number to sort by is a derived value:
 
-- Catalog numbers are strings (`"200"`, `"200a"`, `"Bl3"`), but the ordering is **numeric**
-  (leading digits parsed to an integer; a non-numeric number sorts last).
+- Catalog numbers are strings (`"200"`, `"200a"`, `"Bl3"`), and the ordering is the
+  **catalogue's own**: numeric within a numbering family, and a family at a time — a catalog
+  numbers its Porto, block and Dienst issues in sequences of their own, written with a letter
+  prefix. A number carrying no digits at all sorts last.
 - The number that counts is the one belonging to the area's **effective primary-catalog
   vendor** — which is itself inherited by climbing the collecting-area tree to the nearest
-  ancestor that sets a primary catalog (`buildEffectivePrimaryCatalogMap`). When the row has
-  no number for that vendor, we fall back to the lowest numeric across its numbers.
+  ancestor that names a leading vendor (`buildPrimaryVendorByAreaMap`; the *vendor*, not the
+  price book, since ADR-0040 split the two). When the row has no number for that vendor, we
+  fall back to the lowest key across its numbers.
 
-Prisma's `orderBy` cannot express this: it cannot order by a numerically-parsed string, and
+Prisma's `orderBy` cannot express this: it cannot order by a parsed string, and
 it cannot order by a field reached through a to-many relation (`IssueCatalogNumber` /
 `StampCatalogNumber`). The first implementation therefore sorted **in application memory**:
 it loaded the id + sort keys of *every* matching row on every page, sorted in Node, then
@@ -29,9 +32,9 @@ into an O(N)-per-page load.
 
 ## Decision
 
-Denormalize the derived sort value into an indexed integer column,
-`primaryCatalogSortKey`, on both `issue` and `stamp` (nullable; `NULL` means "no numeric
-catalog number" and sorts last via `NULLS LAST`). Reads become an ordinary indexed
+Denormalize the derived sort value into an indexed **text** column, `primaryCatalogSortKey`,
+on both `issue` and `stamp` (nullable; `NULL` means "no number to sort by" and sorts last via
+`NULLS LAST`). Reads become an ordinary indexed
 `ORDER BY … , "primaryCatalogSortKey" … LIMIT/OFFSET`. Composite indexes
 `(collectionId, year, primaryCatalogSortKey)` / `(collectionId, issuedYear,
 primaryCatalogSortKey)` and `(collectionId, primaryCatalogSortKey)` back the common sorts.
@@ -40,23 +43,47 @@ The only sort that remains in-memory is the stamp list's **issue-name** sort, be
 issue name lives across the to-many `issueMemberships` relation; even there the stored key
 supplies the tiebreaker, so no catalog number is re-parsed.
 
+### The encoding
+
+One number's key is `<prefix><10-digit zero-padded number><suffix>`, lowercase: the letters
+that **lead** the number (its numbering family), its first digit run padded so a family's
+numbers compare numerically as text, and the letters written straight after that run (its
+variant suffix). `"200"` → `0000000200`, `"200a"` → `0000000200a`, `"P15"` → `p0000000015`,
+`"Bl 3"` → `bl0000000003`. A number with no digit run at all (a bare Roman numeral) has no
+key and sorts last.
+
+ASCII puts digits before letters, so the basic numbering sorts first and each prefix follows
+as its own block, alphabetically — the catalogue's own arrangement. The column is
+`text COLLATE "C"` so Postgres orders the keys byte by byte, the same order JS `<` gives:
+the same key is compared in the database (list `ORDER BY`s) and in memory (the comparators
+that fall back to catalog order), and one of them ordering by a locale's rules instead would
+make two screens disagree about the same series.
+
+It was an `INTEGER` of the leading digits until the prefixed families showed what that cost:
+parsing only what a number *starts* with sent every one of them — Michel `P`, `Bl`, `D`,
+`W`/`S`/`Zd` — into the number-less bucket at the end of every list, ordered by name, where
+`P15` read before `P1—14`. A second column (the family beside the number) was weighed and
+rejected: the key is threaded through a dozen `ORDER BY`s, selects and comparators, and two
+columns is two chances to order by half the key.
+
 ### The formula (single definition, two implementations)
 
-`primaryCatalogSortKey` = the parsed leading-digits integer of the effective
-primary-catalog vendor's number; else the lowest numeric across all the row's numbers;
-else `NULL`.
+`primaryCatalogSortKey` = the key of the effective primary-catalog vendor's number; else the
+lowest key across all the row's numbers; else `NULL`.
 
 It exists twice, deliberately, and the two must stay in sync:
 
 1. **Runtime (TypeScript):** `computeCatalogSortKey` in `src/lib/catalog-sort-key.ts`
    (pure, unit-tested), driven by `src/lib/catalog-sort-key-recompute.ts`.
 2. **Backfill (SQL):** the recursive-CTE `UPDATE` in
-   `prisma/migrations/*_backfill_catalog_sort_key`, which resolves the effective primary
-   vendor by climbing the area tree and parses `substring(number from '^[0-9]+')`.
+   `prisma/migrations/*_catalog_sort_key_prefix_aware`, which resolves the effective primary
+   vendor by climbing the area tree — on `primaryCatalogVendorId`, the leading **vendor**
+   (ADR-0040), where the frozen first backfill still reads the price book — and encodes each
+   number with `regexp_match(… '^\s*([A-Za-z]*)\s*([0-9]+)([A-Za-z]*)')`.
 
-The SQL copy is a frozen, one-time backfill; the TypeScript copy is the living source of
-truth. Any change to the formula updates the TypeScript and adds a new backfill migration —
-never edits the frozen one.
+A backfill migration is frozen once written; the TypeScript copy is the living source of
+truth. Any change to the formula updates the TypeScript and adds a **new** backfill migration —
+never edits an existing one.
 
 ### Maintenance (when the key is recomputed)
 
@@ -95,9 +122,15 @@ self-hosted app and is closed by the next read. Bulk writes use a single
   create / primary-vs-fallback / range-set / area-primary-change paths.
 - **Two copies of the formula.** Accepted for the readability of TypeScript at runtime plus a
   self-contained SQL backfill; kept aligned by this ADR and by the tests.
+- **The key is text, so every comparison goes through one helper.** In-memory orderings call
+  `compareCatalogSortKeys` (ascending, `null` last) rather than subtracting, which is what a
+  numeric key invited; SQL keeps `ASC NULLS LAST`, unchanged.
 
 ## Alternatives considered
 
+- **A second column for the numbering family**, kept beside the integer. Rejected above: the
+  key reaches a dozen call sites, and a two-part key ordered by one part is a silent wrong
+  order.
 - **Raw SQL at read time** (recursive CTE + numeric cast + join, per query). Keeps the value
   underived, but the ordering expression is not indexable, so Postgres still sorts every
   matching row per page — it moves the O(N)-per-page sort from Node into the database rather

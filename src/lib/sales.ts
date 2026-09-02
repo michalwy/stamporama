@@ -142,7 +142,7 @@ async function assertBuyer(collectionId: string, buyerId: string | null): Promis
  * order. Shared by the sellable-offer expansion and the sale detail's set labels, so a set reads
  * the same here as it does on the offer screen. */
 function orderedSetItems<
-  T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } },
+  T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: string | null } } },
 >(items: readonly T[]): T[] {
   const byId = new Map(items.map((li) => [li.itemId, li]));
   return sortSetItems(

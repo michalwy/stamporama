@@ -7,6 +7,7 @@ import {
   hasManualItemOrder,
   nextItemSortOrder,
 } from "../../src/lib/offer-set-order";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // Sets ----------------------------------------------------------------------
 
@@ -31,10 +32,13 @@ describe("compareSets", () => {
 
 // Copies --------------------------------------------------------------------
 
-const derived = (itemId: string, catalogSortKey: number | null) => ({
+/** A catalog number encoded the way the column stores it, so the tests read as catalog numbers. */
+const key = (n: string | number | null) => (n === null ? null : catalogSortKeyOf(String(n)));
+
+const derived = (itemId: string, catalogNumber: string | number | null) => ({
   itemId,
   sortOrder: null,
-  catalogSortKey,
+  catalogSortKey: key(catalogNumber),
 });
 
 describe("sortSetItems", () => {
@@ -50,15 +54,15 @@ describe("sortSetItems", () => {
 
   it("honours hand-corrected positions over catalog order", () => {
     const items = [
-      { itemId: "a", sortOrder: 2, catalogSortKey: 1 },
-      { itemId: "b", sortOrder: 0, catalogSortKey: 9 },
-      { itemId: "c", sortOrder: 1, catalogSortKey: 5 },
+      { itemId: "a", sortOrder: 2, catalogSortKey: key(1) },
+      { itemId: "b", sortOrder: 0, catalogSortKey: key(9) },
+      { itemId: "c", sortOrder: 1, catalogSortKey: key(5) },
     ];
     assert.deepEqual(sortSetItems(items).map((i) => i.itemId), ["b", "c", "a"]);
   });
 
   it("puts explicit positions before derived ones in a mixed set", () => {
-    const items = [derived("a", 1), { itemId: "b", sortOrder: 0, catalogSortKey: 99 }];
+    const items = [derived("a", 1), { itemId: "b", sortOrder: 0, catalogSortKey: key(99) }];
     assert.deepEqual(sortSetItems(items).map((i) => i.itemId), ["b", "a"]);
   });
 

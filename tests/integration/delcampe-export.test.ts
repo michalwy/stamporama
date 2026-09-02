@@ -24,6 +24,7 @@ import {
   DelcampeExportError,
 } from "../../src/lib/delcampe-export";
 import { DELCAMPE_UPLOAD_CSV_NAME } from "../../src/lib/delcampe-export-rules";
+import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
 // Bytes go through the filesystem backend, so point it at a throwaway directory rather than the
 // repo's `.data`, exactly as the photo-generation test does.
@@ -104,7 +105,7 @@ describe("Delcampe Easy Uploader export (#610)", () => {
     });
     const condition = await prisma.stampCondition.findFirstOrThrow({ where: { collectionId } });
     const stamp = await prisma.stamp.create({
-      data: { collectionId, name, primaryCatalogSortKey: red },
+      data: { collectionId, name, primaryCatalogSortKey: catalogSortKeyOf(String(red)) },
     });
     const item = await createItem(userId, collectionId, {
       stampId: stamp.id,

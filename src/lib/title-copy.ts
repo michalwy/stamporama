@@ -20,6 +20,7 @@ import { normalizeLanguage } from "./languages";
 import { resolveTranslationWithFallback } from "./translations";
 import { compactCatalogNumbers } from "./offer-title-template";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { compareCatalogSortKeys } from "./catalog-sort-key";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -150,7 +151,7 @@ export type TitleCopyRow = {
     variants: {
       id: string;
       name: string | null;
-      primaryCatalogSortKey: number | null;
+      primaryCatalogSortKey: string | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       actsAsVariantOverride: boolean | null;
       subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
@@ -237,8 +238,8 @@ export function toTitleCopy(
     // reads of a text that is written to the database.
     .sort(
       (a, b) =>
-        (a.primaryCatalogSortKey ?? Number.MAX_SAFE_INTEGER) -
-          (b.primaryCatalogSortKey ?? Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id)
+        compareCatalogSortKeys(a.primaryCatalogSortKey, b.primaryCatalogSortKey) ||
+        a.id.localeCompare(b.id)
     )
     .filter((v) => v.catalogNumbers.length > 0 || v.name)
     .map((v) =>
