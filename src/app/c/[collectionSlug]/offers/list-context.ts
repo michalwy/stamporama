@@ -15,7 +15,9 @@ import { isOfferState, type OfferState } from "@/lib/offer-rules";
  */
 export interface OfferListContext {
   platformId?: string;
-  /** The state chips that were on, OR-matched — a multi-select since #475. */
+  /** The state chips that were on, OR-matched. A list because one axis keeps one filter on it, and
+   *  because a link written while the chips were multi-select (#475) still means what it said — the
+   *  offers list itself writes a single value again since #735, the sale list still writes several. */
   states?: OfferState[];
   /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `states`. */
   needsAction?: boolean;

@@ -141,8 +141,10 @@ export function OffersListPanel({
   //
   // State and "needs action" share one stored value because they are one choice in the toolbar —
   // picking either clears the other — and storing them apart would let the two disagree. The state
-  // half is a comma-separated set since the chips became multi-select (#475); "needs action" stays
-  // a single value, being a derived overlay rather than a state (ADR-0013 §4).
+  // half is still *parsed* as a comma-separated set, even though the chips write one value since
+  // #735: a value stored while #475's multi-select was in force, or a link somebody kept, must go on
+  // meaning what it said. "needs action" stays a single value, being a derived overlay rather than a
+  // state (ADR-0013 §4).
   const [storedPlatform, rememberPlatformFilter] = usePersistedCollectionValue(
     "offers-platform",
     collectionId
@@ -537,12 +539,22 @@ export function OffersListPanel({
             ))}
           </select>
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
-          {/* Multi-select (#475): an offer is in exactly one state, but the question asked of the
-              list is routinely a group of them ("what is prepared but not yet live"), so a chip
-              toggles its own state in and out of the set. Picking one still clears "needs action",
-              which is an overlay rather than a state (ADR-0013 §4). */}
+          {/* Single-select (#735, reverting #475's multi-select on this list only): a chip switches
+              the list to its own state, and clicking the active one clears it. The offers list is
+              worked through **a state at a time** — what is preparing, then what is ready to post —
+              so a click that *added* to a set left the collector clearing the previous chip by hand
+              on the way to every one of those passes. The sale list keeps multi-select, which is the
+              divergence #475 got wrong: a sale is read as a batch of work spanning states, while an
+              offer's state is where in the pipeline it has got to. `states` stays a *list* on
+              `OfferFilters` and in the list context — one axis keeps one filter on it — so a
+              remembered or linked multi-value still reads, and simply collapses to one on the next
+              click. Picking a state still clears "needs action", which is an overlay rather than a
+              state (ADR-0013 §4). */}
           {OFFER_STATES.map((value) => {
+            // Lit for any state in force, so a link or a remembered value carrying two of them is
+            // described honestly rather than showing a narrowed list with no chip on.
             const active = states.includes(value);
+            const onlyThis = active && states.length === 1;
             return (
               <FilterChip
                 key={value}
@@ -550,11 +562,10 @@ export function OffersListPanel({
                 count={counts ? (counts.states[value] ?? 0) : undefined}
                 active={active}
                 onClick={() => {
-                  // Kept in lifecycle order however they were clicked, so the stored value and a
-                  // shared link read the same for one selection whatever route reached it.
-                  const next = OFFER_STATES.filter((s) =>
-                    s === value ? !active : states.includes(s)
-                  ).join(",");
+                  // Clicking one of two lit chips *replaces* the pair rather than subtracting from
+                  // it — subtracting is the multi-select behaviour this reverts. Only the sole
+                  // active chip clears.
+                  const next = onlyThis ? "" : value;
                   rememberStatusFilter(next);
                   updateParams({ state: next, needsAction: "" });
                 }}

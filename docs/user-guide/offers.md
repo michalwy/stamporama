@@ -1775,10 +1775,13 @@ so what is left to deal with is still selected; everything that went through is 
 
 The toolbar has a **search** box, and filters offers by **platform**, by **state** (Preparing /
 Ready / Active / Paused / Sold / Withdrawn), and by **Needs action** (the derived overlay above).
-The state chips are **multi-select** — click as many as you want and the list shows all of them
-together, "everything Ready *or* Active" being one question rather than two. Clicking an active chip
-again drops it. **Needs action** is not a state, so picking it clears the state chips and picking a
-state clears it.
+The state chips are **single-select**: clicking one shows that state, clicking a different one
+switches to it, and clicking the one that is already on clears it and shows every state again. This
+list is worked through a state at a time — what is preparing, then what is ready to post — so a
+click that added to a selection meant clearing the previous chip by hand before every pass. (The
+sale list's status chips are multi-select, because a sale list is read as a batch of work that spans
+statuses; an offer's state is where in the pipeline it has got to.) **Needs action** is not a state,
+so picking it clears the state chips and picking a state clears it.
 
 Beside it are two more overlays, both of which narrow whatever the chips beside them are showing and
 redden as soon as their count is above zero: **Ended auctions** — auctions that closed with a bid and

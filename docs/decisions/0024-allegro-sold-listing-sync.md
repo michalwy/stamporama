@@ -55,8 +55,13 @@ half-finished sweep would report every listing it had not reached yet as ended.
 ### 3a. The sold list filters on two axes, client-side
 
 *Paid / Not paid* and *Matched / Unmatched* are **two independent multi-selects**, OR within an axis
-and AND across them, exactly as the offers list's state chips work (#475). One flat row of chips
-would imply they were alternatives, and "paid but unmatched" is a real and interesting session.
+and AND across them, exactly as the offers list's state chips worked when this was written (#475).
+One flat row of chips would imply they were alternatives, and "paid but unmatched" is a real and
+interesting session.
+
+> The offers list's state chips went back to **single-select** in #735, the offers list being worked
+> a state at a time. These two axes are unaffected: the reasoning above stands on its own, and the
+> sale list's status chips (#392) are the multi-select this can still be read against.
 
 They are applied at the levels the facts live at: payment narrows **orders**, matching narrows
 **lines**, and an order left with no line falls out. Filtering whole orders on "does any line match"
