@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { isTagColor, type TagColor } from "./tag-colors";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -43,6 +44,8 @@ export interface CertificateStatusData {
   /** Per-language overrides of {@link abbreviation} (#294); falls back independently of the name. */
   abbreviationByLanguage: Record<string, string>;
   sortOrder: number;
+  /** The chip colour (#728), or null for the neutral chip — read exactly as a condition's is. */
+  color: TagColor | null;
 }
 
 // Certificate status is optional: a stamp with no status selected is treated as
@@ -61,6 +64,7 @@ export async function getCertificateStatuses(
       id: true,
       name: true,
       abbreviation: true,
+      color: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
@@ -72,6 +76,7 @@ export async function getCertificateStatuses(
     nameByLanguage: translationsByLanguage(s.translations, (t) => t.name),
     abbreviationByLanguage: translationsByLanguage(s.translations, (t) => t.abbreviation),
     sortOrder: s.sortOrder,
+    color: isTagColor(s.color) ? s.color : null,
   }));
 }
 
@@ -101,7 +106,12 @@ async function syncCertificateStatusTranslations(
 export async function createCertificateStatus(
   ownerId: string,
   collectionId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    color?: TagColor | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.certificateStatus.findFirst({
@@ -111,7 +121,13 @@ export async function createCertificateStatus(
   });
   const sortOrder = last ? last.sortOrder + 1 : 0;
   const created = await prisma.certificateStatus.create({
-    data: { collectionId, name: data.name, abbreviation: data.abbreviation, sortOrder },
+    data: {
+      collectionId,
+      name: data.name,
+      abbreviation: data.abbreviation,
+      color: data.color ?? null,
+      sortOrder,
+    },
     select: { id: true },
   });
   await syncCertificateStatusTranslations(created.id, data.translations);
@@ -120,13 +136,18 @@ export async function createCertificateStatus(
 export async function updateCertificateStatus(
   ownerId: string,
   statusId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    color?: TagColor | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   const collectionId = await resolveStatusCollection(statusId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.certificateStatus.update({
     where: { id: statusId },
-    data: { name: data.name, abbreviation: data.abbreviation },
+    data: { name: data.name, abbreviation: data.abbreviation, color: data.color ?? null },
   });
   await syncCertificateStatusTranslations(statusId, data.translations);
 }

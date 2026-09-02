@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { isTagColor, type TagColor } from "./tag-colors";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -45,6 +46,9 @@ export interface StampConditionData {
    * a language often translates `Mint Never Hinged` but keeps `MNH`. */
   abbreviationByLanguage: Record<string, string>;
   sortOrder: number;
+  /** The chip colour (#728), or null for the neutral chip. A palette key from
+   * {@link TAG_COLORS}; anything else stored reads as null rather than reaching a `var()`. */
+  color: TagColor | null;
 }
 
 /**
@@ -54,13 +58,17 @@ export interface StampConditionData {
 export const DEFAULT_CONDITIONS: ReadonlyArray<{
   name: string;
   abbreviation: string;
+  color: TagColor;
 }> = [
-  { name: "Mint Never Hinged", abbreviation: "MNH" },
-  { name: "Mint Hinged", abbreviation: "MH" },
-  { name: "Mint No Gum", abbreviation: "MNG" },
-  { name: "Used", abbreviation: "U" },
-  { name: "Cancelled to Order", abbreviation: "CTO" },
-  { name: "First Day Cover", abbreviation: "FDC" },
+  // Colours (#728) so a fresh collection is already legible: the mint grades run warm through
+  // green / teal / amber, the used ones cool through blue / violet, and FDC — a cover rather than
+  // a stamp — sits apart in orange. The migration backfills existing collections to match.
+  { name: "Mint Never Hinged", abbreviation: "MNH", color: "green" },
+  { name: "Mint Hinged", abbreviation: "MH", color: "teal" },
+  { name: "Mint No Gum", abbreviation: "MNG", color: "amber" },
+  { name: "Used", abbreviation: "U", color: "blue" },
+  { name: "Cancelled to Order", abbreviation: "CTO", color: "violet" },
+  { name: "First Day Cover", abbreviation: "FDC", color: "orange" },
 ];
 
 /**
@@ -76,6 +84,7 @@ export async function seedDefaultConditions(
       collectionId,
       name: c.name,
       abbreviation: c.abbreviation,
+      color: c.color,
       sortOrder: i,
     })),
   });
@@ -93,6 +102,7 @@ export async function getStampConditions(
       id: true,
       name: true,
       abbreviation: true,
+      color: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
@@ -104,6 +114,7 @@ export async function getStampConditions(
     nameByLanguage: translationsByLanguage(c.translations, (t) => t.name),
     abbreviationByLanguage: translationsByLanguage(c.translations, (t) => t.abbreviation),
     sortOrder: c.sortOrder,
+    color: isTagColor(c.color) ? c.color : null,
   }));
 }
 
@@ -134,7 +145,12 @@ async function syncConditionTranslations(
 export async function createStampCondition(
   ownerId: string,
   collectionId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    color?: TagColor | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampCondition.findFirst({
@@ -144,7 +160,13 @@ export async function createStampCondition(
   });
   const sortOrder = last ? last.sortOrder + 1 : 0;
   const created = await prisma.stampCondition.create({
-    data: { collectionId, name: data.name, abbreviation: data.abbreviation, sortOrder },
+    data: {
+      collectionId,
+      name: data.name,
+      abbreviation: data.abbreviation,
+      color: data.color ?? null,
+      sortOrder,
+    },
     select: { id: true },
   });
   await syncConditionTranslations(created.id, data.translations);
@@ -153,13 +175,18 @@ export async function createStampCondition(
 export async function updateStampCondition(
   ownerId: string,
   conditionId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    color?: TagColor | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   const collectionId = await resolveConditionCollection(conditionId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.stampCondition.update({
     where: { id: conditionId },
-    data: { name: data.name, abbreviation: data.abbreviation },
+    data: { name: data.name, abbreviation: data.abbreviation, color: data.color ?? null },
   });
   await syncConditionTranslations(conditionId, data.translations);
 }

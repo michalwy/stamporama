@@ -12,6 +12,11 @@ import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-numbe
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { CopyValue } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -37,16 +42,8 @@ import { TradeLineSignalMarks, withTradeLineSignalActions } from "./trade-line-s
 // The give side is the other way round and *is* rendered through `InventoryItemRow`: a give line
 // names a copy that exists, with all of that.
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+/** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
+const CHIP = ROW_CHIP;
 
 const META_INLINE: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -290,15 +287,21 @@ export function TradeReceiveLineRow({
             flexWrap: "wrap",
           }}
         >
-          <Tooltip content={line.conditionName}>
-            <span style={CHIP}>{line.conditionAbbreviation}</span>
-          </Tooltip>
+          <ConditionChip
+            collectionId={collectionId}
+            conditionId={line.conditionId}
+            label={line.conditionAbbreviation}
+            tooltip={line.conditionName}
+          />
           {/* No certificate is the unmarked default (ADR-0006 §2) and draws nothing; so does the
               single (ADR-0020) and so does a quantity of one. Only what was actually said is chipped. */}
           {line.certificateStatusAbbreviation && (
-            <Tooltip content={`Certificate: ${line.certificateStatusName}`}>
-              <span style={CHIP}>{line.certificateStatusAbbreviation}</span>
-            </Tooltip>
+            <CertificateStatusChip
+              collectionId={collectionId}
+              certificateStatusId={line.certificateStatusId}
+              label={line.certificateStatusAbbreviation}
+              tooltip={`Certificate: ${line.certificateStatusName}`}
+            />
           )}
           {line.formatAbbreviation && (
             <Tooltip content={line.formatName ?? ""}>

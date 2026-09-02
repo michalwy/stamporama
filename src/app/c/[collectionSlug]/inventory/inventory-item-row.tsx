@@ -36,6 +36,11 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
@@ -43,16 +48,8 @@ import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-quer
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+/** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
+const CHIP = ROW_CHIP;
 
 /** A soft-tinted chip so each disposition is visually distinct without being
  * loud: a pale, theme-aware background with colored text and border. */
@@ -775,13 +772,18 @@ export function InventoryItemRow({
           <Tooltip content="Internal copy number — assigned automatically, not editable">
             <span style={ITEM_NO_CHIP}>{formatItemNo(item.itemNo, itemNoPad)}</span>
           </Tooltip>
-          <Tooltip content={item.conditionName}>
-            <span style={CHIP}>{item.conditionAbbreviation}</span>
-          </Tooltip>
+          <ConditionChip
+            collectionId={collectionId}
+            conditionId={item.conditionId}
+            label={item.conditionAbbreviation}
+            tooltip={item.conditionName}
+          />
           {item.certificateStatusName && (
-            <Tooltip content="Certificate status">
-              <span style={CHIP}>{item.certificateStatusName}</span>
-            </Tooltip>
+            <CertificateStatusChip
+              collectionId={collectionId}
+              certificateStatusId={item.certificateStatusId}
+              label={item.certificateStatusName}
+            />
           )}
           {/* Only multiples get a chip. A single is the unmarked default, so labelling it would
               put a badge on nearly every row and say nothing. */}

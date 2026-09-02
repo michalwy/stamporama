@@ -38,6 +38,10 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { Icon } from "@/app/icons";
 
 // The copy detail screen (#517). Read-only by design: every field here is edited through the copy
@@ -240,10 +244,29 @@ export function CopyDetailPanel({
           <DetailColumn>
             <DetailCard title="Details">
               <FieldGrid>
+                {/* Coloured exactly as the copies list colours it (#728) — a chip a collector
+                    learned to recognise on the list has to be the same chip on the copy's own
+                    screen, or the colour is a list convention rather than the entry's own. */}
                 <Field label="Condition">
-                  {item.conditionName} ({item.conditionAbbreviation})
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                    <ConditionChip
+                      collectionId={collectionId}
+                      conditionId={item.conditionId}
+                      label={item.conditionAbbreviation}
+                      tooltip={item.conditionName}
+                    />
+                    {item.conditionName}
+                  </span>
                 </Field>
-                <Field label="Certificate">{item.certificateStatusName}</Field>
+                <Field label="Certificate">
+                  {item.certificateStatusName ? (
+                    <CertificateStatusChip
+                      collectionId={collectionId}
+                      certificateStatusId={item.certificateStatusId}
+                      label={item.certificateStatusName}
+                    />
+                  ) : null}
+                </Field>
                 <Field label="Format">{item.formatName ?? "Single"}</Field>
                 <Field label="Delivery">{deliveryStateLabel(item.deliveryState)}</Field>
                 <Field label="Area">{areaPath}</Field>

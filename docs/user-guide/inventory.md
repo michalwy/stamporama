@@ -18,7 +18,8 @@ Each row shows:
 - The copy's **internal number** (e.g. `#00123`) — see [Internal copy number](#internal-copy-number).
 - The linked stamp's **catalog number**, **name**, and **issue**. A catalog-number chip is
   **clickable — it copies the number** (see [Copying a catalog number](#copying-a-catalog-number)).
-- The **condition** and any **certificate status**.
+- The **condition** and any **certificate status**, each in the colour you gave it (see
+  [Condition and certificate colours](collections.md#condition-and-certificate-colours)).
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once. Copies you intend to sell are composed into [offers](offers.md).
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).

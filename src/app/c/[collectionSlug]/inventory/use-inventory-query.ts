@@ -18,7 +18,6 @@ import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { StampHoldings } from "@/lib/stamp-holdings";
-import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
@@ -576,19 +575,12 @@ export function useStampHoldings(collectionId: string, stampId: string | null) {
 
 /** Certificate statuses for the add-copy dialog opened from list rows (#111). Mirrors
  * {@link useCollectionConditions}; both feed the add/edit dialog's selects client-side so
- * the stamp/issue lists don't have to thread server-loaded props down to every row. */
-export function useCollectionCertificateStatuses(collectionId: string) {
-  return useQuery<CertificateStatusData[]>({
-    queryKey: ["certificateStatuses", collectionId] as const,
-    queryFn: async () => {
-      const { getCertificateStatusesAction } = await import(
-        "@/app/actions/certificate-statuses"
-      );
-      return getCertificateStatusesAction(collectionId);
-    },
-    staleTime: 60_000,
-  });
-}
+ * the stamp/issue lists don't have to thread server-loaded props down to every row.
+ *
+ * Re-exported from the shared hook rather than declared again: this file held a second copy under
+ * its own query key, so a screen drawing coloured certificate chips (#728) and opening the copy
+ * dialog would have fetched the same small dictionary twice and been able to show two answers. */
+export { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 
 /** Physical formats for the copy dialog's format select. Fetched client-side for the same
  * reason as {@link useCollectionCertificateStatuses}: the dialog is opened from four different

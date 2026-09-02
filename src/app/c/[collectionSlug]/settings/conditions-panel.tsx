@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DialogShell,
   DialogBody,
@@ -26,6 +27,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import { Icon } from "@/app/icons";
+import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
+import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -74,6 +77,7 @@ const ABBREVIATION_FIELDS: TranslationField[] = [{ key: "abbreviation", label: "
 function ConditionForm({
   defaultName,
   defaultAbbreviation,
+  defaultColor,
   defaultTranslations,
   titleLanguages,
   defaultLanguage,
@@ -82,6 +86,8 @@ function ConditionForm({
 }: {
   defaultName?: string;
   defaultAbbreviation?: string;
+  /** The chip colour (#728). When adding, the panel offers the first hue nobody is using. */
+  defaultColor?: TagColor | null;
   /** Stored per-language values, field-major (#294); absent when adding. */
   defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
   titleLanguages: string[];
@@ -96,6 +102,7 @@ function ConditionForm({
   // blank entry falls back to, rather than whatever the field held when the dialog opened.
   const [name, setName] = useState(defaultName ?? "");
   const [abbreviation, setAbbreviation] = useState(defaultAbbreviation ?? "");
+  const [color, setColor] = useState<TagColor | null>(defaultColor ?? null);
   // Staged per-language values (#294), one record per field: edited in the shared dialog, submitted
   // as hidden `name:<lang>` / `abbreviation:<lang>` inputs, written only when the condition itself
   // is saved. The two are independent — a language may translate the name and keep the
@@ -177,6 +184,13 @@ function ConditionForm({
           </p>
         )}
       </div>
+      <div style={{ marginTop: "1rem" }}>
+        <LabelWithError>Colour</LabelWithError>
+        <TagColorPicker value={color} onChange={setColor} disabled={isPending} />
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          Tints this condition&rsquo;s chip wherever copies, lines and lots are listed.
+        </p>
+      </div>
     </>
   );
 }
@@ -188,6 +202,10 @@ export function ConditionsPanel({
   defaultLanguage,
 }: ConditionsPanelProps) {
   const router = useRouter();
+  // The chips that read this dictionary (#728) live on other screens and cache it for a minute, so
+  // a recolour has to drop that cache as well as refresh this page — otherwise the colour a
+  // collector just chose is the one thing the app does not show them.
+  const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<ConditionActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -217,6 +235,7 @@ export function ConditionsPanel({
 
   function handleSuccess() {
     setDialog({ kind: "none" });
+    void queryClient.invalidateQueries({ queryKey: ["conditions", collectionId] });
     router.refresh();
   }
 
@@ -347,7 +366,7 @@ export function ConditionsPanel({
             <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
               {condition.name}
             </span>
-            <span style={abbrBadgeStyle}>{condition.abbreviation}</span>
+            <span style={abbrBadgeStyle(condition.color)}>{condition.abbreviation}</span>
             <RowActionsMenu
               ariaLabel="Condition actions"
               actions={[
@@ -373,6 +392,7 @@ export function ConditionsPanel({
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => createStampConditionAction(collectionId, fd), e)}>
             <DialogBody>
               <ConditionForm
+                defaultColor={nextTagColor(items.map((c) => c.color))}
                 titleLanguages={titleLanguages}
                 defaultLanguage={defaultLanguage}
                 isPending={isPending}
@@ -391,6 +411,7 @@ export function ConditionsPanel({
               <ConditionForm
                 defaultName={dialog.condition.name}
                 defaultAbbreviation={dialog.condition.abbreviation}
+                defaultColor={dialog.condition.color}
                 defaultTranslations={{
                   name: dialog.condition.nameByLanguage,
                   abbreviation: dialog.condition.abbreviationByLanguage,
@@ -428,13 +449,18 @@ export function ConditionsPanel({
 
 // ── Shared row styles (local, mirrors catalog-panel) ─────────────────────────
 
-const abbrBadgeStyle: React.CSSProperties = {
-  fontSize: "0.8125rem",
-  color: "var(--color-text-muted)",
-  background: "var(--color-bg-page)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.25rem",
-  padding: "0.1rem 0.4rem",
-  fontFamily: "monospace",
-};
+/** The row's own abbreviation badge, in the colour the entry carries (#728) — the settings list is
+ * where a colour is chosen, so it is the one list that must show the choice back. */
+function abbrBadgeStyle(color: string | null): React.CSSProperties {
+  const tokens = tagColorTokens(color);
+  return {
+    fontSize: "0.8125rem",
+    color: tokens.color,
+    background: tokens.background,
+    border: `1px solid ${tokens.border}`,
+    borderRadius: "0.25rem",
+    padding: "0.1rem 0.4rem",
+    fontFamily: "monospace",
+  };
+}
 

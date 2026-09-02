@@ -67,6 +67,24 @@ export const STAMP_MUTED_PRIMARY_CHIP: React.CSSProperties = {
 };
 
 /**
+ * The **row chip** — the neutral badge a list row hangs its small facts on: a copy's condition,
+ * certificate, format and quantity, and the same four on a trade line, a lot line and a duplicate
+ * group. Four screens had it written out identically, which was survivable while it was grey and
+ * is not now that a condition or a certificate can carry a colour (#728): a coloured chip and a
+ * plain one on the same line have to be the same shape, differing only in tint.
+ */
+export const ROW_CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-page)",
+  whiteSpace: "nowrap",
+};
+
+/**
  * The **set-completeness chip** — *how much of this set is held* — and the state it takes when the
  * answer is "all of it".
  *

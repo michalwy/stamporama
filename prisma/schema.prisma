@@ -180,6 +180,9 @@ model StampCondition {
   name         String
   abbreviation String
   sortOrder    Int
+  /** Chip colour (#728): one of `TAG_COLORS`, or null for the neutral chip. A palette key rather
+   *  than a hex — the theme decides what the hue is worth on each background. */
+  color        String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
@@ -328,6 +331,8 @@ model CertificateStatus {
   name         String
   abbreviation String
   sortOrder    Int
+  /** Chip colour (#728), read exactly as {@link StampCondition.color} is. */
+  color        String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]

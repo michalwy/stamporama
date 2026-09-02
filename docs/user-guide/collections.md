@@ -504,6 +504,7 @@ Each collection keeps its own list of **conditions** — the grades used when va
 
 - Every new collection starts with a default set: **MNH**, **MH**, **MNG**, **U**, **CTO**, and **FDC**. These are ordinary conditions — rename, reorder, or delete any of them.
 - **Add** a condition with a full name (e.g. "Mint Never Hinged") and a short abbreviation (e.g. "MNH").
+- Give each condition a **colour**, so its chip stands out wherever copies are listed — see [Condition and certificate colours](#condition-and-certificate-colours) below.
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
 
@@ -521,10 +522,21 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 
 - Certificate status is **optional**: leaving no status selected means the stamp has none, so there is no "None" entry to manage. New collections start with an empty list — add the statuses you use.
 - **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
+- Give each status a **colour**, exactly as a condition takes one — see [Condition and certificate colours](#condition-and-certificate-colours).
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
 
 Certificate statuses translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button on each of **Name** and **Abbreviation**, feeding the `{certificate}` and `{certificateAbbr}` title tokens.
+
+## Condition and certificate colours
+
+A condition and a certificate status each carry a **colour**, so the chips they draw across the app can be told apart at a glance instead of reading as one grey line. Pick one in the **Colour** field of the add or edit dialog, on either list: a row of swatches, with a dashed **No colour** swatch at the front.
+
+- The colour shows on the **Copies** list, on duplicate and grouped rows, on a copy's own page, on trade receive lines and on auction lot composition lines — everywhere the condition or the status is already drawn as a chip. It does not change listing text, prices, or anything that leaves the app.
+- **No colour is a real choice.** An entry with no colour keeps the plain grey chip, which is what makes a coloured one stand out: colouring everything says as much as colouring nothing.
+- The default conditions arrive **already coloured** — mint grades in green, teal and amber, used in blue, CTO in violet and FDC in orange — and existing collections were given the same colours, so nothing has to be set up before this is worth anything. Change any of them; they are ordinary conditions.
+- Adding a new condition or status offers the first colour nobody is using yet, so a growing list stays distinguishable without picking one each time.
+- The swatches are a fixed set of ten. The app decides what each one looks like on the light and the dark theme, which is what keeps your choice legible in both.
 
 ## Acceptance profiles
 

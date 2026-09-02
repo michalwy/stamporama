@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DialogShell,
   DialogBody,
@@ -26,6 +27,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import { Icon } from "@/app/icons";
+import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
+import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -72,6 +75,7 @@ type DialogState =
 function CertificateStatusForm({
   defaultName,
   defaultAbbreviation,
+  defaultColor,
   defaultTranslations,
   titleLanguages,
   defaultLanguage,
@@ -80,6 +84,8 @@ function CertificateStatusForm({
 }: {
   defaultName?: string;
   defaultAbbreviation?: string;
+  /** The chip colour (#728); mirrors the conditions panel, down to offering a free hue on add. */
+  defaultColor?: TagColor | null;
   /** Stored per-language values, field-major (#294); absent when adding. */
   defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
   titleLanguages: string[];
@@ -94,6 +100,7 @@ function CertificateStatusForm({
   // blank entry falls back to. Mirrors the conditions panel.
   const [name, setName] = useState(defaultName ?? "");
   const [abbreviation, setAbbreviation] = useState(defaultAbbreviation ?? "");
+  const [color, setColor] = useState<TagColor | null>(defaultColor ?? null);
   // One staged record per field; the two fall back independently and the row is dropped only once
   // both are blank.
   const [nameTranslations, setNameTranslations] = useState<TranslationValues>(() =>
@@ -173,6 +180,13 @@ function CertificateStatusForm({
           </p>
         )}
       </div>
+      <div style={{ marginTop: "1rem" }}>
+        <LabelWithError>Colour</LabelWithError>
+        <TagColorPicker value={color} onChange={setColor} disabled={isPending} />
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          Tints this status&rsquo;s chip wherever copies, lines and lots are listed.
+        </p>
+      </div>
     </>
   );
 }
@@ -184,6 +198,10 @@ export function CertificateStatusesPanel({
   defaultLanguage,
 }: CertificateStatusesPanelProps) {
   const router = useRouter();
+  // The chips that read this dictionary (#728) live on other screens and cache it for a minute, so
+  // a recolour has to drop that cache as well as refresh this page — otherwise the colour a
+  // collector just chose is the one thing the app does not show them.
+  const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<CertificateStatusActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -213,6 +231,7 @@ export function CertificateStatusesPanel({
 
   function handleSuccess() {
     setDialog({ kind: "none" });
+    void queryClient.invalidateQueries({ queryKey: ["certificate-statuses", collectionId] });
     router.refresh();
   }
 
@@ -343,7 +362,7 @@ export function CertificateStatusesPanel({
             <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
               {status.name}
             </span>
-            <span style={abbrBadgeStyle}>{status.abbreviation}</span>
+            <span style={abbrBadgeStyle(status.color)}>{status.abbreviation}</span>
             <RowActionsMenu
               ariaLabel="Certificate status actions"
               actions={[
@@ -369,6 +388,7 @@ export function CertificateStatusesPanel({
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => createCertificateStatusAction(collectionId, fd), e)}>
             <DialogBody>
               <CertificateStatusForm
+                defaultColor={nextTagColor(items.map((s) => s.color))}
                 titleLanguages={titleLanguages}
                 defaultLanguage={defaultLanguage}
                 isPending={isPending}
@@ -387,6 +407,7 @@ export function CertificateStatusesPanel({
               <CertificateStatusForm
                 defaultName={dialog.status.name}
                 defaultAbbreviation={dialog.status.abbreviation}
+                defaultColor={dialog.status.color}
                 defaultTranslations={{
                   name: dialog.status.nameByLanguage,
                   abbreviation: dialog.status.abbreviationByLanguage,
@@ -424,13 +445,17 @@ export function CertificateStatusesPanel({
 
 // ── Shared row styles (local, mirrors conditions-panel) ──────────────────────
 
-const abbrBadgeStyle: React.CSSProperties = {
-  fontSize: "0.8125rem",
-  color: "var(--color-text-muted)",
-  background: "var(--color-bg-page)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.25rem",
-  padding: "0.1rem 0.4rem",
-  fontFamily: "monospace",
-};
+/** The row's own abbreviation badge, in the status's colour (#728) — see the conditions panel. */
+function abbrBadgeStyle(color: string | null): React.CSSProperties {
+  const tokens = tagColorTokens(color);
+  return {
+    fontSize: "0.8125rem",
+    color: tokens.color,
+    background: tokens.background,
+    border: `1px solid ${tokens.border}`,
+    borderRadius: "0.25rem",
+    padding: "0.1rem 0.4rem",
+    fontFamily: "monospace",
+  };
+}
 

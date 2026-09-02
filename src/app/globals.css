@@ -29,6 +29,39 @@
   --color-disposition-trade: #7c3aed;
   --color-disposition-trade-soft: #ede9fe;
   --color-disposition-trade-border: #c4b5fd;
+  /* Dictionary tag hues (#728) — the colour a collector may give a condition or a certificate
+     status. Not intents: these say *which entry this is*, so they are picked from a list rather
+     than meant, and each is a chip triple (text / pale fill / edge) like a disposition. */
+  --color-tag-red: #b91c1c;
+  --color-tag-red-soft: #fee2e2;
+  --color-tag-red-border: #fca5a5;
+  --color-tag-orange: #c2410c;
+  --color-tag-orange-soft: #ffedd5;
+  --color-tag-orange-border: #fdba74;
+  --color-tag-amber: #b45309;
+  --color-tag-amber-soft: #fef3c7;
+  --color-tag-amber-border: #fcd34d;
+  --color-tag-green: #15803d;
+  --color-tag-green-soft: #dcfce7;
+  --color-tag-green-border: #86efac;
+  --color-tag-teal: #0f766e;
+  --color-tag-teal-soft: #ccfbf1;
+  --color-tag-teal-border: #5eead4;
+  --color-tag-blue: #1d4ed8;
+  --color-tag-blue-soft: #dbeafe;
+  --color-tag-blue-border: #93c5fd;
+  --color-tag-indigo: #4338ca;
+  --color-tag-indigo-soft: #e0e7ff;
+  --color-tag-indigo-border: #a5b4fc;
+  --color-tag-violet: #6d28d9;
+  --color-tag-violet-soft: #ede9fe;
+  --color-tag-violet-border: #c4b5fd;
+  --color-tag-pink: #be185d;
+  --color-tag-pink-soft: #fce7f3;
+  --color-tag-pink-border: #f9a8d4;
+  --color-tag-slate: #475569;
+  --color-tag-slate-soft: #f1f5f9;
+  --color-tag-slate-border: #cbd5e1;
   --color-action-primary: var(--color-accent);
   --color-action-primary-hover: var(--color-accent-hover);
   /* Surface tokens */
@@ -82,6 +115,37 @@
   --color-disposition-trade: #a48ad4;
   --color-disposition-trade-soft: #221a3a;
   --color-disposition-trade-border: #3d2f63;
+  /* Dictionary tag hues (#728), the dark half. Same three roles per hue. */
+  --color-tag-red: #f87171;
+  --color-tag-red-soft: #450a0a;
+  --color-tag-red-border: #991b1b;
+  --color-tag-orange: #fb923c;
+  --color-tag-orange-soft: #431407;
+  --color-tag-orange-border: #9a3412;
+  --color-tag-amber: #fbbf24;
+  --color-tag-amber-soft: #451a03;
+  --color-tag-amber-border: #92400e;
+  --color-tag-green: #4ade80;
+  --color-tag-green-soft: #052e16;
+  --color-tag-green-border: #166534;
+  --color-tag-teal: #2dd4bf;
+  --color-tag-teal-soft: #042f2e;
+  --color-tag-teal-border: #115e59;
+  --color-tag-blue: #93c5fd;
+  --color-tag-blue-soft: #172554;
+  --color-tag-blue-border: #1e40af;
+  --color-tag-indigo: #a5b4fc;
+  --color-tag-indigo-soft: #1e1b4b;
+  --color-tag-indigo-border: #3730a3;
+  --color-tag-violet: #c4b5fd;
+  --color-tag-violet-soft: #2e1065;
+  --color-tag-violet-border: #5b21b6;
+  --color-tag-pink: #f9a8d4;
+  --color-tag-pink-soft: #500724;
+  --color-tag-pink-border: #9d174d;
+  --color-tag-slate: #cbd5e1;
+  --color-tag-slate-soft: #1e293b;
+  --color-tag-slate-border: #475569;
   --color-action-primary: var(--color-accent);
   --color-action-primary-hover: var(--color-accent-hover);
   /* Surface tokens */

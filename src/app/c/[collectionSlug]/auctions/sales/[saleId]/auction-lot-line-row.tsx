@@ -14,6 +14,11 @@ import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-numbe
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import {
   ColnectChip,
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
@@ -33,16 +38,8 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 // copy row would print `#00000` and four empty slots and call that consistency. What a line has and
 // a copy does not is **quantity**, which is the last chip on the condition line.
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+/** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
+const CHIP = ROW_CHIP;
 
 const META: React.CSSProperties = {
   fontSize: "0.8125rem",
@@ -399,15 +396,21 @@ export function AuctionLotLineRow({
               flexWrap: "wrap",
             }}
           >
-            <Tooltip content={line.conditionName}>
-              <span style={CHIP}>{line.conditionAbbreviation}</span>
-            </Tooltip>
+            <ConditionChip
+              collectionId={collectionId}
+              conditionId={line.conditionId}
+              label={line.conditionAbbreviation}
+              tooltip={line.conditionName}
+            />
             {/* No certificate is the unmarked default (ADR-0006 §2) and renders nothing — most
                 material carries none, and chipping it would badge nearly every line. */}
             {line.certificateStatusAbbreviation && (
-              <Tooltip content={`Certificate: ${line.certificateStatusName}`}>
-                <span style={CHIP}>{line.certificateStatusAbbreviation}</span>
-              </Tooltip>
+              <CertificateStatusChip
+                collectionId={collectionId}
+                certificateStatusId={line.certificateStatusId}
+                label={line.certificateStatusAbbreviation}
+                tooltip={`Certificate: ${line.certificateStatusName}`}
+              />
             )}
             {/* A single is the unmarked default and renders nothing (ADR-0020) — there is no such
                 dictionary row, and labelling most of a list "single" is noise. */}

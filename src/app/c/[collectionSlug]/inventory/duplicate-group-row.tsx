@@ -23,20 +23,17 @@ import {
   type CopyRowActions,
   type CopySelection,
 } from "./inventory-copy-list";
+import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import { CopyValue } from "./inventory-item-row";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+/** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
+const CHIP = ROW_CHIP;
 
 const AREA_CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -323,18 +320,23 @@ export function DuplicateGroupRow({
               flexWrap: "wrap",
             }}
           >
-            <Tooltip content={group.conditionName}>
-              <span style={CHIP}>{group.conditionAbbreviation}</span>
-            </Tooltip>
+            <ConditionChip
+              collectionId={collectionId}
+              conditionId={group.conditionId}
+              label={group.conditionAbbreviation}
+              tooltip={group.conditionName}
+            />
             {axes.format && (
               <Tooltip content={group.formatName ?? "Single (no format recorded)"}>
                 <span style={CHIP}>{group.formatAbbreviation ?? "single"}</span>
               </Tooltip>
             )}
             {axes.certificate && (
-              <Tooltip content="Certificate status">
-                <span style={CHIP}>{group.certificateStatusName ?? "no certificate"}</span>
-              </Tooltip>
+              <CertificateStatusChip
+                collectionId={collectionId}
+                certificateStatusId={group.certificateStatusId}
+                label={group.certificateStatusName ?? "no certificate"}
+              />
             )}
             {group.mixedFormat && (
               <Tooltip content="These copies are not all the same format. Turn on Split by format to group them apart.">

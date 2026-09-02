@@ -14,6 +14,7 @@ import {
   type CertificateStatusData,
 } from "@/lib/certificate-statuses";
 import { parseTranslationValues } from "@/lib/translations";
+import { isTagColor, type TagColor } from "@/lib/tag-colors";
 
 export type CertificateStatusActionState =
   | { status: "idle" }
@@ -33,10 +34,18 @@ export async function getCertificateStatusesAction(
   return getCertificateStatuses(session.user.id, collectionId);
 }
 
-function parseFields(formData: FormData): { name: string; abbreviation: string } {
+function parseFields(formData: FormData): {
+  name: string;
+  abbreviation: string;
+  color: TagColor | null;
+} {
+  // An unset or unrecognised colour (#728) is *no colour* — the neutral chip — rather than an
+  // error: the field is a row of swatches with a None among them, so there is nothing to correct.
+  const color = (formData.get("color") as string | null) ?? "";
   return {
     name: ((formData.get("name") as string | null) ?? "").trim(),
     abbreviation: ((formData.get("abbreviation") as string | null) ?? "").trim(),
+    color: isTagColor(color) ? color : null,
   };
 }
 
@@ -45,13 +54,14 @@ export async function createCertificateStatusAction(
   formData: FormData
 ): Promise<CertificateStatusActionState> {
   const session = await getSession();
-  const { name, abbreviation } = parseFields(formData);
+  const { name, abbreviation, color } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
     await createCertificateStatus(session.user.id, collectionId, {
       name,
       abbreviation,
+      color,
       translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
     });
     return { status: "success" };
@@ -65,13 +75,14 @@ export async function updateCertificateStatusAction(
   formData: FormData
 ): Promise<CertificateStatusActionState> {
   const session = await getSession();
-  const { name, abbreviation } = parseFields(formData);
+  const { name, abbreviation, color } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
     await updateCertificateStatus(session.user.id, statusId, {
       name,
       abbreviation,
+      color,
       translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
     });
     return { status: "success" };
