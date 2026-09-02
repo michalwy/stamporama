@@ -74,6 +74,14 @@ The toolbar **stays pinned to the top of the window** as you scroll a long list,
 sorting and the filter chips are always in reach — on every list that has one: Issues,
 Stamps, Copies, Offers, Sales and Purchases.
 
+**Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
+one click: every chip and toggle, condition, delivery state, format, certificate, location, issue,
+the *Not offered on…* worklist, and the search box. It clears what is remembered as well, so the
+list comes back unfiltered next time too. It appears only while something is actually filtering.
+The **area** and the **year** are deliberately left as they are — those two are shared with the
+Stamps and Wants lists, and a reset here that quietly re-shaped those screens would be doing more
+than it says. Clear them from the area panel (**All areas**) and the year panel.
+
 - **Area** — the panel on the left lists your collection's [areas](collections.md) as a
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
   area includes its nested sub-areas. Choose **All areas** to clear it.

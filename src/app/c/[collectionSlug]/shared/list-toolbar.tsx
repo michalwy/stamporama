@@ -107,14 +107,33 @@ export function ListToolbar({
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange;
   });
+  // The last value this box itself sent upwards. It is what tells an **echo** of our own push apart
+  // from a change made somewhere else, which is the whole of what makes the resync below safe.
+  const pushedRef = useRef(search);
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
+    // Nothing to say when the settled value is already the one in force — which is what a resync
+    // below leaves behind once its own debounce catches up.
+    if (debouncedSearch === pushedRef.current) return;
+    pushedRef.current = debouncedSearch;
     onSearchChangeRef.current(debouncedSearch);
   }, [debouncedSearch]);
+
+  // A `search` the box did not write is an external change — the Copies list's *Reset filters*
+  // (#733) is the one that does it — and the input has to follow it, or the field goes on showing a
+  // phrase that is no longer narrowing anything. Guarded on `pushedRef` rather than compared with
+  // `localSearch`, because the prop lags the input by the debounce for the whole time somebody is
+  // typing: a plain `search !== localSearch` resync would pull half-typed text back out from under
+  // them. A value we pushed comes back equal and is ignored.
+  useEffect(() => {
+    if (search === pushedRef.current) return;
+    pushedRef.current = search;
+    setLocalSearch(search);
+  }, [search]);
 
   const showCatalogSearch =
     catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;

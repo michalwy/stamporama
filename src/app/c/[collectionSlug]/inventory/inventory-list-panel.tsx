@@ -886,14 +886,16 @@ export function InventoryListPanel({
     ]
   );
 
-  const hasActiveFilters =
+  // Everything this screen's own reset can put back (#733) — deliberately *not* the area or the
+  // year, which `use-collection-filter-store` shares with the Stamps and Wants lists (#143): a reset
+  // here that silently re-shaped two other screens would be a bigger act than the button says.
+  const hasResettableFilters =
     !!search ||
     !!issueId ||
     conditionIds.length > 0 ||
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
     !!locationId ||
-    !!year ||
     noPhotos ||
     missingCatalogValue ||
     !!notOfferedPlatformId ||
@@ -902,6 +904,24 @@ export function InventoryListPanel({
     includeGone ||
     includeDisposed ||
     activeDispositions.size > 0;
+
+  // The empty state asks a wider question — "is anything narrowing this list" — and the year is
+  // narrowing it whoever set it.
+  const hasActiveFilters = hasResettableFilters || !!year;
+
+  // One write through the single `updateParams` funnel (#693): naming every key with `""` is what
+  // clears the *remembered* set too, since a filter cleared to nothing leaves the URL and a key not
+  // named in the update would be read straight back out of storage. The platform worklist keeps its
+  // own stored value (#275), so it is cleared beside them.
+  const resetFilters = useCallback(() => {
+    rememberNotOfferedPlatform("");
+    updateParams({
+      ...Object.fromEntries(REMEMBERED_FILTER_KEYS.map((key) => [key, ""])),
+      search: "",
+      notOfferedPlatform: "",
+      excludedPlatform: "",
+    });
+  }, [updateParams, rememberNotOfferedPlatform]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -1637,6 +1657,29 @@ export function InventoryListPanel({
                 selectedIssueId={issueId}
                 onSelect={(id) => updateParams({ issueId: id })}
               />
+
+              {/* Back to an unfiltered list in one click (#733). Rendered only while something is
+                  on — a reset with nothing to reset is noise on a row already this dense — and
+                  drawn as bare accent text rather than one more chip, for the same reason: it is
+                  not a filter, and a control that looks like its neighbours reads as a fourteenth
+                  way of narrowing the list. Same shape as the Allegro worklist's *Clear filters*. */}
+              {hasResettableFilters && (
+                <Tooltip content="Clear every filter on this screen, the search box included. The area and the year are shared with the other lists and are left as they are.">
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    style={{
+                      ...CONTROL_STYLE,
+                      border: "none",
+                      background: "none",
+                      cursor: "pointer",
+                      color: "var(--color-accent)",
+                    }}
+                  >
+                    Reset filters
+                  </button>
+                </Tooltip>
+              )}
             </div>
           </ListToolbar>
 
