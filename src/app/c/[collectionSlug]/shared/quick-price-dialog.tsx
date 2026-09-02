@@ -22,6 +22,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import {
+  CertificateStatusChip,
+  ConditionChip,
+} from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -34,20 +38,10 @@ const INPUT_STYLE: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-/** Condition badge (#227): emphasises which condition × certificate the entered value applies
- * to, so it can't be missed in the "this stamp" card. */
-const CONDITION_BADGE: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  color: "var(--color-accent)",
-  background: "var(--color-accent-soft)",
-  border: "1px solid var(--color-accent-border)",
-  whiteSpace: "nowrap",
-};
+/** The condition and certificate badges (#227) carry the weight the plain row chip does not: they
+ * are one statement on the "this stamp" card rather than one of six chips on a line, and missing
+ * which condition a figure is being filed under is the mistake they exist to prevent. */
+const AXIS_BADGE: React.CSSProperties = { fontWeight: 600 };
 
 /** What the dialog prices: a stamp at one condition × certificate, plus the context it shows.
  * `ItemListItem` satisfies it structurally (a copy carries its own condition and format), and the
@@ -213,13 +207,6 @@ export function QuickPriceDialog({
     return `${fmt.abbreviation}: × ${fmt.factor} = ${deriveFormatPrice(typed, fmt.factor).toFixed(2)} ${c.currency}`;
   }
 
-  // The badge names every axis the value is keyed on — condition and certificate, at the single.
-  // The shown format is deliberately **not** on it: it is not an axis of what is being written, and
-  // a badge reading "MNH · 4-blk" over an input that files the single's price would be the exact
-  // misreading #343's badge was added to prevent. The format gets its own derived line below.
-  const condLabel = `${item.conditionAbbreviation}${
-    item.certificateStatusName ? ` · ${item.certificateStatusName}` : ""
-  }`;
   const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
   const canSave = !isPending && !loading && !loadError && filledEntries.length > 0;
 
@@ -280,9 +267,32 @@ export function QuickPriceDialog({
                 ))}
               </div>
             )}
+            {/* The badges name every axis the value is keyed on — condition and certificate, at the
+                single. The shown format is deliberately **not** among them: it is not an axis of
+                what is being written, and a badge reading "MNH · 4-blk" over an input that files
+                the single's price would be the exact misreading #343's badge was added to prevent.
+                The format gets its own derived line below.
+
+                Two chips rather than one "MNH · Certificate" badge (#728): each axis carries its
+                own colour, so one badge could only have shown one of them. They are the same chips
+                the copies list draws, which is the point — the condition a collector recognises by
+                colour on the list is the condition this figure is being filed under. */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
               <span style={{ color: "var(--color-text-muted)" }}>Condition:</span>
-              <span style={CONDITION_BADGE}>{condLabel}</span>
+              <ConditionChip
+                collectionId={collectionId}
+                conditionId={item.conditionId}
+                label={item.conditionAbbreviation}
+                style={AXIS_BADGE}
+              />
+              {item.certificateStatusName && (
+                <CertificateStatusChip
+                  collectionId={collectionId}
+                  certificateStatusId={item.certificateStatusId}
+                  label={item.certificateStatusName}
+                  style={AXIS_BADGE}
+                />
+              )}
             </div>
             {(context?.areaName ?? areaName) && (
               <div style={{ color: "var(--color-text-muted)" }}>Area: {context?.areaName ?? areaName}</div>

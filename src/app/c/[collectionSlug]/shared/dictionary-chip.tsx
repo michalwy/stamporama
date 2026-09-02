@@ -37,11 +37,17 @@ export function ConditionChip({
   label,
   /** Hover text; defaults to the condition's own name from the dictionary. */
   tooltip,
+  style,
 }: {
   collectionId: string;
   conditionId: string | null | undefined;
   label: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** Merged over the chip, for a surface that needs it heavier or larger than a list row does —
+   * the quick-CV dialog's badge, which is one statement on a card rather than one of six chips on
+   * a line. The tint is never overridden here; a chip that could be told to be a different colour
+   * than its entry would be a second answer to the question this component exists to settle. */
+  style?: React.CSSProperties;
 }) {
   const { data: conditions } = useCollectionConditions(collectionId);
   const condition = useMemo(
@@ -50,7 +56,7 @@ export function ConditionChip({
   );
   return (
     <Tooltip content={tooltip ?? condition?.name ?? ""}>
-      <span style={chipStyle(condition?.color)}>{label}</span>
+      <span style={{ ...chipStyle(condition?.color), ...style }}>{label}</span>
     </Tooltip>
   );
 }
@@ -60,6 +66,7 @@ export function CertificateStatusChip({
   certificateStatusId,
   label,
   tooltip,
+  style,
 }: {
   collectionId: string;
   /** Null is the *no certificate* value (ADR-0006 §2), which has no dictionary row and so no
@@ -67,6 +74,8 @@ export function CertificateStatusChip({
   certificateStatusId: string | null | undefined;
   label: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** See {@link ConditionChip}'s `style`. */
+  style?: React.CSSProperties;
 }) {
   const { data: statuses } = useCollectionCertificateStatuses(collectionId);
   const status = useMemo(
@@ -75,7 +84,7 @@ export function CertificateStatusChip({
   );
   return (
     <Tooltip content={tooltip ?? "Certificate status"}>
-      <span style={chipStyle(status?.color)}>{label}</span>
+      <span style={{ ...chipStyle(status?.color), ...style }}>{label}</span>
     </Tooltip>
   );
 }
