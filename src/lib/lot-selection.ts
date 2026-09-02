@@ -176,11 +176,13 @@ export function isSelectionEmpty(sel: CopySelection): boolean {
   return sel.containers.length === 0 && sel.ids.length === 0;
 }
 
-/** Drop every container taken under a filter chip on `lotId` (#565). Called when that chip is
- *  pressed: the set it named is no longer the set on screen, and nothing downstream can re-judge
- *  a copy against a chip it cannot evaluate. */
-export function dropFilteredContainers(sel: CopySelection, lotId: string): CopySelection {
-  const stale = (c: CopyContainer) => !!c.filter && c.lotId === lotId;
+/** Drop every container taken under a filter chip (#565). Called when that chip is pressed: the set
+ *  it named is no longer the set on screen, and nothing downstream can re-judge a copy against a
+ *  chip it cannot evaluate. Screen-wide since #743, when the chips moved from the lot headers to the
+ *  order toolbar: one press now changes what every lot card and the order-level list are showing, so
+ *  a container recorded under the old chip is stale whichever lot it names. */
+export function dropFilteredContainers(sel: CopySelection): CopySelection {
+  const stale = (c: CopyContainer) => !!c.filter;
   if (!sel.containers.some(stale) && !sel.exContainers.some(stale)) return sel;
   return {
     ...sel,
@@ -190,9 +192,9 @@ export function dropFilteredContainers(sel: CopySelection, lotId: string): CopyS
 }
 
 /** Drop every container taken under a disposition filter (#622). The counterpart of
- *  {@link dropFilteredContainers} for the other axis, and lot-wide rather than per-lot because the
- *  disposition chips govern the whole screen: pressing one changes what every lot card and the
- *  order-level list are showing at once, so every container that recorded the old axis is stale. */
+ *  {@link dropFilteredContainers} for the other axis, and screen-wide for the same reason: pressing
+ *  a chip changes what every lot card and the order-level list are showing at once, so every
+ *  container that recorded the old axis is stale. */
 export function dropDispositionContainers(sel: CopySelection): CopySelection {
   const stale = (c: CopyContainer) => !!c.disposition;
   if (!sel.containers.some(stale) && !sel.exContainers.some(stale)) return sel;

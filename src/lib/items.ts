@@ -2798,6 +2798,16 @@ export interface PurchaseIntakeSummary {
   totalCount: number;
   /** Copies across the order matching the filters the list is showing (#622/#623). */
   filteredCount: number;
+  /** Copies of the order actually in the `to_sort` state — the toolbar's "N to sort" chip (#375).
+   * Over the **whole** order, for the same reason the lot summary's is over the whole lot: the chip
+   * is what the filter is pressed from, so one counting its own filter's survivors would drop to
+   * zero the moment it was used. */
+  toSortCount: number;
+  /** Staying copies of the order with no base-currency catalog weight — these block their lot's
+   * close, and are what the "N unpriced" chip narrows to. */
+  blockingCount: number;
+  /** Copies of the order with no attached photos (#177) — the "no photos" chip's target count. */
+  noPhotoCount: number;
   /** lot id → Σ positive base-currency catalog weight over that lot's staying copies. The
    * client computes a copy's estimate as `poolBase(lot) * weight / lotWeightBase[lotId]`. */
   lotWeightBase: Record<string, number>;
@@ -2841,9 +2851,14 @@ export async function getPurchaseIntakeSummary(
   }
   const matching = all.filter((i) => matchesIntakeFilters(i, filters));
 
+  const staying = all.filter((i) => i.deliveryState !== "not_delivered");
+
   return {
     totalCount: all.length,
     filteredCount: matching.length,
+    toSortCount: all.filter((i) => i.deliveryState === TO_SORT_DELIVERY_STATE).length,
+    blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
+    noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     lotWeightBase,
     issueGroups: buildIssueGroups(matching),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),

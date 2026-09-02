@@ -1001,8 +1001,8 @@ thousands of positions shows every copy, and ticking a whole lot or a whole issu
 **every copy the list is showing** — resolved on the server, not just the rows you have loaded.
 
 **The lots toolbar.** One row above the lots carries everything about how they are shown and how
-new ones are made: the **Lots** heading, **Group by**, **Sort copies**, **Expand all**, and — at the
-right-hand end — **Add lot** and **Add lot with stamps**.
+new ones are made: the **Lots** heading, **Group by**, **Still needs**, **Kept for**, **Sort
+copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Add lot with stamps**.
 
 **Grouping the copies view.** On that row, a **Group by** control has two toggles —
 **Lot** and **Issue** — that shape how the whole order's copies are shown:
@@ -1012,19 +1012,25 @@ right-hand end — **Add lot** and **Add lot with stamps**.
 - **Issue** only — no lot cards; every copy in the order grouped by issue **across all lots**.
 - **neither** — a single **flat list** of every copy in the order, with no lot boundaries.
 
+**Showing only what still needs something.** A **Still needs** control on the same row has up to
+three chips — **N to sort**, **⚠ N unpriced**, **N no photos** — counting the whole order. Press one
+to show only those copies, press it again to show everything. A chip with nothing behind it is not
+drawn at all. The narrowing applies to **every** view: the lot cards, the by-issue view across all
+lots, and the flat list. (Each lot header still shows its own three counts, so you can see which
+card the work is in — those numbers are a readout, not buttons; the filtering is done here.)
+
 **Showing only what you're filing.** A **Kept for** control on the same row has three chips —
 **In collection**, **For sale**, **For trade** — and pressing one shows only the copies kept for
 that, across every lot of the order. Press it again to show everything. It works **together with**
-a lot's own **N to sort** / **⚠ N unpriced** / **N no photos** chips, so *the stock copies I still
-have to put away* is one view: press **For sale** here and **N to sort** on the lot. A copy can be
-kept for more than one purpose, so **For sale** means "kept for sale" and says nothing about
-whether it is also in the collection.
+**Still needs**, so *the stock copies I still have to put away* is one view: press **For sale**
+here and **N to sort** there. A copy can be kept for more than one purpose, so **For sale** means
+"kept for sale" and says nothing about whether it is also in the collection.
 
 While a filter is narrowing the list, each issue header counts what it is **showing** (`12 shown`
 rather than `12 in lot`), and issues left with nothing to show drop out of the view entirely
-instead of appearing as an empty group. The **Kept for** chips are **remembered for that order**,
-along with the lot chips beside them — a filing pass runs over several sittings, and re-narrowing
-the screen each time was work you should not have to repeat. A chip stays lit for as long as it is
+instead of appearing as an empty group. Both chip rows are **remembered for that order** — a filing
+pass runs over several sittings, and re-narrowing the screen each time was work you should not have
+to repeat. A chip stays lit for as long as it is
 on, so an order that looks short is showing you why in the same row.
 
 **Sorting the copies.** A **Sort copies** control next to *Group by* orders the stamps *within*
@@ -1191,18 +1197,17 @@ tree-select. For condition or certificate changes use its **⋮** menu → **Edi
 if the seller shipped a different condition than expected (MH instead of MNH), correct it
 there.
 
-To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
-just the copies waiting to be sorted; click it again (or the **To sort only ✕** button) to show
-all. As you sort each copy it drops out of the filtered list. The chip counts copies in the
-**to sort** state only — copies still *ordered* or *in transit* haven't arrived yet, so there
-is nothing to sort about them (the close confirmation still counts those; see
-[Closing a lot](#closing-a-lot)).
+To focus on what's left, click the toolbar's **N to sort** chip (under *Still needs*) to narrow
+every view down to the copies waiting to be sorted; click it again to show all. As you sort each
+copy it drops out of the filtered list. The chip counts copies in the **to sort** state only —
+copies still *ordered* or *in transit* haven't arrived yet, so there is nothing to sort about them
+(the close confirmation still counts those; see [Closing a lot](#closing-a-lot)). Each lot header
+repeats its own **N to sort** count so you can see where the work is.
 
-The lot header also carries a **N no photos** chip whenever some of the lot's copies have no
-[photo](inventory.md#photos) attached — click it to filter the list down to just those copies
-so you can see what still needs photographing, and click it again (or **No photos only ✕**) to
-show all. Unlike the *to sort* and *unpriced* chips, this one stays available after the lot is
-closed, since photographing usually happens once the stamps are in hand.
+The same control carries a **N no photos** chip whenever copies of the order have no
+[photo](inventory.md#photos) attached — press it to see just those, so you can tell what still
+needs photographing. Unlike *to sort* and *unpriced*, that count includes closed lots, since
+photographing usually happens once the stamps are in hand.
 
 When you put copies into a **location** (storing, moving, or setting one copy's), the picker
 remembers the last location you used and pre-selects it, so working box after box is one click.
@@ -1284,13 +1289,13 @@ works even if the shipment has not physically arrived yet.
 
 If any copies are still unsorted (ordered / to sort / in transit), the confirm dialog **warns
 you** — but you can still close (sorting first is just recommended, not required). This warning
-is deliberately wider than the header's **N to sort** chip: a lot whose copies are all still
-*ordered* has not been through the sort pass either.
+is deliberately wider than the **N to sort** count: a lot whose copies are all still *ordered* has
+not been through the sort pass either.
 
 Closing is **blocked** if any copy lacks a primary-catalog price for its condition — there is
 no weight to split the pool by. The screen highlights the copies that need a price and shows
-how many are unpriced; click the **⚠ N unpriced** chip to filter the list down to just those
-copies. To price them without leaving the screen, click the **+ catalog value** link in the
+how many are unpriced; click the toolbar's **⚠ N unpriced** chip to narrow the order down to just
+those copies. To price them without leaving the screen, click the **+ catalog value** link in the
 copy's catalog-value column — a small dialog sets those values (latest edition) for the copy's
 condition × certificate. It shows **one field per catalog vendor active on the stamp's area**,
 with the **primary catalog's** field focused first for fast entry; the other vendors' fields are

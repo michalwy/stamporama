@@ -114,8 +114,8 @@ import {
 import {
   usePurchaseCollapsedGroups,
   usePurchaseDispositionFilter,
+  usePurchaseFilter,
   usePurchaseLotExpansion,
-  usePurchaseLotFilter,
 } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
 import {
@@ -187,6 +187,49 @@ const DISPOSITION_FILTERS: readonly {
   { key: "for-sale", label: "For sale", hint: "Show only the copies kept as stock" },
   { key: "for-trade", label: "For trade", hint: "Show only the copies kept for trading" },
 ];
+
+/** The *what still needs something* axis (`LotCopyFilter`) as toolbar chips (#743). Order-level
+ * beside *Kept for*, so the flat and by-issue views can be narrowed by it too — it is one question
+ * asked of the whole parcel, and the counts it shows are the order's. */
+const NEEDS_FILTERS: readonly {
+  key: Exclude<LotCopyFilter, "none">;
+  /** Semantic token the chip is tinted with — the same one the lot headers count in. */
+  token: string;
+  label: (count: number) => string;
+  hint: string;
+}[] = [
+  {
+    key: "to-sort",
+    token: "warning",
+    label: (n) => `${n} to sort`,
+    hint: "Copies that have arrived and still await sorting — click to show only them",
+  },
+  {
+    key: "unpriced",
+    token: "error",
+    label: (n) => `${n} unpriced`,
+    hint: "Copies with no catalog price — they would block closing their lot",
+  },
+  {
+    key: "no-photos",
+    token: "accent",
+    label: (n) => `${n} no photos`,
+    hint: "Copies with no photo attached — click to show only them",
+  },
+];
+
+/** The two filter axes as the params every read on this screen takes (#622/#743). One builder, so
+ * the panel's summary, the lot cards and the order-level view cannot end up asking for different
+ * things — and so the containers a tick records mean what the list was showing. */
+function intakeFilterParams(
+  filter: LotCopyFilter,
+  disposition: CopyDispositionFilter | null
+): IntakeFilterParams {
+  return {
+    ...(filter === "none" ? {} : { filter }),
+    ...(disposition ? { disposition } : {}),
+  };
+}
 
 function tintChip(token: string, label: string): { style: React.CSSProperties; label: string } {
   if (token === "muted") return { style: CHIP, label };
@@ -307,17 +350,28 @@ export function PurchaseDetailPanel({
   const dispositionFilter = parseDispositionFilter(storedDisposition) ?? null;
   const setDispositionFilter: (value: CopyDispositionFilter | null) => void = setStoredDisposition;
 
+  // *What still needs something* (#121/#177) — the other filter axis, and **order-level since
+  // #743**, where it used to be a chip on each lot card. It was always one question asked of the
+  // parcel ("show me what is still unpriced"), and holding it per lot meant the two views with no
+  // lot cards — the flat list and the by-issue list across every lot — could not be narrowed by it
+  // at all. Remembered per order beside the disposition, and read back through the endpoints' own
+  // parser for the same reason: the stored value reaches five query strings.
+  const [storedFilter, setStoredFilter] = usePurchaseFilter(collectionId, purchase.id);
+  const filterMode = parseLotCopyFilter(storedFilter) ?? "none";
+
   // Order-level catalog-value-vs-cost figure (#179): the same holdings summary as the Copies
   // screen (#134), aggregated over every copy in the purchase. Undefined until it loads (the
   // bar renders a fixed-height skeleton so nothing shifts).
   // The same filters the order view reads with, so the two share one cached summary rather than
   // making the order pay for a second whole-order valuation. The holdings inside it are over every
   // copy whatever is filtered — the bar is about the order, not about the current view.
-  const orderFilters: IntakeFilterParams = dispositionFilter
-    ? { disposition: dispositionFilter }
-    : {};
-  const purchaseHoldings = usePurchaseSummary(collectionId, purchase.id, orderFilters).data
-    ?.holdings;
+  const orderFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
+  // One read for the whole screen: the bar's holdings, and the counts the toolbar chips carry
+  // (#743). Those counts are over the whole order whatever is filtered, exactly as the lot cards'
+  // are over the whole lot — a chip counting only what its own filter left would drop to zero the
+  // moment it was pressed (#623).
+  const orderSummary = usePurchaseSummary(collectionId, purchase.id, orderFilters).data;
+  const purchaseHoldings = orderSummary?.holdings;
 
   // What the order has earned back so far (#559): the cost side above read against the sale side.
   // The bar draws itself away until a copy of this order has actually sold.
@@ -388,18 +442,25 @@ export function PurchaseDetailPanel({
   const [selectionBarRef, selectionBarHeight] = useMeasuredHeight<HTMLDivElement>();
   const { sentinelRef: selectionBarSentinelRef, stuck: selectionBarStuck } = useStuck(0);
 
-  /** *Select the whole order* under the disposition axis (#622): what the bar offers is what the
-   *  screen is showing, so with a chip on it means every copy kept for that, not every copy. */
-  const wholeOrderContainer: CopyContainer = dispositionFilter
-    ? { disposition: dispositionFilter }
-    : {};
+  /** *Select the whole order* under both filter axes (#622/#743): what the bar offers is what the
+   *  screen is showing, so with a chip on it means every copy that chip leaves, not every copy. */
+  const wholeOrderContainer: CopyContainer = orderFilters;
 
-  /** Press a disposition chip — the same bargain the per-lot chips strike (`changeFilter`): the
-   *  loose ticks are the collector's own and stay, the containers taken under the old axis go with
-   *  it, since "every for-sale copy here" must not become "every copy here". */
+  /** Press a disposition chip — the same bargain `changeFilter` below strikes: the loose ticks are
+   *  the collector's own and stay, the containers taken under the old axis go with it, since "every
+   *  for-sale copy here" must not become "every copy here". */
   function changeDisposition(next: CopyDispositionFilter | null) {
     setDispositionFilter(next);
     setSelection(dropDispositionContainers);
+  }
+
+  /** Press a *needs* chip — the same bargain (#565): the loose ticks are the collector's own and
+   *  stay, the containers taken under the old chip go with it, since "all 40 to sort" must not
+   *  silently become "all 900". Screen-wide now that the chip is, so a container naming any lot is
+   *  retired, not just the pressed card's. */
+  function changeFilter(next: LotCopyFilter) {
+    setStoredFilter(next === "none" ? null : next);
+    setSelection(dropFilteredContainers);
   }
 
 
@@ -750,11 +811,52 @@ export function PurchaseDetailPanel({
           </div>
         )}
 
+        {/* What still needs something (#743): the counts that used to sit on each lot header, as one
+            order-level narrowing. A filing pass asks it of the parcel — "show me everything still
+            unpriced" — and only the toolbar can answer that for the flat and by-issue views, which
+            have no lot headers to hang a chip on. One value at a time: the three are the values of
+            one axis, not three toggles. Combinable with *Kept for*, which is a separate axis. */}
+        {purchase.lots.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Still needs</span>
+            {NEEDS_FILTERS.map(({ key, token, label, hint }) => {
+              const count =
+                key === "to-sort"
+                  ? (orderSummary?.toSortCount ?? 0)
+                  : key === "unpriced"
+                    ? (orderSummary?.blockingCount ?? 0)
+                    : (orderSummary?.noPhotoCount ?? 0);
+              const on = filterMode === key;
+              // A chip with nothing behind it is not worth a slot on the row — but the one that is
+              // *on* always stays, or the filter hiding every copy would take its own way out with
+              // it. (Its count is over the whole order, so it only reaches zero on an empty order.)
+              if (count === 0 && !on) return null;
+              return (
+                <Tooltip key={key} content={on ? "Click to show every copy again" : hint}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => changeFilter(on ? "none" : key)}
+                    style={{
+                      ...tintChip(token, "").style,
+                      cursor: "pointer",
+                      fontWeight: on ? 700 : 500,
+                      boxShadow: on ? `0 0 0 1px var(--color-${token})` : undefined,
+                    }}
+                  >
+                    {key === "unpriced" && <Icon name="warning" size="sm" />} {label(count)}
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+
         {/* Disposition filter (#622): show only the copies kept for one purpose, so a filing pass
             can be about the stock or about the collection-bound pieces rather than about
-            everything. Order-level and combinable with each lot's own chips — "still to sort" and
-            "for sale" are two halves of one question. A copy carries the three flags
-            independently, so these are three separate narrowings and not a three-way switch. */}
+            everything. Combinable with the *Still needs* chips above — "still to sort" and "for
+            sale" are two halves of one question. A copy carries the three flags independently, so
+            these are three separate narrowings and not a three-way switch. */}
         {purchase.lots.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={TOOLBAR_LABEL}>Kept for</span>
@@ -914,7 +1016,7 @@ export function PurchaseDetailPanel({
                 ? null
                 : () => setSelection((sel) => toggleContainer(sel, wholeOrderContainer))
             }
-            wholeOrderIsFiltered={!!dispositionFilter}
+            wholeOrderIsFiltered={!!dispositionFilter || filterMode !== "none"}
             onClear={clearSelection}
             onStore={() => selectionEditing.setBulkStore(selectionTarget)}
             onMove={() => selectionEditing.setBulkMove(selectionTarget)}
@@ -954,6 +1056,7 @@ export function PurchaseDetailPanel({
               groupByIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
+              filterMode={filterMode}
               dispositionFilter={dispositionFilter}
               stickyTop={selectionBarHeight}
               selection={selection}
@@ -976,6 +1079,7 @@ export function PurchaseDetailPanel({
           byIssue={byIssue}
           sortKey={sortKey}
           sortDir={sortDir}
+          filterMode={filterMode}
           dispositionFilter={dispositionFilter}
           stickyTop={selectionBarHeight}
           isPending={isPending}
@@ -1205,8 +1309,8 @@ interface LotCardProps {
   onToggleExpanded: () => void;
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
-  /** The order this lot belongs to — the card's own remembered view state (its collapsed groups
-   * and header chip) is kept in that order's entry, so it can be evicted with it. */
+  /** The order this lot belongs to — the card's own remembered view state (its collapsed groups)
+   * is kept in that order's entry, so it can be evicted with it. */
   purchaseId: string;
   /** The collection's stated scan resolution (#598), on its way to the tile viewer's measuring
    * tools through the condition dialog this card opens. */
@@ -1235,8 +1339,12 @@ interface LotCardProps {
    * copies by before rendering. */
   sortKey: string;
   sortDir: string;
+  /** The order-level *Still needs* chip (#743) — `to-sort` / `unpriced` / `no photos`, or `none`.
+   * Held by the panel since it governs every view of the order at once; this card's own header
+   * counts are what it is pressed from, and they no longer press it. */
+  filterMode: LotCopyFilter;
   /** The order-level *Kept for* filter (#622), narrowing this card's copies to one disposition.
-   * Independent of the card's own chips — both may be on, and the list means their intersection. */
+   * A separate axis from `filterMode` — both may be on, and the list means their intersection. */
   dispositionFilter: CopyDispositionFilter | null;
   /** How far down the viewport this card's own sticky header pins (#621): the height of the pinned
    * selection bar above it, so the two stack instead of overlapping. */
@@ -1996,6 +2104,7 @@ function LotCard({
   groupByIssue,
   sortKey,
   sortDir,
+  filterMode,
   dispositionFilter,
   stickyTop,
   selection,
@@ -2023,18 +2132,6 @@ function LotCard({
   // Hold the copies list until the persisted view prefs are read, so grouping/collapse don't
   // flash from their defaults to the stored values for a returning user (#121).
   const hydrated = useHydrated();
-  // Optional filter narrowing the copies list to just the blockers ("unpriced"), the not-yet-sorted
-  // copies ("to-sort"), or copies still needing a photo ("no-photos", #177), toggled by the matching
-  // header chip (#121). Remembered per lot alongside the order's disposition filter, and read back
-  // through the endpoints' parser for the same reason.
-  const [storedLotFilter, setStoredLotFilter] = usePurchaseLotFilter(
-    collectionId,
-    purchaseId,
-    lot.id
-  );
-  const filterMode = parseLotCopyFilter(storedLotFilter) ?? "none";
-  const setFilterMode = (next: LotCopyFilter) =>
-    setStoredLotFilter(next === "none" ? null : next);
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
@@ -2067,23 +2164,14 @@ function LotCard({
 
   const open = lot.status === "open";
 
-  // Server-side filter for the copy page query, driven by the header chips. The "unpriced" and
-  // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
-  // (#177) stays available regardless of lot status.
-  const filter: LotCopyFilter =
-    filterMode === "none"
-      ? "none"
-      : filterMode === "no-photos"
-        ? "no-photos"
-        : open
-          ? filterMode
-          : "none";
-  // The two filter axes as one value (#622), so the reads, the summary and the containers a tick
-  // records cannot end up disagreeing about what is on screen.
-  const intakeFilters: IntakeFilterParams = {
-    ...(filter === "none" ? {} : { filter }),
-    ...(dispositionFilter ? { disposition: dispositionFilter } : {}),
-  };
+  // The order's chip applies to every card, a closed one included (#743). It used to collapse to
+  // "none" on a closed lot, which was right while it was that card's own chip — the count it was
+  // pressed from was hidden there — but a screen-wide narrowing that quietly skipped some cards
+  // would have the collector reading "unpriced only" over a list holding priced copies.
+  //
+  // The two filter axes as one value (#622/#743), so the reads, the summary and the containers a
+  // tick records cannot end up disagreeing about what is on screen.
+  const intakeFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
 
   // Whole-lot aggregates (counts, cost-estimate denominator, derived label, issue groups) that
   // the paginated copy list can no longer compute client-side (#172). Fetched once per lot.
@@ -2128,7 +2216,7 @@ function LotCard({
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
-    filter,
+    filter: filterMode,
     ...(dispositionFilter ? { disposition: dispositionFilter } : {}),
   };
 
@@ -2146,13 +2234,6 @@ function LotCard({
     ...intakeFilters,
   };
   const lotBoxState = containerBoxState(selection, lotContainer);
-
-  /** Press a filter chip. The containers taken under the old chip stop meaning what they said, so
-   *  they go with it — the loose ticks are the collector's own choices and stay. */
-  function changeFilter(next: typeof filterMode) {
-    setFilterMode(next);
-    setSelection((s) => dropFilteredContainers(s, lot.id));
-  }
 
   function renderRow(it: ItemListItem) {
     const row = (
@@ -2320,7 +2401,7 @@ function LotCard({
         {open && filteredCount > 0 && (
           <Tooltip
             content={
-              filter === "none"
+              filterMode === "none" && !dispositionFilter
                 ? "Select every copy in this lot"
                 : "Select every copy the current filter is showing"
             }
@@ -2375,76 +2456,25 @@ function LotCard({
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
+        {/* What this lot still needs, as **counts** (#743). The filter itself is the toolbar's — one
+            chip governing every view — but the per-lot breakdown is what a card is worked through
+            against, so the numbers stay where they were and simply stopped being buttons. Each is
+            over the whole lot, whatever the toolbar is currently showing. */}
         {toSortCount > 0 && open && (
-          <Tooltip
-            content={
-              filterMode === "to-sort"
-                ? "Showing only copies still to sort — click to show all"
-                : "Copies that have arrived and still await sorting — click to show only them"
-            }
-          >
-            <button
-              type="button"
-              onClick={() =>
-                changeFilter(filterMode === "to-sort" ? "none" : "to-sort")
-              }
-              style={{
-                ...tintChip("warning", "").style,
-                cursor: "pointer",
-                fontWeight: filterMode === "to-sort" ? 700 : 500,
-                boxShadow: filterMode === "to-sort" ? "0 0 0 1px var(--color-warning)" : undefined,
-              }}
-            >
-              {toSortCount} to sort
-            </button>
+          <Tooltip content="Copies of this lot that have arrived and still await sorting">
+            <span style={tintChip("warning", "").style}>{toSortCount} to sort</span>
           </Tooltip>
         )}
         {blockingCount > 0 && open && (
-          <Tooltip
-            content={
-              filterMode === "unpriced"
-                ? "Showing only copies without a catalog price — click to show all"
-                : "These copies would block a close — click to show only them"
-            }
-          >
-            <button
-              type="button"
-              onClick={() =>
-                changeFilter(filterMode === "unpriced" ? "none" : "unpriced")
-              }
-              style={{
-                ...tintChip("error", `${blockingCount} unpriced`).style,
-                cursor: "pointer",
-                fontWeight: filterMode === "unpriced" ? 700 : 500,
-                boxShadow: filterMode === "unpriced" ? "0 0 0 1px var(--color-error)" : undefined,
-              }}
-            >
+          <Tooltip content="Copies with no catalog price — these would block closing this lot">
+            <span style={tintChip("error", "").style}>
               <Icon name="warning" size="sm" /> {blockingCount} unpriced
-            </button>
+            </span>
           </Tooltip>
         )}
         {noPhotoCount > 0 && (
-          <Tooltip
-            content={
-              filterMode === "no-photos"
-                ? "Showing only copies with no photo — click to show all"
-                : "Copies with no photo attached — click to show only them"
-            }
-          >
-            <button
-              type="button"
-              onClick={() =>
-                changeFilter(filterMode === "no-photos" ? "none" : "no-photos")
-              }
-              style={{
-                ...tintChip("accent", "").style,
-                cursor: "pointer",
-                fontWeight: filterMode === "no-photos" ? 700 : 500,
-                boxShadow: filterMode === "no-photos" ? "0 0 0 1px var(--color-accent)" : undefined,
-              }}
-            >
-              {noPhotoCount} no photos
-            </button>
+          <Tooltip content="Copies of this lot with no photo attached">
+            <span style={tintChip("accent", "").style}>{noPhotoCount} no photos</span>
           </Tooltip>
         )}
         <span style={{ flex: 1 }} />
@@ -2530,45 +2560,6 @@ function LotCard({
                 <HoldingsSummaryBar total={summary?.holdings} ret={lotReturn} />
               </div>
 
-              {/* Active-filter toolbar (grouping is now controlled at the order level) */}
-              {filterMode !== "none" && (open || filterMode === "no-photos") && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    padding: "0.5rem 1.25rem",
-                    borderBottom: "1px solid var(--color-border)",
-                  }}
-                >
-                  <Tooltip content="Clear filter">
-                    <button
-                      type="button"
-                      onClick={() => changeFilter("none")}
-                      style={{
-                        ...tintChip(
-                          filterMode === "unpriced"
-                            ? "error"
-                            : filterMode === "no-photos"
-                              ? "accent"
-                              : "warning",
-                          ""
-                        ).style,
-                        cursor: "pointer",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {filterMode === "unpriced"
-                        ? "Unpriced only"
-                        : filterMode === "no-photos"
-                          ? "No photos only"
-                          : "To sort only"}{" "}
-                      <Icon name="close" size="sm" />
-                    </button>
-                  </Tooltip>
-                </div>
-              )}
-
               {groupByIssue ? (
                 issueGroups.map((group) => {
                   const collapsed = collapsedGroups.has(group.key);
@@ -2586,7 +2577,7 @@ function LotCard({
                       }
                       collapsed={collapsed}
                       countLabel={
-                        filter !== "none" || dispositionFilter ? "shown" : undefined
+                        filterMode !== "none" || dispositionFilter ? "shown" : undefined
                       }
                       stickyTop={stickyTop + headerHeight}
                       completeness={setCompleteness?.[group.key]}
@@ -2918,6 +2909,7 @@ function OrderCopiesView({
   byIssue,
   sortKey,
   sortDir,
+  filterMode,
   dispositionFilter,
   stickyTop,
   isPending,
@@ -2937,8 +2929,11 @@ function OrderCopiesView({
   byIssue: boolean;
   sortKey: string;
   sortDir: string;
-  /** The order-level *Kept for* filter (#622) — the only filter this view has, and the same value
-   * the lot cards read, so switching the grouping does not change what is on screen. */
+  /** The order-level *Still needs* chip (#743). This view had no way to read it while it was a
+   * per-lot chip — there are no lot headers here — which is exactly why it moved to the toolbar. */
+  filterMode: LotCopyFilter;
+  /** The order-level *Kept for* filter (#622). Both axes are the same values the lot cards read, so
+   * switching the grouping does not change what is on screen. */
   dispositionFilter: CopyDispositionFilter | null;
   /** Where the pinned selection bar ends (#621), so the issue headers pin below it. */
   stickyTop: number;
@@ -2978,9 +2973,7 @@ function OrderCopiesView({
   const lotStatusByLot = useMemo(() => new Map(lots.map((l) => [l.id, l.status])), [lots]);
   // The same filters the panel reads this summary with, so both share one cached answer — and the
   // issue groups come back over the copies those filters show (#623).
-  const intakeFilters: IntakeFilterParams = dispositionFilter
-    ? { disposition: dispositionFilter }
-    : {};
+  const intakeFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
   const summary = usePurchaseSummary(collectionId, purchaseId, intakeFilters).data;
   const issueGroups = summary?.issueGroups ?? [];
   // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
@@ -2990,7 +2983,6 @@ function OrderCopiesView({
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
-    filter: "none",
     ...intakeFilters,
   };
 
@@ -3071,7 +3063,7 @@ function OrderCopiesView({
               primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
               vendorMap={vendorMapFor(areaId, group.key === "__none__" ? null : group.key)}
               collapsed={collapsed}
-              countLabel={dispositionFilter ? "shown" : undefined}
+              countLabel={filterMode !== "none" || dispositionFilter ? "shown" : undefined}
               stickyTop={stickyTop}
               completeness={setCompleteness?.[group.key]}
               onToggle={() =>
@@ -3115,9 +3107,15 @@ function OrderCopiesView({
           params={listParams}
           renderRow={renderRow}
           emptyText={
-            dispositionFilter
-              ? "No copies in this order are kept for that."
-              : "No copies identified into this order yet."
+            filterMode === "unpriced"
+              ? "No unpriced copies."
+              : filterMode === "to-sort"
+                ? "Nothing left to sort."
+                : filterMode === "no-photos"
+                  ? "Every copy has a photo."
+                  : dispositionFilter
+                    ? "No copies in this order are kept for that."
+                    : "No copies identified into this order yet."
           }
         />
       )}

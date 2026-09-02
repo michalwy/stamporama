@@ -157,18 +157,20 @@ describe("the filter chip a container was taken under", () => {
   it("is retired when that chip is pressed — 'all 40 to sort' must not become 'all 900'", () => {
     let sel = toggleContainer(EMPTY_SELECTION, { lotId: "lotA", filter: "to-sort" });
     sel = toggleRow(sel, B1);
-    sel = dropFilteredContainers(sel, "lotA");
+    sel = dropFilteredContainers(sel);
     // The container goes; the loose tick is the collector's own choice and stays.
     assert.deepEqual(resolveSelection(sel), { kind: "ids", ids: ["b1"] });
   });
 
-  it("leaves another lot's containers alone", () => {
+  it("takes every lot's containers with it — the chip governs the whole screen (#743)", () => {
     let sel = toggleContainer(EMPTY_SELECTION, { lotId: "lotA", filter: "to-sort" });
-    sel = toggleContainer(sel, { lotId: "lotB", filter: "unpriced" });
-    sel = dropFilteredContainers(sel, "lotA");
+    sel = toggleContainer(sel, { lotId: "lotB", filter: "to-sort" });
+    sel = toggleContainer(sel, { lotId: "lotC" });
+    sel = dropFilteredContainers(sel);
+    // The unfiltered container names a set the chip cannot have changed, so it stays.
     assert.deepEqual(resolveSelection(sel), {
       kind: "scope",
-      scope: { selectors: [{ lotId: "lotB", filter: "unpriced" }] },
+      scope: { selectors: [{ lotId: "lotC" }] },
     });
   });
 });

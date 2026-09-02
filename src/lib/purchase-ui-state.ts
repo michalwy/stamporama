@@ -38,8 +38,9 @@ export interface PurchaseUiState {
   lots: string[];
   /** Collapsed issue groups, keyed by lot id — or by `ORDER_GROUP_SCOPE` for the order-level view. */
   groups: Record<string, string[]>;
-  /** The per-lot header chip filter (`LotCopyFilter`), keyed by lot id. Absent means "none". */
-  lotFilter: Record<string, string>;
+  /** The header chip filter (`LotCopyFilter`); null when off. Held per **order** since #743 — it
+   * governs every view of the order's copies, not one lot card. */
+  filter: string | null;
   /** The order-level disposition filter (#622); null when off. */
   disposition: string | null;
   /** The scans card (#566): whether it is open, its tile filter, whether set-aside batches show,
@@ -58,7 +59,7 @@ export const ORDER_GROUP_SCOPE = "order";
 export const EMPTY_PURCHASE_UI_STATE: PurchaseUiState = Object.freeze({
   lots: [],
   groups: {},
-  lotFilter: {},
+  filter: null,
   disposition: null,
   scans: Object.freeze({ open: false, filter: "all", showDone: false, batches: {} }),
 }) as PurchaseUiState;
@@ -143,7 +144,6 @@ function scalarMap<T>(value: unknown, keep: (v: unknown) => v is T): Record<stri
   return out;
 }
 
-const isString = (v: unknown): v is string => typeof v === "string";
 const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
 
 /**
@@ -166,7 +166,7 @@ export function parsePurchaseUiState(raw: string | null): PurchaseUiState {
   return {
     lots: stringArray(o.lots),
     groups: stringArrayMap(o.groups),
-    lotFilter: scalarMap(o.lotFilter, isString),
+    filter: typeof o.filter === "string" ? o.filter : null,
     disposition: typeof o.disposition === "string" ? o.disposition : null,
     scans: {
       open: scans.open === true,
@@ -183,7 +183,7 @@ export function isEmptyPurchaseUiState(state: PurchaseUiState): boolean {
   return (
     state.lots.length === 0 &&
     Object.keys(state.groups).length === 0 &&
-    Object.keys(state.lotFilter).length === 0 &&
+    state.filter === null &&
     state.disposition === null &&
     !state.scans.open &&
     !state.scans.showDone &&

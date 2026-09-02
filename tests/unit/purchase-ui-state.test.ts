@@ -101,7 +101,7 @@ describe("parsePurchaseUiState", () => {
     const written: PurchaseUiState = {
       lots: ["lot1", "lot2"],
       groups: { lot1: ["iss1"], order: ["iss2"] },
-      lotFilter: { lot1: "to-sort" },
+      filter: "to-sort",
       disposition: "for-sale",
       scans: { open: true, filter: "unidentified", showDone: true, batches: { "3": false } },
     };
@@ -119,7 +119,7 @@ describe("parsePurchaseUiState", () => {
       JSON.stringify({
         lots: ["ok", 5, null],
         groups: { lot1: ["a", 2], lot2: "nope", lot3: [] },
-        lotFilter: { lot1: "to-sort", lot2: 9 },
+        filter: 9,
         disposition: 42,
         scans: { open: "yes", filter: 3, showDone: true, batches: { "1": true, "2": "no" } },
       })
@@ -127,7 +127,7 @@ describe("parsePurchaseUiState", () => {
     assert.deepEqual(parsed.lots, ["ok"]);
     // lot3's empty list carries nothing, so it is not kept as a key.
     assert.deepEqual(parsed.groups, { lot1: ["a"] });
-    assert.deepEqual(parsed.lotFilter, { lot1: "to-sort" });
+    assert.equal(parsed.filter, null);
     assert.equal(parsed.disposition, null);
     assert.equal(parsed.scans.open, false);
     assert.equal(parsed.scans.filter, "all");
@@ -145,7 +145,7 @@ describe("isEmptyPurchaseUiState", () => {
   it("is false as soon as any one slice holds a choice", () => {
     assert.equal(isEmptyPurchaseUiState(state({ lots: ["lot1"] })), false);
     assert.equal(isEmptyPurchaseUiState(state({ groups: { lot1: ["iss"] } })), false);
-    assert.equal(isEmptyPurchaseUiState(state({ lotFilter: { lot1: "unpriced" } })), false);
+    assert.equal(isEmptyPurchaseUiState(state({ filter: "unpriced" })), false);
     assert.equal(isEmptyPurchaseUiState(state({ disposition: "for-sale" })), false);
     assert.equal(
       isEmptyPurchaseUiState(state({ scans: { ...EMPTY_PURCHASE_UI_STATE.scans, open: true } })),

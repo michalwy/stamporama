@@ -151,7 +151,7 @@ export type PurchaseUiUpdater = (updater: (prev: PurchaseUiState) => PurchaseUiS
  *
  * The updater **re-reads the stored entry at write time** rather than closing over the rendered
  * value: the order screen has several independent slices writing into one entry (lot expansion, the
- * per-lot chips, the scans card), and a stale closure would have one of them undo another.
+ * filter chips, the scans card), and a stale closure would have one of them undo another.
  */
 export function usePurchaseUiState(
   collectionId: string,
@@ -224,24 +224,18 @@ export function usePurchaseCollapsedGroups(
   return [value, set];
 }
 
-/** One lot's header chip filter (#121/#177). `null` is the "none" the call sites already use. */
-export function usePurchaseLotFilter(
+/** The order's header chip filter (#121/#177), order-level since #743. `null` is the "none" the
+ * call sites already use. */
+export function usePurchaseFilter(
   collectionId: string,
-  purchaseId: string,
-  lotId: string
+  purchaseId: string
 ): [string | null, (value: string | null) => void] {
   const [state, update] = usePurchaseUiState(collectionId, purchaseId);
   const set = useCallback(
-    (value: string | null) =>
-      update((prev) => {
-        const lotFilter = { ...prev.lotFilter };
-        if (value) lotFilter[lotId] = value;
-        else delete lotFilter[lotId];
-        return { ...prev, lotFilter };
-      }),
-    [update, lotId]
+    (value: string | null) => update((prev) => ({ ...prev, filter: value })),
+    [update]
   );
-  return [state.lotFilter[lotId] ?? null, set];
+  return [state.filter, set];
 }
 
 /** The order-level disposition filter (#622). */
