@@ -53,6 +53,11 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   // Copies now stream into each lot card via paginated client queries (#172), so the page no
   // longer preloads them. Issue headers for the grouped-by-issue view are still loaded here
   // (from the purchase's distinct issue ids) so the group headers read like the issues list.
+  // Today at request time, the way the Purchases list page computes it (#120): the header dialog
+  // this screen now opens (#752) takes it as the new-order date default, and an SSR clock read
+  // inside a client component would disagree with the server's.
+  const today = new Date().toISOString().slice(0, 10);
+
   const issueIds = await getPurchaseIssueIds(purchase.id);
   const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
   const issueHeaderById: Record<string, IssueHeader> = {};
@@ -94,6 +99,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         // What this collection scans at (#598) — the scale the ruler and the perforation gauge in
         // the tile viewer convert with. One integer, loaded with the collection it belongs to.
         scanDpi={collection.scanDpi}
+        today={today}
         purchase={purchase}
         issueHeaderById={issueHeaderById}
         areas={areas}

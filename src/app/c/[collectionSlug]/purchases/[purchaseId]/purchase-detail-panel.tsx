@@ -83,6 +83,7 @@ import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identi
 import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
+import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { ScansCard } from "@/app/c/[collectionSlug]/shared/scans-card";
 import {
@@ -250,6 +251,9 @@ interface PurchaseDetailPanelProps {
   /** The resolution this collection's cards are scanned at (#598), carried down to the tile viewer
    * where the ruler and the perforation gauge live. */
   scanDpi: number;
+  /** Today as yyyy-mm-dd, from the page's request-time clock — what the header dialog (#752)
+   *  defaults a date to. Unused while editing an order that already has one. */
+  today: string;
   purchase: PurchaseDetail;
   issueHeaderById: Record<string, IssueHeader>;
   areas: CollectionAreaData[];
@@ -262,6 +266,7 @@ export function PurchaseDetailPanel({
   collectionId,
   collectionSlug,
   scanDpi,
+  today,
   purchase,
   issueHeaderById,
   areas,
@@ -285,6 +290,9 @@ export function PurchaseDetailPanel({
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const [isPending, startTransition] = useTransition();
   const [addingLot, setAddingLot] = useState(false);
+  // The order header's own edit (#752) — supplier, platform, date, currency, status and shipping,
+  // through the Purchases list's own dialog. Everything below the header has its own controls.
+  const [editingHeader, setEditingHeader] = useState(false);
   const [arriving, setArriving] = useState(false);
   const [error, setError] = useState<string | undefined>();
   // Briefly highlight a lot right after it is created, so the new card is easy to spot once
@@ -683,6 +691,32 @@ export function PurchaseDetailPanel({
                 </>
               );
             })()}
+            {/* The header's own edit (#752): the fields printed on this card and in the line
+                below it — supplier, platform, date, currency, shipping — through the Purchases
+                list's own dialog, so there is still exactly one editor per order. It sits with the
+                status control because that is the other thing on this card that changes the order
+                itself rather than its lots. */}
+            <Tooltip content="Edit this order's header — supplier, platform, date, currency and shipping. The lots below are edited on their own cards.">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(undefined);
+                  setEditingHeader(true);
+                }}
+                disabled={isPending}
+                style={{
+                  ...CHIP,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  cursor: isPending ? "default" : "pointer",
+                  fontWeight: 600,
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                <Icon name="edit" size="sm" /> Edit header
+              </button>
+            </Tooltip>
             {purchase.status !== "arrived" && (
               <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
                 <button
@@ -1114,6 +1148,37 @@ export function PurchaseDetailPanel({
         run={run}
         onIdentified={() => void invalidateScans(collectionId)}
       />
+
+      {/* The Purchases list's own header dialog (#120), opened over this order (#752). It edits the
+          header and nothing else — the lots and their copies have their own controls below — so
+          `run` is what carries the save: the same refresh and the same invalidations every other
+          write on this screen goes through, including the list this page was opened from. */}
+      {editingHeader && (
+        <PurchaseFormDialog
+          mode="edit"
+          collectionId={collectionId}
+          baseCurrency={purchase.baseCurrency}
+          today={today}
+          purchase={purchase}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setEditingHeader(false);
+              setError(undefined);
+            }
+          }}
+          onSubmit={(fd) =>
+            run(
+              async () => {
+                const { updatePurchaseAction } = await import("@/app/actions/purchases");
+                return updatePurchaseAction(purchase.id, fd);
+              },
+              () => setEditingHeader(false)
+            )
+          }
+        />
+      )}
 
       {addingLot && (
         <LotDialog

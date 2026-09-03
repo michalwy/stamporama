@@ -119,7 +119,11 @@ export interface LotSummary {
 export interface PurchaseDetail {
   id: string;
   collectionId: string;
+  /** Supplier and platform ids beside their names (#752), so the order screen can open the
+   *  Purchases list's own header dialog pre-filled — its two contact pickers are addressed by id. */
+  contactId: string | null;
   contactName: string | null;
+  platformId: string | null;
   platformName: string | null;
   purchasedAt: string;
   currency: string;
@@ -190,8 +194,8 @@ export async function getPurchaseDetail(
       shippingCost: true,
       status: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
-      contact: { select: { name: true } },
-      platform: { select: { name: true } },
+      contact: { select: { id: true, name: true } },
+      platform: { select: { id: true, name: true } },
       // The auction settlement this purchase was transcribed from (#28), when it came from one.
       auctionSale: { select: { id: true, name: true } },
       trade: { select: { id: true, tradeNo: true, partner: { select: { name: true } } } },
@@ -261,7 +265,9 @@ export async function getPurchaseDetail(
   return {
     id: row.id,
     collectionId: row.collectionId,
+    contactId: row.contact?.id ?? null,
     contactName: row.contact?.name ?? null,
+    platformId: row.platform?.id ?? null,
     platformName: row.platform?.name ?? null,
     purchasedAt: dateToIso(row.purchasedAt),
     currency: row.currency,

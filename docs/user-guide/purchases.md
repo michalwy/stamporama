@@ -98,7 +98,8 @@ expenses — are added afterwards during intake.
 Use the **⋮** menu on a row to **Edit** or **Delete**.
 
 - **Edit** reopens the header dialog. It never touches a purchase's lots or expenses —
-  those are managed during intake.
+  those are managed during intake. The order's own screen carries the same **Edit header**
+  button, so you do not have to come back here to fix a date or add the postage.
 - **Delete** removes the purchase along with any lots and expenses. This cannot be undone.
   Once lots have been resolved into copies (during intake), a purchase whose lots still hold
   copies cannot be deleted until those copies are detached.
@@ -116,6 +117,10 @@ status change, because arriving also moves the order's copies to *To sort*.
 Next to the dropdown, a small **→** button advances the status one step along the fixed
 progression (*Preparing → In transit → Arrived*) with a single click. It disappears once the
 order has **Arrived**.
+
+Beside them, **Edit header** opens the same dialog the Purchases list's **⋮ → Edit** opens, over
+this order: supplier, platform, date, transaction currency, status and shipping cost. It edits the
+**header only** — the lots below and the copies in them have their own controls on their own cards.
 
 ### Lots
 

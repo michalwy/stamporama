@@ -18,7 +18,8 @@ heading, and the scrolling under it, on telling you that something is not there.
 No field on these pages is typed into directly. Everything is still edited where it always was: the
 copy form, the stamp dialog, the issue dialog — and where a page offers a button that starts one of
 those, it is that same dialog that opens, so there is never a second version of a record to keep
-straight. The popups you already use (**View copies**, **View offers**, **Show valuation**) also stay
+straight. All three pages carry **Edit** at the end of their identity line, so a mistake you notice
+while reading the page is corrected on the spot rather than back on the list you came from. The popups you already use (**View copies**, **View offers**, **Show valuation**) also stay
 exactly where they are — they answer one question without leaving the list, and these pages are for
 when you want the whole picture instead.
 
@@ -96,7 +97,10 @@ Offers. Only Details is always there.
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
   stamp's variants when there are any, and opening its disposition breakdown on click — and the
-  headline catalog price.
+  headline catalog price. At the end of the line, **Edit** opens the stamp form — the same one the
+  Issues list opens, over this stamp — for its name, issued date, catalog numbers and checklists.
+  (The **Variants** card below edits the stamps *under* this one; this button is for the stamp the
+  page is about.)
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).
@@ -136,7 +140,8 @@ Offers. Only Details is always there.
 Details is always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
-  required/total stamp count.
+  required/total stamp count. At the end of the line, **Edit** opens the issue dialog — the same one
+  the Issues list opens, over this issue — for its name, year, area, catalog numbers and checklists.
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
   many of them are actually priced.
 - **Completeness** — the breakdown described below.

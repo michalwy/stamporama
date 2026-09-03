@@ -31,6 +31,22 @@ const STATUS_OPTIONS = [
   { value: "arrived", label: "Arrived" },
 ] as const;
 
+/** The header fields this dialog edits, and nothing else (#752). Stated as its own shape rather
+ *  than as `PurchaseListItem` because the order's **own screen** opens the same dialog and reads
+ *  through `PurchaseDetail` — both carry these seven, and neither should have to pretend to be the
+ *  other to hand them over. */
+export type PurchaseHeaderFields = Pick<
+  PurchaseListItem,
+  | "contactId"
+  | "contactName"
+  | "platformId"
+  | "platformName"
+  | "purchasedAt"
+  | "currency"
+  | "status"
+  | "shippingCost"
+>;
+
 export interface PurchaseFormDialogProps {
   mode: "add" | "edit";
   collectionId: string;
@@ -38,10 +54,10 @@ export interface PurchaseFormDialogProps {
   baseCurrency: string;
   /** Today as yyyy-mm-dd, computed by the caller (server/page) to avoid SSR clock use. */
   today: string;
-  /** The row being edited (add mode leaves this undefined). Its header fields — supplier,
+  /** The order being edited (add mode leaves this undefined). Its header fields — supplier,
    * date, currency, status, shipping — are already in the loaded list row, so editing
    * needs no extra fetch. */
-  purchase?: PurchaseListItem;
+  purchase?: PurchaseHeaderFields;
   isPending: boolean;
   error?: string;
   onClose: () => void;

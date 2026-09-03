@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { StampIssueMembership, StampListItem, StampRelatives } from "@/lib/stamps";
 import type { IssueListItem } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -13,6 +14,7 @@ import {
   DetailLayout,
   DetailColumn,
   DetailColumns,
+  DETAIL_BUTTON,
   Field,
   FieldGrid,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
@@ -30,12 +32,23 @@ import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-co
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
 import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import { Icon } from "@/app/icons";
 import { StampVariantsCard } from "./stamp-variants-card";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
 // two relationships a row cannot draw at all: the variant tree around it (#54) and the copies
 // held of it (#348). The tree is also **worked** here (#630) — see `stamp-variants-card.tsx` for
 // why that is not the page becoming a second editor.
+//
+// **Edit** on the identity band (#751) is #673's rule applied to this record: it opens the very
+// dialog the Issues list opens, so there is still exactly one editor per stamp and not one field on
+// this page becomes typeable in place. It closes an odd gap the Variants card left — that card has
+// edited every stamp *under* this one since #630, while the stamp the page is actually about could
+// only be reached by going back to a list and finding its row again. It sits on the band rather
+// than on the Details card, because it is about the stamp as a whole and a button per card would be
+// several of them saying the same thing.
 
 export function StampDetailPanel({
   collectionId,
@@ -64,6 +77,31 @@ export function StampDetailPanel({
   const areaPath = buildAreaPath(areas, stamp.areaId);
   const issuedDate = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
   const price = stamp.mainCatalogPrice;
+
+  // The edit dialog this screen opens (#751). Its catalog-number inputs are labelled through the
+  // same resolution the band's chips use — the area's vendors as the stamp's first issue overrides
+  // them (#377) — so the prefix on the form is the prefix the numbers will actually carry.
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
+  const areaVendors = [...vendorMap.values()];
+  const { invalidateList: invalidateStamps } = useInvalidateStamps();
+  function closeDialog() {
+    if (isPending) return;
+    setEditing(false);
+    setError(undefined);
+  }
+  // The page is server-rendered, so a save is shown by re-reading it. The Stamps list's cached
+  // pages go stale in the same breath: the collector arrived from one of its rows and **Back to
+  // stamps** is the way out, so a row still reading the way it read before the edit is the one
+  // thing this must not leave behind.
+  function onSaved() {
+    setEditing(false);
+    setError(undefined);
+    router.refresh();
+    void invalidateStamps(collectionId);
+  }
 
   return (
     <>
@@ -95,6 +133,15 @@ export function StampDetailPanel({
               )}
             </span>
           )}
+          {/* What this screen can start (#751), at the end of the line that says which stamp it is
+              about — the Issues list's own dialog, over this stamp. */}
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
+            <Tooltip content="Edit this stamp — name, issued date, catalog numbers and checklists.">
+              <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
+                <Icon name="edit" size="sm" /> Edit
+              </button>
+            </Tooltip>
+          </span>
         </DetailFullRow>
 
         <DetailColumns>
@@ -180,6 +227,41 @@ export function StampDetailPanel({
           </DetailColumn>
         </DetailColumns>
       </DetailLayout>
+
+      {/* The Issues list's own stamp dialog (#54), opened over this one stamp. Its memberships go in
+          as they are — the dialog edits the first one's checklists, the same rule the Variants card
+          and `toStampListItem` already follow. */}
+      {editing && (
+        <StampFormDialog
+          mode="edit"
+          stampId={stamp.id}
+          collectionId={collectionId}
+          stamp={{
+            name: stamp.name,
+            issuedDay: stamp.issuedDay,
+            issuedMonth: stamp.issuedMonth,
+            issuedYear: stamp.issuedYear,
+            catalogNumbers: stamp.catalogNumbers,
+            colnectId: stamp.colnectId,
+            issues: stamp.issues.map((m) => ({
+              issueId: m.issueId,
+              checklists: m.checklists,
+            })),
+          }}
+          areaVendors={areaVendors}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(fd) =>
+            startTransition(async () => {
+              const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
+              const result = await updateStampWithCatalogAction(stamp.id, fd);
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setError(result.message);
+            })
+          }
+        />
+      )}
     </>
   );
 }

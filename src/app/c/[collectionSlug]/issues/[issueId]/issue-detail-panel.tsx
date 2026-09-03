@@ -18,6 +18,7 @@ import {
   DetailLayout,
   DetailColumn,
   DetailColumns,
+  DETAIL_BUTTON,
   EmptyNote,
   Field,
   FieldGrid,
@@ -53,6 +54,9 @@ import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chi
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
+import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
+import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { Icon } from "@/app/icons";
 
 // The issue detail screen (#519). Two things the list row cannot give: the stamp tree with enough
 // room to read it, and the completeness question answered from the copies actually held rather
@@ -61,6 +65,13 @@ import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offer
 // Since #531 the subject of that question is a **checklist**, and an issue may carry several. This
 // is the screen with room for all of them: one card per checklist, each with its own grid — where
 // the list row could only collapse them to a count.
+//
+// **Edit** on the identity band (#751) is #673's rule applied to this record: it opens the Issues
+// list's own dialog, so there is still exactly one editor per issue and not one field on this page
+// becomes typeable in place. The stamp tree below it is already *worked* here — reordered (#549),
+// narrowed by checklist (#531) — for the reason #630 gives about the variant tree: those are the
+// relationships between an issue's stamps, not fields of the issue. The issue's own fields had no
+// way in at all, which meant a wrong year noticed on this screen was a trip back to the list.
 
 const CELL: React.CSSProperties = {
   padding: "0.3rem 0.6rem",
@@ -117,6 +128,24 @@ export function IssueDetailPanel({
     members,
     onSaved: () => router.refresh(),
   });
+  // The edit dialog this screen opens (#751) — the Issues list's own, over this issue.
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
+  const { invalidateList: invalidateIssues } = useInvalidateIssues();
+  function closeDialog() {
+    if (isPending) return;
+    setEditing(false);
+    setError(undefined);
+  }
+  // Server-rendered page, so a save is shown by re-reading it; the Issues list goes stale with it,
+  // because **Back to issues** is the way out and its row must not still read as it did before.
+  function onSaved() {
+    setEditing(false);
+    setError(undefined);
+    router.refresh();
+    void invalidateIssues(collectionId);
+  }
   // Dropped while reordering: a drag inside a narrowed tree would move a stamp past a sibling
   // that was never on screen, and the server refuses a partial group.
   const { tree, contextIds } = filterStampTreeByChecklists(
@@ -145,6 +174,15 @@ export function IssueDetailPanel({
             requiredCount={issue.requiredCount}
             memberCount={issue.memberCount}
           />
+          {/* What this screen can start (#751), at the end of the line that says which issue it is
+              about. */}
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
+            <Tooltip content="Edit this issue — name, year, area, catalog numbers and checklists.">
+              <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
+                <Icon name="edit" size="sm" /> Edit
+              </button>
+            </Tooltip>
+          </span>
         </DetailFullRow>
 
         <DetailColumns>
@@ -287,6 +325,27 @@ export function IssueDetailPanel({
           </DetailColumn>
         </DetailColumns>
       </DetailLayout>
+
+      {/* The Issues list's own dialog (#142/#531), opened over this one issue. */}
+      {editing && (
+        <IssueDialog
+          mode="edit"
+          collectionId={collectionId}
+          areas={areas}
+          issue={issue}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(fd) =>
+            startTransition(async () => {
+              const { updateIssueAction } = await import("@/app/actions/issues");
+              const result = await updateIssueAction(collectionId, issue.id, fd);
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setError(result.message);
+            })
+          }
+        />
+      )}
     </>
   );
 }
