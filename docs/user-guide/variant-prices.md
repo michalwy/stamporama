@@ -28,9 +28,12 @@ Typing:
 - **Tab** moves down a condition column, and on to the top of the next column at the end of
   one — the way a column of variants is filled in from a catalogue that lists them down the
   page, and the same movement the stamp editor's price grid uses. **Shift+Tab** goes back.
+  Off the **last** cell it lands on **Done**, so a whole grid can be typed through without
+  focus ever leaving the dialog.
 - **Enter** saves the cell and closes the grid. It is the way out of a grid you opened to
   fill one gap. If the figure is refused, the grid stays open with the message on the cell.
-- There is **no Save**. Each figure is written when you leave the cell.
+- There is **no Save**. Each figure is written when you leave the cell — **Done** only
+  closes the grid, exactly as Enter on a cell does.
 - **Clearing a cell removes the price.** An empty cell records nothing — it is not a zero.
 
 On a format tab, a greyed, dashed cell shows what that format would be worth from the

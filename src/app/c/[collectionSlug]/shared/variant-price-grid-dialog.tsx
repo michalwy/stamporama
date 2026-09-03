@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { DialogShell, DialogBody } from "@/app/dialog-shell";
+import { DialogShell, DialogBody, DialogFooter, DialogPrimaryButton } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -34,6 +34,12 @@ import type {
  * down the page — and a grid whose two price surfaces disagree about Tab is a grid whose muscle
  * memory is wrong half the time. Locked umbrella rows are not in it: it walks the cells that can be
  * typed in.
+ *
+ * **Tab off the last cell lands on Done** (#753). Auto-saving per cell left the dialog with no
+ * button in its own tab order at all — the shell's close is drawn *above* the body — so a fast
+ * price → Tab → price → Tab pass eventually walked focus out of the dialog and into the browser's
+ * address bar. Done catches it. It submits nothing (there is nothing to submit) and closes, which
+ * is what Enter on a cell already does: the way out is the same act however it is reached.
  *
  * **Enter saves the cell and closes the dialog** (#634), superseding #626's second half, where it
  * followed Tab down the same column. Tab is still that walk, so there is still one movement rule —
@@ -107,6 +113,9 @@ export function VariantPriceGridDialog({
   });
 
   const wroteRef = useRef(false);
+  /** The Done button, so the grid's Tab walk can end on it (#753) rather than off the dialog. It
+   *  lives out here because the button is the footer's and the walk is the grid's. */
+  const doneRef = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => {
     if (wroteRef.current) onSaved?.();
     onClose();
@@ -134,9 +143,18 @@ export function VariantPriceGridDialog({
             restrict={restrict}
             onWrote={() => (wroteRef.current = true)}
             onDone={close}
+            doneRef={doneRef}
           />
         ) : null}
       </DialogBody>
+      {/* One button, and it is the primary: closing is the only act this dialog has left once every
+          cell writes itself. Drawn while the grid is still loading too — a dialog whose only button
+          appears late is a dialog with nothing to press at the moment it is opened by mistake. */}
+      <DialogFooter>
+        <DialogPrimaryButton type="button" ref={doneRef} onClick={close}>
+          Done
+        </DialogPrimaryButton>
+      </DialogFooter>
     </DialogShell>,
     document.body
   );
@@ -159,12 +177,15 @@ function VariantPriceGrid({
   restrict,
   onWrote,
   onDone,
+  doneRef,
 }: {
   grid: VariantPriceGridData;
   restrict?: VariantPriceRestriction;
   onWrote: () => void;
   /** Close the dialog — what Enter does once the cell it was pressed in is written (#634). */
   onDone: () => void;
+  /** The footer's Done button, where the Tab walk ends (#753). */
+  doneRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   /**
    * The restriction, or nothing — applied only when **every** axis of it is one this collection
@@ -330,9 +351,16 @@ function VariantPriceGrid({
 
   /**
    * **Tab** steps through {@link navOrder} — down the condition column, then on to the next column
-   * (#626). Shift reverses. At either end the browser takes over, so focus can leave the grid the
-   * ordinary way rather than being trapped in it. It commits nothing here: its own blur does that,
-   * and committing twice for one keystroke is how a cell gets written on the way past it.
+   * (#626). Shift reverses. It commits nothing here: its own blur does that, and committing twice
+   * for one keystroke is how a cell gets written on the way past it.
+   *
+   * Off the **last** cell it goes to Done (#753), the last step of the walk being the way out of a
+   * grid that has just been filled. Nothing else in this dialog comes after the grid in the
+   * document — the shell draws its close above the body — so without that step Tab left the dialog
+   * altogether and landed in the browser's chrome, which a fast price → Tab → price → Tab pass
+   * reaches within a column. Backwards off the **first** cell the browser still takes over, into
+   * the edition and format controls above the grid: those are the dialog's own, and focus leaving
+   * upwards leaves it by a route that still has something to press.
    *
    * **Enter** writes the cell and closes the dialog (#634) — and closes only once the write is in,
    * since `onDone` is what tells the surface behind to refetch. A refusal leaves the dialog open
@@ -355,7 +383,14 @@ function VariantPriceGrid({
     const idx = navOrder.indexOf(cellKey(stampId, editionId, conditionId, certId, formatId));
     if (idx === -1) return;
     const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
-    if (nextIdx < 0 || nextIdx >= navOrder.length) return;
+    if (nextIdx >= navOrder.length) {
+      const done = doneRef.current;
+      if (!done) return;
+      e.preventDefault();
+      done.focus();
+      return;
+    }
+    if (nextIdx < 0) return;
     const target = inputRefs.current.get(navOrder[nextIdx]);
     if (!target) return;
     e.preventDefault();
@@ -452,10 +487,11 @@ function VariantPriceGrid({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <p style={{ ...MUTED, margin: 0 }}>
-        {grid.scopeLabel}. Every figure is saved as you leave the cell — there is nothing to submit.
-        Clear a cell to remove the price; an empty cell records nothing. Tab moves down a condition
-        column; Enter saves the cell and closes. An <em>umbrella</em> row shows what its variants
-        roll up to and is read-only until you unlock it.
+        {grid.scopeLabel}. Every figure is saved as you leave the cell — there is nothing to submit,
+        and <em>Done</em> only closes. Clear a cell to remove the price; an empty cell records
+        nothing. Tab moves down a condition column and off the last cell onto <em>Done</em>; Enter
+        saves the cell and closes. An <em>umbrella</em> row shows what its variants roll up to and
+        is read-only until you unlock it.
       </p>
 
       {narrowedLabel && (
