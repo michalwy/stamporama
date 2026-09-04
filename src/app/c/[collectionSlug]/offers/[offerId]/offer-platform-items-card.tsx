@@ -23,6 +23,7 @@ import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usesPlatformCatalogue } from "@/lib/platform-modules";
 import { listingItemGaps } from "@/lib/offer-listing-wizard";
@@ -971,7 +972,17 @@ export function OfferPlatformItemsCard({
                   )}
                 </span>
                 <span style={CELL}>
-                  <span style={{ ...MUTED, whiteSpace: "nowrap" }}>{item.conditionName}</span>
+                  {/* The same coloured chip the copies list, the trade line and the lot line draw
+                      (#728) — a condition the collector recognises by colour on those screens is the
+                      condition this row is about. It says the abbreviation, as a row chip does
+                      everywhere else, and keeps the full name in its hover: this column sits between
+                      the stamp name and the links, and the long form widened it on every row. */}
+                  <ConditionChip
+                    collectionId={collectionId}
+                    conditionId={item.conditionId}
+                    label={item.conditionAbbreviation}
+                    tooltip={item.conditionName}
+                  />
                   {item.copyCount > 1 && (
                     <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
                       <span style={MUTED}>×{item.copyCount}</span>

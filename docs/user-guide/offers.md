@@ -804,7 +804,9 @@ the stamp itself and not about where it is being sold.
 
 The card lists the offer's stamps — one row per **stamp and condition**,
 since that is what the marketplace pages are keyed on, with a `×3` where several copies of the offer
-share a row. A row names the stamp, says which condition it is in, then carries two links and the
+share a row. A row names the stamp, says which condition it is in — the same coloured
+[condition chip](collections.md#condition-and-certificate-colours) the copies list draws, saying the condition's
+abbreviation with its full name on hover — then carries two links and the
 stamp's catalog value — each lined up in a column of its own, so a batch of them is worked straight
 down the card. The two links open in a new tab:
 

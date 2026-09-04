@@ -532,7 +532,7 @@ Certificate statuses translate exactly like [conditions](#conditions-in-other-la
 
 A condition and a certificate status each carry a **colour**, so the chips they draw across the app can be told apart at a glance instead of reading as one grey line. Pick one in the **Colour** field of the add or edit dialog, on either list: a row of swatches, with a dashed **No colour** swatch at the front.
 
-- The colour shows on the **Copies** list, on duplicate and grouped rows, on a copy's own page, on trade receive lines and on auction lot composition lines — everywhere the condition or the status is already drawn as a chip. It does not change listing text, prices, or anything that leaves the app.
+- The colour shows on the **Copies** list, on duplicate and grouped rows, on a copy's own page, on trade receive lines, on auction lot composition lines and on an offer's **Items** rows — everywhere the condition or the status is already drawn as a chip. It does not change listing text, prices, or anything that leaves the app.
 - **No colour is a real choice.** An entry with no colour keeps the plain grey chip, which is what makes a coloured one stand out: colouring everything says as much as colouring nothing.
 - The default conditions arrive **already coloured** — mint grades in green, teal and amber, used in blue, CTO in violet and FDC in orange — and existing collections were given the same colours, so nothing has to be set up before this is worth anything. Change any of them; they are ordinary conditions.
 - Adding a new condition or status offers the first colour nobody is using yet, so a growing list stays distinguishable without picking one each time.

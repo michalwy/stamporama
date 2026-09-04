@@ -2817,7 +2817,10 @@ const LISTING_SETS_SELECT = {
           // variant that is cheapest at *this* copy's condition, certificate and format.
           certificateStatusId: true,
           formatId: true,
-          condition: { select: { name: true } },
+          // The abbreviation rides along for the Items card's condition chip: the chip resolves its
+          // colour from the dictionary but is handed its own text, and a row says it in the short
+          // form the rest of the app's row chips use.
+          condition: { select: { name: true, abbreviation: true } },
           stamp: {
             select: {
               // The label select already carries the area links the grouping needs (#379).
@@ -3559,6 +3562,9 @@ export interface OfferPlatformItem {
   /** The stamp's name, where it has one; the label already carries the number. */
   stampName: string | null;
   conditionName: string;
+  /** The short form of the same condition, for the row's condition chip — the abbreviation is what
+   * a chip says on every other list in the app, with the full name in its hover. */
+  conditionAbbreviation: string;
   /** The page in the platform's catalogue (#290) of whatever this row **stands under** — the stamp
    * itself, or the variant of {@link catalogItemVariant} — null when that entry was never matched. */
   catalogUrl: string | null;
@@ -4133,6 +4139,7 @@ function platformItemsFor(
         catalogNumbers,
         stampName: item.stamp.name?.trim() || null,
         conditionName: item.condition.name,
+        conditionAbbreviation: item.condition.abbreviation,
         catalogUrl: colnectStampUrl(colnectId),
         // Only for a stamp with no page of its own: searching for one already matched would offer
         // the long way round to a link that is right there.
