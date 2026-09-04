@@ -806,9 +806,9 @@ export function ScansCard({
           // The same handover, minus the picker (#757, #595 before it) — the panel drops these
           // pieces straight onto the condition step with that identification's answers in the
           // fields.
-          onRepeat={(entry, pieces) => {
+          onRepeat={(answers, pieces) => {
             closeDialog();
-            onRepeatIdentification(entry.answers, pieces);
+            onRepeatIdentification(answers, pieces);
           }}
           onDone={(touchedCopy) => {
             closeDialog();

@@ -290,7 +290,11 @@ describe("identifying scan tiles into copies (#567)", () => {
     // consumed tile is inspected now that clicking one no longer leaves for the copy.
     assert.equal(consumed?.item?.stampName, "Tile stamp");
     assert.equal(consumed?.item?.conditionAbbreviation, "U");
+    // The numbers travel with their vendor so the client can prefix them (#757), and the issue and
+    // its area come along to key the lookup — both null for a stamp reported under no issue.
     assert.deepEqual(consumed?.item?.catalogNumbers, []);
+    assert.equal(consumed?.item?.issueId, null);
+    assert.equal(consumed?.item?.collectionAreaId, null);
     assert.equal(consumed?.item?.backPhotoId, null, "this card was never turned over");
     // …and what the identification history repeats and orders itself by (#757): the lot the copy's
     // money came from, and the copy's own creation, which is the identification's time — a tile

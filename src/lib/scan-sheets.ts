@@ -1309,10 +1309,11 @@ export interface ScanTileData {
    * perfectly well, and the tile's own dialog shows them at full size (#584).
    *
    * The rest is **enough of the copy to recognise it** (#584), which is what a consumed tile's
-   * dialog exists to say now that the click no longer leaves for it. Raw catalogue numbers rather
-   * than prefix-formatted labels: the assign list one dialog over prints a copy the same way, and
-   * this read is a lot's tiles, not the area tree and per-issue prefix overrides that formatting
-   * would drag in. */
+   * dialog exists to say now that the click no longer leaves for it — and, since #757, enough to
+   * **name the stamp the way the rest of the app does**: the numbers travel with their vendor, and
+   * the issue and its area come along, so the client resolves the prefix through the same
+   * `useAreaVendorMaps` every catalogue chip goes through. The formatting stays on the client on
+   * purpose; what this read gained is the two ids it could not derive, not a label. */
   item: {
     id: string;
     itemNo: number;
@@ -1353,7 +1354,13 @@ export interface ScanTileData {
     frontPhotoId: string | null;
     backPhotoId: string | null;
     stampName: string | null;
-    catalogNumbers: string[];
+    catalogNumbers: { catalogVendorId: string; number: string }[];
+    /** The issue this copy's stamp is reported under, and that issue's area — the **first**
+     * membership, the one-issue-per-stamp rule every other read follows, and the same pair
+     * `TileCandidate` carries for the same reason. They are what `vendorMapFor` is keyed by, so
+     * without them a number can only be printed bare. Null for a stamp on no issue. */
+    issueId: string | null;
+    collectionAreaId: string | null;
     conditionAbbreviation: string;
   } | null;
   /** What this piece **could be** (#607) — the shortlist a parked tile carries, in the order it was
@@ -1523,7 +1530,19 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             // front.
             photos: { where: { role: { in: ["front", "back"] } }, select: { id: true, role: true } },
             condition: { select: { abbreviation: true } },
-            stamp: { select: { name: true, catalogNumbers: { select: { number: true } } } },
+            stamp: {
+              select: {
+                name: true,
+                // With the vendor, so the client can prefix them (#757) — the same shape the
+                // shortlist's numbers would have needed had they ever been formatted.
+                catalogNumbers: { select: { catalogVendorId: true, number: true } },
+                issueMemberships: {
+                  orderBy: { issueId: "asc" },
+                  take: 1,
+                  select: { issue: { select: { id: true, collectionAreaId: true } } },
+                },
+              },
+            },
           },
         },
       },
@@ -1590,7 +1609,12 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             frontPhotoId: t.item.photos.find((p) => p.role === "front")?.id ?? null,
             backPhotoId: t.item.photos.find((p) => p.role === "back")?.id ?? null,
             stampName: t.item.stamp.name,
-            catalogNumbers: t.item.stamp.catalogNumbers.map((c) => c.number),
+            catalogNumbers: t.item.stamp.catalogNumbers.map((c) => ({
+              catalogVendorId: c.catalogVendorId,
+              number: c.number,
+            })),
+            issueId: t.item.stamp.issueMemberships[0]?.issue.id ?? null,
+            collectionAreaId: t.item.stamp.issueMemberships[0]?.issue.collectionAreaId ?? null,
             conditionAbbreviation: t.item.condition.abbreviation,
           }
         : null,

@@ -25,7 +25,12 @@ function item(
     frontPhotoId: "p-front",
     backPhotoId: "p-back",
     stampName: "Chopin",
-    catalogNumbers: ["Mi 200", "Fi 180"],
+    catalogNumbers: [
+      { catalogVendorId: "v-mi", number: "200" },
+      { catalogVendorId: "v-fi", number: "180" },
+    ],
+    issueId: "iss-1",
+    collectionAreaId: "area-1",
     conditionAbbreviation: "MNH",
     ...overrides,
   };
@@ -56,8 +61,8 @@ describe("identifyHistory", () => {
   it("lists a consumed tile's identification, newest first", () => {
     const history = identifyHistory([
       batch(1, [
-        tile("t1", { item: item({ id: "i1", createdAt: "2026-09-04T10:00:00.000Z" }) }),
-        tile("t2", { item: item({ id: "i2", createdAt: "2026-09-04T10:05:00.000Z" }) }),
+        tile("t1", { item: item({ stampId: "s1", createdAt: "2026-09-04T10:00:00.000Z" }) }),
+        tile("t2", { item: item({ stampId: "s2", createdAt: "2026-09-04T10:05:00.000Z" }) }),
       ]),
     ]);
     assert.deepEqual(
@@ -68,8 +73,12 @@ describe("identifyHistory", () => {
 
   it("spans every batch of the screen, not one card", () => {
     const history = identifyHistory([
-      batch(2, [tile("newer", { item: item({ createdAt: "2026-09-04T12:00:00.000Z" }) })]),
-      batch(1, [tile("older", { item: item({ createdAt: "2026-09-04T09:00:00.000Z" }) })]),
+      batch(2, [
+        tile("newer", { item: item({ stampId: "s2", createdAt: "2026-09-04T12:00:00.000Z" }) }),
+      ]),
+      batch(1, [
+        tile("older", { item: item({ stampId: "s1", createdAt: "2026-09-04T09:00:00.000Z" }) }),
+      ]),
     ]);
     assert.deepEqual(
       history.map((e) => e.tileId),
@@ -112,12 +121,19 @@ describe("identifyHistory", () => {
     assert.equal(entry.itemNo, 123);
     assert.equal(entry.photoId, "p-front");
     assert.equal(entry.conditionAbbreviation, "U");
-    assert.equal(entry.answers.shortLabel, "Mi 200");
-    assert.equal(entry.answers.label, "Mi 200 · Fi 180 — Chopin");
+    // The stamp travels unformatted: the prefix is resolved on the client, where the area and
+    // per-issue maps are, so what this module hands over is where it sits and what it is numbered.
+    assert.deepEqual(entry.subject, {
+      areaId: "area-1",
+      issueId: "iss-1",
+      catalogNumbers: [
+        { catalogVendorId: "v-mi", number: "200" },
+        { catalogVendorId: "v-fi", number: "180" },
+      ],
+      name: "Chopin",
+    });
     assert.deepEqual(entry.answers, {
       stampId: "s-chopin",
-      label: "Mi 200 · Fi 180 — Chopin",
-      shortLabel: "Mi 200",
       conditionId: "c-used",
       certificateStatusId: "",
       formatId: "f-pair",
@@ -135,32 +151,52 @@ describe("identifyHistory", () => {
     assert.equal(entry.photoId, "p-back");
   });
 
-  it("keeps only the last few, and orders a one-pass run stably", () => {
-    // Ten tiles identified as one stamp in one pass (#596) share a creation instant, and an
-    // eleventh identified after them must be the row on top.
+  it("lists one stamp once, however many copies of it were taken in", () => {
+    // Ten tiles identified as one stamp in one pass (#596) is the ordinary shape of a card, and it
+    // must not spend the whole list on a single answer.
     const run = Array.from({ length: 10 }, (_, i) =>
-      tile(`t${i}`, { item: item({ createdAt: "2026-09-04T10:00:00.000Z" }) })
+      tile(`t${i}`, { item: item({ createdAt: `2026-09-04T10:0${i}:00.000Z` }) })
     );
     const history = identifyHistory([
       batch(1, [
         ...run,
-        tile("last", { item: item({ createdAt: "2026-09-04T10:01:00.000Z" }) }),
+        tile("other", { item: item({ stampId: "s2", createdAt: "2026-09-04T09:00:00.000Z" }) }),
       ]),
     ]);
-    assert.equal(history.length, 10);
-    assert.equal(history[0].tileId, "last");
-    // The run's own order is total and repeatable, so a row cannot move under the pointer.
     assert.deepEqual(
-      history.slice(1).map((e) => e.tileId),
-      identifyHistory([batch(1, [...run].reverse())])
-        .slice(0, 9)
-        .map((e) => e.tileId)
+      history.map((e) => e.tileId),
+      // The newest of the run stands for it, and the other stamp keeps its own row underneath.
+      ["t9", "other"]
     );
   });
 
-  it("takes the limit it is given", () => {
+  it("tells apart what a row would draw differently", () => {
+    const history = identifyHistory([
+      batch(1, [
+        tile("mnh", { item: item({ createdAt: "2026-09-04T10:00:00.000Z" }) }),
+        tile("used", {
+          item: item({ conditionId: "c-used", createdAt: "2026-09-04T10:01:00.000Z" }),
+        }),
+        tile("pair", {
+          item: item({ formatId: "f-pair", createdAt: "2026-09-04T10:02:00.000Z" }),
+        }),
+        // The same stamp, condition and format, differing only in what no row shows: one entry,
+        // and the newest of them carries its own certificate onward.
+        tile("cert", {
+          item: item({ certificateStatusId: "cert-1", createdAt: "2026-09-04T10:03:00.000Z" }),
+        }),
+      ]),
+    ]);
+    assert.deepEqual(
+      history.map((e) => e.tileId),
+      ["cert", "pair", "used"]
+    );
+    assert.equal(history[0].answers.certificateStatusId, "cert-1");
+  });
+
+  it("takes the limit it is given, counting distinct identifications", () => {
     const tiles = Array.from({ length: 4 }, (_, i) =>
-      tile(`t${i}`, { item: item({ createdAt: `2026-09-04T10:0${i}:00.000Z` }) })
+      tile(`t${i}`, { item: item({ stampId: `s${i}`, createdAt: `2026-09-04T10:0${i}:00.000Z` }) })
     );
     assert.equal(identifyHistory([batch(1, tiles)], 2).length, 2);
   });

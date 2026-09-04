@@ -622,10 +622,18 @@ or ruling out from here settles it for the whole run.
 
 **Duplicates you meet as you go: *Just identified*.** Beside the piece, under *It could be*, the
 dialog lists the **last ten identifications you have made on this screen**, newest first — each one a
-picture of the piece it was, its catalogue number, its condition, and the copy number it became.
-Press one and this tile is identified the same way. Duplicates on a card sit next to each other, but
-the runs interleave — two of a stamp, one of another, then back to the first — so the one you want is
-often not the one immediately before.
+picture of the piece it was, its catalogue number in full (`Mi·DE-BM 68`, the way the copies list
+writes it), its condition as the coloured chip you know from every other list, and the copy number it
+became. Press one and this tile is identified the same way. Duplicates on a card sit next to each
+other, but the runs interleave — two of a stamp, one of another, then back to the first — so the one
+you want is often not the one immediately before.
+
+**Each identification appears once.** Ten copies of one stamp taken in one after another is one row,
+not ten — the list is ten *different* things to press, which is the depth it exists to give. Two rows
+are separate when they would read differently: a different stamp, a different condition, or a
+different format. Where two otherwise identical intakes differed only in something the row does not
+show — a certificate, a location, its ref, the lot — the **most recent** one stands for them, and it
+is that one's answers you get.
 
 The **picture** is why the list is worth its room. A number and an abbreviation say what you
 recorded; the thumbnail says what the piece looked like, which is what you are holding this tile

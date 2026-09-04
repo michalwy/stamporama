@@ -37,6 +37,7 @@ import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chi
 import { perforationMatches, type PerforationMatch } from "@/lib/perforation";
 import { formatGaugeStep, formatMeasuredGauge, nearestCatalogueGauge } from "@/lib/scan-measure";
 import { StampPickerBrowser } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
+import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
@@ -45,8 +46,14 @@ import {
   type VendorMap,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import type { IdentifyHistoryEntry } from "@/lib/tile-identify-history";
+import {
+  useAreaVendorMaps,
+  type AreaVendorMaps,
+} from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import type {
+  IdentifyHistoryAnswers,
+  IdentifyHistoryEntry,
+} from "@/lib/tile-identify-history";
 import { IdentifyHistory } from "./identify-history";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import {
@@ -230,8 +237,10 @@ interface Props {
    */
   history: IdentifyHistoryEntry[];
   /** Identify this tile the way a history row was identified — the same handover `onIdentifyNew`
-   * makes, with the picker's answer and the whole of the condition step already given. */
-  onRepeat: (entry: IdentifyHistoryEntry, pieces: IdentifiedPiece[]) => void;
+   * makes, with the picker's answer and the whole of the condition step already given. The answers
+   * arrive complete from the panel, which is where the catalogue prefixes are resolved and so the
+   * only place the stamp's label can be worded the way the picker words it. */
+  onRepeat: (answers: IdentifyHistoryAnswers, pieces: IdentifiedPiece[]) => void;
   /**
    * *Identify as this stamp* with the picker skipped (#607) — a candidate off the shortlist, or the
    * parent offered in place of a shortlist that is all variants of one node.
@@ -336,6 +345,10 @@ export function TileIdentifyDialog({
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The catalogue prefixes, for the one place on this dialog that names a stamp without a query of
+  // its own to draw it from: a consumed tile's identity (#584). The shortlist and the history panel
+  // resolve their own through the same shared, cached query.
+  const vendorMaps = useAreaVendorMaps(areas, collectionId);
 
   /** The one tile this dialog is about, or null when it is about a run. Everything that is genuinely
    * about a single piece — the assign list, the settled panels, the note editor — reads this and is
@@ -753,14 +766,20 @@ export function TileIdentifyDialog({
           {!settled && (
             <IdentifyHistory
               collectionId={collectionId}
+              areas={areas}
               entries={history}
               canIdentify={canIdentify}
               disabled={pending}
-              onRepeat={(entry) => onRepeat(entry, pieces)}
+              onRepeat={(answers) => onRepeat(answers, pieces)}
             />
           )}
           {settled && tile ? (
-            <SettledTile tile={tile} disabled={pending} onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)} />
+            <SettledTile
+              tile={tile}
+              maps={vendorMaps}
+              disabled={pending}
+              onSaveNote={(n) => run(() => noteTileAction(tile.id, n), false)}
+            />
           ) : mode === null ? (
             // The first tile of a card, waiting on the one lot-wide query. Deliberately not opening
             // on identify meanwhile: a mode that arrives a moment later is a dialog that moves under
@@ -1905,10 +1924,14 @@ function TileNote({
  * where a consumed tile says what it became. */
 function SettledTile({
   tile,
+  maps,
   disabled,
   onSaveNote,
 }: {
   tile: ScanTileData;
+  /** For the consumed tile's catalogue numbers — derived once by the dialog, since the shortlist
+   * beside it already needs the same maps. */
+  maps: AreaVendorMaps;
   disabled: boolean;
   onSaveNote: (note: string) => void;
 }) {
@@ -1928,7 +1951,7 @@ function SettledTile({
                 that is what makes opening the copy a decision rather than a way of finding out. The
                 numbers are the copy's own, drawn the way the assign list one screen back draws
                 them. */}
-            <ConsumedIdentity item={tile.item} />
+            <ConsumedIdentity item={tile.item} maps={maps} />
           </>
         ) : (
           <p style={{ margin: 0 }}>
@@ -1967,9 +1990,23 @@ function SettledTile({
 
 /** What the copy a tile became *is*, in one line — its numbers, its name and its condition, the
  *  three the assign list's own rows lead with, so a tile before and after being worked through
- *  describes its copy the same way. */
-function ConsumedIdentity({ item }: { item: NonNullable<ScanTileData["item"]> }) {
-  const numbers = item.catalogNumbers.join(" · ");
+ *  describes its copy the same way.
+ *
+ *  The numbers are **prefix-formatted** (#757): the copy's numbers began travelling with their
+ *  vendor for the history panel a few inches away, and the same dialog printing `68` here and
+ *  `Mi·DE-BM 68` there would be two answers to what this stamp is called. */
+function ConsumedIdentity({
+  item,
+  maps,
+}: {
+  item: NonNullable<ScanTileData["item"]>;
+  maps: AreaVendorMaps;
+}) {
+  const numbers = orderedCatalogLabels(
+    item.catalogNumbers,
+    maps.vendorMapFor(item.collectionAreaId, item.issueId),
+    item.collectionAreaId ? (maps.primaryVendorByArea.get(item.collectionAreaId) ?? null) : null
+  ).join(" · ");
   return (
     <p style={{ margin: "0.375rem 0 0", color: "var(--color-text-primary)" }}>
       {numbers && <strong>{numbers}</strong>}
