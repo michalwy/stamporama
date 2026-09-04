@@ -620,24 +620,36 @@ to the same pair is one comparison at the colour key, not five. If the pieces ar
 different shortlists, you see all of them, and one written on only some says so (*on 3 of 5*); adding
 or ruling out from here settles it for the whole run.
 
-**Duplicates you meet as you go: *Same as the last*.** Once you have identified one tile in this sitting, the dialog
-offers to identify the next one the same way — and it **names what it will repeat**, so the button
-reads *Same as the last: Mi·PL 200, MNH* rather than asking you to remember. Duplicates on a card sit
-next to each other, and working a batch in order means meeting them in a run.
+**Duplicates you meet as you go: *Just identified*.** Beside the piece, under *It could be*, the
+dialog lists the **last ten identifications you have made on this screen**, newest first — each one a
+picture of the piece it was, its catalogue number, its condition, and the copy number it became.
+Press one and this tile is identified the same way. Duplicates on a card sit next to each other, but
+the runs interleave — two of a stamp, one of another, then back to the first — so the one you want is
+often not the one immediately before.
+
+The **picture** is why the list is worth its room. A number and an abbreviation say what you
+recorded; the thumbnail says what the piece looked like, which is what you are holding this tile
+against. Hover a row to see that piece at full size, the way hovering a tile on the strip works.
 
 It is the companion of ticking, not a lesser version of it: tick the tiles when you can see the run
-on the strip before you start, and repeat when you only discover the duplicate on reaching it.
+on the strip before you start, and use the list when you only discover the duplicate on reaching it.
+
+The list is read from the card itself, not remembered for the length of a sitting: reload the page,
+come back tomorrow, open the next batch of the same order — the identifications are still there. It
+spans **every batch of the order** (or, for a card that belongs to no order, of the collection),
+because the same stamp turns up on the next sheet of the same lot. A copy you have since deleted
+drops off the list by itself.
 
 It is the *stamp* that this saves you. Everything else the condition step asks — condition,
 certificate, location and its ref, disposition, the lot — already comes back on its own from the last
 copy you took in; the stamp deliberately does not, because the next tile is normally a different one.
-So the whole of "the same again" is *and the same stamp*, and it is worth a button rather than a walk
+So the whole of "the same again" is *and the same stamp*, and it is worth a press rather than a walk
 through the browse popup.
 
 It **fills the step and stops at the ordinary confirm**. Nothing is created by the press itself: you
 see what is about to be made, with the picture of this tile beside it, and press **Identify the tile**
-as usual — a consumed tile has no undo short of deleting the copy it became. What it fills is the
-**previous tile's** answers rather than your usual defaults, which is the point: the two differ
+as usual — a consumed tile has no undo short of deleting the copy it became. What it fills is **that
+identification's** answers rather than your usual defaults, which is the point: the two differ
 exactly when you have changed something for this card. **Back** takes you to the browse popup and
 drops the repeat, so the stamp you pick instead arrives at your ordinary defaults.
 

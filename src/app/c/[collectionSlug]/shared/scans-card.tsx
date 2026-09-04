@@ -41,6 +41,7 @@ import {
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import type { CollectionAreaData } from "@/lib/areas";
 import { candidateLabel, candidateShortLabel } from "@/lib/tile-candidates";
+import { identifyHistory, type IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
 import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
 import {
   TileIdentifyDialog,
@@ -149,11 +150,11 @@ interface Props {
    * chain at the condition step instead of the picker, the picker's question having been answered.
    * Everything after that is identical, confirm included. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
-  /** *Same as the last* (#595): the same handover as `onIdentifyTile`, for the tile that is to be
-   * identified as the previous one of this sitting was. Null until one has been — the panel above
-   * owns that record, because it owns the step that answers it. `summary` is what the action names,
-   * built there for the same reason: the condition and format dictionaries are up there. */
-  repeatLast: { summary: string; onRepeatTile: (pieces: IdentifiedPiece[]) => void } | null;
+  /** A row of the identification history, pressed (#757): the same handover as `onIdentifyTiles`,
+   * for a tile that is to be identified the way an earlier one of this screen was. The answers come
+   * from **here** — they are read off the screen's own consumed tiles — and the panel above owns
+   * only the chain they are dropped into. */
+  onRepeatIdentification: (answers: IdentifyHistoryAnswers, pieces: IdentifiedPiece[]) => void;
   /** *Identify again*: the same handover, for a tile that has already become a copy. One piece and
    * the copy it became — the chain the panel runs is the identification's own, ending in a write
    * that re-answers that copy instead of creating one. */
@@ -204,7 +205,7 @@ export function ScansCard({
   canIdentify,
   onIdentifyTiles,
   onReidentifyTile,
-  repeatLast,
+  onRepeatIdentification,
   onChanged,
 }: Props) {
   /** The card's own view state, remembered per order so an identification pass resumes where it
@@ -285,6 +286,10 @@ export function ScansCard({
 
   const batches = data?.batches ?? [];
   const fromAuction = data?.fromAuction ?? false;
+  // The screen's last identifications (#757), for the tile dialog's history panel. Derived from the
+  // batches rather than remembered as each one happens: the copy a tile became **is** the record,
+  // so this comes back with the strip after a reload and cannot drift from what the tiles say.
+  const history = identifyHistory(batches);
   const expansion = useBatchExpansion(scansUi.batches, (batches) => patchScansUi({ batches }));
   // The tile and the batch it was cut from — the batch because the dialog looks *into* the tile
   // (#585) and the scans behind it are where anything past the tile photo's own resolution comes
@@ -792,17 +797,19 @@ export function ScansCard({
             closeDialog();
             onReidentifyTile(piece, copy);
           }}
-          // The same handover, minus the picker (#595) — the panel drops these pieces straight onto
-          // the condition step with the last tile's answers in the fields.
-          repeatLast={
-            repeatLast && {
-              summary: repeatLast.summary,
-              onRepeat: (pieces) => {
-                closeDialog();
-                repeatLast.onRepeatTile(pieces);
-              },
-            }
-          }
+          // What has already been identified on this screen (#757) — derived here, where the batches
+          // are, rather than fetched by the dialog: a consumed tile carries the whole of what it
+          // became, so the strip's own read already answers this and a second one would be a second
+          // answer to it. Re-derived on every refetch, which is how a copy created a moment ago
+          // reaches the top of the list.
+          history={history}
+          // The same handover, minus the picker (#757, #595 before it) — the panel drops these
+          // pieces straight onto the condition step with that identification's answers in the
+          // fields.
+          onRepeat={(entry, pieces) => {
+            closeDialog();
+            onRepeatIdentification(entry.answers, pieces);
+          }}
           onDone={(touchedCopy) => {
             closeDialog();
             refresh(touchedCopy);

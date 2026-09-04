@@ -476,7 +476,7 @@ export function PurchaseDetailPanel({
   /** The picker → condition chain a scan tile is identified through (#567/#584/#595), shared with
    * the collection's own card scans since #725. The screen keeps the runner and the error slot; the
    * chain keeps where it is and what it is carrying. */
-  const tileChain = useTileIdentifyChain({ collectionId, conditions, setError });
+  const tileChain = useTileIdentifyChain({ setError });
 
   function run(
     fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
@@ -790,7 +790,7 @@ export function PurchaseDetailPanel({
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={tileChain.onIdentifyTiles}
         onReidentifyTile={tileChain.onReidentifyTile}
-        repeatLast={tileChain.repeatLast}
+        onRepeatIdentification={tileChain.onRepeatIdentification}
         onChanged={() => router.refresh()}
       />
 

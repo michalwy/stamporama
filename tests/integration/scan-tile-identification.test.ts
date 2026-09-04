@@ -292,6 +292,14 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(consumed?.item?.conditionAbbreviation, "U");
     assert.deepEqual(consumed?.item?.catalogNumbers, []);
     assert.equal(consumed?.item?.backPhotoId, null, "this card was never turned over");
+    // …and what the identification history repeats and orders itself by (#757): the lot the copy's
+    // money came from, and the copy's own creation, which is the identification's time — a tile
+    // carries no `consumedAt`, and consuming one *is* creating this row.
+    assert.equal(consumed?.item?.lotId, lotId);
+    assert.equal(
+      consumed?.item?.createdAt,
+      (await prisma.item.findUniqueOrThrow({ where: { id: outcome.itemId } })).createdAt.toISOString()
+    );
 
     // The copy is an ordinary intake copy: linked to the lot, not yet in the collection.
     const item = await prisma.item.findUniqueOrThrow({ where: { id: outcome.itemId } });

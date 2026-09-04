@@ -1326,8 +1326,12 @@ export interface ScanTileData {
      * row already holds. `stampId` was already being read for `outsideDescription`, and the rest are
      * scalars on the same row.
      *
-     * Deliberately **not** `lotId`: which lot the copy's money comes from is not a question the
-     * identification asks, and a correction leaves it exactly where it is.
+     * A **correction** never reads `lotId` — which lot the copy's money comes from is not a question
+     * the identification asks, and correcting one leaves it exactly where it is. It is read all the
+     * same, for the identification *history* (#757): repeating an identification onto the next tile
+     * carries the lot with it, the way #595's *Same as the last* did while the answers lived in
+     * screen state, and a lot that has since closed falls back to the first one offered like every
+     * other prefilled id the condition step is handed.
      */
     stampId: string;
     conditionId: string;
@@ -1335,9 +1339,17 @@ export interface ScanTileData {
     formatId: string | null;
     locationId: string | null;
     locationRef: string | null;
+    lotId: string | null;
     inCollection: boolean;
     forSale: boolean;
     forTrade: boolean;
+    /** When the copy was created (#757) — the identification's own time, and what orders the
+     * history: the tile carries no `consumedAt`, and consuming one *is* creating this row.
+     *
+     * An **assigned** tile is the exception the ordering absorbs rather than excludes: its copy
+     * existed before the card was scanned, so it sorts back with its own age and drops off the end
+     * of a ten-row list by itself. */
+    createdAt: string;
     frontPhotoId: string | null;
     backPhotoId: string | null;
     stampName: string | null;
@@ -1499,6 +1511,10 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             formatId: true,
             locationId: true,
             locationRef: true,
+            // The lot and the copy's age, for the identification history (#757) — see
+            // `ScanTileData.item`. Scalars on a row this read already has in hand.
+            lotId: true,
+            createdAt: true,
             inCollection: true,
             forSale: true,
             forTrade: true,
@@ -1566,6 +1582,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             formatId: t.item.formatId,
             locationId: t.item.locationId,
             locationRef: t.item.locationRef,
+            lotId: t.item.lotId,
+            createdAt: t.item.createdAt.toISOString(),
             inCollection: t.item.inCollection,
             forSale: t.item.forSale,
             forTrade: t.item.forTrade,

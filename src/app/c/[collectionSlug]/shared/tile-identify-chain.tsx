@@ -5,7 +5,6 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampConditionData } from "@/lib/conditions";
 import type { LocationData } from "@/lib/locations";
-import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
   StampPickerBrowser,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
@@ -20,17 +19,19 @@ import {
 } from "./intake-condition-dialog";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import type { ScanTileData } from "@/lib/scan-sheets";
+import type { IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
 import type { TileStampPick } from "./tile-identify-dialog";
 
 /**
  * The chain a **scan tile** is identified through (#567): the stamp picker, then the condition step,
- * and the write at the end of it — including *Same as the last* (#595) and *Identify again* (#584).
+ * and the write at the end of it — including a repeat off the identification history (#757, #595
+ * before it) and *Identify again* (#584).
  *
  * It lived in `purchase-detail-panel.tsx` until #725, and the move is the point of the issue rather
  * than tidying beside it: the very same chain now runs from the collection's own card scans, where
  * there is no order and no lot. Two copies of it would have been two sets of remembered choices, two
- * places for *Same as the last* to mean something slightly different, and two ends to keep in step
- * with `identifyTilesAction`.
+ * places for a repeated identification to mean something slightly different, and two ends to keep in
+ * step with `identifyTilesAction`.
  *
  * **The one thing the two screens differ in is `lotChoice`.** An order asks which lot the new copy
  * belongs to (#586); a card scanned outside any order asks nothing, because there is no lot — and
@@ -40,29 +41,6 @@ import type { TileStampPick } from "./tile-identify-dialog";
  * order, invalidates its copy pages and raises the want review (#532) — so what happens after a
  * copy is created stays where the knowledge of it is.
  */
-
-/**
- * Everything one tile was identified as (#595) — the whole of the condition step's answers, plus the
- * stamp that got there.
- *
- * The catalogue value is deliberately **not** here. It is a fact about a stamp that is already
- * recorded, so the field prefills itself from what was written for this stamp × condition ×
- * certificate × format (#593); carrying a figure across would be typing the same price twice.
- */
-interface TileIdentification {
-  stampId: string;
-  /** The pick as the condition step's summary box words it. */
-  label: string;
-  /** The pick in one catalogue number, for an action that has to fit on a button. */
-  shortLabel: string;
-  conditionId: string;
-  certificateStatusId: string;
-  formatId: string;
-  locationId: string;
-  locationRef: string;
-  disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
-  lotId: string;
-}
 
 /**
  * A correction in flight: which tile is being identified again, and what its copy answers **now**.
@@ -79,26 +57,6 @@ interface TileCorrection {
   prefill: NonNullable<IntakeConditionDialogProps["prefill"]>;
 }
 
-/** The condition step's answers as the intake write is given them (#595). One field is absent from
- * the form when the collection defines no formats and another when it has no locations, so every
- * read falls back to the empty string — the same "not chosen" the fields themselves start at. */
-function tileAnswersFrom(fd: FormData): Omit<TileIdentification, "stampId" | "label" | "shortLabel"> {
-  const text = (key: string) => String(fd.get(key) ?? "");
-  return {
-    conditionId: text("conditionId"),
-    certificateStatusId: text("certificateStatusId"),
-    formatId: text("formatId"),
-    locationId: text("locationId"),
-    locationRef: text("locationRef"),
-    disposition: {
-      inCollection: text("inCollection") === "true",
-      forSale: text("forSale") === "true",
-      forTrade: text("forTrade") === "true",
-    },
-    lotId: text("lotId"),
-  };
-}
-
 /** Where the chain is and what it is carrying. Held by {@link useTileIdentifyChain} and handed
  * straight to {@link TileIdentifyChainDialogs}; the three fields a screen actually reads are the
  * handlers at the bottom, which are what `ScansCard` takes. */
@@ -109,31 +67,26 @@ export interface TileIdentifyChainState {
   setTileIntake: (pieces: IdentifiedPiece[]) => void;
   tileSelection: PendingSelection | null;
   setTileSelection: (selection: PendingSelection | null) => void;
-  tileShortLabel: string;
-  setTileShortLabel: (label: string) => void;
-  tileRepeat: TileIdentification | null;
-  setTileRepeat: (identification: TileIdentification | null) => void;
+  tileRepeat: IdentifyHistoryAnswers | null;
+  setTileRepeat: (answers: IdentifyHistoryAnswers | null) => void;
   tileCorrection: TileCorrection | null;
   setTileCorrection: (correction: TileCorrection | null) => void;
-  setLastTileIdentify: (identification: TileIdentification | null) => void;
   resetTileIntake: () => void;
   /** What `ScansCard.onIdentifyTiles` is given. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
   /** What `ScansCard.onReidentifyTile` is given. */
   onReidentifyTile: (piece: IdentifiedPiece, copy: NonNullable<ScanTileData["item"]>) => void;
-  /** What `ScansCard.repeatLast` is given — null until a tile has been identified this sitting. */
-  repeatLast: { summary: string; onRepeatTile: (pieces: IdentifiedPiece[]) => void } | null;
+  /** What `ScansCard.onRepeatIdentification` is given (#757) — a row of the history, pressed. */
+  onRepeatIdentification: (answers: IdentifyHistoryAnswers, pieces: IdentifiedPiece[]) => void;
 }
 
 export function useTileIdentifyChain(input: {
-  collectionId: string;
-  conditions: StampConditionData[];
   /** The screen's own error slot, cleared as the chain opens and moves. Shared rather than owned
    * here, because the write at the end is the caller's `run` and its refusal has to land in the
    * same place every other refusal on that screen does. */
   setError: (message: string | undefined) => void;
 }): TileIdentifyChainState {
-  const { collectionId, conditions, setError } = input;
+  const { setError } = input;
   /**
    * Identifying a scan tile into a **new copy** (#567), which since #586 is the order's job rather
    * than a lot card's — the card the tile came from belongs to the parcel, so the chain that turns
@@ -154,26 +107,18 @@ export function useTileIdentifyChain(input: {
    */
   const [tileIntake, setTileIntake] = useState<IdentifiedPiece[]>([]);
   const [tileSelection, setTileSelection] = useState<PendingSelection | null>(null);
-  /** The pick in one catalogue number, kept beside the selection because `PendingSelection` carries
-   * only the long form and the repeat action has a button's width to say it in. */
-  const [tileShortLabel, setTileShortLabel] = useState("");
   /**
-   * How the **previous tile of this sitting** was identified (#595), so the next one can be
-   * identified the same way in one press. Component state, never storage: "this sitting" is exactly
-   * the life of this screen, and a record surviving a reload would offer to repeat a decision from
-   * another day.
+   * The answers of the identification being **repeated** (#757), in the fields of the condition
+   * step, for the tile they are being repeated onto. Non-null only on the repeat path — the
+   * ordinary picker → condition chain must keep arriving at the remembered defaults and nothing
+   * else.
    *
-   * It is kept at all because **nothing recoverable holds it**. The remembered add-copy defaults
-   * (`add-copy-defaults.ts`) are collection-wide and any other add-copy overwrites them, and they
-   * carry no stamp, no format and no ref — which are precisely the three the previous tile's answers
-   * add. The two sets differ exactly when it matters: after the collector has changed something for
-   * this card.
+   * Nothing here remembers *which* identification is repeatable any more, and that is #757's whole
+   * change: the history is the screen's consumed tiles, read from the same batches the strip draws,
+   * so it survives the reload that #595's one-deep screen state did not — which is exactly the
+   * sitting a half-worked card is returned to.
    */
-  const [lastTileIdentify, setLastTileIdentify] = useState<TileIdentification | null>(null);
-  /** The previous tile's answers, in the fields of the condition step, for the tile being repeated
-   * onto. Non-null only on the repeat path — the ordinary picker → condition chain must keep
-   * arriving at the remembered defaults and nothing else. */
-  const [tileRepeat, setTileRepeat] = useState<TileIdentification | null>(null);
+  const [tileRepeat, setTileRepeat] = useState<IdentifyHistoryAnswers | null>(null);
   /**
    * The tile whose identification is being **corrected** — *Identify again* on a tile that already
    * became a copy. Null on every ordinary intake, and what it changes is only the chain's two ends:
@@ -192,27 +137,10 @@ export function useTileIdentifyChain(input: {
     setTileStep("none");
     setTileIntake([]);
     setTileSelection(null);
-    setTileShortLabel("");
     setTileRepeat(null);
     setTileCorrection(null);
     setError(undefined);
   }
-  // The dictionaries the repeat action's own wording needs. Conditions arrive as a prop; formats
-  // are the one this screen does not have, fetched the way the condition step itself fetches them.
-  const { data: collectionFormats = [] } = useCollectionFormats(collectionId);
-  /** What *Same as the last* says it will do: the stamp, the condition, and the format when the
-   * piece was not a single. Named rather than implied — everything else this action fills is a
-   * field the collector would have found pre-filled anyway. */
-  const repeatSummary = lastTileIdentify
-    ? [
-        lastTileIdentify.shortLabel,
-        conditions.find((c) => c.id === lastTileIdentify.conditionId)?.abbreviation,
-        collectionFormats.find((f) => f.id === lastTileIdentify.formatId)?.abbreviation,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : "";
-
   return {
     tileStep,
     setTileStep,
@@ -220,13 +148,10 @@ export function useTileIdentifyChain(input: {
     setTileIntake,
     tileSelection,
     setTileSelection,
-    tileShortLabel,
-    setTileShortLabel,
     tileRepeat,
     setTileRepeat,
     tileCorrection,
     setTileCorrection,
-    setLastTileIdentify,
     resetTileIntake,
     onIdentifyTiles: (pieces, pick) => {
       setTileIntake(pieces);
@@ -235,11 +160,10 @@ export function useTileIdentifyChain(input: {
       if (pick) {
         // The stamp is already known (#607): a candidate pressed on a parked tile's shortlist, or
         // the parent offered in place of one. So the chain enters at the step the picker would have
-        // led to — with **no** prefill, unlike *Same as the last* (#595): what has been answered is
-        // the stamp and nothing else, and the condition, the format and the ref must arrive at the
-        // ordinary remembered defaults rather than at the previous tile's answers.
+        // led to — with **no** prefill, unlike a repeat off the history (#757): what has been
+        // answered is the stamp and nothing else, and the condition, the format and the ref must
+        // arrive at the ordinary remembered defaults rather than at another tile's answers.
         setTileSelection({ kind: "stamp", stampId: pick.stampId, label: pick.label });
-        setTileShortLabel(pick.shortLabel);
         setTileStep("condition");
         return;
       }
@@ -275,23 +199,17 @@ export function useTileIdentifyChain(input: {
       });
       setTileStep("picker");
     },
-    // *Same as the last* (#595): the picker is skipped, because its answer is the record, and the
-    // chain resumes at the step that would have followed it — with the fields filled and the
-    // ordinary confirm still to press.
-    repeatLast: lastTileIdentify && {
-      summary: repeatSummary,
-      onRepeatTile: (pieces) => {
-        setTileIntake(pieces);
-        setTileSelection({
-          kind: "stamp",
-          stampId: lastTileIdentify.stampId,
-          label: lastTileIdentify.label,
-        });
-        setTileShortLabel(lastTileIdentify.shortLabel);
-        setTileRepeat(lastTileIdentify);
-        setError(undefined);
-        setTileStep("condition");
-      },
+    // A row of the history, pressed (#757, #595 before it): the picker is skipped, because its
+    // answer is the record being repeated, and the chain resumes at the step that would have
+    // followed it — with the fields filled and the ordinary confirm still to press. Which row it
+    // was is the caller's to know; the chain is handed the answers and nothing else.
+    onRepeatIdentification: (answers, pieces) => {
+      setTileIntake(pieces);
+      setTileSelection({ kind: "stamp", stampId: answers.stampId, label: answers.label });
+      setTileRepeat(answers);
+      setTileCorrection(null);
+      setError(undefined);
+      setTileStep("condition");
     },
   };
 }
@@ -346,12 +264,9 @@ export function TileIdentifyChainDialogs({
     tileIntake,
     tileSelection,
     setTileSelection,
-    setTileShortLabel,
-    tileShortLabel,
     tileRepeat,
     setTileRepeat,
     tileCorrection,
-    setLastTileIdentify,
     resetTileIntake,
   } = chain;
   return (
@@ -393,9 +308,6 @@ export function TileIdentifyChainDialogs({
               stampId: picked.stampId,
               label: pickedStampText(picked),
             });
-            // The primary vendor's number leads `catalogLabels`, so the first of them is the one the
-            // collector thinks in; a stamp with no number at all falls back to its name (#595).
-            setTileShortLabel(picked.catalogLabels[0] ?? picked.name ?? "(unnamed stamp)");
             setError(undefined);
             setTileStep("condition");
           }}
@@ -440,7 +352,7 @@ export function TileIdentifyChainDialogs({
                 ? "Identify the tile"
                 : `Identify ${tileIntake.length} tiles`
           }
-          // *Same as the last* (#595) arrives here with the previous tile's answers rather than
+          // A repeat off the history (#757) arrives here with another tile's answers rather than
           // through the picker. Null on every other route in, which is what keeps this an action and
           // not a default.
           prefill={tileCorrection ? tileCorrection.prefill : (tileRepeat ?? undefined)}
@@ -474,15 +386,6 @@ export function TileIdentifyChainDialogs({
             // (#596). Each one is handed its own tile's images by the write; nothing here is shared
             // between them but the answers on this form.
             const tileIds = tileIntake.map((p) => p.tileId);
-            // What the *next* tile can be identified as in one press (#595). Read off the submitted
-            // form rather than mirrored from the dialog's state: this is the same set of answers the
-            // write itself is given, so the two cannot describe different intakes. Recorded only on
-            // success, in `run`'s completion — an intake the server refused is not a decision that
-            // was taken.
-            const answers = tileAnswersFrom(fd);
-            const stampId = tileSelection.kind === "stamp" ? tileSelection.stampId : "";
-            const label = tileSelection.label;
-            const shortLabel = tileShortLabel;
             const correction = tileCorrection;
             run(
               async () => {
@@ -504,13 +407,10 @@ export function TileIdentifyChainDialogs({
                 return r;
               },
               () => {
-                // **A correction is not what *Same as the last* repeats** (#595). That action
-                // carries the previous *intake* onto the next tile, lot included, and a correction
-                // answers no lot at all — so recording one here would hand the next tile a blank
-                // lot that the step would silently resolve to the first one offered.
-                if (stampId && !correction) {
-                  setLastTileIdentify({ stampId, label, shortLabel, ...answers });
-                }
+                // Nothing is recorded here for the *next* tile to repeat (#757). What can be
+                // repeated is the screen's own consumed tiles, re-read by `onIdentified` above — so
+                // an intake the server refused leaves no offer behind, without this end having to
+                // know it, and a correction is simply not an identification the history lists.
                 resetTileIntake();
               }
             );

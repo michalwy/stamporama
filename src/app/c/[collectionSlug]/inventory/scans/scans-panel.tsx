@@ -61,7 +61,7 @@ export function ScansPanel({
   const [isPending, startTransition] = useTransition();
   const { invalidateScans } = useInvalidateScans();
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
-  const tileChain = useTileIdentifyChain({ collectionId, conditions, setError });
+  const tileChain = useTileIdentifyChain({ setError });
 
   /**
    * The screen's runner — the two things that follow a copy being created here.
@@ -124,7 +124,7 @@ export function ScansPanel({
         canIdentify
         onIdentifyTiles={tileChain.onIdentifyTiles}
         onReidentifyTile={tileChain.onReidentifyTile}
-        repeatLast={tileChain.repeatLast}
+        onRepeatIdentification={tileChain.onRepeatIdentification}
         onChanged={() => router.refresh()}
       />
 

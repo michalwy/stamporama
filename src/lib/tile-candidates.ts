@@ -69,7 +69,7 @@ export function candidateLabel(candidate: {
 
 /** The one number a candidate is reached for by — the primary catalogue's leads a stamp's numbers,
  * so the first of them is the one the collector thinks in, and a stamp with no number at all falls
- * back to its name. The same fallback chain #595's *Same as the last* uses on a picked stamp. */
+ * back to its name. The same fallback chain the identification history uses on a copy (#757). */
 export function candidateShortLabel(candidate: {
   stampName: string | null;
   catalogNumbers: string[];

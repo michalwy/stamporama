@@ -46,6 +46,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import type { IdentifyHistoryEntry } from "@/lib/tile-identify-history";
+import { IdentifyHistory } from "./identify-history";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import {
   useOwnerCopiesInfinite,
@@ -155,13 +157,12 @@ import type { ScanOwner } from "./use-scans-query";
  */
 
 /** A stamp this dialog hands upward to be identified as, without the picker having been opened for
- * it — a candidate pressed, or the parent offered in its place (#607). The two labels are what the
- * chain downstream would otherwise have taken from `PickedStamp`: the long one names the pick in the
- * condition step, the short one is what *Same as the last* has a button's width to say. */
+ * it — a candidate pressed, or the parent offered in its place (#607). The label is what the chain
+ * downstream would otherwise have taken from `PickedStamp`, to name the pick in the condition step.
+ * The short form went with #595's button (#757): the history draws its own rows, off the copies. */
 export interface TileStampPick {
   stampId: string;
   label: string;
-  shortLabel: string;
 }
 
 /**
@@ -215,17 +216,22 @@ interface Props {
    */
   onIdentifyNew: (pieces: IdentifiedPiece[]) => void;
   /**
-   * *Same as the last* (#595): identify this tile the way the previous one of this sitting was
-   * identified. Null until something has been, so the action is never offered with nothing to
-   * repeat — and it carries `summary`, the stamp and condition it will apply, because a button that
-   * does not name what it repeats is a blind one.
+   * The screen's last identifications, newest first (#757) — drawn beside the piece, each with its
+   * picture, and each a press away from identifying this tile the same way.
    *
-   * It **skips the picker and stops at the condition step's ordinary confirm**, which is the whole
-   * of its saving: the stamp is the one answer the intake step does not remember, and everything
-   * around it already comes back on its own. One extra press buys sight of what is about to be
-   * created, and a consumed tile has no undo short of deleting the copy.
+   * It **replaces** #595's *Same as the last*, which is why nothing in the footer repeats anything
+   * any more: one identification deep is short by a few exactly when a run of duplicates resumes
+   * after another stamp, and the same action in a footer button and a list would have been two
+   * things to keep in step. The first row is that button, with the piece drawn instead of described.
+   *
+   * Repeating **skips the picker and stops at the condition step's ordinary confirm**, which is the
+   * whole of the saving: the stamp is the one answer the intake step does not remember, everything
+   * around it comes back on its own, and a consumed tile has no undo short of deleting the copy.
    */
-  repeatLast?: { summary: string; onRepeat: (pieces: IdentifiedPiece[]) => void } | null;
+  history: IdentifyHistoryEntry[];
+  /** Identify this tile the way a history row was identified — the same handover `onIdentifyNew`
+   * makes, with the picker's answer and the whole of the condition step already given. */
+  onRepeat: (entry: IdentifyHistoryEntry, pieces: IdentifiedPiece[]) => void;
   /**
    * *Identify as this stamp* with the picker skipped (#607) — a candidate off the shortlist, or the
    * parent offered in place of a shortlist that is all variants of one node.
@@ -320,7 +326,8 @@ export function TileIdentifyDialog({
   fromAuction,
   copyHref,
   onIdentifyNew,
-  repeatLast,
+  history,
+  onRepeat,
   onIdentifyAs,
   onReidentify,
   onDone,
@@ -642,20 +649,6 @@ export function TileIdentifyDialog({
       </DialogSecondaryButton>
     ) : null;
 
-  /** *Same as the last* (#595), beside *Identify as a new copy* in both footers, because it is that
-   * answer with its first question already answered — and offered under the same `canIdentify`, since
-   * an order whose every lot is closed takes no new copy however it is asked for. It names the stamp
-   * and the condition it will apply: this is the one control on the screen that acts on a decision
-   * taken minutes ago, so what it will do has to be readable before it is pressed. */
-  const repeat = repeatLast ? (
-    <DialogSecondaryButton
-      onClick={() => repeatLast.onRepeat(pieces)}
-      disabled={pending || !canIdentify}
-    >
-      <Icon name="duplicate" size="sm" /> Same as the last: {repeatLast.summary}
-    </DialogSecondaryButton>
-  ) : null;
-
   return (
     <>
     <DialogShell
@@ -750,6 +743,20 @@ export function TileIdentifyDialog({
                 run(() => removeTileCandidateAction(ids, stampId), false, true)
               }
               onIdentifyAs={(pick) => onIdentifyAs(pick, pieces)}
+            />
+          )}
+          {/* What has just been identified (#757) — under the shortlist, because the shortlist is
+              about *this* piece and the history is about what the collector has been doing, and the
+              narrower question is the one to read first. Above the outcomes for the same reason the
+              shortlist is: both are one-press identifications, and the assign list below can run to
+              a lot's whole copy list. */}
+          {!settled && (
+            <IdentifyHistory
+              collectionId={collectionId}
+              entries={history}
+              canIdentify={canIdentify}
+              disabled={pending}
+              onRepeat={(entry) => onRepeat(entry, pieces)}
             />
           )}
           {settled && tile ? (
@@ -851,7 +858,6 @@ export function TileIdentifyDialog({
             >
               <Icon name="add" size="sm" /> Identify as new copy
             </DialogSecondaryButton>
-            {repeat}
             {parked ? putBack : park}
             {discard}
             {unpairBack}
@@ -874,7 +880,6 @@ export function TileIdentifyDialog({
           onAction={() => onIdentifyNew(pieces)}
           leading={
             <>
-              {repeat}
               {parked ? putBack : park}
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose
@@ -1642,7 +1647,6 @@ function CandidateRow({
             onIdentifyAs({
               stampId: candidate.stampId,
               label,
-              shortLabel: candidateShortLabel(candidate),
             })
           }
           disabled={disabled || !canIdentify}
@@ -1802,7 +1806,6 @@ function ParentInsteadNotice({
           onIdentifyAs({
             stampId: parent.stampId,
             label,
-            shortLabel: candidateShortLabel(parent),
           })
         }
         disabled={disabled}

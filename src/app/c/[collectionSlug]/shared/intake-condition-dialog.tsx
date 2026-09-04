@@ -176,9 +176,9 @@ export interface IntakeConditionDialogProps {
    */
   copyCount?: number;
   /**
-   * The previous tile's answers, filled into every field this dialog holds (#595) — present only on
-   * *Same as the last*, which is why the fields below still read the remembered collection-wide
-   * defaults on every other route in.
+   * An earlier tile's answers, filled into every field this dialog holds (#595, #757) — present
+   * only on a repeat off the identification history, which is why the fields below still read the
+   * remembered collection-wide defaults on every other route in.
    *
    * It leads those defaults wherever both have something to say, because the two differ exactly when
    * it matters: after the collector has changed something for this card. And it fills the three the
