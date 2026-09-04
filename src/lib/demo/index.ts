@@ -5,6 +5,7 @@ import { seedAreas } from "./seed-areas";
 import { seedStamps } from "./seed-stamps";
 import { seedInventory } from "./seed-inventory";
 import { seedLocations } from "./seed-locations";
+import { seedAttributes } from "./seed-attributes";
 
 export async function seedDemoData(
   collectionId: string,
@@ -12,7 +13,9 @@ export async function seedDemoData(
 ): Promise<void> {
   const catalog = await seedCatalog(collectionId, tx);
   const areas = await seedAreas(collectionId, tx, catalog);
-  await seedStamps(collectionId, tx, catalog, areas);
+  // The attribute dictionaries (#72) come before the stamps that reference them.
+  const attributes = await seedAttributes(collectionId, tx);
+  await seedStamps(collectionId, tx, catalog, areas, attributes);
   await seedInventory(collectionId, tx);
   // Locations run last: they assign the seeded copies to physical storage (#56).
   await seedLocations(collectionId, tx);
@@ -43,6 +46,13 @@ export async function wipeDemoData(
   await tx.stamp.deleteMany({ where: { collectionId } });
 
   await tx.issue.deleteMany({ where: { collectionId } });
+
+  // The attribute dictionaries after the stamps that reference them (#72): every reference is
+  // ON DELETE RESTRICT, so this order is the only one that works.
+  await tx.stampColor.deleteMany({ where: { collectionId } });
+  await tx.stampWatermark.deleteMany({ where: { collectionId } });
+  await tx.stampPaper.deleteMany({ where: { collectionId } });
+  await tx.stampPrinting.deleteMany({ where: { collectionId } });
 
   await tx.collectionArea.deleteMany({
     where: { collectionId, parentId: { not: null } },

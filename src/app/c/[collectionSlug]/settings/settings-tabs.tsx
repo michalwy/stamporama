@@ -10,6 +10,7 @@ import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { FormatsPanel } from "./formats-panel";
 import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
+import { AttributeDictionaryPanel } from "./attributes-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
@@ -38,6 +39,8 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import type { StampAttributeLists } from "@/lib/stamp-attributes";
+import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
 import type { CarrierData } from "@/lib/carriers";
@@ -65,6 +68,8 @@ interface SettingsTabsProps {
   initialFormatFactors: FormatFactorData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  /** The four stamp-attribute dictionaries (#72) — colour, watermark, paper, printing method. */
+  initialAttributes: StampAttributeLists;
   initialCollageTemplates: CollageTemplateData[];
   /** The collection's ref-card formats (#569) — what the blank ref-card sheet prints. */
   initialRefCardTemplates: RefCardTemplateData[];
@@ -131,6 +136,9 @@ const TABS = [
   { key: "catalogs", label: "Catalogs" },
   { key: "conditions", label: "Conditions & formats" },
   { key: "subtypes", label: "Subtypes" },
+  // The four stamp-attribute dictionaries on one tab, not four (#72): they are one subject — what a
+  // catalogue says about a stamp — set up in one sitting, and the strip is already long.
+  { key: "attributes", label: "Attributes" },
   { key: "areas", label: "Areas" },
   { key: "collages", label: "Collage templates" },
   // Beside the collage templates (#569): the collection's other named dictionary of render numbers,
@@ -182,6 +190,7 @@ export function SettingsTabs({
   initialFormatFactors,
   initialCertificateStatuses,
   initialSubtypes,
+  initialAttributes,
   initialCollageTemplates,
   initialRefCardTemplates,
   initialCarriers,
@@ -223,6 +232,7 @@ export function SettingsTabs({
     rawTab === "areas" ||
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
+    rawTab === "attributes" ||
     rawTab === "collages" ||
     rawTab === "refcards" ||
     rawTab === "shipping" ||
@@ -367,6 +377,28 @@ export function SettingsTabs({
             defaultLanguage={defaultLanguage}
           />
         </section>
+      )}
+      {activeTab === "attributes" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+          <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", margin: 0 }}>
+            The values a stamp&apos;s colour, watermark, paper and printing method are chosen from.
+            Nothing here is required: a stamp that states none of them simply has none, so there is
+            no default and a new collection starts with every list empty. Drag rows to change the
+            order they are offered in.
+          </p>
+          {STAMP_ATTRIBUTE_KINDS.map((kind) => (
+            <section key={kind}>
+              <h2 style={sectionHeadingStyle}>{STAMP_ATTRIBUTE_LABELS[kind].heading}</h2>
+              <AttributeDictionaryPanel
+                collectionId={collectionId}
+                kind={kind}
+                initialRows={initialAttributes[kind]}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+              />
+            </section>
+          ))}
+        </div>
       )}
       {activeTab === "areas" && (
         <AreasPanel

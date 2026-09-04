@@ -133,6 +133,10 @@ model Collection {
   stampFormats    StampFormat[]
   stampFormatFactors StampFormatFactor[]
   stampSubtypes   StampSubtype[]
+  stampColors     StampColor[]
+  stampWatermarks StampWatermark[]
+  stampPapers     StampPaper[]
+  stampPrintings  StampPrinting[]
   checklists      Checklist[]
   wants           Want[]
   acceptanceProfiles AcceptanceProfile[]
@@ -394,6 +398,114 @@ model StampSubtypeTranslation {
 
   @@id([stampSubtypeId, language])
   @@map("stamp_subtype_translation")
+}
+
+// The four stamp-attribute dictionaries (#71/#72): colour, watermark, paper and printing method.
+// Each is `StampSubtype`'s shape with the behaviour stripped — no `actsAsVariant`, and **no
+// `isDefault`**: unlike a condition there is no "usual colour", a stamp that states none simply
+// has none. That is also why nothing is seeded into a new collection and nothing was backfilled.
+// Referenced from `Stamp` with `onDelete: Restrict`, as every other dictionary, so a row in use
+// cannot be deleted out from under a stamp. Translated because they are listing text (#738): as
+// free text they would give `carmine` / `karminowy` / `Karmin` as three values of one thing —
+// the argument that produced `StampCondition` in the first place.
+model StampColor {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  sortOrder    Int
+
+  collection   Collection              @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampColorTranslation[]
+
+  @@index([collectionId])
+  @@map("stamp_color")
+}
+
+model StampColorTranslation {
+  stampColorId String
+  language     String
+  name         String?
+
+  stampColor StampColor @relation(fields: [stampColorId], references: [id], onDelete: Cascade)
+
+  @@id([stampColorId, language])
+  @@map("stamp_color_translation")
+}
+
+model StampWatermark {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  sortOrder    Int
+
+  collection   Collection                  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampWatermarkTranslation[]
+
+  @@index([collectionId])
+  @@map("stamp_watermark")
+}
+
+model StampWatermarkTranslation {
+  stampWatermarkId String
+  language         String
+  name             String?
+
+  stampWatermark StampWatermark @relation(fields: [stampWatermarkId], references: [id], onDelete: Cascade)
+
+  @@id([stampWatermarkId, language])
+  @@map("stamp_watermark_translation")
+}
+
+model StampPaper {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  sortOrder    Int
+
+  collection   Collection              @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampPaperTranslation[]
+
+  @@index([collectionId])
+  @@map("stamp_paper")
+}
+
+model StampPaperTranslation {
+  stampPaperId String
+  language     String
+  name         String?
+
+  stampPaper StampPaper @relation(fields: [stampPaperId], references: [id], onDelete: Cascade)
+
+  @@id([stampPaperId, language])
+  @@map("stamp_paper_translation")
+}
+
+model StampPrinting {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  sortOrder    Int
+
+  collection   Collection                 @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampPrintingTranslation[]
+
+  @@index([collectionId])
+  @@map("stamp_printing")
+}
+
+model StampPrintingTranslation {
+  stampPrintingId String
+  language        String
+  name            String?
+
+  stampPrinting StampPrinting @relation(fields: [stampPrintingId], references: [id], onDelete: Cascade)
+
+  @@id([stampPrintingId, language])
+  @@map("stamp_printing_translation")
 }
 
 // A named, reusable collage render preset (#307). How many stamps fit sensibly on one collage is a
@@ -1699,6 +1811,20 @@ model Stamp {
   // `actsAsVariantOverride ?? subtype.actsAsVariant`. Meaningful only for children.
   actsAsVariantOverride Boolean?
   name         String?
+  // The stamp's catalogue attributes (#71/#72). Two are printed facts stored as printed — never
+  // parsed, never translated: `10 gr`, `1 zł`, `50 h`; `11½`, `11½:12`, `imperf`. A dictionary of
+  // either would hold roughly a row per stamp. Four are references into per-collection dictionaries
+  // shaped on `StampSubtype`, because they are named sets a catalogue reuses and listing text a
+  // buyer reads in their own language. All six are optional and empty is the normal state: a stamp
+  // that states no colour simply has none, which is also why nothing is inherited down the variant
+  // tree (ADR-0010 — a variant is its own stamp) and nothing was backfilled. They live on the stamp,
+  // never the copy: `Stamp` is catalogue identity, `Item` is condition, format and location.
+  denomination String?
+  perforation  String?
+  colorId      String?
+  watermarkId  String?
+  paperId      String?
+  printingId   String?
   issuedDay    Int?
   issuedMonth  Int?
   issuedYear   Int?
@@ -1722,6 +1848,10 @@ model Stamp {
   collection        Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   parent            Stamp?                @relation("StampVariants", fields: [parentId], references: [id])
   subtype           StampSubtype?         @relation(fields: [subtypeId], references: [id], onDelete: Restrict)
+  color             StampColor?           @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  watermark         StampWatermark?       @relation(fields: [watermarkId], references: [id], onDelete: Restrict)
+  paper             StampPaper?           @relation(fields: [paperId], references: [id], onDelete: Restrict)
+  printing          StampPrinting?        @relation(fields: [printingId], references: [id], onDelete: Restrict)
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
   catalogNumbers    StampCatalogNumber[]
@@ -1744,6 +1874,10 @@ model Stamp {
   tradeLines             TradeLine[]          @relation("TradeLineStamp")
 
   @@index([subtypeId])
+  @@index([colorId])
+  @@index([watermarkId])
+  @@index([paperId])
+  @@index([printingId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
   // *Which stamp is Colnect item 1234567* (#687/#688) — the join key read in the direction the list

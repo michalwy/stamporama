@@ -4,6 +4,7 @@ import { seedDefaultConditions } from "../conditions";
 import { allocateEntityNumber } from "../items";
 import type { DemoCatalog } from "./seed-catalog";
 import type { DemoAreas } from "./seed-areas";
+import { demoStampAttributes, type DemoAttributes } from "./seed-attributes";
 
 interface CompactIssue {
   a: string;
@@ -74,7 +75,7 @@ function buildIssues(): CompactIssue[] {
     ] },
     { a: "sr-com", n: "Copernicus", y: 1923, fi: 155, mi: 182, s: [
       "1000mk green", "3000mk red", "5000mk blue",
-    ] },
+    ], v: { 0: ["1000mk green (imperf)"] } },
     { a: "sr-com", n: "National Exhibition Poznań", y: 1925, fi: 196, s: [
       "5gr green", "10gr red", "15gr violet", "25gr dark blue",
     ] },
@@ -630,7 +631,8 @@ export async function seedStamps(
   collectionId: string,
   tx: PrismaClient,
   catalog: DemoCatalog,
-  areas: DemoAreas
+  areas: DemoAreas,
+  attributes: DemoAttributes
 ): Promise<void> {
   const issues = buildIssues();
 
@@ -654,7 +656,7 @@ export async function seedStamps(
   if (!firstCondition) throw new Error("Demo seed requires seeded conditions.");
   const conditionId = firstCondition.id;
 
-  for (const def of issues) {
+  for (const [issueIndex, def] of issues.entries()) {
     const areaId = areas[def.a];
     const isGerman = def.a.startsWith("de-") || def.a.startsWith("brd") || def.a === "ddr" || def.a === "de-mod";
 
@@ -706,7 +708,13 @@ export async function seedStamps(
 
     for (let i = 0; i < def.s.length; i++) {
       const stamp = await tx.stamp.create({
-        data: { collectionId, name: def.s[i], issuedYear: def.y },
+        data: {
+          collectionId,
+          name: def.s[i],
+          issuedYear: def.y,
+          // Denomination and colour read out of the name, the rest from the period (#72).
+          ...demoStampAttributes(attributes, { name: def.s[i], areaKey: def.a, year: def.y, issueIndex }),
+        },
       });
 
       await tx.stampCollectionArea.create({
@@ -752,7 +760,15 @@ export async function seedStamps(
       if (variantNames) {
         for (let vi = 0; vi < variantNames.length; vi++) {
           const variant = await tx.stamp.create({
-            data: { collectionId, parentId: stamp.id, name: variantNames[vi], issuedYear: def.y },
+            data: {
+              collectionId,
+              parentId: stamp.id,
+              name: variantNames[vi],
+              issuedYear: def.y,
+              // A variant states its own values (nothing is inherited, ADR-0010); its note —
+              // `(perf 11½)`, `(thin paper)` — is where it differs from the base stamp.
+              ...demoStampAttributes(attributes, { name: variantNames[vi], areaKey: def.a, year: def.y, issueIndex }),
+            },
           });
           await tx.stampCollectionArea.create({
             data: { stampId: variant.id, collectionAreaId: areaId, isPrimary: true },

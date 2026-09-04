@@ -599,6 +599,20 @@ Subtypes translate exactly like [conditions](#conditions-in-other-languages) —
 
 The token follows the same rule as the tag: a stamp on the collection's **default** subtype renders `{subtype}` as empty, so ordinary variants do not pick up a redundant word in their listing title.
 
+## Stamp attributes
+
+A catalogue states a handful of facts about every stamp beyond its number: what it is denominated, how it is perforated, its colour, its watermark, its paper and how it was printed. The app keeps six such attributes on a stamp — **denomination**, **perforation**, **colour**, **watermark**, **paper** and **printing method** — and the last four are chosen from lists the collection keeps. Manage those four lists on the **Settings → Attributes** tab.
+
+- **Nothing here is required.** A stamp that states no colour simply has none, so there is no default entry and a new collection starts with every list empty. Add the values your catalogues actually use; the demo collection comes with a representative set.
+- **Add** an entry with a name — *Carmine*, *Lozenges*, *Thin paper*, *Photogravure*. **Reorder** entries by dragging rows; the order is the order they are offered in. **Delete** an entry you no longer need — one already assigned to stamps cannot be deleted until those stamps are changed.
+- All four lists sit on one tab because they are one subject, set up in one sitting.
+
+Denomination and perforation are not lists. They are recorded on each stamp **as printed** — `10 gr`, `1 zł`, `50 h`; `11½`, `11½:12`, `imperf` — because they are facts about that one stamp rather than a vocabulary shared across many, and they are never translated.
+
+### Attributes in other languages
+
+The four lists translate exactly like [subtypes](#subtypes-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the entry, so a Polish listing can read *karminowy* where an English one reads *Carmine*. Leave a language blank to fall back to the name above.
+
 ## Carriers
 
 The post offices and couriers you post with, kept under **Settings → Shipping**. A carrier is a name

@@ -265,6 +265,44 @@ describe("seedDemoData", () => {
     assert.ok(parents.length >= 5, `Expected >=5 stamps with variants, got ${parents.length}`);
   });
 
+  it("seeds the four attribute dictionaries and states attributes on the stamps (#72)", async () => {
+    assert.ok((await prisma.stampColor.count({ where: { collectionId } })) >= 10);
+    assert.ok((await prisma.stampWatermark.count({ where: { collectionId } })) >= 2);
+    assert.ok((await prisma.stampPaper.count({ where: { collectionId } })) >= 2);
+    assert.ok((await prisma.stampPrinting.count({ where: { collectionId } })) >= 3);
+
+    // Denomination and colour are read out of the names, so nearly every stamp carries them;
+    // the period rules give every stamp a perforation and a printing method, and some stamps a
+    // watermark and a paper.
+    const total = await prisma.stamp.count({ where: { collectionId } });
+    const withDenomination = await prisma.stamp.count({
+      where: { collectionId, denomination: { not: null } },
+    });
+    assert.ok(withDenomination >= total * 0.9, `denomination on ${withDenomination} of ${total}`);
+    const withColor = await prisma.stamp.count({ where: { collectionId, colorId: { not: null } } });
+    assert.ok(withColor >= total * 0.8, `colour on ${withColor} of ${total}`);
+    assert.equal(await prisma.stamp.count({ where: { collectionId, perforation: null } }), 0);
+    assert.equal(await prisma.stamp.count({ where: { collectionId, printingId: null } }), 0);
+    assert.ok((await prisma.stamp.count({ where: { collectionId, watermarkId: { not: null } } })) > 0);
+    assert.ok((await prisma.stamp.count({ where: { collectionId, paperId: { not: null } } })) > 0);
+
+    // Values are as printed, and a variant's note is where it differs from its base stamp.
+    const carmine = await prisma.stamp.findFirst({
+      where: { collectionId, name: "10gr carmine" },
+      include: { color: true },
+    });
+    assert.equal(carmine?.denomination, "10 gr");
+    assert.equal(carmine?.color?.name, "Carmine");
+    const imperf = await prisma.stamp.findFirst({ where: { collectionId, perforation: "imperf" } });
+    assert.ok(imperf, "an imperforate variant exists to compare against");
+    assert.ok(imperf.parentId, "and it is a variant");
+    const thin = await prisma.stamp.findFirst({
+      where: { collectionId, name: { endsWith: "(thin paper)" } },
+      include: { paper: true },
+    });
+    assert.equal(thin?.paper?.name, "Thin");
+  });
+
   it("seeds contacts (address book)", async () => {
     const count = await prisma.contact.count({ where: { collectionId } });
     assert.ok(count >= 5, `Expected >=5 contacts, got ${count}`);
@@ -379,6 +417,13 @@ describe("wipeDemoData", () => {
   it("removes all collection areas", async () => {
     const count = await prisma.collectionArea.count({ where: { collectionId } });
     assert.equal(count, 0);
+  });
+
+  it("removes the attribute dictionaries", async () => {
+    assert.equal(await prisma.stampColor.count({ where: { collectionId } }), 0);
+    assert.equal(await prisma.stampWatermark.count({ where: { collectionId } }), 0);
+    assert.equal(await prisma.stampPaper.count({ where: { collectionId } }), 0);
+    assert.equal(await prisma.stampPrinting.count({ where: { collectionId } }), 0);
   });
 
   it("removes all storage locations", async () => {

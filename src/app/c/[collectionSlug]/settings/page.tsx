@@ -10,6 +10,7 @@ import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
+import { getStampAttributeLists } from "@/lib/stamp-attributes";
 import {
   getColnectMappings,
   getColnectConditionMappings,
@@ -62,6 +63,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     formatFactors,
     certificateStatuses,
     subtypes,
+    attributes,
     collageTemplates,
     refCardTemplates,
     carriers,
@@ -90,6 +92,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
+    getStampAttributeLists(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
     getRefCardTemplates(session.user.id, collection.id),
     getCarriers(session.user.id, collection.id),
@@ -150,6 +153,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialFormatFactors={formatFactors}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
+          initialAttributes={attributes}
           initialCollageTemplates={collageTemplates}
           initialRefCardTemplates={refCardTemplates}
           initialCarriers={carriers}
