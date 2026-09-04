@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCollectionOwner } from "@/lib/route-auth";
 import { confirmColnectMatch, ColnectMatchConflictError } from "@/lib/colnect";
+import { parseColnectAttributes } from "@/lib/colnect-attributes";
 
 // Commit a user-chosen Colnect match (#250, part of #155): write `Stamp.colnectId` for a stamp the
 // user picked from a `needs-confirm` result. Returns 409 with the existing ID when the write would
@@ -23,16 +24,27 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { colnectId, stampId, allowOverwrite, backfill, catalogRefs, issueDate, issuedOn } =
-    (body ?? {}) as {
-      colnectId?: unknown;
-      stampId?: unknown;
-      allowOverwrite?: unknown;
-      backfill?: unknown;
-      catalogRefs?: unknown;
-      issueDate?: unknown;
-      issuedOn?: unknown;
-    };
+  const {
+    colnectId,
+    stampId,
+    allowOverwrite,
+    backfill,
+    catalogRefs,
+    issueDate,
+    issuedOn,
+    attributeSync,
+    attributes,
+  } = (body ?? {}) as {
+    colnectId?: unknown;
+    stampId?: unknown;
+    allowOverwrite?: unknown;
+    backfill?: unknown;
+    catalogRefs?: unknown;
+    issueDate?: unknown;
+    issuedOn?: unknown;
+    attributeSync?: unknown;
+    attributes?: unknown;
+  };
   if (typeof colnectId !== "string" || !colnectId.trim() || typeof stampId !== "string" || !stampId) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -61,8 +73,16 @@ export async function POST(
       // (#655): the chosen stamp is dated in the same call.
       issueDate: issueDate === true,
       ...(typeof issuedOn === "string" ? { issuedOn } : {}),
+      // …and what it states about the stamp, for the same reason again (#739).
+      attributeSync: attributeSync === true,
+      attributes: parseColnectAttributes(attributes),
     });
-    return NextResponse.json({ ok: true, backfill: written.backfill, date: written.date });
+    return NextResponse.json({
+      ok: true,
+      backfill: written.backfill,
+      date: written.date,
+      attributes: written.attributes,
+    });
   } catch (err) {
     if (err instanceof ColnectMatchConflictError) {
       return NextResponse.json(

@@ -1,6 +1,11 @@
 import { normalizeBaseUrl, type Profile } from "../core/profile";
-import type { BackfillProposal, DateProposal, MatchResult } from "../core/decisions";
-import type { ExtractedItem } from "../platform/types";
+import type {
+  AttributeProposal,
+  BackfillProposal,
+  DateProposal,
+  MatchResult,
+} from "../core/decisions";
+import type { ExtractedAttributes, ExtractedItem } from "../platform/types";
 
 // The instance-facing HTTP client, run from the background service worker so host_permissions exempt
 // it from CORS. Talks to the Colnect matcher endpoints (#250), authenticating with the active
@@ -15,14 +20,15 @@ function authHeaders(profile: Profile): HeadersInit {
 }
 
 /** Run a batch through the matcher. `dryRun` computes decisions without persisting; `backfill` asks
- *  for the missing-catalog proposals (#280) and `issueDate` for the date ones (#655), both of which
- *  a real run also writes. */
+ *  for the missing-catalog proposals (#280), `issueDate` for the date ones (#655) and `attributes`
+ *  for the stamp-attribute ones (#739) — each of which a real run also writes. */
 export async function callMatch(
   profile: Profile,
   items: ExtractedItem[],
   dryRun: boolean,
   backfill: boolean,
-  issueDate: boolean
+  issueDate: boolean,
+  attributes: boolean
 ): Promise<MatchResult[]> {
   const res = await fetch(endpoint(profile, "match"), {
     method: "POST",
@@ -31,10 +37,12 @@ export async function callMatch(
       dryRun,
       backfill,
       issueDate,
+      attributes,
       items: items.map((i) => ({
         colnectId: i.platformItemId,
         catalogRefs: i.catalogRefs,
         issuedOn: i.issuedOn,
+        attributes: i.attributes,
       })),
     }),
   });
@@ -45,7 +53,12 @@ export async function callMatch(
 }
 
 export type ConfirmOutcome =
-  | { ok: true; backfill: BackfillProposal[]; date: DateProposal | null }
+  | {
+      ok: true;
+      backfill: BackfillProposal[];
+      date: DateProposal | null;
+      attributes: AttributeProposal[];
+    }
   | { ok: false; conflict: true; existingColnectId?: string }
   | { ok: false; conflict: false; error: string };
 
@@ -62,6 +75,8 @@ export async function callConfirm(
     catalogRefs?: { catalog: string; number: string }[];
     issueDate?: boolean;
     issuedOn?: string;
+    attributeSync?: boolean;
+    attributes?: ExtractedAttributes;
   } = {}
 ): Promise<ConfirmOutcome> {
   const res = await fetch(endpoint(profile, "confirm"), {
@@ -75,14 +90,22 @@ export async function callConfirm(
       catalogRefs: opts.catalogRefs,
       issueDate: opts.issueDate,
       issuedOn: opts.issuedOn,
+      attributeSync: opts.attributeSync,
+      attributes: opts.attributes,
     }),
   });
   if (res.ok) {
     const data = (await res.json().catch(() => ({}))) as {
       backfill?: BackfillProposal[];
       date?: DateProposal | null;
+      attributes?: AttributeProposal[];
     };
-    return { ok: true, backfill: data.backfill ?? [], date: data.date ?? null };
+    return {
+      ok: true,
+      backfill: data.backfill ?? [],
+      date: data.date ?? null,
+      attributes: data.attributes ?? [],
+    };
   }
   if (res.status === 409) {
     const data = (await res.json().catch(() => ({}))) as { existingColnectId?: string };
@@ -160,4 +183,36 @@ export async function callOverwriteDate(
   }
   if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
   return { ok: false, error: `Date request failed (HTTP ${res.status}).` };
+}
+
+export type OverwriteAttributesOutcome =
+  | { ok: true; attributes: AttributeProposal[] }
+  | { ok: false; error: string };
+
+/**
+ * Replace what a stamp states about itself with what the Colnect page prints (#739) — the date
+ * overwrite five fields wider.
+ *
+ * Only the attributes **sent** are touched, so an unticked disagreement is expressed by leaving that
+ * attribute out. The printed values travel as the matcher received them and are compared on the
+ * instance, which is what lets a mapping edited in the meantime be honoured rather than baked into
+ * the request — and what keeps an unmapped word from being written by a path that could not read it
+ * in the first place.
+ */
+export async function callOverwriteAttributes(
+  profile: Profile,
+  stampId: string,
+  attributes: ExtractedAttributes
+): Promise<OverwriteAttributesOutcome> {
+  const res = await fetch(endpoint(profile, "overwrite-attributes"), {
+    method: "POST",
+    headers: authHeaders(profile),
+    body: JSON.stringify({ stampId, attributes }),
+  });
+  if (res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { attributes?: AttributeProposal[] };
+    return { ok: true, attributes: data.attributes ?? [] };
+  }
+  if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
+  return { ok: false, error: `Attribute request failed (HTTP ${res.status}).` };
 }

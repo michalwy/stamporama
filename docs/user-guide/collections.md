@@ -617,6 +617,7 @@ The stamp form — the one the Issues list, the Variants card and the stamp page
 - The attributes belong to the stamp, not to the copy: they say what the catalogue printed, while a copy records its condition, format and where it is filed.
 - **Nothing is inherited and nothing is remembered.** A variant is its own stamp, so it states its own values or none — a `240a` does not pick up `240`'s colour. And unlike the subtype, the values are not carried over from the last stamp you added: colour and denomination differ from stamp to stamp *within* one series, so a remembered value would be wrong nearly every time. Adding a [range of variants](#adding-a-range-of-variants) likewise sets none of them — a range types the skeleton, and the detail comes from editing each stamp.
 - The stamp's own page shows what it states on an **Attributes** card ([the stamp page](detail-pages.md#the-stamp-page)).
+- Perforation and watermark are the two the [intake measuring tools](purchases.md#pieces-you-cannot-identify-from-the-picture) compare against: a gauge taken off a scanned piece marks the shortlisted stamps whose perforation it fits, and the watermark you can see narrows the same list. That only works on stamps that state them, which is the practical reason to fill these two in first.
 
 ### Attributes on the lists
 
@@ -631,6 +632,19 @@ Denomination and perforation get no filter of their own — they are free text, 
 ### Attributes in other languages
 
 The four lists translate exactly like [subtypes](#subtypes-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the entry, so a Polish listing can read *karminowy* where an English one reads *Carmine*. Leave a language blank to fall back to the name above.
+
+### Filling attributes from Colnect
+
+The four lists carry one more field, on the **Settings → Colnect** tab rather than here: what Colnect
+calls each value. With that mapping in place the [Assistant](assistant.md#when-colnect-knows-what-the-stamp-is)
+fills a matched stamp's attributes straight off its Colnect catalogue page — the fastest way to get
+these six filled in on a collection of any size. Denomination and perforation need no mapping.
+
+### Attributes in listing titles and descriptions
+
+All six are available as tokens in [listing texts](contacts.md#adding-and-editing) — `{denomination}`, `{perforation}`, `{color}`, `{watermark}`, `{paper}` and `{printing}` — so a title can say `Mi·PL 240 10 gr carmine perf 11½` without any of that having been typed into the stamp's name. A stamp that states nothing for an attribute renders the token empty and takes the separator around it with it, exactly as `{format}` does for a single, so putting one in a template costs nothing on the stamps you have not filled in yet.
+
+The four list ones use the language of the platform being listed on, and the title preview marks one that has no translation yet so you can fill it in from there. Denomination and perforation are printed as recorded in every language.
 
 ## Carriers
 

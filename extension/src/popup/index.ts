@@ -13,6 +13,7 @@ import type {
   ConfirmResponse,
   ExtractResponse,
   MatchResponse,
+  OverwriteAttributesResponse,
   OverwriteDateResponse,
   OverwriteNumberResponse,
   ResultsUpdatedNotice,
@@ -30,6 +31,7 @@ import {
 import type { ExtractedItem } from "../platform/types";
 import { isAlreadyLinkedElsewhere } from "../core/decisions";
 import type {
+  AttributeProposal,
   BackfillProposal,
   Candidate,
   DateProposal,
@@ -368,6 +370,64 @@ function pendingDateCount(): number {
 }
 
 /**
+ * Attribute rows the collector has **unticked** (#739), by `colnectId|stampId|field`.
+ *
+ * `skippedDates`' rule with one more segment, and the segment is the point: a stamp faces up to six
+ * attribute questions at once, and *take the colour but not the perforation* has to be sayable. Not
+ * persisted either — the standing answer is the **Fill missing stamp attributes** toggle.
+ */
+const skippedAttributes = new Set<string>();
+
+const attrKey = (colnectId: string, stampId: string, field: string): string =>
+  `${colnectId}|${stampId}|${field}`;
+
+const attrTicked = (colnectId: string, stampId: string, field: string): boolean =>
+  !skippedAttributes.has(attrKey(colnectId, stampId, field));
+
+/** The attribute fills the pending write would make on one row (#739) — the ticked `would-fill`
+ *  proposals. Already-linked stamps count, exactly as the numbers and the date do: the fill rides on
+ *  the match being confident, not on the Colnect ID being new. */
+function attributeFillsOf(r: MatchResult): number {
+  if (r.status !== "auto" || r.written) return 0;
+  return (r.stamp?.attributes ?? []).filter(
+    (p) => p.status === "would-fill" && attrTicked(r.colnectId, r.stampId, p.field)
+  ).length;
+}
+
+function pendingAttributeCount(): number {
+  return results.reduce((n, r) => n + attributeFillsOf(r), 0);
+}
+
+/** The attribute **changes** the write would make (#739) — the ticked conflicts, grouped by the
+ *  stamp they land on, since one call settles every attribute of one stamp. Registered as the list
+ *  renders, so this reads whatever is currently on screen. */
+function pendingAttributeChanges(): AttributePick[] {
+  const byStamp = new Map<string, AttributePick>();
+  for (const pick of attributeOverwritePicks) {
+    if (!pick) continue;
+    if (!attrTicked(pick.colnectId, pick.stamp.stampId, pick.proposal.field)) continue;
+    const key = `${pick.colnectId}|${pick.stamp.stampId}`;
+    const seen = byStamp.get(key);
+    if (seen) seen.fields[pick.proposal.field] = pick.proposal.colnectLabel;
+    else {
+      byStamp.set(key, {
+        colnectId: pick.colnectId,
+        stamp: pick.stamp,
+        proposal: pick.proposal,
+        fields: { [pick.proposal.field]: pick.proposal.colnectLabel },
+      });
+    }
+  }
+  return [...byStamp.values()];
+}
+
+/** How many attributes those changes replace, across every stamp — what the confirm names, since a
+ *  collector counts fields rather than requests. */
+function pendingAttributeChangeCount(): number {
+  return pendingAttributeChanges().reduce((n, p) => n + Object.keys(p.fields).length, 0);
+}
+
+/**
  * The date **changes** the write would make (#668) — the conflicts still ticked.
  *
  * A different act from the fills above and counted separately, because it is the one that destroys
@@ -391,7 +451,9 @@ function pendingWriteItems(): ExtractedItem[] {
     results
       .filter(
         (r) =>
-          r.status === "auto" && !r.written && (!r.alreadySet || fillsOf(r) > 0 || dateFillOf(r))
+          r.status === "auto" &&
+          !r.written &&
+          (!r.alreadySet || fillsOf(r) > 0 || dateFillOf(r) || attributeFillsOf(r) > 0)
       )
       .map((r) => r.colnectId)
   );
@@ -410,12 +472,34 @@ function pendingWriteItems(): ExtractedItem[] {
       )
       .map((r) => r.colnectId)
   );
+  // The same withholding, one field at a time (#739): the instance fills an attribute from what the
+  // page states and from nothing else, so leaving a value out of `attributes` *is* "leave this
+  // attribute of this stamp alone". A `conflict` is never stripped, for the date's own reason — the
+  // disagreement would leave the screen with it — and neither is an `unmapped` word, which is
+  // reported rather than written anyway.
+  const droppedFields = new Map<string, Set<string>>();
+  for (const r of results) {
+    if (r.status !== "auto" || r.written) continue;
+    const skipped = (r.stamp?.attributes ?? []).filter(
+      (p) => p.status === "would-fill" && !attrTicked(r.colnectId, r.stampId, p.field)
+    );
+    if (skipped.length > 0) {
+      droppedFields.set(r.colnectId, new Set(skipped.map((p) => p.field)));
+    }
+  }
+
   return items
     .filter((i) => wanted.has(i.platformItemId))
     .map((i) => {
-      if (!undated.has(i.platformItemId)) return i;
+      const dropped = droppedFields.get(i.platformItemId);
+      if (!undated.has(i.platformItemId) && !dropped) return i;
       const stripped: ExtractedItem = { ...i };
-      delete stripped.issuedOn;
+      if (undated.has(i.platformItemId)) delete stripped.issuedOn;
+      if (dropped && stripped.attributes) {
+        const attributes = { ...stripped.attributes };
+        for (const field of dropped) delete attributes[field as keyof typeof attributes];
+        stripped.attributes = attributes;
+      }
       return stripped;
     });
 }
@@ -433,13 +517,28 @@ function syncButtons(): void {
   // The ticked disagreements (#668) are counted apart from the fills and named apart in the label:
   // one adds what we lack, the other replaces what we hold, and a single "dates" would hide which.
   const changes = pendingDateChanges().length;
+  const attrs = pendingAttributeCount();
+  const attrChanges = pendingAttributeChangeCount();
   writeAutoBtn.disabled =
-    busy || (pending === 0 && fills === 0 && dates === 0 && changes === 0) || !profile;
+    busy ||
+    (pending === 0 &&
+      fills === 0 &&
+      dates === 0 &&
+      changes === 0 &&
+      attrs === 0 &&
+      attrChanges === 0) ||
+    !profile;
   const parts = [
     pending > 0 ? `${pending} auto-match${pending === 1 ? "" : "es"}` : "",
     fills > 0 ? `${fills} catalog number${fills === 1 ? "" : "s"}` : "",
     dates > 0 ? `${dates} date${dates === 1 ? "" : "s"}` : "",
     changes > 0 ? `${changes} date change${changes === 1 ? "" : "s"}` : "",
+    // Counted apart from the fills for the dates' own reason (#668): one adds what we state nothing
+    // for, the other replaces what we hold, and a single "attributes" would hide which.
+    attrs > 0 ? `${attrs} attribute${attrs === 1 ? "" : "s"}` : "",
+    attrChanges > 0
+      ? `${attrChanges} attribute change${attrChanges === 1 ? "" : "s"}`
+      : "",
   ].filter(Boolean);
   writeAutoBtn.textContent = parts.length ? `Write ${parts.join(" + ")}` : "Write auto-matches";
 }
@@ -457,6 +556,7 @@ async function scanPage(): Promise<void> {
   // A rescan is a different page: the ticks named stamps on the old one (#668), so the exceptions
   // the collector made there mean nothing here.
   skippedDates.clear();
+  skippedAttributes.clear();
   resultsEl.innerHTML = "";
   chipsEl.hidden = true;
   setStatus("");
@@ -573,11 +673,28 @@ function renderChips(): void {
   const skipped = results.filter((r) => r.status === "skipped").length;
   const fills = pendingFillCount();
   const dates = pendingDateCount();
+  const attrs = pendingAttributeCount();
+  const unmapped = results.reduce(
+    (n, r) =>
+      n +
+      (r.status === "auto" ? (r.stamp?.attributes ?? []) : []).filter(
+        (p) => p.status === "unmapped"
+      ).length,
+    0
+  );
   const parts = [
     auto ? `<span class="chip auto">${auto} auto</span>` : "",
     ask ? `<span class="chip needs">${ask} to confirm</span>` : "",
     fills ? `<span class="chip auto">${fills} number${fills === 1 ? "" : "s"} to add</span>` : "",
     dates ? `<span class="chip auto">${dates} date${dates === 1 ? "" : "s"} to add</span>` : "",
+    attrs
+      ? `<span class="chip auto">${attrs} attribute${attrs === 1 ? "" : "s"} to add</span>`
+      : "",
+    // Said even though nothing will be written from it, because it is the one thing on this page
+    // that a trip to Settings → Colnect makes go away for good (#739).
+    unmapped
+      ? `<span class="chip">${unmapped} unmapped Colnect word${unmapped === 1 ? "" : "s"}</span>`
+      : "",
     linked ? `<span class="chip">${linked} already linked</span>` : "",
     skipped ? `<span class="chip">${skipped} skipped</span>` : "",
   ].filter(Boolean);
@@ -632,12 +749,26 @@ async function preview(): Promise<void> {
 async function writeAuto(): Promise<void> {
   if (!profile) return;
   const changes = pendingDateChanges();
-  if (changes.length > 0) {
+  const attrChanges = pendingAttributeChanges();
+  const attrFields = pendingAttributeChangeCount();
+  if (changes.length > 0 || attrChanges.length > 0) {
+    // One confirm for both (#668/#739). They are the same act on two kinds of field — what we hold,
+    // replaced by what Colnect states — and asking twice for one press of Write would be two
+    // overlays in front of one decision.
+    const what = [
+      changes.length
+        ? `the date on <strong>${changes.length} stamp${changes.length === 1 ? "" : "s"}</strong>`
+        : "",
+      attrFields
+        ? `<strong>${attrFields} attribute${attrFields === 1 ? "" : "s"}</strong> on ` +
+          `<strong>${attrChanges.length} stamp${attrChanges.length === 1 ? "" : "s"}</strong>`
+        : "",
+    ].filter(Boolean);
     const ok = await askConfirm(
-      `<div>Date <strong>${changes.length} stamp${changes.length === 1 ? "" : "s"}</strong> as ` +
-        `Colnect does?</div>` +
-        `<div class="warnline">The date each of them carries now is replaced, components Colnect ` +
-        `doesn't state included.</div>${targetLine()}`
+      `<div>Replace ${what.join(" and ")} with what Colnect states?</div>` +
+        `<div class="warnline">What each of them says now is overwritten${
+          changes.length ? ", date components Colnect doesn't state included" : ""
+        }.</div>${targetLine()}`
     );
     if (!ok) return;
     setStatus("Writing…");
@@ -656,17 +787,35 @@ async function writeAuto(): Promise<void> {
       }
       applyDateOverwrite(pick, res.label);
     }
+    // One call per stamp, carrying every attribute of it the collector ticked — the instance settles
+    // them together, and six requests to replace six words on one row would be five round trips
+    // nobody asked for.
+    for (const pick of attrChanges) {
+      const res = await sendToBackground<OverwriteAttributesResponse>({
+        type: "overwrite-attributes",
+        stampId: pick.stamp.stampId,
+        attributes: pick.fields,
+      });
+      if (!res.ok) {
+        render();
+        setStatus(res.error, true);
+        return;
+      }
+      applyAttributeOverwrite(pick, res.attributes);
+    }
   }
 
   const batch = pendingWriteItems();
   if (batch.length === 0) {
-    // Nothing left to match — the dates were the whole of it. Report them and go, exactly as a
+    // Nothing left to match — the corrections were the whole of it. Report them and go, exactly as a
     // batch write does.
-    if (changes.length === 0) return;
+    if (changes.length === 0 && attrChanges.length === 0) return;
     render();
-    setStatus(
-      `Changed ${changes.length} date${changes.length === 1 ? "" : "s"} on ${profile.name}.`
-    );
+    const done = [
+      changes.length ? `${changes.length} date${changes.length === 1 ? "" : "s"}` : "",
+      attrFields ? `${attrFields} attribute${attrFields === 1 ? "" : "s"}` : "",
+    ].filter(Boolean);
+    setStatus(`Changed ${done.join(" and ")} on ${profile.name}.`);
     window.close();
     return;
   }
@@ -683,10 +832,20 @@ async function writeAuto(): Promise<void> {
   const dated = out.filter(
     (r) => r.status === "auto" && r.stamp?.dateProposal?.status === "filled"
   ).length;
+  const attributed = out.reduce(
+    (acc, r) =>
+      acc +
+      (r.status === "auto"
+        ? (r.stamp?.attributes ?? []).filter((p) => p.status === "filled").length
+        : 0),
+    0
+  );
   const extras = [
     filled ? `${filled} catalog number${filled === 1 ? "" : "s"}` : "",
     dated ? `${dated} date${dated === 1 ? "" : "s"}` : "",
     changes.length ? `${changes.length} date change${changes.length === 1 ? "" : "s"}` : "",
+    attributed ? `${attributed} attribute${attributed === 1 ? "" : "s"}` : "",
+    attrFields ? `${attrFields} attribute change${attrFields === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
   setStatus(
     `Wrote ${written} auto-match${written === 1 ? "" : "es"}${
@@ -701,7 +860,8 @@ function markWritten(
   colnectId: string,
   stamp: Candidate,
   backfill: BackfillProposal[],
-  dateProposal: DateProposal | null
+  dateProposal: DateProposal | null,
+  attributes: AttributeProposal[]
 ): void {
   const i = results.findIndex((r) => r.colnectId === colnectId);
   if (i === -1) return;
@@ -712,7 +872,7 @@ function markWritten(
     written: true,
     alreadySet: false,
     // The server reports what it actually filled; before a write we only had proposals.
-    stamp: { ...stamp, backfill, dateProposal, existingColnectId: colnectId },
+    stamp: { ...stamp, backfill, dateProposal, attributes, existingColnectId: colnectId },
     // The refs keep their classification: it described this stamp, which is the one just linked.
     refs: results[i].refs,
   };
@@ -731,10 +891,24 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
   // the batch write follows, and for the same reason: the instance dates from `issuedOn`, so an
   // unticked row simply sends none.
   const dating = stamp.dateProposal?.status === "would-fill" && dateTicked(colnectId, stamp.stampId);
+  // The same, per attribute (#739): the row's ticks decide which of the six this write carries, and
+  // an unticked one is expressed by leaving it out of what is sent.
+  const attributes: ExtractedItem["attributes"] = {};
+  for (const p of stamp.attributes) {
+    if (p.status !== "would-fill") continue;
+    if (!attrTicked(colnectId, stamp.stampId, p.field)) continue;
+    const printed = src?.attributes?.[p.field as keyof NonNullable<ExtractedItem["attributes"]>];
+    if (printed) attributes[p.field as keyof typeof attributes] = printed;
+  }
+  const attributing = Object.keys(attributes).length > 0;
   // A date fill is an addition like a number's, so it is named in the same sentence (#655). A
   // conflict never is: it is not part of this write.
   if (dating && stamp.dateProposal) {
     adds.push(`the issue date <strong>${esc(stamp.dateProposal.label)}</strong>`);
+  }
+  if (attributing) {
+    const n = Object.keys(attributes).length;
+    adds.push(`<strong>${n} attribute${n === 1 ? "" : "s"}</strong>`);
   }
   const fillLine = adds.length ? `<div>Also adds ${adds.join(", ")}.</div>` : "";
   const ok = await askConfirm(
@@ -752,13 +926,16 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     allowOverwrite: overwrite,
     catalogRefs: src?.catalogRefs,
     issuedOn: dating ? src?.issuedOn : undefined,
+    attributes: attributing ? attributes : undefined,
   });
   if (res.ok) {
-    markWritten(colnectId, stamp, res.backfill, res.date);
+    markWritten(colnectId, stamp, res.backfill, res.date, res.attributes);
     const filled = res.backfill.filter((p) => p.status === "filled").length;
+    const written = res.attributes.filter((p) => p.status === "filled").length;
     const extras = [
       filled ? `${filled} catalog number${filled === 1 ? "" : "s"}` : "",
       res.date?.status === "filled" ? `the date ${res.date.label}` : "",
+      written ? `${written} attribute${written === 1 ? "" : "s"}` : "",
     ].filter(Boolean);
     setStatus(
       `Linked #${colnectId} → ${stamp.name || stamp.stampId}${
@@ -781,9 +958,10 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
       allowOverwrite: true,
       catalogRefs: src?.catalogRefs,
       issuedOn: dating ? src?.issuedOn : undefined,
+      attributes: attributing ? attributes : undefined,
     });
     if (retry.ok) {
-      markWritten(colnectId, stamp, retry.backfill, retry.date);
+      markWritten(colnectId, stamp, retry.backfill, retry.date, retry.attributes);
       setStatus(`Overwrote → #${colnectId}.`);
     } else {
       setStatus(retry.error, true);
@@ -871,6 +1049,25 @@ function applyDateOverwrite(pick: DatePick, label: string): void {
   proposal.label = label;
   proposal.currentLabel = label;
   delete proposal.conflictingFields;
+}
+
+/**
+ * Fold a written attribute overwrite into what is on screen (#739) — {@link applyDateOverwrite} for
+ * a handful of fields at once.
+ *
+ * The instance answers with what it *actually* did, and that answer is what lands: a field it
+ * refused because Colnect's word maps to nothing stays `unmapped` on the row rather than being
+ * marked written, which is the one thing a naive "they all went through" fold would get wrong.
+ */
+function applyAttributeOverwrite(pick: AttributePick, written: AttributeProposal[]): void {
+  const byField = new Map(written.map((p) => [p.field, p]));
+  for (const proposal of pick.stamp.attributes) {
+    const result = byField.get(proposal.field);
+    if (!result || !(proposal.field in pick.fields)) continue;
+    proposal.status = result.status;
+    proposal.label = result.label;
+    proposal.currentLabel = result.status === "filled" ? result.label : result.currentLabel;
+  }
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -1113,13 +1310,93 @@ function dateMarkup(proposal: DateProposal | null, resolvable: boolean, key: str
   );
 }
 
+/** What each attribute status means, on the chip that carries it. */
+const ATTRIBUTE_TITLE: Record<string, string> = {
+  "would-fill": "Your stamp states nothing here — Colnect's value will be stored",
+  filled: "Stored from Colnect",
+  unmapped:
+    "Colnect's word maps to none of your values — map it under Settings → Colnect, or leave it",
+};
+
+/**
+ * A stamp's attribute proposals (#739) — the date row six fields wide, drawn on the same two shapes:
+ * an addition is a ticked chip, a disagreement is `ours → theirs` with a tick of its own.
+ *
+ * An **unmapped** value is neither, and deliberately gets no tick at all: there is nothing to write
+ * and nothing to decide here, only a word to be told about. It is drawn quietly and named for what
+ * it is, because the answer to it is one trip to Settings that then covers every page.
+ *
+ * @param keyFor    what this row's ticks are remembered by (#668's rule, one segment wider), or null
+ *                  where the row has nothing left to decide.
+ * @param resolvable whether a disagreement may be settled from this row at all — only a row naming
+ *                  a single stamp may (#433).
+ */
+function attributeMarkup(
+  proposals: AttributeProposal[],
+  resolvable: boolean,
+  keyFor: ((field: string) => string) | null
+): string {
+  if (proposals.length === 0) return "";
+  const rows = proposals.map((p) => {
+    const name = `<span class="attrname">${esc(p.fieldLabel)}</span>`;
+    if (p.status === "unmapped") {
+      return (
+        `<div class="fills">${name}` +
+        `<span class="ref unmapped" title="${esc(ATTRIBUTE_TITLE.unmapped)}">` +
+        `${esc(p.colnectLabel)} — not mapped</span></div>`
+      );
+    }
+    if (p.status !== "conflict") {
+      const mark = p.status === "filled" ? "✓ " : "+ ";
+      const chip =
+        `<span class="ref fill${p.status === "filled" ? " done" : ""}" ` +
+        `title="${esc(ATTRIBUTE_TITLE[p.status] ?? "")}">${esc(`${mark}${p.label}`)}</span>`;
+      const tick =
+        keyFor && p.status === "would-fill" ? attributeTick(keyFor(p.field), "fill") : "";
+      return `<div class="fills">${tick}${name}${chip}</div>`;
+    }
+    const theirs = `<span class="ref missing">${esc(p.colnectLabel)}</span>`;
+    const mine = `<span class="ref conflict">${esc(p.currentLabel ?? "")}</span>`;
+    if (!resolvable || !keyFor) {
+      return `<div class="fix">${name}${mine}<span class="arrow">→</span>${theirs}</div>`;
+    }
+    attributePicks.push(p);
+    return (
+      `<div class="fix">${attributeTick(keyFor(p.field), "change")}${name}${mine}` +
+      `<span class="arrow">→</span>${theirs}</div>`
+    );
+  });
+  return rows.join("");
+}
+
+/** One attribute row's tick, remembered by `key` across renders — {@link dateTick}'s twin. */
+function attributeTick(key: string, kind: keyof typeof TICK_TITLE): string {
+  return (
+    `<label class="tick" title="${esc(TICK_TITLE[kind])}">` +
+    `<input type="checkbox" data-attr-key="${esc(key)}"${
+      skippedAttributes.has(key) ? "" : " checked"
+    } />` +
+    `</label>`
+  );
+}
+
 /** One of our stamps, with enough detail to tell it from a sibling. */
 function stampBlock(
   c: Candidate,
   label: string,
-  opts: { actionIndex?: number; resolveConflicts?: boolean; dateKey?: string | null } = {}
+  opts: {
+    actionIndex?: number;
+    resolveConflicts?: boolean;
+    dateKey?: string | null;
+    attrKeyFor?: ((field: string) => string) | null;
+  } = {}
 ): string {
-  const { actionIndex, resolveConflicts = false, dateKey: key = null } = opts;
+  const {
+    actionIndex,
+    resolveConflicts = false,
+    dateKey: key = null,
+    attrKeyFor = null,
+  } = opts;
   const meta = [stampDate(c), c.areaName].filter(Boolean).join(" · ");
   const warn = c.existingColnectId
     ? `<div class="warnline">already has Colnect ID ${esc(c.existingColnectId)}</div>`
@@ -1147,6 +1424,7 @@ function stampBlock(
       meta: [
         backfillMarkup(c.backfill, resolveConflicts),
         dateMarkup(c.dateProposal, resolveConflicts, key),
+        attributeMarkup(c.attributes, resolveConflicts, attrKeyFor),
         meta,
         warn,
       ]
@@ -1191,6 +1469,22 @@ let datePicks: DateProposal[] = [];
 let dateOverwritePicks: DatePick[] = [];
 
 /**
+ * The same for the attribute disagreements (#739), with one difference that matters: a stamp can
+ * carry several at once, so `pendingAttributeChanges` folds these back down to **one pick per
+ * stamp** — the instance settles every attribute of a stamp in a single call, and six requests to
+ * replace six words on one row would be five round trips nobody asked for.
+ */
+interface AttributePick {
+  colnectId: string;
+  stamp: Candidate;
+  proposal: AttributeProposal;
+  /** The printed values to send, by field — filled in by the fold above. */
+  fields: Record<string, string>;
+}
+let attributePicks: AttributeProposal[] = [];
+let attributeOverwritePicks: AttributePick[] = [];
+
+/**
  * Turn the proposals registered while one card rendered into full click targets. Rendering a card
  * cannot do this itself — `backfillMarkup` is handed proposals, not the stamp or the item — so the
  * card closes the loop for whatever its own stamp block just pushed.
@@ -1198,6 +1492,18 @@ let dateOverwritePicks: DatePick[] = [];
 function claimOverwrites(from: number, stamp: Candidate, refs: RefView[]): void {
   for (let i = from; i < overwrites.length; i++) {
     overwritePicks[i] = { stamp, proposal: overwrites[i], refs };
+  }
+}
+
+/** The same for the attribute proposals a card just registered (#739). */
+function claimAttributes(from: number, colnectId: string, stamp: Candidate): void {
+  for (let i = from; i < attributePicks.length; i++) {
+    attributeOverwritePicks[i] = {
+      colnectId,
+      stamp,
+      proposal: attributePicks[i],
+      fields: {},
+    };
   }
 }
 
@@ -1230,16 +1536,21 @@ function itemCard(r: MatchResult): string {
     matchLabel = "Your stamp";
     const from = overwrites.length;
     const fromDate = datePicks.length;
+    const fromAttr = attributePicks.length;
     matchBody = r.stamp
       ? stampBlock(r.stamp, matchLabel, {
           resolveConflicts,
           // Nothing left to tick on a row already written — its dates are facts now (#668).
           dateKey: r.written ? null : dateKey(r.colnectId, r.stampId),
+          attrKeyFor: r.written
+            ? null
+            : (field) => attrKey(r.colnectId, r.stampId, field),
         })
       : labelledNote(matchLabel, `stamp ${esc(r.stampId)}`);
     if (r.stamp) {
       claimOverwrites(from, r.stamp, r.refs);
       claimDates(fromDate, r.colnectId, r.stamp, src?.issuedOn);
+      claimAttributes(fromAttr, r.colnectId, r.stamp);
     }
   } else if (r.status === "needs-confirm") {
     tag = `<span class="tag needs">${esc(REASON_LABEL[r.reason] || r.reason)}</span>`;
@@ -1250,15 +1561,20 @@ function itemCard(r: MatchResult): string {
         picks.push({ colnectId: r.colnectId, stamp: c, overwrite });
         const from = overwrites.length;
         const fromDate = datePicks.length;
+        const fromAttr = attributePicks.length;
         const block = stampBlock(c, matchLabel, {
           actionIndex: picks.length - 1,
           resolveConflicts,
           // Only where this row names a single stamp: a tick on one of several candidates would be
           // a decision about a stamp the collector has not chosen yet.
           dateKey: resolveConflicts ? dateKey(r.colnectId, c.stampId) : null,
+          attrKeyFor: resolveConflicts
+            ? (field) => attrKey(r.colnectId, c.stampId, field)
+            : null,
         });
         claimOverwrites(from, c, r.refs);
         claimDates(fromDate, r.colnectId, c, src?.issuedOn);
+        claimAttributes(fromAttr, r.colnectId, c);
         return block;
       })
       .join("");
@@ -1337,6 +1653,8 @@ function resetPicks(): void {
   overwritePicks = [];
   datePicks = [];
   dateOverwritePicks = [];
+  attributePicks = [];
+  attributeOverwritePicks = [];
 }
 
 /**
@@ -1404,6 +1722,18 @@ function render(): void {
       const key = box.dataset.dateKey!;
       if (box.checked) skippedDates.delete(key);
       else skippedDates.add(key);
+      renderChips();
+      syncButtons();
+    });
+  });
+
+  // The attribute ticks (#739), on exactly the same terms — and never re-rendering, for exactly the
+  // same reason.
+  resultsEl.querySelectorAll<HTMLInputElement>("input[data-attr-key]").forEach((box) => {
+    box.addEventListener("change", () => {
+      const key = box.dataset.attrKey!;
+      if (box.checked) skippedAttributes.delete(key);
+      else skippedAttributes.add(key);
       renderChips();
       syncButtons();
     });

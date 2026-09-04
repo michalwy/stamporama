@@ -132,6 +132,16 @@ interface Props {
    * viewer that read it for itself would be a second source for the one number that must not have
    * two. */
   scanDpi: number;
+  /**
+   * The gauge currently on the bar, or null when there is not one (#740).
+   *
+   * The viewer measures; it does not know what a measurement is *for*. Reporting the figure upward
+   * lets the identification dialog compare it against the candidates' own perforations without the
+   * comparison — or the candidate list, or anything about identification — reaching in here. Null
+   * covers every way there is no reading: the tool is up, the marks are unplaced, the tooth count is
+   * missing, the figure is not a perforation at all, and the viewer being unmounted.
+   */
+  onGauge?: (gauge: number | null) => void;
 }
 
 /**
@@ -197,11 +207,17 @@ export function IdentifiedPieceAside({
   collectionId,
   pieces,
   scanDpi,
+  onGauge,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
   /** The collection's stated scan resolution (#598), carried to whichever viewer this resolves to. */
   scanDpi: number;
+  /** The gauge the open viewer is reading, passed straight through (#740). A run showing the grid
+   * has no viewer and so no reading — which is right: the pieces were ticked as one stamp, but a
+   * perforation is measured on **one** of them, and there is no run-wide answer to report. Opening
+   * the loupe on a piece starts one; going back to the grid ends it. */
+  onGauge?: (gauge: number | null) => void;
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -240,6 +256,7 @@ export function IdentifiedPieceAside({
         sides={shown[0].sides}
         position={shown[0].position}
         scanDpi={scanDpi}
+        onGauge={onGauge}
       />
     );
   }
@@ -308,6 +325,7 @@ export function IdentifiedPieceAside({
           sides={opened.sides}
           position={opened.position}
           scanDpi={scanDpi}
+          onGauge={onGauge}
         />
       </div>
     );
@@ -432,7 +450,7 @@ function describeReading(args: {
   marks: { a: ScanPoint; b: ScanPoint } | null;
   dpi: number | null;
   teeth: number | null;
-}): { text: string; muted: boolean; detail?: string } {
+}): { text: string; muted: boolean; detail?: string; gauge?: number } {
   const { tool, marks, dpi, teeth } = args;
   if (tool === "off") return { text: "", muted: true };
   if (dpi === null) {
@@ -474,6 +492,10 @@ function describeReading(args: {
   }
   return {
     text: `Perf ${formatGaugeAt(gauge, dpi)}`,
+    // The figure itself rides out beside the sentence (#740), so the one place that decided a
+    // reading is real is also the one place that hands it to whatever compares it. A caller cannot
+    // arrive at a gauge this function called a mistake.
+    gauge,
     muted: false,
     detail: `${formatMillimetres(mm)} mm over ${teeth} teeth`,
   };
@@ -525,7 +547,7 @@ interface Natural {
   height: number;
 }
 
-export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) {
+export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }: Props) {
   const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
@@ -1030,15 +1052,25 @@ export function TileZoomView({ collectionId, sides, position, scanDpi }: Props) 
     size,
   });
 
-  if (!current) return null;
-
-  const atActualSize = ready && Math.abs(view.scale - 1) < 1e-6;
-
   /** The reading, or the reason there is not one yet. Recomputed on every render rather than held
    * in state: it is a function of the marks, the scale and the tooth count, and a cached copy of it
    * is a copy that can be stale — which for a number quoted as a measurement is not a bug worth
    * risking to save an arithmetic. */
   const reading = describeReading({ tool, marks, dpi, teeth });
+  const gauge = reading.gauge ?? null;
+
+  // Hand the figure to whoever asked for it (#740). Above the `current` guard because it is a hook,
+  // and split in two so that the unmount — the loupe closing back to the grid, the dialog moving to
+  // the next tile — reports *no reading* rather than leaving the last one standing beside a piece it
+  // was not taken on.
+  useEffect(() => {
+    onGauge?.(gauge);
+  }, [gauge, onGauge]);
+  useEffect(() => () => onGauge?.(null), [onGauge]);
+
+  if (!current) return null;
+
+  const atActualSize = ready && Math.abs(view.scale - 1) < 1e-6;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>

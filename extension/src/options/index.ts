@@ -11,9 +11,11 @@ import {
   type ProfileInput,
 } from "../core/profile";
 import {
+  getAttributeSync,
   getCatalogBackfill,
   getIssueDateSync,
   getMatchOnLoad,
+  setAttributeSync,
   setCatalogBackfill,
   setIssueDateSync,
   setMatchOnLoad,
@@ -33,6 +35,7 @@ const savedEl = $("saved");
 const matchOnLoadEl = $<HTMLInputElement>("matchOnLoad");
 const catalogBackfillEl = $<HTMLInputElement>("catalogBackfill");
 const issueDateSyncEl = $<HTMLInputElement>("issueDateSync");
+const attributeSyncEl = $<HTMLInputElement>("attributeSync");
 
 const fields = {
   name: $<HTMLInputElement>("name"),
@@ -208,6 +211,10 @@ void (async () => {
   issueDateSyncEl.checked = await getIssueDateSync();
   issueDateSyncEl.addEventListener("change", () => {
     void setIssueDateSync(issueDateSyncEl.checked).then(flashSaved);
+  });
+  attributeSyncEl.checked = await getAttributeSync();
+  attributeSyncEl.addEventListener("change", () => {
+    void setAttributeSync(attributeSyncEl.checked).then(flashSaved);
   });
   catalogBackfillEl.checked = await getCatalogBackfill();
   catalogBackfillEl.addEventListener("change", () => {

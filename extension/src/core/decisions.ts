@@ -22,7 +22,37 @@ export interface Candidate {
    *  (#655). Null when the date sync is switched off, the page states none, or it tells us nothing
    *  we don't already hold. */
   dateProposal: DateProposal | null;
+  /** What the page's stated attributes would add to this stamp, disagree with it about, or name in
+   *  a word the collection's mapping does not cover (#739). Empty when the attribute sync is
+   *  switched off, the page states none, or the two sides already agree about every one of them. */
+  attributes: AttributeProposal[];
   existingColnectId: string | null;
+}
+
+/**
+ * One decided stamp attribute (#739) — the date proposal five fields wider, plus the one status a
+ * date cannot have.
+ *
+ * `would-fill`/`filled` add what our stamp states nothing for and destroy nothing; `conflict` is a
+ * value the two sides state differently, reported and left alone until the collector settles it;
+ * `unmapped` is a Colnect word the collection's attribute mapping does not cover, which is reported
+ * and **never** written — nothing here invents a dictionary row.
+ */
+export type AttributeStatus = "would-fill" | "filled" | "conflict" | "unmapped";
+
+export interface AttributeProposal {
+  /** Which of the six — `denomination`, `perforation`, `color`, `watermark`, `paper`, `printing`. */
+  field: string;
+  /** How the attribute is named on screen, resolved by the instance so the window carries no
+   *  vocabulary of its own. */
+  fieldLabel: string;
+  status: AttributeStatus;
+  /** What a fill or an overwrite would store, as it reads. */
+  label: string;
+  /** What our stamp states today, or null when it states nothing. */
+  currentLabel: string | null;
+  /** What Colnect prints, verbatim — and, on an `unmapped` row, the word to map in Settings. */
+  colnectLabel: string;
 }
 
 /**

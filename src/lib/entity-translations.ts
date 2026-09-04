@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
+import { stampAttributeTranslationStore } from "./stamp-attributes";
 import {
   TRANSLATABLE_ENTITY_FIELDS,
   type TranslatableEntity,
@@ -10,12 +11,12 @@ import {
 
 // Writing **one** translated field of **one** entity, outside that entity's own form (#299/#300).
 //
-// The seven translatable entities (#293–#296, #338, #344) are each edited through their own dialog, which stages
-// every language and submits them along the entity's save. Filling a gap from an offer dialog is the
+// The eleven translatable entities (#293–#296, #338, #344, #738) are each edited through their own
+// dialog, which stages every language and submits them along the entity's save. Filling a gap from an offer dialog is the
 // opposite shape: one field, one language, saved on its own the moment it is typed, because a
 // translation is entity data and must survive cancelling the offer dialog it was typed in.
 //
-// One module rather than a setter per domain module: the seven paths differ only in which table they
+// One module rather than a setter per domain module: the paths differ only in which table they
 // resolve the owning collection through and which row they upsert, and the caller dispatches over
 // `TranslatableEntity` anyway. The shared blank / delete / untouched rules still come from
 // `syncEntityTranslations`, so a gap filled here and one filled in the entity's dialog store the
@@ -105,6 +106,17 @@ async function loadEntity(
         },
       });
       return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
+    }
+    // The four stamp-attribute dictionaries (#72/#738), through their own module's delegates rather
+    // than four more copies of the block above. `current` stays empty because these rows carry one
+    // translatable column: there are no siblings for the write to preserve, and reading the row back
+    // would be a query whose result is thrown away.
+    case "color":
+    case "watermark":
+    case "paper":
+    case "printing": {
+      const row = await stampAttributeTranslationStore(entityType).find(entityId);
+      return row && { collectionId: row.collectionId, current: {} };
     }
   }
 }
@@ -221,6 +233,20 @@ function handlers(entityType: TranslatableEntity, entityId: string) {
           });
         },
       };
+    case "color":
+    case "watermark":
+    case "paper":
+    case "printing": {
+      const store = stampAttributeTranslationStore(entityType);
+      return {
+        upsert: async (language: string, fields: Record<string, string | null>) => {
+          await store.upsertTranslation(entityId, language, fields.name ?? null);
+        },
+        remove: async (language: string) => {
+          await store.removeTranslation(entityId, language);
+        },
+      };
+    }
   }
 }
 

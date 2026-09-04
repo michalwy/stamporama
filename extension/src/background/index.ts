@@ -4,6 +4,7 @@ import {
   ISSUE_DATE_SYNC,
   getCatalogBackfill,
   getIssueDateSync,
+  getAttributeSync,
   getMatchOnLoad,
 } from "../core/settings";
 import type {
@@ -22,13 +23,20 @@ import type {
   ReportedOrder,
   OpenMatchResponse,
   OverwriteDateResponse,
+  OverwriteAttributesResponse,
   OverwriteNumberResponse,
   ResultsUpdatedNotice,
   SearchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { badgeTodo } from "../core/decisions";
-import { callConfirm, callMatch, callOverwriteDate, callOverwriteNumber } from "./matching-client";
+import {
+  callConfirm,
+  callMatch,
+  callOverwriteAttributes,
+  callOverwriteDate,
+  callOverwriteNumber,
+} from "./matching-client";
 import { callCapture } from "./capture-client";
 import { callSearch } from "./search-client";
 import { callOfferLookup } from "./offer-lookup-client";
@@ -89,13 +97,15 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
       platformItemId: r.platformItemId,
       catalogRefs: r.catalogRefs,
       ...(r.issuedOn ? { issuedOn: r.issuedOn } : {}),
+      ...(r.attributes ? { attributes: r.attributes } : {}),
     }));
     const results = await callMatch(
       profile,
       items,
       true,
       await getCatalogBackfill(),
-      await getIssueDateSync()
+      await getIssueDateSync(),
+      await getAttributeSync()
     );
     resultCache.set(tabId, results);
     await showTodoBadge(tabId, results);
@@ -147,19 +157,33 @@ async function applyResultsUpdate(msg: ResultsUpdatedNotice): Promise<void> {
 
 async function handle(
   msg: BackgroundRequest
-): Promise<MatchResponse | ConfirmResponse | OverwriteNumberResponse | OverwriteDateResponse> {
+): Promise<
+  | MatchResponse
+  | ConfirmResponse
+  | OverwriteNumberResponse
+  | OverwriteDateResponse
+  | OverwriteAttributesResponse
+> {
   const profile = await getActiveProfile();
   if (!profile) {
     return { ok: false, error: "No active profile. Set one in the extension options." };
   }
 
-  // Both flags are read here rather than taken from the caller, so the load-time match, the
-  // window's preview and every write all describe the same settings (#280, #655).
+  // All three flags are read here rather than taken from the caller, so the load-time match, the
+  // window's preview and every write all describe the same settings (#280, #655, #739).
   const backfill = await getCatalogBackfill();
   const issueDate = await getIssueDateSync();
+  const attributeSync = await getAttributeSync();
 
   if (msg.type === "match") {
-    const results = await callMatch(profile, msg.items, msg.dryRun, backfill, issueDate);
+    const results = await callMatch(
+      profile,
+      msg.items,
+      msg.dryRun,
+      backfill,
+      issueDate,
+      attributeSync
+    );
     return { ok: true, results };
   }
 
@@ -175,18 +199,25 @@ async function handle(
     return callOverwriteDate(profile, msg.stampId, msg.issuedOn);
   }
 
+  // …and correcting what a stamp states about itself (#739), five fields wider and just as silent.
+  if (msg.type === "overwrite-attributes") {
+    return callOverwriteAttributes(profile, msg.stampId, msg.attributes);
+  }
+
   const outcome = await callConfirm(profile, msg.colnectId, msg.stampId, {
     allowOverwrite: msg.allowOverwrite,
     backfill,
     catalogRefs: msg.catalogRefs,
     issueDate,
     issuedOn: msg.issuedOn,
+    attributeSync,
+    attributes: msg.attributes,
   });
   if (outcome.ok) {
     // The instance now knows something a screen of it may be showing. Ring the doorbell — not
     // awaited, since the popup's answer must not wait on other tabs.
     void broadcastMatched();
-    return { ok: true, backfill: outcome.backfill, date: outcome.date };
+    return { ok: true, backfill: outcome.backfill, date: outcome.date, attributes: outcome.attributes };
   }
   if (outcome.conflict) {
     return { ok: false, error: "conflict", conflict: true, existingColnectId: outcome.existingColnectId };

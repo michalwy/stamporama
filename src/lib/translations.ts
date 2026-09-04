@@ -1,10 +1,10 @@
 import { normalizeLanguage } from "./languages";
 
-// Shared rules for per-language entity text (#265, #293–#296, #338, #344). Seven entities now
+// Shared rules for per-language entity text (#265, #293–#296, #338, #344, #738). Eleven entities now
 // carry translation child tables — area title name, condition, certificate status and format (name
-// + abbreviation), issue name, stamp name and stamp subtype name — and every one of them parses the
-// same form fields, writes rows the same way, and resolves the same fallback. That logic lives here
-// once.
+// + abbreviation), issue name, stamp name, stamp subtype name and the four stamp-attribute
+// dictionaries (#72) — and every one of them parses the same form fields, writes rows the same way,
+// and resolves the same fallback. That logic lives here once.
 //
 // Pure — no Prisma, no React, no `server-only`. Persistence is supplied by the caller as two
 // callbacks in {@link syncEntityTranslations}, so this module stays unit-testable and the per-entity
@@ -27,7 +27,15 @@ export type TranslatableEntity =
   | "certificateStatus"
   | "area"
   | "subtype"
-  | "format";
+  | "format"
+  // The four stamp-attribute dictionaries (#72), translatable since #738 put them in listing texts:
+  // a Polish listing says `karminowy` where the collection's row reads `Carmine`. Denomination and
+  // perforation are not here and never will be — they are printed as printed, and no language
+  // rewrites `11½`.
+  | "color"
+  | "watermark"
+  | "paper"
+  | "printing";
 
 /** The translatable columns of each entity, in the order their forms show them. Also the guard the
  * single-field save path validates an incoming field name against. */
@@ -39,6 +47,10 @@ export const TRANSLATABLE_ENTITY_FIELDS: Readonly<Record<TranslatableEntity, rea
   area: ["titleName"],
   subtype: ["name"],
   format: ["name", "abbreviation"],
+  color: ["name"],
+  watermark: ["name"],
+  paper: ["name"],
+  printing: ["name"],
 };
 
 /** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */

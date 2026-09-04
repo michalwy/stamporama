@@ -28,6 +28,16 @@ import { compareCatalogSortKeys } from "./catalog-sort-key";
 // the Prisma `select`, the per-area catalog resolution, and the mapping in one place means the two
 // paths resolve every token — including the parameterised `{catalog}` — identically.
 
+/** One stamp-attribute dictionary row as a listing text needs it (#738): the id so a missing
+ * translation can name the row it goes on (#299), the default-language name, and the rows to
+ * resolve the listing's own language from. The same three every other translated entity here
+ * selects — stated once because four of them want it. */
+const ATTRIBUTE_SELECT = {
+  id: true,
+  name: true,
+  translations: { select: { language: true, name: true } },
+} as const;
+
 /** Copy fields the title template resolves over: stamp name / **all** catalog numbers (with vendor
  * abbreviation, for `{catalog:Mi…}`) / year / condition / certificate / primary area + its id (to
  * resolve per-area catalog prefixes and the primary vendor) / issue. */
@@ -75,6 +85,15 @@ export const TITLE_COPY_SELECT = {
         },
         take: 1,
       },
+      // What the catalogue states the stamp is (#71/#738). The two printed attributes are columns;
+      // the four dictionary ones are rows with translations of their own, selected exactly as the
+      // subtype's are — one handful of rows per stamp, and the language is picked in `toTitleCopy`.
+      denomination: true,
+      perforation: true,
+      color: { select: ATTRIBUTE_SELECT },
+      watermark: { select: ATTRIBUTE_SELECT },
+      paper: { select: ATTRIBUTE_SELECT },
+      printing: { select: ATTRIBUTE_SELECT },
       // The stamp's **direct** children, behind `{#unknownVariant}` and `{variants}` (#619): whether
       // any of them acts as a variant is what makes this copy an unidentified umbrella (ADR-0010 §3),
       // and their numbers are what the listing text says the piece might be. Direct children only —
@@ -127,6 +146,8 @@ export const TITLE_COPY_SELECT = {
 type NameTranslation = { language: string; name: string | null };
 /** A translation row for the name + abbreviation entities (condition, certificate status). */
 type LabelTranslation = { language: string; name: string | null; abbreviation: string | null };
+/** One of the stamp's four dictionary attributes as {@link ATTRIBUTE_SELECT} fetches it (#738). */
+type AttributeRow = { id: string; name: string; translations: NameTranslation[] };
 
 export type TitleCopyRow = {
   id: string;
@@ -148,6 +169,12 @@ export type TitleCopyRow = {
     issueMemberships: {
       issue: { id: string; name: string | null; year: number | null; translations: NameTranslation[] };
     }[];
+    denomination: string | null;
+    perforation: string | null;
+    color: AttributeRow | null;
+    watermark: AttributeRow | null;
+    paper: AttributeRow | null;
+    printing: AttributeRow | null;
     variants: {
       id: string;
       name: string | null;
@@ -276,6 +303,23 @@ export function toTitleCopy(
     return value;
   };
 
+  /** One dictionary attribute, resolved and reported like every other translated entity — the four
+   * differ only in which `TranslatableEntity` a gap is written on, so they are one function rather
+   * than four spellings of `resolve`. */
+  const attribute = (
+    kind: "color" | "watermark" | "paper" | "printing",
+    entity: { id: string; name: string; translations: NameTranslation[] } | null
+  ): string | null =>
+    entity
+      ? resolve(
+          kind,
+          { type: kind, id: entity.id, field: "name" },
+          entity.translations,
+          (t: NameTranslation) => t.name,
+          entity.name
+        )
+      : null;
+
   const copy: TitleTemplateCopy = {
     name: resolve(
       "name",
@@ -376,6 +420,17 @@ export function toTitleCopy(
             subtype.name
           )
         : null,
+    // What the catalogue states the stamp is (#738). The two printed ones travel verbatim — `10 gr`
+    // and `11½` are read the same in every language, which is why #72 stored them as text rather
+    // than as dictionaries in the first place. The four dictionary ones resolve exactly as the
+    // subtype does, and there is no default row to suppress: a stamp that states no colour has a
+    // null relation, which is the unmarked case (ADR-0020's rule, arrived at again).
+    denomination: row.stamp.denomination,
+    perforation: row.stamp.perforation,
+    color: attribute("color", row.stamp.color),
+    watermark: attribute("watermark", row.stamp.watermark),
+    paper: attribute("paper", row.stamp.paper),
+    printing: attribute("printing", row.stamp.printing),
   };
   // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately — and
   // against the area the winning name came from, which may be an ancestor of the copy's own (#299).
@@ -400,8 +455,9 @@ export function toTitleCopy(
  * translation exists and falls back to the default value otherwise; the fallback is silent in the
  * generated title and reported per copy for the preview to flag (#298). Every translatable token
  * honours it: `{area}` (#293), `{condition}` / `{conditionAbbr}` / `{certificate}` /
- * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296), `{subtype}` (#338/#339) and
- * `{format}` / `{formatAbbr}` (#344/#345).
+ * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296), `{subtype}` (#338/#339),
+ * `{format}` / `{formatAbbr}` (#344/#345) and the four dictionary attributes `{color}` /
+ * `{watermark}` / `{paper}` / `{printing}` (#738).
  *
  * A language equal to the collection's own `defaultLanguage` is the same thing as no language —
  * entity columns are already written in it and carry no translation rows — so it is normalised to

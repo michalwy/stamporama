@@ -147,6 +147,22 @@
         </span>
       </label>
 
+      <label style="display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin-top: 12px">
+        <input id="attributeSync" type="checkbox" style="width: auto; margin-top: 3px" />
+        <span>
+          <strong style="display: block; font-weight: 600">Fill missing stamp attributes</strong>
+          <span class="help">
+            When a stamp is matched, take what Colnect states about it — denomination, perforation,
+            colour, watermark, paper and printing method — for the attributes your stamp states
+            nothing for. A value the two sides state differently is never overwritten as part of a
+            match; it is reported, and you settle it from the Assistant window. Colour, watermark,
+            paper and printing method go through the mapping under Settings → Colnect: a Colnect word
+            that maps to none of your values is reported and never invents one. Also switchable in
+            the Assistant window.
+          </span>
+        </span>
+      </label>
+
       <div class="note">
         Registering from Stamporama's settings exchanges a one-time code for a token that is stored
         here and revocable there (Stamporama issue #252). Registering the same instance and collection

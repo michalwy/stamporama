@@ -681,8 +681,10 @@ if (!window.__stamporamaAssistantLoaded) {
         platformItemId: i.platformItemId,
         catalogRefs: i.catalogRefs,
         // The printed date rides along (#655), so the load-time match — which the window reuses as
-        // its preview — decides the same thing the window's own request would.
+        // its preview — decides the same thing the window's own request would. The stated
+        // attributes ride along for the same reason (#739).
         ...(i.issuedOn ? { issuedOn: i.issuedOn } : {}),
+        ...(i.attributes ? { attributes: i.attributes } : {}),
       })),
     };
     void chrome.runtime.sendMessage(notice).catch(() => {});

@@ -68,6 +68,12 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     itemNo: null,
     itemNoPad: 5,
     subtype: null,
+    denomination: null,
+    perforation: null,
+    color: null,
+    watermark: null,
+    paper: null,
+    printing: null,
     format: null,
     formatAbbr: null,
     issueName: null,
@@ -497,6 +503,73 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
   it("lets a fallback group fall past a single's absent format", () => {
     const c = copy({ format: null, condition: "Used" });
     assert.equal(renderTitleTemplate("{format|condition}", [c]), "Used");
+  });
+
+  // The six catalogue attributes (#738). What the stamp *is* — its denomination, perforation,
+  // colour, watermark, paper and printing method — each an ordinary per-copy token, and null on
+  // most stamps, which is what the tidy pass makes survivable.
+  it("resolves the six attribute tokens", () => {
+    const c = copy({
+      name: "Mercury",
+      denomination: "10 gr",
+      perforation: "11½",
+      color: "Carmine",
+      watermark: "Lozenges",
+      paper: "Thin paper",
+      printing: "Photogravure",
+    });
+    assert.equal(
+      renderTitleTemplate("{name} {denomination} {perforation}", [c]),
+      "Mercury 10 gr 11½"
+    );
+    assert.equal(
+      renderTitleTemplate("{color}, {watermark}, {paper}, {printing}", [c]),
+      "Carmine, Lozenges, Thin paper, Photogravure"
+    );
+  });
+
+  it("renders nothing for an attribute the stamp does not state, taking its separator with it", () => {
+    const c = copy({ name: "Mercury", denomination: "10 gr", condition: "Used" });
+    assert.equal(
+      renderTitleTemplate("{name} - {color} - {denomination} - {perforation} - {condition}", [c]),
+      "Mercury - 10 gr - Used"
+    );
+  });
+
+  it("joins distinct attribute values across copies and skips the stamps stating none", () => {
+    const copies = [
+      copy({ color: "Carmine", perforation: "11½" }),
+      copy({ color: null, perforation: null }),
+      copy({ color: "Green", perforation: "11½" }),
+      copy({ color: "Carmine", perforation: "12" }),
+    ];
+    assert.equal(renderTitleTemplate("{color}", copies), "Carmine / Green");
+    assert.equal(renderTitleTemplate("{perforation}", copies), "11½ / 12");
+  });
+
+  it("lets a fallback group fall past an unstated attribute", () => {
+    const c = copy({ color: null, condition: "Used" });
+    assert.equal(renderTitleTemplate("{color|condition}", [c]), "Used");
+  });
+
+  // Only the four dictionary ones can flag: a denomination and a perforation are printed as
+  // printed, and no language rewrites `11½`.
+  it("reports a fallback on a dictionary attribute and never on a printed one", () => {
+    const c = copy({
+      color: "Carmine",
+      denomination: "10 gr",
+      fallbacks: [
+        {
+          field: "color",
+          entityType: "color",
+          entityId: "color-1",
+          entityField: "name",
+          defaultValue: "Carmine",
+        },
+      ],
+    });
+    assert.deepEqual(titleFallbackTokens("{color} {denomination}", [c]), ["{color}"]);
+    assert.deepEqual(titleFallbackTokens("{denomination}", [c]), []);
   });
 
   it("resolves the location tokens", () => {

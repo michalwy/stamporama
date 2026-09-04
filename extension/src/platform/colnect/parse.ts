@@ -1,4 +1,4 @@
-import type { CatalogRef, ExtractedItem } from "../types";
+import type { CatalogRef, ExtractedAttributes, ExtractedItem } from "../types";
 
 // Colnect DOM extraction (#249). Pure functions over a Document/Element so they run under a test DOM
 // (linkedom) as well as in the content script. Two page shapes yield items, both confirmed against
@@ -162,6 +162,45 @@ function issuedOnOf(root: Element | Document): string | undefined {
 }
 
 /**
+ * What the page states about the stamp itself (#739) — the six attributes of #71, read out of the
+ * same dt/dd rows everything else here is.
+ *
+ * Each label is tried in the forms Colnect actually prints. `ddFor` matches a **prefix** of the
+ * label, so `perforation` also catches "Perforation:" wherever the row carries a note after the
+ * colon, and the leading-word forms are listed most specific first — "printing" must not be matched
+ * by a row reading "Printing type" when we want the method, so both are simply tried in turn and the
+ * first hit wins.
+ *
+ * Values travel **verbatim**. The four dictionary attributes are Colnect's own words and are
+ * translated by the collection's mapping on the instance; the two printed ones are stored as
+ * printed. Nothing is normalised, split or title-cased here, for `issuedOn`'s reason: a second
+ * reading of the page is a second thing to keep in step with the first.
+ */
+const ATTRIBUTE_LABELS: readonly { key: keyof ExtractedAttributes; labels: readonly string[] }[] = [
+  { key: "denomination", labels: ["face value", "denomination"] },
+  { key: "perforation", labels: ["perforation"] },
+  { key: "color", labels: ["colors", "colours", "color", "colour"] },
+  { key: "watermark", labels: ["watermark"] },
+  { key: "paper", labels: ["paper"] },
+  { key: "printing", labels: ["printing"] },
+];
+
+function attributesOf(root: Element | Document): ExtractedAttributes | undefined {
+  const out: ExtractedAttributes = {};
+  let any = false;
+  for (const { key, labels } of ATTRIBUTE_LABELS) {
+    for (const label of labels) {
+      const value = labelledText(root, label);
+      if (!value) continue;
+      out[key] = value;
+      any = true;
+      break;
+    }
+  }
+  return any ? out : undefined;
+}
+
+/**
  * Country and date for an item, so the Colnect side can show the same kind of detail as our stamp
  * (date · area). `fallback` is consulted only for variant rows, which state neither themselves —
  * both belong to the stamp whose page they are listed on. A card must never fall back to the
@@ -170,12 +209,18 @@ function issuedOnOf(root: Element | Document): string | undefined {
 function itemContext(
   root: Element,
   fallback: Document | null
-): { issuedOn?: string; country?: string } {
+): { issuedOn?: string; country?: string; attributes?: ExtractedAttributes } {
   const issuedOn = issuedOnOf(root) ?? (fallback ? issuedOnOf(fallback) : undefined);
   const country = labelledText(root, "country") ?? (fallback ? labelledText(fallback, "country") : undefined);
+  // The attributes follow the same rule and for the same reason (#739): a variant row states only
+  // what makes it *different*, so the rest belongs to the stamp whose page it is listed on — the
+  // fallback is where a variant's colour comes from when the row itself names none. Merged rather
+  // than chosen whole, since a variant row typically states one attribute and inherits five.
+  const attributes = { ...attributesOf(fallback ?? root), ...attributesOf(root) };
   return {
     ...(issuedOn ? { issuedOn } : {}),
     ...(country ? { country } : {}),
+    ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
   };
 }
 

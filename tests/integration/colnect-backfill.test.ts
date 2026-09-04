@@ -314,7 +314,7 @@ describe("Colnect catalog-number backfill", () => {
         { catalog: "Sn", number: "PL 902" },
       ],
     });
-    assert.deepEqual(applied, { backfill: [], date: null });
+    assert.deepEqual(applied, { backfill: [], date: null, attributes: [] });
     assert.equal((await numbersOf(s.stamps.pickB)).length, 1);
   });
 });

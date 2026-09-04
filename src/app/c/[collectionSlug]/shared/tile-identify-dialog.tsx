@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { Icon } from "@/app/icons";
 import {
   DialogActions,
@@ -33,6 +33,9 @@ import {
   type TileCandidate,
 } from "@/lib/tile-candidates";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { perforationMatches, type PerforationMatch } from "@/lib/perforation";
+import { formatGaugeStep, formatMeasuredGauge, nearestCatalogueGauge } from "@/lib/scan-measure";
 import { StampPickerBrowser } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
@@ -378,6 +381,20 @@ export function TileIdentifyDialog({
   const [addingCandidate, setAddingCandidate] = useState(false);
 
   /**
+   * The gauge the viewer is reading right now (#740), or null when it is reading nothing.
+   *
+   * Held here rather than in the shortlist because the two halves of the comparison sit on opposite
+   * sides of this dialog — the picture on the left measures, the candidate list on the right is what
+   * a measurement narrows — and this is the one component that holds both. It is **state and not a
+   * ref**: the marks moving has to redraw the marks on the rows.
+   *
+   * Nothing is written and nothing is chosen from it. The collector's own press on a candidate stays
+   * the only write, exactly as #614's counted teeth stay a hand-editable number.
+   */
+  const [gauge, setGauge] = useState<number | null>(null);
+  const onGauge = useCallback((next: number | null) => setGauge(next), []);
+
+  /**
    * Whether *Discard* has been pressed on a **run** and is asking to be confirmed.
    *
    * One tile keeps its single press, which #567 made cheap on purpose: on a parcel of junk it is the
@@ -678,7 +695,12 @@ export function TileIdentifyDialog({
             one click away and ‹ / › between neighbours (#596's aside, which is already the shape
             this needs — it is drawn beside the condition step for the same selection). Answering
             *show the first one* would be one photograph standing in for fifteen pieces of paper. */}
-        <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
+        <IdentifiedPieceAside
+          collectionId={collectionId}
+          pieces={pieces}
+          scanDpi={scanDpi}
+          onGauge={onGauge}
+        />
 
         <div
           style={{
@@ -718,6 +740,7 @@ export function TileIdentifyDialog({
               collectionId={collectionId}
               areas={areas}
               candidates={merged}
+              gauge={gauge}
               tileCount={count}
               parked={parked}
               canIdentify={canIdentify}
@@ -1249,6 +1272,7 @@ function CandidateShortlist({
   collectionId,
   areas,
   candidates,
+  gauge,
   tileCount,
   parked,
   canIdentify,
@@ -1262,6 +1286,8 @@ function CandidateShortlist({
   /** The shortlist over whatever this dialog is about — one tile's, or the union across a run with
    * how many of them carry each possibility (`mergeTileCandidates`). */
   candidates: MergedTileCandidate[];
+  /** What the viewer's perforation gauge reads right now (#740), or null for no reading. */
+  gauge: number | null;
   /** How many tiles the shortlist is being read for, so a possibility written on only some of them
    * can say so. One is the ordinary case and says nothing. */
   tileCount: number;
@@ -1282,6 +1308,34 @@ function CandidateShortlist({
   // One derivation for the whole list, not one per row: the vendor maps come off a shared query and
   // every candidate resolves through the same (area, issue) lookup the picker's rows do (#377).
   const { vendorMapFor, primaryVendorByArea } = useAreaVendorMaps(areas, collectionId);
+
+  /**
+   * The watermark the collector says they can see (#740), or `""` for *not said*.
+   *
+   * A watermark is a **pick, not a measurement**: #625's view makes it visible and the eye reads it,
+   * so there is no figure to compare — which is why this is a control and the gauge is not. The
+   * choices are **the watermarks these candidates state**, not the collection's whole dictionary:
+   * picking a watermark none of them carries would narrow to nothing, and a list of forty rows to
+   * choose from would be a worse question than the one already on the screen.
+   *
+   * A pick the candidates no longer offer — the row it belonged to was ruled out, or the dialog
+   * moved to the next tile — reads as **no pick**, derived rather than cleared: the shortlist is
+   * what the pick is about, and a pick outliving the candidate that offered it would mark rows on
+   * evidence about a different question.
+   */
+  const [pickedWatermark, setPickedWatermark] = useState("");
+  const watermarks: { id: string; name: string }[] = [];
+  for (const { candidate } of candidates) {
+    if (candidate.watermark && !watermarks.some((w) => w.id === candidate.watermark!.id)) {
+      watermarks.push(candidate.watermark);
+    }
+  }
+  const watermarkId = watermarks.some((w) => w.id === pickedWatermark) ? pickedWatermark : "";
+
+  /** Whether a measurement could narrow anything at all — some candidate states the attribute. A
+   * shortlist of stamps that state neither gets no narrowing row and no marks: there is nothing for
+   * a reading to say about it, and a control that can only ever answer *no idea* is furniture. */
+  const anyPerforation = candidates.some((c) => c.candidate.perforation);
 
   const add = (
     <button
@@ -1325,11 +1379,37 @@ function CandidateShortlist({
         </span>
       </div>
 
+      {/* What was read off the piece, above the rows it marks (#740). It **proposes**: a row that
+          fits is marked, nothing is picked, nothing is written, and the collector's press on a
+          candidate stays the only write — exactly as #614's counted teeth stay a number that can be
+          typed over. Absent entirely when there is nothing to compare, which is the ordinary
+          shortlist. */}
+      {(anyPerforation || watermarks.length > 0) && (
+        <MeasuredNarrowing
+          gauge={gauge}
+          anyPerforation={anyPerforation}
+          watermarks={watermarks}
+          watermarkId={watermarkId}
+          onWatermark={setPickedWatermark}
+        />
+      )}
+
       {candidates.map(({ candidate: c, onCount }) => (
         <CandidateRow
           key={c.stampId}
           collectionId={collectionId}
           candidate={c}
+          perforation={perforationMatches(gauge, c.perforation)}
+          // A watermark is compared by identity — one dictionary row against another — so there is
+          // no tolerance and no parser. A candidate stating none is `unknown` rather than ruled out:
+          // an attribute nobody has filled in yet is not evidence against the stamp.
+          watermark={
+            !watermarkId || !c.watermark
+              ? "unknown"
+              : c.watermark.id === watermarkId
+                ? "fits"
+                : "differs"
+          }
           // Said only when it is not true of the whole run: a possibility carried by three of five
           // ticked pieces is a fact about how they were narrowed, and smoothing it over would be the
           // union pretending to be an intersection. Adding or removing from here settles it.
@@ -1359,6 +1439,125 @@ function CandidateShortlist({
 }
 
 /**
+ * What has been read off the piece, and the one thing that has to be **said** rather than measured
+ * (#740).
+ *
+ * The intake measuring stack produces two kinds of answer and this is where they meet the candidate
+ * list. The **gauge** arrives on its own from the viewer beside this column — the collector marks a
+ * run and the figure appears, so there is nothing to ask for here and the line only reports it. The
+ * **watermark** is the opposite: #625 makes it visible and the eye reads it, so the app is told
+ * rather than measuring, and the control is a plain select over what the candidates actually differ
+ * by.
+ *
+ * Both are stated as *what was seen*, never as *what this is*: the marks below propose, and every
+ * row stays pressable whether it was marked, unmarked or contradicted.
+ */
+function MeasuredNarrowing({
+  gauge,
+  anyPerforation,
+  watermarks,
+  watermarkId,
+  onWatermark,
+}: {
+  gauge: number | null;
+  anyPerforation: boolean;
+  watermarks: { id: string; name: string }[];
+  watermarkId: string;
+  onWatermark: (id: string) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "0.5rem",
+        fontSize: "0.75rem",
+        color: "var(--color-text-muted)",
+      }}
+    >
+      {anyPerforation &&
+        (gauge === null ? (
+          // Said only where it can be acted on, and said as an invitation rather than as a warning:
+          // most tiles are identified without a gauge ever being taken.
+          <span>Gauge a run on the piece to mark the ones it fits.</span>
+        ) : (
+          <span style={{ color: "var(--color-text-secondary)" }}>
+            <Icon name="measure" size="xs" /> Measured{" "}
+            <strong>{formatGaugeStep(nearestCatalogueGauge(gauge))}</strong> (
+            {formatMeasuredGauge(gauge)})
+          </span>
+        ))}
+      {watermarks.length > 0 && (
+        <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          Watermark seen
+          <select
+            value={watermarkId}
+            onChange={(e) => onWatermark(e.target.value)}
+            style={{
+              ...FILTER_CONTROL_STYLE,
+              fontSize: "0.75rem",
+              padding: "0.15rem 0.35rem",
+            }}
+          >
+            {/* *Not said* is the resting state and the way back out of a pick — nothing on this
+                panel is an assertion the collector has to undo somewhere else. */}
+            <option value="">—</option>
+            {watermarks.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** What a reading says about one row: a mark for the ones it fits, the stated value alone for the
+ * ones it does not, and nothing at all where there is nothing to compare (#740). The stated value is
+ * printed either way, because *what this stamp says its perforation is* is the fact the collector
+ * came to the shortlist for — the mark is an opinion about it, not a replacement for it. */
+function MeasuredMark({
+  match,
+  label,
+  what,
+}: {
+  match: PerforationMatch;
+  label: string;
+  what: string;
+}) {
+  const fits = match === "fits";
+  return (
+    <Tooltip
+      content={
+        fits
+          ? `The ${what} read off the piece fits this stamp's ${label}`
+          : `This stamp states ${label} — what was read off the piece does not fit it`
+      }
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.15rem",
+          padding: "0 0.3rem",
+          borderRadius: "0.25rem",
+          border: `1px solid ${fits ? "var(--color-accent-border)" : "var(--color-border)"}`,
+          background: fits ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+          color: fits ? "var(--color-accent-hover)" : "var(--color-text-muted)",
+          fontSize: "0.6875rem",
+        }}
+      >
+        {fits && <Icon name="check" size="xs" />}
+        {label}
+      </span>
+    </Tooltip>
+  );
+}
+
+/**
  * One possibility, drawn **as the picker draws a stamp** (#607).
  *
  * A shortlist is compared against a piece under a lamp, and a bare catalogue number is not enough to
@@ -1379,6 +1578,8 @@ function CandidateRow({
   collectionId,
   candidate,
   partial,
+  perforation,
+  watermark,
   vendorMap,
   primaryVendorId,
   canIdentify,
@@ -1391,6 +1592,11 @@ function CandidateRow({
   /** *on 3 of 5*, when this possibility is written on only some of the ticked pieces — null for the
    * ordinary case, which is one tile or a run that agrees. */
   partial: string | null;
+  /** What the piece's measured perforation and the watermark the collector says they can see make of
+   * this row (#740). `unknown` — nothing read, or nothing stated — draws nothing at all, which is
+   * what keeps the shortlist of a collection that has filled none of this in exactly as it was. */
+  perforation: PerforationMatch;
+  watermark: PerforationMatch;
   vendorMap: VendorMap;
   primaryVendorId: string | null;
   canIdentify: boolean;
@@ -1405,6 +1611,27 @@ function CandidateRow({
   );
   const node = members.find((m) => m.stampId === candidate.stampId) ?? null;
   const label = candidateLabel(candidate);
+
+  /** What the readings say about this row (#740) — on its own line under the numbers, because it is
+   * evidence *about* the row rather than part of naming it. Nothing is drawn where nothing was read
+   * or nothing is stated, so a shortlist that cannot be narrowed this way looks exactly as it did. */
+  const marks =
+    perforation === "unknown" && watermark === "unknown" ? null : (
+      <span
+        style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}
+      >
+        {perforation !== "unknown" && candidate.perforation && (
+          <MeasuredMark
+            match={perforation}
+            label={candidate.perforation}
+            what="perforation"
+          />
+        )}
+        {watermark !== "unknown" && candidate.watermark && (
+          <MeasuredMark match={watermark} label={candidate.watermark.name} what="watermark" />
+        )}
+      </span>
+    );
 
   return (
     <div style={{ display: "flex", alignItems: "stretch", gap: "0.25rem" }}>
@@ -1454,12 +1681,14 @@ function CandidateRow({
                   vendorMap={vendorMap}
                   primaryVendorId={primaryVendorId}
                 />
+                {marks}
               </div>
             </div>
           ) : (
             <>
               {label}
               {partial && <span style={{ color: "var(--color-text-muted)" }}> — {partial}</span>}
+              {marks}
             </>
           )}
         </button>

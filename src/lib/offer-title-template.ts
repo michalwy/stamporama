@@ -91,6 +91,23 @@ export interface TitleTemplateCopy {
   format: string | null;
   /** Format abbreviation (e.g. `Blk4`), or null for a single. */
   formatAbbr: string | null;
+  /** What the catalogue states the stamp **is** (#71/#738): its denomination and perforation as
+   * printed, and its colour, watermark, paper and printing method as the collection's own
+   * dictionaries name them. Six facts about the stamp rather than about the copy, so a second copy
+   * of one stamp resolves them identically and `distinct` collapses the pair to one value.
+   *
+   * Null is the ordinary value on every one of them — most stamps state none — which is why they are
+   * safe to put in a template at all: an unstated attribute renders empty and the tidy pass takes
+   * the separator that was gluing it in, exactly as `{format}` does for a single. */
+  denomination: string | null;
+  perforation: string | null;
+  /** The four dictionary attributes, resolved in the listing's language like `{subtype}` — a Polish
+   * listing says `karminowy` where the collection's own row reads `Carmine`, and an untranslated one
+   * is reported as a gap to fill (#298/#299) rather than silently printed in the default language. */
+  color: string | null;
+  watermark: string | null;
+  paper: string | null;
+  printing: string | null;
   /** Name of the issue the stamp belongs to (its first membership), or null. */
   issueName: string | null;
   /** Year of that issue, or null. */
@@ -151,6 +168,12 @@ const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   subtype: "subtype",
   format: "format",
   formatabbr: "formatAbbr",
+  // The four dictionary attributes (#738). `{denomination}` and `{perforation}` are absent on
+  // purpose: they are printed as printed and no language rewrites `11½` (#72).
+  color: "color",
+  watermark: "watermark",
+  paper: "paper",
+  printing: "printing",
 };
 
 /** A token usable in a template, with the label + example the config UI shows as a legend. */
@@ -178,6 +201,15 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{subtype}", label: "Subtype", example: "Overprint" },
   { token: "{format}", label: "Format", example: "Block of 4" },
   { token: "{formatAbbr}", label: "Format (abbr.)", example: "Blk4" },
+  // What the catalogue says the stamp is (#738). Last in the legend because they are the detail a
+  // title reaches for after it has said which stamp this is — and because a template that names all
+  // six is a description rather than a title.
+  { token: "{denomination}", label: "Denomination", example: "10 gr" },
+  { token: "{perforation}", label: "Perforation", example: "11½" },
+  { token: "{color}", label: "Colour", example: "Carmine" },
+  { token: "{watermark}", label: "Watermark", example: "Lozenges" },
+  { token: "{paper}", label: "Paper", example: "Thin paper" },
+  { token: "{printing}", label: "Printing method", example: "Photogravure" },
 ];
 
 /** What a `{offerUrl}` renders as in a template *preview* (#415) and in the token legend: the real
@@ -694,6 +726,21 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.format)).join(" / ");
     case "formatabbr":
       return distinct(copies.map((c) => c.formatAbbr)).join(" / ");
+    // The six catalogue attributes (#738), each the plain per-copy token every other stamp fact is:
+    // one value for one stamp, joined by `/` across a mixed offer, and empty for the stamps that
+    // state nothing — which is most of them, and which the tidy pass is already there for.
+    case "denomination":
+      return distinct(copies.map((c) => c.denomination)).join(" / ");
+    case "perforation":
+      return distinct(copies.map((c) => c.perforation)).join(" / ");
+    case "color":
+      return distinct(copies.map((c) => c.color)).join(" / ");
+    case "watermark":
+      return distinct(copies.map((c) => c.watermark)).join(" / ");
+    case "paper":
+      return distinct(copies.map((c) => c.paper)).join(" / ");
+    case "printing":
+      return distinct(copies.map((c) => c.printing)).join(" / ");
     case "issueyear":
       return yearSpan(copies, (c) => c.issueYear);
     default:

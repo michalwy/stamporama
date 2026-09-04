@@ -252,6 +252,49 @@ describe("the date of issue on a list page", () => {
   });
 });
 
+// What a page states about the stamp itself (#739): the six attributes, read out of the same dt/dd
+// rows as everything else and travelling verbatim.
+const ATTRIBUTE_CARDS = `
+<html><body>
+  <div class="pl-it">
+    <div class="ibox" data-xid="111"></div>
+    <a href="/en/stamps/stamp/111-Full/">Everything stated</a>
+    <dl>
+      <dt>Face Value:</dt><dd>10 Grosz</dd>
+      <dt>Perforation:</dt><dd>11½ x 12</dd>
+      <dt>Colors:</dt><dd><a href="#">Carmine</a></dd>
+      <dt>Watermark:</dt><dd>Lozenges</dd>
+      <dt>Paper:</dt><dd>Thin</dd>
+      <dt>Printing:</dt><dd>Photogravure</dd>
+      <dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 1</dd>
+    </dl>
+  </div>
+  <div class="pl-it">
+    <div class="ibox" data-xid="222"></div>
+    <a href="/en/stamps/stamp/222-Bare/">Nothing stated</a>
+    <dl><dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 2</dd></dl>
+  </div>
+</body></html>`;
+
+describe("the stamp attributes on a list page (#739)", () => {
+  it("reads all six, verbatim", () => {
+    const items = extractColnect(parseHTML(ATTRIBUTE_CARDS).document as unknown as Document);
+    assert.deepEqual(items[0].attributes, {
+      denomination: "10 Grosz",
+      perforation: "11½ x 12",
+      color: "Carmine",
+      watermark: "Lozenges",
+      paper: "Thin",
+      printing: "Photogravure",
+    });
+  });
+
+  it("states nothing for a card that states nothing, and never borrows a neighbour's", () => {
+    const items = extractColnect(parseHTML(ATTRIBUTE_CARDS).document as unknown as Document);
+    assert.equal(items[1].attributes, undefined);
+  });
+});
+
 describe("extractColnect on a single stamp's page", () => {
   it("extracts the minor variants and skips the main stamp", () => {
     const items = extractColnect(stampPageDoc());
@@ -276,6 +319,9 @@ describe("extractColnect on a single stamp's page", () => {
       imageUrl: "//i.colnect.net/t/8240/676/V1.jpg",
       country: "Poland",
       issuedOn: "1945-01-22",
+      // What the row itself states about the stamp (#739) — a variant row states only what makes it
+      // different, which is exactly what these two are.
+      attributes: { perforation: "Imperforate", color: "Grey red" },
     });
 
     // Country and date of issue come from the stamp page: a variant states neither of its own, and

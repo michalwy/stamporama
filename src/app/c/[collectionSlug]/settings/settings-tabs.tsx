@@ -15,6 +15,7 @@ import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
+import { ColnectAttributesPanel } from "./colnect-attributes-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { ColnectListsPanel } from "./colnect-lists-panel";
 import { AllegroPlatformPanel } from "./allegro-platform-panel";
@@ -480,7 +481,14 @@ export function SettingsTabs({
           <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect condition mapping</h2>
           <ColnectConditionsPanel mappings={initialColnectConditionMappings} />
 
-          {/* The third translation in the tab (#684), and the one that reads in the other
+          {/* The third form of the same translation (#739): our four attribute dictionaries →
+              the words Colnect prints. A field rather than a select, Colnect's side being open text
+              — there is no list of every colour it names — and beside the two above it because a
+              collector sets all three up in one sitting, looking at one catalogue page. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect attribute mapping</h2>
+          <ColnectAttributesPanel lists={initialAttributes} />
+
+          {/* The fourth translation in the tab (#684), and the one that reads in the other
               direction: the two above say what our vocabulary is called on Colnect, this says what
               a list *of theirs* is a list of here. Last because it is what the export → compare →
               fix loop (#685–#690) is configured with, and that loop presupposes the rest. */}

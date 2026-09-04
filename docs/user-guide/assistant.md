@@ -298,6 +298,48 @@ year you have just called wrong, and keeping them would store a date neither sid
 Only the matched stamp is dated. The **issue** it belongs to keeps its own year — that record covers
 many stamps, and one Colnect page is about one of them.
 
+## When Colnect knows what the stamp is
+
+A Colnect catalog page prints more than the numbers and the date: what the stamp is denominated, how
+it is perforated, its colour, its watermark, its paper and how it was printed. Those are the six
+[stamp attributes](collections.md#stamp-attributes), and nobody is going to type them for a thousand
+stamps by hand.
+
+So a match fills them in too, for the attributes your stamp states nothing for — the **Fill missing
+stamp attributes** tick box, beside the other two and its own switch for the same reason: wanting
+Colnect's numbers, its dates and its attributes are three separate appetites. The rules are the ones
+you already know. Nothing you typed is replaced; a value the two sides state differently is only
+reported; and where you already agree, nothing is proposed at all.
+
+Each attribute is its own row under the stamp, named and ticked:
+
+> ☑ colour `+ Carmine`   ☑ perforation `11½` → `12`
+
+**Ticks are per attribute**, not per stamp: take the colour and leave the perforation if that is what
+you mean. **Write** does the lot at once and counts them in its label (*… + 4 attributes + 1
+attribute change*), and the replacements are confirmed once for the whole page, together with the
+date changes — they are the same act on two kinds of field.
+
+### Colnect's words and yours
+
+Colnect states a colour as a word of its own — *Carmine*, *Grey Red* — while your collection keeps
+its own list of colours, watermarks, papers and printing methods. So there is a mapping, in
+**Settings → Colnect → Colnect attribute mapping**: a field beside each of your values saying what
+Colnect calls it. **Fill matching** fills in every blank one with your own value's name, which is
+usually right — most of these lists are built from catalogue words in the first place — and you
+correct the ones that are not.
+
+A Colnect word that maps to none of your values is **reported, never written**:
+
+> colour `Vermilion — not mapped`
+
+Nothing is created for you, and that is deliberate: a vocabulary that grows itself from scraped pages
+fills up with near-duplicates within a week. Map the word once in Settings and every later page
+knows it. It blocks nothing meanwhile — the stamp's other attributes are filled as usual, and the
+match itself is unaffected.
+
+Denomination and perforation need no mapping: they are recorded as printed on both sides.
+
 ## Filling a sale form for you
 
 The Assistant also works the other way round: **⚡ List via Assistant** on a ready offer — in the

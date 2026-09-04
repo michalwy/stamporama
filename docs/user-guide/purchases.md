@@ -770,6 +770,10 @@ base stamp is one of the answers — so nothing is suggested. That is what candi
 possibilities that are not variants of one another, two different issues, or a base stamp you have
 not settled yet.
 
+**What you measure marks the list.** Once the shortlist is up, gauging a perforation in the viewer beside it — the [ruler and gauge](#measuring-on-the-scan) — marks the stamps whose own perforation the reading fits, so a run of teeth counted on the piece answers *which of these is it* without you holding two numbers in your head. Each stamp on the list shows what it states, and the ones the reading fits are ticked. Two neighbouring gauges can both be ticked on the same reading: the tolerance is a quarter step either way, which is deliberate — the list is meant to narrow the question, not to answer it. For the watermark, where there is nothing to measure, the list carries a **Watermark seen** dropdown offering only the watermarks these stamps actually differ by; pick what you can see in the [watermark view](#looking-for-a-watermark) and the matching rows are ticked the same way.
+
+Nothing here picks or writes anything. Marks are a suggestion drawn on rows that stay exactly as pressable as before, and identifying the tile is still your press on the stamp you settled on. A stamp that states nothing for an attribute is neither ticked nor ruled out — the app has no opinion where nothing was recorded — and if your stamps carry no perforations or watermarks at all, none of this appears. Fill them in on the stamps themselves ([stamp attributes](collections.md#stamp-attributes)) and it starts working.
+
 Once the tile becomes a copy the list is gone, and so is the note: what the copy **is** is the
 record from then on, and a change of mind later is written in the copy's own refinement history
 rather than in a shortlist standing beside it. Putting a piece back in the queue clears both for the

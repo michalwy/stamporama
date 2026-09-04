@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCollectionOwner } from "@/lib/route-auth";
 import { matchColnectItems, type ColnectMatchItemInput } from "@/lib/colnect";
+import { parseColnectAttributes } from "@/lib/colnect-attributes";
 
 // Colnect catalog-number matcher (#250, part of #155). Accepts a batch of extracted Colnect items
 // and returns a per-item decision (auto / needs-confirm / skipped), writing unambiguous matches
@@ -10,23 +11,31 @@ import { matchColnectItems, type ColnectMatchItemInput } from "@/lib/colnect";
 /** Parse and validate the request body into matcher input; returns null on a malformed shape. */
 function parseBody(
   body: unknown
-): { items: ColnectMatchItemInput[]; dryRun: boolean; backfill: boolean; issueDate: boolean } | null {
+): {
+  items: ColnectMatchItemInput[];
+  dryRun: boolean;
+  backfill: boolean;
+  issueDate: boolean;
+  attributes: boolean;
+} | null {
   if (typeof body !== "object" || body === null) return null;
-  const { items, dryRun, backfill, issueDate } = body as {
+  const { items, dryRun, backfill, issueDate, attributes } = body as {
     items?: unknown;
     dryRun?: unknown;
     backfill?: unknown;
     issueDate?: unknown;
+    attributes?: unknown;
   };
   if (!Array.isArray(items)) return null;
 
   const parsed: ColnectMatchItemInput[] = [];
   for (const raw of items) {
     if (typeof raw !== "object" || raw === null) return null;
-    const { colnectId, catalogRefs, issuedOn } = raw as {
+    const { colnectId, catalogRefs, issuedOn, attributes: itemAttributes } = raw as {
       colnectId?: unknown;
       catalogRefs?: unknown;
       issuedOn?: unknown;
+      attributes?: unknown;
     };
     if (typeof colnectId !== "string" || !colnectId.trim()) return null;
     if (!Array.isArray(catalogRefs)) return null;
@@ -43,15 +52,20 @@ function parseBody(
       // What the page printed under "Issued on" (#655), verbatim. Not a hard shape — a value we
       // cannot read is simply no date, and must not cost the item its match.
       ...(typeof issuedOn === "string" ? { issuedOn } : {}),
+      // What the page states about the stamp itself (#739), read on the same terms: an attribute we
+      // cannot read is no attribute, and must not cost the item its match.
+      attributes: parseColnectAttributes(itemAttributes),
     });
   }
-  // Backfill and date sync are both opt-in on the wire (#280, #655): an older client that doesn't
-  // know about them never writes a catalog number or a date by accident.
+  // Backfill, date sync and attribute sync are each opt-in on the wire (#280, #655, #739): wanting
+  // Colnect's numbers, its dates and its attributes are three separate appetites, and an older
+  // client that doesn't know about one of them never writes it by accident.
   return {
     items: parsed,
     dryRun: dryRun === true,
     backfill: backfill === true,
     issueDate: issueDate === true,
+    attributes: attributes === true,
   };
 }
 
@@ -82,6 +96,7 @@ export async function POST(
       dryRun: parsed.dryRun,
       backfill: parsed.backfill,
       issueDate: parsed.issueDate,
+      attributes: parsed.attributes,
     });
     return NextResponse.json({ results });
   } catch {

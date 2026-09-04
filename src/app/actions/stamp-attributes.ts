@@ -10,6 +10,7 @@ import {
   reorderStampAttributes,
   getStampAttributeLists,
   getStampAttributeValues,
+  setStampAttributeColnectValue,
   StampAttributeInUseError,
   STAMP_ATTRIBUTE_TRANSLATION_FIELDS,
   type StampAttributeLists,
@@ -88,6 +89,33 @@ export async function updateStampAttributeAction(
     return {
       status: "error",
       message: `Failed to update ${STAMP_ATTRIBUTE_LABELS[kind].noun}. Please try again.`,
+    };
+  }
+}
+
+/**
+ * Say what Colnect prints for one dictionary row (#739) — the Settings → Colnect mapping.
+ *
+ * One write per select, like the condition mapping's own panel (#404): there is no draft and no
+ * Save, the field *is* the control. The clash the domain refuses is reported in its own words, since
+ * it names something the collector typed rather than a failure they can only retry.
+ */
+export async function setStampAttributeColnectValueAction(
+  kind: StampAttributeKind,
+  attributeId: string,
+  colnectValue: string
+): Promise<StampAttributeActionState> {
+  const session = await getSession();
+  try {
+    await setStampAttributeColnectValue(session.user.id, kind, attributeId, colnectValue);
+    return { status: "success" };
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof Error && err.message.includes("already mapped")
+          ? err.message
+          : `Failed to map that ${STAMP_ATTRIBUTE_LABELS[kind].noun}. Please try again.`,
     };
   }
 }

@@ -173,6 +173,13 @@ always generates, falling back to your default text. The tokens fill in from the
   disappears with it, and a line that says nothing else is dropped whole. A batch mixing formats
   lists the distinct ones, `/`-separated, the way every other per-copy token does; the singles in
   it simply contribute nothing.
+- `{denomination}`, `{perforation}`, `{color}`, `{watermark}`, `{paper}`, `{printing}` — what the
+  catalogue says the stamp **is** ([stamp attributes](collections.md#stamp-attributes)): `10 gr`,
+  `11½`, `Carmine`, `Lozenges`, `Thin paper`, `Photogravure`. Each is empty on a stamp that states
+  nothing — which is most stamps until you have filled them in — so the separator around it
+  disappears with it and a line that said nothing else is dropped whole. A batch listing several
+  stamps joins the distinct values with `/`, like every other per-copy token. The four dictionary
+  ones translate; a denomination and a perforation are printed as printed and never do.
 - `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
   named the set, so pair it as `{setTitle|catalog}`)
 - `{offerUrl}` — a link straight to this offer in Stamporama, on the description and private-note

@@ -23,6 +23,8 @@ function candidate(over: Partial<TileCandidate> & { stampId: string }): TileCand
   return {
     stampName: null,
     catalogNumbers: [],
+    perforation: null,
+    watermark: null,
     issueId: null,
     collectionAreaId: null,
     unknownVariant: false,

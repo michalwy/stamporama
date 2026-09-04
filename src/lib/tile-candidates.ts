@@ -35,6 +35,18 @@ export interface TileCandidate {
   /** The node this stamp hangs under, when it hangs under one — with enough of it to be named,
    * because naming it is the whole of the correction below. */
   parent: { stampId: string; stampName: string | null; catalogNumbers: string[] } | null;
+  /** What the stamp states about its **perforation** and **watermark** (#740) — the two attributes
+   * the intake measuring stack can produce a reading for (#598/#614 gauge one, #625 shows the
+   * other). They ride on the candidate because the comparison happens where the shortlist is drawn,
+   * and because a card of forty tiles reads them once with everything else about the tile.
+   *
+   * Perforation travels **as printed**, the way #72 stores it: `perforation.ts` reads it where the
+   * comparison is made, and a value it cannot read narrows nothing. The watermark is a dictionary
+   * row, so it travels as an id — what the collector picks is one — with its name for saying which
+   * one it is. Null on both is the ordinary case; a stamp stating neither is neither marked nor
+   * ruled out. */
+  perforation: string | null;
+  watermark: { id: string; name: string } | null;
   /** This stamp's **effective** `actsAsVariant` (ADR-0010 §2a/§3): its own override when set,
    * otherwise its subtype's flag, false when unclassified. What separates *watermark A* from
    * *the overprint* — see {@link sharedVariantParent}. */
@@ -152,6 +164,9 @@ export function toTileCandidate(stamp: {
   id: string;
   name: string | null;
   catalogNumbers: { number: string }[];
+  perforation?: string | null;
+  watermarkId?: string | null;
+  watermark?: { name: string } | null;
   actsAsVariantOverride: boolean | null;
   subtype: { actsAsVariant: boolean } | null;
   parent: { id: string; name: string | null; catalogNumbers: { number: string }[] } | null;
@@ -166,6 +181,11 @@ export function toTileCandidate(stamp: {
     stampId: stamp.id,
     stampName: stamp.name,
     catalogNumbers: stamp.catalogNumbers.map((c) => c.number),
+    perforation: stamp.perforation ?? null,
+    watermark:
+      stamp.watermarkId && stamp.watermark
+        ? { id: stamp.watermarkId, name: stamp.watermark.name }
+        : null,
     issueId: membership?.id ?? null,
     collectionAreaId: membership?.collectionAreaId ?? null,
     unknownVariant: isUnknownVariantStamp({ variants: stamp.variants ?? [] }),

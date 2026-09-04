@@ -4,6 +4,7 @@
 const MATCH_ON_LOAD = "matchOnLoad";
 export const CATALOG_BACKFILL = "catalogBackfill";
 export const ISSUE_DATE_SYNC = "issueDateSync";
+export const ATTRIBUTE_SYNC = "attributeSync";
 const SHOW_LINKED_DECISIONS = "showLinkedDecisions";
 
 /**
@@ -51,6 +52,26 @@ export async function getIssueDateSync(): Promise<boolean> {
 
 export async function setIssueDateSync(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [ISSUE_DATE_SYNC]: enabled });
+}
+
+/**
+ * Whether a matched stamp should also take the attributes Colnect prints — its denomination,
+ * perforation, colour, watermark, paper and printing method (#739). Default on, for the date sync's
+ * own reason: every one of them is printed on the page and nobody is going to type them for a
+ * thousand stamps by hand.
+ *
+ * Its own switch again, because wanting Colnect's numbers, its dates and its attributes are three
+ * separate appetites. The instance only fills what is *missing*, reports a value the two sides state
+ * differently, and never invents a colour or a watermark your collection has no name for — an
+ * unmapped Colnect word is reported and left for the mapping in Settings → Colnect.
+ */
+export async function getAttributeSync(): Promise<boolean> {
+  const data = await chrome.storage.local.get(ATTRIBUTE_SYNC);
+  return data[ATTRIBUTE_SYNC] !== false;
+}
+
+export async function setAttributeSync(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [ATTRIBUTE_SYNC]: enabled });
 }
 
 /**

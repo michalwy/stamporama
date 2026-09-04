@@ -30,6 +30,14 @@ import {
   type PartialDate,
 } from "./colnect-date";
 import { colnectGradeFor, isColnectConditionValue } from "./colnect-conditions";
+import {
+  attributeWrites,
+  proposeStampAttributes,
+  type ColnectAttributeDictionaries,
+  type ColnectAttributeProposal,
+  type ColnectAttributes,
+  type CurrentStampAttributes,
+} from "./colnect-attributes";
 import { COLNECT_PLATFORM_MODULE } from "./platform-modules";
 import {
   getModulePlatform,
@@ -660,12 +668,98 @@ async function applyDateFills(pending: readonly PendingDate[]): Promise<void> {
   );
 }
 
+// ── Stamp-attribute sync (#739) ──────────────────────────────────────────────
+//
+// The date sync five fields wider (#655), on the identical rule: fill what we state nothing for,
+// report a disagreement, never overwrite silently. What is new is the **vocabulary gap** — Colnect
+// prints its colour, watermark, paper and printing method as text where ours are dictionary rows —
+// so the four go through the collection's own mapping (`colnectValue` on the dictionary row, #404's
+// shape) and a value the mapping does not cover is *reported*, never auto-created. The decision is
+// pure (`colnect-attributes.ts`); what lives here is the dictionaries, the write and the stamp it
+// lands on.
+//
+// The printed values travel **verbatim**, exactly as the date and the catalog numbers do: the
+// Assistant says what the page said, and deciding what that means is the instance's job.
+
+/** An attribute proposal set together with the stamp it would land on. */
+interface PendingAttributes {
+  stampId: string;
+  proposals: ColnectAttributeProposal[];
+}
+
+/** The four dictionaries of a collection, with what Colnect calls each row (#739). Loaded once per
+ * matcher run and only when the caller asked for the attribute sync at all — a page of two hundred
+ * stamps is one read, and a collection that has mapped nothing pays for none. */
+async function loadAttributeDictionaries(
+  collectionId: string
+): Promise<ColnectAttributeDictionaries> {
+  const [color, watermark, paper, printing] = await Promise.all([
+    prisma.stampColor.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
+    prisma.stampWatermark.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
+    prisma.stampPaper.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
+    prisma.stampPrinting.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
+  ]);
+  return { color, watermark, paper, printing };
+}
+
+const ATTRIBUTE_ROW_SELECT = { id: true, name: true, colnectValue: true } as const;
+
+/** The six columns a stamp's attributes are compared and written through. */
+const STAMP_ATTRIBUTE_SELECT = {
+  denomination: true,
+  perforation: true,
+  colorId: true,
+  watermarkId: true,
+  paperId: true,
+  printingId: true,
+} as const;
+
+/** Nothing mapped and nothing to compare against — what a run that did not ask for the attribute
+ * sync hands the proposal function, so no caller has to special-case its absence. */
+const NO_ATTRIBUTE_DICTIONARIES: ColnectAttributeDictionaries = {
+  color: [],
+  watermark: [],
+  paper: [],
+  printing: [],
+};
+
+/**
+ * Write every still-proposed attribute fill, flipping its status to `filled`. Deduplicated per
+ * stamp for `applyDateFills`' own reason: two Colnect items in one batch can resolve to the same
+ * stamp, and the second was decided against the same pre-write state as the first.
+ *
+ * Only `would-fill` is written. A `conflict` is the disagreement, reported and left alone
+ * (`overwriteColnectAttributes` is the collector settling one), and an `unmapped` value has nothing
+ * to write.
+ */
+async function applyAttributeFills(pending: readonly PendingAttributes[]): Promise<void> {
+  const rows: { stampId: string; data: Record<string, string> }[] = [];
+  const seen = new Set<string>();
+  for (const { stampId, proposals } of pending) {
+    if (seen.has(stampId)) continue;
+    const data = attributeWrites(proposals, ["would-fill"]);
+    if (Object.keys(data).length === 0) continue;
+    seen.add(stampId);
+    rows.push({ stampId, data });
+    for (const p of proposals) if (p.status === "would-fill") p.status = "filled";
+  }
+  if (rows.length === 0) return;
+
+  await prisma.$transaction(
+    rows.map((r) => prisma.stamp.update({ where: { id: r.stampId }, data: r.data }))
+  );
+}
+
 /** One Colnect item to match: its Colnect ID and what the page printed for it. */
 export interface ColnectMatchItemInput {
   colnectId: string;
   catalogRefs: { catalog: string; number: string }[];
   /** The page's "Issued on" value, verbatim (#655) — parsed here, not by the client. */
   issuedOn?: string | null;
+  /** What the page states about the stamp itself (#739), each value verbatim — the two printed
+   * attributes and the four the collection's mapping translates. Absent on an older Assistant, and
+   * on a page that states none. */
+  attributes?: ColnectAttributes | null;
 }
 
 /** One of our stamps offered for the user to choose from when a match needs confirmation. */
@@ -691,12 +785,22 @@ export interface ColnectCandidate {
   /** What the item's issue date would add to (or disagrees with on) this stamp (#655). Null when
    *  the caller asked for no date sync, the page states none, or it tells us nothing new. */
   dateProposal: ColnectDateProposal | null;
+  /** What the page's stated attributes would add to (or disagree with on) this stamp (#739). Empty
+   *  unless the caller asked for the attribute sync, and holding one entry per attribute that has
+   *  something to say — including the `unmapped` ones, which are reported so the collector can map
+   *  the word in Settings. */
+  attributes: ColnectAttributeProposal[];
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
   existingColnectId: string | null;
 }
 
 export type { ColnectBackfillProposal, ColnectBackfillStatus } from "./colnect-backfill";
 export type { ColnectDateProposal, ColnectDateStatus } from "./colnect-date";
+export type {
+  ColnectAttributeProposal,
+  ColnectAttributeStatus,
+  ColnectAttributes,
+} from "./colnect-attributes";
 
 /**
  * What one catalog reference printed on the Colnect page means for us (#284 display):
@@ -764,9 +868,11 @@ export class ColnectMatchConflictError extends Error {
 /** Internal shape for a discovered candidate stamp: decision keys plus display fields. */
 interface CandidateEntry extends CandidateStampRefs {
   /** Everything about the stamp that doesn't depend on which Colnect item it is compared to. */
-  base: Omit<ColnectCandidate, "catalogNumbers" | "backfill" | "dateProposal">;
+  base: Omit<ColnectCandidate, "catalogNumbers" | "backfill" | "dateProposal" | "attributes">;
   /** The stamp's own date, for comparing against what the item's page printed (#655). */
   issuedDate: PartialDate;
+  /** Its six attributes as stored, for the same comparison one page wider (#739). */
+  attributes: CurrentStampAttributes;
   /** Its numbers, carrying the keys needed to compare each against a Colnect item. */
   numbers: { label: string; catalogVendorId: string; key: string }[];
   /** What the backfill (#280) needs: the area whose prefixes apply, and the raw stored numbers. */
@@ -793,12 +899,14 @@ function candidateView(
   entry: CandidateEntry,
   itemByVendor: Map<string, Set<string>>,
   backfill: ColnectBackfillProposal[] = [],
-  dateProposal: ColnectDateProposal | null = null
+  dateProposal: ColnectDateProposal | null = null,
+  attributes: ColnectAttributeProposal[] = []
 ): ColnectCandidate {
   return {
     ...entry.base,
     backfill,
     dateProposal,
+    attributes,
     catalogNumbers: entry.numbers.map((n) => {
       const theirs = itemByVendor.get(n.catalogVendorId);
       const status: ColnectMineStatus = !theirs
@@ -873,7 +981,7 @@ export async function matchColnectItems(
   ownerId: string,
   collectionId: string,
   items: ColnectMatchItemInput[],
-  opts: { dryRun?: boolean; backfill?: boolean; issueDate?: boolean } = {}
+  opts: { dryRun?: boolean; backfill?: boolean; issueDate?: boolean; attributes?: boolean } = {}
 ): Promise<ColnectMatchResult[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -997,6 +1105,7 @@ export async function matchColnectItems(
           issuedMonth: true,
           issuedDay: true,
           colnectId: true,
+          ...STAMP_ATTRIBUTE_SELECT,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           issueMemberships: {
@@ -1034,6 +1143,14 @@ export async function matchColnectItems(
       refs,
       numbers,
       issuedDate: { year: s.issuedYear, month: s.issuedMonth, day: s.issuedDay },
+      attributes: {
+        denomination: s.denomination,
+        perforation: s.perforation,
+        colorId: s.colorId,
+        watermarkId: s.watermarkId,
+        paperId: s.paperId,
+        printingId: s.printingId,
+      },
       backfillStamp: {
         stampId: s.id,
         areaId,
@@ -1061,6 +1178,11 @@ export async function matchColnectItems(
   const dryRun = opts.dryRun ?? false;
   const wantBackfill = opts.backfill ?? false;
   const wantDate = opts.issueDate ?? false;
+  const wantAttributes = opts.attributes ?? false;
+  // Loaded only for a run that asked, and once for the whole batch (#739).
+  const dictionaries = wantAttributes
+    ? await loadAttributeDictionaries(collectionId)
+    : NO_ATTRIBUTE_DICTIONARIES;
   // Proposals for stamps we are confident about (`auto`), which is what a real run may write. The
   // objects are shared with the results, so marking/applying them updates what the caller sees.
   const autoFills: PendingFill[] = [];
@@ -1069,6 +1191,8 @@ export async function matchColnectItems(
   const allFills: PendingFill[] = [];
   /** Date fills for the stamps we are confident about (#655), which a real run writes. */
   const autoDates: PendingDate[] = [];
+  /** The same for the attributes (#739). */
+  const autoAttributes: PendingAttributes[] = [];
 
   const proposalsFor = (entry: CandidateEntry, annotated: ResolvedAnnotation[]) => {
     if (!wantBackfill) return [];
@@ -1079,6 +1203,9 @@ export async function matchColnectItems(
 
   const dateFor = (entry: CandidateEntry, item: ColnectMatchItemInput) =>
     wantDate ? dateProposalFor(entry.issuedDate, item.issuedOn) : null;
+
+  const attributesFor = (entry: CandidateEntry, item: ColnectMatchItemInput) =>
+    wantAttributes ? proposeStampAttributes(item.attributes, entry.attributes, dictionaries) : [];
 
   for (const { item, itemRefs, annotated } of resolvedItems) {
     const decision = decideColnectItem(item.colnectId, itemRefs, allCandidates);
@@ -1105,7 +1232,13 @@ export async function matchColnectItems(
           .map((id) => {
             const entry = candidatesById.get(id);
             return entry
-              ? candidateView(entry, itemByVendor, proposalsFor(entry, annotated), dateFor(entry, item))
+              ? candidateView(
+                  entry,
+                  itemByVendor,
+                  proposalsFor(entry, annotated),
+                  dateFor(entry, item),
+                  attributesFor(entry, item)
+                )
               : undefined;
           })
           .filter((c): c is ColnectCandidate => c !== undefined),
@@ -1132,7 +1265,12 @@ export async function matchColnectItems(
           // The date rides on the same confidence, for the same reason (#655).
           const date = dateFor(entry, item);
           if (date) autoDates.push({ stampId: entry.stampId, proposal: date });
-          return candidateView(entry, itemByVendor, proposals, date);
+          // …and the attributes on the same again (#739).
+          const attributes = attributesFor(entry, item);
+          if (attributes.length > 0) {
+            autoAttributes.push({ stampId: entry.stampId, proposals: attributes });
+          }
+          return candidateView(entry, itemByVendor, proposals, date, attributes);
         })(),
         refs: classifyRefs(annotated, candidatesById.get(decision.stampId) ?? null, allCandidates),
       });
@@ -1153,6 +1291,7 @@ export async function matchColnectItems(
     if (!dryRun) await applyBackfill(collectionId, autoFills);
   }
   if (wantDate && !dryRun) await applyDateFills(autoDates);
+  if (wantAttributes && !dryRun) await applyAttributeFills(autoAttributes);
 
   return results;
 }
@@ -1326,13 +1465,55 @@ export async function overwriteColnectIssuedDate(
   };
 }
 
-/** What a confirmed match wrote beyond the Colnect ID: the catalog numbers (#280) and the date
- *  (#655), each reported so the caller can say what it did. */
+/**
+ * Replace stamp attributes with what the Colnect page prints (#739). Owner-authorized and
+ * collection-scoped.
+ *
+ * The **printed values** are sent, exactly as the matcher received them, and compared here against
+ * what the stamp holds — the window and the instance cannot then disagree about what the page said,
+ * and a mapping changed in the meantime is honoured rather than baked into the request. Only the
+ * attributes named in `attributes` are touched: an unticked disagreement is expressed by not sending
+ * that attribute at all, which is the same shape the date sync's ticks already have.
+ *
+ * A value the mapping does not cover writes **nothing** and is reported back as `unmapped` — this
+ * path can settle a disagreement, but it cannot invent a dictionary row any more than the fill can.
+ * Attributes the stamp does not hold at all are written too: *use Colnect's* is the same statement
+ * about a blank field as about a full one, and refusing it here would leave a fill the collector has
+ * just asked for undone.
+ */
+export async function overwriteColnectAttributes(
+  ownerId: string,
+  collectionId: string,
+  input: { stampId: string; attributes: ColnectAttributes }
+): Promise<ColnectAttributeProposal[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const stamp = await prisma.stamp.findFirst({
+    where: { id: input.stampId, collectionId },
+    select: { id: true, ...STAMP_ATTRIBUTE_SELECT },
+  });
+  if (!stamp) throw new Error("Stamp not found in this collection.");
+
+  const dictionaries = await loadAttributeDictionaries(collectionId);
+  const proposals = proposeStampAttributes(input.attributes, stamp, dictionaries);
+  const data = attributeWrites(proposals, ["conflict", "would-fill"]);
+  if (Object.keys(data).length === 0) return proposals;
+
+  await prisma.stamp.update({ where: { id: stamp.id }, data });
+  for (const p of proposals) if (p.status !== "unmapped") p.status = "filled";
+  return proposals;
+}
+
+/** What a confirmed match wrote beyond the Colnect ID: the catalog numbers (#280), the date
+ *  (#655) and the attributes (#739), each reported so the caller can say what it did. */
 export interface ColnectConfirmResult {
   backfill: ColnectBackfillProposal[];
   /** Null when no date sync was asked for, the page stated none, or it told us nothing new. A
    *  `conflict` here was **not** written — it is the disagreement, reported. */
   date: ColnectDateProposal | null;
+  /** Empty when no attribute sync was asked for, the page stated none, or the two sides already
+   *  agree. A `conflict` and an `unmapped` were **not** written, for the same reason. */
+  attributes: ColnectAttributeProposal[];
 }
 
 /**
@@ -1356,6 +1537,8 @@ export async function confirmColnectMatch(
     backfill?: boolean;
     issuedOn?: string | null;
     issueDate?: boolean;
+    attributes?: ColnectAttributes | null;
+    attributeSync?: boolean;
   }
 ): Promise<ColnectConfirmResult> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -1367,6 +1550,7 @@ export async function confirmColnectMatch(
       issuedYear: true,
       issuedMonth: true,
       issuedDay: true,
+      ...STAMP_ATTRIBUTE_SELECT,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
       // The issue may override the area's prefix, which the backfill resolves numbers against (#377).
@@ -1396,7 +1580,19 @@ export async function confirmColnectMatch(
     : null;
   if (date) await applyDateFills([{ stampId: stamp.id, proposal: date }]);
 
-  if (!input.backfill || !input.catalogRefs?.length) return { backfill: [], date };
+  // The attributes are their own switch again (#739), and their own six fields.
+  const attributes = input.attributeSync
+    ? proposeStampAttributes(
+        input.attributes,
+        stamp,
+        await loadAttributeDictionaries(collectionId)
+      )
+    : [];
+  if (attributes.length > 0) {
+    await applyAttributeFills([{ stampId: stamp.id, proposals: attributes }]);
+  }
+
+  if (!input.backfill || !input.catalogRefs?.length) return { backfill: [], date, attributes };
 
   const ctx = await loadColnectContext(collectionId);
   const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
@@ -1418,5 +1614,5 @@ export async function confirmColnectMatch(
   const pending = proposals.map((proposal) => ({ stamp: target, proposal }));
   await markBackfillDuplicates(collectionId, pending, ctx);
   await applyBackfill(collectionId, pending);
-  return { backfill: proposals, date };
+  return { backfill: proposals, date, attributes };
 }

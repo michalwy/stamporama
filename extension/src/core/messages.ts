@@ -1,7 +1,12 @@
-import type { ExtractedItem } from "../platform/types";
+import type { ExtractedAttributes, ExtractedItem } from "../platform/types";
 import type { ListingFillOutcome, ListingTask } from "../platform/listing";
 import type { CapturedLot, CaptureRefusal } from "../platform/capture";
-import type { BackfillProposal, DateProposal, MatchResult } from "./decisions";
+import type {
+  AttributeProposal,
+  BackfillProposal,
+  DateProposal,
+  MatchResult,
+} from "./decisions";
 import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
 import type { LotMarkerTarget } from "./lot-marker";
@@ -214,9 +219,16 @@ export interface ConfirmRequest {
   /** The page's printed date of issue, travelling with the confirmation for the same reason the
    *  numbers do (#655). Whether it is used is the extension setting, applied by the worker. */
   issuedOn?: string;
+  /** What the page states about the stamp (#739), travelling for the same reason again. */
+  attributes?: ExtractedAttributes;
 }
 export type ConfirmResponse =
-  | { ok: true; backfill: BackfillProposal[]; date: DateProposal | null }
+  | {
+      ok: true;
+      backfill: BackfillProposal[];
+      date: DateProposal | null;
+      attributes: AttributeProposal[];
+    }
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
 // popup → background: "Colnect is right about this number" (#433). One field of one stamp, taken
@@ -245,6 +257,20 @@ export interface OverwriteDateRequest {
 }
 export type OverwriteDateResponse =
   | { ok: true; label: string }
+  | { ok: false; error: string };
+
+// popup → background: "Colnect is right about what this stamp is" (#739). The date overwrite five
+// fields wider, and the same rule: only the attributes **sent** are touched, so an unticked
+// disagreement is expressed by leaving it out. The values travel as the page printed them and are
+// compared on the instance, which is what keeps a word the mapping cannot place from being written
+// by a path that could not read it either.
+export interface OverwriteAttributesRequest {
+  type: "overwrite-attributes";
+  stampId: string;
+  attributes: ExtractedAttributes;
+}
+export type OverwriteAttributesResponse =
+  | { ok: true; attributes: AttributeProposal[] }
   | { ok: false; error: string };
 
 // instance content script (on the Colnect report screen) → background: "carry this list difference
@@ -350,7 +376,8 @@ export type BackgroundRequest =
   | MatchRequest
   | ConfirmRequest
   | OverwriteNumberRequest
-  | OverwriteDateRequest;
+  | OverwriteDateRequest
+  | OverwriteAttributesRequest;
 
 // instance content script → background: "the collector handed this offer over" (#409). The worker
 // resolves the module, opens the sale form in a tab of its own and has it filled; the answer is what
@@ -433,6 +460,9 @@ export interface SlimItem {
    *  reuses this match as its preview, and a preview that omitted the dates would promise less than
    *  the write it leads to. */
   issuedOn?: string;
+  /** What the page states about the stamp (#739) — six short strings, carried for the same reason
+   *  and at much the same cost. */
+  attributes?: ExtractedAttributes;
 }
 
 // content script → background: "this tab holds these items", on page load. The background sets the

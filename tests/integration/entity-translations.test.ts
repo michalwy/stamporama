@@ -327,6 +327,12 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         subtype: null,
         catalogNumbers: [],
         stampAreaLinks: [],
+        denomination: null,
+        perforation: null,
+        color: null,
+        watermark: null,
+        paper: null,
+        printing: null,
         variants: [],
         issueMemberships: [
           {

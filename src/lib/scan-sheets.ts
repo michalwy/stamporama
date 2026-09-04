@@ -1459,6 +1459,13 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
                 id: true,
                 name: true,
                 catalogNumbers: { select: { number: true } },
+                // What a measured perforation and a picked watermark are compared against (#740).
+                // Read with the shortlist rather than fetched when a reading is taken: the answer
+                // is wanted the moment the drag is released, and a card of forty tiles has already
+                // paid for this row.
+                perforation: true,
+                watermarkId: true,
+                watermark: { select: { name: true } },
                 ...VARIANT_FLAG_SELECT,
                 parent: {
                   select: { id: true, name: true, catalogNumbers: { select: { number: true } } },

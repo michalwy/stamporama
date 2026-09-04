@@ -413,11 +413,17 @@ model StampColor {
   collectionId String
   name         String
   sortOrder    Int
+  // What Colnect prints for this value (#739), or null while nothing is mapped. A column rather
+  // than a `ColnectConditionMapping`-shaped table (#404) because the mapping is one-to-one with the
+  // row, and four join tables over four parallel dictionaries would each be a table whose every row
+  // is a column. Unique per collection so the lookup from Colnect's printed text is unambiguous.
+  colnectValue String?
 
   collection   Collection              @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampColorTranslation[]
 
+  @@unique([collectionId, colnectValue])
   @@index([collectionId])
   @@map("stamp_color")
 }
@@ -438,11 +444,17 @@ model StampWatermark {
   collectionId String
   name         String
   sortOrder    Int
+  // What Colnect prints for this value (#739), or null while nothing is mapped. A column rather
+  // than a `ColnectConditionMapping`-shaped table (#404) because the mapping is one-to-one with the
+  // row, and four join tables over four parallel dictionaries would each be a table whose every row
+  // is a column. Unique per collection so the lookup from Colnect's printed text is unambiguous.
+  colnectValue String?
 
   collection   Collection                  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampWatermarkTranslation[]
 
+  @@unique([collectionId, colnectValue])
   @@index([collectionId])
   @@map("stamp_watermark")
 }
@@ -463,11 +475,17 @@ model StampPaper {
   collectionId String
   name         String
   sortOrder    Int
+  // What Colnect prints for this value (#739), or null while nothing is mapped. A column rather
+  // than a `ColnectConditionMapping`-shaped table (#404) because the mapping is one-to-one with the
+  // row, and four join tables over four parallel dictionaries would each be a table whose every row
+  // is a column. Unique per collection so the lookup from Colnect's printed text is unambiguous.
+  colnectValue String?
 
   collection   Collection              @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampPaperTranslation[]
 
+  @@unique([collectionId, colnectValue])
   @@index([collectionId])
   @@map("stamp_paper")
 }
@@ -488,11 +506,17 @@ model StampPrinting {
   collectionId String
   name         String
   sortOrder    Int
+  // What Colnect prints for this value (#739), or null while nothing is mapped. A column rather
+  // than a `ColnectConditionMapping`-shaped table (#404) because the mapping is one-to-one with the
+  // row, and four join tables over four parallel dictionaries would each be a table whose every row
+  // is a column. Unique per collection so the lookup from Colnect's printed text is unambiguous.
+  colnectValue String?
 
   collection   Collection                 @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampPrintingTranslation[]
 
+  @@unique([collectionId, colnectValue])
   @@index([collectionId])
   @@map("stamp_printing")
 }

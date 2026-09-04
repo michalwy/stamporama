@@ -32,6 +32,12 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
   "subtype:name": "Subtype",
   "format:name": "Format",
   "format:abbreviation": "Format (abbr.)",
+  // The four stamp-attribute dictionaries a listing text can print (#738). Named as their own
+  // Settings tab names them, so the gap says which list the row is on.
+  "color:name": "Colour",
+  "watermark:name": "Watermark",
+  "paper:name": "Paper",
+  "printing:name": "Printing method",
 };
 
 /** A stable identity for one gap — the entity row + field it would be written on. */

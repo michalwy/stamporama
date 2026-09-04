@@ -11,6 +11,7 @@ import {
   type StampAttributeKind,
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
+import { normalizeColnectAttribute } from "./colnect-attributes";
 
 // The four stamp-attribute dictionaries (#71/#72). Each is `StampSubtype`'s shape with the
 // behaviour stripped — no `actsAsVariant`, no `isDefault` — so one module serves all four and
@@ -111,6 +112,9 @@ export interface StampAttributeData {
   /** Per-language overrides of {@link name}, keyed by ISO 639-1 code. Only languages with a
    * stored, non-blank value appear. */
   nameByLanguage: Record<string, string>;
+  /** What Colnect prints for this value (#739), or null while nothing is mapped — the fourth of the
+   * Settings → Colnect translations, and what lets a catalogue page fill this attribute. */
+  colnectValue: string | null;
   sortOrder: number;
 }
 
@@ -120,6 +124,7 @@ export type StampAttributeLists = Record<StampAttributeKind, StampAttributeData[
 interface AttributeRow {
   id: string;
   name: string;
+  colnectValue: string | null;
   sortOrder: number;
   translations: { language: string; name: string | null }[];
 }
@@ -136,6 +141,11 @@ interface AttributeStore {
   remove(id: string): Promise<unknown>;
   /** How many stamps reference the row — the count behind a refused delete. */
   stampsUsing(id: string): Promise<number>;
+  /** What Colnect calls this row (#739). Blank is stored as null: unmapped and cleared are one
+   * state, the rule every other optional text in the app follows. */
+  setColnectValue(id: string, colnectValue: string | null): Promise<unknown>;
+  /** The rows of one collection with their mapped values, for the uniqueness check below. */
+  mapped(collectionId: string): Promise<{ id: string; colnectValue: string | null }[]>;
   upsertTranslation(id: string, language: string, name: string | null): Promise<unknown>;
   removeTranslation(id: string, language: string): Promise<unknown>;
 }
@@ -143,6 +153,7 @@ interface AttributeStore {
 const LIST_SELECT = {
   id: true,
   name: true,
+  colnectValue: true,
   sortOrder: true,
   translations: { select: { language: true, name: true } },
 } as const;
@@ -160,6 +171,13 @@ const STORES: Readonly<Record<StampAttributeKind, AttributeStore>> = {
     setSortOrder: (id, sortOrder) => prisma.stampColor.update({ where: { id }, data: { sortOrder } }),
     remove: (id) => prisma.stampColor.delete({ where: { id } }),
     stampsUsing: (id) => prisma.stamp.count({ where: { colorId: id } }),
+    setColnectValue: (id, colnectValue) =>
+      prisma.stampColor.update({ where: { id }, data: { colnectValue } }),
+    mapped: (collectionId) =>
+      prisma.stampColor.findMany({
+        where: { collectionId },
+        select: { id: true, colnectValue: true },
+      }),
     upsertTranslation: (stampColorId, language, name) =>
       prisma.stampColorTranslation.upsert({
         where: { stampColorId_language: { stampColorId, language } },
@@ -181,6 +199,13 @@ const STORES: Readonly<Record<StampAttributeKind, AttributeStore>> = {
     setSortOrder: (id, sortOrder) => prisma.stampWatermark.update({ where: { id }, data: { sortOrder } }),
     remove: (id) => prisma.stampWatermark.delete({ where: { id } }),
     stampsUsing: (id) => prisma.stamp.count({ where: { watermarkId: id } }),
+    setColnectValue: (id, colnectValue) =>
+      prisma.stampWatermark.update({ where: { id }, data: { colnectValue } }),
+    mapped: (collectionId) =>
+      prisma.stampWatermark.findMany({
+        where: { collectionId },
+        select: { id: true, colnectValue: true },
+      }),
     upsertTranslation: (stampWatermarkId, language, name) =>
       prisma.stampWatermarkTranslation.upsert({
         where: { stampWatermarkId_language: { stampWatermarkId, language } },
@@ -202,6 +227,13 @@ const STORES: Readonly<Record<StampAttributeKind, AttributeStore>> = {
     setSortOrder: (id, sortOrder) => prisma.stampPaper.update({ where: { id }, data: { sortOrder } }),
     remove: (id) => prisma.stampPaper.delete({ where: { id } }),
     stampsUsing: (id) => prisma.stamp.count({ where: { paperId: id } }),
+    setColnectValue: (id, colnectValue) =>
+      prisma.stampPaper.update({ where: { id }, data: { colnectValue } }),
+    mapped: (collectionId) =>
+      prisma.stampPaper.findMany({
+        where: { collectionId },
+        select: { id: true, colnectValue: true },
+      }),
     upsertTranslation: (stampPaperId, language, name) =>
       prisma.stampPaperTranslation.upsert({
         where: { stampPaperId_language: { stampPaperId, language } },
@@ -223,6 +255,13 @@ const STORES: Readonly<Record<StampAttributeKind, AttributeStore>> = {
     setSortOrder: (id, sortOrder) => prisma.stampPrinting.update({ where: { id }, data: { sortOrder } }),
     remove: (id) => prisma.stampPrinting.delete({ where: { id } }),
     stampsUsing: (id) => prisma.stamp.count({ where: { printingId: id } }),
+    setColnectValue: (id, colnectValue) =>
+      prisma.stampPrinting.update({ where: { id }, data: { colnectValue } }),
+    mapped: (collectionId) =>
+      prisma.stampPrinting.findMany({
+        where: { collectionId },
+        select: { id: true, colnectValue: true },
+      }),
     upsertTranslation: (stampPrintingId, language, name) =>
       prisma.stampPrintingTranslation.upsert({
         where: { stampPrintingId_language: { stampPrintingId, language } },
@@ -258,6 +297,7 @@ function toData(row: AttributeRow): StampAttributeData {
     id: row.id,
     name: row.name,
     nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
+    colnectValue: row.colnectValue,
     sortOrder: row.sortOrder,
   };
 }
@@ -282,6 +322,52 @@ export async function getStampAttributeLists(
   return Object.fromEntries(
     STAMP_ATTRIBUTE_KINDS.map((kind, i) => [kind, lists[i].map(toData)])
   ) as StampAttributeLists;
+}
+
+/**
+ * Say what Colnect prints for one dictionary row (#739) — the Settings → Colnect mapping, written
+ * one select at a time exactly as the condition mapping is (#404).
+ *
+ * Blank clears it, so *unmapped* and *cleared* are one state. Two rows of one dictionary may not
+ * claim the same Colnect word — the fill would then depend on which row the database happened to
+ * hand back — and the check is made **here** as well as by the unique index, because a collision is
+ * an ordinary thing for a collector to type and deserves a sentence rather than a constraint error.
+ * It compares the way the fill does (trimmed, whitespace collapsed, case-insensitive), so a mapping
+ * the database would accept but the lookup could not tell apart is refused too.
+ */
+export async function setStampAttributeColnectValue(
+  ownerId: string,
+  kind: StampAttributeKind,
+  attributeId: string,
+  colnectValue: string
+): Promise<void> {
+  const collectionId = await resolveAttributeCollection(kind, attributeId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const value = colnectValue.trim();
+  if (value) {
+    const key = normalizeColnectAttribute(value);
+    const clash = (await STORES[kind].mapped(collectionId)).find(
+      (r) => r.id !== attributeId && normalizeColnectAttribute(r.colnectValue) === key
+    );
+    if (clash) throw new Error("Another value in this list is already mapped to that Colnect word.");
+  }
+  await STORES[kind].setColnectValue(attributeId, value || null);
+}
+
+/**
+ * The three calls the gap-fill path makes on one dictionary row (#299/#738), narrowed out of
+ * {@link STORES}.
+ *
+ * Since #738 a listing text can print a stamp's colour, watermark, paper and printing method, so a
+ * missing translation on one of those rows is reported in the title preview like every other — and
+ * filled from the offer dialog, which is `entity-translations.ts`' job. It addresses these four
+ * tables through the very delegates every other attribute write uses rather than restating them,
+ * so a fifth dictionary stays one entry in one table here.
+ */
+export function stampAttributeTranslationStore(
+  kind: StampAttributeKind
+): Pick<AttributeStore, "find" | "upsertTranslation" | "removeTranslation"> {
+  return STORES[kind];
 }
 
 /** Per-language `name` rows. Shared rules — blank clears the field, an all-blank language drops

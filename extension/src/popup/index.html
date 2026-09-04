@@ -214,6 +214,10 @@
       .tick { display: inline-flex; align-items: center; }
       .tick input { margin: 0; cursor: pointer; }
       .fills { align-items: center; }
+      /* Which attribute a row is about (#739). A stamp asks up to six of these questions at once, so
+         each line has to name its own field — the values alone ("Carmine", "11½") would be a list
+         nobody could read down. */
+      .attrname { color: var(--muted); font-size: 11px; text-transform: lowercase; }
       .opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
       .opt input { margin: 0; }
 
