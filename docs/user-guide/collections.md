@@ -609,6 +609,25 @@ A catalogue states a handful of facts about every stamp beyond its number: what 
 
 Denomination and perforation are not lists. They are recorded on each stamp **as printed** — `10 gr`, `1 zł`, `50 h`; `11½`, `11½:12`, `imperf` — because they are facts about that one stamp rather than a vocabulary shared across many, and they are never translated.
 
+### Recording attributes on a stamp
+
+The stamp form — the one the Issues list, the Variants card and the stamp page's **Edit** all open — carries all six under **Attributes**, below the subtype: two text boxes for denomination and perforation, and a dropdown for each of the four lists with an empty choice at the top. Every field is optional and empty is the normal state, so nothing here has to be filled in to save a stamp.
+
+- A dropdown appears **only once its list has entries**. A collection that has never set up watermarks sees no watermark dropdown, and adding the first entry under **Settings → Attributes** makes it appear.
+- The attributes belong to the stamp, not to the copy: they say what the catalogue printed, while a copy records its condition, format and where it is filed.
+- **Nothing is inherited and nothing is remembered.** A variant is its own stamp, so it states its own values or none — a `240a` does not pick up `240`'s colour. And unlike the subtype, the values are not carried over from the last stamp you added: colour and denomination differ from stamp to stamp *within* one series, so a remembered value would be wrong nearly every time. Adding a [range of variants](#adding-a-range-of-variants) likewise sets none of them — a range types the skeleton, and the detail comes from editing each stamp.
+- The stamp's own page shows what it states on an **Attributes** card ([the stamp page](detail-pages.md#the-stamp-page)).
+
+### Attributes on the lists
+
+Wherever stamps are listed — the **Stamps** list and the **Issues** list's stamp tree — the attributes a stamp states are printed on a muted line under its chips, in the order a catalogue prints them: `10 gr · 11½ · Carmine · Thin paper`. A stamp that states none shows nothing at all rather than a row of dashes. Rest the pointer on a value to be told which attribute it is.
+
+The point of the line is to tell `240a` from `240b` at a glance, without opening either.
+
+The **Stamps** list toolbar also carries a filter for each of the four lists — *All colours*, *All watermarks*, *All papers*, *All printing methods* — each taking several values at once, because the question asked of a list is routinely a group of them ("the carmine shades"). Ticking values in two of them narrows to stamps that satisfy both. The filters narrow **on the server**, they are kept in the page URL so a narrowed view survives a reload and can be shared, and the year counts beside the list follow them. A filter is absent while its list has no entries.
+
+Denomination and perforation get no filter of their own — they are free text, so the toolbar's **search** box matches them instead, alongside the stamp name, issue name and catalog numbers.
+
 ### Attributes in other languages
 
 The four lists translate exactly like [subtypes](#subtypes-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the entry, so a Polish listing can read *karminowy* where an English one reads *Carmine*. Leave a language blank to fall back to the name above.

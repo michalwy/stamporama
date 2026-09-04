@@ -3,13 +3,19 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
+import {
+  STAMP_ATTRIBUTE_FILTER_KEYS,
+  type StampAttributeFilters,
+} from "@/lib/stamp-attribute-kinds";
 
 interface StampsPage {
   items: StampListItem[];
   nextCursor: string | null;
 }
 
-export interface StampListFilters {
+/** The catalogue-attribute narrowing both stamp queries carry (#737) — one id set per dictionary,
+ *  absent or empty meaning every value. */
+export interface StampListFilters extends StampAttributeFilters {
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -25,13 +31,24 @@ export interface StampListFilters {
   displayFormatId?: string | null;
 }
 
-/** Filters that affect the year facet counts (everything except year itself). */
-export interface StampYearFacetFilters {
+/** Filters that affect the year facet counts (everything except year itself). The attribute
+ *  filters are among them: they narrow the list, so the counts have to answer for them — unlike the
+ *  condition and format switchers, which only choose which price a row shows. */
+export interface StampYearFacetFilters extends StampAttributeFilters {
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
+}
+
+/** Writes the four attribute filters onto a request's query string, in the shape the API route
+ *  reads back. Empty sets are left off entirely, so a request carries only what is narrowing. */
+function appendAttributeFilters(params: URLSearchParams, filters: StampAttributeFilters) {
+  for (const key of STAMP_ATTRIBUTE_FILTER_KEYS) {
+    const ids = filters[key];
+    if (ids && ids.length > 0) params.set(key, ids.join(","));
+  }
 }
 
 export const stampKeys = {
@@ -59,6 +76,7 @@ export function useStampsInfinite(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
+      appendAttributeFilters(params, filters);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
@@ -89,6 +107,7 @@ export function useStampYears(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
+      appendAttributeFilters(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/stamps/years?${params.toString()}`
       );

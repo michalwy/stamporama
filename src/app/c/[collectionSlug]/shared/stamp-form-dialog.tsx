@@ -22,6 +22,12 @@ import type { CatalogVendorData } from "@/lib/catalog";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import type { StampAttributeLists, StampAttributeValues } from "@/lib/stamp-attributes";
+import {
+  STAMP_ATTRIBUTE_KINDS,
+  STAMP_ATTRIBUTE_LABELS,
+  STAMP_TEXT_ATTRIBUTE_LABELS,
+} from "@/lib/stamp-attribute-kinds";
 import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { computeIssueRangeExtension } from "@/lib/catalog-number";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
@@ -76,6 +82,16 @@ const TAB_STYLE: React.CSSProperties = {
 };
 
 type TabKey = "details" | "prices";
+
+/** A stamp with no attributes stated — the normal case, and what an add starts from (#736). */
+const BLANK_ATTRIBUTES: StampAttributeValues = {
+  denomination: null,
+  perforation: null,
+  colorId: null,
+  watermarkId: null,
+  paperId: null,
+  printingId: null,
+};
 
 const CHECKLIST_OPTION_STYLE: React.CSSProperties = {
   display: "flex",
@@ -372,6 +388,44 @@ export function StampFormDialog(props: StampFormDialogProps) {
     });
     return () => { cancelled = true; };
   }, [collectionId, editStampId]);
+
+  // ── Catalogue attributes (#736) ──
+  //
+  // The six of #71/#72, on every stamp — root and variant alike, since nothing is inherited down
+  // the variant tree and a child either states its own value or states none. The stored values are
+  // fetched **by stampId**, like the subtype assignment, the translations and the photos, so none
+  // of this dialog's nine callers has to carry six more fields on its row shape to edit one stamp.
+  //
+  // **Nothing is remembered between adds.** #342 remembers the subtype because a run of additions
+  // shares one; colour and denomination differ from stamp to stamp *within* a series, so a
+  // remembered value would pre-fill the wrong answer nearly every time.
+  const [attributeLists, setAttributeLists] = useState<StampAttributeLists | null>(null);
+  const [attributes, setAttributes] = useState<StampAttributeValues>(BLANK_ATTRIBUTES);
+  const [attributesLoaded, setAttributesLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      import("@/app/actions/stamp-attributes").then((m) =>
+        m.getStampAttributeListsAction(collectionId)
+      ),
+      editStampId
+        ? import("@/app/actions/stamp-attributes").then((m) =>
+            m.getStampAttributeValuesAction(editStampId)
+          )
+        : Promise.resolve(null),
+    ]).then(([lists, values]) => {
+      if (cancelled) return;
+      setAttributeLists(lists);
+      if (values) setAttributes(values);
+      setAttributesLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [collectionId, editStampId]);
+
+  function setAttribute(key: keyof StampAttributeValues, value: string) {
+    setAttributes((prev) => ({ ...prev, [key]: value }));
+  }
 
   // Load the stamp's stored per-language names (#296), by id — the same way the subtype assignment
   // and the photos are, so no caller's row shape has to carry them. Add mode has nothing to load.
@@ -1119,6 +1173,107 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 />
               </div>
             )}
+
+            {/* Catalogue attributes (#736): what the catalogue states about this stamp beyond its
+                number. All six optional — an empty value is the normal case, not a gap to fill —
+                and none of them inherited from the parent, because a variant is its own stamp.
+                A dictionary select appears only once its dictionary has entries, the rule the
+                subtype block above already follows: a select offering nothing but "—" is furniture,
+                and the four lists are set up in Settings → Attributes. */}
+            <div
+              style={{
+                marginTop: "1.25rem",
+                paddingTop: "1.25rem",
+                borderTop: "1px solid var(--color-border)",
+              }}
+            >
+              <LabelWithError>Attributes (optional)</LabelWithError>
+              {!attributesLoaded ? (
+                // Reserve the row's height so the dialog doesn't jump, and — the reason this is
+                // gated at all — so a save made before the stored values arrive cannot submit the
+                // blank fields over them.
+                <div
+                  style={{
+                    minHeight: "3.75rem",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  Loading attributes…
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
+                    gap: "0.75rem 1rem",
+                  }}
+                >
+                  {/* Denomination and perforation are recorded **as printed** — never parsed, never
+                      translated — so they are text boxes and not dictionaries. */}
+                  <div style={{ minWidth: 0 }}>
+                    <LabelWithError htmlFor="f-stamp-denomination">
+                      {STAMP_TEXT_ATTRIBUTE_LABELS.denomination.field}
+                    </LabelWithError>
+                    <input
+                      id="f-stamp-denomination"
+                      name="denomination"
+                      type="text"
+                      disabled={isPending}
+                      value={attributes.denomination ?? ""}
+                      onChange={(e) => setAttribute("denomination", e.target.value)}
+                      placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.denomination.example}
+                      {...NO_AUTOFILL}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <LabelWithError htmlFor="f-stamp-perforation">
+                      {STAMP_TEXT_ATTRIBUTE_LABELS.perforation.field}
+                    </LabelWithError>
+                    <input
+                      id="f-stamp-perforation"
+                      name="perforation"
+                      type="text"
+                      disabled={isPending}
+                      value={attributes.perforation ?? ""}
+                      onChange={(e) => setAttribute("perforation", e.target.value)}
+                      placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.perforation.example}
+                      {...NO_AUTOFILL}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
+                  {STAMP_ATTRIBUTE_KINDS.map((kind) => {
+                    const options = attributeLists?.[kind] ?? [];
+                    if (options.length === 0) return null;
+                    const field = `${kind}Id` as keyof StampAttributeValues;
+                    return (
+                      <div key={kind} style={{ minWidth: 0 }}>
+                        <LabelWithError htmlFor={`f-stamp-${kind}`}>
+                          {STAMP_ATTRIBUTE_LABELS[kind].field}
+                        </LabelWithError>
+                        <select
+                          id={`f-stamp-${kind}`}
+                          name={field}
+                          value={attributes[field] ?? ""}
+                          onChange={(e) => setAttribute(field, e.target.value)}
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        >
+                          {/* The empty choice is the value most stamps have, so it leads. */}
+                          <option value="">—</option>
+                          {options.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted
                 only once the stamp's existing photos have loaded (edit mode); PhotoEditor seeds

@@ -50,6 +50,7 @@ import type {
 import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import { parseTranslationValues } from "@/lib/translations";
+import { parseStampAttributes } from "@/lib/stamp-attribute-kinds";
 
 export type StampActionState =
   | { status: "idle" }
@@ -395,6 +396,11 @@ export async function updateStampWithCatalogAction(
 
   const photoChangeSet = parsePhotoChangeSet(formData);
 
+  // Catalogue attributes (#736), present only when the form rendered them — a dictionary select is
+  // absent while its dictionary is empty, and every one of them is absent until the stored values
+  // have loaded. Absent → undefined → the stored value is left alone; a blank clears it.
+  const attributes = parseStampAttributes(formData);
+
   // Block-mode duplicate guard (#85): reject before mutating when the collection
   // blocks duplicate catalog identities. Warn mode passes through (the form shows
   // the non-blocking warning instead).
@@ -418,6 +424,7 @@ export async function updateStampWithCatalogAction(
       checklistIssueId,
       subtypeId,
       actsAsVariantOverride,
+      ...attributes,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
     });
     if (photoChangeSet) {

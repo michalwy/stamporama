@@ -9,9 +9,11 @@ import {
   deleteStampAttribute,
   reorderStampAttributes,
   getStampAttributeLists,
+  getStampAttributeValues,
   StampAttributeInUseError,
   STAMP_ATTRIBUTE_TRANSLATION_FIELDS,
   type StampAttributeLists,
+  type StampAttributeValues,
 } from "@/lib/stamp-attributes";
 import { STAMP_ATTRIBUTE_LABELS, type StampAttributeKind } from "@/lib/stamp-attribute-kinds";
 import { parseTranslationValues } from "@/lib/translations";
@@ -35,6 +37,15 @@ export async function getStampAttributeListsAction(
 ): Promise<StampAttributeLists> {
   const session = await getSession();
   return getStampAttributeLists(session.user.id, collectionId);
+}
+
+/** One stamp's stored attribute values, for seeding the stamp form (#736). Fetched by id like the
+ * subtype assignment and the photos, so no caller's row shape has to carry them. */
+export async function getStampAttributeValuesAction(
+  stampId: string
+): Promise<StampAttributeValues> {
+  const session = await getSession();
+  return getStampAttributeValues(session.user.id, stampId);
 }
 
 export async function createStampAttributeAction(

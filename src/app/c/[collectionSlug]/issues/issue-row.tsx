@@ -24,6 +24,7 @@ import {
   StampDetailLine,
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
+import { StampAttributesLine } from "@/app/c/[collectionSlug]/shared/stamp-attributes-line";
 import {
   ReorderModeButton,
   StampDragGrip,
@@ -383,6 +384,11 @@ function StampTreeNode({
               // chip is already pointing at those copies, so it should be the way to them.
               onOpenCopies={copies.open}
             />
+
+            {/* The stamp's attributes (#737) on a line of their own under the chips, rather than as
+                four more columns the tree row has no width for: within one issue they are exactly
+                what distinguishes one variant from the next. */}
+            <StampAttributesLine attributes={node.attributes} />
           </div>
         </div>
       </div>

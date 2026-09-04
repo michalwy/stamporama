@@ -26,6 +26,14 @@ import {
   type StampListFilters,
   type StampYearFacetFilters,
 } from "./use-stamps-query";
+import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { useCollectionStampAttributes } from "@/app/c/[collectionSlug]/shared/use-stamp-attributes";
+import {
+  STAMP_ATTRIBUTE_KINDS,
+  STAMP_ATTRIBUTE_LABELS,
+  stampAttributeFiltersFromParams,
+  type StampAttributeFilters,
+} from "@/lib/stamp-attribute-kinds";
 import { StampRow } from "./stamp-row";
 import { useToast } from "@/app/toast-provider";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -107,6 +115,14 @@ export function StampsListPanel({
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
 
+  // Catalogue-attribute filters (#737), URL-backed like every other filter on this screen, so a
+  // narrowing survives a reload and can be shared. Empty is "every value", not "states none".
+  const attributeFilters: StampAttributeFilters = useMemo(
+    () => stampAttributeFiltersFromParams(searchParams),
+    [searchParams]
+  );
+  const { data: attributeLists } = useCollectionStampAttributes(collectionId);
+
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
   const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
@@ -144,13 +160,14 @@ export function StampsListPanel({
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
+      ...attributeFilters,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       displayFormatId: displayFormatId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
@@ -160,8 +177,9 @@ export function StampsListPanel({
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
+      ...attributeFilters,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
@@ -224,7 +242,13 @@ export function StampsListPanel({
   // a different year, a deleted stamp leaves nothing behind at all.
   const { toast } = useToast();
 
-  const hasActiveFilters = !!(search || catalogNumber || issueId || year);
+  const hasActiveFilters = !!(
+    search ||
+    catalogNumber ||
+    issueId ||
+    year ||
+    Object.keys(attributeFilters).length > 0
+  );
 
   return (
     <div
@@ -274,24 +298,58 @@ export function StampsListPanel({
             updateParams({ catalogVendorId: vid, catalogNumber: num });
           }}
         >
-          <IssueFilterAutocomplete
-            collectionId={collectionId}
-            areaIds={filterAreaIds}
-            selectedIssueId={issueId}
-            onSelect={(id) => updateParams({ issueId: id })}
-          />
-          <ConditionPriceSwitcher
-            conditions={conditions}
-            value={displayConditionId}
-            onChange={setDisplayConditionId}
-          />
-          {/* Condition and format together name one cell of the price grid (#343); the format
-              control renders nothing at all when the collection defines no formats. */}
-          <FormatPriceSwitcher
-            formats={formats}
-            value={displayFormatId}
-            onChange={setDisplayFormatId}
-          />
+          {/* The toolbar wraps: the four attribute filters below join controls that already fill
+              a line on their own. */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "0.5rem",
+              flex: 1,
+            }}
+          >
+            <IssueFilterAutocomplete
+              collectionId={collectionId}
+              areaIds={filterAreaIds}
+              selectedIssueId={issueId}
+              onSelect={(id) => updateParams({ issueId: id })}
+            />
+            <ConditionPriceSwitcher
+              conditions={conditions}
+              value={displayConditionId}
+              onChange={setDisplayConditionId}
+            />
+            {/* Condition and format together name one cell of the price grid (#343); the format
+                control renders nothing at all when the collection defines no formats. */}
+            <FormatPriceSwitcher
+              formats={formats}
+              value={displayFormatId}
+              onChange={setDisplayFormatId}
+            />
+            {/* Catalogue attributes (#737) — one multi-select per dictionary, because the question
+                asked of a list is routinely a group of values ("the carmine shades"). A dictionary
+                with no entries gets no control: most collections never fill all four, and a filter
+                over a vocabulary that does not exist narrows nothing. Denomination and perforation
+                have no control here — they are free text and the search box matches them. */}
+            {STAMP_ATTRIBUTE_KINDS.map((kind) => {
+              const options = attributeLists?.[kind] ?? [];
+              if (options.length === 0) return null;
+              const key = `${kind}Ids` as const;
+              const labels = STAMP_ATTRIBUTE_LABELS[kind];
+              return (
+                <MultiSelectFilter
+                  key={kind}
+                  options={options.map((o) => ({ id: o.id, label: o.name }))}
+                  selected={attributeFilters[key] ?? []}
+                  onChange={(ids) => updateParams({ [key]: ids.join(",") })}
+                  allLabel={`All ${labels.plural}`}
+                  itemNoun={labels.plural}
+                  ariaLabel={`Filter by ${labels.noun}`}
+                />
+              );
+            })}
+          </div>
         </ListToolbar>
 
         {/* Stamps list */}

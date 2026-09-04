@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
+import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 
 const VALID_SORT_BY = new Set<StampSortBy>(["issueDate", "catalogNumber", "name", "issueName"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -25,6 +26,7 @@ export async function GET(
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
+  const attributeFilters = stampAttributeFiltersFromParams(sp);
   const displayConditionId = sp.get("displayConditionId") || undefined;
   const displayFormatId = sp.get("displayFormatId") || undefined;
   const yearParam = sp.get("year");
@@ -47,6 +49,7 @@ export async function GET(
       catalogVendorId,
       catalogNumber,
       issueId,
+      ...attributeFilters,
       year,
       displayConditionId,
       displayFormatId,

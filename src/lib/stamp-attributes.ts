@@ -9,6 +9,7 @@ import {
 import {
   STAMP_ATTRIBUTE_KINDS,
   type StampAttributeKind,
+  type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
 
 // The four stamp-attribute dictionaries (#71/#72). Each is `StampSubtype`'s shape with the
@@ -20,6 +21,88 @@ import {
 
 /** The one translatable column (#72) — none of the four has an abbreviation. */
 export const STAMP_ATTRIBUTE_TRANSLATION_FIELDS = ["name"] as const;
+
+/**
+ * What every read model selects to draw a stamp's attributes (#736/#737): the two printed strings,
+ * and the four dictionary rows by name rather than by id. Selected as a fragment so the stamp list,
+ * the issue tree and anything reaching for them later ask for the same six columns — and so a fifth
+ * dictionary is one entry here rather than a hunt through the funnels.
+ */
+export const STAMP_ATTRIBUTE_DISPLAY_SELECT = {
+  denomination: true,
+  perforation: true,
+  color: { select: { name: true } },
+  watermark: { select: { name: true } },
+  paper: { select: { name: true } },
+  printing: { select: { name: true } },
+} as const;
+
+/** The shape {@link STAMP_ATTRIBUTE_DISPLAY_SELECT} returns. */
+export interface StampAttributeDisplayRow {
+  denomination: string | null;
+  perforation: string | null;
+  color: { name: string } | null;
+  watermark: { name: string } | null;
+  paper: { name: string } | null;
+  printing: { name: string } | null;
+}
+
+/** A selected stamp's attributes as the screens want them (mirrors `subtypeLabel`). The default
+ * language's name is what a list and a detail card read; the per-language names are listing text
+ * and belong to the listing tokens (#738), not here. */
+export function stampAttributeLabels(row: StampAttributeDisplayRow): StampAttributeLabels {
+  return {
+    denomination: row.denomination,
+    perforation: row.perforation,
+    color: row.color?.name ?? null,
+    watermark: row.watermark?.name ?? null,
+    paper: row.paper?.name ?? null,
+    printing: row.printing?.name ?? null,
+  };
+}
+
+/** The six values as stored — ids, not names — for seeding the stamp form's own fields (#736). */
+export interface StampAttributeValues {
+  denomination: string | null;
+  perforation: string | null;
+  colorId: string | null;
+  watermarkId: string | null;
+  paperId: string | null;
+  printingId: string | null;
+}
+
+/**
+ * One stamp's stored attribute values, fetched **by id** the way the subtype assignment and the
+ * photos are (#736) — so no caller's row shape has to carry six more fields just to open the edit
+ * dialog over it. Ownership is checked through the stamp's collection.
+ */
+export async function getStampAttributeValues(
+  ownerId: string,
+  stampId: string
+): Promise<StampAttributeValues> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: {
+      collectionId: true,
+      denomination: true,
+      perforation: true,
+      colorId: true,
+      watermarkId: true,
+      paperId: true,
+      printingId: true,
+    },
+  });
+  if (!stamp) throw new Error("Stamp not found.");
+  await assertCollectionOwner(ownerId, stamp.collectionId);
+  return {
+    denomination: stamp.denomination,
+    perforation: stamp.perforation,
+    colorId: stamp.colorId,
+    watermarkId: stamp.watermarkId,
+    paperId: stamp.paperId,
+    printingId: stamp.printingId,
+  };
+}
 
 export interface StampAttributeData {
   id: string;

@@ -19,6 +19,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { StampAttributesLine } from "@/app/c/[collectionSlug]/shared/stamp-attributes-line";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { useAddWantAction } from "@/app/c/[collectionSlug]/wants/use-add-want-action";
@@ -352,6 +353,10 @@ export function StampRow({
           )}
         </div>
         )}
+
+        {/* What the catalogue says this stamp is (#737) — under the chips, because it is what tells
+            two rows carrying consecutive numbers apart once the numbers themselves have been read. */}
+        <StampAttributesLine attributes={stamp.attributes} size="medium" />
         </div>
       </div>
     </div>

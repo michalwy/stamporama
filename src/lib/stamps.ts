@@ -46,6 +46,16 @@ import {
   translationsByLanguage,
   type TranslationValueMap,
 } from "./translations";
+import {
+  STAMP_ATTRIBUTE_DISPLAY_SELECT,
+  stampAttributeLabels,
+  type StampAttributeDisplayRow,
+} from "./stamp-attributes";
+import {
+  pickStampAttributeWrites,
+  type StampAttributeInput,
+  type StampAttributeLabels,
+} from "./stamp-attribute-kinds";
 import type { Prisma } from "@/generated/prisma/client";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
@@ -381,6 +391,9 @@ export interface StampListItem {
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. */
   wants: StampWantSummary | null;
+  /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
+   *  their names. Every value is null on a stamp that states none, which is the normal case. */
+  attributes: StampAttributeLabels;
 }
 
 export interface PaginatedStampsResult {
@@ -428,6 +441,7 @@ const STAMP_LIST_SELECT = {
   },
   checklistEntries: { select: { checklistId: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
 } as const;
 
 function toStampListItem(
@@ -457,7 +471,7 @@ function toStampListItem(
     }[];
     checklistEntries: { checklistId: string }[];
     photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
-  },
+  } & StampAttributeDisplayRow,
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   latestYearByName: Map<string, number>,
@@ -540,6 +554,7 @@ function toStampListItem(
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
     variantCopies: copyCounts.variant.get(stamp.id) ?? NO_COPIES,
     wants: wantsByStamp.get(stamp.id) ?? null,
+    attributes: stampAttributeLabels(stamp),
   };
 }
 
@@ -606,6 +621,14 @@ export interface StampListFilterOpts {
   /** Physical format whose price fills the list price column (#343). Null / omitted is the
    *  single — the default, and the only value a collection with no formats can have. */
   displayFormatId?: string | null;
+  /** Catalogue-attribute narrowing (#737), one set per dictionary. Empty or omitted is *every
+   *  value* — the absence of a filter, never "stamps that state none", which is the same reading
+   *  every `MultiSelectFilter` on this app has. Denomination and perforation have no set of their
+   *  own: they are free text and are matched by {@link StampListFilterOpts.search} (#71 §6). */
+  colorIds?: string[];
+  watermarkIds?: string[];
+  paperIds?: string[];
+  printingIds?: string[];
 }
 
 
@@ -632,8 +655,23 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
         { name: { contains: s, mode: "insensitive" } },
         { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
         { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
+        // The two free-text attributes (#71 §6, #737): they get no filter control of their own, so
+        // the search box is how `11½` or `10 gr` is asked for.
+        { denomination: { contains: s, mode: "insensitive" } },
+        { perforation: { contains: s, mode: "insensitive" } },
       ],
     });
+  }
+
+  // The four dictionary attributes (#737). Each set narrows independently and they combine with
+  // AND, because a collector asking for "carmine, on thin paper" means both.
+  for (const [field, ids] of [
+    ["colorId", opts.colorIds],
+    ["watermarkId", opts.watermarkIds],
+    ["paperId", opts.paperIds],
+    ["printingId", opts.printingIds],
+  ] as const) {
+    if (ids && ids.length > 0) conditions.push({ [field]: { in: ids } });
   }
 
   // Catalog filter (#146): a number narrows to a vendor when one is set, else it
@@ -1225,7 +1263,7 @@ export async function updateStampWithCatalog(
     // default. Top-level stamps are always forced back to null on both fields.
     subtypeId?: string | null;
     actsAsVariantOverride?: boolean | null;
-  }
+  } & StampAttributeInput
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -1275,6 +1313,9 @@ export async function updateStampWithCatalog(
         // Omit when undefined so callers that don't manage the field leave it untouched;
         // a blank string clears it to null.
         ...(data.colnectId !== undefined ? { colnectId: data.colnectId || null } : {}),
+        // The six catalogue attributes (#736), on the same rule: a key absent from `data` is a
+        // field the caller's form did not render, and its stored value is not touched.
+        ...pickStampAttributeWrites(data),
         ...subtypeData,
       },
     });

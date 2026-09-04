@@ -19,6 +19,10 @@ import {
   FieldGrid,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
+import {
+  STAMP_ATTRIBUTE_FIELDS,
+  statedStampAttributes,
+} from "@/lib/stamp-attribute-kinds";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { CopyCountBadge, dispositionParts } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
@@ -75,6 +79,7 @@ export function StampDetailPanel({
   const primaryVendorId = maps.primaryVendorByArea.get(stamp.areaId ?? "") ?? null;
 
   const areaPath = buildAreaPath(areas, stamp.areaId);
+  const statedAttributes = statedStampAttributes(stamp.attributes);
   const issuedDate = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
   const price = stamp.mainCatalogPrice;
 
@@ -136,7 +141,7 @@ export function StampDetailPanel({
           {/* What this screen can start (#751), at the end of the line that says which stamp it is
               about — the Issues list's own dialog, over this stamp. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
-            <Tooltip content="Edit this stamp — name, issued date, catalog numbers and checklists.">
+            <Tooltip content="Edit this stamp — name, issued date, catalog numbers, attributes and checklists.">
               <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
                 <Icon name="edit" size="sm" /> Edit
               </button>
@@ -170,6 +175,22 @@ export function StampDetailPanel({
                         .join(" · ")
                     : null}
                 </Field>
+              </FieldGrid>
+            </DetailCard>
+
+            {/* What the catalogue states about this stamp beyond its number (#736). Display only:
+                the values are edited in the dialog that already owns the record, because a detail
+                page reads and does not become a second editor. The card omits itself when the stamp
+                states none — which is the normal case, and six em dashes on every stamp would push
+                what the page does say further down the column (#536). Once it is here it lists all
+                six, so what is *not* stated is visible too. */}
+            <DetailCard title="Attributes" empty={statedAttributes.length === 0}>
+              <FieldGrid min="9rem">
+                {STAMP_ATTRIBUTE_FIELDS.map(({ key, label }) => (
+                  <Field key={key} label={label}>
+                    {stamp.attributes[key]}
+                  </Field>
+                ))}
               </FieldGrid>
             </DetailCard>
 

@@ -91,19 +91,23 @@ Details is always there; the rest appear when the copy has them.
 
 ## The stamp page
 
-*Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Wants, Copies,
-Offers. Only Details is always there.
+*Left column:* Details, Attributes, Issues, Photos, Catalog prices, Variants. *Right column:* Wants,
+Copies, Offers. Only Details is always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
   stamp's variants when there are any, and opening its disposition breakdown on click — and the
   headline catalog price. At the end of the line, **Edit** opens the stamp form — the same one the
-  Issues list opens, over this stamp — for its name, issued date, catalog numbers and checklists.
+  Issues list opens, over this stamp — for its name, issued date, catalog numbers, attributes and checklists.
   (The **Variants** card below edits the stamps *under* this one; this button is for the stamp the
   page is about.)
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).
+- **Attributes** — the six [stamp attributes](collections.md#stamp-attributes): denomination,
+  perforation, colour, watermark, paper and printing method. The card appears only when the stamp
+  states at least one of them, and then lists all six, so what is *not* recorded is visible too.
+  Read-only here, as everything on this page is — the values are edited from **Edit** above.
 - **Issues** — which issues the stamp belongs to, and which of each issue's
   [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
   counts it.

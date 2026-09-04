@@ -27,6 +27,16 @@ import {
   type TranslationValueMap,
 } from "./translations";
 import { syncStampTranslations } from "./stamps";
+import {
+  STAMP_ATTRIBUTE_DISPLAY_SELECT,
+  stampAttributeLabels,
+  type StampAttributeDisplayRow,
+} from "./stamp-attributes";
+import {
+  pickStampAttributeWrites,
+  type StampAttributeInput,
+  type StampAttributeLabels,
+} from "./stamp-attribute-kinds";
 import { makeFormatFactorResolver } from "./format-pricing";
 import {
   loadStampCopyCounts,
@@ -157,6 +167,9 @@ export interface StampNodeData {
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. Null too when the caller loaded no summaries. */
   wants: StampWantSummary | null;
+  /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
+   *  their names — what tells `240a` from `240b` without opening either. */
+  attributes: StampAttributeLabels;
 }
 
 export interface IssueCatalogNumberData {
@@ -217,6 +230,7 @@ const MEMBER_SELECT = {
       // unknown-variant umbrella whose price rolls up from its variants (#238).
       ...VARIANT_FLAG_SELECT,
       variants: { select: VARIANT_FLAG_SELECT },
+      ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
     },
   },
 } as const;
@@ -283,7 +297,7 @@ function toStampNode(
         actsAsVariantOverride: boolean | null;
         subtype: { actsAsVariant: boolean } | null;
       }[];
-    };
+    } & StampAttributeDisplayRow;
   },
   pricing?: {
     primaryNameId: string | null;
@@ -363,6 +377,7 @@ function toStampNode(
     copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,
     variantCopies: copyCounts?.variant.get(m.stampId) ?? NO_COPIES,
     wants: wantsByStamp?.get(m.stampId) ?? null,
+    attributes: stampAttributeLabels(m.stamp),
   };
 }
 
@@ -2080,7 +2095,7 @@ export async function previewIssueDeletion(
   };
 }
 
-export interface AddStampData {
+export interface AddStampData extends StampAttributeInput {
   name?: string | null;
   issuedDay?: number | null;
   issuedMonth?: number | null;
@@ -2165,6 +2180,8 @@ export async function addStampToIssue(
         subtypeId,
         actsAsVariantOverride,
         colnectId: data.colnectId || null,
+        // The six catalogue attributes (#736); an unsupplied one is simply not set.
+        ...pickStampAttributeWrites(data),
       },
       select: { id: true },
     });
