@@ -94,8 +94,8 @@ importers:
   extension:
     devDependencies:
       '@types/chrome':
-        specifier: 0.2.5
-        version: 0.2.5
+        specifier: 0.2.8
+        version: 0.2.8
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
@@ -1046,8 +1046,8 @@ packages:
   '@types/caseless@0.12.5':
     resolution: {integrity: sha512-hWtVTC2q7hc7xZ/RLbxapMvDMgUnDvKvMOpKal4DrMyfGBUfB1oKaZlIRr6mJL+If3bAP6sV/QneGzF6tJjZDg==}
 
-  '@types/chrome@0.2.5':
-    resolution: {integrity: sha512-DwLFgwj3D0zjxRBhQ3610RBso2g+yI1cakq/JdIGopZ9Bc5UhQluyfcLGZwivFE4t2h4b2QZYZhPV7KylExSbA==}
+  '@types/chrome@0.2.8':
+    resolution: {integrity: sha512-dznDYMiJUyuc7b+78PxnWhaGOonmbX/OmcWu7NE42sg/yTLJMYnJ7Uah40SLPNFiCh8reqcthk7vOva2+MSvzw==}
 
   '@types/d3-array@3.0.3':
     resolution: {integrity: sha512-Reoy+pKnvsksN0lQUlcH6dOGjRZ/3WRwXR//m+/8lt1BXeI4xyaUZoqULNjyXXRuh0Mj4LNpkCvhUpQlY3X5xQ==}
@@ -4165,7 +4165,7 @@ snapshots:
 
   '@types/caseless@0.12.5': {}
 
-  '@types/chrome@0.2.5':
+  '@types/chrome@0.2.8':
     dependencies:
       '@types/filesystem': 0.0.36
       '@types/har-format': 1.2.16
