@@ -50,7 +50,7 @@ import type {
 import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import { parseTranslationValues } from "@/lib/translations";
-import { parseStampAttributes } from "@/lib/stamp-attribute-kinds";
+import { parseStampAttributes, parseStampSizeInput } from "@/lib/stamp-attribute-kinds";
 
 export type StampActionState =
   | { status: "idle" }
@@ -400,6 +400,11 @@ export async function updateStampWithCatalogAction(
   // absent while its dictionary is empty, and every one of them is absent until the stored values
   // have loaded. Absent → undefined → the stored value is left alone; a blank clears it.
   const attributes = parseStampAttributes(formData);
+  // The size (#763) is read apart from them, because a figure this app cannot make sense of is
+  // reported rather than stored: saving it as *no size* would leave the stamp borrowing its
+  // neighbour's, which is a measurement the collector never took.
+  const size = parseStampSizeInput(formData);
+  if (size.error) return { status: "error", message: size.error };
 
   // Block-mode duplicate guard (#85): reject before mutating when the collection
   // blocks duplicate catalog identities. Warn mode passes through (the form shows
@@ -425,6 +430,7 @@ export async function updateStampWithCatalogAction(
       subtypeId,
       actsAsVariantOverride,
       ...attributes,
+      ...size.input,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
     });
     if (photoChangeSet) {

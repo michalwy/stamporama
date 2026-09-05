@@ -12,6 +12,7 @@ import {
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
 import { normalizeColnectAttribute } from "./colnect-attributes";
+import { formatSizeMm, type StampSizeFields } from "./stamp-size";
 
 // The four stamp-attribute dictionaries (#71/#72). Each is `StampSubtype`'s shape with the
 // behaviour stripped — no `actsAsVariant`, no `isDefault` — so one module serves all four and
@@ -37,6 +38,23 @@ export const STAMP_ATTRIBUTE_DISPLAY_SELECT = {
   paper: { select: { name: true } },
   printing: { select: { name: true } },
 } as const;
+
+/** The size columns (#763), a fragment of their own rather than part of the six above: they are
+ * numbers where those are names, they are drawn as one figure rather than as two rows, and a read
+ * model that has no use for a box should not have to carry them. */
+export const STAMP_SIZE_SELECT = { widthMm: true, heightMm: true } as const;
+
+/** A selected stamp's size as the screens want it — `Decimal` turned into the plain numbers every
+ * pure rule and every layout in the app is written against. */
+export function stampSizeFields(row: {
+  widthMm: Prisma.Decimal | null;
+  heightMm: Prisma.Decimal | null;
+}): StampSizeFields {
+  return {
+    widthMm: row.widthMm === null ? null : row.widthMm.toNumber(),
+    heightMm: row.heightMm === null ? null : row.heightMm.toNumber(),
+  };
+}
 
 /** The shape {@link STAMP_ATTRIBUTE_DISPLAY_SELECT} returns. */
 export interface StampAttributeDisplayRow {
@@ -70,6 +88,11 @@ export interface StampAttributeValues {
   watermarkId: string | null;
   paperId: string | null;
   printingId: string | null;
+  /** The size (#763) as the field shows it — `21.5`, not `21.5000` — because the form's own state
+   * is text and a number that round-trips through the input as a different string would look to
+   * the collector like an edit they did not make. */
+  widthMm: string | null;
+  heightMm: string | null;
 }
 
 /**
@@ -91,10 +114,12 @@ export async function getStampAttributeValues(
       watermarkId: true,
       paperId: true,
       printingId: true,
+      ...STAMP_SIZE_SELECT,
     },
   });
   if (!stamp) throw new Error("Stamp not found.");
   await assertCollectionOwner(ownerId, stamp.collectionId);
+  const size = stampSizeFields(stamp);
   return {
     denomination: stamp.denomination,
     perforation: stamp.perforation,
@@ -102,6 +127,8 @@ export async function getStampAttributeValues(
     watermarkId: stamp.watermarkId,
     paperId: stamp.paperId,
     printingId: stamp.printingId,
+    widthMm: size.widthMm === null ? null : formatSizeMm(size.widthMm),
+    heightMm: size.heightMm === null ? null : formatSizeMm(size.heightMm),
   };
 }
 

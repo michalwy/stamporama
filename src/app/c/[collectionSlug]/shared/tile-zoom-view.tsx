@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -24,6 +25,12 @@ import {
   perforationGauge,
   type ScanPoint,
 } from "@/lib/scan-measure";
+import {
+  formatStampSize,
+  sizeFromScanPixels,
+  type StampSize,
+} from "@/lib/stamp-size";
+import { usePublishSizeProposal } from "./measured-size";
 import { countTeethBetweenMarks, type Pixels } from "@/lib/scan-perf-count";
 import {
   DEFAULT_WATERMARK_CHANNEL,
@@ -423,11 +430,17 @@ function IdentifiedPieceGrid({
   );
 }
 
-/** Which measuring tool is down, if any (#598). Two, because they are two questions: a distance is
- * a distance, and a perforation is that distance divided into teeth. The gauge is arithmetic over
- * the ruler rather than a second measurement, which is also how a physical odontometer works — so
- * nothing new has to be learned to read one. */
-type MeasureTool = "off" | "ruler" | "perforation";
+/** Which measuring tool is down, if any (#598). Three, because they are three questions: a distance
+ * is a distance, a perforation is that distance divided into teeth, and a size is two distances
+ * taken at right angles in one act. The gauge is arithmetic over the ruler rather than a second
+ * measurement, which is also how a physical odontometer works — so nothing new has to be learned to
+ * read one.
+ *
+ * The size tool (#763) is the ruler with a second axis rather than a rectangle-drawing tool: the
+ * same drag, the same two marks in scan pixels, read as opposite corners instead of as the ends of
+ * a line. One act rather than *now the width, now the height*, because two separate readings are
+ * two chances to measure two different stamps and nothing would notice. */
+type MeasureTool = "off" | "ruler" | "perforation" | "size";
 
 /**
  * What the measuring bar says right now (#598) — the figure, or the reason there is not one.
@@ -450,7 +463,7 @@ function describeReading(args: {
   marks: { a: ScanPoint; b: ScanPoint } | null;
   dpi: number | null;
   teeth: number | null;
-}): { text: string; muted: boolean; detail?: string; gauge?: number } {
+}): { text: string; muted: boolean; detail?: string; gauge?: number; size?: StampSize } {
   const { tool, marks, dpi, teeth } = args;
   if (tool === "off") return { text: "", muted: true };
   if (dpi === null) {
@@ -464,13 +477,34 @@ function describeReading(args: {
       text:
         tool === "ruler"
           ? "Drag across the tile to measure it."
-          : "Drag from the first hole of a run to the last.",
+          : tool === "size"
+            ? "Drag a box around the stamp, corner to corner."
+            : "Drag from the first hole of a run to the last.",
       muted: true,
     };
   }
   const { px, mm } = measureDistance(marks.a, marks.b, dpi);
   if (px <= 0) {
     return { text: "One mark placed — drag to the second.", muted: true };
+  }
+  if (tool === "size") {
+    // The two marks read as opposite corners. A box with no width or no height is a line, and a
+    // line is the ruler's answer rather than a size of `0 × 25.4 mm` — so it is the prompt again.
+    const w = Math.abs(marks.b.x - marks.a.x);
+    const h = Math.abs(marks.b.y - marks.a.y);
+    const size = sizeFromScanPixels({ w, h }, dpi, MM_PER_INCH);
+    if (!size) {
+      return { text: "Drag a box around the stamp, corner to corner.", muted: true };
+    }
+    return {
+      text: `${formatStampSize(size)} at ${dpi} dpi`,
+      // Out beside the sentence, on `gauge`'s rule (#740): the one place that decided a reading is
+      // real is the one place that hands it on, so nothing downstream can offer a figure this
+      // function refused to state.
+      size,
+      muted: false,
+      detail: `${Math.round(w)} × ${Math.round(h)} scan px`,
+    };
   }
   if (tool === "ruler") {
     return {
@@ -1068,6 +1102,23 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
   }, [gauge, onGauge]);
   useEffect(() => () => onGauge?.(null), [onGauge]);
 
+  // The two size proposals (#763), published for whatever is beside this viewer and able to take
+  // one — the stamp form, when the picker handed it this viewer as its aside; nothing at all
+  // otherwise. Hooks, so they sit above the `current` guard with the gauge's.
+  //
+  // The **measured** figure is the size tool's reading and exists only while one stands.
+  usePublishSizeProposal("measured", reading.size ?? null, dpi);
+  // The **estimate** is the tile's own crop box divided by the stated scale, and it is always
+  // there: the box was cut by #574's detector or by hand in the cut editor, and either way it is
+  // the stamp plus whatever slack the cut carried. Good enough to propose, never good enough to
+  // write — which is why it travels marked as an estimate and is offered as one.
+  const box = current?.box ?? null;
+  const cropSize = useMemo(
+    () => (box && dpi !== null ? sizeFromScanPixels(box, dpi, MM_PER_INCH) : null),
+    [box, dpi]
+  );
+  usePublishSizeProposal("estimated", cropSize, dpi);
+
   if (!current) return null;
 
   const atActualSize = ready && Math.abs(view.scale - 1) < 1e-6;
@@ -1108,6 +1159,20 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
               active={tool === "ruler"}
               onClick={() => {
                 setChosenTool((t) => (t === "ruler" ? "off" : "ruler"));
+                setMarks(null);
+              }}
+            />
+            {/* The size tool (#763) — the ruler's second axis. Beside it rather than folded into
+                it because they answer different questions and a tool that quietly changed what a
+                drag meant would be worse than a third button. What it produces is offered to the
+                stamp form when there is one beside this viewer, and nothing is ever written by the
+                act of measuring. */}
+            <ScanToolButton
+              label="Size"
+              hint="Drag a box around the stamp — its width and height in millimetres, offered to the stamp's size when a stamp form is open beside this"
+              active={tool === "size"}
+              onClick={() => {
+                setChosenTool((t) => (t === "size" ? "off" : "size"));
                 setMarks(null);
               }}
             />
@@ -1285,7 +1350,29 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
               style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
             >
               {/* Twice, dark under light: a scan is white paper in some places and printing ink in
-                  others, and one stroke colour is invisible over one of them. */}
+                  others, and one stroke colour is invisible over one of them. The size tool draws
+                  the same two marks as a box, since that is what its two corners describe — a line
+                  across a stamp would say nothing about which rectangle is being read. */}
+              {tool === "size" ? (
+                <>
+                  {[
+                    { stroke: "rgba(0,0,0,0.65)", width: 3 },
+                    { stroke: "#fff", width: 1 },
+                  ].map((s) => (
+                    <rect
+                      key={s.stroke}
+                      x={Math.min(marks.a.x, marks.b.x) * view.scale}
+                      y={Math.min(marks.a.y, marks.b.y) * view.scale}
+                      width={Math.abs(marks.b.x - marks.a.x) * view.scale}
+                      height={Math.abs(marks.b.y - marks.a.y) * view.scale}
+                      fill="none"
+                      stroke={s.stroke}
+                      strokeWidth={s.width}
+                    />
+                  ))}
+                </>
+              ) : (
+                <>
               <line
                 x1={marks.a.x * view.scale}
                 y1={marks.a.y * view.scale}
@@ -1316,6 +1403,8 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
                   paintOrder="stroke"
                 />
               ))}
+                </>
+              )}
             </svg>
           )}
 

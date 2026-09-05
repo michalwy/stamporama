@@ -95,6 +95,8 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: lozenges,
       paperId: thinPaper,
       printingId: photogravure,
+      widthMm: null,
+      heightMm: null,
     });
     await prisma.stamp.delete({ where: { id: stampId } });
   });
@@ -108,6 +110,8 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: null,
       paperId: null,
       printingId: null,
+      widthMm: null,
+      heightMm: null,
     });
     await prisma.stamp.delete({ where: { id: stampId } });
   });
@@ -135,6 +139,8 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: null,
       paperId: thinPaper,
       printingId: null,
+      widthMm: null,
+      heightMm: null,
     });
 
     // No attribute keys at all — a caller whose form does not manage them.
@@ -143,6 +149,40 @@ describe("stamp attributes on stamps (#736, #737)", () => {
     assert.equal(after.denomination, "1 zł");
     assert.equal(after.colorId, green);
     assert.equal(after.paperId, thinPaper);
+    await prisma.stamp.delete({ where: { id: stampId } });
+  });
+
+  // The size (#763) rides the same write path as the six and comes back as the field shows it —
+  // `21.5`, not `21.5000`, since the form's own state is text and a figure that round-tripped as a
+  // different string would read as an edit the collector did not make.
+  it("writes a size, reads it back as typed, and clears it", async () => {
+    const stampId = await addStamp("sized", { widthMm: 21.5, heightMm: 25 });
+    const stored = await getStampAttributeValues(userId, stampId);
+    assert.equal(stored.widthMm, "21.5");
+    assert.equal(stored.heightMm, "25");
+
+    // A caller that does not manage the size leaves it alone; null clears it.
+    await updateStampWithCatalog(userId, stampId, { name: "sized", catalogNumbers: [] });
+    assert.equal((await getStampAttributeValues(userId, stampId)).widthMm, "21.5");
+    await updateStampWithCatalog(userId, stampId, {
+      name: "sized",
+      catalogNumbers: [],
+      widthMm: null,
+      heightMm: null,
+    });
+    const cleared = await getStampAttributeValues(userId, stampId);
+    assert.equal(cleared.widthMm, null);
+    assert.equal(cleared.heightMm, null);
+    await prisma.stamp.delete({ where: { id: stampId } });
+  });
+
+  // What a list and a detail page read: the stamp's own figures, as plain numbers.
+  it("carries the size onto the stamp list row", async () => {
+    const stampId = await addStamp("listed size", { widthMm: 21.5, heightMm: 25.5 });
+    const { items } = await listStampsPaginated(userId, collectionId, { issueId });
+    const row = items.find((i) => i.id === stampId);
+    assert.ok(row);
+    assert.deepEqual(row.size, { widthMm: 21.5, heightMm: 25.5 });
     await prisma.stamp.delete({ where: { id: stampId } });
   });
 

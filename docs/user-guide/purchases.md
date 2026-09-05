@@ -414,10 +414,17 @@ magnification rather than starting again from Fit.
 #### Measuring on the scan
 
 Many variants differ by a measurement — the perforation, the size of the design, the gap between two
-elements — and the scan already holds it. Two tools in the same toolbar read it out, so a
+elements — and the scan already holds it. Three tools in the same toolbar read it out, so a
 perforation question is settled on screen instead of with an odontometer.
 
 **Ruler** — drag from one point to another and read the distance in millimetres.
+
+**Size** — drag a box around the stamp, corner to corner, and read its **width and height** in
+millimetres. It is the ruler with a second axis: the same drag, read as two opposite corners instead
+of as the ends of a line, so both figures come from one act and cannot end up describing two
+different stamps. When you are creating or editing a stamp with the piece beside you, the reading is
+offered on that stamp's **Attributes** tab as its [size](collections.md#the-stamps-size) — offered,
+never filled in: nothing is written until you press **Use as size**.
 
 **Perforation** — drag from the **first hole of a run to the last** and read the gauge. That is how a
 physical odontometer works: perforation is quoted as teeth per 2 cm. You are told **both figures** —

@@ -1918,6 +1918,16 @@ model Stamp {
   watermarkId  String?
   paperId      String?
   printingId   String?
+  // The stamp's physical size in millimetres (#763), a seventh and eighth catalogue fact on the
+  // same terms as the six above: on `Stamp` because size is catalogue identity, optional because a
+  // stamp that states none is the normal case, and not inherited down the variant tree. A tenth of
+  // a millimetre is what a catalogue prints and rather more than a scan measured through a stated
+  // dpi can honestly claim. There is no *inherited* column and no *estimated* flag — a stamp with
+  // no size of its own borrows its checklist neighbour's at read time (`src/lib/stamp-size.ts`),
+  // and an estimate off a tile's crop is a proposal until it is accepted, after which it is an
+  // ordinary stated value.
+  widthMm      Decimal? @db.Decimal(5, 1)
+  heightMm     Decimal? @db.Decimal(5, 1)
   issuedDay    Int?
   issuedMonth  Int?
   issuedYear   Int?

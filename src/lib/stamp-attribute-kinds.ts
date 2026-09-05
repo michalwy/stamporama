@@ -3,6 +3,8 @@
 // dispatch over a kind rather than existing four times. Pure: no Prisma, no React, no
 // `server-only`, so the panel can read the labels and the domain module the kinds.
 
+import { parseSizeMm } from "./stamp-size";
+
 export const STAMP_ATTRIBUTE_KINDS = ["color", "watermark", "paper", "printing"] as const;
 
 export type StampAttributeKind = (typeof STAMP_ATTRIBUTE_KINDS)[number];
@@ -127,7 +129,28 @@ export interface StampAttributeInput {
   watermarkId?: string | null;
   paperId?: string | null;
   printingId?: string | null;
+  /** The size, in millimetres (#763), on the same `undefined` / `null` / value rule as the six —
+   * but numbers, because unlike a denomination a size is arithmetic: it is divided into a hawid
+   * strip. Parsed by {@link parseStampSizeInput}, which reports a figure it cannot read instead of
+   * letting it arrive here as a null that would erase a real measurement. */
+  widthMm?: number | null;
+  heightMm?: number | null;
 }
+
+/** The two size columns, named where the six are so the eight read as one set at every call site
+ * that walks them. Separate from {@link STAMP_ATTRIBUTE_INPUT_FIELDS} because these are numbers and
+ * that loop is over strings. */
+export const STAMP_SIZE_INPUT_FIELDS = ["widthMm", "heightMm"] as const;
+
+export type StampSizeInputField = (typeof STAMP_SIZE_INPUT_FIELDS)[number];
+
+/** How each is labelled on the form and on the stamp's own screen. */
+export const STAMP_SIZE_LABELS: Readonly<
+  Record<StampSizeInputField, { field: string; example: string }>
+> = {
+  widthMm: { field: "Width (mm)", example: "e.g. 21.5" },
+  heightMm: { field: "Height (mm)", example: "e.g. 25.5" },
+};
 
 /** The six column names a write and a form both address them by. */
 export const STAMP_ATTRIBUTE_INPUT_FIELDS = [
@@ -147,6 +170,35 @@ export function parseStampAttributes(formData: FormData): StampAttributeInput {
   return input;
 }
 
+/**
+ * The two size fields off the same form (#763) — **with the reading that failed**, which is why
+ * they are parsed apart from the six.
+ *
+ * A denomination this app cannot read is still a denomination and is stored as typed. A size it
+ * cannot read is nothing at all, and storing it as *no size* would be worse than refusing it: the
+ * stamp then borrows its checklist neighbour's figure (`stamp-size.ts`) and a hawid gets cut to a
+ * number the collector never accepted. So an unreadable figure comes back as a message the action
+ * returns, and nothing is written.
+ */
+export function parseStampSizeInput(formData: FormData): {
+  input: StampAttributeInput;
+  error: string | null;
+} {
+  const input: StampAttributeInput = {};
+  for (const field of STAMP_SIZE_INPUT_FIELDS) {
+    if (!formData.has(field)) continue;
+    const parsed = parseSizeMm(formData.get(field) as string | null);
+    if (!parsed.ok) {
+      return {
+        input: {},
+        error: `${STAMP_SIZE_LABELS[field].field} must be a figure in millimetres, like 21.5.`,
+      };
+    }
+    input[field] = parsed.mm;
+  }
+  return { input, error: null };
+}
+
 /** The subset of {@link StampAttributeInput} a caller actually supplied, as a Prisma `data` patch:
  * a key left `undefined` is dropped, so a write that does not manage the attributes cannot blank
  * them. The same rule `colnectId` follows on the stamp update. */
@@ -154,6 +206,11 @@ export function pickStampAttributeWrites(input: StampAttributeInput): StampAttri
   const writes: StampAttributeInput = {};
   for (const field of STAMP_ATTRIBUTE_INPUT_FIELDS) {
     if (input[field] !== undefined) writes[field] = input[field] || null;
+  }
+  // The size on the same rule (#763), but without the `|| null`: nothing this app accepts as a
+  // dimension is falsy, and a coercion there would be a rule waiting to erase a figure.
+  for (const field of STAMP_SIZE_INPUT_FIELDS) {
+    if (input[field] !== undefined) writes[field] = input[field];
   }
   return writes;
 }

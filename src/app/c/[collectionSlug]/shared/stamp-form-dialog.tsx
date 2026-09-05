@@ -26,11 +26,17 @@ import type { StampAttributeLists, StampAttributeValues } from "@/lib/stamp-attr
 import {
   STAMP_ATTRIBUTE_KINDS,
   STAMP_ATTRIBUTE_LABELS,
+  STAMP_SIZE_INPUT_FIELDS,
+  STAMP_SIZE_LABELS,
+  STAMP_TEXT_ATTRIBUTES,
   STAMP_TEXT_ATTRIBUTE_LABELS,
 } from "@/lib/stamp-attribute-kinds";
 import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { computeIssueRangeExtension } from "@/lib/catalog-number";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
+import { SizeProposalScope, useSizeProposals, type SizeProposal } from "./measured-size";
+import { Tooltip } from "./tooltip";
+import { formatSizeMm, formatStampSize } from "@/lib/stamp-size";
 import { Segmented } from "./segmented";
 import { CatalogDuplicateWarningIcon } from "./catalog-duplicate-warning";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -93,6 +99,8 @@ const TAB_LABELS: Record<TabKey, string> = {
 const BLANK_ATTRIBUTES: StampAttributeValues = {
   denomination: null,
   perforation: null,
+  widthMm: null,
+  heightMm: null,
   colorId: null,
   watermarkId: null,
   paperId: null,
@@ -703,6 +711,12 @@ export function StampFormDialog(props: StampFormDialogProps) {
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    // Everything this dialog renders — including the `aside`, which is where the tile viewer lands
+    // when a stamp is created from inside an identification — sits in one size-proposal scope
+    // (#763). That is the whole of the plumbing between a measurement and this form: the viewer
+    // publishes into it and the Attributes tab reads from it, and neither has to be handed to the
+    // other through the picker that opened them both.
+    <SizeProposalScope>
     <DialogShell
       title={title}
       onClose={onClose}
@@ -1218,108 +1232,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
             </div>
           </div>
 
-          {/* ── Attributes tab (#761) ── Catalogue attributes (#736): what the catalogue states
-              about this stamp beyond its number. All six optional — an empty value is the normal
-              case, not a gap to fill — and none of them inherited from the parent, because a
-              variant is its own stamp. They sit on their own tab rather than inline on Details
-              because they are extra detail on a form whose core is the stamp's identity, and six
-              usually-empty fields between the subtype and the photos pushed that identity apart.
-              A dictionary select appears only once its dictionary has entries, the rule the
-              subtype block on Details already follows: a select offering nothing but "—" is
-              furniture, and the four lists are set up in Settings → Attributes. */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              overflowY: "auto",
-              display: shownTab === "attributes" ? "block" : "none",
-            }}
-          >
-            {!attributesLoaded ? (
-              // The fields stay unrendered until the stored values arrive — the reason the
-              // section is gated at all — so a save made before they land cannot submit the
-              // blank fields over them.
-              <div
-                style={{
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.875rem",
-                }}
-              >
-                Loading attributes…
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
-                  gap: "0.75rem 1rem",
-                }}
-              >
-                {/* Denomination and perforation are recorded **as printed** — never parsed, never
-                    translated — so they are text boxes and not dictionaries. */}
-                <div style={{ minWidth: 0 }}>
-                  <LabelWithError htmlFor="f-stamp-denomination">
-                    {STAMP_TEXT_ATTRIBUTE_LABELS.denomination.field}
-                  </LabelWithError>
-                  <input
-                    id="f-stamp-denomination"
-                    name="denomination"
-                    type="text"
-                    disabled={isPending}
-                    value={attributes.denomination ?? ""}
-                    onChange={(e) => setAttribute("denomination", e.target.value)}
-                    placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.denomination.example}
-                    {...NO_AUTOFILL}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <LabelWithError htmlFor="f-stamp-perforation">
-                    {STAMP_TEXT_ATTRIBUTE_LABELS.perforation.field}
-                  </LabelWithError>
-                  <input
-                    id="f-stamp-perforation"
-                    name="perforation"
-                    type="text"
-                    disabled={isPending}
-                    value={attributes.perforation ?? ""}
-                    onChange={(e) => setAttribute("perforation", e.target.value)}
-                    placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.perforation.example}
-                    {...NO_AUTOFILL}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-                {STAMP_ATTRIBUTE_KINDS.map((kind) => {
-                  const options = attributeLists?.[kind] ?? [];
-                  if (options.length === 0) return null;
-                  const field = `${kind}Id` as keyof StampAttributeValues;
-                  return (
-                    <div key={kind} style={{ minWidth: 0 }}>
-                      <LabelWithError htmlFor={`f-stamp-${kind}`}>
-                        {STAMP_ATTRIBUTE_LABELS[kind].field}
-                      </LabelWithError>
-                      <select
-                        id={`f-stamp-${kind}`}
-                        name={field}
-                        value={attributes[field] ?? ""}
-                        onChange={(e) => setAttribute(field, e.target.value)}
-                        disabled={isPending}
-                        style={INPUT_STYLE}
-                      >
-                        {/* The empty choice is the value most stamps have, so it leads. */}
-                        <option value="">—</option>
-                        {options.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <StampAttributesTab
+            shown={shownTab === "attributes"}
+            loaded={attributesLoaded}
+            lists={attributeLists}
+            values={attributes}
+            setValue={setAttribute}
+            disabled={isPending}
+          />
 
           {/* ── Prices tab (overlays Details; own scroll if taller) ── */}
           {hasPricesTab && (
@@ -1362,7 +1282,245 @@ export function StampFormDialog(props: StampFormDialogProps) {
           error={error}
         />
       </form>
-    </DialogShell>,
+    </DialogShell>
+    </SizeProposalScope>,
     document.body
   );
 }
+
+
+/**
+ * The Attributes tab (#761/#736) — what the catalogue states about this stamp beyond its number.
+ *
+ * All eight optional; an empty value is the normal case, not a gap to fill. None of them is
+ * inherited from the parent, because a variant is its own stamp (ADR-0010). They sit on their own
+ * tab rather than inline on Details because they are extra detail on a form whose core is the
+ * stamp's identity, and eight usually-empty fields between the subtype and the photos pushed that
+ * identity apart. A dictionary select appears only once its dictionary has entries, the rule the
+ * subtype block on Details already follows: a select offering nothing but "—" is furniture, and the
+ * four lists are set up in Settings → Attributes.
+ *
+ * Its own component so that it is **inside** the dialog's `SizeProposalScope` (#763) — a hook read
+ * in the dialog body would sit outside the provider the same body renders — and so the size
+ * proposals are read exactly where they are offered.
+ */
+function StampAttributesTab({
+  shown,
+  loaded,
+  lists,
+  values,
+  setValue,
+  disabled,
+}: {
+  shown: boolean;
+  /** The fields stay unrendered until the stored values arrive — the reason the section is gated at
+   * all — so a save made before they land cannot submit blank fields over them. */
+  loaded: boolean;
+  lists: StampAttributeLists | null;
+  values: StampAttributeValues;
+  setValue: (key: keyof StampAttributeValues, value: string) => void;
+  disabled: boolean;
+}) {
+  const proposals = useSizeProposals();
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        overflowY: "auto",
+        display: shown ? "block" : "none",
+      }}
+    >
+      {!loaded ? (
+        <div style={{ color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
+          Loading attributes…
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
+              gap: "0.75rem 1rem",
+            }}
+          >
+            {/* Denomination and perforation are recorded **as printed** — never parsed, never
+                translated — so they are text boxes and not dictionaries. */}
+            {STAMP_TEXT_ATTRIBUTES.map((field) => (
+              <div key={field} style={{ minWidth: 0 }}>
+                <LabelWithError htmlFor={`f-stamp-${field}`}>
+                  {STAMP_TEXT_ATTRIBUTE_LABELS[field].field}
+                </LabelWithError>
+                <input
+                  id={`f-stamp-${field}`}
+                  name={field}
+                  type="text"
+                  disabled={disabled}
+                  value={values[field] ?? ""}
+                  onChange={(e) => setValue(field, e.target.value)}
+                  placeholder={STAMP_TEXT_ATTRIBUTE_LABELS[field].example}
+                  {...NO_AUTOFILL}
+                  style={INPUT_STYLE}
+                />
+              </div>
+            ))}
+            {/* The size (#763), two fields beside the printed facts because that is what it is —
+                a figure the catalogue states about this stamp. Millimetres, to a tenth; the action
+                refuses a figure it cannot read rather than saving it as *no size*, since a stamp
+                with none borrows its neighbour's and a hawid gets cut to it. */}
+            {STAMP_SIZE_INPUT_FIELDS.map((field) => (
+              <div key={field} style={{ minWidth: 0 }}>
+                <LabelWithError htmlFor={`f-stamp-${field}`}>
+                  {STAMP_SIZE_LABELS[field].field}
+                </LabelWithError>
+                <input
+                  id={`f-stamp-${field}`}
+                  name={field}
+                  type="text"
+                  inputMode="decimal"
+                  disabled={disabled}
+                  value={values[field] ?? ""}
+                  onChange={(e) => setValue(field, e.target.value)}
+                  placeholder={STAMP_SIZE_LABELS[field].example}
+                  {...NO_AUTOFILL}
+                  style={INPUT_STYLE}
+                />
+              </div>
+            ))}
+            {STAMP_ATTRIBUTE_KINDS.map((kind) => {
+              const options = lists?.[kind] ?? [];
+              if (options.length === 0) return null;
+              const field = `${kind}Id` as keyof StampAttributeValues;
+              return (
+                <div key={kind} style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor={`f-stamp-${kind}`}>
+                    {STAMP_ATTRIBUTE_LABELS[kind].field}
+                  </LabelWithError>
+                  <select
+                    id={`f-stamp-${kind}`}
+                    name={field}
+                    value={values[field] ?? ""}
+                    onChange={(e) => setValue(field, e.target.value)}
+                    disabled={disabled}
+                    style={INPUT_STYLE}
+                  >
+                    {/* The empty choice is the value most stamps have, so it leads. */}
+                    <option value="">—</option>
+                    {options.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* What the scan beside this form has to say about the size (#763). Present only when
+              this dialog was opened with a piece next to it — every other opener sees nothing at
+              all here. Each is a **button and never a default**: a size that filled itself in is a
+              size nobody read, and the hawid cut from it is gone either way. */}
+          {(proposals.measured || proposals.estimated) && (
+            <div
+              style={{
+                marginTop: "1rem",
+                paddingTop: "0.75rem",
+                borderTop: "1px solid var(--color-border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.375rem",
+                fontSize: "0.8125rem",
+              }}
+            >
+              {(["measured", "estimated"] as const).map((kind) => {
+                const proposal = proposals[kind];
+                if (!proposal) return null;
+                return (
+                  <SizeProposalRow
+                    key={kind}
+                    proposal={proposal}
+                    disabled={disabled}
+                    onUse={() => {
+                      setValue("widthMm", formatSizeMm(proposal.widthMm));
+                      setValue("heightMm", formatSizeMm(proposal.heightMm));
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** How each proposal words itself. The estimate says what it is *made of* rather than merely being
+ * labelled uncertain: a crop box is the stamp plus the slack the cut carried, and a collector who
+ * knows that can judge whether this particular cut was tight. */
+const SIZE_PROPOSAL_COPY: Record<
+  SizeProposal["source"],
+  { label: string; hint: string; estimate: boolean }
+> = {
+  measured: {
+    label: "Measured on the scan",
+    hint: "The box you marked with the Size tool, converted at the resolution on the measuring bar. Check the scale before you take it.",
+    estimate: false,
+  },
+  estimated: {
+    label: "From the tile's crop",
+    hint: "Arithmetic on the crop this tile was cut to, at the resolution on the measuring bar — so it is the stamp plus whatever slack the cut carried. A first guess, not a measurement: mark the stamp out with the Size tool for a figure worth keeping.",
+    estimate: true,
+  },
+};
+
+function SizeProposalRow({
+  proposal,
+  disabled,
+  onUse,
+}: {
+  proposal: SizeProposal;
+  disabled: boolean;
+  onUse: () => void;
+}) {
+  const copy = SIZE_PROPOSAL_COPY[proposal.source];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      <Tooltip content={copy.hint}>
+        <span style={{ color: "var(--color-text-muted)" }}>{copy.label}</span>
+      </Tooltip>
+      <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+        {formatStampSize(proposal)}
+      </span>
+      <span style={{ color: "var(--color-text-muted)" }}>at {proposal.dpi} dpi</span>
+      {copy.estimate && (
+        <span
+          style={{
+            padding: "0.0625rem 0.3125rem",
+            borderRadius: "0.25rem",
+            border: "1px solid var(--color-border-strong)",
+            color: "var(--color-text-muted)",
+            fontSize: "0.6875rem",
+          }}
+        >
+          estimate
+        </span>
+      )}
+      <button type="button" onClick={onUse} disabled={disabled} style={USE_SIZE_BTN}>
+        Use as size
+      </button>
+    </div>
+  );
+}
+
+const USE_SIZE_BTN: React.CSSProperties = {
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-elevated)",
+  color: "var(--color-text-secondary)",
+  font: "inherit",
+  fontSize: "0.75rem",
+  cursor: "pointer",
+};

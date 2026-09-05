@@ -632,13 +632,47 @@ Denomination and perforation are not lists. They are recorded on each stamp **as
 
 ### Recording attributes on a stamp
 
-The stamp form — the one the Issues list, the Variants card and the stamp page's **Edit** all open — carries all six on its own **Attributes** tab, beside **Details**: two text boxes for denomination and perforation, and a dropdown for each of the four lists with an empty choice at the top. Every field is optional and empty is the normal state, so nothing here has to be filled in to save a stamp. The tab is grouping only — the form saves as a whole, so what you type here goes in with the **Save** on any tab.
+The stamp form — the one the Issues list, the Variants card and the stamp page's **Edit** all open — carries all six on its own **Attributes** tab, beside **Details**: two text boxes for denomination and perforation, a dropdown for each of the four lists with an empty choice at the top, and the [size](#the-stamps-size) boxes beside them. Every field is optional and empty is the normal state, so nothing here has to be filled in to save a stamp. The tab is grouping only — the form saves as a whole, so what you type here goes in with the **Save** on any tab.
 
 - A dropdown appears **only once its list has entries**. A collection that has never set up watermarks sees no watermark dropdown, and adding the first entry under **Settings → Attributes** makes it appear.
 - The attributes belong to the stamp, not to the copy: they say what the catalogue printed, while a copy records its condition, format and where it is filed.
 - **Nothing is inherited and nothing is remembered.** A variant is its own stamp, so it states its own values or none — a `240a` does not pick up `240`'s colour. And unlike the subtype, the values are not carried over from the last stamp you added: colour and denomination differ from stamp to stamp *within* one series, so a remembered value would be wrong nearly every time. Adding a [range of variants](#adding-a-range-of-variants) likewise sets none of them — a range types the skeleton, and the detail comes from editing each stamp.
 - The stamp's own page shows what it states on an **Attributes** card ([the stamp page](detail-pages.md#the-stamp-page)).
 - Perforation and watermark are the two the [intake measuring tools](purchases.md#pieces-you-cannot-identify-from-the-picture) compare against: a gauge taken off a scanned piece marks the shortlisted stamps whose perforation it fits, and the watermark you can see narrows the same list. That only works on stamps that state them, which is the practical reason to fill these two in first.
+
+### The stamp's size
+
+A stamp also has a physical size, and it is kept where the rest of its catalogue facts are: **Width
+(mm)** and **Height (mm)** on the same **Attributes** tab, and a **Size** row on the stamp's own
+page reading `21.5 × 25 mm`. Millimetres to a tenth, which is what a catalogue prints. Both are
+optional like everything else here, and both follow the same rules as the six above — they belong to
+the stamp rather than to the copy, and nothing is inherited from a parent stamp.
+
+The size is what album pages are laid out from — a mount is cut from a hawid strip to the stamp's
+own dimensions — so it is worth having on the stamps you mount; until then it is simply another
+catalogue fact.
+
+There are two ways not to type it, both of them offers rather than actions:
+
+- **Measured on the scan.** With a scanned piece beside the form — creating or editing a stamp from
+  inside an [identification](purchases.md#identifying-stamps-intake) — the viewer's
+  [**Size** tool](purchases.md#measuring-on-the-scan) draws a box around the stamp and reads its
+  width and height at the resolution on the measuring bar. Press **Use as size** to take it.
+- **From the tile's crop**, marked **estimate**. The crop a tile was cut to is the stamp *plus
+  whatever slack the cut carried*, so its dimensions are a good first guess and a poor fact. It is
+  offered pre-computed and labelled, and it is written only when you press **Use as size** — a size
+  nobody looked at becomes a wrongly cut hawid, and the material does not come back.
+
+Both offers quote the resolution they were taken at, because a measurement is only as good as the
+scale it was converted through — correct it on the measuring bar before taking the figure if the
+card was scanned at something other than the collection's setting.
+
+**A stamp that states no size borrows one when something needs to draw it.** For laying out an album
+page, a stamp with no size of its own uses the nearest stamp of the same checklist that has one, in
+catalog order — a series is printed on one press at one size, so this is right far more often than it
+is wrong. Nothing is written by that: the stamp still states no size, the page says which boxes came
+from a borrowed figure, and typing a real size on the stamp ends the borrowing for it. The stamp's
+own page and the lists show only what the stamp itself states.
 
 ### Attributes on the lists
 

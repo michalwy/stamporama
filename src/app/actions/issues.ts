@@ -40,7 +40,7 @@ import type { ChecklistEstimatedValue } from "@/lib/estimated-values";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { parseTranslationValues } from "@/lib/translations";
 import { STAMP_TRANSLATION_FIELDS, getStampCatalogNumber } from "@/lib/stamps";
-import { parseStampAttributes } from "@/lib/stamp-attribute-kinds";
+import { parseStampAttributes, parseStampSizeInput } from "@/lib/stamp-attribute-kinds";
 import {
   parseCatalogNumberSpec,
   parseVariantNumberSpec,
@@ -406,6 +406,10 @@ export async function addStampToIssueAction(
   // Catalogue attributes (#736). A field the form did not render — a dictionary with no entries —
   // is simply not set on the new stamp.
   const attributes = parseStampAttributes(formData);
+  // The size (#763) apart from them: a figure this app cannot read is reported, never stored as
+  // *no size* — see `parseStampSizeInput`.
+  const size = parseStampSizeInput(formData);
+  if (size.error) return { status: "error", message: size.error };
 
   const catalogNumbers: { catalogVendorId: string; number: string }[] = [];
   for (const [key, value] of formData.entries()) {
@@ -468,6 +472,7 @@ export async function addStampToIssueAction(
       checklistIds,
       colnectId,
       ...attributes,
+      ...size.input,
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),

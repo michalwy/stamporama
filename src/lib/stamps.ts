@@ -48,6 +48,8 @@ import {
 } from "./translations";
 import {
   STAMP_ATTRIBUTE_DISPLAY_SELECT,
+  STAMP_SIZE_SELECT,
+  stampSizeFields,
   stampAttributeLabels,
   type StampAttributeDisplayRow,
 } from "./stamp-attributes";
@@ -56,6 +58,7 @@ import {
   type StampAttributeInput,
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
+import type { StampSizeFields } from "./stamp-size";
 import type { Prisma } from "@/generated/prisma/client";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
@@ -394,6 +397,10 @@ export interface StampListItem {
   /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
    *  their names. Every value is null on a stamp that states none, which is the normal case. */
   attributes: StampAttributeLabels;
+  /** What the stamp states about its physical size (#763), in millimetres — its own figures only.
+   *  Nothing is resolved through the checklist here: a list and a detail page report what the
+   *  record holds, and the borrowed figure belongs to the surfaces that draw boxes with it. */
+  size: StampSizeFields;
 }
 
 export interface PaginatedStampsResult {
@@ -442,6 +449,7 @@ const STAMP_LIST_SELECT = {
   checklistEntries: { select: { checklistId: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
+  ...STAMP_SIZE_SELECT,
 } as const;
 
 function toStampListItem(
@@ -471,7 +479,10 @@ function toStampListItem(
     }[];
     checklistEntries: { checklistId: string }[];
     photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
-  } & StampAttributeDisplayRow,
+  } & StampAttributeDisplayRow & {
+      widthMm: Prisma.Decimal | null;
+      heightMm: Prisma.Decimal | null;
+    },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   latestYearByName: Map<string, number>,
@@ -555,6 +566,7 @@ function toStampListItem(
     variantCopies: copyCounts.variant.get(stamp.id) ?? NO_COPIES,
     wants: wantsByStamp.get(stamp.id) ?? null,
     attributes: stampAttributeLabels(stamp),
+    size: stampSizeFields(stamp),
   };
 }
 

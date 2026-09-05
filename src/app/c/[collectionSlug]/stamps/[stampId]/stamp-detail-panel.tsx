@@ -23,6 +23,7 @@ import {
   STAMP_ATTRIBUTE_FIELDS,
   statedStampAttributes,
 } from "@/lib/stamp-attribute-kinds";
+import { formatStampSize } from "@/lib/stamp-size";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { CopyCountBadge, dispositionParts } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
@@ -80,6 +81,7 @@ export function StampDetailPanel({
 
   const areaPath = buildAreaPath(areas, stamp.areaId);
   const statedAttributes = statedStampAttributes(stamp.attributes);
+  const statedSize = formatStampSize(stamp.size);
   const issuedDate = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
   const price = stamp.mainCatalogPrice;
 
@@ -184,13 +186,22 @@ export function StampDetailPanel({
                 states none — which is the normal case, and six em dashes on every stamp would push
                 what the page does say further down the column (#536). Once it is here it lists all
                 six, so what is *not* stated is visible too. */}
-            <DetailCard title="Attributes" empty={statedAttributes.length === 0}>
+            <DetailCard
+              title="Attributes"
+              empty={statedAttributes.length === 0 && statedSize === null}
+            >
               <FieldGrid min="9rem">
                 {STAMP_ATTRIBUTE_FIELDS.map(({ key, label }) => (
                   <Field key={key} label={label}>
                     {stamp.attributes[key]}
                   </Field>
                 ))}
+                {/* The size (#763) reads with the rest because it is the same kind of fact, but as
+                    one figure rather than two fields: `21.5 × 25 mm` is how a catalogue prints it
+                    and how a collector reads it back. Only what this stamp itself states — the
+                    neighbour's figure a sizeless stamp borrows (`stamp-size.ts`) belongs to the
+                    surfaces that cut hawids by it, not to a page reporting the record. */}
+                <Field label="Size">{statedSize}</Field>
               </FieldGrid>
             </DetailCard>
 

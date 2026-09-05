@@ -105,9 +105,12 @@ Copies, Offers. Only Details is always there.
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).
 - **Attributes** — the six [stamp attributes](collections.md#stamp-attributes): denomination,
-  perforation, colour, watermark, paper and printing method. The card appears only when the stamp
-  states at least one of them, and then lists all six, so what is *not* recorded is visible too.
-  Read-only here, as everything on this page is — the values are edited from **Edit** above.
+  perforation, colour, watermark, paper and printing method, and the stamp's
+  [size](collections.md#the-stamps-size) as one figure (`21.5 × 25 mm`). The card appears only when
+  the stamp states at least one of them, and then lists them all, so what is *not* recorded is
+  visible too. The size shown is the stamp's own — nothing borrowed from a neighbour on its
+  checklist. Read-only here, as everything on this page is — the values are edited from **Edit**
+  above.
 - **Issues** — which issues the stamp belongs to, and which of each issue's
   [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
   counts it.
