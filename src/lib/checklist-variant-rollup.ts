@@ -94,6 +94,59 @@ export async function loadChecklistVariantRollup(
   };
 }
 
+/** How deep a variant chain is walked before the loop gives up. A stamp tree that deep does not
+ *  exist; the bound is here so a cycle written by hand cannot spin a read forever. */
+const MAX_VARIANT_DEPTH = 8;
+
+/**
+ * The variant chain of each of the given stamps — **itself first, then upward while the node it
+ * came from is a variant** — for a caller holding copies rather than checklist members (#759).
+ *
+ * {@link loadChecklistVariantRollup} walks *down* from a known membership and can only answer about
+ * the subtrees it loaded. The bulk-lot builder starts from the other end: it holds a pool of copies
+ * and asks two questions of each one — which checklist slot it covers ({@link satisfiedMember}) and
+ * which duplicate pile it belongs to (`lot-builder-rules.ts`' `duplicateKey`, the top of the chain).
+ * Both are this same chain, so it is loaded once and handed to the pure rules rather than being
+ * re-derived per question.
+ *
+ * One query per level, and the levels are few: the walk stops the moment a node is a distinct entry
+ * (an error, a plate flaw, an overprint), which keeps its own identity and takes its ancestors out
+ * of reach with it — ADR-0010 §3's rule, the one this whole module reads the tree by. A stamp with
+ * no variant edge above it gets a chain of one, which is the correct answer and not an absence.
+ */
+export async function loadVariantChains(
+  collectionId: string,
+  stampIds: readonly string[]
+): Promise<Map<string, VariantChain>> {
+  const chains = new Map<string, string[]>();
+  if (stampIds.length === 0) return chains;
+  for (const id of new Set(stampIds)) chains.set(id, [id]);
+
+  // The frontier is "the nodes whose parent we still might climb to", carrying the origins that
+  // reached them — several copies routinely share an ancestor, and it is read once for all of them.
+  let frontier = new Map<string, Set<string>>(
+    [...chains.keys()].map((id) => [id, new Set([id])])
+  );
+  for (let depth = 0; depth < MAX_VARIANT_DEPTH && frontier.size > 0; depth += 1) {
+    const rows = await prisma.stamp.findMany({
+      where: { id: { in: [...frontier.keys()] }, collectionId },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+    });
+    const next = new Map<string, Set<string>>();
+    for (const row of rows) {
+      // A child that does not act as a variant is a stamp in its own right: the chain ends at it.
+      if (row.parentId === null || !childIsVariant(row)) continue;
+      const origins = frontier.get(row.id)!;
+      for (const origin of origins) chains.get(origin)!.push(row.parentId);
+      const carried = next.get(row.parentId) ?? new Set<string>();
+      for (const origin of origins) carried.add(origin);
+      next.set(row.parentId, carried);
+    }
+    frontier = next;
+  }
+  return chains;
+}
+
 /**
  * One checklist's copy tallies, re-stamped onto the members they satisfy — rows answering for no
  * member dropped.

@@ -982,6 +982,17 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
   year?: number | "none";
+  /** Restrict to copies whose linked stamp was issued in a **span** of years (#759) — either bound
+   * on its own, both together, and inclusive at each end. The bulk-lot builder asks its pool for
+   * "the fifties", which the single-year axis above cannot express and which is not the same
+   * question as eleven separate reads.
+   *
+   * A stamp with **no** issued year is outside every span: a bound is a claim about when the goods
+   * were issued, and a copy that cannot answer it has not met it. `"none"` stays {@link year}'s
+   * own value — the two axes are exclusive and `year` wins, since a caller that set both is asking
+   * one exact question and one loose one about the same field. */
+  yearFrom?: number;
+  yearTo?: number;
   /** Restrict to copies with no attached photos (#177), so users can find pieces that
    * still need photographing (#112). */
   noPhotos?: boolean;
@@ -1059,6 +1070,13 @@ function buildItemWhere(
   }
   if (filters.year !== undefined) {
     stampWhere.issuedYear = filters.year === "none" ? null : filters.year;
+  } else if (filters.yearFrom !== undefined || filters.yearTo !== undefined) {
+    // A span (#759). Written as one comparison object rather than two clauses so a caller giving
+    // both bounds narrows the same key instead of the second spread silently replacing the first.
+    stampWhere.issuedYear = {
+      ...(filters.yearFrom !== undefined ? { gte: filters.yearFrom } : {}),
+      ...(filters.yearTo !== undefined ? { lte: filters.yearTo } : {}),
+    };
   }
   // Constraints that would otherwise collide on the same top-level key (several
   // `offerSetMemberships` filters, the search `OR`) are collected here and AND-ed.
@@ -1628,6 +1646,32 @@ async function enrichItemRows(
  * would otherwise pay on every scroll. Ordering is `createdAt`, so a caller that does not rearrange
  * gets the list's own order.
  */
+/**
+ * The **exact** `where` {@link listItemsPaginated} reads over, for a caller assembling a query of
+ * its own against the same scope (#759).
+ *
+ * The bulk-lot builder's candidate pool is `notOfferedPlatformId` plus the structural axes, and its
+ * summary is a second read over the same set — the idiom {@link getHoldingsValuation} already shares
+ * with the list so that a list and its total can never disagree about which copies they are about.
+ * Exported rather than reimplemented because the availability question alone is four clauses (#259,
+ * #334, the in-hand states, #506) and a second copy of them would drift the day one of them changes.
+ *
+ * Ownership is the caller's to assert, as it is on {@link getHoldingsValuationForItems}: this
+ * builds a `where`, it does not run one. The location subtree and the derived "unpriced" narrowing
+ * are resolved here, so a caller cannot forget either.
+ */
+export async function buildItemFilterWhere(
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<Prisma.ItemWhereInput> {
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  return (await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  )) as Prisma.ItemWhereInput;
+}
+
 export async function filterItemIds(
   ownerId: string,
   collectionId: string,

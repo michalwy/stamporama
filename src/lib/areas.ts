@@ -12,8 +12,10 @@ import {
 export const AREA_TRANSLATION_FIELDS = ["titleName"] as const;
 
 /** The area plus every area nested under it, within a collection. Used to scope a catalog
- * sort-key recompute to a subtree when an area's effective primary catalog shifts (#181). */
-async function areaSubtreeIds(collectionId: string, rootId: string): Promise<string[]> {
+ * sort-key recompute to a subtree when an area's effective primary catalog shifts (#181), and to
+ * resolve the bulk-lot builder's one selected area into the set its pool reads over (#759) — where
+ * the *root* is kept as well, because the lot is named after it. */
+export async function areaSubtreeIds(collectionId: string, rootId: string): Promise<string[]> {
   const areas = await prisma.collectionArea.findMany({
     where: { collectionId },
     select: { id: true, parentId: true },

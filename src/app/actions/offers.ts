@@ -50,6 +50,8 @@ import {
 } from "@/lib/offer-photo-attachments";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
+import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
+import { parseLotBuilderRequest } from "@/lib/lot-builder-criteria";
 import {
   isOfferState,
   isCreatableOfferState,
@@ -167,6 +169,50 @@ async function readOfferInput(
       state,
     },
   };
+}
+
+export type CommitLotActionState =
+  | { status: "success"; id: string; copies: number; missingPinned: MissingPinnedCopy[] }
+  | { status: "error"; message: string };
+
+/**
+ * Carry an accepted bulk-lot proposal out as a `preparing` offer (#759).
+ *
+ * Takes the wizard's **query string**, not a list of copies: the commit re-plans from the same five
+ * inputs the proposal was drawn from and re-reads the pool while doing it (#717). Between opening
+ * the wizard and pressing this a copy may have gone onto another offer or into an agreed trade, and
+ * re-reading is what notices; a pinned copy that stopped being listable comes back named
+ * (`missingPinned`) rather than silently released (#314).
+ *
+ * `name` / `description` are the wizard's pre-filled texts. Non-empty, they are stored as the
+ * collector's own; blank, the platform's template renders as it does for any other offer.
+ */
+export async function commitLotBuilderAction(
+  collectionId: string,
+  search: string,
+  name: string,
+  description: string
+): Promise<CommitLotActionState> {
+  const session = await getSession();
+  const parsed = parseLotBuilderRequest(new URLSearchParams(search));
+  if (!parsed.criteria.platformId) {
+    return { status: "error", message: "Choose a platform to build the lot for." };
+  }
+  try {
+    const result = await commitLotProposal(session.user.id, collectionId, {
+      ...parsed,
+      name,
+      description,
+    });
+    return {
+      status: "success",
+      id: result.offerId,
+      copies: result.copies,
+      missingPinned: result.missingPinned,
+    };
+  } catch (e) {
+    return fail(e, "Failed to create the lot. Please try again.");
+  }
 }
 
 /** Create an offer, optionally seeding it with copies. `seedPerCopy` packages that seed as one
