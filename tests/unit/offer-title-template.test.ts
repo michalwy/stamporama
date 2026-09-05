@@ -67,6 +67,7 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     ref: null,
     itemNo: null,
     itemNoPad: 5,
+    issuedDate: null,
     subtype: null,
     denomination: null,
     perforation: null,

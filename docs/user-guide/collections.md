@@ -801,6 +801,60 @@ laid out to a size nobody chose, and hawid cut to a wrong size does not come bac
 The stock is read as a page is planned and copied nowhere, so editing it changes the *next* plan.
 Pages you have already printed are paper.
 
+## Album templates
+
+**Settings → Albums → Album templates** holds everything about how an album *looks*, so a new album
+is not an evening of retyping page sizes and font names. One template covers:
+
+- **Page** — size and the four margins in millimetres, how many columns the content is laid in, and
+  an optional decorative border with its weight and inset.
+- **Spacing** — between boxes across a row, between rows, and the space a heading reserves above and
+  below itself.
+- **Hawid clearances** — what a box adds to the stamp. Two numbers rather than one, because the two
+  axes are different: the vertical clearance is added *before a strip is chosen* (how much hawid has
+  to be there above and below the stamp), while the horizontal margin is the cut. Together they
+  replace AlbumEasy's single global 4 mm.
+- **Type** — a face and a size for each of the five roles: album title, chapter heading, checklist
+  heading, box label, footer. Sizes are in **points**, the unit type is set in.
+- **Boxes and photos** — the outline around a mount and where its label sits, and whether a box
+  prints the photo it has, at what opacity.
+- **Texts** — the chapter heading, the checklist heading, the box label and the footer.
+
+### The fonts are a fixed set
+
+You pick from the faces the app itself ships and embeds, not from the fonts installed on a machine.
+AlbumEasy can name "Times New Roman" because it runs on your desktop; these pages are built on the
+server, and a font name there gives you a PDF that is right on one machine and wrong on the next.
+
+Two families are available. **Liberation** matches Times New Roman and Arial *metrically* — the same
+widths, so a page set in it lines up with the pages you have already printed and filed. **Noto** is
+there for an album that is not continuing an existing binder. Each comes in regular, bold, italic and
+bold italic, and a "face" is one of those combinations, exactly as `ALBUM_DEFINE_FONT` names them.
+
+### The texts are templates, not sentences
+
+The four texts are written with the same `{token}` placeholders as your listing titles and
+descriptions — `{catalog::}` for a bare catalogue number, `{year}`, `{checklistName}`, `{pageRange}`.
+That is what lets one template serve an album in any language: the tokens resolve against the
+album's own language when its pages are planned, so nothing here is ever a translated string.
+
+Each text is offered only the tokens its own place on the page can answer. A chapter heading is a
+*year group*, so it can name the year and the area and nothing else; a footer can name the page and
+the album but not a checklist. The point is that an unresolvable token on an album page is not a
+puzzling preview — it is a gap printed on a card that is already in a binder.
+
+`{issueDate}` is the catalogue's own date for the earliest stamp on a checklist. Bare, it reads
+`22 VII` — the Roman month your existing headings use — so `{year}, {issueDate}. {checklistName}`
+prints *1952, 22 VII. Uchwalenie Konstytucji PRL.* Write `{issueDate:numeric}` for `22.07` or
+`{issueDate:iso}` for `1952-07-22`.
+
+### Choosing a template copies it
+
+This is the part worth being clear about. Starting an album from a template **copies** its values
+onto the album. The album does not point back at the template, so editing or deleting one later
+never changes an album that already exists — and can never change a page that is already printed,
+mounted and glued into. If you want an existing album to follow a change, you change that album.
+
 ## Stamp photos
 
 Alongside the photos you attach to an individual owned **copy** (see [Inventory → Photos](inventory.md#photos)), you can attach photos to the **stamp itself** — a representative or reference image of the catalog stamp (or variant). Stamp photos live at the catalog level, so they are shared context for every copy of that stamp rather than a record of one physical piece.

@@ -55,6 +55,10 @@ export const TITLE_COPY_SELECT = {
       id: true,
       name: true,
       issuedYear: true,
+      // The catalogue's own issue date behind `{issueDate}` (#766) — the year above is already
+      // selected for `{year}`; these two are what turn it into `22 VII`.
+      issuedDay: true,
+      issuedMonth: true,
       translations: { select: { language: true, name: true } },
       // The subtype behind `{subtype}` (#339). `isDefault` rides along because the default subtype
       // renders as nothing — see `toTitleCopy`.
@@ -157,6 +161,8 @@ export type TitleCopyRow = {
     id: string;
     name: string | null;
     issuedYear: number | null;
+    issuedDay: number | null;
+    issuedMonth: number | null;
     translations: NameTranslation[];
     subtype: {
       id: string;
@@ -330,6 +336,15 @@ export function toTitleCopy(
     ),
     catalogNumbers,
     year: row.stamp.issuedYear,
+    // No year, no date: a month without one is not something any caller could order or print.
+    issuedDate:
+      row.stamp.issuedYear === null
+        ? null
+        : {
+            year: row.stamp.issuedYear,
+            month: row.stamp.issuedMonth,
+            day: row.stamp.issuedDay,
+          },
     condition: resolve(
       "condition",
       { type: "condition", id: row.condition.id, field: "name" },

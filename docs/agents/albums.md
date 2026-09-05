@@ -47,6 +47,69 @@ The clearances themselves are **not** here — they belong to the album template
 in. The rule takes plain numbers on purpose; it is unit-tested on plain numbers in
 `tests/unit/hawid.test.ts`.
 
+## The album template (#766)
+
+`AlbumTemplate` is a collection-level **render preset** — page, spacing, hawid clearances, a face and
+size per type role, box treatment, photos, and four texts — edited in **Settings → Albums** beside
+the stock. It is `CollageTemplate`'s analogue and follows #307/#308's decisions rather than parallel
+ones.
+
+`src/lib/album-template-rules.ts` is the pure half: bounds, parsing, and `AlbumRenderPreset`, the
+type an `AlbumTemplate` is *plus an id and a name*. #767's `Album` embeds the same preset, and that
+shared type is the only thing keeping the two field lists in step.
+
+**It stays a shared type — never a shared row, never a foreign key.** The duplicated columns are the
+design, not an oversight waiting to be normalised: choosing a template copies it, so editing one
+cannot reach into a page already in a binder. That is #308's rule, and paper is why it is stricter
+here.
+
+The defaults are **measured, not invented**: `DEFAULT_ALBUM_PRESET` is the geometry of the
+collector's own AlbumEasy sources — A4, 10 mm margins, `ALBUM_PAGES_SPACING (1.0 6.0)`, and
+`STAMP_BOXES_SIZE_ADJUST(4)` split across the two clearances that single global figure becomes.
+
+### Fonts are a fixed set (`src/lib/album-fonts.ts`)
+
+A face is a **family and a style** — the unit `ALBUM_DEFINE_FONT("Arial Bold Italic")` names — so
+there are no per-role weight columns. Two families ship: Liberation, metrically compatible with the
+Times New Roman and Arial roughly 200 already-printed pages are set in, and Noto. #768 embeds the
+bytes and owns verifying coverage.
+
+There is deliberately **no mono face**. The case for one is aligning columns of catalog numbers, and
+it fails on the material: text faces already advance digits equally (Arial 1139, Times 1024 units),
+catalog numbers are not pure digits, and labels are centred under boxes of differing widths. Note
+also that pdf-lib exposes no OpenType feature selection, so `tnum` is unreachable — a face's default
+figures are the figures you get.
+
+Type sizes are in **points**, geometry in millimetres. Points is what type is set in and what a PDF
+is drawn in; millimetres is what gets cut.
+
+### The texts reuse the offer vocabulary, scoped per role
+
+No album-only token engine exists. The four texts are `{token}` templates over
+`src/lib/offer-title-template.ts`, and what the album needed was added *there*: `{issueDate}` as a
+stamp fact beside `{denomination}`, and `{albumName}` / `{checklistName}` / `{pageRange}` on
+`ListingTemplateContext` exactly as `{offerUrl}` rides there.
+
+The vocabulary is exposed as **four per-role lists** (`ALBUM_CHAPTER_TOKENS`,
+`ALBUM_CHECKLIST_TOKENS`, `ALBUM_BOX_LABEL_TOKENS`, `ALBUM_FOOTER_TOKENS`), not one. A flat list
+would offer a footer `{checklistName}` and a chapter heading `{pageRange}`; on an offer that is a
+puzzled collector, on an album it is a gap printed on a mounted card.
+
+Two role decisions worth keeping:
+
+- A **chapter is a year group**, so its heading names the year and the area and nothing issue-scoped
+  — including where a year group happens to hold one issue. A heading whose shape changes with the
+  data produces a printed run nobody can account for.
+- A **box label names a catalogue slot**, not an owned copy, so condition, location and copy number
+  are absent. Its default is `{catalog::}`: the empty vendor list means the area's primary catalogue
+  and the empty flags mean no prefixes, because a page is already one area and one catalogue.
+
+`{issueDate}` resolves the **earliest** date among the stamps in scope, and precision is not
+earliness — an absent month or day sorts last within its year rather than first. Its format is a
+token argument (`roman` default, `numeric`, `iso`) rather than a setting: Roman month numerals are a
+convention nothing else in the codebase produces, and a per-collection setting is what that turns
+into if it is left implicit.
+
 ## Stamp size (#763)
 
 A box needs a size, and a size is a `Stamp` attribute — catalogue identity, not condition — resolved

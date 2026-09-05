@@ -53,6 +53,15 @@ export interface TitleCatalogNumber {
   isPrimary: boolean;
 }
 
+/** A stamp's issue date as the catalogue records it — the year always, the month and day only
+ * where they are known. `1952` and `1952, 22 VII` are both ordinary catalogue entries, so the two
+ * finer fields are independently absent rather than a single optional date. */
+export interface TitleIssuedDate {
+  year: number;
+  month: number | null;
+  day: number | null;
+}
+
 /** One copy's title-relevant fields, already normalised from whatever source (server Prisma row or
  * client `ItemListItem`) into plain strings. `null` marks an absent value (skipped in the token). */
 export interface TitleTemplateCopy {
@@ -108,6 +117,14 @@ export interface TitleTemplateCopy {
   watermark: string | null;
   paper: string | null;
   printing: string | null;
+  /** What the catalogue records as the stamp's **issue date** (#71/#766): the year it already
+   * carries above, plus the month and day where the collection recorded them. Null when no year is
+   * known — a month without a year is not a date, so the whole value goes rather than half of it.
+   *
+   * A fact about the stamp, like `{denomination}`, which is why it lives here rather than on the
+   * container context: an album's checklist heading resolves it over the stamps of one checklist
+   * (the earliest of them), and a listing text could resolve it over an offer's copies. */
+  issuedDate: TitleIssuedDate | null;
   /** Name of the issue the stamp belongs to (its first membership), or null. */
   issueName: string | null;
   /** Year of that issue, or null. */
@@ -208,6 +225,10 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   // What the catalogue says the stamp is (#738). Last in the legend because they are the detail a
   // title reaches for after it has said which stamp this is — and because a template that names all
   // six is a description rather than a title.
+  // When the catalogue's own date is known, not just its year (#766). A stamp fact like the six
+  // below it, and advertised here rather than only on the album's headings for `{count}`'s reason:
+  // a token the engine resolves everywhere but shows on one screen is a token nobody finds.
+  { token: "{issueDate}", label: "Issue date", example: "22 VII" },
   { token: "{denomination}", label: "Denomination", example: "10 gr" },
   { token: "{perforation}", label: "Perforation", example: "11½" },
   { token: "{color}", label: "Colour", example: "Carmine" },
@@ -229,6 +250,17 @@ export const EXAMPLE_OFFER_URL = "https://stamporama.example/o/my-collection/42"
 export interface ListingTemplateContext {
   /** Absolute URL of the offer's own screen on this instance, for `{offerUrl}`. */
   offerUrl?: string | null;
+  /** The album's own name, for `{albumName}` in a footer (#766). */
+  albumName?: string | null;
+  /** The checklist a heading is being rendered for, for `{checklistName}` (#766). The engine's
+   *  `{name}` is the *stamp's*, so without this a checklist heading has nothing to call itself —
+   *  and it is the only thing a checklist spanning several issues (#767) can say about itself at
+   *  all. */
+  checklistName?: string | null;
+  /** The page's identity — `PL 303-309`, from `formatCatalogRange` (#400) over the stamps actually
+   *  on the page — for `{pageRange}` in a footer. Resolved per page by the plan (#767), which is
+   *  the only caller that knows what fell onto which sheet. */
+  pageRange?: string | null;
 }
 
 /** No offer in hand — the default for every render that is not an offer's own listing text. */
@@ -265,6 +297,93 @@ export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
   { token: "{listedAs}", label: "Listed as (variant)", example: "Mi·PL 865a" },
   { token: "{variants}", label: "Possible variants", example: "Mi·PL 865a-c" },
   { token: "{offerUrl}", label: "Offer link", example: EXAMPLE_OFFER_URL },
+];
+
+/** What the album's three container tokens stand for in a **preview** (#766). A template is written
+ * before any album exists, exactly as `{offerUrl}` is written before any offer does, so the Settings
+ * panel previews against these — and the token legend quotes the same strings, so the example a
+ * collector reads and the example they see rendered can never drift apart. */
+export const ALBUM_PREVIEW_CONTEXT: ListingTemplateContext = {
+  albumName: "Polska Ludowa",
+  checklistName: "Uchwalenie Konstytucji PRL",
+  pageRange: "PL 303-309",
+};
+
+/** Look one token up in the shared vocabulary by name, so the album's per-role lists below are
+ * built *from* that vocabulary rather than beside it — a label reworded once is reworded
+ * everywhere, and a role cannot drift into offering a token that no longer exists. */
+function titleToken(token: string): TitleToken {
+  const found = AVAILABLE_TITLE_TOKENS.find((t) => t.token === token);
+  if (!found) throw new Error(`Unknown title token: ${token}`);
+  return found;
+}
+
+// ── The album's text roles (#766) ────────────────────────────────────────────
+//
+// Four lists rather than one, and this is the point worth defending: a single flat "album tokens"
+// list would offer `{pageRange}` on a checklist heading and `{checklistName}` in a footer, and
+// neither can ever resolve. On an offer that produces a puzzled collector; here it produces a
+// hundred printed cards with a gap where a token was, and the paper does not come back.
+//
+// Each list is over the shared vocabulary — no album-only engine, per #766 — and holds exactly what
+// its own scope can answer.
+
+/** A chapter is a **year group** (#767), so a heading can name the year and the area and nothing
+ *  more. Deliberately *not* the issue: a year group holding one issue would then print a different
+ *  shape of heading from one holding three, and a collector reading the finished run could not tell
+ *  why. Naming the issue is the checklist heading's job, which always has exactly one in scope. */
+export const ALBUM_CHAPTER_TOKENS: readonly TitleToken[] = [
+  titleToken("{year}"),
+  titleToken("{area}"),
+];
+
+/** A checklist heading, the line the collector writes by hand today as
+ *  `1952, 22 VII. Uchwalenie Konstytucji PRL.` — the year, the catalogue's own date, and what the
+ *  series is called. `{checklistName}` is the only one of these a checklist spanning several issues
+ *  can answer, which is why it leads. */
+export const ALBUM_CHECKLIST_TOKENS: readonly TitleToken[] = [
+  {
+    token: "{checklistName}",
+    label: "Checklist name",
+    example: ALBUM_PREVIEW_CONTEXT.checklistName!,
+  },
+  titleToken("{year}"),
+  titleToken("{issueDate}"),
+  titleToken("{issueName}"),
+  titleToken("{area}"),
+];
+
+/** A box label names the **catalogue slot** the mount is for, so the copy-level tokens — condition,
+ *  location, copy number — are deliberately absent: an album page is a plan for stamps that are not
+ *  necessarily owned yet, and a box labelled with a location ref would be a box that only makes
+ *  sense once something is in it.
+ *
+ *  The default template is `{catalog::}` — the bare number. The empty vendor list means the area's
+ *  primary catalogue and the empty flag list means no prefixes, both of which the token already
+ *  supports; an album is scoped to one area and one catalogue, so `Mi·PL 303` under every box would
+ *  print what the binder spine already says. */
+export const ALBUM_BOX_LABEL_TOKENS: readonly TitleToken[] = [
+  titleToken("{catalog}"),
+  titleToken("{name}"),
+  titleToken("{year}"),
+  titleToken("{denomination}"),
+  titleToken("{perforation}"),
+  titleToken("{color}"),
+  titleToken("{watermark}"),
+  titleToken("{paper}"),
+  titleToken("{printing}"),
+  titleToken("{subtype}"),
+  titleToken("{format}"),
+];
+
+/** A footer identifies the **sheet**. `{pageRange}` is the page's identity — a catalog range and not
+ *  a page number, because a number is a position and a position moves when the collection grows
+ *  (#767); the collector's own footers already read `PL 303-309` for exactly that reason. */
+export const ALBUM_FOOTER_TOKENS: readonly TitleToken[] = [
+  { token: "{pageRange}", label: "Page range", example: ALBUM_PREVIEW_CONTEXT.pageRange! },
+  { token: "{albumName}", label: "Album name", example: ALBUM_PREVIEW_CONTEXT.albumName! },
+  titleToken("{area}"),
+  titleToken("{year}"),
 ];
 
 /** The blocks a listing text may use (#266), for the builder's chips: each renders its body once per
@@ -663,6 +782,71 @@ function resolveItemNo(copies: readonly TitleTemplateCopy[], widthArg: string | 
   ).join(" / ");
 }
 
+/** Roman month numerals, the convention the collector's own album headings are written in —
+ * `1952, 22 VII.`. Nothing else in the app produces them, which is exactly why the format is a
+ * token argument rather than a silent default that would later become a per-collection setting. */
+const ROMAN_MONTHS = [
+  "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
+] as const;
+
+/** Which of the dates in scope is the earliest. Precision is not earliness: a stamp stating only a
+ * year is *less precisely* dated than one stating a day in the same year, not earlier than it, so
+ * an absent month or day sorts last within its year rather than first. */
+function earliestIssuedDate(copies: readonly TitleTemplateCopy[]): TitleIssuedDate | null {
+  let best: TitleIssuedDate | null = null;
+  for (const copy of copies) {
+    const d = copy.issuedDate;
+    if (!d) continue;
+    if (!best) {
+      best = d;
+      continue;
+    }
+    const rank = (x: TitleIssuedDate) => x.year * 10000 + (x.month ?? 99) * 100 + (x.day ?? 99);
+    if (rank(d) < rank(best)) best = d;
+  }
+  return best;
+}
+
+/**
+ * Resolve `{issueDate[:FORMAT]}` — the **earliest** issue date among the stamps in scope (#766). The
+ * date belongs to the publication event, the stamps of a series share it, and where they differ the
+ * earliest is the one a catalogue prints against the series.
+ *
+ * FORMAT is `roman` (the default), `numeric` or `iso`:
+ *
+ * - `roman` → `22 VII`, and `VII` when only the month is known. Day and month only: the year is
+ *   `{year}`, which already collapses a span across several stamps, so a heading reads
+ *   `{year}, {issueDate}.` exactly as the collector writes it by hand.
+ * - `numeric` → `22.07`, `07` with no day. The same two fields for collectors who do not use Roman
+ *   month numerals.
+ * - `iso` → `1952-07-22`, shortening to `1952-07` and `1952` as precision runs out. This one
+ *   carries the year, because an ISO fragment without one is not a date anybody reads.
+ *
+ * Nothing dated in scope renders empty, and the tidy pass takes the separator that was gluing it in.
+ */
+function resolveIssueDate(
+  copies: readonly TitleTemplateCopy[],
+  formatArg: string | undefined
+): string {
+  const date = earliestIssuedDate(copies);
+  if (!date) return "";
+  const format = (formatArg ?? "roman").trim().toLowerCase() || "roman";
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  if (format === "iso") {
+    if (date.month === null) return String(date.year);
+    if (date.day === null) return `${date.year}-${pad(date.month)}`;
+    return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
+  }
+
+  if (date.month === null) return "";
+  const month = format === "numeric" ? pad(date.month) : ROMAN_MONTHS[date.month - 1];
+  // A month out of range is data we cannot render rather than a reason to fail a save.
+  if (!month) return "";
+  if (date.day === null) return month;
+  return format === "numeric" ? `${pad(date.day)}.${month}` : `${date.day} ${month}`;
+}
+
 /** Resolve one token spec (without braces), e.g. `name` or `catalog:Mi,Sc:vendor`. Returns the
  * rendered value (possibly `""` when absent), or `null` when the token name is not known.
  * `setTitle` is the enclosing set's title, which only `{setTitle}` reads (null outside a set);
@@ -683,6 +867,19 @@ function resolveTokenValue(
     // it simply has nothing to render there, like a certificate token on a copy without one.
     case "offerurl":
       return context.offerUrl?.trim() ?? "";
+    // The album's three container facts (#766), known everywhere for `{offerUrl}`'s reason: a token
+    // that renders empty is a token with nothing to say here, never literal braces on a printed
+    // page. Which of them a given text is *offered* is scoped per role — see the four
+    // `ALBUM_*_TOKENS` lists — because a footer that could name a checklist would be a footer
+    // nobody could explain.
+    case "albumname":
+      return context.albumName?.trim() ?? "";
+    case "checklistname":
+      return context.checklistName?.trim() ?? "";
+    case "pagerange":
+      return context.pageRange?.trim() ?? "";
+    case "issuedate":
+      return resolveIssueDate(copies, segments[1]);
     // Known everywhere for the same reason (#619), and **blank outside a listing text**: unlike
     // `{offerUrl}`, whose value simply is not there in a title, theirs rides on the copy and would
     // otherwise render — see {@link TemplateScope.listingText} for why a title must not print it.
@@ -1204,9 +1401,10 @@ function renderSegments(
  */
 export function renderTitleTemplate(
   template: string | null | undefined,
-  copies: readonly TitleTemplateCopy[]
+  copies: readonly TitleTemplateCopy[],
+  context: ListingTemplateContext = NO_CONTEXT
 ): string {
-  return renderTitleTemplateSegments(template, copies)
+  return renderTitleTemplateSegments(template, copies, context)
     .map((s) => s.text)
     .join("");
 }
@@ -1218,10 +1416,15 @@ export function renderTitleTemplate(
  */
 export function renderTitleTemplateSegments(
   template: string | null | undefined,
-  copies: readonly TitleTemplateCopy[]
+  copies: readonly TitleTemplateCopy[],
+  // The container facts a one-line text can name. An offer title has none — `{offerUrl}` is a
+  // listing-text token — but an album's heading, label and footer are one-line templates whose
+  // subject *is* the container (#766), so the parameter has to reach this path too.
+  context: ListingTemplateContext = NO_CONTEXT
 ): TitleSegment[] {
   return renderSegments(template, [{ title: null, copies }], {
     fallbackTemplate: DEFAULT_TITLE_TEMPLATE,
+    context,
   });
 }
 

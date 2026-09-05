@@ -8,6 +8,7 @@ import {
   titleFallbackTokens,
   listingFallbackTokens,
   EXAMPLE_OFFER_URL,
+  type ListingTemplateContext,
   type TitleToken,
 } from "@/lib/offer-title-template";
 import { TitlePreviewText, TitleFallbackNote } from "./title-preview";
@@ -293,6 +294,11 @@ export interface TemplateBuilderProps {
   /** Extra controls for this template, shown between its explanation and the field — the listing
    * description's format selector (#319) is the only one so far. */
   extra?: React.ReactNode;
+  /** Container facts the preview should resolve — the offer's URL by default, or the album's own
+   *  name / checklist / page range when this builder is editing an album template's text (#766).
+   *  A template is always written before the thing it will render against exists, so a preview
+   *  either stands in for it or shows a gap that is not real. */
+  context?: ListingTemplateContext;
   /** The format this template's text will be read as (#319). Anything other than plain text adds a
    * Source / Rendered switch to the preview. Source stays the default: it is the only mode that can
    * mark the runs which fell back to the default language (#298). */
@@ -322,6 +328,7 @@ export function TemplateBuilder({
   emptyPreview,
   extra,
   previewFormat,
+  context,
 }: TemplateBuilderProps) {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   // Only offered when the text is not plain — there is nothing to render otherwise.
@@ -350,9 +357,10 @@ export function TemplateBuilder({
   const previewCopies = samples.copies.map((s) => s.copy);
   // `{offerUrl}` (#415) names an offer, and a template is written before any of them — the preview
   // shows the example link so the collector sees how much room a URL takes in the text.
+  const previewContext = context ?? { offerUrl: EXAMPLE_OFFER_URL };
   const segments = multiline
-    ? renderListingTemplateSegments(value, previewSets, { offerUrl: EXAMPLE_OFFER_URL })
-    : renderTitleTemplateSegments(value, previewCopies.slice(0, 1));
+    ? renderListingTemplateSegments(value, previewSets, previewContext)
+    : renderTitleTemplateSegments(value, previewCopies.slice(0, 1), previewContext);
   const fallbackTokens = multiline
     ? listingFallbackTokens(value, previewSets)
     : titleFallbackTokens(value, previewCopies.slice(0, 1));

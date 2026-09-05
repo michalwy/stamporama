@@ -29,6 +29,7 @@ import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
 import { HawidStockPanel } from "./hawid-stock-panel";
+import { AlbumTemplatesPanel } from "./album-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -47,6 +48,7 @@ import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
 import type { CarrierData } from "@/lib/carriers";
 import type { HawidStripData } from "@/lib/hawid-stock";
+import type { AlbumTemplateData } from "@/lib/album-templates";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
@@ -78,6 +80,9 @@ interface SettingsTabsProps {
   initialRefCardTemplates: RefCardTemplateData[];
   /** The hawid strips the collection owns (#765) — what an album page's boxes are cut from. */
   initialHawidStrips: HawidStripData[];
+  /** The collection's album templates (#766) — how a page looks, seeded onto an album rather than
+   *  referenced by one. */
+  initialAlbumTemplates: AlbumTemplateData[];
   /** The collection's carriers (#491) — the tracking-address side of shipping. */
   initialCarriers: CarrierData[];
   initialColnectMappings: ColnectMappingData[];
@@ -203,6 +208,7 @@ export function SettingsTabs({
   initialCollageTemplates,
   initialRefCardTemplates,
   initialHawidStrips,
+  initialAlbumTemplates,
   initialCarriers,
   initialColnectMappings,
   initialColnectConditionMappings,
@@ -451,6 +457,15 @@ export function SettingsTabs({
               drawer or it is not. */}
           <h2 style={sectionHeadingStyle}>Hawid stock</h2>
           <HawidStockPanel collectionId={collectionId} initialStrips={initialHawidStrips} />
+
+          {/* The template comes second because it is the half that can be changed freely: the stock
+              above is a statement about a drawer, while everything here is a look, and a look is
+              only ever copied onto an album (#308's rule) rather than read back from one. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2.5rem" }}>Album templates</h2>
+          <AlbumTemplatesPanel
+            collectionId={collectionId}
+            initialTemplates={initialAlbumTemplates}
+          />
         </section>
       )}
       {activeTab === "shipping" && (

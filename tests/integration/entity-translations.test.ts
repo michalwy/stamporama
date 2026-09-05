@@ -323,6 +323,8 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         id: "stamp-1",
         name: "5 kr blue",
         issuedYear: 1918,
+        issuedDay: null,
+        issuedMonth: null,
         translations: [{ language: "pl", name: "5 kr niebieski" }],
         subtype: null,
         catalogNumbers: [],

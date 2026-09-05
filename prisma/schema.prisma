@@ -143,6 +143,7 @@ model Collection {
   collageTemplates CollageTemplate[]
   refCardTemplates RefCardTemplate[]
   hawidStrips     HawidStrip[]
+  albumTemplates  AlbumTemplate[]
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
@@ -746,6 +747,128 @@ model HawidStrip {
   @@unique([collectionId, heightMm])
   @@index([collectionId])
   @@map("hawid_strip")
+}
+
+// A collection-level **render preset** for album pages (#766) — everything about how an album
+// *looks*, held once so a new album is not an evening of retyping page sizes and font names. The
+// direct analogue of {@link CollageTemplate} (#307), and it follows that model's decisions rather
+// than inventing parallel ones.
+//
+// **Seeded, never referenced** (#308's rule). Choosing a template on an album *copies* its values
+// onto the album (#767); the album holds no `albumTemplateId` and nothing here is read at plan
+// time. That rule matters more on this model than anywhere else in the schema: an album is printed
+// on paper and stamps are glued into it, so an edit here must not be able to reach back into a page
+// already sitting in a binder. The columns below are duplicated onto `Album` deliberately — the
+// shared piece is the TypeScript type `AlbumRenderPreset`, never a shared row and never a foreign
+// key.
+//
+// **Two units, on purpose.** Geometry is millimetres, because millimetres are what gets cut: the
+// clearances feed the box rule (#765) directly, at the tenth `src/lib/hawid.ts` rounds to. Type
+// sizes are **points** — the unit the collector's existing AlbumEasy sources state type in
+// (`PAGE_TEXT_CENTRE (STAMP_H1 12 …)`) and the unit a PDF is natively drawn in (#768), so neither
+// the collector nor the renderer converts.
+//
+// The four text columns are **templates over the shared `{token}` vocabulary**, not translated
+// strings — which is what lets one template serve an album in any language, the album's own (#767),
+// resolved at plan time. There is deliberately no second, album-only token engine:
+// `src/lib/offer-title-template.ts` is the vocabulary, scoped per text role so a chapter heading is
+// never offered a token only a page can answer.
+model AlbumTemplate {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+
+  // ── Page ──
+  // The sheet itself. Millimetres, fractional: A4 is 210 × 297 and a collector cutting his own
+  // stock is not wrong.
+  pageWidthMm    Float
+  pageHeightMm   Float
+  marginTopMm    Float
+  marginRightMm  Float
+  marginBottomMm Float
+  marginLeftMm   Float
+  // How many columns the content area is divided into, and the gutter between them. 1 is the
+  // ordinary page; a definitives album with small boxes reads better in two.
+  columns        Int   @default(1)
+  columnGapMm    Float
+  // The optional decorative border: `none` | `single` | `double`, its line weight, and how far in
+  // from the page edge it is drawn. `none` leaves the other two unread rather than null — a border
+  // that is off still remembers what it was set to when it is turned back on.
+  borderStyle    String @default("none")
+  borderWidthMm  Float
+  borderInsetMm  Float
+
+  // ── Spacing ──
+  // Between boxes, horizontally and vertically; then the space a checklist heading reserves above
+  // and below itself. Two numbers rather than one because the two axes of an album page are not
+  // symmetric: rows carry labels under the boxes, columns do not.
+  boxGapXMm           Float
+  boxGapYMm           Float
+  headingSpaceAboveMm Float
+  headingSpaceBelowMm Float
+
+  // ── Hawid margins (#765) ──
+  // The clearances the box rule adds to a stamp. The **vertical** one is added before a strip is
+  // chosen — it is how much strip has to be there above and below the stamp — while the
+  // **horizontal** one is the cut itself. They live on the template rather than in `hawid.ts`
+  // because they are a statement about how this album looks, and the rule stays pure by taking
+  // them as plain numbers. AlbumEasy's single global `STAMP_BOXES_SIZE_ADJUST(4)` is what these
+  // two replace.
+  verticalClearanceMm  Float
+  horizontalMarginMm   Float
+
+  // ── Type ──
+  // A face and a size for each of the five roles. The face is an id from the set the app ships and
+  // embeds (`src/lib/album-fonts.ts`, #768) — **not** a system font name. AlbumEasy names a system
+  // face and gets away with it because it runs on the collector's desktop; this renders on a
+  // server, where a free-text name produces a PDF that is right on one machine and wrong on the
+  // next. A face is a family *and* a style (`liberation-sans-bold-italic`), the unit
+  // `ALBUM_DEFINE_FONT` itself names.
+  titleFace     String
+  titleSizePt   Float
+  chapterFace   String
+  chapterSizePt Float
+  headingFace   String
+  headingSizePt Float
+  labelFace     String
+  labelSizePt   Float
+  footerFace    String
+  footerSizePt  Float
+
+  // ── Boxes ──
+  // The outline drawn around a mount, and where its label sits: `none` | `solid` | `dashed` |
+  // `dotted`, a weight in millimetres, and `below` | `above` | `none`.
+  boxBorderStyle   String @default("solid")
+  boxBorderWidthMm Float
+  labelPosition    String @default("below")
+
+  // ── Photos ──
+  // Whether a box prints the photo it has, and at what opacity — a faint image behind the mount is
+  // a placeholder showing what belongs there, which is a different thing from a page that prints
+  // the stamps it already owns at full strength. Percent, because it is a share of ink and not a
+  // measurement.
+  printPhotos         Boolean @default(false)
+  photoOpacityPercent Int     @default(100)
+
+  // ── Texts ──
+  // Templates over the shared token vocabulary, each scoped to what its role can answer. Blank is
+  // a real value on all four: a page with no footer is an ordinary thing to want.
+  chapterTemplate   String @default("")
+  checklistTemplate String @default("")
+  boxLabelTemplate  String @default("")
+  footerTemplate    String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // Unique per collection: an album's template is picked by name, and two templates called
+  // "Polska A4" would make which one you seeded from depend on which the database handed back
+  // first — `RefCardTemplate`'s rule (#569), reported as its own error rather than a failed save.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("album_template")
 }
 
 model CatalogVendor {
