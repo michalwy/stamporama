@@ -81,7 +81,13 @@ const TAB_STYLE: React.CSSProperties = {
   marginBottom: "-1px",
 };
 
-type TabKey = "details" | "prices";
+type TabKey = "details" | "attributes" | "prices";
+
+const TAB_LABELS: Record<TabKey, string> = {
+  details: "Details",
+  attributes: "Attributes",
+  prices: "Prices",
+};
 
 /** A stamp with no attributes stated — the normal case, and what an add starts from (#736). */
 const BLANK_ATTRIBUTES: StampAttributeValues = {
@@ -210,6 +216,13 @@ export function StampFormDialog(props: StampFormDialogProps) {
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );
   const hasPricesTab = areaVendors.length > 0;
+  const tabs: TabKey[] = hasPricesTab
+    ? ["details", "attributes", "prices"]
+    : ["details", "attributes"];
+  // Which tab is shown is derived from the requested one against the tabs that exist, never a
+  // `setState` in an effect: `areaVendors` arrives with the area, so Prices can disappear from
+  // under the collector while they are standing on it.
+  const shownTab: TabKey = tabs.includes(activeTab) ? activeTab : "details";
   // Colnect ID (#247): editable when adding, or when the edited stamp carries the field.
   // A caller that omits `colnectId` (undefined) hides the input so its value is never clobbered.
   const showColnect = props.mode === "add" || editProps?.stamp.colnectId !== undefined;
@@ -703,42 +716,40 @@ export function StampFormDialog(props: StampFormDialogProps) {
       maxWidth={aside ? "min(96vw, 78rem)" : "52rem"}
       height={aside ? "min(90vh, 52rem)" : undefined}
     >
-      {/* Tab bar only when the area has catalogs to price. Photos are inline on the Details
-          tab (like the copy dialog), not a separate tab. */}
-      {hasPricesTab && (
-        <div
-          style={{
-            display: "flex",
-            gap: 0,
-            borderBottom: "1px solid var(--color-border)",
-            flexShrink: 0,
-            padding: "0 1.5rem",
-          }}
-        >
-          {(["details", "prices"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                ...TAB_STYLE,
-                fontWeight: activeTab === tab ? 600 : 400,
-                color: activeTab === tab ? "var(--color-accent)" : "var(--color-text-secondary)",
-                borderBottom: activeTab === tab ? "2px solid var(--color-accent)" : "2px solid transparent",
-              }}
-            >
-              {tab === "details" ? "Details" : "Prices"}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Details and Attributes are always there; Prices joins them only when the area has catalogs
+          to price. Photos are inline on the Details tab (like the copy dialog), not a separate tab. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 0,
+          borderBottom: "1px solid var(--color-border)",
+          flexShrink: 0,
+          padding: "0 1.5rem",
+        }}
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            style={{
+              ...TAB_STYLE,
+              fontWeight: shownTab === tab ? 600 : 400,
+              color: shownTab === tab ? "var(--color-accent)" : "var(--color-text-secondary)",
+              borderBottom: shownTab === tab ? "2px solid var(--color-accent)" : "2px solid transparent",
+            }}
+          >
+            {TAB_LABELS[tab]}
+          </button>
+        ))}
+      </div>
 
       <form style={FORM_STYLE} onSubmit={handleSubmit}>
         <DialogBody>
-          {/* Details stays in flow to dictate dialog height; Prices overlays it. */}
+          {/* Details stays in flow to dictate dialog height; the other tabs overlay it. */}
           <div style={{ position: "relative" }}>
           {/* ── Details tab ── */}
-          <div style={{ visibility: activeTab === "details" ? "visible" : "hidden" }}>
+          <div style={{ visibility: shownTab === "details" ? "visible" : "hidden" }}>
             {/* Issue selection (add only) */}
             {showIssueStep && addProps && (
               <div style={{ marginBottom: "1.25rem", paddingBottom: "1.25rem", borderBottom: "1px solid var(--color-border)" }}>
@@ -1174,107 +1185,6 @@ export function StampFormDialog(props: StampFormDialogProps) {
               </div>
             )}
 
-            {/* Catalogue attributes (#736): what the catalogue states about this stamp beyond its
-                number. All six optional — an empty value is the normal case, not a gap to fill —
-                and none of them inherited from the parent, because a variant is its own stamp.
-                A dictionary select appears only once its dictionary has entries, the rule the
-                subtype block above already follows: a select offering nothing but "—" is furniture,
-                and the four lists are set up in Settings → Attributes. */}
-            <div
-              style={{
-                marginTop: "1.25rem",
-                paddingTop: "1.25rem",
-                borderTop: "1px solid var(--color-border)",
-              }}
-            >
-              <LabelWithError>Attributes (optional)</LabelWithError>
-              {!attributesLoaded ? (
-                // Reserve the row's height so the dialog doesn't jump, and — the reason this is
-                // gated at all — so a save made before the stored values arrive cannot submit the
-                // blank fields over them.
-                <div
-                  style={{
-                    minHeight: "3.75rem",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.875rem",
-                  }}
-                >
-                  Loading attributes…
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
-                    gap: "0.75rem 1rem",
-                  }}
-                >
-                  {/* Denomination and perforation are recorded **as printed** — never parsed, never
-                      translated — so they are text boxes and not dictionaries. */}
-                  <div style={{ minWidth: 0 }}>
-                    <LabelWithError htmlFor="f-stamp-denomination">
-                      {STAMP_TEXT_ATTRIBUTE_LABELS.denomination.field}
-                    </LabelWithError>
-                    <input
-                      id="f-stamp-denomination"
-                      name="denomination"
-                      type="text"
-                      disabled={isPending}
-                      value={attributes.denomination ?? ""}
-                      onChange={(e) => setAttribute("denomination", e.target.value)}
-                      placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.denomination.example}
-                      {...NO_AUTOFILL}
-                      style={INPUT_STYLE}
-                    />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <LabelWithError htmlFor="f-stamp-perforation">
-                      {STAMP_TEXT_ATTRIBUTE_LABELS.perforation.field}
-                    </LabelWithError>
-                    <input
-                      id="f-stamp-perforation"
-                      name="perforation"
-                      type="text"
-                      disabled={isPending}
-                      value={attributes.perforation ?? ""}
-                      onChange={(e) => setAttribute("perforation", e.target.value)}
-                      placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.perforation.example}
-                      {...NO_AUTOFILL}
-                      style={INPUT_STYLE}
-                    />
-                  </div>
-                  {STAMP_ATTRIBUTE_KINDS.map((kind) => {
-                    const options = attributeLists?.[kind] ?? [];
-                    if (options.length === 0) return null;
-                    const field = `${kind}Id` as keyof StampAttributeValues;
-                    return (
-                      <div key={kind} style={{ minWidth: 0 }}>
-                        <LabelWithError htmlFor={`f-stamp-${kind}`}>
-                          {STAMP_ATTRIBUTE_LABELS[kind].field}
-                        </LabelWithError>
-                        <select
-                          id={`f-stamp-${kind}`}
-                          name={field}
-                          value={attributes[field] ?? ""}
-                          onChange={(e) => setAttribute(field, e.target.value)}
-                          disabled={isPending}
-                          style={INPUT_STYLE}
-                        >
-                          {/* The empty choice is the value most stamps have, so it leads. */}
-                          <option value="">—</option>
-                          {options.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted
                 only once the stamp's existing photos have loaded (edit mode); PhotoEditor seeds
                 its state from initialPhotos once on mount, so it must not mount before they arrive. */}
@@ -1308,6 +1218,109 @@ export function StampFormDialog(props: StampFormDialogProps) {
             </div>
           </div>
 
+          {/* ── Attributes tab (#761) ── Catalogue attributes (#736): what the catalogue states
+              about this stamp beyond its number. All six optional — an empty value is the normal
+              case, not a gap to fill — and none of them inherited from the parent, because a
+              variant is its own stamp. They sit on their own tab rather than inline on Details
+              because they are extra detail on a form whose core is the stamp's identity, and six
+              usually-empty fields between the subtype and the photos pushed that identity apart.
+              A dictionary select appears only once its dictionary has entries, the rule the
+              subtype block on Details already follows: a select offering nothing but "—" is
+              furniture, and the four lists are set up in Settings → Attributes. */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              overflowY: "auto",
+              display: shownTab === "attributes" ? "block" : "none",
+            }}
+          >
+            {!attributesLoaded ? (
+              // The fields stay unrendered until the stored values arrive — the reason the
+              // section is gated at all — so a save made before they land cannot submit the
+              // blank fields over them.
+              <div
+                style={{
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.875rem",
+                }}
+              >
+                Loading attributes…
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
+                  gap: "0.75rem 1rem",
+                }}
+              >
+                {/* Denomination and perforation are recorded **as printed** — never parsed, never
+                    translated — so they are text boxes and not dictionaries. */}
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="f-stamp-denomination">
+                    {STAMP_TEXT_ATTRIBUTE_LABELS.denomination.field}
+                  </LabelWithError>
+                  <input
+                    id="f-stamp-denomination"
+                    name="denomination"
+                    type="text"
+                    disabled={isPending}
+                    value={attributes.denomination ?? ""}
+                    onChange={(e) => setAttribute("denomination", e.target.value)}
+                    placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.denomination.example}
+                    {...NO_AUTOFILL}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="f-stamp-perforation">
+                    {STAMP_TEXT_ATTRIBUTE_LABELS.perforation.field}
+                  </LabelWithError>
+                  <input
+                    id="f-stamp-perforation"
+                    name="perforation"
+                    type="text"
+                    disabled={isPending}
+                    value={attributes.perforation ?? ""}
+                    onChange={(e) => setAttribute("perforation", e.target.value)}
+                    placeholder={STAMP_TEXT_ATTRIBUTE_LABELS.perforation.example}
+                    {...NO_AUTOFILL}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                {STAMP_ATTRIBUTE_KINDS.map((kind) => {
+                  const options = attributeLists?.[kind] ?? [];
+                  if (options.length === 0) return null;
+                  const field = `${kind}Id` as keyof StampAttributeValues;
+                  return (
+                    <div key={kind} style={{ minWidth: 0 }}>
+                      <LabelWithError htmlFor={`f-stamp-${kind}`}>
+                        {STAMP_ATTRIBUTE_LABELS[kind].field}
+                      </LabelWithError>
+                      <select
+                        id={`f-stamp-${kind}`}
+                        name={field}
+                        value={attributes[field] ?? ""}
+                        onChange={(e) => setAttribute(field, e.target.value)}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      >
+                        {/* The empty choice is the value most stamps have, so it leads. */}
+                        <option value="">—</option>
+                        {options.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* ── Prices tab (overlays Details; own scroll if taller) ── */}
           {hasPricesTab && (
             <div
@@ -1315,7 +1328,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 position: "absolute",
                 inset: 0,
                 overflowY: "auto",
-                display: activeTab === "prices" ? "block" : "none",
+                display: shownTab === "prices" ? "block" : "none",
               }}
             >
               {!pricesLoaded ? (

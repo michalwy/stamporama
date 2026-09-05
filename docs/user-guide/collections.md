@@ -611,7 +611,7 @@ Denomination and perforation are not lists. They are recorded on each stamp **as
 
 ### Recording attributes on a stamp
 
-The stamp form — the one the Issues list, the Variants card and the stamp page's **Edit** all open — carries all six under **Attributes**, below the subtype: two text boxes for denomination and perforation, and a dropdown for each of the four lists with an empty choice at the top. Every field is optional and empty is the normal state, so nothing here has to be filled in to save a stamp.
+The stamp form — the one the Issues list, the Variants card and the stamp page's **Edit** all open — carries all six on its own **Attributes** tab, beside **Details**: two text boxes for denomination and perforation, and a dropdown for each of the four lists with an empty choice at the top. Every field is optional and empty is the normal state, so nothing here has to be filled in to save a stamp. The tab is grouping only — the form saves as a whole, so what you type here goes in with the **Save** on any tab.
 
 - A dropdown appears **only once its list has entries**. A collection that has never set up watermarks sees no watermark dropdown, and adding the first entry under **Settings → Attributes** makes it appear.
 - The attributes belong to the stamp, not to the copy: they say what the catalogue printed, while a copy records its condition, format and where it is filed.
