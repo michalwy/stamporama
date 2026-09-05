@@ -16,6 +16,8 @@ build/
 .env
 .env.local
 .env.*.local
+# this worktree's port slot (#781) — allocated on first use, released by removing the worktree
+.env.slot
 !.env.example
 !.env.prod.example
 

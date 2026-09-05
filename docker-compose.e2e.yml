@@ -1,5 +1,12 @@
 # Isolated PostgreSQL for integration tests.
 # Started automatically by pnpm test:integration; do not use this database for development.
+#
+# The project name is written down here rather than inherited from the directory (#781): two
+# worktrees are two directories, so Compose gave them two different projects that then fought
+# over the same host port, and the second `up -d --wait` died on "port is already allocated".
+# The suffix and the port both come from the worktree's slot — see scripts/dev-slot.sh. Unset,
+# they are the main worktree's slot 0, which is the project name and port this file always had.
+name: stamporama${STAMPORAMA_SLOT_SUFFIX:-}
 services:
   e2e-db:
     image: postgres:18-alpine
@@ -13,7 +20,7 @@ services:
     # "sorry, too many clients already", which reads as a broken feature and is nothing of the kind.
     command: ["postgres", "-c", "max_connections=300"]
     ports:
-      - "5433:5432"
+      - "${STAMPORAMA_E2E_DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U stamporama"]
       interval: 5s

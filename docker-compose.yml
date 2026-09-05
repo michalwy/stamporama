@@ -24,8 +24,11 @@ services:
       args:
         STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
         STAMPORAMA_BUILD_DATE: ${STAMPORAMA_BUILD_DATE:-}
+    # The published port follows the worktree's slot (#781, scripts/dev-slot.sh) so a second
+    # worktree can bring this stack up too. Unset — the main worktree, and every self-hosted
+    # install — it is 3000, the port the README documents.
     ports:
-      - "3000:3000"
+      - "${STAMPORAMA_APP_PORT:-3000}:3000"
     environment:
       DATABASE_URL: postgresql://stamporama:${POSTGRES_PASSWORD:-stamporama}@db:5432/stamporama
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}

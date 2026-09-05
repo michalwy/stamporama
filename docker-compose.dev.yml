@@ -10,8 +10,11 @@ services:
     # webpack the heap plateaus. See issue #161 — revert to `pnpm dev` (Turbopack) once the upstream
     # leak is fixed; periodically re-test after Next.js upgrades.
     command: sh -c "pnpm install && pnpm exec prisma migrate deploy && pnpm exec prisma generate && pnpm exec next dev --webpack"
+    # Must stay character-for-character the same as docker-compose.yml's entry: Compose merges
+    # the two port lists and only drops the duplicate when they are identical — a different
+    # published port here would be *added*, publishing the app twice (#781).
     ports:
-      - "3000:3000"
+      - "${STAMPORAMA_APP_PORT:-3000}:3000"
     environment:
       NODE_ENV: development
       # Keep photo bytes (#112) OUTSIDE the bind-mounted repo. Without this the storage

@@ -102,7 +102,22 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 pnpm lint
 pnpm typecheck
 pnpm test:unit
+pnpm test:integration   # starts its own throwaway Postgres via docker-compose.e2e.yml
 ```
+
+**Working in more than one git worktree?** Every host port this project pins is derived from a
+*slot* — a small integer belonging to the worktree — so a second worktree can run the integration
+suite, or its own stack, without fighting the first one for a port. The main worktree is slot 0 and
+needs nothing configured: 3000 for the app and 5433 for the test database, as above. Each linked
+worktree takes the next free number on first use and records it in its own (untracked) `.env.slot`,
+shifting every port by ten per slot — slot 1 is 3010 and 5443, slot 2 is 3020 and 5453, and so on.
+
+```sh
+pnpm slot            # every worktree, its slot and its ports
+pnpm e2e:db:down     # stop this worktree's test database
+```
+
+Removing the worktree releases the number; `scripts/dev-slot.sh release` releases it without.
 
 ## License
 
