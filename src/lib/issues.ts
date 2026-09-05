@@ -1615,8 +1615,15 @@ async function createRangeStamps(
 
   if (!parent) {
     const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
+    // Appended after whatever the checklist already carries, in the order the numbers were typed
+    // (#764) — the same reading of a bulk add as the members above.
+    const last = await tx.checklistStamp.aggregate({
+      where: { checklistId },
+      _max: { sortOrder: true },
+    });
+    const base = (last._max.sortOrder ?? -1) + 1;
     await tx.checklistStamp.createMany({
-      data: stampIds.map((stampId) => ({ checklistId, stampId })),
+      data: stampIds.map((stampId, i) => ({ checklistId, stampId, sortOrder: base + i })),
       skipDuplicates: true,
     });
   }

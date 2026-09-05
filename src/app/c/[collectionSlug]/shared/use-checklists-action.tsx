@@ -6,6 +6,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFooter,
+  DialogPrimaryButton,
   LabelWithError,
   ConfirmDialog,
 } from "@/app/dialog-shell";
@@ -15,6 +17,7 @@ import {
   renameChecklistAction,
   deleteChecklistAction,
   reorderChecklistsAction,
+  reorderChecklistStampsAction,
   setChecklistStampsAction,
   type ChecklistActionState,
 } from "@/app/actions/checklists";
@@ -114,7 +117,8 @@ export function useChecklistsAction(scope: ChecklistsScope): {
 type Editing =
   | { kind: "add" }
   | { kind: "rename"; checklist: ChecklistData }
-  | { kind: "stamps"; checklist: ChecklistData };
+  | { kind: "stamps"; checklist: ChecklistData }
+  | { kind: "order"; checklist: ChecklistData };
 
 export function ChecklistsDialog({
   scope,
@@ -175,6 +179,7 @@ export function ChecklistsDialog({
   const duplicateName =
     editing !== null &&
     editing.kind !== "stamps" &&
+    editing.kind !== "order" &&
     nameText.trim() !== "" &&
     checklists.some(
       (c) =>
@@ -278,6 +283,12 @@ export function ChecklistsDialog({
                           onSelect: () => setEditing({ kind: "stamps", checklist }),
                         },
                         {
+                          key: "order",
+                          label: "Order stamps…",
+                          icon: "reorder",
+                          onSelect: () => setEditing({ kind: "order", checklist }),
+                        },
+                        {
                           key: "rename",
                           label: "Rename…",
                           icon: "edit",
@@ -332,7 +343,7 @@ export function ChecklistsDialog({
         </DialogBody>
       </DialogShell>
 
-      {editing && editing.kind !== "stamps" && (
+      {editing && editing.kind !== "stamps" && editing.kind !== "order" && (
         <DialogShell
           title={editing.kind === "add" ? "Add checklist" : "Rename checklist"}
           onClose={() => {
@@ -426,6 +437,25 @@ export function ChecklistsDialog({
               () => setChecklistStampsAction(editing.checklist.id, stampIds),
               () => setEditing(null)
             )
+          }
+        />
+      )}
+
+      {editing?.kind === "order" && (
+        <ChecklistStampOrderDialog
+          collectionId={collectionId}
+          issueId={issueId}
+          vendorMap={scope.vendorMap}
+          primaryVendorId={scope.primaryVendorId}
+          checklist={editing.checklist}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            setEditing(null);
+            setError(undefined);
+          }}
+          onReorder={(stampIds) =>
+            run(() => reorderChecklistStampsAction(editing.checklist.id, stampIds), () => {})
           }
         />
       )}
@@ -591,10 +621,6 @@ function StampCheckRow({
   disabled: boolean;
 }) {
   const stamp = node.node;
-  const primaryCN = primaryVendorId
-    ? stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
-    : null;
-  const secondaryCNs = stamp.catalogNumbers.filter((cn) => cn !== primaryCN);
   return (
     <>
       <label
@@ -616,33 +642,7 @@ function StampCheckRow({
           onChange={() => onToggle(stamp.stampId)}
           disabled={disabled}
         />
-        <span
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            flexWrap: "wrap",
-          }}
-        >
-          {primaryCN && (
-            <CatalogNumberChip
-              number={primaryCN.number}
-              vendor={vendorMap.get(primaryCN.catalogVendorId)}
-              style={STAMP_PRIMARY_CHIP}
-            />
-          )}
-          {secondaryCNs.map((cn) => (
-            <CatalogNumberChip
-              key={cn.catalogVendorId}
-              number={cn.number}
-              vendor={vendorMap.get(cn.catalogVendorId)}
-              style={STAMP_SECONDARY_CHIP}
-            />
-          ))}
-          {stampRest(stamp)}
-        </span>
+        <StampLabel stamp={stamp} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
       </label>
       {node.children.map((child) => (
         <StampCheckRow
@@ -657,6 +657,197 @@ function StampCheckRow({
         />
       ))}
     </>
+  );
+}
+
+/** How a stamp is named on both of this editor's stamp lists: the same catalog-number chips the
+ *  issue's own rows draw (#227), the leading catalogue accented, then whatever is left of the name. */
+function StampLabel({
+  stamp,
+  vendorMap,
+  primaryVendorId,
+}: {
+  stamp: StampNodeData;
+  vendorMap: VendorMap;
+  primaryVendorId: string | null;
+}) {
+  const primaryCN = primaryVendorId
+    ? stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
+    : null;
+  const secondaryCNs = stamp.catalogNumbers.filter((cn) => cn !== primaryCN);
+  return (
+    <span
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.3rem",
+        flexWrap: "wrap",
+      }}
+    >
+      {primaryCN && (
+        <CatalogNumberChip
+          number={primaryCN.number}
+          vendor={vendorMap.get(primaryCN.catalogVendorId)}
+          style={STAMP_PRIMARY_CHIP}
+        />
+      )}
+      {secondaryCNs.map((cn) => (
+        <CatalogNumberChip
+          key={cn.catalogVendorId}
+          number={cn.number}
+          vendor={vendorMap.get(cn.catalogVendorId)}
+          style={STAMP_SECONDARY_CHIP}
+        />
+      ))}
+      {stampRest(stamp)}
+    </span>
+  );
+}
+
+/**
+ * The order one checklist's stamps read in (#764).
+ *
+ * A checklist had no order of its own: every surface that listed one fell back to the catalog sort
+ * key — right almost always, and wrong exactly where a catalogue's numbering does not match how the
+ * set is laid out. This is the **collection-wide** answer, and every reader of the checklist takes
+ * it; an album page may override it for one page, and the base order is the one set here.
+ *
+ * A **flat** list, unlike the tree next door: a checklist has no parents and no variants, only the
+ * stamps it names, so a drag moves a row against the whole list and nothing has to stay inside a
+ * sibling group. Reordering is the shared kit's, grip-only.
+ *
+ * Each drop **saves** — a drag is a gesture, not a form, and it is how every other reorder in the
+ * app behaves, the checklists one row up included. The list on screen is the local one, moved
+ * optimistically, so a slow write never drags a row back under the pointer.
+ */
+function ChecklistStampOrderDialog({
+  collectionId,
+  issueId,
+  vendorMap,
+  primaryVendorId,
+  checklist,
+  isPending,
+  error,
+  onClose,
+  onReorder,
+}: {
+  collectionId: string;
+  issueId: string;
+  vendorMap: VendorMap;
+  primaryVendorId: string | null;
+  checklist: ChecklistData;
+  isPending: boolean;
+  error?: string;
+  onClose: () => void;
+  onReorder: (stampIds: string[]) => void;
+}) {
+  const { data: members = [], isLoading } = useIssueMembers(collectionId, issueId, true);
+  const [order, setOrder] = useState<string[]>(checklist.stampIds);
+  const byStamp = new Map(members.map((m) => [m.stampId, m]));
+
+  function move(from: number, to: number) {
+    const next = [...order];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setOrder(next);
+    onReorder(next);
+  }
+
+  const drag = useReorderList(order.length > 1 && !isPending, move, { handleOnly: true });
+
+  return (
+    <DialogShell
+      title={`Order of “${checklist.name}”`}
+      onClose={() => {
+        if (!isPending) onClose();
+      }}
+      maxWidth="min(96vw, 40rem)"
+    >
+      <DialogBody>
+        <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: "0 0 0.75rem" }}>
+          Drag the ⠿ grip to say what order this set reads in. It starts in catalog order, which is
+          what every screen showed before — change it where the catalogue&apos;s numbering is not how
+          the set is laid out. Every screen that lists this checklist follows it.
+        </p>
+
+        {order.length === 0 ? (
+          <p style={{ fontSize: "0.9375rem", color: "var(--color-text-muted)" }}>
+            Nothing on this checklist yet — tick its stamps under <strong>Choose stamps…</strong>{" "}
+            first.
+          </p>
+        ) : isLoading ? (
+          <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Loading stamps…</p>
+        ) : (
+          <div
+            {...(drag?.containerProps ?? {})}
+            style={{
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.75rem",
+              overflow: "hidden",
+            }}
+          >
+            {order.map((stampId, i) => {
+              const stamp = byStamp.get(stampId);
+              return (
+                <div key={stampId}>
+                  {showLineAt(drag, i) && <InsertionLine />}
+                  <div
+                    {...(drag?.itemProps(i) ?? {})}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.6rem",
+                      padding: "0.4rem 0.75rem",
+                      background: "var(--color-bg-elevated)",
+                      borderTop: i > 0 ? "1px solid var(--color-border)" : "none",
+                      fontSize: "0.875rem",
+                      ...dragStyle(drag, i),
+                    }}
+                  >
+                    {drag && (
+                      <span {...drag.handleProps(i)}>
+                        <DragGrip label="Reorder stamp" />
+                      </span>
+                    )}
+                    <span style={{ ...COUNT_BADGE, minWidth: "1.75rem", textAlign: "right" }}>
+                      {i + 1}
+                    </span>
+                    {stamp ? (
+                      <StampLabel
+                        stamp={stamp}
+                        vendorMap={vendorMap}
+                        primaryVendorId={primaryVendorId}
+                      />
+                    ) : (
+                      // A checklist may name a stamp this issue no longer holds. It still has a
+                      // place in the set, so it keeps its row rather than vanishing from the order.
+                      <span style={{ flex: 1, color: "var(--color-text-muted)" }}>
+                        (not among this issue&apos;s stamps)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {showLineAt(drag, order.length) && <InsertionLine />}
+          </div>
+        )}
+
+        {error && (
+          <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginTop: "0.75rem" }}>
+            {error}
+          </p>
+        )}
+      </DialogBody>
+      {/* One button: each drop is already saved, so this dialog has nothing to commit. */}
+      <DialogFooter>
+        <DialogPrimaryButton type="button" onClick={onClose} disabled={isPending}>
+          Done
+        </DialogPrimaryButton>
+      </DialogFooter>
+    </DialogShell>
   );
 }
 

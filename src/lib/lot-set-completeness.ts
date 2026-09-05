@@ -7,6 +7,7 @@ import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
 import { loadChecklistVariantRollup, rollUpStampIds } from "./checklist-variant-rollup";
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { loadIssuePrefixMap } from "./issue-prefix";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 // How close a purchase lot's issues are to a **complete for-sale set** (#563) — the I/O half.
 //
@@ -134,7 +135,8 @@ export async function getLotSetCompleteness(
       id: true,
       issueId: true,
       name: true,
-      stamps: { select: { stampId: true } },
+      // The stamps a set is still missing are named in the order the set reads (#764).
+      stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       issue: { select: { collectionAreaId: true } },
     },
   });

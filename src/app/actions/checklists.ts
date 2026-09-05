@@ -8,6 +8,7 @@ import {
   renameChecklist,
   deleteChecklist,
   reorderChecklists,
+  reorderChecklistStamps,
   setChecklistStamps,
   getChecklistsForIssue,
   type ChecklistData,
@@ -108,5 +109,20 @@ export async function setChecklistStampsAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save the checklist. Please try again." };
+  }
+}
+
+/** Put a checklist's stamps in the order the set reads (#764) — the collection-wide answer an
+ *  album page then prints as a row of boxes. Sent whole, like every other reorder here. */
+export async function reorderChecklistStampsAction(
+  checklistId: string,
+  stampIds: string[]
+): Promise<ChecklistActionState> {
+  const session = await getSession();
+  try {
+    await reorderChecklistStamps(session.user.id, checklistId, stampIds);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to reorder the stamps. Please try again." };
   }
 }

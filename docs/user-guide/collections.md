@@ -460,7 +460,7 @@ Some publications are collected more than one way, and those need several:
 - **perforated** beside **imperforate**, printed by the catalog as two series in one block;
 - the **tabbed** stamps as the goal, with the plain ones as background — or both, separately.
 
-Each checklist has its own completeness and its own catalog value.
+Each checklist has its own completeness and its own catalog value, and its own **order** — the sequence the set reads in, which starts as the catalog's and is yours to change.
 
 ### Managing an issue's checklists
 
@@ -468,6 +468,7 @@ Open **Checklists…** from the issue's **⋮** menu. From there you can:
 
 - **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
 - **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed, each row carrying the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
+- **Order stamps…** — drag the ⠿ grip to say what order the set reads in. It starts in catalog order, which is what every screen showed before, so nothing moves until you change it; change it where the catalogue's numbering is not how the set is laid out. Each drop is saved as you make it, and every screen that lists the checklist follows the order — the copies an intake creates from a whole set, the lines an auction lot or a trade takes it as, the stamps a set is still missing.
 - **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures.
 
 Names are **labels, not identifiers**: the same name may repeat freely across issues, and *Imperforate* on two different series is two unrelated checklists that never meet on one screen. Within **one** issue a repeated name is allowed too, but the field shows a **⚠** saying so — two checklists called the same thing read alike everywhere they are listed, and you can still save it if that is what you meant.

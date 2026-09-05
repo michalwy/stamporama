@@ -40,7 +40,7 @@ export interface ChecklistData {
   name: string;
   sortOrder: number;
   /** Stamps on the checklist — the set completeness, the price total and the range are all read
-   *  against. */
+   *  against — **in the order the set reads** (#764), which an album page then prints as a row. */
   stampIds: string[];
 }
 
@@ -49,24 +49,53 @@ const CHECKLIST_SELECT = {
   issueId: true,
   name: true,
   sortOrder: true,
-  stamps: { select: { stampId: true } },
+  stamps: { select: { stampId: true, sortOrder: true } },
 } as const;
+
+/**
+ * The order the set reads in (#764): `sortOrder`, the stamp id behind it so rows written in one
+ * `createMany` before the column existed still come out the same way twice.
+ *
+ * Sorted in the mapper rather than by the query, exactly as the issue list's checklists are: the
+ * select above is `as const`, and a readonly `orderBy` tuple is not assignable to Prisma's mutable
+ * input type. A checklist is a set of stamps, not a page of them, so this costs nothing.
+ */
+export function compareChecklistStamps(
+  a: { stampId: string; sortOrder: number },
+  b: { stampId: string; sortOrder: number }
+): number {
+  return a.sortOrder - b.sortOrder || a.stampId.localeCompare(b.stampId);
+}
+
+/** {@link compareChecklistStamps} applied — a checklist's membership in the order it reads. */
+export function orderedChecklistStampIds(
+  stamps: readonly { stampId: string; sortOrder: number }[]
+): string[] {
+  return [...stamps].sort(compareChecklistStamps).map((s) => s.stampId);
+}
 
 function toChecklistData(row: {
   id: string;
   issueId: string | null;
   name: string;
   sortOrder: number;
-  stamps: { stampId: string }[];
+  stamps: { stampId: string; sortOrder: number }[];
 }): ChecklistData {
   return {
     id: row.id,
     issueId: row.issueId,
     name: row.name,
     sortOrder: row.sortOrder,
-    stampIds: row.stamps.map((s) => s.stampId),
+    stampIds: orderedChecklistStampIds(row.stamps),
   };
 }
+
+/**
+ * The order a checklist's stamps read in (#764), for the queries that can state it themselves —
+ * `CHECKLIST_SELECT` cannot, being `as const`, and sorts in its mapper instead. Spread it
+ * (`orderBy: [...CHECKLIST_STAMP_ORDER]`): Prisma's input type is mutable.
+ */
+export const CHECKLIST_STAMP_ORDER = [{ sortOrder: "asc" }, { stampId: "asc" }] as const;
 
 /** Ordering is `sortOrder` then `createdAt`, everywhere — the first checklist of an issue is the
  *  one a badge falls back to and the one a new stamp joins by default, so it must be stable. */
@@ -259,17 +288,69 @@ export async function setChecklistStamps(
             select: { id: true },
           })
         ).map((s) => s.id);
+  // Membership is replaced; the **order** (#764) is not. A stamp that survives the edit keeps its
+  // place, and the ones just ticked are appended in the order the tree offered them — ticking a
+  // box is an answer about what the set contains, and it must not silently undo an order the
+  // collector dragged into shape.
+  const before = await prisma.checklistStamp.findMany({
+    where: { checklistId },
+    select: { stampId: true, sortOrder: true },
+  });
+  const kept = new Set(valid);
+  const held = new Set(before.map((r) => r.stampId));
+  const ordered = [
+    ...orderedChecklistStampIds(before).filter((id) => kept.has(id)),
+    ...valid.filter((id) => !held.has(id)),
+  ];
   await prisma.$transaction([
     prisma.checklistStamp.deleteMany({ where: { checklistId } }),
-    ...(valid.length > 0
+    ...(ordered.length > 0
       ? [
           prisma.checklistStamp.createMany({
-            data: valid.map((stampId) => ({ checklistId, stampId })),
+            data: ordered.map((stampId, i) => ({ checklistId, stampId, sortOrder: i })),
             skipDuplicates: true,
           }),
         ]
       : []),
   ]);
+}
+
+/**
+ * Reorder a checklist's stamps to exactly `stampIds` — the collection-wide answer to "in what order
+ * does this set read" (#764), which an album page prints as a row of boxes and may then override
+ * locally (#767).
+ *
+ * A checklist is **flat**, so unlike `IssueMember` (#549) there are no sibling groups to keep
+ * apart: the whole list is densely renumbered. Ids that are not on this checklist are ignored
+ * rather than rejected, and members the client left out keep their relative order at the end — a
+ * stale list must be able to move what it names without dropping what it never saw.
+ */
+export async function reorderChecklistStamps(
+  ownerId: string,
+  checklistId: string,
+  stampIds: string[]
+): Promise<void> {
+  const collectionId = await resolveChecklistCollection(checklistId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const members = await prisma.checklistStamp.findMany({
+    where: { checklistId },
+    select: { stampId: true, sortOrder: true },
+  });
+  const own = new Set(members.map((m) => m.stampId));
+  const named = stampIds.filter((id, i) => own.has(id) && stampIds.indexOf(id) === i);
+  const namedSet = new Set(named);
+  const ordered = [
+    ...named,
+    ...orderedChecklistStampIds(members).filter((id) => !namedSet.has(id)),
+  ];
+  await prisma.$transaction(
+    ordered.map((stampId, i) =>
+      prisma.checklistStamp.update({
+        where: { checklistId_stampId: { checklistId, stampId } },
+        data: { sortOrder: i },
+      })
+    )
+  );
 }
 
 /**
@@ -299,12 +380,35 @@ export async function putStampOnChecklists(
   if (checklistIds.includes(DEFAULT_CHECKLIST)) {
     wanted.add(await ensureIssueChecklist(tx, collectionId, issueId));
   }
+  // Where this stamp already sits on a checklist, it keeps its place (#764): editing a stamp is not
+  // a statement about the set's order, and the rows go through a delete/insert only because the
+  // membership is written as a set. A checklist it joins now appends it at the end — the same rule
+  // `IssueMember` follows, and the only position that cannot be wrong.
+  const [before, ends] = await Promise.all([
+    tx.checklistStamp.findMany({
+      where: { stampId, checklist: { collectionId, issueId } },
+      select: { checklistId: true, sortOrder: true },
+    }),
+    wanted.size > 0
+      ? tx.checklistStamp.groupBy({
+          by: ["checklistId"],
+          where: { checklistId: { in: [...wanted] } },
+          _max: { sortOrder: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const heldAt = new Map(before.map((r) => [r.checklistId, r.sortOrder]));
+  const lastAt = new Map(ends.map((r) => [r.checklistId, r._max.sortOrder ?? -1]));
   await tx.checklistStamp.deleteMany({
     where: { stampId, checklist: { collectionId, issueId } },
   });
   if (wanted.size > 0) {
     await tx.checklistStamp.createMany({
-      data: [...wanted].map((checklistId) => ({ checklistId, stampId })),
+      data: [...wanted].map((checklistId) => ({
+        checklistId,
+        stampId,
+        sortOrder: heldAt.get(checklistId) ?? (lastAt.get(checklistId) ?? -1) + 1,
+      })),
       skipDuplicates: true,
     });
   }

@@ -43,6 +43,7 @@ import {
   isCommittingFulfillment,
   readTradeFulfillment,
 } from "./trade-realisation-rules";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 
 // **What is on a trade, line by line** (#637; ADR-0039 §1/§2). The database half of the trade
@@ -1153,7 +1154,11 @@ export async function resolveTradeLineStamps(
   if (checklistId) {
     const checklist = await prisma.checklist.findFirst({
       where: { id: checklistId, collectionId },
-      select: { name: true, stamps: { select: { stampId: true } } },
+      select: {
+        // The trade's lines come out in the order the set reads (#764).
+        name: true,
+        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      },
     });
     if (!checklist) throw new Error("That checklist no longer exists.");
     if (checklist.stamps.length === 0) {

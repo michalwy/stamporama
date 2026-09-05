@@ -73,6 +73,7 @@ import {
 } from "./checklist-completeness-rules";
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 import { buildLocationPath } from "./location-path";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -2307,7 +2308,13 @@ export async function listIssueGroupCompleteness(
   const checklists = await prisma.checklist.findMany({
     where: { collectionId, issueId: { in: ids } },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    select: { id: true, issueId: true, name: true, stamps: { select: { stampId: true } } },
+    select: {
+      id: true,
+      issueId: true,
+      name: true,
+      // The stamps a set is still missing are named in the order the set reads (#764).
+      stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+    },
   });
   const byIssue: IssueGroupCompleteness = Object.fromEntries(ids.map((id) => [id, []]));
   if (checklists.length === 0) return byIssue;

@@ -25,6 +25,7 @@ import {
   type DeliveryState,
 } from "./purchase-allocation";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -667,7 +668,11 @@ export async function intakeStamps(
   if (input.checklistId) {
     const checklist = await prisma.checklist.findFirst({
       where: { id: input.checklistId, collectionId },
-      select: { name: true, stamps: { select: { stampId: true } } },
+      select: {
+        name: true,
+        // The copies come out in the order the set reads (#764).
+        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      },
     });
     if (!checklist) throw new Error("Checklist not found in this collection.");
     stampIds = checklist.stamps.map((cs) => cs.stampId);

@@ -727,7 +727,8 @@ export async function seedStamps(
       });
       if (!optSet.has(i)) {
         await tx.checklistStamp.create({
-          data: { checklistId: checklist.id, stampId: stamp.id },
+          // Seeded in catalog order, which is the order the set reads (#764).
+          data: { checklistId: checklist.id, stampId: stamp.id, sortOrder: i },
         });
       }
 

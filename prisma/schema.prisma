@@ -4829,12 +4829,21 @@ model Checklist {
 model ChecklistStamp {
   checklistId String
   stampId     String
+  // The order the set reads in (#764), the same mechanism `IssueMember.sortOrder` (#549) is one
+  // level over — and simpler, because a checklist is **flat** where the issue's stamp tree is not:
+  // there are no sibling groups to keep apart, so a reorder densely renumbers the whole list. This
+  // is the **collection-wide** answer to "in what order does this set read"; an album page may
+  // override it locally (#767), and the base order is this one. A stamp joining a checklist is
+  // appended at `max(sortOrder) + 1`. Backfilled in catalog-sort order, which is what every
+  // surface fell back to before the column existed.
+  sortOrder   Int    @default(0)
 
   checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   stamp     Stamp     @relation("ChecklistStampStamp", fields: [stampId], references: [id], onDelete: Cascade)
 
   @@id([checklistId, stampId])
   @@index([stampId])
+  @@index([checklistId, sortOrder])
   @@map("checklist_stamp")
 }
 

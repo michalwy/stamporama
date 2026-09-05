@@ -47,6 +47,7 @@ import {
   type AuctionLotStatus,
   type AuctionSaleStatus,
 } from "./auction-rules";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 // Server-side domain logic for **auction tracking** (ADR-0021, #350–#352): a bidding watchlist with
 // a fork at the end. `AuctionSale` ⊃ `AuctionLot` ⊃ `AuctionLotLine`, where the sale is one
@@ -2774,7 +2775,11 @@ export async function resolveAuctionLineStamps(
   if (target.checklistId) {
     const checklist = await prisma.checklist.findFirst({
       where: { id: target.checklistId, collectionId },
-      select: { name: true, stamps: { select: { stampId: true } } },
+      select: {
+        name: true,
+        // The lot's lines come out in the order the set reads (#764).
+        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      },
     });
     if (!checklist) {
       throw new AuctionActionBlockedError("bad-line", "That checklist no longer exists.");

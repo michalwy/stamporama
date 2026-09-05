@@ -30,6 +30,7 @@ import {
   type WantCandidateCopy,
   type WantPriority,
 } from "./want-rules";
+import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
 // The priority vocabulary lives in the pure module, since the form and the list toolbar render it
 // and this one is `server-only`. Re-exported here so a server caller has one import.
@@ -1186,7 +1187,11 @@ export async function createWant(
   if (input.checklistId) {
     const checklist = await prisma.checklist.findFirst({
       where: { id: input.checklistId, collectionId },
-      select: { name: true, stamps: { select: { stampId: true } } },
+      select: {
+        name: true,
+        // The wants come out in the order the set reads (#764).
+        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      },
     });
     if (!checklist) throw new Error("Checklist not found in this collection.");
     stampIds = [...new Set(checklist.stamps.map((s) => s.stampId))];
