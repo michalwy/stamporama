@@ -4,9 +4,9 @@ A **trade** records an exchange with another collector: the copies you send on o
 you get back on the other, and the negotiation that ties them together. No money changes hands, so
 it is neither a purchase nor a sale — it is its own record.
 
-Open the **Trades** screen from the sidebar. It sits below the **Buying** section, next to
-**Contacts**, because a trade is the one part of the hobby where both directions are the same act:
-material leaves and material arrives in one agreement.
+Open the **Trades** screen from the **Partners** section of the sidebar, next to **Contacts**.
+It sits under neither **Selling** nor **Buying**, because a trade is the one part of the hobby where
+both directions are the same act: material leaves and material arrives in one agreement.
 
 ## Starting a trade
 

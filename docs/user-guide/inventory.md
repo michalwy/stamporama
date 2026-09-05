@@ -5,7 +5,7 @@ each copy is its own record, so two copies of the same stamp can differ in condi
 certificate, disposition, storage, and notes. There is no "quantity" — three
 copies of the same stamp are three rows.
 
-Open the **Inventory** screen from the **Collection** section of the sidebar.
+Open the **Inventory** screen from **Collection → Inventory** in the sidebar.
 
 Each copy also has a page of its own, gathering everything about it — including its purchase, its
 offers and the sale it left on — in one place. Open it from the row's **⋮** menu with **Open copy
@@ -427,7 +427,8 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 ## Cataloguing from card scans
 
 If you have a lot of stamps to enter — a shelf of stockbooks, a collection you inherited, a gift —
-typing them in one at a time is the slow way. **Card scans** (**Card scans** in the sidebar, or
+typing them in one at a time is the slow way. **Card scans** (**Collection → Inventory → Card
+scans** in the sidebar, or
 **Scan a card** beside **Add copy**) does it the other way round: scan a whole stockbook card, cut
 the scan into one piece per stamp, and identify each piece on screen afterwards. Each stamp is
 handled physically once — laid out and scanned — and everything after that happens at the keyboard.

@@ -5,8 +5,9 @@ or Colnect. The offer **owns what it lists**: you compose it from your inventory
 more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
 independent offers — each tracked, edited, and sold on its own.
 
-**Offers** is a group of entries in the **Selling** section of the sidebar, in the order the work
-reaches them:
+**Offers** in the **Selling** section of the sidebar is the offer list itself, with the screens
+that feed it indented underneath, in the order the work reaches them — and the two marketplace
+screens sit in the **Marketplaces** group just below, one per platform:
 
 - **Offers** — the list itself, and the screen you spend the day on.
 - **Lot builder** — where a job lot of a hundred copies is put together and turned into an offer.

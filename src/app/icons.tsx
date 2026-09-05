@@ -111,6 +111,7 @@ import {
   Stamp,
   Star,
   StickyNote,
+  Store,
   Tag,
   Trash2,
   TriangleAlert,
@@ -251,6 +252,10 @@ const GLYPHS = {
   receipt: Receipt,
   /** Money changing hands: sell an offer, a copy already sold. */
   sell: HandCoins,
+  /** The marketplaces this collection lists on, as a subject (#762) — the sidebar group over the
+   *  per-platform screens. Told apart from `sell`, which is the act, and from `externalLink`,
+   *  which is one listing's own page. */
+  marketplaces: Store,
   /** Bidding is running on this. */
   bidding: Gavel,
   /** What a lot came to: closed at a price, or cancelled. */

@@ -23,7 +23,28 @@ The **Your Collections** page lists all collections you own, sorted by creation 
 Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 - The collection name, at the top, with the [Action items](action-items.md) bell beside it
-- Navigation links for each section (Overview, Catalog, Items — more sections will be added as features are built)
+- **Overview**, pinned above everything else — the one screen about the collection as a whole
+- Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
+  variant-price worklist under it), **Collection** (Inventory with Card scans under it, and
+  Locations), **Selling** (the Offers group, the Marketplaces group, Sales), **Buying** (Want list,
+  Purchases, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
+  and selling alike). A subject read through more than one screen carries the extra ones indented
+  under it: **Stamps**, **Inventory** and **Offers** are themselves the list you open every day,
+  with **Variant prices**, **Card scans** and the **Lot builder** / **Bulk listing** beneath them,
+  while **Auctions** and **Marketplaces** are names over their entries rather than screens of their
+  own. Each section carries a quiet colour of its own — its heading, the icons of its entries, the
+  line beside its indented ones, the entry names themselves in a quieter shade of it, a hairline
+  running from the section's name to the edge of the sidebar, and the highlight on the screen you
+  are currently on — so the five blocks stay apart at a glance while the names still read as plain
+  text. A highlighted row with a
+  coloured bar down its left edge always means *this is the screen you are on*; **Overview** and the
+  footer, belonging to no section, use the app's own teal for it
+- Sections open and close on their heading. **The section holding the screen you are on is open and
+  the others are closed**, so arriving anywhere shows that screen's neighbours and nothing else;
+  click any heading to open or close it and the choice is remembered for that collection, on that
+  browser. A closed heading whose section holds the current screen is shown in the accent colour, so
+  a folded section still says where you are. Every screen keeps its own address either way — a
+  bookmark or a shared link opens it whatever is folded
 - An **All collections** link in the footer, to return to the collection picker. There is no
   quick-switch dropdown: changing collection is a rare enough act that it does not need a permanent
   control in the sidebar's most prominent row

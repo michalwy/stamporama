@@ -74,7 +74,7 @@ drawn.
 
 ## The worklist
 
-**Variant prices** in the **Catalog** section of the sidebar lists every stamp whose
+**Variant prices**, under **Catalog → Stamps** in the sidebar, lists every stamp whose
 variants are not fully priced, widest gap first. Each row says how many of its variants
 have no price and how many cells that comes to, and opens the grid over that tree.
 

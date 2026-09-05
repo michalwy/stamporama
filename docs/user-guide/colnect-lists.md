@@ -3,8 +3,8 @@
 Colnect keeps lists of its own — **Collection**, **Swap**, **Wish** and **Sell** — and they are what
 another collector reads before offering you anything. Keeping one in step with what you actually
 hold is a loop, because Colnect offers no way to push data into it: **export the list, load the file
-here, look at what differs, fix whichever side is wrong.** The **Colnect** screen in the sidebar is
-where the middle two happen — and with the [Assistant](assistant.md) running, the export can be
+here, look at what differs, fix whichever side is wrong.** The **Colnect** screen, in the **Partners** section of the
+sidebar, is where the middle two happen — and with the [Assistant](assistant.md) running, the export can be
 fetched for you as well.
 
 Which of your own things each list stands for, and which side wins when the two disagree, is set up
