@@ -4,8 +4,8 @@
 
 Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. The design it applies is #755. The pieces it reads are #763 (stamp
 size), #764 (stamp order within a checklist), #765 (the hawid box rule) and #766 (the album
-template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor), #770
-(the cutting list) and #778 (printed pages, **ADR-0047**).
+template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor, built — see the
+consequences below), #770 (the cutting list) and #778 (printed pages, **ADR-0047**).
 
 Decision 3's open half is now closed: #778 built the printed-page row and the divergence report, and
 **ADR-0047** records what it settled — including that the comparison is per printed card rather than
@@ -231,6 +231,19 @@ is a block the pairing has made worse.
   which is short by the year heading. Decision 7's third packing rule is what it now obeys. Nothing
   else in `album-layout.ts` moved, and no other file did. See ADR-0046.
 - #769 attaches its relative corrections to entries and stamps, which survive a re-flow, rather than
-  to pages, which are not rows.
+  to pages, which are not rows. It is built: three columns on `album_entry` (space before, space
+  after, where a page may break above it), an `album_box_adjustment` row per **box** — keyed
+  `(entry, stamp)`, because a box is a slot and one stamp can have two of them (ADR-0047 §2) — and an
+  `album_text_block` row per note, **anchored to an entry and to a side of it** rather than positioned
+  among them, for this decision's own reason — *after X* and *before Y* being one gap today and two
+  different ones once the album is reordered, which is what a note opening a chapter needs. Two things it settled that are easy to undo. A box correction is
+  millimetres on the **stamp**, applied before `hawid.ts` runs, so the height still comes out of the
+  drawer and moves in strip steps; correcting the finished box would draw one at a height no strip
+  has. And *keep with the block above* is a **preference** the packer honours by enlarging the unit
+  that moves whole, dropped when no sheet could hold the run — a single-pass packer never goes back
+  for what it has placed — and **reported** when it is dropped, since a constraint that fails quietly
+  is one the collector meets with the card already in his hand. `docs/agents/albums.md` carries the rest, including the counts that decided
+  the space rails and the fact that the free text block is an invention rather than something read
+  off the sources.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.

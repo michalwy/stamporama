@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { languageLabel } from "@/lib/languages";
-import type { TitleFallback } from "@/lib/offer-title-template";
+import { titleFallbackKey, type TitleFallback } from "@/lib/offer-title-template";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 
@@ -40,10 +40,10 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
   "printing:name": "Printing method",
 };
 
-/** A stable identity for one gap — the entity row + field it would be written on. */
-export function gapKey(gap: TitleFallback): string {
-  return `${gap.entityType}:${gap.entityId}:${gap.entityField}`;
-}
+/** A stable identity for one gap — the entity row + field it would be written on. The rule lives in
+ * `offer-title-template.ts` because the album editor (#769) dedupes by it **server-side**, and a
+ * server component may not import a value from a `"use client"` module. */
+export const gapKey = titleFallbackKey;
 
 function gapLabel(gap: TitleFallback): string {
   return GAP_LABELS[`${gap.entityType}:${gap.entityField}`] ?? gap.field;

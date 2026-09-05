@@ -1,7 +1,15 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { getAlbum, getAlbumEntries, type AlbumData, type AlbumEntryData } from "./albums";
+import {
+  getAlbum,
+  getAlbumEntries,
+  getAlbumTextBlocks,
+  type AlbumData,
+  type AlbumEntryData,
+  type AlbumTextBlockData,
+} from "./albums";
+import { albumCorrectedStampSize } from "./album-corrections";
 import { getHawidStrips, type HawidStripData } from "./hawid-stock";
 import { albumHawidMargins, albumRenderPreset } from "./album-template-rules";
 import { planHawidBox, type HawidBox } from "./hawid";
@@ -18,7 +26,9 @@ import {
 } from "./title-copy";
 import {
   renderTitleTemplate,
+  templateFallbacks,
   type ListingTemplateContext,
+  type TitleFallback,
   type TitleTemplateCopy,
 } from "./offer-title-template";
 import { albumTextMetrics } from "./album-metrics";
@@ -114,6 +124,11 @@ export interface AlbumBoxData extends AlbumBoxSpec {
    *  which contributes nothing to the identity of the page it sits on. */
   catalogNumber: string | null;
   catalogSortKey: string | null;
+  /** True when the collector has corrected this box by hand (#769). A fact about **how the figure
+   *  was arrived at**, kept for the same reason `sizeSource` is: the editor and the cutting list have
+   *  to be able to say that a cut is one somebody typed rather than one the drawer decided. It is
+   *  not printed and it is not compared. */
+  sizeAdjusted: boolean;
 }
 
 /** A page as the plan hands it over: the geometry, its identity, and the footer rendered into the
@@ -189,6 +204,8 @@ function primaryNumber(
 export interface AlbumPlanContext {
   album: AlbumData;
   entries: AlbumEntryData[];
+  /** The collector's own text blocks (#769), in the order they are filed. */
+  textBlocks: AlbumTextBlockData[];
   printed: AlbumPrintedIndex;
   emptyStock: boolean;
   /** The boxes of `stampIds`, sized through the whole entry's checklist. */
@@ -197,6 +214,21 @@ export interface AlbumPlanContext {
   checklistHeading(entry: AlbumEntryData): string;
   /** The chapter heading a year group of these entries prints. */
   chapterHeading(entries: readonly AlbumEntryData[]): string;
+  /**
+   * Which entity fields one of the album's texts rendered **untranslated** for these stamps (#298).
+   *
+   * An album prints in one language of its own (#755) and every token falls back to the entity's
+   * default-language value when a translation is missing. On a screen that is a small annoyance; on a
+   * card glued into a binder it is permanent, so the editor (#769) flags it before the sheet goes
+   * into the printer and offers to fill the gap in place (#299/#300).
+   *
+   * Asked **per template**, not per stamp, so a missing translation on a field none of the album's
+   * four texts names is not reported — `templateFallbacks` walks the template's own placeholders,
+   * which is what makes the flag on the page and the gap in the panel the same claim. And no
+   * fallback template is passed: a blank album text is a real value (#766) and renders blank, so it
+   * can fall back on nothing.
+   */
+  textGaps(template: string, stampIds: readonly string[]): TitleFallback[];
   /** Name each page of a laid-out plan and render its footer into the band reserved for it. */
   finish(plan: AlbumPlan<AlbumBoxData>): AlbumPlanPage[];
 }
@@ -207,7 +239,10 @@ export async function albumPlanContext(
 ): Promise<AlbumPlanContext | null> {
   const album = await getAlbum(ownerId, albumId);
   if (!album) return null;
-  const entries = await getAlbumEntries(ownerId, albumId);
+  const [entries, textBlocks] = await Promise.all([
+    getAlbumEntries(ownerId, albumId),
+    getAlbumTextBlocks(ownerId, albumId),
+  ]);
 
   const [stock, areas, issuePrefixes, toCopy, printed] = await Promise.all([
     getHawidStrips(ownerId, album.collectionId),
@@ -285,7 +320,14 @@ export async function albumPlanContext(
       // invented size that looks like a stamp is exactly what #763 exists to prevent, and this box
       // is visibly not one. `sizeSource` is null, the editor (#769) says so, and the cutting list
       // (#770) has nothing to cut.
-      const size = resolved ?? { widthMm: 0, heightMm: 0 };
+      const stated = resolved ?? { widthMm: 0, heightMm: 0 };
+      // The collector's own correction on **this box** (#769), applied to the stamp's size *before*
+      // the box rule runs. Not to the box the rule produced: a hawid box's height is the height of
+      // the shortest strip the piece fits into, so correcting the finished box would draw one at a
+      // height no strip has — the page-disagrees-with-the-desk failure #765 exists to prevent. So the
+      // height moves in strip steps and the width, which is the cut, moves continuously.
+      const adjustment = entry.boxAdjustments[stampId] ?? null;
+      const size = albumCorrectedStampSize(stated, adjustment);
       const hawid: HawidBox<HawidStripData> = planHawidBox(size, margins, stock);
       const { number } = primaryNumber(stamp, maps);
       return [
@@ -299,6 +341,7 @@ export async function albumPlanContext(
           sizeFromStampId: resolved?.fromStampId ?? null,
           catalogNumber: number,
           catalogSortKey: stamp.primaryCatalogSortKey,
+          sizeAdjusted: adjustment !== null,
         },
       ];
     });
@@ -317,6 +360,7 @@ export async function albumPlanContext(
   return {
     album,
     entries,
+    textBlocks,
     printed,
     emptyStock: stock.length === 0,
     boxesFor,
@@ -327,6 +371,13 @@ export async function albumPlanContext(
       }),
     chapterHeading: (forEntries) =>
       renderAlbumText(album.chapterTemplate, copiesOf(forEntries), { albumName: album.name }),
+    textGaps: (template, stampIds) => {
+      if (!template.trim()) return [];
+      const copies = stampIds
+        .map((id) => copyById.get(id))
+        .filter((c): c is TitleTemplateCopy => !!c);
+      return templateFallbacks(template, [{ title: null, copies }]);
+    },
     finish: (plan) =>
       plan.pages.map((page) => {
         if (page.kind === "printed") {
@@ -373,8 +424,42 @@ export async function albumPlanContext(
  */
 export async function planAlbum(ownerId: string, albumId: string): Promise<AlbumPlanResult | null> {
   const context = await albumPlanContext(ownerId, albumId);
-  if (!context) return null;
+  return context ? planAlbumFrom(context) : null;
+}
+
+/**
+ * {@link planAlbum} over a context the caller already has.
+ *
+ * The editor (#769) needs both the plan and the context it was planned from — the geometry to draw
+ * and the entries, notes and corrections to say what is settable on it — and reading the album twice
+ * would be two answers to a question with one. That is the same reason `albumPlanContext` was split
+ * out for the divergence report in the first place.
+ */
+export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
   const { album, entries, printed } = context;
+
+  // The collector's notes (#769), filed by the entry each is anchored to and by which side of it.
+  // An **anchor rather than a position**: a note travels with the series it is about when the album
+  // is reordered, and a position is exactly the thing this model refuses to store. The side is not
+  // tidiness — *after 1949's last checklist* and *before 1950's first* name one gap today and two
+  // different ones the moment the album is reordered, and a note that opens a chapter needs the
+  // second.
+  const notesAt = new Map<string, AlbumTextBlockData[]>();
+  const slot = (anchorId: string | null, side: string) => `${anchorId ?? ""}#${side}`;
+  for (const note of context.textBlocks) {
+    const at = slot(note.anchorAlbumEntryId, note.side);
+    notesAt.set(at, [...(notesAt.get(at) ?? []), note]);
+  }
+  // Anchored to nothing: the head of the album, and the end of it. Both are steadier than naming the
+  // first or last checklist, neither of which stays the first or the last.
+  const headNotes = notesAt.get(slot(null, "before")) ?? [];
+  const tailNotes = notesAt.get(slot(null, "after")) ?? [];
+  let headNotesFiled = headNotes.length === 0;
+  // Which sheet a note is on is the **printed index's** answer, not the note's own column: a card
+  // being reprinted has its content back in the live plan, and the note beside a checklist on that
+  // card has to come back with it.
+  const noteBlock = (note: AlbumTextBlockData) =>
+    albumNoteBlock(note, printed.byTextBlock.get(note.id) ?? null);
 
   const chapters: { key: string; heading: string; blocks: AlbumBlockSpec<AlbumBoxData>[] }[] = [];
   for (const entry of entries) {
@@ -384,6 +469,12 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
       chapter = { key, heading: context.chapterHeading([entry]), blocks: [] };
       chapters.push(chapter);
     }
+    if (!headNotesFiled) {
+      for (const note of headNotes) chapter.blocks.push(noteBlock(note));
+      headNotesFiled = true;
+    }
+    for (const note of notesAt.get(slot(entry.id, "before")) ?? [])
+      chapter.blocks.push(noteBlock(note));
     const heading = context.checklistHeading(entry);
     const onPaper = printed.byEntry.get(entry.id);
 
@@ -391,9 +482,15 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
       chapter.blocks.push({
         entryId: entry.id,
         heading,
+        kind: "entry",
         boxes: context.boxesFor(entry, entry.stampIds),
         printedPageIds: null,
+        spaceBeforeMm: entry.spaceBeforeMm,
+        spaceAfterMm: entry.spaceAfterMm,
+        breakBefore: entry.breakBefore,
       });
+      for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
+        chapter.blocks.push(noteBlock(note));
       continue;
     }
 
@@ -404,8 +501,16 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
     chapter.blocks.push({
       entryId: entry.id,
       heading,
+      kind: "entry",
       boxes: [],
       printedPageIds: onPaper.printedPageIds,
+      // A block on paper carries the collector's corrections all the same, and they change nothing:
+      // the layout steps over it before it ever measures one. They are here because the block is the
+      // entry, and an entry that comes back into the plan — a reprint (#778) — must come back with
+      // the corrections it had, not with none.
+      spaceBeforeMm: entry.spaceBeforeMm,
+      spaceAfterMm: entry.spaceAfterMm,
+      breakBefore: entry.breakBefore,
     });
 
     // The **continuation page** (#778): the stamps of this entry that are on no sheet yet, filed
@@ -418,15 +523,64 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
         chapter.blocks.push({
           entryId: entry.id,
           heading,
+          kind: "entry",
           boxes: context.boxesFor(entry, waiting),
           printedPageIds: null,
+          spaceBeforeMm: entry.spaceBeforeMm,
+          spaceAfterMm: entry.spaceAfterMm,
+          breakBefore: entry.breakBefore,
         });
       }
     }
+    for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
+      chapter.blocks.push(noteBlock(note));
+  }
+
+  // An album that is nothing but notes — no checklists gathered yet, or every one removed — still
+  // has something to lay out. A chapter with no year is what a checklist spanning issues already
+  // produces, so this is the shape the planner has rather than a special case.
+  if (!headNotesFiled) {
+    chapters.push({ key: "", heading: "", blocks: headNotes.map(noteBlock) });
+  }
+  // The album's closing notes go at the end of its last chapter — or open one of their own when
+  // there is nothing else in the album at all.
+  if (tailNotes.length > 0) {
+    const last = chapters[chapters.length - 1];
+    const into = last ?? { key: "", heading: "", blocks: [] };
+    if (!last) chapters.push(into);
+    for (const note of tailNotes) into.blocks.push(noteBlock(note));
   }
 
   const pages = context.finish(planAlbumPages(chapters, album, album.name, albumTextMetrics));
   return { album, entries, pages, printed, emptyStock: context.emptyStock };
+}
+
+/**
+ * One of the collector's own notes as a block the packer can place (#769).
+ *
+ * A block with a **role and no boxes**: the layout measures its text in whichever of the template's
+ * five voices the note names, gives it the ordinary lead plus whatever correction it carries, and
+ * moves it whole like anything else. There is nothing special about it in `album-layout.ts`, which is
+ * the point — a note that needed its own branch in the packer would be a second geometry.
+ *
+ * A note that is **on a card** names that sheet, exactly as an entry on paper does, so the plan steps
+ * over it rather than emitting it again on live paper (ADR-0047 §4).
+ */
+export function albumNoteBlock(
+  note: AlbumTextBlockData,
+  printedPageId: string | null
+): AlbumBlockSpec<AlbumBoxData> {
+  return {
+    entryId: note.id,
+    kind: "text",
+    role: note.role,
+    heading: note.text,
+    boxes: [],
+    printedPageIds: printedPageId ? [printedPageId] : null,
+    spaceBeforeMm: note.spaceBeforeMm,
+    spaceAfterMm: note.spaceAfterMm,
+    breakBefore: note.breakBefore,
+  };
 }
 
 /** The separator between a page range's endpoints.
@@ -694,6 +848,7 @@ export function albumComparablePage(
     return {
       entryId: block.entryId,
       part: block.part,
+      kind: block.kind ?? "entry",
       heading: block.heading,
       boxes,
     };

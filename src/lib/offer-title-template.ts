@@ -1515,6 +1515,15 @@ export function listingFallbackTokens(
  * can never disagree about what counts. A template that renders none of an entity's translatable
  * tokens yields nothing for it, however untranslated that entity is.
  */
+/** A stable identity for one gap: the entity row and field a translation would be written on.
+ *
+ * Here rather than beside the panel that renders them, because both a **server** module and a
+ * `"use client"` one deduplicate by it — the album editor (#769) collects the gaps on a sheet, and
+ * the panel keys its rows — and a server component may not import a value from a client module. */
+export function titleFallbackKey(fallback: TitleFallback): string {
+  return `${fallback.entityType}:${fallback.entityId}:${fallback.entityField}`;
+}
+
 export function templateFallbacks(
   template: string | null | undefined,
   sets: readonly TemplateSet[],
@@ -1528,7 +1537,7 @@ export function templateFallbacks(
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
     const { fallbacks } = resolvePlaceholder(m[1], scope.copies, scope.setTitle);
     for (const f of fallbacks) {
-      const key = `${f.entityType}:${f.entityId}:${f.entityField}`;
+      const key = titleFallbackKey(f);
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(f);

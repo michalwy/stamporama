@@ -101,6 +101,69 @@ If the collection has **no hawid stock** at all, the screen says so and every bo
 pocket. That is honest rather than broken: describe your drawer in Settings → Albums and the boxes
 are cut from it.
 
+## The page editor
+
+**Page editor** on the Sheets header — or *Open in the page editor* on one sheet's `⋮` — draws a
+sheet at **1:1** and lets you overrule the layout by hand.
+
+Everything you set there is a **correction**, not a position: *this box 2 mm wider*, *5 mm more
+before this series*, *break here*, these stamps in this order. That distinction is the whole reason
+the automatic layout goes on running underneath — add a stamp to a checklist and the page re-flows
+with every one of your corrections still in place. Nothing has to be re-done after an acquisition.
+
+**Dragging writes the number and typing moves the drawing.** Neither is the real way: drag a box's
+corner and the millimetre appears in the panel; type the millimetre and the box moves. Whichever you
+use, the sheet is re-planned when you let go or press Enter, so what you end up looking at is the
+plan and not a sketch of it.
+
+What you can set:
+
+- **Space before and after a block.** Added to the space the layout already leaves. Negative closes
+  a gap; it stops at nothing rather than printing one block over another.
+- **Where a page may break above a block** — wherever it falls, start a new sheet, or keep it with
+  the block above. The last is a preference: if no sheet could hold both, the layout gives up on it —
+  and **says so**, on the block and in the sheet's own summary, so you never find out from a card in
+  your hand.
+- **A box's width and height.** Type millimetres **on the piece**, not on the box. The width is the
+  cut and moves with what you type. The **height comes out of your drawer** — it is the shortest
+  strip the piece fits into — so it moves in strip steps and may not move at all: two more
+  millimetres might change nothing, or might take a 24 mm box to a 29 mm one. Raise it past your
+  tallest strip and the box becomes a pocket, and the cutting list says so.
+- **The order of the stamps in a block** — drag one box onto another. That writes this album's own
+  order for the whole checklist; *Follow the checklist's order* puts it back.
+- **A note of your own**, set in one of the template's five voices and **filed before or after a
+  checklist** rather than dropped at a spot on a page. Reorder the album and the note goes with the
+  checklist it is filed against. The side matters: a note that opens a chapter belongs *before* that
+  chapter's first checklist, not after whichever one happens to precede it today — otherwise it slides
+  into the middle of the previous year the first time you drag a new checklist in there. Filed
+  against nothing, *before* is the head of the album and *after* is the end of it. Dragging a note's
+  heading onto another block files it before that block.
+
+The order the blocks themselves print in is the **Entries** list on the album screen — dragging
+there is what moves one checklist before another.
+
+The canvas also marks, in colour, the three things that are worth catching **before** a sheet goes
+into the printer and are worth nothing after: a box **sized from a neighbour** rather than measured,
+an **oversize** box that needs a pocket, and a box with **no size at all**. Beside them it lists any
+word on the sheet that would print in the collection's default language because the album's own
+translation is missing — click the dotted underline on the canvas, or fill it in the panel, and it
+is saved on the stamp or issue itself straight away.
+
+**1:1 on a screen proves nothing about the card.** A viewer applies its own zoom and the print
+dialog applies another; the ruler check below is the only one that counts.
+
+### A printed card opens read-only
+
+The editor works on sheets that are still a plan. A card you have marked printed opens showing
+**what went onto the paper** — in the faces and margins it was set in — with whatever has changed
+under it listed beside. Its geometry cannot be corrected there, and that is not a missing feature: putting a
+card right is a decision rather than an edit, a **continuation page** or a **reprint**, and both are
+made on the album screen under *Printed cards*.
+
+One thing you *can* still change is what a **note** on a printed card says, and the card then
+reports the difference like any other — the same as renaming an issue. Taking such a note out of the
+album is refused, though: the card would go on carrying words nothing in the album accounts for.
+
 ## Printing
 
 **Download PDF** composes the whole album. Each sheet also has its own **PDF** link, which is the

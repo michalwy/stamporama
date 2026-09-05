@@ -289,6 +289,25 @@ way for years.
   heading it does not.
 - A snapshot this build cannot read is **refused by version**, not guessed at — the same asymmetry as
   ADR-0046 §5. A card is not a derivation.
+- #769 has since stepped over printed sheets and found **two more of §4's family**, both from the
+  collector's own text blocks: a sheet carrying nothing but a note has no stamp rows, so it read as
+  **orphaned** — the loudest divergence there is, on a card nothing is wrong with — and it joined no
+  card group, so it was compared against nothing. Both are answered by the note naming its sheet
+  (`album_text_block.printedPageId`) and by the printed index carrying `byTextBlock`, which is also
+  what brings a note back into the live plan when the card beside it is reprinted. The list in §4 is
+  therefore position, chapter heading, stamps **and now blocks that carry no stamps at all**, and it
+  is still not obviously closed. `AlbumPlacedBlock.kind` is optional for this reason: a placement
+  stored before text blocks existed reads back as the `entry` it was, rather than being refused by
+  version for a field it could not have had.
+- A note **on** a card may be edited and the difference is reported, which is §1's rule rather than an
+  exception to it: the snapshot cannot change, the live row goes on being live, and that is exactly
+  what happens when an issue is renamed. Refusing it would be a rule this ADR does not have, and an
+  inconsistent one, since renaming the *album* rewrites a running head on every card and is not
+  refused. **Deleting** one is refused, and the asymmetry is the finding: an edited note diverges
+  visibly, where a deleted one would take the card's own account of it away with it. `album-divergence.ts`
+  now reports a note the card carries that the album no longer has — a note holds no stamps, so none of
+  §5's stamp rules would ever have caught it, and it was the one thing on a card that could vanish into
+  silence.
 - Anyone reaching for a `frozen` boolean, for a whole-album shadow plan to diff against, or for the
   live sheet selector to identify a card for reprinting is undoing decisions 1, 5 and 3 respectively.
   Read this file first.

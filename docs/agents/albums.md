@@ -38,6 +38,30 @@ Neither was settled by argument. Both took one `grep -c` against a corpus that w
 there. When an issue and the sources could disagree — page geometry, headings, what is printed where
 — count first.
 
+**#769 counted again and it moved two decisions.** Over his own six areas
+(`DA DE-BM DE-BY DR PL "PL-ON GG"`, excluding `examples/`):
+
+- **`PAGE_VSPACE` — 480**, over **198** `PAGE_START(` pages. Extra vertical space is by a long way
+  the hand correction he actually makes, about 2.4 a page, which is why it is the first of #769's
+  five and the one with real rails around it. Values cluster on multiples of five.
+- **All 18 negative `PAGE_VSPACE` are in the six `_*.txt` running-head includes** — `-6`, a white
+  spacer image, `-18.5`, then `PAGE_TEXT_CENTRE(HEADER 18 …)`: the head construction `printTitle`
+  already models. **Not one is in page content.** So a space correction may be negative but the
+  layout floors a block's lead at zero: closing a gap is something he does, overlapping two blocks
+  is not.
+- **`PAGE_TEXT_PARAGRAPH_START` — 0**, and **`PAGE_TEXT(` — 0**. All 21 paragraph blocks in the
+  corpus are in AlbumEasy's own `examples/`. The **free text block is an invention**, and both
+  `album-corrections.ts` and the migration say so where somebody would otherwise assume it was
+  measured like everything else here.
+- **`PAGE_BREAK` — 0.** AlbumEasy paginates by hand, so his 198 `PAGE_START(` *are* the breaks. The
+  forced break and the forced no-break have no corpus either.
+
+One thing the count turned up that #769 did **not** build, recorded so the next person does not have
+to find it again: several of those `PAGE_VSPACE` sit **between a heading and its boxes**, inside a
+`PAGE_COLUMN_START` pair — `PAGE_VSPACE(9.0)` after a heading that wrapped to two lines, lining its
+mounts up with the one-line heading beside it. That is a third space correction, and #769's issue
+lists only *before* and *after* a block, so it was left out deliberately rather than missed.
+
 Note that the defaults in `DEFAULT_ALBUM_PRESET` (#766) and the packing rules in `album-layout.ts`
 (#767) are all measured from these files, and each says which line it came from. Anything added later
 should be able to do the same, or should say plainly that it is an invention.
@@ -526,6 +550,95 @@ Both reachable only once a sheet could actually be printed, and both now pinned 
   Otherwise an album with every chapter printed is a run of blank sheets each headed with a year.
   (Not the same case as #768's year heading legitimately alone on a sheet — there the content under it
   moved to the next *live* page.)
+
+## The page editor (#769)
+
+Where the collector overrules the layout. `album-corrections.ts` is the pure vocabulary and the one
+piece of arithmetic; `album-editor.ts` builds the sheet a canvas draws; `page-canvas.tsx` draws it and
+`page-editor.tsx` is the screen. The corrections themselves are three columns on `album_entry`, an
+`album_box_adjustment` row per box and an `album_text_block` row per note
+(`20260906170000_album_corrections`).
+
+**Every correction is a delta, and that is not a style.** ADR-0045 §3 is the reason: a live page has
+no row, and its identity is derived from its own contents, so anything keyed on a position would be
+undone by the next stamp bought. A delta hangs on an entry, a block or a stamp — all three are rows —
+and the automatic layout goes on running underneath it, which is what makes a correction survive a
+re-flow. There is deliberately **no save-the-page action anywhere**, because there is no page to save.
+
+Six things worth not re-deriving:
+
+- **A box correction is millimetres on the *stamp*, applied before `hawid.ts` runs**, never on the
+  box the rule produced. A hawid box's height is the height of the shortest strip in the drawer the
+  piece fits into; correcting the finished box would draw one at a height no strip has, which is
+  exactly the failure #765 exists to prevent. So the height moves in **strip steps** and the width,
+  which is the cut, moves continuously — and raising past the tallest strip, or widening past a
+  strip's stock length, makes the box a pocket. The screen says so, because a drag that asked for
+  2 mm and got 5 looks like a bug otherwise. Pinned in `tests/unit/album-corrections.test.ts`.
+- **The key is `(albumEntryId, stampId)`, because a box is a slot and not a stamp** (ADR-0047 §2). A
+  stamp can be on two checklists of one issue, and an album gathers both, so keying on the album and
+  the stamp would let one correction silently move two boxes.
+- **`avoid` is a preference and `always` is not.** A forced break is something the packer can always
+  honour; *keep with the block above* is honoured by making the unit that moves whole bigger
+  (`keepTogether`), and a run of them taller than a sheet has no arrangement that satisfies it — so
+  the packer **drops** the preference rather than looking for one. That is also why `avoid` needed a
+  look-ahead at all: this packer never goes back for what it has already placed. **A dropped
+  preference is reported**, on the block and on the sheet: a constraint dropped silently is one the
+  collector finds out about with the card in his hand, which is the same argument the inherited-size
+  and oversize flags are shown under. `AlbumPlacedBlock.separated` is read off the **page** — a block
+  that got what it asked for has the block it wanted above it, so the sheet is not empty under it —
+  rather than off the packer's branches, so every way the preference can be dropped arrives the same
+  way. A continuation sheet of a split block is excluded: nothing was separated that anybody asked to
+  keep together.
+- **`breakInside: avoid` — *keep this checklist whole on one card* — is deliberately not built.** It
+  is a different control rather than a narrower reading of the pair above, the issue does not ask for
+  it, and #768 already made a split block legible with the `[2]` marks. If it is wanted it will be
+  asked for after a split series comes off a printer, which is the right moment to design it.
+- **A note is anchored to an entry, not positioned among them, and the anchor carries a side.**
+  *After X* and *before Y* are one gap today and two different ones the moment the album is
+  reordered, and a note that **opens a chapter** is the case that separates them: written as *after
+  1949's last checklist* it slides into the middle of 1949 the first time a gathered checklist is
+  dragged in there. Null + `before` is the head of the album, null + `after` is the end of it, and
+  both are steadier than naming the first or last checklist. `SET NULL` is what a removed anchor
+  does — a note that jumps to the head is loud and one drag from being right, where a note deleted
+  with its anchor is the collector's own words gone. (The side arrived one migration later,
+  `20260906180000_album_text_block_side`, which also renamed the column rather than leaving a name
+  that lies half the time.)
+- **The gesture reads as a sequence; the model stays an anchor.** Dropping a note's heading on a
+  block files it *before that block*, which is what a collector expects from dragging — and it is
+  also what makes the note travel when that block is later dragged somewhere else, which a position
+  in a shared ordering space would not.
+- **A note on a card may be edited and may not be deleted**, and the asymmetry is the point rather
+  than an oversight. Editing is the same shape as renaming an issue: the snapshot cannot change, the
+  live row goes on being live, and #778 reports the difference (`album-divergence.ts` names it *a
+  note* rather than *a checklist heading*, which needed `kind` on the comparable block). Deleting
+  would take the card's own account of the note away with it, and `diffAlbumPlanPages` now reports
+  a note on a card that the album no longer has — the one thing that could otherwise vanish into
+  silence, since a note carries no stamps for the stamp rules to catch.
+- **The chapter's opener is not always `blocks[0]`.** A live note filed at the head of the album sits
+  in front of a printed first block and was on no card, so reading it as the opener would print the
+  year a second time on a live sheet in front of the card that carries it — ADR-0047 §4's family
+  arriving through the editor. `planAlbumPages` skips live text blocks for that one question.
+- **A note names its own sheet** (`album_text_block.printedPageId`), the same seam
+  `AlbumEntry.continuesPrintedPageId` is, and the *index* answers which sheet that is
+  (`AlbumPrintedIndex.byTextBlock`) so a reprint brings the note back with the checklist beside it.
+  Two smaller consequences fall out and are easy to lose: a sheet carrying nothing but a note has no
+  stamp rows, so it would read as **orphaned** without being claimed in the index, and it joins no
+  card group in the divergence report without `printedCardGroups` being told about it. Both are
+  handled; a third of the same shape is what to look for next.
+
+**The client does not measure.** `album-editor.ts` ships the *results* of measuring — the wrapped
+lines, each run's band, its line height and its `albumBaselineOffsetMm` — and the canvas positions
+what the renderer positioned. The one thing that is genuinely the browser's is centring an
+already-wrapped line with `text-anchor="middle"`, which is a **paint** difference: `cssStack` names
+the metric twin of each embedded face first, and nothing about where a block breaks depends on it.
+Dragging is a geometric offset and typing feeds the same offset; both commit server-side, which
+re-plans.
+
+The sheet is drawn in **literal ink and paper** rather than semantic tokens, and the box flags with
+it. That is `ui-patterns.md`'s stated exception — the reading label on a scan (#598) — for the same
+reason: everything inside the frame has to stay legible over white paper and printed ink in either
+theme, and a token that inverts would make dark mode mean a black album page. Everything outside the
+frame is tokens.
 
 ## The cutting list (#770)
 

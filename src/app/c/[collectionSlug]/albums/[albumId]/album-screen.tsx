@@ -451,6 +451,16 @@ export function AlbumScreen({
             </Tooltip>
           )}
           {initialOverview.pages.length > 0 && (
+            <Tooltip content="Draw a sheet at 1:1 and correct it by hand — extra space, a forced break, a box a couple of millimetres bigger, an order of your own. Every correction is a delta, so a stamp arriving later re-flows the page and keeps them.">
+              <Link
+                href={`/c/${collectionSlug}/albums/${album.id}/pages`}
+                style={DOWNLOAD_BTN}
+              >
+                Page editor
+              </Link>
+            </Tooltip>
+          )}
+          {initialOverview.pages.length > 0 && (
             <Tooltip content="What to cut for every sheet, and what the album still needs bought. It is a list, so it prints from the browser — only the album's own pages have to be true to the millimetre.">
               <Link
                 href={`/c/${collectionSlug}/albums/${album.id}/cutting-list`}
@@ -544,6 +554,13 @@ export function AlbumScreen({
                   page.printedPageId
                     ? [
                         {
+                          key: "editor",
+                          label: "Open in the page editor",
+                          icon: "open",
+                          href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${i + 1}`,
+                          hint: "Read-only: it draws what went onto the paper, with what has changed since",
+                        },
+                        {
                           key: "pdf",
                           label: "Download this card",
                           icon: "print",
@@ -561,6 +578,13 @@ export function AlbumScreen({
                         },
                       ]
                     : [
+                        {
+                          key: "editor",
+                          label: "Open in the page editor",
+                          icon: "edit",
+                          href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${i + 1}`,
+                          hint: "Correct it by hand, exact in millimetres",
+                        },
                         {
                           key: "pdf",
                           label: "Download this sheet",

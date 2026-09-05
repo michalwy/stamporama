@@ -55,6 +55,24 @@
 // *5 mm more before this block*, *break here*. Dragging shows a geometric offset applied to an
 // already-computed plan; the re-plan happens server-side when the drag is released. So the browser's
 // own `measureText` never enters the picture, and there is nothing for it to disagree with.
+//
+// ## The collector's corrections are inputs to this module, not a second pass over its output
+//
+// #769 lets the collector overrule the packing: extra space before or after a block, a forced break
+// and a forced *no* break, a text block of their own, a box a couple of millimetres bigger. Every one
+// of them arrives on the specs this function is given and is packed **with** the automatic layout
+// rather than applied to the plan afterwards. That is what makes a correction survive a content
+// change: adding a stamp re-flows the page and the deltas are still the deltas.
+//
+// The space corrections were counted before they were built. His own six areas hold **480**
+// `PAGE_VSPACE` over **198** `PAGE_START(` pages — by a long way the most-made hand correction in the
+// corpus, and the reason it is first in the list. **Every negative one of them (18) is in a `_*.txt`
+// running-head include**, building the head `printTitle` already models; there is not one in page
+// content. So {@link AlbumBlockSpec.spaceBeforeMm} may be negative but floors the block's lead at
+// zero: closing a gap is something he does, overlapping two blocks is not.
+//
+// The forced break has no analogue in the sources to count — AlbumEasy paginates by hand, so his 198
+// `PAGE_START(` *are* the breaks and there is no `PAGE_BREAK` anywhere. It is ours.
 
 import type { AlbumRenderPreset } from "./album-template-rules";
 import { roundSizeMm } from "./stamp-size";
@@ -193,13 +211,59 @@ export interface AlbumBoxSpec {
   label: string;
 }
 
+/**
+ * Where a page may break relative to a block (#769).
+ *
+ * `auto` is the packer's own answer and is what every block starts at. The other two are the
+ * collector overruling it, and they are not symmetric: `always` is a statement this module can
+ * always honour, while `avoid` is a *preference* — a run of them longer than a sheet cannot be kept
+ * together on any page, and the packer then gives up on the run rather than looping.
+ *
+ * There is nothing in the AlbumEasy sources to measure this against: that program paginates by hand,
+ * so the collector's 198 `PAGE_START(` are themselves the breaks and there is no `PAGE_BREAK`
+ * directive in the corpus at all. This pair is an invention, and #755 is where it was asked for.
+ */
+export type AlbumBlockBreak = "auto" | "always" | "avoid";
+
+/**
+ * What kind of block this is (#769).
+ *
+ * `entry` is a checklist and is everything the plan produced before the editor existed; `text` is a
+ * block of the collector's own words, set in one of the template's roles and carrying no boxes.
+ *
+ * Optional, and read as `entry` when absent, so a snapshot stored before text blocks existed reads
+ * back as what it is rather than being refused by version (`album-snapshot.ts`).
+ */
+export type AlbumBlockKind = "entry" | "text";
+
 /** One block to place: a checklist's heading and its boxes, in the order the album prints them. */
 export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
-  /** The album entry this block is, carried through so a placement joins back to its rows. */
+  /** The album entry this block is, carried through so a placement joins back to its rows. For a
+   *  `text` block it is that block's own id — the caller's handle on the row, either way. */
   entryId: string;
   /** The rendered checklist heading, already in the album's language. Blank reserves nothing. */
   heading: string;
   boxes: readonly T[];
+  /** A checklist, or a block of the collector's own text (#769). Absent means `entry`. */
+  kind?: AlbumBlockKind;
+  /** Which of the template's roles this block's text is set in. Absent means `heading`, which is
+   *  what a checklist is. A **text block** names another of them, which is the whole of what "from
+   *  the template's text roles" (#769) buys: the collector picks the voice the note is printed in
+   *  rather than the album growing a sixth type setting nothing else uses. */
+  role?: AlbumTextRole;
+  /** Extra space the collector has asked for **before** this block, in millimetres (#769).
+   *
+   *  Part of the block's own lead, so — like the lead — it does not change when the block moves, and
+   *  "does not fit, so move it whole" stays well-defined. May be negative to close a gap the
+   *  automatic lead opened, but the lead itself floors at zero: his 480 content `PAGE_VSPACE` are
+   *  every one of them positive, and two blocks printed over one another is not a correction anyone
+   *  asked for. */
+  spaceBeforeMm?: number;
+  /** Extra space **after** this block. Charged on the block's last sheet only, so splitting one
+   *  across three cards does not spend it three times. */
+  spaceAfterMm?: number;
+  /** Whether the collector has forced, or forbidden, a page break above this block (#769). */
+  breakBefore?: AlbumBlockBreak;
   /** The printed sheets this block is already on (#778), in printing order, or null while it is
    *  live. A block naming any is **not planned**: the sheets exist and the plan steps over them.
    *
@@ -234,6 +298,9 @@ export interface AlbumPlacedBox<
 /** What a page says about a block that landed on it. */
 export interface AlbumPlacedBlock {
   entryId: string;
+  /** A checklist, or a block of the collector's own text (#769). Absent on a placement stored before
+   *  text blocks existed, which is exactly the `entry` it was. */
+  kind?: AlbumBlockKind;
   /** Which sheet of this block this page is: **1** for an ordinary block, which moves whole, and
    *  2, 3, … for the tails of one too tall for a column and therefore split.
    *
@@ -254,6 +321,17 @@ export interface AlbumPlacedBlock {
   /** Index of the block's first box on this page, into the block's own box list. */
   firstBoxIndex: number;
   boxCount: number;
+  /** True when this block asked **not** to be separated from what is above it (#769) and the packer
+   *  could not grant it — it opens a sheet, so what it wanted to stay with is on the one before.
+   *
+   *  Reported rather than resolved, and that is the whole reason the flag exists: `avoid` is a
+   *  preference, a run of them taller than a sheet has no arrangement that satisfies it, and a
+   *  constraint dropped **silently** here is one the collector discovers with the card in his hand.
+   *  A chapter's first block is included on purpose: a chapter starts a sheet, so an `avoid` there is
+   *  a request nothing could ever grant, and saying so is better than a setting that quietly does
+   *  nothing. A continuation sheet of a split block is not — nothing was separated that anybody asked
+   *  to keep together. */
+  separated?: boolean;
 }
 
 /** A page of the plan.
@@ -424,11 +502,14 @@ interface MeasuredBlock<T extends AlbumBoxSpec> {
   spec: AlbumBlockSpec<T>;
   /** The heading as the block's **first** sheet prints it, unmarked. */
   heading: MeasuredHeading;
-  /** The space separating this block from whatever is above it, whether or not it has a heading.
-   *  Part of the block, so its height never changes when it moves. */
+  /** The space separating this block from whatever is above it, whether or not it has a heading,
+   *  plus the collector's own correction (#769). Part of the block, so its height never changes when
+   *  it moves. */
   leadMm: number;
+  /** The collector's extra space **after** the block, charged on its last sheet only. */
+  trailingMm: number;
   rows: MeasuredRow<T>[];
-  /** The total this block occupies: its lead, its heading and all of its rows. */
+  /** The total this block occupies: its lead, its heading, all of its rows and its trailing space. */
   heightMm: number;
 }
 
@@ -460,8 +541,9 @@ function measureHeading(
   widthMm: number,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
+  role: AlbumTextRole = "heading",
 ): MeasuredHeading {
-  const face = albumRoleFace(preset, "heading");
+  const face = albumRoleFace(preset, role);
   const lines = wrapAlbumText(text, widthMm, face.face, face.sizePt, metrics);
   return {
     lines,
@@ -474,18 +556,30 @@ function measureHeading(
   };
 }
 
+/** The role a block's text is set in — a checklist heading unless the collector said otherwise. */
+function blockRole(block: AlbumBlockSpec): AlbumTextRole {
+  return block.role ?? "heading";
+}
+
 function measureBlock<T extends AlbumBoxSpec>(
   block: AlbumBlockSpec<T>,
   widthMm: number,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
 ): MeasuredBlock<T> {
-  const heading = measureHeading(block.heading, widthMm, preset, metrics);
+  const role = blockRole(block);
+  const heading = measureHeading(block.heading, widthMm, preset, metrics, role);
   // With a heading, the collector's own "space above a heading"; without one, the ordinary row gap,
-  // so two unheaded blocks do not run together.
-  const leadMm = heading.lines.length
-    ? preset.headingSpaceAboveMm
-    : preset.boxGapYMm;
+  // so two unheaded blocks do not run together. The correction rides on that lead rather than beside
+  // it, and floors at zero: `PAGE_VSPACE` closes gaps in his sources and never overlaps blocks.
+  const leadMm = Math.max(
+    0,
+    roundSizeMm(
+      (heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm) +
+        (block.spaceBeforeMm ?? 0),
+    ),
+  );
+  const trailingMm = Math.max(0, roundSizeMm(block.spaceAfterMm ?? 0));
 
   const labelFace = albumRoleFace(preset, "label");
   const labelLineMm = metrics.lineHeightMm(labelFace.face, labelFace.sizePt);
@@ -534,9 +628,13 @@ function measureBlock<T extends AlbumBoxSpec>(
     spec: block,
     heading,
     leadMm,
+    trailingMm,
     rows,
     heightMm: roundSizeMm(
-      leadMm + heading.costMm + rowsHeightMm(rows, preset.boxGapYMm),
+      leadMm +
+        heading.costMm +
+        rowsHeightMm(rows, preset.boxGapYMm) +
+        trailingMm,
     ),
   };
 }
@@ -606,12 +704,16 @@ function measureBand<T extends AlbumBoxSpec>(
   metrics: AlbumTextMetrics,
 ): MeasuredBand<T> {
   const cap = Math.max(1, Math.round(preset.blocksPerBand));
-  // Only an unbroken run of live blocks can share a band: a printed sheet is a page boundary.
+  // Only an unbroken run of live blocks can share a band: a printed sheet is a page boundary. So is
+  // a **forced break** (#769) — a band is one horizontal slice of one page, so pairing a block that
+  // has been told to start a sheet of its own with the block above it would quietly overrule the
+  // collector rather than the packer.
   let available = 0;
   while (
     available < cap &&
     from + available < blocks.length &&
-    !blocks[from + available].printedPageIds?.length
+    !blocks[from + available].printedPageIds?.length &&
+    (available === 0 || blocks[from + available].breakBefore !== "always")
   ) {
     available += 1;
   }
@@ -645,6 +747,44 @@ function measureBand<T extends AlbumBoxSpec>(
     blockWidthMm: contentWidthMm,
     heightMm: only.heightMm,
   };
+}
+
+/**
+ * The bands that must land on one page together: one band, plus every band after it whose first
+ * block asks not to be separated from what is above it (#769).
+ *
+ * This is what makes *a forced no break* expressible in a single-pass packer at all. The packer
+ * decides page by page and never moves what it has already placed, so `avoid` cannot be a rule that
+ * pulls the previous block forward after the fact — it has to make the **unit that moves whole**
+ * bigger before anything is placed. That is also why it composes with everything else for free: a
+ * unit of one band is the ordinary page, and every rule below it — moves whole, unpairs rather than
+ * making a page worse, splits only when taller than a sheet — is written against a band and still is.
+ *
+ * The run stops at a **printed sheet**, which is a page boundary nothing may be kept together across,
+ * and at a **forced break**, which is the collector saying the opposite in the same breath.
+ */
+function keepTogether<T extends AlbumBoxSpec>(
+  blocks: readonly AlbumBlockSpec<T>[],
+  from: number,
+  preset: AlbumRenderPreset,
+  contentWidthMm: number,
+  metrics: AlbumTextMetrics,
+): MeasuredBand<T>[] {
+  const unit: MeasuredBand<T>[] = [];
+  let at = from;
+  for (;;) {
+    const band = measureBand(blocks, at, preset, contentWidthMm, metrics);
+    unit.push(band);
+    at += band.blocks.length;
+    const next = blocks[at];
+    if (
+      !next ||
+      next.breakBefore !== "avoid" ||
+      (next.printedPageIds?.length ?? 0) > 0
+    ) {
+      return unit;
+    }
+  }
 }
 
 /** A page being filled. */
@@ -749,7 +889,17 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
     //
     // Not the same case as a year heading legitimately alone on a sheet (#768): there the content
     // under it moved to the next *live* page and the heading is still the plan's to print.
-    const opensOnPaper = !!chapter.blocks[0]?.printedPageIds?.length;
+    //
+    // The block that answers this is the first one that **could have carried the heading**, which is
+    // not always `blocks[0]`: a live text block the collector has since filed at the head of the
+    // album (#769) sits in front of it and was on no card. Reading it as the opener would print a
+    // second 1938 on a live sheet in front of the card headed 1938 — this family of bug arriving
+    // through the editor rather than through a reorder. A note that is itself on paper *is* an
+    // opener, because it is on the card that carries the year.
+    const opener = chapter.blocks.find(
+      (b) => b.kind !== "text" || (b.printedPageIds?.length ?? 0) > 0,
+    );
+    const opensOnPaper = !!opener?.printedPageIds?.length;
     const chapterFace = albumRoleFace(preset, "chapter");
     const chapterLines = opensOnPaper
       ? []
@@ -822,12 +972,31 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         continue;
       }
 
-      const band = measureBand(
+      // **A forced break** (#769): this block starts a sheet of its own. Conditioned on the page
+      // having a *block* on it rather than on the pen having moved, so a chapter's own year heading
+      // does not count — forcing a break under it would leave the year alone on a card, which is
+      // something the packer already does when it has to (#768) and never something to do on
+      // purpose. It terminates for the same reason: after the break the fresh page holds no blocks,
+      // so the condition is false and the loop cannot take this branch twice for one block.
+      if (block.breakBefore === "always" && page.blocks.length > 0) {
+        emit(page);
+        page = freshPage(chapter.key);
+        continue;
+      }
+
+      // **A forced *no* break** (#769) is the other half, and it is not a mirror image: it makes the
+      // thing that moves whole bigger. A block asking not to be separated from what is above it joins
+      // the unit the previous band is in, and the unit is placed, moved or given up on together.
+      const unit = keepTogether(
         chapter.blocks,
         i,
         preset,
         page.content.widthMm,
         metrics,
+      );
+      const band = unit[0];
+      const unitHeightMm = roundSizeMm(
+        unit.reduce((total, b) => total + b.heightMm, 0),
       );
       const spaceMm = roundSizeMm(
         page.content.yMm + page.content.heightMm - page.penMm,
@@ -843,17 +1012,37 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       const roomier =
         !atTop || page.content.heightMm + FIT_EPSILON < fullContentHeightMm;
 
-      // Fits where the pen is.
-      if (band.heightMm <= spaceMm + FIT_EPSILON) {
-        placeBand(band, page, preset, metrics);
-        i += band.blocks.length;
+      // The whole unit fits where the pen is: place every band of it.
+      if (unitHeightMm <= spaceMm + FIT_EPSILON) {
+        for (const held of unit) {
+          placeBand(held, page, preset, metrics);
+          i += held.blocks.length;
+        }
         continue;
       }
-      // Fits an empty page, just not what is left of this one: move it whole.
-      if (roomier && band.heightMm <= fullContentHeightMm + FIT_EPSILON) {
+      // It fits an empty page, just not what is left of this one: move it whole. A unit of one band
+      // is the ordinary case and this is the rule that has always been here; a longer unit is the
+      // collector's *keep these together* being honoured.
+      if (roomier && unitHeightMm <= fullContentHeightMm + FIT_EPSILON) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
+      }
+      // A unit longer than one band that will not fit any page **cannot be kept together**, so the
+      // preference is dropped and its first band is packed on its own — which is what the rest of
+      // this loop then does. Giving up rather than looping is the point: `avoid` is a preference and
+      // a run of them taller than a sheet has no arrangement that satisfies it.
+      if (unit.length > 1) {
+        if (band.heightMm <= spaceMm + FIT_EPSILON) {
+          placeBand(band, page, preset, metrics);
+          i += band.blocks.length;
+          continue;
+        }
+        if (roomier) {
+          emit(page);
+          page = freshPage(chapter.key);
+          continue;
+        }
       }
       // Too tall even for an empty page. If it is a pairing, unpair it — pairing must never make a
       // page worse — and let the loop try the first block on its own.
@@ -954,6 +1143,7 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
             current.content.widthMm,
             preset,
             metrics,
+            blockRole(measured.spec),
           );
     const rest = measured.rows.slice(rowIndex);
     const fixedMm = roundSizeMm(measured.leadMm + heading.costMm);
@@ -1034,14 +1224,15 @@ function placeBlock<T extends AlbumBoxSpec>(
 ): void {
   page.penMm = roundSizeMm(page.penMm + measured.leadMm);
 
+  const role = blockRole(measured.spec);
   if (heading.lines.length) {
-    const headingFace = albumRoleFace(preset, "heading");
+    const headingFace = albumRoleFace(preset, role);
     const textMm = roundSizeMm(
       heading.lines.length *
         metrics.lineHeightMm(headingFace.face, headingFace.sizePt),
     );
     page.headings.push({
-      role: "heading",
+      role,
       lines: heading.lines,
       xMm: at.xMm,
       yMm: page.penMm,
@@ -1103,11 +1294,28 @@ function placeBlock<T extends AlbumBoxSpec>(
     );
   }
 
+  // The collector's extra space **after** the block, on the sheet the block actually ends on. A
+  // split block charges it once, at the foot of its last card, rather than three times over — the
+  // correction is *after this checklist*, and the gaps inside a split one are page edges.
+  if (fromRow + count >= measured.rows.length) {
+    page.penMm = roundSizeMm(page.penMm + measured.trailingMm);
+  }
+
   page.blocks.push({
     entryId: measured.spec.entryId,
+    kind: measured.spec.kind ?? "entry",
     part,
     heading: heading.lines.join(" "),
     firstBoxIndex,
     boxCount: placed,
+    // Read off the page rather than off the packer's own branches: a block that got what it asked
+    // for has the block it wanted to stay with above it on this sheet, so the sheet is not empty
+    // under it. Every way the preference can be dropped — an unsatisfiable run, a chapter boundary,
+    // a band unpaired — arrives here the same way.
+    ...(measured.spec.breakBefore === "avoid" &&
+    part === 1 &&
+    page.blocks.length === 0
+      ? { separated: true }
+      : {}),
   });
 }

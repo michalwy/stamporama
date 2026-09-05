@@ -4,6 +4,7 @@ import {
   albumContinuationHeading,
   planAlbumPages,
   wrapAlbumText,
+  type AlbumBlockSpec,
   type AlbumBoxSpec,
   type AlbumChapterSpec,
   type AlbumPlannedPage,
@@ -46,7 +47,7 @@ const block = (
 const chapter = (
   key: string,
   heading: string,
-  blocks: ReturnType<typeof block>[]
+  blocks: AlbumBlockSpec[]
 ): AlbumChapterSpec => ({ key, heading, blocks });
 
 const live = (pages: AlbumPlannedPage[]) =>
@@ -363,6 +364,7 @@ describe("planAlbumPages", () => {
     assert.deepEqual(page.headings[0].lines, ["Nothing collected yet"]);
     assert.deepEqual(page.blocks[0], {
       entryId: "a",
+      kind: "entry",
       part: 1,
       heading: "Nothing collected yet",
       firstBoxIndex: 0,
@@ -671,5 +673,470 @@ describe("planAlbumPages on the rare shapes", () => {
       pages[1].boxes.map((b) => b.box.label),
       ["b"]
     );
+  });
+});
+
+/**
+ * The collector overruling the packer (#769).
+ *
+ * These are corrections, not settings: they arrive on the block specs and are packed **with** the
+ * automatic layout, which is what makes them survive a content change. So the geometry below is
+ * asserted in absolute millimetres against `DEFAULT_ALBUM_PRESET` — an ordinary sheet has 260 mm of
+ * content starting at y = 23 with the stand-in measurer above, and every figure here is worked out
+ * on paper from that.
+ *
+ * Extra space is the one of the five with a corpus behind it: **480** `PAGE_VSPACE` across the
+ * collector's own 198 AlbumEasy pages, every content one of them positive. The forced break and the
+ * forced no-break have none — AlbumEasy paginates by hand — and are inventions #755 asked for.
+ */
+describe("planAlbumPages and the collector's corrections", () => {
+  /** One block per band, so the tests below read as a column and a correction moves one thing. */
+  const stacked = preset({ blocksPerBand: 1 });
+
+  /** A block with corrections on it. Written out rather than added to `block()` above, so the
+   *  hundred existing cases keep saying "no corrections" by their shape. */
+  const corrected = (
+    entryId: string,
+    heading: string,
+    boxes: AlbumBoxSpec[],
+    over: Partial<AlbumBlockSpec>
+  ): AlbumBlockSpec => ({ entryId, heading, boxes, printedPageIds: null, ...over });
+
+  /** Rows 190 mm wide, so each box takes a row of its own and a block's height is arithmetic:
+   *  8 (lead) + 11 (one heading line and the space under it) + 30n + 6(n − 1). */
+  const tall = (n: number) => Array.from({ length: n }, () => box(190, 30));
+
+  it("pushes a block down by the space asked for before it, and charges it to the block", () => {
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            corrected("b", "B", [box(30, 36)], { spaceBeforeMm: 20 }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    // A: lead 8 from y 23, heading at 31, one 36 mm row — the block ends at 78.
+    assert.equal(pages[0].headings[0].yMm, 31);
+    // B's lead is its own 8 plus the collector's 20, so its heading sits 20 mm lower than it would.
+    assert.equal(pages[0].headings[1].yMm, 106);
+  });
+
+  it("lets a correction close the gap above a block, but never below zero", () => {
+    // −50 against a lead of 8 is not a block printed 42 mm into the one above it. His own content
+    // `PAGE_VSPACE` are every one of them positive; the 18 negatives in the corpus are all in the
+    // running-head includes, building the head `printTitle` already models.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            corrected("b", "B", [box(30, 36)], { spaceBeforeMm: -50 }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages[0].headings[1].yMm, 78);
+  });
+
+  it("moves a block whole onto the next sheet when its own correction is what stopped it fitting", () => {
+    // Filler is 193 mm, B is 55: 248 fits the 260 mm sheet. The 20 mm correction makes it 268, and
+    // then B moves — **with its correction**, which is the half that matters. A lead that collapsed
+    // at the top of a page would make "does not fit, so move it" ill-defined, and a correction that
+    // evaporated on the way would make it worse: the block would fit where it had just been refused.
+    const chapterSpec = (over: Partial<AlbumBlockSpec>) =>
+      chapter("y", "", [
+        block("f", "F", tall(5)),
+        corrected("b", "B", [box(30, 36)], over),
+      ]);
+
+    const together = live(planAlbumPages([chapterSpec({})], stacked, "Album", metrics).pages);
+    assert.equal(together.length, 1);
+
+    const apart = live(
+      planAlbumPages([chapterSpec({ spaceBeforeMm: 20 })], stacked, "Album", metrics).pages
+    );
+    assert.equal(apart.length, 2);
+    // y 23 + the block's own 8 + the collector's 20.
+    assert.equal(apart[1].headings[0].yMm, 51);
+  });
+
+  it("charges the space after a split block once, at the foot of its last card", () => {
+    // Ten 30 mm rows is 373 mm and splits over two sheets, six rows then four. The trailing space is
+    // *after this checklist*, and the gaps inside a split one are page edges — so spending it three
+    // times over would put 20 mm of nothing at the bottom of every card of the run.
+    const plan = (over: Partial<AlbumBlockSpec>) =>
+      live(
+        planAlbumPages(
+          [
+            chapter("y", "", [
+              corrected("a", "A", tall(10), over),
+              block("b", "B", [box(30, 36)]),
+            ]),
+          ],
+          stacked,
+          "Album",
+          metrics
+        ).pages
+      );
+
+    const plain = plan({});
+    assert.equal(plain.length, 2);
+    assert.deepEqual(
+      plain.map((p) => p.blocks.map((b) => b.entryId)),
+      [["a"], ["a", "b"]]
+    );
+    // A's tail ends at 180 on the second sheet; B's own lead of 8 puts its heading at 188.
+    assert.equal(plain[1].headings[1].yMm, 188);
+
+    const spaced = plan({ spaceAfterMm: 20 });
+    assert.equal(spaced[1].headings[1].yMm, 208);
+    // And the first card of the run is unchanged: it did not pay for a gap that is not on it.
+    assert.equal(spaced[0].blocks[0].boxCount, plain[0].blocks[0].boxCount);
+  });
+
+  it("starts a fresh sheet for a block the collector has broken before", () => {
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            corrected("b", "B", [box(30, 36)], { breakBefore: "always" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.deepEqual(
+      pages.map((p) => p.blocks.map((b) => b.entryId)),
+      [["a"], ["b"]]
+    );
+  });
+
+  it("does not let a band pairing swallow a forced break", () => {
+    // Two one-stamp checklists are exactly what the collector pairs, and a band is one slice of one
+    // page — so pairing a block that has been told to start a sheet of its own would overrule him
+    // rather than the packer, silently, on the shape where pairing is most likely to happen.
+    const blocks = (over: Partial<AlbumBlockSpec>) => [
+      block("a", "A", [box(30, 36)]),
+      corrected("b", "B", [box(30, 36)], over),
+    ];
+    const paired = live(
+      planAlbumPages([chapter("y", "", blocks({}))], preset(), "Album", metrics).pages
+    );
+    assert.equal(paired.length, 1);
+    assert.equal(paired[0].headings[0].yMm, paired[0].headings[1].yMm);
+
+    const broken = live(
+      planAlbumPages(
+        [chapter("y", "", blocks({ breakBefore: "always" }))],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.deepEqual(
+      broken.map((p) => p.blocks.map((b) => b.entryId)),
+      [["a"], ["b"]]
+    );
+  });
+
+  it("leaves a year heading alone rather than breaking under it", () => {
+    // A chapter already starts a page, so a break forced above its first block would only produce a
+    // card carrying the year and nothing else. The packer does emit such a sheet when it has to
+    // (#768) — it must not do it because a flag was left on a block that has since moved.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("1938", "1938", [
+            corrected("a", "A", [box(30, 36)], { breakBefore: "always" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 1);
+    assert.ok(pages[0].chapter);
+    assert.deepEqual(
+      pages[0].blocks.map((b) => b.entryId),
+      ["a"]
+    );
+  });
+
+  it("moves a block and the one that must stay with it together", () => {
+    // 193 mm of filler leaves 67, which A alone fits and A + B does not. Asked to keep them
+    // together, the packer moves **both** — which it can only do by making the unit that moves whole
+    // bigger before anything is placed, since it never goes back for what it has already put down.
+    const blocks = (over: Partial<AlbumBlockSpec>) => [
+      block("f", "F", tall(5)),
+      block("a", "A", [box(30, 36)]),
+      corrected("b", "B", [box(30, 36)], over),
+    ];
+
+    const loose = live(
+      planAlbumPages([chapter("y", "", blocks({}))], stacked, "Album", metrics).pages
+    );
+    assert.deepEqual(
+      loose.map((p) => p.blocks.map((b) => b.entryId)),
+      [["f", "a"], ["b"]]
+    );
+
+    const kept = live(
+      planAlbumPages(
+        [chapter("y", "", blocks({ breakBefore: "avoid" }))],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.deepEqual(
+      kept.map((p) => p.blocks.map((b) => b.entryId)),
+      [["f"], ["a", "b"]]
+    );
+  });
+
+  it("gives up on keeping two blocks together when no sheet could hold both", () => {
+    // `avoid` is a preference, not a statement the packer can always honour: a run of them taller
+    // than a sheet has no arrangement that satisfies it. Dropping the preference is the answer;
+    // looking for one is a plan that never terminates.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", tall(5)),
+            corrected("b", "B", tall(5), { breakBefore: "avoid" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.deepEqual(
+      pages.map((p) => p.blocks.map((b) => b.entryId)),
+      [["a"], ["b"]]
+    );
+  });
+
+  it("says so on the block when a keep-together could not be granted", () => {
+    // A constraint dropped **silently** is much worse here than one refused out loud: the collector
+    // finds out from a sheet in his hand. So the packer reports it, and reads it off the page rather
+    // than off its own branches — a block that got what it asked for has the block it wanted to stay
+    // with above it, so the sheet is not empty under it.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", tall(5)),
+            corrected("b", "B", tall(5), { breakBefore: "avoid" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages[0].blocks[0].separated, undefined);
+    assert.equal(pages[1].blocks[0].separated, true);
+  });
+
+  it("says nothing when the keep-together was granted", () => {
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            corrected("b", "B", [box(30, 36)], { breakBefore: "avoid" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 1);
+    for (const placed of pages[0].blocks) assert.equal(placed.separated, undefined);
+  });
+
+  it("does not call a continuation sheet of a split block a broken keep-together", () => {
+    // Parts 2 and 3 open sheets of their own by construction. Nothing was separated that anybody
+    // asked to keep together, and flagging them would make the warning mean nothing.
+    const pages = live(
+      planAlbumPages(
+        [chapter("y", "", [corrected("a", "A", tall(10), { breakBefore: "avoid" })])],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 2);
+    assert.equal(pages[1].blocks[0].part, 2);
+    assert.equal(pages[1].blocks[0].separated, undefined);
+  });
+
+  it("sets a text block in the role it names and gives it no boxes", () => {
+    // A block of the collector's own words, in one of the template's five voices. There is nothing
+    // in his AlbumEasy sources to measure this against — `PAGE_TEXT_PARAGRAPH_START` appears 21
+    // times in the program's own examples and **not once** in his six areas — so it is an invention,
+    // and the role is what keeps it from being a sixth type setting nothing else uses.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            corrected("t1", "Kasowane", [], { kind: "text", role: "chapter" }),
+          ]),
+        ],
+        stacked,
+        "Album",
+        metrics
+      ).pages
+    );
+    const note = pages[0].headings[1];
+    assert.equal(note.role, "chapter");
+    assert.deepEqual(note.lines, ["Kasowane"]);
+    // The chapter face is 24 pt against the heading's 12, so the note is set twice the size — which
+    // is the whole of what choosing a role buys, and it is charged for: 12 mm of line, not 6.
+    assert.equal(note.heightMm, 12);
+    assert.deepEqual(pages[0].blocks[1], {
+      entryId: "t1",
+      kind: "text",
+      part: 1,
+      heading: "Kasowane",
+      firstBoxIndex: 0,
+      boxCount: 0,
+    });
+  });
+
+  it("does not reprint a chapter's year because a note was filed in front of a printed card", () => {
+    // The printed-sheet family (ADR-0047 §4) arriving through the editor. The card in the binder
+    // carries 1938; a note typed today sits in front of it and was on no card, so reading the note
+    // as the block that opens the chapter would file a blank sheet headed 1938 ahead of the real one
+    // — which is exactly what an album with every chapter printed used to come out as.
+    const plan = planAlbumPages(
+      [
+        chapter("1938", "1938", [
+          corrected("t1", "Kasowane", [], { kind: "text" }),
+          block("a", "A", [], "printed-1"),
+        ]),
+      ],
+      stacked,
+      "Album",
+      metrics
+    );
+    const [sheet] = live(plan.pages);
+    assert.equal(sheet.chapter, null);
+    assert.deepEqual(
+      sheet.blocks.map((b) => b.entryId),
+      ["t1"]
+    );
+
+    // A note that is itself on the card *is* an opener: the card carries it and the year together.
+    const printedNote = planAlbumPages(
+      [
+        chapter("1938", "1938", [
+          corrected("t1", "Kasowane", [], { kind: "text", printedPageIds: ["printed-1"] }),
+          block("a", "A", [], "printed-1"),
+        ]),
+      ],
+      stacked,
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      printedNote.pages.map((p) => p.kind),
+      ["printed"]
+    );
+  });
+
+  it("still steps over a printed sheet whose block carries corrections", () => {
+    // A correction is an instruction to the **packer**, and a card in a binder was never packed by
+    // this run. A forced break above a block on paper that opened a live sheet in front of it would
+    // be the printed-sheet family of bug (ADR-0047 §4) arriving through the editor: the plan
+    // emitting something the card already accounts for.
+    const plan = planAlbumPages(
+      [
+        chapter("1938", "1938", [
+          corrected("a", "A", [], {
+            printedPageIds: ["printed-1"],
+            breakBefore: "always",
+            spaceBeforeMm: 50,
+          }),
+          block("b", "B", [box(30, 36)]),
+        ]),
+      ],
+      stacked,
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => (p.kind === "printed" ? p.printedPageId : "live")),
+      ["printed-1", "live"]
+    );
+    // The chapter's year is on the card, so the live sheet after it does not print one again.
+    const [after] = live(plan.pages);
+    assert.equal(after.chapter, null);
+  });
+
+  it("files a reordered printed sheet once even with a correction between its blocks", () => {
+    // The reordered-printed input (ADR-0047 §4), with the editor's own vocabulary in the gap. The
+    // block in between asks for a break and for space, and the card is still one card.
+    const plan = planAlbumPages(
+      [
+        chapter("y", "", [
+          block("a", "", [box(30, 36)], "printed-1"),
+          corrected("b", "B", [box(30, 36)], {
+            breakBefore: "always",
+            spaceBeforeMm: 15,
+          }),
+          block("c", "", [box(30, 36)], "printed-1"),
+        ]),
+      ],
+      stacked,
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => p.kind),
+      ["printed", "live"]
+    );
+    const sheet = plan.pages[0];
+    if (sheet.kind === "printed") assert.deepEqual(sheet.entryIds, ["a", "c"]);
+  });
+
+  it("keeps a correction working after the content it hangs on has changed", () => {
+    // The claim the whole design rests on: a correction is a delta the automatic layout still runs
+    // under, so a stamp joining the checklist re-flows the page and the correction is still 20 mm
+    // before that block. An absolute position would have to be re-typed here.
+    const withStamps = (n: number) =>
+      live(
+        planAlbumPages(
+          [
+            chapter("y", "", [
+              block("a", "A", Array.from({ length: n }, () => box(30, 36))),
+              corrected("b", "B", [box(30, 36)], { spaceBeforeMm: 20 }),
+            ]),
+          ],
+          stacked,
+          "Album",
+          metrics
+        ).pages
+      );
+
+    const before = withStamps(1);
+    const after = withStamps(12);
+    // A now wraps to two rows, so B is a row lower — and exactly a row lower, the 20 mm intact.
+    assert.equal(after[0].headings[1].yMm - before[0].headings[1].yMm, 42);
   });
 });

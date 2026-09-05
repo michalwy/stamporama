@@ -85,6 +85,11 @@ export interface AlbumComparableBlock {
   entryId: string;
   /** Which sheet of a split checklist this is. */
   part: number;
+  /** A checklist, or one of the collector's own notes (#769). Absent on a block compared from a
+   *  snapshot stored before notes existed, which is the `entry` it was. It changes no comparison —
+   *  only what a divergence is *called*, and "a checklist heading now reads" is the wrong sentence
+   *  about a note somebody typed. */
+  kind?: "entry" | "text";
   heading: string;
   boxes: AlbumComparableBox[];
 }
@@ -340,8 +345,25 @@ export function compareAlbumPages(
   }
   for (const [key, block] of printedBlocks) {
     const now = referenceBlocks.get(key);
-    if (!now) continue;
-    const d = textDivergence("A checklist heading", block.heading, now.heading);
+    if (!now) {
+      // A **note** the card carries that the album no longer produces. Only for a note, and only for
+      // one with no boxes: a checklist that has left the card is already said, loudly, by the stamps
+      // above and by the orphan rule. Without this the one thing that can vanish without a trace is
+      // the collector's own words — the card would go on carrying a sentence nothing in the album
+      // accounts for, and no read would say so.
+      if (block.kind === "text" && block.boxes.length === 0) {
+        found.push({
+          kind: "text",
+          detail: `The card carries a note the album no longer has: "${block.heading}".`,
+        });
+      }
+      continue;
+    }
+    const d = textDivergence(
+      block.kind === "text" ? "A note" : "A checklist heading",
+      block.heading,
+      now.heading
+    );
     if (d) found.push(d);
   }
   if (relabelled > 0) {

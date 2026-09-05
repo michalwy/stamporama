@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { Prisma } from "@/generated/prisma/client";
 import {
+  albumNoteBlock,
   albumPlanContext,
   albumComparablePage,
   albumPlanPrint,
@@ -176,7 +177,14 @@ export async function markAlbumPagesPrinted(
       ...row,
       part: (partBase.get(row.albumEntryId) ?? 0) + row.part,
     }));
-    return { snapshot, rows };
+    // The collector's own notes (#769) that went onto this sheet. They carry no stamps, so the index
+    // over the snapshot cannot see them and they name their sheet on their own row instead — the
+    // same seam `AlbumEntry.continuesPrintedPageId` is. Without it the plan would emit the note again
+    // on live paper beside the card that already prints it, which is ADR-0047 §4's family exactly.
+    const noteIds = snapshot.page.blocks
+      .filter((b) => b.kind === "text")
+      .map((b) => b.entryId);
+    return { snapshot, rows, noteIds };
   });
 
   const continuationsAnswered = plan.entries
@@ -189,14 +197,21 @@ export async function markAlbumPagesPrinted(
 
   await prisma.$transaction(async (tx) => {
     for (const write of writes) {
-      await tx.albumPrintedPage.create({
+      const created = await tx.albumPrintedPage.create({
         data: {
           albumId,
           range: write.snapshot.range,
           snapshot: write.snapshot as unknown as Prisma.InputJsonValue,
           stamps: { createMany: { data: write.rows } },
         },
+        select: { id: true },
       });
+      if (write.noteIds.length > 0) {
+        await tx.albumTextBlock.updateMany({
+          where: { albumId, id: { in: write.noteIds } },
+          data: { printedPageId: created.id },
+        });
+      }
     }
     // The choice is per divergence, not a setting: a continuation that has itself gone onto paper is
     // answered, and the next stamp to arrive asks again.
@@ -515,7 +530,7 @@ export async function getAlbumPrintedReport(
     });
   }
 
-  for (const group of printedCardGroups(printed.byEntry, snapshots)) {
+  for (const group of printedCardGroups(printed.byEntry, snapshots, printed.byTextBlock)) {
     const groupSheets = group.pageIds.filter((id) => {
       const row = printed.pages.get(id);
       return row && !row.reprintingAt;
@@ -601,7 +616,11 @@ interface PrintedCardGroup {
  */
 function printedCardGroups(
   byEntry: ReadonlyMap<string, { printedPageIds: string[] }>,
-  snapshots: ReadonlyMap<string, AlbumPageSnapshot>
+  snapshots: ReadonlyMap<string, AlbumPageSnapshot>,
+  /** Which sheet each of the collector's notes is on (#769), so a card carrying **only** a note is
+   *  still a card. Without it such a sheet joins no group, is never compared, and is offered nothing
+   *  in the report — a card in the binder the album has quietly stopped having an opinion about. */
+  byTextBlock: ReadonlyMap<string, string>
 ): PrintedCardGroup[] {
   const parent = new Map<string, string>();
   const find = (id: string): string => {
@@ -632,17 +651,24 @@ function printedCardGroups(
   }
 
   const groups = new Map<string, PrintedCardGroup>();
-  for (const [entryId, held] of byEntry) {
-    for (const id of held.printedPageIds) {
-      const root = find(id);
-      let group = groups.get(root);
-      if (!group) {
-        group = { pageIds: [], entryIds: new Set() };
-        groups.set(root, group);
-      }
-      if (!group.pageIds.includes(id)) group.pageIds.push(id);
-      group.entryIds.add(entryId);
+  const groupFor = (id: string): PrintedCardGroup => {
+    const root = find(id);
+    let group = groups.get(root);
+    if (!group) {
+      group = { pageIds: [], entryIds: new Set() };
+      groups.set(root, group);
     }
+    if (!group.pageIds.includes(id)) group.pageIds.push(id);
+    return group;
+  };
+  for (const [entryId, held] of byEntry) {
+    for (const id of held.printedPageIds) groupFor(id).entryIds.add(entryId);
+  }
+  // A note never joins two sheets — it is one block on one card — so it only ever opens a group that
+  // no checklist opened.
+  for (const pageId of byTextBlock.values()) {
+    if (!parent.has(pageId)) parent.set(pageId, pageId);
+    groupFor(pageId);
   }
   return [...groups.values()];
 }
@@ -669,8 +695,32 @@ function planPrintedCardReference(
     for (const box of snapshot.page.boxes) onOtherCards.add(box.box.stampId);
   }
 
+  // The collector's own notes that are **on this card** (#769). They have to be in the reference for
+  // the reason the chapter heading has to: the card carries them, so a reference planned without
+  // them would report every one of them as gone, for ever, on a card nothing is wrong with. Read
+  // from the printed index rather than from the snapshot's blocks, so one module answers *which sheet
+  // is this note on* — the same rule the checklists beside them follow.
+  const notesOnCard = context.textBlocks.filter((note) => {
+    const pageId = context.printed.byTextBlock.get(note.id);
+    return pageId !== undefined && group.pageIds.includes(pageId);
+  });
+  const notesAt = new Map<string, typeof notesOnCard>();
+  for (const note of notesOnCard) {
+    // A note anchored to a checklist that is not on this card is still on this card, and the anchor
+    // says nothing useful about where it sits within it — so it leads, which is where the plan puts
+    // an unanchored one.
+    const anchored =
+      note.anchorAlbumEntryId &&
+      groupEntries.some((e) => e.id === note.anchorAlbumEntryId);
+    const at = anchored ? `${note.anchorAlbumEntryId}#${note.side}` : "#before";
+    notesAt.set(at, [...(notesAt.get(at) ?? []), note]);
+  }
+
   const blocks: AlbumBlockSpec<AlbumBoxData>[] = [];
+  for (const note of notesAt.get("#before") ?? []) blocks.push(albumNoteBlock(note, null));
   for (const entry of groupEntries) {
+    for (const note of notesAt.get(`${entry.id}#before`) ?? [])
+      blocks.push(albumNoteBlock(note, null));
     const onPaper = context.printed.byEntry.get(entry.id);
     const stampIds = entry.stampIds.filter((id) => {
       if (onOtherCards.has(id)) return false;
@@ -679,14 +729,22 @@ function planPrintedCardReference(
       if (entry.continuesPrintedPageId && onPaper && !onPaper.stampIds.has(id)) return false;
       return true;
     });
-    if (stampIds.length === 0) continue;
-    blocks.push({
-      entryId: entry.id,
-      heading: context.checklistHeading(entry),
-      boxes: context.boxesFor(entry, stampIds),
-      printedPageIds: null,
-    });
+    if (stampIds.length > 0) {
+      blocks.push({
+        entryId: entry.id,
+        heading: context.checklistHeading(entry),
+        kind: "entry",
+        boxes: context.boxesFor(entry, stampIds),
+        printedPageIds: null,
+        spaceBeforeMm: entry.spaceBeforeMm,
+        spaceAfterMm: entry.spaceAfterMm,
+        breakBefore: entry.breakBefore,
+      });
+    }
+    for (const note of notesAt.get(`${entry.id}#after`) ?? [])
+      blocks.push(albumNoteBlock(note, null));
   }
+  for (const note of notesAt.get("#after") ?? []) blocks.push(albumNoteBlock(note, null));
   if (blocks.length === 0) return [];
 
   const plan = planAlbumPages(
@@ -731,6 +789,9 @@ export function snapshotComparablePage(snapshot: AlbumPageSnapshot): AlbumCompar
     blocks: snapshotBlocks(snapshot.page).map((block) => ({
       entryId: block.entryId,
       part: block.part,
+      kind:
+        snapshot.page.blocks.find((b) => b.entryId === block.entryId && b.part === block.part)
+          ?.kind ?? "entry",
       heading:
         snapshot.page.blocks.find((b) => b.entryId === block.entryId && b.part === block.part)
           ?.heading ?? "",

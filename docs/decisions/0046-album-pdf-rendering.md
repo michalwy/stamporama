@@ -198,8 +198,11 @@ forty boxes on it.
 - The coverage gap #766 recorded is closed by measurement: Liberation Serif and Sans 2.1.5 carry
   Greek and Cyrillic in full. One real gap remains and is pinned by a test rather than discovered on
   a card — Liberation Sans Narrow has no `ẞ`.
-- #769 must draw through `albumBaselineOffsetMm` as this renderer does, or the two will place a
-  heading's ink differently inside a band whose height they agree on.
+- #769 draws through `albumBaselineOffsetMm` as this renderer does, and takes it **off the payload**
+  rather than computing it: `album-editor.ts` resolves the face once per role, server-side, and the
+  canvas positions what the renderer positioned. The one figure the browser supplies is the centring
+  of an already-wrapped line, which is a paint difference — `cssStack` names each embedded face's
+  metric twin first, and no page break depends on it.
 - #778 now draws printed sheets through this same module, from their stored snapshots (**ADR-0047**).
   Nothing had to be unpicked, but the file did have to be **parameterised**: every drawing function
   takes the sheet's own `AlbumRenderPreset` rather than the album row, and `embedFaces` covers every

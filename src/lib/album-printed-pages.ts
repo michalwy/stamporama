@@ -50,6 +50,12 @@ export interface AlbumPrintedIndex {
   pages: Map<string, AlbumPrintedPageRow>;
   /** Only entries with something on paper, and only sheets that are not being reprinted. */
   byEntry: Map<string, AlbumPrintedEntry>;
+  /** Which sheet each of the collector's own text blocks (#769) is on, for sheets that are not being
+   *  reprinted. Read here rather than off `AlbumTextBlock.printedPageId` for exactly the reason
+   *  `byEntry` is: a reprint returns a card's content to the live plan, and one module deciding what
+   *  *on paper* means is what keeps the note and the checklist beside it from being answered two
+   *  different ways. */
+  byTextBlock: Map<string, string>;
   /** Printed sheets no live entry names any more, so nothing in the plan can file them. A card in a
    *  binder whose stamps have all left the album is not a row to sweep — it is a divergence, and the
    *  report is where it is said. */
@@ -72,11 +78,17 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
   });
   const pages = new Map(rows.map((r) => [r.id, r]));
 
-  const stamps = await prisma.albumPrintedPageStamp.findMany({
-    where: { printedPage: { albumId, reprintingAt: null } },
-    orderBy: [{ part: "asc" }, { sortOrder: "asc" }],
-    select: { albumPrintedPageId: true, stampId: true, albumEntryId: true, part: true },
-  });
+  const [stamps, notes] = await Promise.all([
+    prisma.albumPrintedPageStamp.findMany({
+      where: { printedPage: { albumId, reprintingAt: null } },
+      orderBy: [{ part: "asc" }, { sortOrder: "asc" }],
+      select: { albumPrintedPageId: true, stampId: true, albumEntryId: true, part: true },
+    }),
+    prisma.albumTextBlock.findMany({
+      where: { albumId, printedPage: { reprintingAt: null } },
+      select: { id: true, printedPageId: true },
+    }),
+  ]);
 
   const byEntry = new Map<string, AlbumPrintedEntry>();
   // `part` orders the sheets of one split block; a first-seen order would be the database's, and two
@@ -100,9 +112,20 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
       .map(([, id]) => id);
   }
 
+  const byTextBlock = new Map<string, string>();
+  for (const note of notes) {
+    if (!note.printedPageId) continue;
+    byTextBlock.set(note.id, note.printedPageId);
+    // A sheet carrying nothing but one of the collector's notes has no stamp rows at all, so it
+    // would otherwise read as **orphaned** — a card whose stamps have all left the album — and be
+    // reported as a divergence that no acquisition caused and nothing can answer.
+    claimed.add(note.printedPageId);
+  }
+
   return {
     pages,
     byEntry,
+    byTextBlock,
     orphanedPageIds: rows
       .filter((r) => !r.reprintingAt && !claimed.has(r.id))
       .map((r) => r.id),

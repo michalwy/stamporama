@@ -977,6 +977,7 @@ model Album {
   collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   entries        AlbumEntry[]
   printedPages   AlbumPrintedPage[]
+  textBlocks     AlbumTextBlock[]
 
   // An album is picked and printed by name, and two albums called "Polska" would make which binder a
   // footer names depend on which row the database handed back first — `AlbumTemplate`'s rule.
@@ -1017,9 +1018,32 @@ model AlbumEntry {
   // deletion, so un-printing the card an open continuation answers takes the continuation with it.
   continuesPrintedPageId String?
 
+  // ── The collector's corrections to the automatic layout (#769) ──
+  //
+  // Relative, never positions. `spaceBeforeMm` and `spaceAfterMm` are millimetres added to the space
+  // the packer already leaves around this block, and they ride on the block's own lead — so its
+  // height is still the same wherever it lands and "does not fit, so move it whole" stays
+  // well-defined. Extra space is the correction the collector actually makes: **480** `PAGE_VSPACE`
+  // across the **198** pages of his own AlbumEasy sources, about 2.4 a page.
+  //
+  // Signed, because closing a gap the automatic lead opened is a real thing to want — but the layout
+  // floors the resulting lead at zero rather than letting one block print over another. Every one of
+  // the corpus's 18 negative `PAGE_VSPACE` is in a `_*.txt` running-head include, building the head
+  // `printTitle` already models; not one is in page content.
+  //
+  // `breakBefore` is `auto` | `always` | `avoid`, and unlike the two above it has no corpus behind
+  // it — AlbumEasy paginates by hand, so his `PAGE_START(` *are* the breaks and there is no
+  // `PAGE_BREAK` in the sources at all. `avoid` is a **preference**: a run of them taller than a
+  // sheet cannot be satisfied, and the packer drops it rather than looping.
+  spaceBeforeMm Float  @default(0)
+  spaceAfterMm  Float  @default(0)
+  breakBefore   String @default("auto")
+
   album             Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
   checklist         Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   stampOrder        AlbumEntryStampOrder[]
+  boxAdjustments    AlbumBoxAdjustment[]
+  textBlocks        AlbumTextBlock[]       @relation("AlbumTextBlockAnchor")
   continuesPrintedPage AlbumPrintedPage? @relation("AlbumEntryContinuation", fields: [continuesPrintedPageId], references: [id], onDelete: SetNull)
   printedStamps     AlbumPrintedPageStamp[]
 
@@ -1054,6 +1078,99 @@ model AlbumEntryStampOrder {
   @@index([albumEntryId, sortOrder])
   @@index([stampId])
   @@map("album_entry_stamp_order")
+}
+
+// A box the collector has corrected by hand (#769) — this box, on this album's page, a couple of
+// millimetres bigger than the rule made it.
+//
+// **Keyed on the box, and a box is a slot rather than a stamp.** That is ADR-0047 §2's fact and it
+// is why the key is not `(album, stamp)`: a stamp can be on two checklists of one issue — basic and
+// specialized, perforated and imperforate (ADR-0031) — and an album gathers both from the same area,
+// so one stamp can have two boxes on one card. Correcting one of them must not silently correct the
+// other.
+//
+// The millimetres are added to the **stamp's size, before the box rule runs** (#765), never to the
+// box the rule produced. A hawid box's height is not chosen: it is the shortest strip in the drawer
+// the piece fits into, so a correction that moved it continuously would draw a box at a height no
+// strip has, which is the one thing that rule exists to prevent. The height therefore moves in strip
+// steps, and raising it past the tallest strip — or widening past a strip's stock length — turns the
+// box into a pocket, which the cutting list (#770) then says.
+model AlbumBoxAdjustment {
+  albumEntryId  String
+  stampId       String
+  widthDeltaMm  Float @default(0)
+  heightDeltaMm Float @default(0)
+
+  albumEntry AlbumEntry @relation(fields: [albumEntryId], references: [id], onDelete: Cascade)
+  stamp      Stamp      @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([albumEntryId, stampId])
+  @@index([stampId])
+  @@map("album_box_adjustment")
+}
+
+// A block of the collector's own words on a page (#769), set in one of the template's five roles.
+//
+// **An invention, and it says so.** Everything else on this track was measured off
+// `~/Documents/AlbumEasy` before it was built; this was not, because there is nothing there to
+// measure — `PAGE_TEXT_PARAGRAPH_START` appears 21 times in AlbumEasy's own `examples/` and not once
+// in the collector's six areas, and `PAGE_TEXT(` not at all. It is asked for in #755 and built as
+// asked.
+//
+// **Anchored to an entry, not positioned among them.** A position is exactly what this model refuses
+// to store — it moves when the collection grows — and an anchor is what makes a note travel with the
+// series it is about when the album is reordered. It is a note that goes with the entry it was
+// written next to, the way *5 mm more before this block* goes with the block.
+//
+// The anchor carries a **side**, and that is not tidiness: *after X* and *before Y* are different
+// statements under a re-flow, and a note that **opens a chapter** is the case that separates them.
+// Written as *after the last entry of 1949* it is right only until a newly gathered 1949 checklist
+// is dragged into place, at which point the note is in the middle of 1949 rather than opening 1950 —
+// having moved without anybody moving it.
+//
+// A null anchor says something on each side too, and both are steadier than naming an entry:
+// **null + `before` is the head of the album, null + `after` is the end of it**, neither of which
+// moves when the first or last checklist changes. Null is also where a note goes when the entry it
+// was about is taken out of the binder (`SetNull`) — a note that jumps to the head is loud and one
+// drag from being right, where a note deleted with its anchor is the collector's own words gone.
+//
+// `printedPageId` is the seam `AlbumEntry.continuesPrintedPageId` is one of: a text block on a card
+// in a binder is on that card, and the plan steps over it rather than emitting it again on live
+// paper (ADR-0047 §4).
+model AlbumTextBlock {
+  id                 String  @id @default(cuid())
+  albumId            String
+  anchorAlbumEntryId String?
+  /// `before` | `after` that anchor. See the note above: the two are different statements once the
+  /// album is reordered, and a chapter's opening note is the case that needs `before`.
+  side               String  @default("after")
+  // Among the notes sharing one anchor *and* one side. Densely renumbered on a reorder, as every
+  // other order in this model is.
+  sortOrder          Int     @default(0)
+  // Which of the template's roles the note is set in: `title` | `chapter` | `heading` | `label` |
+  // `footer`. Reusing the roles rather than growing a sixth type setting is the whole of what "from
+  // the template's text roles" buys — a note in the album's own voice, with nothing new to configure.
+  role              String  @default("heading")
+  text              String  @default("")
+
+  // The same three corrections an entry carries, and for the same reasons.
+  spaceBeforeMm Float  @default(0)
+  spaceAfterMm  Float  @default(0)
+  breakBefore   String @default("auto")
+
+  printedPageId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  album            Album             @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  anchorAlbumEntry AlbumEntry?       @relation("AlbumTextBlockAnchor", fields: [anchorAlbumEntryId], references: [id], onDelete: SetNull)
+  printedPage      AlbumPrintedPage? @relation("AlbumTextBlockPrinted", fields: [printedPageId], references: [id], onDelete: SetNull)
+
+  @@index([albumId])
+  @@index([anchorAlbumEntryId, sortOrder])
+  @@index([printedPageId])
+  @@map("album_text_block")
 }
 
 // A sheet that has been printed and glued into (#778, #755).
@@ -1105,6 +1222,9 @@ model AlbumPrintedPage {
   stamps             AlbumPrintedPageStamp[]
   // Entries whose open continuation page answers this sheet.
   continuationOf     AlbumEntry[]            @relation("AlbumEntryContinuation")
+  // The collector's own text blocks (#769) that went onto this sheet, so the plan steps over them
+  // instead of emitting them again on live paper.
+  textBlocks         AlbumTextBlock[]        @relation("AlbumTextBlockPrinted")
 
   @@index([albumId, printedAt])
   @@map("album_printed_page")
@@ -2407,6 +2527,8 @@ model Stamp {
   checklistEntries  ChecklistStamp[]      @relation("ChecklistStampStamp")
   /** Per-album overrides of where this stamp reads within a checklist (#767). */
   albumStampOrders  AlbumEntryStampOrder[]
+  /** Per-box size corrections the collector has made by hand on an album page (#769). */
+  albumBoxAdjustments AlbumBoxAdjustment[]
   /** The album sheets already in a binder that carry this stamp (#778). */
   albumPrintedPages AlbumPrintedPageStamp[]
   wants             Want[]                @relation("WantStamp")

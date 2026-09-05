@@ -12,6 +12,15 @@ import {
   DEFAULT_ALBUM_PRESET,
   type AlbumRenderPreset,
 } from "./album-template-rules";
+import {
+  asAlbumBlockBreak,
+  asAlbumTextBlockSide,
+  asAlbumTextRole,
+  isEmptyBoxAdjustment,
+  type AlbumBoxAdjustmentValue,
+  type AlbumTextBlockSide,
+} from "./album-corrections";
+import type { AlbumBlockBreak, AlbumTextRole } from "./album-layout";
 
 // Albums (#767) — the Prisma side. The design is #755; ADR-0045 states the model.
 //
@@ -309,6 +318,16 @@ export interface AlbumEntryData {
   /** The chapter this entry falls in — `Issue.year`, or null for a checklist that spans issues. */
   year: number | null;
   sortOrder: number;
+  /** The collector's corrections to how this block is packed (#769). Deltas against what the layout
+   *  produced, never positions, so they survive a re-flow — which is the whole reason the automatic
+   *  layout is still running underneath them. */
+  spaceBeforeMm: number;
+  spaceAfterMm: number;
+  breakBefore: AlbumBlockBreak;
+  /** Per-box size corrections, by stamp (#769). Keyed inside the entry because a **box is a slot
+   *  rather than a stamp** (ADR-0047 §2): one stamp on two checklists of one issue is two boxes, and
+   *  correcting one must not correct the other. Absent means the box rule's own answer stands. */
+  boxAdjustments: Record<string, AlbumBoxAdjustmentValue>;
   /** The stamps of the entry, in the order this album prints them: the checklist's own order (#764)
    *  unless the album overrides it. */
   stampIds: string[];
@@ -327,7 +346,11 @@ const ENTRY_SELECT = {
   checklistId: true,
   sortOrder: true,
   continuesPrintedPageId: true,
+  spaceBeforeMm: true,
+  spaceAfterMm: true,
+  breakBefore: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
+  boxAdjustments: { select: { stampId: true, widthDeltaMm: true, heightDeltaMm: true } },
   checklist: {
     select: {
       name: true,
@@ -372,6 +395,15 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     issueName: row.checklist.issue?.name ?? null,
     year: row.checklist.issue?.year ?? null,
     sortOrder: row.sortOrder,
+    spaceBeforeMm: row.spaceBeforeMm,
+    spaceAfterMm: row.spaceAfterMm,
+    breakBefore: asAlbumBlockBreak(row.breakBefore),
+    boxAdjustments: Object.fromEntries(
+      row.boxAdjustments.map((a) => [
+        a.stampId,
+        { widthDeltaMm: a.widthDeltaMm, heightDeltaMm: a.heightDeltaMm },
+      ])
+    ),
     stampIds,
     ordersItsOwn,
     continuesPrintedPageId: row.continuesPrintedPageId,
@@ -560,4 +592,306 @@ export async function clearAlbumEntryStampOrder(
   const { collectionId } = await resolveEntryAlbum(entryId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.albumEntryStampOrder.deleteMany({ where: { albumEntryId: entryId } });
+}
+
+// ── The collector's corrections (#769) ───────────────────────────────────────
+//
+// Every writer below stores a **delta**, and the automatic layout goes on running underneath it.
+// That is not a style: a live page has no row and its identity is derived from its own contents
+// (ADR-0045 §3), so a correction stored against a position would be undone by the next stamp bought.
+// Adding a stamp re-flows the page and *5 mm more before this series* is still 5 mm more before that
+// series.
+//
+// The geometry is not here either. These functions move numbers; `album-plan.ts` puts them on the
+// specs and `album-layout.ts` packs them.
+
+/** How a block is packed, as the editor sets it. Each field is optional so a drag that moved one
+ *  handle writes one number — a whole-object save would let a stale field from an open panel
+ *  overwrite a correction made on the canvas a second earlier. */
+export interface AlbumBlockLayoutInput {
+  spaceBeforeMm?: number;
+  spaceAfterMm?: number;
+  breakBefore?: AlbumBlockBreak;
+}
+
+export async function setAlbumEntryLayout(
+  ownerId: string,
+  entryId: string,
+  input: AlbumBlockLayoutInput
+): Promise<void> {
+  const { collectionId } = await resolveEntryAlbum(entryId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.albumEntry.update({
+    where: { id: entryId },
+    data: {
+      ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
+      ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
+      ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+    },
+  });
+}
+
+/**
+ * Correct one box's size, or take the correction back.
+ *
+ * **Both deltas zero deletes the row**, which is `clearAlbumEntryStampOrder`'s rule one level down:
+ * an album that has never disagreed with the box rule keeps nothing, so it is indistinguishable from
+ * one that never could — and the editor reads the presence of a row as *this box was corrected by
+ * hand*, which a row of two zeroes would make a lie.
+ *
+ * The stamp is checked against the entry's own checklist rather than against the album, because the
+ * key is a **box** and a box is a slot: `(entry, stamp)` is the one pair that names exactly one box.
+ */
+export async function setAlbumBoxAdjustment(
+  ownerId: string,
+  entryId: string,
+  stampId: string,
+  value: AlbumBoxAdjustmentValue
+): Promise<void> {
+  const { collectionId } = await resolveEntryAlbum(entryId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const entry = await prisma.albumEntry.findUnique({
+    where: { id: entryId },
+    select: { checklist: { select: { stamps: { select: { stampId: true } } } } },
+  });
+  if (!entry) throw new Error("Album entry not found.");
+  if (!entry.checklist.stamps.some((s) => s.stampId === stampId)) {
+    throw new Error("That stamp is not on this entry's checklist.");
+  }
+
+  if (isEmptyBoxAdjustment(value)) {
+    await prisma.albumBoxAdjustment.deleteMany({
+      where: { albumEntryId: entryId, stampId },
+    });
+    return;
+  }
+  await prisma.albumBoxAdjustment.upsert({
+    where: { albumEntryId_stampId: { albumEntryId: entryId, stampId } },
+    create: { albumEntryId: entryId, stampId, ...value },
+    update: value,
+  });
+}
+
+/** Drop every box correction on one entry, returning the block to the box rule's own answer. */
+export async function clearAlbumBoxAdjustments(
+  ownerId: string,
+  entryId: string
+): Promise<void> {
+  const { collectionId } = await resolveEntryAlbum(entryId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.albumBoxAdjustment.deleteMany({ where: { albumEntryId: entryId } });
+}
+
+// ── Free text blocks (#769) ──────────────────────────────────────────────────
+
+/** A block of the collector's own words, as the editor reads one. */
+export interface AlbumTextBlockData {
+  id: string;
+  /** The entry it is filed against — an **anchor**, not a position, so a note travels with the series
+   *  it is about when the album is reordered. Null with {@link side} `before` is the head of the
+   *  album and null with `after` is the end of it. */
+  anchorAlbumEntryId: string | null;
+  /** Which side of that anchor. `after X` and `before Y` are the same gap today and different ones
+   *  the moment the album is reordered, which is why a note that opens a chapter needs `before`. */
+  side: AlbumTextBlockSide;
+  sortOrder: number;
+  role: AlbumTextRole;
+  text: string;
+  spaceBeforeMm: number;
+  spaceAfterMm: number;
+  breakBefore: AlbumBlockBreak;
+  /** The sheet it went onto, if it has been printed (#778). The plan steps over it there. */
+  printedPageId: string | null;
+}
+
+const TEXT_BLOCK_SELECT = {
+  id: true,
+  anchorAlbumEntryId: true,
+  side: true,
+  sortOrder: true,
+  role: true,
+  text: true,
+  spaceBeforeMm: true,
+  spaceAfterMm: true,
+  breakBefore: true,
+  printedPageId: true,
+} satisfies Prisma.AlbumTextBlockSelect;
+
+function toTextBlockData(
+  row: Prisma.AlbumTextBlockGetPayload<{ select: typeof TEXT_BLOCK_SELECT }>
+): AlbumTextBlockData {
+  return {
+    ...row,
+    role: asAlbumTextRole(row.role),
+    side: asAlbumTextBlockSide(row.side),
+    breakBefore: asAlbumBlockBreak(row.breakBefore),
+  };
+}
+
+export async function getAlbumTextBlocks(
+  ownerId: string,
+  albumId: string
+): Promise<AlbumTextBlockData[]> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.albumTextBlock.findMany({
+    where: { albumId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: TEXT_BLOCK_SELECT,
+  });
+  return rows.map(toTextBlockData);
+}
+
+async function resolveTextBlockAlbum(
+  textBlockId: string
+): Promise<{ albumId: string; collectionId: string }> {
+  const row = await prisma.albumTextBlock.findUnique({
+    where: { id: textBlockId },
+    select: { albumId: true, album: { select: { collectionId: true } } },
+  });
+  if (!row) throw new Error("Text block not found.");
+  return { albumId: row.albumId, collectionId: row.album.collectionId };
+}
+
+/** Where a note goes and what it says. The anchor is checked against this album, so a note cannot be
+ *  filed after a checklist in a different binder. */
+export interface AlbumTextBlockInput {
+  anchorAlbumEntryId: string | null;
+  side: AlbumTextBlockSide;
+  role: AlbumTextRole;
+  text: string;
+}
+
+async function assertAnchorInAlbum(
+  albumId: string,
+  anchorAlbumEntryId: string | null
+): Promise<void> {
+  if (!anchorAlbumEntryId) return;
+  const anchor = await prisma.albumEntry.findFirst({
+    where: { id: anchorAlbumEntryId, albumId },
+    select: { id: true },
+  });
+  if (!anchor) throw new Error("That checklist is not in this album.");
+}
+
+export async function addAlbumTextBlock(
+  ownerId: string,
+  albumId: string,
+  input: AlbumTextBlockInput
+): Promise<string> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await assertAnchorInAlbum(albumId, input.anchorAlbumEntryId);
+  const last = await prisma.albumTextBlock.findFirst({
+    where: { albumId, anchorAlbumEntryId: input.anchorAlbumEntryId, side: input.side },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true },
+  });
+  const created = await prisma.albumTextBlock.create({
+    data: {
+      albumId,
+      anchorAlbumEntryId: input.anchorAlbumEntryId,
+      side: input.side,
+      role: input.role,
+      text: input.text,
+      sortOrder: last ? last.sortOrder + 1 : 0,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/**
+ * Edit a note: its words, its voice, where it is filed, and how it is packed.
+ *
+ * **A note that is on a card may be edited, and the edit is a divergence rather than a refusal.**
+ * That looks wrong for a moment and is the same shape as renaming an issue: what is on the paper is
+ * in that sheet's snapshot and cannot change (ADR-0047 §1), while the live row goes on being live —
+ * so the album says the note reads one way, the card says it reads another, and #778 reports the
+ * difference like every other one. Refusing the edit would be a rule ADR-0047 does not have, and an
+ * inconsistent one: an album whose *name* is changed re-writes a running head on every card without
+ * anybody being stopped.
+ *
+ * **Deleting one is refused** while it is on a card, and the asymmetry is the point: an edited note
+ * diverges *visibly*, where a deleted one would take the card's own account of it away with it. See
+ * {@link deleteAlbumTextBlock}.
+ */
+export async function updateAlbumTextBlock(
+  ownerId: string,
+  textBlockId: string,
+  input: Partial<AlbumTextBlockInput> & AlbumBlockLayoutInput
+): Promise<void> {
+  const { albumId, collectionId } = await resolveTextBlockAlbum(textBlockId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const current = await prisma.albumTextBlock.findUnique({
+    where: { id: textBlockId },
+    select: { printedPageId: true, anchorAlbumEntryId: true },
+  });
+  if (!current) throw new Error("Text block not found.");
+  if (
+    input.anchorAlbumEntryId !== undefined &&
+    input.anchorAlbumEntryId !== current.anchorAlbumEntryId
+  ) {
+    await assertAnchorInAlbum(albumId, input.anchorAlbumEntryId);
+  }
+  await prisma.albumTextBlock.update({
+    where: { id: textBlockId },
+    data: {
+      ...(input.anchorAlbumEntryId === undefined
+        ? {}
+        : { anchorAlbumEntryId: input.anchorAlbumEntryId }),
+      ...(input.side === undefined ? {} : { side: input.side }),
+      ...(input.role === undefined ? {} : { role: input.role }),
+      ...(input.text === undefined ? {} : { text: input.text }),
+      ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
+      ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
+      ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+    },
+  });
+}
+
+export async function deleteAlbumTextBlock(
+  ownerId: string,
+  textBlockId: string
+): Promise<void> {
+  const { collectionId } = await resolveTextBlockAlbum(textBlockId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const current = await prisma.albumTextBlock.findUnique({
+    where: { id: textBlockId },
+    select: { printedPageId: true },
+  });
+  if (current?.printedPageId) {
+    throw new Error(
+      "This note is on a printed card, so it cannot be taken out of the album — the card would then " +
+        "carry words nothing accounts for. Change what it says and the difference is reported, or " +
+        "reprint the card."
+    );
+  }
+  await prisma.albumTextBlock.delete({ where: { id: textBlockId } });
+}
+
+/** Reorder the notes filed after one anchor. Densely renumbered to array position, as every other
+ *  order in this model is. */
+export async function reorderAlbumTextBlocks(
+  ownerId: string,
+  albumId: string,
+  anchorAlbumEntryId: string | null,
+  side: AlbumTextBlockSide,
+  orderedIds: string[]
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const existing = await prisma.albumTextBlock.findMany({
+    where: { albumId, anchorAlbumEntryId, side },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((b) => b.id));
+  if (orderedIds.length !== existingIds.size || !orderedIds.every((id) => existingIds.has(id))) {
+    throw new Error("Reorder list does not match the notes filed here.");
+  }
+  await prisma.$transaction(
+    orderedIds.map((id, i) =>
+      prisma.albumTextBlock.update({ where: { id }, data: { sortOrder: i } })
+    )
+  );
 }

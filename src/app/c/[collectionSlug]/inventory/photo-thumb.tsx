@@ -31,6 +31,10 @@ const DEFAULT_THUMB_SIZE = "4rem"; // 64px — larger than the old strip's 2.75r
 function thumbUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/thumb`;
 }
+/** The same address, for a surface that draws a picture without a `<PhotoThumb>` around it — the
+ * album page canvas (#769) puts one inside an `<image>` in an SVG. Exported rather than repeated, so
+ * the serving route is named in one place. */
+export const photoThumbUrl = thumbUrl;
 function fullUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/full`;
 }
