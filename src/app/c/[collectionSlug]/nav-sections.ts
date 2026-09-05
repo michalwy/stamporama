@@ -24,7 +24,7 @@ export type SectionKey = "catalog" | "collection" | "selling" | "buying" | "part
  */
 export const SECTION_ROUTES: Record<SectionKey, string[]> = {
   catalog: ["/issues", "/stamps"],
-  collection: ["/inventory", "/locations"],
+  collection: ["/inventory", "/locations", "/albums"],
   selling: ["/offers", "/sales"],
   buying: ["/wants", "/purchases", "/auctions"],
   partners: ["/trades", "/contacts", "/colnect"],

@@ -113,8 +113,8 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ headingFace: "Arial Bold Italic" }), /not one this version ships/);
   });
 
-  it("refuses fractional columns", () => {
-    assert.match(parseError({ columns: "1.5" }), /whole number/);
+  it("refuses a fractional band ceiling", () => {
+    assert.match(parseError({ blocksPerBand: "1.5" }), /whole number/);
   });
 
   it("refuses margins that leave no printable area", () => {
@@ -179,12 +179,15 @@ describe("albumTemplateSummary", () => {
   it("says the page, the shape and the face that names it", () => {
     assert.equal(
       albumTemplateSummary(DEFAULT_ALBUM_PRESET),
-      "210 × 297 mm · 1 column · Liberation Serif 26 pt"
+      "210 × 297 mm · up to 2 blocks per band · Liberation Serif 26 pt"
     );
   });
 
-  it("pluralises the columns", () => {
-    assert.match(albumTemplateSummary({ ...DEFAULT_ALBUM_PRESET, columns: 2 }), /2 columns/);
+  it("says so when a template never pairs two checklists in a band", () => {
+    assert.match(
+      albumTemplateSummary({ ...DEFAULT_ALBUM_PRESET, blocksPerBand: 1 }),
+      /one block per band/
+    );
   });
 });
 

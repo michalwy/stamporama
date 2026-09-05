@@ -144,6 +144,7 @@ model Collection {
   refCardTemplates RefCardTemplate[]
   hawidStrips     HawidStrip[]
   albumTemplates  AlbumTemplate[]
+  albums          Album[]
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
@@ -787,10 +788,16 @@ model AlbumTemplate {
   marginRightMm  Float
   marginBottomMm Float
   marginLeftMm   Float
-  // How many columns the content area is divided into, and the gutter between them. 1 is the
-  // ordinary page; a definitives album with small boxes reads better in two.
-  columns        Int   @default(1)
-  columnGapMm    Float
+  // How many checklist **blocks** may share one horizontal band, and the gap between two that do.
+  //
+  // This is deliberately **not** a page divided into columns with content flowing down one and into
+  // the next. AlbumEasy's `PAGE_COLUMN_START` looks like a column mode until you notice it is opened
+  // and closed several times on one page — the collector's own sources hold 35 of them, every one a
+  // pair, and `PL-1933.txt` has six on a single page. What he is doing is putting two short
+  // checklists side by side and running full width everywhere else, so that is what this models: a
+  // ceiling on how many blocks may pair, never a frame. Nothing overflows sideways.
+  blocksPerBand  Int   @default(1)
+  blockGapMm     Float
   // The optional decorative border: `none` | `single` | `double`, its line weight, and how far in
   // from the page edge it is drawn. `none` leaves the other two unread rather than null — a border
   // that is off still remembers what it was set to when it is turned back on.
@@ -826,6 +833,10 @@ model AlbumTemplate {
   // `ALBUM_DEFINE_FONT` itself names.
   titleFace     String
   titleSizePt   Float
+  // Whether the album's name prints as a **running head** on every page. Off is a real album, not a
+  // degenerate one: four of the collector's five areas carry a head and DA does not — and DA starts
+  // its content at 30 mm rather than 20 because it is not spending those millimetres on one.
+  printTitle    Boolean @default(true)
   chapterFace   String
   chapterSizePt Float
   headingFace   String
@@ -869,6 +880,162 @@ model AlbumTemplate {
   @@unique([collectionId, name])
   @@index([collectionId])
   @@map("album_template")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Albums (#767) — the design is #755; ADR-0045 states the model and its reasoning.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// An album is a **durable, printed object**, and the app's job is to plan it rather than to render
+// it once. Anchored on a `CollectionArea`, its entries gathered from that area's subtree, grouped
+// into chapters by `Issue.year`.
+//
+// **The template's values are copied here, never referenced** (#308's rule, #766). There is
+// deliberately no `albumTemplateId`: choosing a template seeds these columns and the link ends
+// there, so editing a template cannot reach into a page that is already in a binder with stamps
+// glued to it. The duplicated column list is kept in step by `AlbumRenderPreset` in
+// `src/lib/album-template-rules.ts`, which is a shared *type* and must never become a shared row.
+//
+// The hawid stock (#765) is the deliberate exception and is read live: it is a statement about a
+// drawer, and a drawer changes. What must not change under a printed page is the page, and that is
+// #778's snapshot rather than anything here.
+model Album {
+  id               String @id @default(cuid())
+  collectionId     String
+  // The area whose subtree supplies the entries, and what `{area}` resolves against in the chapter
+  // and footer texts — through the same roll-up a generated listing title uses.
+  collectionAreaId String
+  name             String
+
+  // **An album is printed in one language, and it is the album's own** (#755). Not the render's:
+  // headings are longer in some languages, longer headings wrap, and wrapping changes where a block
+  // stops fitting — so the page plan itself depends on this column, and a language chosen at render
+  // time would make a page's catalog-range identity not a property of the album at all.
+  //
+  // A free ISO 639-1 code, as `Contact.titleLanguage` is, and **not nullable**: the collection's
+  // default is a real code and is what a new album starts at, so a null would be a second way of
+  // saying what `Collection.defaultLanguage` already says. #777 unions these into the collection's
+  // language set, so an album in a language nothing is sold in still gets an input in every entity
+  // dialog instead of falling back on every token with no way to fix it.
+  language String
+
+  // ── The seeded render preset (#766) ──
+  // Identical in name, type and meaning to `AlbumTemplate`'s columns. A change to one is a change to
+  // both and to `AlbumRenderPreset`; the reasoning behind each field is stated on the template and
+  // is deliberately not repeated here.
+  pageWidthMm    Float
+  pageHeightMm   Float
+  marginTopMm    Float
+  marginRightMm  Float
+  marginBottomMm Float
+  marginLeftMm   Float
+  blocksPerBand  Int    @default(1)
+  blockGapMm     Float
+  borderStyle    String @default("none")
+  borderWidthMm  Float
+  borderInsetMm  Float
+
+  boxGapXMm           Float
+  boxGapYMm           Float
+  headingSpaceAboveMm Float
+  headingSpaceBelowMm Float
+
+  verticalClearanceMm Float
+  horizontalMarginMm  Float
+
+  titleFace     String
+  titleSizePt   Float
+  // Whether the album's name prints as a **running head** on every page. Off is a real album, not a
+  // degenerate one: four of the collector's five areas carry a head and DA does not — and DA starts
+  // its content at 30 mm rather than 20 because it is not spending those millimetres on one.
+  printTitle    Boolean @default(true)
+  chapterFace   String
+  chapterSizePt Float
+  headingFace   String
+  headingSizePt Float
+  labelFace     String
+  labelSizePt   Float
+  footerFace    String
+  footerSizePt  Float
+
+  boxBorderStyle   String @default("solid")
+  boxBorderWidthMm Float
+  labelPosition    String @default("below")
+
+  printPhotos         Boolean @default(false)
+  photoOpacityPercent Int     @default(100)
+
+  chapterTemplate   String @default("")
+  checklistTemplate String @default("")
+  boxLabelTemplate  String @default("")
+  footerTemplate    String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection     Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  entries        AlbumEntry[]
+
+  // An album is picked and printed by name, and two albums called "Polska" would make which binder a
+  // footer names depend on which row the database handed back first — `AlbumTemplate`'s rule.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@index([collectionAreaId])
+  @@map("album")
+}
+
+// One checklist in one album — **a checklist, not an issue** (#531, ADR-0031, #755). A checklist is
+// what counts as one complete unit — basic against specialized, perforated against imperforate — and
+// that is exactly what a card is laid out for; an issue is a publication event whose variant tree
+// would burst the card. Every slot gets a box whether or not a copy is owned, which is what makes a
+// page double as a want list.
+//
+// Entries are **gathered** from the area's subtree in catalog order and seeded in it. The one
+// exception is a checklist with no issue (`Checklist.issueId` null — one that spans issues): it has
+// no area, so it cannot be gathered and is added by hand.
+model AlbumEntry {
+  id          String @id @default(cuid())
+  albumId     String
+  checklistId String
+  // The order the album prints its entries in. Seeded in catalog order and then the collector's,
+  // densely renumbered on a reorder exactly as `ChecklistStamp.sortOrder` (#764) is one level down.
+  sortOrder   Int    @default(0)
+
+  album      Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  checklist  Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  stampOrder AlbumEntryStampOrder[]
+
+  // One entry per checklist: the same checklist printed twice in one album is two cards each
+  // claiming to be the same complete unit.
+  @@unique([albumId, checklistId])
+  @@index([albumId, sortOrder])
+  @@index([checklistId])
+  @@map("album_entry")
+}
+
+// This album's own order for the stamps of one entry, overriding the checklist's collection-wide
+// order (#764).
+//
+// Written for **every** stamp of the entry, or for none. A sparse override cannot define an order — a
+// stamp placed third with nothing else stated leaves the rest unanswered — so the first reorder
+// writes the whole list, and the mere presence of rows is what the page editor (#769) reads to say
+// whether a block is following the checklist's order or the album's.
+//
+// Nothing backfills these, and an entry that agrees with its checklist keeps no rows at all: an
+// album that has never disagreed should be indistinguishable from one that never could.
+model AlbumEntryStampOrder {
+  albumEntryId String
+  stampId      String
+  sortOrder    Int
+
+  albumEntry AlbumEntry @relation(fields: [albumEntryId], references: [id], onDelete: Cascade)
+  stamp      Stamp      @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([albumEntryId, stampId])
+  @@index([albumEntryId, sortOrder])
+  @@index([stampId])
+  @@map("album_entry_stamp_order")
 }
 
 model CatalogVendor {
@@ -2025,6 +2192,8 @@ model CollectionArea {
   collectionAreaCatalogs CollectionAreaCatalog[]
   collectionAreaVendors  CollectionAreaVendor[]
   issues                 Issue[]
+  /** Albums anchored on this area (#767) — entries are gathered from its subtree. */
+  albums                 Album[]
   formatFactors          StampFormatFactor[]
   platformCategoryLessons PlatformCategoryLesson[]
 
@@ -2128,6 +2297,8 @@ model Stamp {
   catalogPrices     StampCatalogPrice[]
   issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
   checklistEntries  ChecklistStamp[]      @relation("ChecklistStampStamp")
+  /** Per-album overrides of where this stamp reads within a checklist (#767). */
+  albumStampOrders  AlbumEntryStampOrder[]
   wants             Want[]                @relation("WantStamp")
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
@@ -4976,6 +5147,8 @@ model Checklist {
   collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   issue      Issue?           @relation(fields: [issueId], references: [id], onDelete: Cascade)
   stamps     ChecklistStamp[]
+  /** The album entries that print this checklist (#767). */
+  albumEntries AlbumEntry[]
 
   @@index([collectionId])
   @@index([issueId, sortOrder])

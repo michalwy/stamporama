@@ -806,16 +806,24 @@ Pages you have already printed are paper.
 **Settings → Albums → Album templates** holds everything about how an album *looks*, so a new album
 is not an evening of retyping page sizes and font names. One template covers:
 
-- **Page** — size and the four margins in millimetres, how many columns the content is laid in, and
-  an optional decorative border with its weight and inset.
-- **Spacing** — between boxes across a row, between rows, and the space a heading reserves above and
-  below itself.
+- **Page** — size and the four margins in millimetres, and an optional decorative border with its
+  weight and inset.
+- **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
+  do, then the space between boxes across a row, between rows, and above and below a heading.
+
+  A band is a slice of the page. Normally one checklist takes the full width; where two short ones
+  would both fit, they can sit side by side, which is what your own pages do a few times per page.
+  It is a ceiling and not a frame — the page is never divided into fixed columns and nothing ever
+  runs off the side of one.
 - **Hawid clearances** — what a box adds to the stamp. Two numbers rather than one, because the two
   axes are different: the vertical clearance is added *before a strip is chosen* (how much hawid has
   to be there above and below the stamp), while the horizontal margin is the cut. Together they
   replace AlbumEasy's single global 4 mm.
 - **Type** — a face and a size for each of the five roles: album title, chapter heading, checklist
-  heading, box label, footer. Sizes are in **points**, the unit type is set in.
+  heading, box label, footer. Sizes are in **points**, the unit type is set in. The album title also
+  has a switch for whether it is printed as a **running head** on every page — your Polska, Bohemia,
+  Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the ones that do not
+  get those millimetres back for content.
 - **Boxes and photos** — the outline around a mount and where its label sits, and whether a box
   prints the photo it has, at what opacity.
 - **Texts** — the chapter heading, the checklist heading, the box label and the footer.
@@ -854,6 +862,9 @@ This is the part worth being clear about. Starting an album from a template **co
 onto the album. The album does not point back at the template, so editing or deleting one later
 never changes an album that already exists — and can never change a page that is already printed,
 mounted and glued into. If you want an existing album to follow a change, you change that album.
+
+The albums themselves live outside Settings, under **Collection → Albums** — see
+[Albums](albums.md). A template is configuration; an album is a binder being filled.
 
 ## Stamp photos
 

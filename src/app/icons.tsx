@@ -31,6 +31,7 @@
  *   An icon that is the control's *only* content needs an `aria-label` on the control itself.
  */
 import {
+  Album,
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowLeftToLine,
@@ -142,6 +143,9 @@ const GLYPHS = {
   stamps: Stamp,
   inventory: Layers,
   locations: MapPin,
+  /** Printed album pages (#767) — the binder a collection is mounted in, not a book to read. The
+   *  drawing is a sheet with a card on it, which is what an album page is. */
+  albums: Album,
   offers: Tag,
   sales: Banknote,
   purchases: ShoppingBag,

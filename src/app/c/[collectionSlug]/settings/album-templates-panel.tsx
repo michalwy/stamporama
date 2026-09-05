@@ -23,6 +23,8 @@ import {
   ALBUM_MM_STEP,
   ALBUM_PT_STEP,
   DEFAULT_ALBUM_PRESET,
+  MAX_BLOCKS_PER_BAND,
+  MIN_BLOCKS_PER_BAND,
   albumTemplateSummary,
   type AlbumRenderPreset,
 } from "@/lib/album-template-rules";
@@ -290,24 +292,10 @@ function TemplateForm({
       <div style={GRID_STYLE}>
         <MmField name="pageWidthMm" label="Width (mm)" value={preset.pageWidthMm} disabled={isPending} />
         <MmField name="pageHeightMm" label="Height (mm)" value={preset.pageHeightMm} disabled={isPending} />
-        <div>
-          <LabelWithError htmlFor="f-album-columns">Columns</LabelWithError>
-          <input
-            id="f-album-columns"
-            name="columns"
-            type="number"
-            step={1}
-            min={1}
-            defaultValue={preset.columns}
-            disabled={isPending}
-            style={INPUT_STYLE}
-          />
-        </div>
         <MmField name="marginTopMm" label="Top margin (mm)" value={preset.marginTopMm} disabled={isPending} />
         <MmField name="marginRightMm" label="Right margin (mm)" value={preset.marginRightMm} disabled={isPending} />
         <MmField name="marginBottomMm" label="Bottom margin (mm)" value={preset.marginBottomMm} disabled={isPending} />
         <MmField name="marginLeftMm" label="Left margin (mm)" value={preset.marginLeftMm} disabled={isPending} />
-        <MmField name="columnGapMm" label="Column gap (mm)" value={preset.columnGapMm} disabled={isPending} />
         <div>
           <LabelWithError htmlFor="f-album-borderStyle">Decorative border</LabelWithError>
           <select
@@ -329,7 +317,35 @@ function TemplateForm({
       </div>
 
       <h3 style={SECTION_STYLE}>Spacing</h3>
+      <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
+        A <strong>band</strong> is a horizontal slice of the page. Normally it holds one checklist
+        across the full width; where two short ones would both fit, they can share it side by side.
+        This is a ceiling, not a frame — the page is never divided into fixed columns, and nothing
+        ever runs off the side of one.
+      </p>
       <div style={GRID_STYLE}>
+        <div>
+          <LabelWithError htmlFor="f-album-blocksPerBand">Checklists per band</LabelWithError>
+          <input
+            id="f-album-blocksPerBand"
+            name="blocksPerBand"
+            type="number"
+            step={1}
+            min={MIN_BLOCKS_PER_BAND}
+            max={MAX_BLOCKS_PER_BAND}
+            defaultValue={preset.blocksPerBand}
+            disabled={isPending}
+            style={INPUT_STYLE}
+          />
+          <span style={HINT_STYLE}>1 never pairs.</span>
+        </div>
+        <MmField
+          name="blockGapMm"
+          label="Between two sharing a band (mm)"
+          value={preset.blockGapMm}
+          disabled={isPending}
+        />
+        <div />
         <MmField name="boxGapXMm" label="Between boxes, across (mm)" value={preset.boxGapXMm} disabled={isPending} />
         <MmField name="boxGapYMm" label="Between rows (mm)" value={preset.boxGapYMm} disabled={isPending} />
         <div />
@@ -378,6 +394,29 @@ function TemplateForm({
       </p>
       <div style={GRID_STYLE}>
         <TypeRow role="title" label="Album title" face={preset.titleFace} size={preset.titleSizePt} disabled={isPending} />
+        <div
+          style={{
+            gridColumn: "span 2",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginTop: "-0.5rem",
+          }}
+        >
+          <input
+            id="f-album-printTitle"
+            name="printTitle"
+            type="checkbox"
+            defaultChecked={preset.printTitle}
+            disabled={isPending}
+          />
+          <label
+            htmlFor="f-album-printTitle"
+            style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}
+          >
+            Print it as a running head on every page
+          </label>
+        </div>
         <TypeRow role="chapter" label="Chapter heading" face={preset.chapterFace} size={preset.chapterSizePt} disabled={isPending} />
         <TypeRow role="heading" label="Checklist heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
         <TypeRow role="label" label="Box label" face={preset.labelFace} size={preset.labelSizePt} disabled={isPending} />

@@ -38,6 +38,77 @@ const ATTRIBUTE_SELECT = {
   translations: { select: { language: true, name: true } },
 } as const;
 
+/** The **stamp** half of {@link TITLE_COPY_SELECT}, named so a caller with no copy at all can select
+ * it on its own. An album page (#767) is a plan for catalogue slots, most of which nobody owns yet,
+ * so its texts resolve over a stamp rather than over an `Item` — through this same select and the
+ * same mapper, because two paths that resolve `{catalog}` separately are two paths that will
+ * eventually resolve it differently. */
+export const TITLE_COPY_STAMP_SELECT = {
+  // Entity ids ride along so a fallback can name the row a missing translation goes on (#299).
+  id: true,
+  name: true,
+  issuedYear: true,
+  // The catalogue's own issue date behind `{issueDate}` (#766) — the year above is already
+  // selected for `{year}`; these two are what turn it into `22 VII`.
+  issuedDay: true,
+  issuedMonth: true,
+  translations: { select: { language: true, name: true } },
+  // The subtype behind `{subtype}` (#339). `isDefault` rides along because the default subtype
+  // renders as nothing — see `toTitleCopy`.
+  subtype: {
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+      translations: { select: { language: true, name: true } },
+    },
+  },
+  catalogNumbers: {
+    select: { catalogVendorId: true, number: true, catalogVendor: { select: { abbreviation: true } } },
+  },
+  stampAreaLinks: {
+    select: { isPrimary: true, collectionAreaId: true, collectionArea: { select: { name: true } } },
+  },
+  issueMemberships: {
+    select: {
+      issue: {
+        select: {
+          id: true,
+          name: true,
+          year: true,
+          translations: { select: { language: true, name: true } },
+        },
+      },
+    },
+    take: 1,
+  },
+  // What the catalogue states the stamp is (#71/#738). The two printed attributes are columns;
+  // the four dictionary ones are rows with translations of their own, selected exactly as the
+  // subtype's are — one handful of rows per stamp, and the language is picked in `toTitleCopy`.
+  denomination: true,
+  perforation: true,
+  color: { select: ATTRIBUTE_SELECT },
+  watermark: { select: ATTRIBUTE_SELECT },
+  paper: { select: ATTRIBUTE_SELECT },
+  printing: { select: ATTRIBUTE_SELECT },
+  // The stamp's **direct** children, behind `{#unknownVariant}` and `{variants}` (#619): whether
+  // any of them acts as a variant is what makes this copy an unidentified umbrella (ADR-0010 §3),
+  // and their numbers are what the listing text says the piece might be. Direct children only —
+  // *which of these is it* is the question the collector could not answer, and a flattened deep
+  // tree names variants nobody was choosing between. The denormalized catalog sort key (ADR-0014)
+  // and the id ride along because the text this feeds is **stored**: an order left to the database
+  // would rewrite a description on nothing but a re-read, so `toTitleCopy` pins one.
+  variants: {
+    select: {
+      id: true,
+      name: true,
+      primaryCatalogSortKey: true,
+      catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      ...VARIANT_FLAG_SELECT,
+    },
+  },
+} as const;
+
 /** Copy fields the title template resolves over: stamp name / **all** catalog numbers (with vendor
  * abbreviation, for `{catalog:Mi…}`) / year / condition / certificate / primary area + its id (to
  * resolve per-area catalog prefixes and the primary vendor) / issue. */
@@ -49,73 +120,7 @@ export const TITLE_COPY_SELECT = {
   id: true,
   // The internal copy number behind `{itemNo}` (#268).
   itemNo: true,
-  stamp: {
-    select: {
-      // Entity ids ride along so a fallback can name the row a missing translation goes on (#299).
-      id: true,
-      name: true,
-      issuedYear: true,
-      // The catalogue's own issue date behind `{issueDate}` (#766) — the year above is already
-      // selected for `{year}`; these two are what turn it into `22 VII`.
-      issuedDay: true,
-      issuedMonth: true,
-      translations: { select: { language: true, name: true } },
-      // The subtype behind `{subtype}` (#339). `isDefault` rides along because the default subtype
-      // renders as nothing — see `toTitleCopy`.
-      subtype: {
-        select: {
-          id: true,
-          name: true,
-          isDefault: true,
-          translations: { select: { language: true, name: true } },
-        },
-      },
-      catalogNumbers: {
-        select: { catalogVendorId: true, number: true, catalogVendor: { select: { abbreviation: true } } },
-      },
-      stampAreaLinks: {
-        select: { isPrimary: true, collectionAreaId: true, collectionArea: { select: { name: true } } },
-      },
-      issueMemberships: {
-        select: {
-          issue: {
-            select: {
-              id: true,
-              name: true,
-              year: true,
-              translations: { select: { language: true, name: true } },
-            },
-          },
-        },
-        take: 1,
-      },
-      // What the catalogue states the stamp is (#71/#738). The two printed attributes are columns;
-      // the four dictionary ones are rows with translations of their own, selected exactly as the
-      // subtype's are — one handful of rows per stamp, and the language is picked in `toTitleCopy`.
-      denomination: true,
-      perforation: true,
-      color: { select: ATTRIBUTE_SELECT },
-      watermark: { select: ATTRIBUTE_SELECT },
-      paper: { select: ATTRIBUTE_SELECT },
-      printing: { select: ATTRIBUTE_SELECT },
-      // The stamp's **direct** children, behind `{#unknownVariant}` and `{variants}` (#619): whether
-      // any of them acts as a variant is what makes this copy an unidentified umbrella (ADR-0010 §3),
-      // and their numbers are what the listing text says the piece might be. Direct children only —
-      // *which of these is it* is the question the collector could not answer, and a flattened deep
-      // tree names variants nobody was choosing between. The denormalized catalog sort key (ADR-0014)
-      // and the id ride along because the text this feeds is **stored**: an order left to the database
-      // would rewrite a description on nothing but a re-read, so `toTitleCopy` pins one.
-      variants: {
-        select: {
-          id: true,
-          name: true,
-          primaryCatalogSortKey: true,
-          catalogNumbers: { select: { catalogVendorId: true, number: true } },
-          ...VARIANT_FLAG_SELECT,
-        },
-      },
-    },
-  },
+  stamp: { select: TITLE_COPY_STAMP_SELECT },
   condition: {
     select: {
       id: true,
@@ -153,44 +158,49 @@ type LabelTranslation = { language: string; name: string | null; abbreviation: s
 /** One of the stamp's four dictionary attributes as {@link ATTRIBUTE_SELECT} fetches it (#738). */
 type AttributeRow = { id: string; name: string; translations: NameTranslation[] };
 
-export type TitleCopyRow = {
+/** The stamp half of {@link TitleCopyRow}, as {@link TITLE_COPY_STAMP_SELECT} fetches it. Named so
+ * that a caller with no owned copy — an album page (#767) — can hand one to {@link toTitleCopy}. */
+export type TitleCopyStampRow = {
   id: string;
-  /** Internal copy number (#268) behind `{itemNo}`. */
-  itemNo: number;
-  stamp: {
+  name: string | null;
+  issuedYear: number | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  translations: NameTranslation[];
+  subtype: {
+    id: string;
+    name: string;
+    isDefault: boolean;
+    translations: NameTranslation[];
+  } | null;
+  catalogNumbers: { catalogVendorId: string; number: string; catalogVendor: { abbreviation: string } }[];
+  stampAreaLinks: { isPrimary: boolean; collectionAreaId: string; collectionArea: { name: string } }[];
+  issueMemberships: {
+    issue: { id: string; name: string | null; year: number | null; translations: NameTranslation[] };
+  }[];
+  denomination: string | null;
+  perforation: string | null;
+  color: AttributeRow | null;
+  watermark: AttributeRow | null;
+  paper: AttributeRow | null;
+  printing: AttributeRow | null;
+  variants: {
     id: string;
     name: string | null;
-    issuedYear: number | null;
-    issuedDay: number | null;
-    issuedMonth: number | null;
-    translations: NameTranslation[];
-    subtype: {
-      id: string;
-      name: string;
-      isDefault: boolean;
-      translations: NameTranslation[];
-    } | null;
-    catalogNumbers: { catalogVendorId: string; number: string; catalogVendor: { abbreviation: string } }[];
-    stampAreaLinks: { isPrimary: boolean; collectionAreaId: string; collectionArea: { name: string } }[];
-    issueMemberships: {
-      issue: { id: string; name: string | null; year: number | null; translations: NameTranslation[] };
-    }[];
-    denomination: string | null;
-    perforation: string | null;
-    color: AttributeRow | null;
-    watermark: AttributeRow | null;
-    paper: AttributeRow | null;
-    printing: AttributeRow | null;
-    variants: {
-      id: string;
-      name: string | null;
-      primaryCatalogSortKey: string | null;
-      catalogNumbers: { catalogVendorId: string; number: string }[];
-      actsAsVariantOverride: boolean | null;
-      subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
-    }[];
-  };
-  condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] };
+    primaryCatalogSortKey: string | null;
+    catalogNumbers: { catalogVendorId: string; number: string }[];
+    actsAsVariantOverride: boolean | null;
+    subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
+  }[];
+};
+
+export type TitleCopyRow = {
+  id: string;
+  /** Internal copy number (#268) behind `{itemNo}`. Null where there is no copy: a sample copy, or
+   *  an album box, which is a catalogue slot and not something anybody owns yet. */
+  itemNo: number | null;
+  stamp: TitleCopyStampRow;
+  condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] } | null;
   certificateStatus: {
     id: string;
     name: string;
@@ -345,20 +355,28 @@ export function toTitleCopy(
             month: row.stamp.issuedMonth,
             day: row.stamp.issuedDay,
           },
-    condition: resolve(
-      "condition",
-      { type: "condition", id: row.condition.id, field: "name" },
-      row.condition.translations,
-      (t: LabelTranslation) => t.name,
-      row.condition.name
-    ),
-    conditionAbbr: resolve(
-      "conditionAbbr",
-      { type: "condition", id: row.condition.id, field: "abbreviation" },
-      row.condition.translations,
-      (t: LabelTranslation) => t.abbreviation,
-      row.condition.abbreviation
-    ),
+    // Null where the row is not a copy at all (#767): an album box is a catalogue slot, and a slot
+    // has no condition until something is in it. `ALBUM_BOX_LABEL_TOKENS` leaves `{condition}` out
+    // for that reason, and this is what keeps a collector who types it anyway from getting a
+    // condition nobody recorded.
+    condition: row.condition
+      ? resolve(
+          "condition",
+          { type: "condition", id: row.condition.id, field: "name" },
+          row.condition.translations,
+          (t: LabelTranslation) => t.name,
+          row.condition.name
+        )
+      : null,
+    conditionAbbr: row.condition
+      ? resolve(
+          "conditionAbbr",
+          { type: "condition", id: row.condition.id, field: "abbreviation" },
+          row.condition.translations,
+          (t: LabelTranslation) => t.abbreviation,
+          row.condition.abbreviation
+        )
+      : null,
     certificate: row.certificateStatus
       ? resolve(
           "certificate",

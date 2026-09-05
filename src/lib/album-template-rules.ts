@@ -46,8 +46,11 @@ export const MIN_PAGE_MM = 50;
 export const MAX_PAGE_MM = 1000;
 export const MIN_MARGIN_MM = 0;
 export const MAX_MARGIN_MM = 100;
-export const MIN_COLUMNS = 1;
-export const MAX_COLUMNS = 6;
+/** How many checklist blocks may share one horizontal band. A **ceiling, not a target**: the ordinary
+ *  page is one block per band, and pairing is the exception. Capped at four because the collector's
+ *  own pages only ever pair two, and a band of five narrow blocks is a table, not an album page. */
+export const MIN_BLOCKS_PER_BAND = 1;
+export const MAX_BLOCKS_PER_BAND = 4;
 export const MIN_SPACING_MM = 0;
 export const MAX_SPACING_MM = 100;
 /** The clearances a box adds to a stamp (#765). Capped low on purpose: these are millimetres of
@@ -118,8 +121,10 @@ export interface AlbumRenderPreset {
   marginRightMm: number;
   marginBottomMm: number;
   marginLeftMm: number;
-  columns: number;
-  columnGapMm: number;
+  /** The most blocks that may share one horizontal band. See {@link MIN_BLOCKS_PER_BAND}. */
+  blocksPerBand: number;
+  /** The space between two blocks sharing a band. */
+  blockGapMm: number;
   borderStyle: AlbumBorderStyle;
   borderWidthMm: number;
   borderInsetMm: number;
@@ -137,6 +142,10 @@ export interface AlbumRenderPreset {
   // Type — a face id from `album-fonts.ts` and a size in points, per role
   titleFace: string;
   titleSizePt: number;
+  /** Whether the album's name is printed as a **running head** on every page. Off is a real album:
+   *  four of the collector's five areas carry a head and one does not, and the one that does not
+   *  spends those millimetres on content instead. */
+  printTitle: boolean;
   chapterFace: string;
   chapterSizePt: number;
   headingFace: string;
@@ -176,8 +185,10 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   marginRightMm: 10,
   marginBottomMm: 10,
   marginLeftMm: 10,
-  columns: 1,
-  columnGapMm: 6,
+  // `PAGE_COLUMN_START(50 10 0 0 10)` — a two-way split with 10 mm between the halves. Two, because
+  // every one of the 35 column regions in his sources is a pair, and never more.
+  blocksPerBand: 2,
+  blockGapMm: 10,
   // His pages carry `ALBUM_PAGES_DECORATIVE_BORDER("Classic.txt")` — a double rule inset from the
   // edge is what that draws, and what these three reproduce.
   borderStyle: "double",
@@ -201,6 +212,9 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   // `STAMP "Arial"`, and `PAGE_TEXT_CENTER(FOOTER 8 …)`.
   titleFace: "liberation-serif",
   titleSizePt: 26,
+  // His PL, DE-BM, DE-BY and DR pages all carry the running head; DA does not. On is the majority
+  // and the one a new album is most likely to want.
+  printTitle: true,
   chapterFace: "liberation-serif-bold",
   chapterSizePt: 24,
   headingFace: "liberation-sans-bold-italic",
@@ -331,10 +345,15 @@ export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTempla
   const marginLeftMm = mm("marginLeftMm", "Left margin", MIN_MARGIN_MM, MAX_MARGIN_MM);
   if (!marginLeftMm.ok) return marginLeftMm;
 
-  const columns = parseWholeNumber(raw.columns, "Columns", MIN_COLUMNS, MAX_COLUMNS);
-  if (!columns.ok) return columns;
-  const columnGapMm = mm("columnGapMm", "Column gap", MIN_SPACING_MM, MAX_SPACING_MM);
-  if (!columnGapMm.ok) return columnGapMm;
+  const blocksPerBand = parseWholeNumber(
+    raw.blocksPerBand,
+    "Blocks per band",
+    MIN_BLOCKS_PER_BAND,
+    MAX_BLOCKS_PER_BAND
+  );
+  if (!blocksPerBand.ok) return blocksPerBand;
+  const blockGapMm = mm("blockGapMm", "Gap between blocks", MIN_SPACING_MM, MAX_SPACING_MM);
+  if (!blockGapMm.ok) return blockGapMm;
 
   const borderStyle = parseChoice(raw.borderStyle, "Page border", ALBUM_BORDER_STYLES);
   if (!borderStyle.ok) return borderStyle;
@@ -431,8 +450,8 @@ export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTempla
       marginRightMm: marginRightMm.value,
       marginBottomMm: marginBottomMm.value,
       marginLeftMm: marginLeftMm.value,
-      columns: columns.value,
-      columnGapMm: columnGapMm.value,
+      blocksPerBand: blocksPerBand.value,
+      blockGapMm: blockGapMm.value,
       borderStyle: borderStyle.value,
       borderWidthMm: borderWidthMm.value,
       borderInsetMm: borderInsetMm.value,
@@ -456,6 +475,7 @@ export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTempla
       boxBorderWidthMm: boxBorderWidthMm.value,
       labelPosition: labelPosition.value,
       // A checkbox is present or absent, never invalid — the form submits "on" or nothing.
+      printTitle: raw.printTitle.trim() !== "",
       printPhotos: raw.printPhotos.trim() !== "",
       photoOpacityPercent: photoOpacityPercent.value,
       // Templates are free text by design: a token this build does not know renders empty rather
@@ -480,13 +500,16 @@ export function albumHawidMargins(preset: AlbumRenderPreset): {
   };
 }
 
-/** A template in words, for the Settings row and #767's picker: `210 × 297 mm · 1 column ·
- *  Liberation Serif 26 pt`. The page, the shape and the face that names it — enough to tell two
- *  templates apart without opening either. */
+/** A template in words, for the Settings row and #767's picker: `210 × 297 mm · up to 2 blocks per
+ *  band · Liberation Serif 26 pt`. The page, the shape and the face that names it — enough to tell
+ *  two templates apart without opening either. */
 export function albumTemplateSummary(preset: AlbumRenderPreset): string {
   const page = `${preset.pageWidthMm} × ${preset.pageHeightMm} mm`;
-  const columns = preset.columns === 1 ? "1 column" : `${preset.columns} columns`;
-  return `${page} · ${columns} · ${albumFaceLabel(preset.titleFace)} ${preset.titleSizePt} pt`;
+  const bands =
+    preset.blocksPerBand === 1
+      ? "one block per band"
+      : `up to ${preset.blocksPerBand} blocks per band`;
+  return `${page} · ${bands} · ${albumFaceLabel(preset.titleFace)} ${preset.titleSizePt} pt`;
 }
 
 /** Coerce a stored choice column back to its union, falling back to the default preset's value.

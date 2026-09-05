@@ -534,6 +534,15 @@ export function CollectionSidebar({
             label="Locations"
             active={isActive(`${base}/locations`)}
           />
+          {/* Albums (#767) sit in Collection rather than in Settings: the *template* is
+              configuration and lives in Settings beside the hawid stock (#765/#766), while an album
+              is operational data — a binder being filled — and is worked in. */}
+          <NavItem
+            href={`${base}/albums`}
+            icon={<Icon name="albums" />}
+            label="Albums"
+            active={isActive(`${base}/albums`)}
+          />
         </NavSection>
 
         {/* Trading is split by *direction* (#351): what comes in and what goes out are two
