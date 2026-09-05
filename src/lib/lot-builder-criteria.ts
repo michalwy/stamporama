@@ -53,6 +53,12 @@ export interface LotBuilderCriteria {
   /** How many copies of one stamp — rolled up through variants — the lot may hold. */
   maxPerStamp: number | null;
   duplicates: DuplicatePolicy;
+  /** The listing title and description this lot writes onto its offer, as **templates** (#774).
+   *  Criteria like any other — they ride in the address so the commit renders exactly what the
+   *  screen previewed — and part of the recipe, because how a kind of lot is *worded* repeats
+   *  exactly as much as how it is picked. Null / empty leaves the platform's own template. */
+  nameTemplate: string | null;
+  descriptionTemplate: string | null;
 }
 
 /** The whole proposal request: the criteria, plus the three things a round of closing in adds. */
@@ -129,7 +135,9 @@ export type LotRecipeKey =
   | "valueMax"
   | "series"
   | "maxPerStamp"
-  | "duplicates";
+  | "duplicates"
+  | "nameTemplate"
+  | "descriptionTemplate";
 
 export type LotRecipe = Pick<LotBuilderCriteria, LotRecipeKey>;
 
@@ -147,6 +155,8 @@ export const LOT_RECIPE_KEYS: readonly LotRecipeKey[] = [
   "series",
   "maxPerStamp",
   "duplicates",
+  "nameTemplate",
+  "descriptionTemplate",
 ];
 
 /** What the collector is looking at, as a recipe worth keeping. Takes anything carrying the recipe's
@@ -165,6 +175,8 @@ export function toLotRecipe(criteria: LotRecipe): LotRecipe {
     series: criteria.series,
     maxPerStamp: criteria.maxPerStamp,
     duplicates: criteria.duplicates,
+    nameTemplate: criteria.nameTemplate,
+    descriptionTemplate: criteria.descriptionTemplate,
   };
 }
 
@@ -221,6 +233,10 @@ export function parseLotBuilderRequest(params: URLSearchParams): LotBuilderReque
       maxPerStamp: num(params.get("maxPerStamp")),
       duplicates:
         duplicates && DUPLICATE_POLICIES.includes(duplicates) ? duplicates : "neutral",
+      // Blank and absent are one thing here — "leave the platform's template" — so an empty
+      // parameter must not round-trip as an empty *override*, which would render an empty listing.
+      nameTemplate: params.get("nameTpl") || null,
+      descriptionTemplate: params.get("descTpl") || null,
     },
     seed: params.get("seed") ?? "",
     pinnedItemIds: params.getAll("pin").filter(Boolean),
@@ -251,6 +267,8 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
   params.set("series", criteria.series);
   putNum(params, "maxPerStamp", criteria.maxPerStamp);
   params.set("duplicates", criteria.duplicates);
+  if (criteria.nameTemplate) params.set("nameTpl", criteria.nameTemplate);
+  if (criteria.descriptionTemplate) params.set("descTpl", criteria.descriptionTemplate);
   if (request.seed) params.set("seed", request.seed);
   for (const id of request.pinnedItemIds) params.append("pin", id);
   for (const id of request.rejectedItemIds) params.append("reject", id);
@@ -264,35 +282,40 @@ function putNum(params: URLSearchParams, key: string, value: number | null): voi
 // ── The suggested texts ─────────────────────────────────────────────────────────────────────────
 
 /**
- * What the wizard's title and description fields are pre-filled with.
+ * What the wizard's title and description fields are pre-filled with — **templates** (#774), in the
+ * same `{token}` engine every platform template is written in.
  *
  * **Not a nicety.** Left blank, the platform's own template renders over a hundred unrelated stamps
  * and `compactCatalogNumberGroups` (#379) emits a dozen catalog ranges — comfortably past a
  * `maxTitleLength` (#403), and since #636 an over-long text blocks `preparing → ready`. A blank
- * default would land every bulk lot unable to reach ready, so the offer is created with these and
- * `nameEdited` / `descriptionEdited` set: the flag means *do not regenerate this*, and regeneration
- * is precisely what produces the unusable title. The `edited` chip then says why the name stops
- * following later composition changes.
+ * default would land every bulk lot unable to reach ready.
  *
- * Both are a starting point the collector types over, so this states only what it can keep saying.
+ * These used to be **finished text**, rendered here from the picked lot and frozen onto the offer
+ * with `nameEdited`. That kept the title short and cost the collector what every other listing has:
+ * wording that follows what the listing holds. Strike a copy that sold elsewhere and a frozen title
+ * still claimed a hundred. As a template the text is both — short by construction, and alive.
+ *
+ * The consequence is that **only what the engine can still answer may appear in the default**. The
+ * area, the year span, the piece count and the conditions can: `{area}`, `{year}`, `{count}` and
+ * `{condition}` all resolve over the copies in scope, whenever they are asked. *How many different
+ * stamps* and *how many complete sets* cannot — both mean the variant rollup and the checklist read,
+ * which this pure engine deliberately knows nothing about — so they are **out of the default text**
+ * rather than baked in as numbers that would go stale the first time a copy left. They are on the
+ * screen a keystroke away, in the figures bar, for a collector who wants to state them as of today.
+ *
+ * `{condition}` is also a small correction: the old text listed the conditions the criteria
+ * *allowed*, and this one lists the conditions the lot actually **has**.
  */
 export interface LotTextFacts {
-  /** The area the lot was drawn from, or null when it spans the collection. */
+  /** The area the lot was drawn from, or null when it spans the collection. Used only to decide
+   *  whether the template mentions an area at all — the rendered value is `{area}`, read off the
+   *  copies, so a lot that loses its last Bavarian copy stops claiming Bavaria. */
   areaName: string | null;
   yearFrom: number | null;
   yearTo: number | null;
-  /** The conditions the criteria allowed, in the collection's own order. Empty = every condition,
-   *  which the text then says nothing about. */
+  /** The conditions the criteria allowed. Empty = every condition, and the text then says nothing
+   *  about them; non-empty puts `{condition}` in, which states the ones actually present. */
   conditionNames: readonly string[];
-  /** Copies **actually picked** — never the count target. The pick stops at the floor of the range
-   *  and an atomic series overshoots it, so a target of 100 routinely lands at 103; a title saying
-   *  100 over a 103-piece lot is wrong the moment it is written. */
-  pieceCount: number;
-  /** Distinct stamps in the lot, rolled up through variants — the variety a job-lot buyer is
-   *  buying, and the one figure worth stating beyond the count. */
-  distinctStamps: number;
-  /** Complete series the lot carries whole. */
-  completeSets: number;
 }
 
 export interface LotSuggestedTexts {
@@ -301,47 +324,26 @@ export interface LotSuggestedTexts {
 }
 
 export function suggestLotTexts(facts: LotTextFacts): LotSuggestedTexts {
-  const span = yearSpan(facts.yearFrom, facts.yearTo);
-  const pieces = `${facts.pieceCount} ${plural(facts.pieceCount, "stamp")}`;
+  const hasYears = facts.yearFrom !== null || facts.yearTo !== null;
+  const area = facts.areaName ? "{area}" : "";
+  const years = hasYears ? "{year}" : "";
 
   // The name leads with what the lot is *of*, because that is what a buyer scans a listing index by.
-  const scope = [facts.areaName, span].filter(Boolean).join(" ");
-  const name = scope ? `${scope}, ${pieces}` : `Bulk lot of ${pieces}`;
+  const scope = [area, years].filter(Boolean).join(" ");
+  const name = scope ? `${scope}, {count} stamps` : "Bulk lot of {count} stamps";
 
   const opening = [
-    `Bulk lot of ${pieces}`,
-    facts.areaName ? ` from ${facts.areaName}` : "",
-    span ? `, issued ${span}` : "",
+    "Bulk lot of {count} stamps",
+    area ? ` from ${area}` : "",
+    years ? `, issued ${years}` : "",
     ".",
   ].join("");
-  const variety =
-    `${facts.distinctStamps} different ${plural(facts.distinctStamps, "stamp")}` +
-    (facts.completeSets > 0
-      ? `, including ${facts.completeSets} complete ${plural(facts.completeSets, "set")}.`
-      : ".");
-  // The catalogue-value sum is deliberately **not** here. It is the claim a job-lot buyer decides
-  // on and it reads as authoritative, so nobody re-checks it — and frozen with
-  // `descriptionEdited = true` it never refreshes: `listingContentChangedAt` (#542/#700) fires only
-  // for listed states, so trimming copies while the offer is still `preparing` would drift the
-  // figure with no signal anywhere. The collector has the true sum on that very screen (#378) the
-  // moment they want to type it, so the default saves almost nothing and risks misdescribing the
-  // goods — the failure the listing kit refuses outright rather than emit (#405). Variety stays:
-  // the drift is bounded and non-monetary.
-  const lines = [opening, variety];
-  if (facts.conditionNames.length > 0) {
-    lines.push(`Conditions: ${facts.conditionNames.join(", ")}.`);
-  }
+  // The catalogue-value sum is deliberately **not** here, and now cannot be: it is the claim a
+  // job-lot buyer decides on, it reads as authoritative so nobody re-checks it, and there is no token
+  // for it. The collector has the true sum on that very screen (#378) the moment they want to type
+  // it, so the default saves almost nothing and risks misdescribing the goods — the failure the
+  // listing kit refuses outright rather than emit (#405).
+  const lines = [opening];
+  if (facts.conditionNames.length > 0) lines.push("Conditions: {condition}.");
   return { name, description: lines.join("\n") };
-}
-
-/** `1950`, `1950–1960`, `from 1950`, `to 1960`, or "" when neither bound was set. */
-function yearSpan(from: number | null, to: number | null): string {
-  if (from !== null && to !== null) return from === to ? String(from) : `${from}–${to}`;
-  if (from !== null) return `from ${from}`;
-  if (to !== null) return `to ${to}`;
-  return "";
-}
-
-function plural(count: number, word: string): string {
-  return count === 1 ? word : `${word}s`;
 }

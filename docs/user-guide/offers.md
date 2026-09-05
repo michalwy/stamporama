@@ -1132,8 +1132,13 @@ them. Once you have a set of criteria that works, [save it](#saved-criteria) so 
 again.
 
 The **platform** comes first, because everything else is judged against it. The lot is drawn from the
-copies that are marked *for sale*, are in your hands, are not already listed on that platform, are
-not under bid anywhere, and that you have not set aside as never-on-that-platform. Copies you have
+copies that are marked *for sale*, have **arrived and been sorted**, are not already listed on that
+platform, are not under bid anywhere, and that you have not set aside as never-on-that-platform.
+
+*Delivered* is stricter here than on the Copies list's *not offered on X* worklist, which happily
+shows you a copy still in the post — you can write a listing ahead of a parcel. A bulk lot is a
+hundred pieces you count into one envelope now, and the offer refuses to go live around a copy that
+has not arrived, so a lot built from one could not be posted. Copies you have
 not marked for sale are not in the pool at all — mark them in bulk on the [Copies list](inventory.md)
 first if that is where your duplicates are sitting.
 
@@ -1180,6 +1185,7 @@ What a saved set holds:
 - the maximum catalogue value per copy
 - both targets — the piece range and the catalogue-value range
 - the complete-sets preference, the per-stamp cap and the duplicates preference
+- the listing title and description templates
 
 What it deliberately does **not** hold, and why:
 
@@ -1238,7 +1244,8 @@ have broken is named along with the stamp that blocked it: the cap is something 
 complete set is only a preference, so the cap wins.
 
 The list itself is grouped the way the pick happened — pinned copies, then each set that went in
-whole, then the singles that topped the lot up. Each copy is drawn as a **full copy row**, the same
+whole, then the singles that topped the lot up — and **within each group it is in catalogue order**,
+which is the order the finished offer puts them in too. Each copy is drawn as a **full copy row**, the same
 one the Copies list draws: the photograph, the area and issue, the catalogue numbers, the condition,
 the catalogue value, where it is filed, and any want or trade promise attached to it. Deciding what
 goes into a job lot is looking at the stamps, so the row you look at here is the one you look at
@@ -1279,25 +1286,38 @@ The lot is **picked again** as the offer is created. Between opening this screen
 button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a
 fresh look rather than from what is on your screen — and anything that dropped out is named.
 
-The **title and description** are filled in for you from your criteria and from what the lot actually
-came to. That is not decoration: the automatic title over a hundred unrelated stamps comes out as a
-dozen catalogue-number ranges, which is longer than most platforms allow, and a text over the limit
-blocks the offer's way to **Ready**. What is written here is stored as **yours** — the offer shows
-the *edited* mark and the text stops following later changes to the composition. Clear a field and
-the platform's own template takes over instead.
+### Naming the listing
 
-The piece count in the title is what the lot **actually holds**, not what you asked for: a set goes in
-whole, so a target of 100 often lands at 103.
+The title and description sit directly under the figures, so you word them while the piece count and
+the value are in front of you, and read the list below afterwards.
 
-The catalogue-value sum is deliberately **not** in the suggested description. It is the number a
-buyer decides on, and once written it would not refresh if you trimmed copies from the offer
-afterwards. The offer's own screen shows you the true figure the moment you want to type it in.
+They are **templates**, in the same `{token}` language a platform's own templates are written in, and
+they preview against **this lot's copies** rather than random samples — so `{count}` shows the number
+this listing will really carry. `{area}`, `{year}`, `{condition}` and `{count}` are the ones a job lot
+is mostly made of; the rest of the vocabulary is there if you want it.
+
+Because they are templates, the wording **keeps following the offer**. Strike a copy that sold
+somewhere else and the title re-reads at 99 by itself — which finished text could not do, and which
+is why this stopped being finished text.
+
+Two figures are deliberately **not** in the suggested wording: how many different stamps, and how
+many complete sets. There is no token for either — both mean rolling variants up — so writing them in
+would freeze a number that goes stale the moment a copy leaves. Both are in the figures bar right
+above if you want to state them as of today.
+
+They are saved as part of a [saved set of criteria](#saved-criteria): how a kind of lot is *worded*
+repeats as much as how it is picked.
+
+A template of your own is not decoration: the **platform's** template over a hundred unrelated stamps
+comes out as a dozen catalogue-number ranges, which is longer than most platforms allow, and a text
+over the limit blocks the offer's way to **Ready**. Leave a field blank and the platform's template
+takes over instead — right for a single stamp, wrong for a lot.
+
+The catalogue-value sum is deliberately **not** in the suggested description, and cannot be: there is
+no token for it. It is the number a buyer decides on, so it is worth stating deliberately rather than
+by default — and the figures bar has the true figure the moment you want to type it.
 
 Everything after that is an ordinary offer: pricing, photos, the ready gate, publishing.
-
-Nothing is remembered between visits. If you find yourself typing the same criteria for the third
-time, that is worth saying — a named, reusable recipe is a deliberate not-yet rather than an
-oversight.
 
 ## Bulk listing — posting a prepared batch
 

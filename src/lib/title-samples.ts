@@ -92,6 +92,47 @@ export async function randomTitleSampleCopies(
     });
 }
 
+/**
+ * Named copies as template samples (#774) — for a screen that already knows exactly which copies the
+ * text will be rendered over.
+ *
+ * The bulk-lot builder is the one such screen. Everywhere else a template is written *before* there
+ * is anything to write it about, so the builder previews on **random** copies of the collection; a
+ * lot is the opposite, and previewing its title against three stamps that are not in it would answer
+ * a question nobody asked. It also makes `{count}` mean something: over the lot's own copies the
+ * preview says the number the listing will actually carry.
+ *
+ * Capped by the caller. The whole lot is a hundred copies, and a preview is read, not counted — but
+ * `{count}` must be right, so the cap belongs to the caller who knows whether it is previewing or
+ * rendering.
+ */
+export async function titleSampleCopiesByIds(
+  ownerId: string,
+  collectionId: string,
+  itemIds: readonly string[],
+  language: string | null = null
+): Promise<TitleSampleCopy[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (itemIds.length === 0) return [];
+  const [rows, mapCopy] = await Promise.all([
+    prisma.item.findMany({
+      where: { collectionId, id: { in: [...itemIds] } },
+      select: TITLE_COPY_SELECT,
+    }),
+    makeTitleCopyMapper(ownerId, collectionId, language),
+  ]);
+  // Back into the order asked for: the caller's order is the lot's, and a preview whose first copy
+  // changed between two reads would look like the lot had.
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return itemIds
+    .map((id) => byId.get(id))
+    .filter((row) => row !== undefined)
+    .map((row) => {
+      const copy = mapCopy(row);
+      return { id: row.id, label: sampleLabel(copy), copy };
+    });
+}
+
 /** Copies matching `search` (by stamp name or catalog number), for the builder's "pick a specific
  * copy" list. A blank search returns the most recent copies. Capped at `limit` (default 12).
  * `language` (#293) previews the copy in the platform's listing language. */

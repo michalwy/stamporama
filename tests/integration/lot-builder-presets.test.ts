@@ -34,6 +34,8 @@ function recipe(overrides: Partial<LotRecipe> = {}): LotRecipe {
     series: "neutral",
     maxPerStamp: null,
     duplicates: "neutral",
+    nameTemplate: null,
+    descriptionTemplate: null,
     ...overrides,
   });
 }

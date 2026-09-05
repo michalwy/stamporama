@@ -37,6 +37,8 @@ function criteria(overrides: Partial<LotBuilderCriteria> = {}): LotBuilderCriter
     series: "neutral",
     maxPerStamp: null,
     duplicates: "neutral",
+    nameTemplate: null,
+    descriptionTemplate: null,
     ...overrides,
   };
 }
@@ -120,6 +122,26 @@ describe("the bulk-lot criteria round trip (#759)", () => {
       new URLSearchParams("platform=plat-1&area=area-pl&areaScope=only")
     );
     assert.equal(parsed.criteria.areaSubtree, true);
+  });
+
+  it("round-trips the listing wording, and reads a blank one as absent (#774)", () => {
+    const input = request({
+      criteria: criteria({
+        nameTemplate: "{area} {year}, {count} stamps",
+        descriptionTemplate: "Bulk lot of {count} stamps.\nConditions: {condition}.",
+      }),
+    });
+    assert.deepEqual(roundTrip(input), input);
+    // Blank and absent are one thing — "leave the platform's template" — and an empty parameter must
+    // not come back as an empty *override*, which would render an empty listing.
+    const blank = parseLotBuilderRequest(new URLSearchParams("platform=plat-1&nameTpl=&descTpl="));
+    assert.equal(blank.criteria.nameTemplate, null);
+    assert.equal(blank.criteria.descriptionTemplate, null);
+  });
+
+  it("keeps the wording out of the pick's own inputs", () => {
+    const pure = toLotCriteria(criteria({ nameTemplate: "{count} stamps" }));
+    assert.equal("nameTemplate" in pure, false);
   });
 
   it("falls back to the neutral preferences on an unknown value", () => {
@@ -209,56 +231,46 @@ function facts(overrides: Partial<LotTextFacts> = {}): LotTextFacts {
     yearFrom: 1950,
     yearTo: 1960,
     conditionNames: ["Used", "MNH"],
-    pieceCount: 103,
-    distinctStamps: 87,
-    completeSets: 3,
     ...overrides,
   };
 }
 
-describe("the suggested lot texts (#759)", () => {
-  it("names the lot by what it is of, and by the copies actually picked", () => {
-    const { name } = suggestLotTexts(facts());
-    assert.equal(name, "Poland 1950–1960, 103 stamps");
+// The suggestion is a **template** (#774), not finished text. What may appear in it is exactly what
+// the engine can still answer later — `{area}`, `{year}`, `{count}`, `{condition}` — because the
+// offer re-renders it whenever its composition changes. The variety and the complete-set tally are
+// out for the same reason: both mean a rollup this engine knows nothing about, so as numbers they
+// would go stale the first time a copy left the lot.
+describe("the suggested lot templates (#759, #774)", () => {
+  it("names the lot by what it is of, and counts the copies with a token", () => {
+    assert.equal(suggestLotTexts(facts()).name, "{area} {year}, {count} stamps");
   });
 
-  it("states variety and the complete sets, and never the catalogue value", () => {
-    const { description } = suggestLotTexts(facts());
+  it("states the conditions the lot has, not the ones the criteria allowed", () => {
     assert.equal(
-      description,
-      "Bulk lot of 103 stamps from Poland, issued 1950–1960.\n" +
-        "87 different stamps, including 3 complete sets.\n" +
-        "Conditions: Used, MNH."
+      suggestLotTexts(facts()).description,
+      "Bulk lot of {count} stamps from {area}, issued {year}.\nConditions: {condition}."
     );
   });
 
   it("says nothing about conditions when the criteria allowed every one", () => {
-    const { description } = suggestLotTexts(facts({ conditionNames: [] }));
-    assert.equal(description.includes("Conditions:"), false);
+    assert.equal(suggestLotTexts(facts({ conditionNames: [] })).description.includes("Conditions:"), false);
   });
 
-  it("drops the complete-sets clause when the lot carries none", () => {
-    const { description } = suggestLotTexts(facts({ completeSets: 0 }));
-    assert.equal(description.split("\n")[1], "87 different stamps.");
+  // No figure that cannot move is written into the default — that is the whole change. The catalogue
+  // value was already refused (#405); the variety and the set tally join it.
+  it("bakes in no figure of its own", () => {
+    const { name, description } = suggestLotTexts(facts());
+    assert.match(name, /\{count\}/);
+    assert.equal(/\d/.test(name), false, "no literal number in the title");
+    assert.equal(/\d/.test(description), false, "nor in the description");
   });
 
-  it("renders every shape of year span", () => {
-    assert.equal(suggestLotTexts(facts({ yearTo: 1950 })).name, "Poland 1950, 103 stamps");
-    assert.equal(suggestLotTexts(facts({ yearTo: null })).name, "Poland from 1950, 103 stamps");
-    assert.equal(suggestLotTexts(facts({ yearFrom: null })).name, "Poland to 1960, 103 stamps");
-    assert.equal(suggestLotTexts(facts({ yearFrom: null, yearTo: null })).name, "Poland, 103 stamps");
-  });
-
-  it("still names a lot the criteria narrowed by neither area nor year", () => {
-    const { name } = suggestLotTexts(facts({ areaName: null, yearFrom: null, yearTo: null }));
-    assert.equal(name, "Bulk lot of 103 stamps");
-  });
-
-  it("counts one of anything in the singular", () => {
-    const { name, description } = suggestLotTexts(
-      facts({ pieceCount: 1, distinctStamps: 1, completeSets: 1 })
+  it("mentions an axis only when the criteria named one", () => {
+    assert.equal(suggestLotTexts(facts({ yearFrom: null, yearTo: null })).name, "{area}, {count} stamps");
+    assert.equal(
+      suggestLotTexts(facts({ areaName: null, yearFrom: null, yearTo: null })).name,
+      "Bulk lot of {count} stamps"
     );
-    assert.equal(name, "Poland 1950–1960, 1 stamp");
-    assert.equal(description.split("\n")[1], "1 different stamp, including 1 complete set.");
+    assert.equal(suggestLotTexts(facts({ areaName: null })).name, "{year}, {count} stamps");
   });
 });

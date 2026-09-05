@@ -5014,6 +5014,12 @@ export async function regenerateOfferText(
   const ref = await assertOfferOwner(ownerId, offerId);
   const platform = await assertPlatform(ref.collectionId, ref.platformId);
   const composition = await offerComposition(offerId);
+  // The offer's own template wins where it has one (#774), exactly as it does when the composition
+  // changes — ↻ is the *explicit* form of the same act, so the two must render the same text.
+  const own = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { nameTemplate: true, descriptionTemplate: true },
+  });
   // Only the asked-for field's template is handed to the generator, so the others are neither
   // rendered nor written — a regenerated description never disturbs a hand-edited title.
   const only: PlatformTemplates = {
@@ -5022,9 +5028,9 @@ export async function regenerateOfferText(
     privateNoteTemplate: null,
     titleLanguage: platform.titleLanguage,
     ...(field === "name"
-      ? { titleTemplate: platform.titleTemplate }
+      ? { titleTemplate: own?.nameTemplate ?? platform.titleTemplate }
       : field === "description"
-        ? { descriptionTemplate: platform.descriptionTemplate }
+        ? { descriptionTemplate: own?.descriptionTemplate ?? platform.descriptionTemplate }
         : { privateNoteTemplate: platform.privateNoteTemplate }),
   };
   const texts = await generateListingTexts(
@@ -5114,6 +5120,8 @@ export async function syncGeneratedTexts(ownerId: string, offerId: string): Prom
       nameEdited: true,
       descriptionEdited: true,
       privateNoteEdited: true,
+      nameTemplate: true,
+      descriptionTemplate: true,
     },
   });
   if (!offer) return;
@@ -5124,9 +5132,15 @@ export async function syncGeneratedTexts(ownerId: string, offerId: string): Prom
   const platform = await assertPlatform(offer.collectionId, offer.platformId);
   // Only the fields still following the template are rendered at all — the generator is handed
   // nothing for the others, so an edited field costs neither a render nor a write.
+  // **The offer's own template wins where it has one** (#774). A listing that carries one is saying
+  // that the platform's is not the right wording *for this listing* — which is the whole of what a
+  // bulk lot is: a hundred unrelated stamps whose title cannot be an enumeration. Null everywhere
+  // else, which is what every offer written before this says, so nothing else changes.
   const templates: PlatformTemplates = {
-    titleTemplate: offer.nameEdited ? null : platform.titleTemplate,
-    descriptionTemplate: offer.descriptionEdited ? null : platform.descriptionTemplate,
+    titleTemplate: offer.nameEdited ? null : (offer.nameTemplate ?? platform.titleTemplate),
+    descriptionTemplate: offer.descriptionEdited
+      ? null
+      : (offer.descriptionTemplate ?? platform.descriptionTemplate),
     privateNoteTemplate: offer.privateNoteEdited ? null : platform.privateNoteTemplate,
     titleLanguage: platform.titleLanguage,
   };

@@ -22,7 +22,15 @@ import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolb
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
-import { BAND, Empty, FIGURE_FRAME, NOTE, SectionHeading } from "./lot-builder-chrome";
+import {
+  TemplateBuilder,
+  type TemplateSamples,
+} from "@/app/c/[collectionSlug]/shared/template-builder";
+import {
+  AVAILABLE_LISTING_TOKENS,
+  AVAILABLE_TITLE_TOKENS,
+} from "@/lib/offer-title-template";
+import { BAND, Empty, NOTE, SectionHeading } from "./lot-builder-chrome";
 import { LotFigures } from "./lot-figures";
 import { LotPresetBar, applyLotRecipe } from "./lot-preset-bar";
 import { useLotPoolSummary, useLotProposal } from "../use-offers-query";
@@ -224,6 +232,9 @@ export function LotBuilderPanel({
   // a re-roll that changes the piece count keeps updating the field until the collector touches it.
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
+  // Which of the two template editors is expanded — one at a time, the rule the shared builder is
+  // written for: several stacked, and the one being worked on needs the room.
+  const [openTemplate, setOpenTemplate] = useState<"name" | "description" | null>("name");
 
   const parsed = useMemo(
     () => parseLotBuilderRequest(new URLSearchParams(searchParams.toString())),
@@ -244,9 +255,16 @@ export function LotBuilderPanel({
       criteria: {
         ...parsed.criteria,
         areaSubtree: parsed.criteria.areaId ? includeSubAreas : true,
+        // The wording is a criterion — the preset keeps it and the commit renders it — but a draft
+        // being *typed* is not navigation, so it is overlaid from local state rather than pushed to
+        // the address on every keystroke. Null there means "whatever the address says", which is
+        // what a just-applied preset put in it. The two reads drop these before keying, so a title
+        // gaining a character never re-asks for the pick.
+        nameTemplate: name ?? parsed.criteria.nameTemplate,
+        descriptionTemplate: description ?? parsed.criteria.descriptionTemplate,
       },
     }),
-    [parsed, includeSubAreas]
+    [parsed, includeSubAreas, name, description]
   );
   const { criteria } = request;
 
@@ -279,8 +297,8 @@ export function LotBuilderPanel({
   // 100 re-words the untouched field, and leaves a written one alone.
   const suggestedName = proposal?.suggested.name ?? "";
   const suggestedDescription = proposal?.suggested.description ?? "";
-  const effectiveName = name ?? suggestedName;
-  const effectiveDescription = description ?? suggestedDescription;
+  const effectiveName = criteria.nameTemplate ?? suggestedName;
+  const effectiveDescription = criteria.descriptionTemplate ?? suggestedDescription;
 
   const roll = () => write({ ...request, seed: Math.random().toString(36).slice(2, 10) });
 
@@ -319,6 +337,24 @@ export function LotBuilderPanel({
       } else setError(result.message);
     });
   }
+
+  // The shared builder's sample shape, over the lot itself. Its picker half is inert here on
+  // purpose: there is nothing to search for or shuffle to, because the copies the text will be
+  // rendered over are the copies in front of the collector.
+  const templateSamples: TemplateSamples = useMemo(
+    () => ({
+      copies: proposal?.templateSamples ?? [],
+      loading: proposalLoading,
+      shuffle: () => {},
+      search: "",
+      setSearch: () => {},
+      picking: false,
+      setPicking: () => {},
+      candidates: [],
+      pick: () => {},
+    }),
+    [proposal?.templateSamples, proposalLoading]
+  );
 
   const platformChosen = !!criteria.platformId;
   const busy = proposalFetching || isPending;
@@ -450,9 +486,14 @@ export function LotBuilderPanel({
               <LotPresetBar
                 collectionId={collectionId}
                 request={request}
-                onApply={(recipe) =>
-                  write({ ...request, criteria: applyLotRecipe(criteria, recipe) })
-                }
+                onApply={(recipe) => {
+                  // The drafts are dropped, not merged: a preset carries the wording too, and a
+                  // half-typed title left overlaying it would make the applied preset say something
+                  // it does not say. Applying is whole on this axis exactly as on every other.
+                  setName(null);
+                  setDescription(null);
+                  write({ ...request, criteria: applyLotRecipe(criteria, recipe) });
+                }}
                 disabled={busy}
               />
             }
@@ -618,6 +659,76 @@ export function LotBuilderPanel({
           )}
         </section>
 
+        {/* **Name the listing before reading the lot, not after** (#773's pass). The block used to
+            sit under the proposal, which put the button that finishes the job a hundred rows down
+            and asked the collector to scroll back up to the figures to word a title against them.
+            Here it is under the band those figures are in, so the piece count, the value and the
+            wording are read in one glance, and the list below is what you check *after* deciding
+            what you are selling. It appears with the lot, since there is nothing to name before. */}
+        {proposal && proposal.plan.itemIds.length > 0 && (
+          <section style={BAND}>
+            <SectionHeading
+              title="Create the offer"
+              note={`A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`}
+            />
+            {/* **Templates, not finished text** (#774). The lot writes its own template onto the
+                offer, so the wording follows the composition the way every other listing's does —
+                strike a copy that sold elsewhere and `{count}` re-reads by itself. What it may not
+                be is the *platform's* template: over a hundred unrelated stamps that renders a dozen
+                catalogue ranges, past most platforms' limit, and an over-long text blocks the way to
+                Ready (#636).
+
+                They preview against **this lot's own copies** rather than random samples of the
+                collection, which is the one thing the shared builder cannot do for a platform
+                template written before there is anything to write it about — and the only way
+                `{count}` can preview the figure the listing will actually carry. */}
+            <TemplateBuilder
+              label="Listing title"
+              open={openTemplate === "name"}
+              onToggle={() => setOpenTemplate(openTemplate === "name" ? null : "name")}
+              value={effectiveName}
+              onChange={setName}
+              tokens={AVAILABLE_TITLE_TOKENS}
+              samples={templateSamples}
+              placeholder="Leave blank to use this platform's template"
+              description="Rendered over the lot's copies, and re-rendered whenever the offer's composition changes."
+              emptyPreview="This platform's own title template renders instead."
+            />
+            <TemplateBuilder
+              label="Description"
+              open={openTemplate === "description"}
+              onToggle={() =>
+                setOpenTemplate(openTemplate === "description" ? null : "description")
+              }
+              value={effectiveDescription}
+              onChange={setDescription}
+              tokens={AVAILABLE_LISTING_TOKENS}
+              multiline
+              rows={5}
+              samples={templateSamples}
+              placeholder="Leave blank to use this platform's template"
+              description="Same engine as a platform's description template, over this lot's copies."
+              emptyPreview="This platform's own description template renders instead."
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <DialogPrimaryButton type="button" onClick={commit} disabled={busy}>
+                <Icon name="newOffer" /> Create the offer
+              </DialogPrimaryButton>
+              <span style={NOTE}>
+                The lot is picked again as it is created, so anything listed elsewhere since
+                is left out and named.
+              </span>
+            </div>
+          </section>
+        )}
+
         {/* The work itself. Each state below carries its own padding rather than the column carrying
             one for all of them: an empty note is set in from the edge further than a list of rows
             is, which is the difference between a sentence to read and a table to scan. */}
@@ -674,57 +785,6 @@ export function LotBuilderPanel({
                 busy={busy}
               />
 
-              {proposal.plan.itemIds.length > 0 && (
-                <div style={{ ...FIGURE_FRAME, gap: "0.75rem" }}>
-                  <SectionHeading
-                    title="Create the offer"
-                    note={`A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`}
-                  />
-                  {/* The texts are written here rather than left to the platform's template. Over a
-                      hundred unrelated stamps the generated title is a dozen catalogue ranges, which
-                      is past most platforms' limit — and an over-long text blocks the way to Ready
-                      (#636). What is typed here is stored as yours and stops following the
-                      composition, which the offer's `edited` chip then says. */}
-                  <Field label="Listing title">
-                    <input
-                      style={{ ...FILTER_CONTROL_STYLE, width: "100%" }}
-                      value={effectiveName}
-                      onChange={(e) => setName(e.currentTarget.value)}
-                      placeholder="Leave blank to use this platform's template"
-                    />
-                  </Field>
-                  <Field label="Description">
-                    <textarea
-                      style={{
-                        ...FILTER_CONTROL_STYLE,
-                        width: "100%",
-                        minHeight: "5rem",
-                        resize: "vertical",
-                        fontFamily: "inherit",
-                      }}
-                      value={effectiveDescription}
-                      onChange={(e) => setDescription(e.currentTarget.value)}
-                      placeholder="Leave blank to use this platform's template"
-                    />
-                  </Field>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <DialogPrimaryButton type="button" onClick={commit} disabled={busy}>
-                      <Icon name="newOffer" /> Create the offer
-                    </DialogPrimaryButton>
-                    <span style={NOTE}>
-                      The lot is picked again as it is created, so anything listed elsewhere since
-                      is left out and named.
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>

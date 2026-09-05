@@ -61,6 +61,7 @@ export function isDelivered(state: string): boolean {
   return state === "delivered";
 }
 
+
 /**
  * How a count of copies you have *bought* splits by where each one is (#532, #562).
  *
@@ -120,6 +121,22 @@ export const IN_HAND_COPY_BUCKETS = COPY_BUCKETS.filter(
 export const IN_HAND_DELIVERY_STATES: readonly DeliveryState[] = IN_HAND_COPY_BUCKETS.map(
   (b) => b.state
 );
+
+/**
+ * The same judgement as {@link isDelivered}, as a list for a query's `deliveryStates` — the reads
+ * that narrow a *set* of copies to the ones that may actually be listed, rather than testing one.
+ *
+ * It sits between the two neighbours above and is narrower than both, which is the whole reason it
+ * is named. The `notOfferedPlatformId` clause keeps the **in-flight** states, because a listing is
+ * something one writes ahead of the parcel arriving. {@link IN_HAND_DELIVERY_STATES} adds `to_sort`,
+ * because a stamp on the desk is there to put in an envelope. A **bulk lot** can take neither: it is
+ * a hundred pieces counted into one envelope now, and the offer it commits to refuses to go live
+ * around anything this predicate rejects — so admitting a copy here would only build a lot that
+ * could not be posted.
+ */
+export const LISTABLE_DELIVERY_STATES: readonly DeliveryState[] = COPY_BUCKETS.filter((b) =>
+  isDelivered(b.state)
+).map((b) => b.state);
 
 /** The buckets a copy that has **not** arrived and been filed falls in — everything the headline
  *  *you hold N* does not cover, in the order above. */

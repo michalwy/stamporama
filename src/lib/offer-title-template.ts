@@ -193,6 +193,10 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{certificate}", label: "Certificate", example: "Photo certificate" },
   { token: "{certificateAbbr}", label: "Certificate (abbr.)", example: "cert." },
   { token: "{area}", label: "Area", example: "Austria" },
+  // Offered on every template, not only a lot's (#773/#774): a set of four is as entitled to say
+  // "4 stamps" as a lot of a hundred is, and a token the engine resolves everywhere but only
+  // *advertises* on one screen is a token nobody finds.
+  { token: "{count}", label: "How many copies", example: "100" },
   { token: "{location}", label: "Location", example: "Stockbook A" },
   { token: "{ref}", label: "Location ref", example: "A234" },
   { token: "{itemNo}", label: "Copy number", example: "00042" },
@@ -705,6 +709,19 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.certificateAbbr)).join(" / ");
     case "area":
       return distinct(copies.map((c) => c.area)).join(" / ");
+    // **How many pieces** (#773). Every other token names *what* the copies are; this one names how
+    // many, which is what a bulk lot's wording is mostly made of ("Bulk lot of 100 stamps") and the
+    // one thing no amount of joining distinct values could say. It counts the copies **in scope**,
+    // so it follows the offer's composition exactly as every other token does: strike a copy that
+    // sold elsewhere, and the title re-renders at 99 by itself.
+    //
+    // There is deliberately no companion `{stampCount}` yet. *Different stamps* means the variant
+    // rollup — two copies of 226 and one of 226y are one stamp — and this engine is pure precisely
+    // because it knows nothing about that rollup: every such fact reaches it already resolved on the
+    // copy (`{listedAs}` / `{variants}` are the precedent). A token that counted rows instead would
+    // be right on a lot of singles and quietly wrong on the lots this feature exists for.
+    case "count":
+      return String(copies.length);
     case "location":
       return distinct(copies.map((c) => c.location)).join(" / ");
     case "ref":

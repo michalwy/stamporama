@@ -60,6 +60,8 @@ const SELECT = {
   series: true,
   duplicates: true,
   maxPerStamp: true,
+  nameTemplate: true,
+  descriptionTemplate: true,
 } as const;
 
 type PresetRow = {
@@ -77,6 +79,8 @@ type PresetRow = {
   series: string;
   duplicates: string;
   maxPerStamp: number | null;
+  nameTemplate: string | null;
+  descriptionTemplate: string | null;
 };
 
 /** A stored `Decimal` as the criteria carry it: a plain finite number, or null. */
@@ -116,6 +120,8 @@ function toData(row: PresetRow): LotBuilderPresetData {
       series: series(row.series),
       maxPerStamp: row.maxPerStamp,
       duplicates: duplicates(row.duplicates),
+      nameTemplate: row.nameTemplate,
+      descriptionTemplate: row.descriptionTemplate,
     },
   };
 }
@@ -136,6 +142,8 @@ function toColumns(recipe: LotRecipe) {
     series: recipe.series,
     duplicates: recipe.duplicates,
     maxPerStamp: recipe.maxPerStamp,
+    nameTemplate: recipe.nameTemplate,
+    descriptionTemplate: recipe.descriptionTemplate,
   } satisfies Record<(typeof LOT_RECIPE_KEYS)[number], unknown>;
 }
 

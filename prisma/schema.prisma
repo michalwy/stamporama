@@ -659,6 +659,13 @@ model LotBuilderPreset {
   // How many copies of one stamp — rolled up through variants — the lot may hold. Null = no cap.
   maxPerStamp Int?
 
+  // The listing title and description this kind of lot is worded with, as **templates** (#774) in
+  // the same `{token}` engine a platform's are. Part of the recipe because how a kind of lot is
+  // *worded* repeats exactly as much as how it is picked — "{area} {year}, {count} stamps" is as
+  // reusable as "about a hundred, used, deepest piles first". Null leaves the platform's own.
+  nameTemplate        String?
+  descriptionTemplate String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2925,6 +2932,24 @@ model Offer {
   nameEdited        Boolean @default(false)
   descriptionEdited Boolean @default(false)
   privateNoteEdited Boolean @default(false)
+  // **This listing's own template**, preferred over the platform's wherever the platform's is read
+  // (#774). Null everywhere it has never been set, which is exactly what "use the platform's"
+  // already meant, so every offer written before this is unchanged.
+  //
+  // It exists for the bulk lot (#773). A lot's texts used to be rendered once and frozen with
+  // `nameEdited` — because regenerating them from the *platform's* template over a hundred unrelated
+  // stamps emits a dozen catalogue ranges, past most platforms' limit, and an over-long text blocks
+  // `preparing → ready` (#636). The cost was that the wording then stopped following the offer:
+  // strike a copy that sold elsewhere and the title still claimed a hundred. With its own template
+  // on the offer, a lot commits with the `*Edited` flags **false** and follows its composition like
+  // any other listing — safely, because the lot's template is short by construction
+  // (`{count} stamps from {area}`) rather than an enumeration.
+  //
+  // No `privateNoteTemplate` companion: a lot has nothing to say in a seller-only note that the
+  // platform's own template does not already say, and a column nothing writes is a column to keep in
+  // step for nothing.
+  nameTemplate        String?
+  descriptionTemplate String?
   // Listing URL on the platform.
   url          String?
   // How the listing is sold (#449): `fixed` — a quick-buy at a stated asking price — or `auction`,

@@ -1,6 +1,9 @@
 import "server-only";
 import { prisma } from "./db";
 import { areaSubtreeIds } from "./areas";
+import { compareCatalogSortKeys } from "./catalog-sort-key";
+import { titleSampleCopiesByIds, type TitleSampleCopy } from "./title-samples";
+import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
@@ -31,7 +34,7 @@ import {
 } from "./lot-builder-criteria";
 import { findCommittedCopies } from "./trade-reservations";
 import type { CommittedCopy } from "./trade-reservation-rules";
-import { createOffer, patchOffer } from "./offers";
+import { createOffer, syncGeneratedTexts } from "./offers";
 
 // The server half of the bulk-lot builder (#759; #756's design, #758's rules).
 //
@@ -109,6 +112,15 @@ async function poolFilters(
     : undefined;
   return {
     notOfferedPlatformId: criteria.platformId,
+    // **In hand, and only in hand.** The shared `notOfferedPlatformId` branch keeps the in-flight
+    // states on purpose — "a copy still on its way is exactly what one plans a listing for" — and
+    // that is right for the Copies list's worklist, where the answer is a listing to *write*. A bulk
+    // lot is not that: it is a hundred pieces to count into one envelope, and a copy that has not
+    // arrived cannot be counted into anything. `LISTABLE_DELIVERY_STATES` is the list form of the
+    // very predicate the offer enforces before it will go live (#188), so the two cannot drift and a
+    // lot is never built that could not be posted. Narrowed here rather than in the shared clause,
+    // which every other caller still wants as it is.
+    deliveryStates: [...LISTABLE_DELIVERY_STATES],
     ...(areaIds ? { areaIds } : {}),
     ...(criteria.yearFrom !== null ? { yearFrom: criteria.yearFrom } : {}),
     ...(criteria.yearTo !== null ? { yearTo: criteria.yearTo } : {}),
@@ -307,6 +319,10 @@ export interface LotProposal {
   plan: LotPlan;
   /** The picked copies in **pick order**, enriched as the Copies list enriches a row. */
   copies: ItemListItem[];
+  /** The picked copies as the **template engine** takes them (#774) — so the wizard's title and
+   *  description previews render against the lot itself rather than random copies of the collection,
+   *  and `{count}` previews the number the listing will actually carry. */
+  templateSamples: TitleSampleCopy[];
   /** Pinned copies that stopped being listable. */
   missingPinned: MissingPinnedCopy[];
   /** Picked copies promised in an agreed trade (#639). Reported, never excluded: a `preparing`
@@ -356,6 +372,9 @@ export async function buildLotProposal(
     findCommittedCopies(collectionId, plan.itemIds),
     nameChecklists(collectionId, plan),
   ]);
+  // The whole lot, not a sample of it: `{count}` has to preview the figure the listing will carry,
+  // and a template previewed over three of a hundred copies would say `3`.
+  const templateSamples = await titleSampleCopiesByIds(ownerId, collectionId, plan.itemIds);
 
   const summary = summarize(pool, criteria, baseCurrency);
   return {
@@ -366,25 +385,51 @@ export async function buildLotProposal(
     takenChecklists: series.taken,
     refusedChecklists: series.refused,
     summary,
-    suggested: await suggestTexts(collectionId, criteria, pool, plan),
+    suggested: await suggestTexts(collectionId, criteria),
+    templateSamples,
   };
 }
 
-/** The picked copies as the Copies list draws one, back in **pick order** — `sortOrder` on the
- *  offer's set is what a buyer reads as the order of the goods (#306), so the order the pick chose
- *  has to survive the display read that follows it. */
+/**
+ * The picked copies as the Copies list draws one, in **catalogue order**.
+ *
+ * This used to hand them back in *pick order*, on the reading that the order the pick chose should
+ * survive the display read after it. That was wrong, and the commit is what says so: within the
+ * offer's one set the copies start **derived** (#759), precisely so a seeded shuffle is not frozen
+ * as somebody's hand-correction — and `compareSetItems` resolves derived to the catalogue's own
+ * order (#306). So pick order was a random order the finished offer never uses, shown on the screen
+ * where the collector checks the goods against a catalogue and reads a hundred rows in a sitting.
+ * Ordering here rather than in the client keeps the sort where the sort key lives: it is a
+ * denormalized column on the stamp, not something a row states.
+ *
+ * The **groups** are unaffected — which copies came in pinned, whole as a series, or as singles is
+ * the pick's report and not an order — so the screen still groups the way the pick happened and
+ * sorts within each group.
+ */
 async function loadPickedCopies(
   ownerId: string,
   collectionId: string,
   itemIds: readonly string[]
 ): Promise<ItemListItem[]> {
   if (itemIds.length === 0) return [];
-  const { items } = await listItemsPaginated(ownerId, collectionId, {
-    ids: [...itemIds],
-    pageSize: itemIds.length,
+  const [{ items }, stamps] = await Promise.all([
+    listItemsPaginated(ownerId, collectionId, { ids: [...itemIds], pageSize: itemIds.length }),
+    prisma.stamp.findMany({
+      where: { items: { some: { id: { in: [...itemIds] } } } },
+      select: { id: true, primaryCatalogSortKey: true },
+    }),
+  ]);
+  const keyByStamp = new Map(stamps.map((s) => [s.id, s.primaryCatalogSortKey]));
+  return [...items].sort((a, b) => {
+    const byCatalog = compareCatalogSortKeys(
+      keyByStamp.get(a.stampId) ?? null,
+      keyByStamp.get(b.stampId) ?? null
+    );
+    // Two copies of one stamp share a key, and a pair that arrived in one order and rendered in
+    // another on the next read would look like the lot had changed. The copy number is the stable
+    // tie-break the Copies list itself falls back on.
+    return byCatalog !== 0 ? byCatalog : a.itemNo - b.itemNo;
   });
-  const byId = new Map(items.map((item) => [item.id, item]));
-  return itemIds.map((id) => byId.get(id)).filter((item) => item !== undefined);
 }
 
 /** A sentence's worth of each pinned copy the pool has lost. Read straight off `Item` rather than
@@ -461,17 +506,18 @@ async function nameChecklists(
 }
 
 /**
- * The pre-filled title and description (`lot-builder-criteria.ts` states why they exist at all).
+ * The pre-filled title and description **templates** (`lot-builder-criteria.ts` states why they
+ * exist at all, and why they became templates in #774).
  *
- * The labels are resolved here because the criteria carry ids and a name is what a listing says.
- * The piece count comes from the **plan**, never from the count target: the pick stops at the floor
- * of a range and an atomic series overshoots it, so a target of 100 routinely lands at 103.
+ * Only the labels are resolved here, and only to decide whether the template mentions an axis at
+ * all: the criteria carry ids, and a template that says `{area}` should say it only where the
+ * collector actually narrowed to one. Every figure the old finished text carried — the piece count,
+ * the variety, the set tally — is gone from this call, because a template asks the engine for those
+ * at render time instead of freezing them here.
  */
 async function suggestTexts(
   collectionId: string,
-  criteria: LotBuilderCriteria,
-  pool: LotPool,
-  plan: LotPlan
+  criteria: LotBuilderCriteria
 ): Promise<LotSuggestedTexts> {
   const [area, conditions] = await Promise.all([
     criteria.areaId
@@ -488,35 +534,33 @@ async function suggestTexts(
         })
       : [],
   ]);
+  // The suggestion is a **template** now (#774), so the figures it used to carry are tokens the
+  // engine resolves against whatever the offer holds at the time — which is why the count, the
+  // variety and the set tally no longer reach it as numbers.
   return suggestLotTexts({
     areaName: area?.name ?? null,
     yearFrom: criteria.yearFrom,
     yearTo: criteria.yearTo,
     conditionNames: conditions.map((c) => c.name),
-    pieceCount: plan.itemIds.length,
-    distinctStamps: distinctStamps(pool, plan),
-    completeSets: plan.takenChecklistIds.length,
   });
 }
 
-/** How many different stamps the lot holds, counted the way the cap counts them (`duplicateKey`,
- *  so a `226` and a `226yw` are one). Over the **picks**, so it describes the lot rather than the
- *  criteria — {@link LotPoolSummary.stamps} is the same figure over the whole pool. */
-function distinctStamps(pool: LotPool, plan: LotPlan): number {
-  const byId = new Map(pool.candidates.map((c) => [c.itemId, c]));
-  const piles = new Set<string>();
-  for (const itemId of plan.itemIds) {
-    const candidate = byId.get(itemId);
-    if (candidate) piles.add(duplicateKey(candidate));
-  }
-  return piles.size;
-}
 
 // ── The commit ──────────────────────────────────────────────────────────────────────────────────
 
 export interface LotCommitInput extends LotBuilderRequest {
-  /** The listing title. Non-empty is stored as the collector's own (`nameEdited`, #380); empty
-   *  leaves the platform's template to render, as it does for every other offer. */
+  /**
+   * The listing title, as a **template** (#774) — `{count} stamps from {area}`, in the same engine
+   * every platform template is written in. Non-empty is stored on the offer as *its own* template;
+   * empty leaves the platform's to render, as it does for every other offer.
+   *
+   * It used to be finished text, rendered once by the wizard and frozen with `nameEdited`. That was
+   * necessary — regenerating from the *platform's* template over a hundred unrelated stamps emits a
+   * dozen catalogue ranges, past most platforms' cap (#403), and since #636 an over-long text blocks
+   * the way to `ready` — and it cost the collector the thing every other listing has: a title that
+   * follows what the listing actually holds. Strike a copy that sold elsewhere and the frozen title
+   * still claimed a hundred. A template of the lot's own is both: short by construction, and alive.
+   */
   name: string | null;
   /** The listing description, on the same contract. */
   description: string | null;
@@ -574,17 +618,25 @@ export async function commitLotProposal(
     { seedItemIds: proposal.plan.itemIds }
   );
 
-  // The wizard's texts, when it sent any. `patchOffer` carries #380's rule: writing a generated text
-  // takes the field off the template. That flag is right even though nobody typed these — it means
-  // *do not regenerate this*, and regeneration over a hundred unrelated stamps is exactly what
-  // produces a title past the platform's cap (#403), which since #636 blocks the way to `ready`.
-  const name = input.name?.trim() || null;
-  const description = input.description?.trim() || null;
-  if (name !== null || description !== null) {
-    await patchOffer(ownerId, offerId, {
-      ...(name !== null ? { name } : {}),
-      ...(description !== null ? { description } : {}),
+  // The wizard's templates, when it sent any (#774). Written **as templates**, not as the text they
+  // render to, and deliberately *not* through `patchOffer`: that carries #380's rule that writing a
+  // generated text takes the field off the template, and taking the field off the template is the
+  // one thing this must not do. The flags stay false, so `syncGeneratedTexts` renders these on every
+  // composition change and the lot's wording follows what the lot actually holds — which is what a
+  // frozen text could not, and what makes striking a sold copy re-read the piece count by itself.
+  const nameTemplate = input.name?.trim() || null;
+  const descriptionTemplate = input.description?.trim() || null;
+  if (nameTemplate !== null || descriptionTemplate !== null) {
+    await prisma.offer.update({
+      where: { id: offerId },
+      data: {
+        ...(nameTemplate !== null ? { nameTemplate } : {}),
+        ...(descriptionTemplate !== null ? { descriptionTemplate } : {}),
+      },
     });
+    // The offer was created before it had a template of its own, so its texts were rendered from the
+    // platform's (or from nothing). One sync now writes them from the lot's.
+    await syncGeneratedTexts(ownerId, offerId);
   }
 
   return {

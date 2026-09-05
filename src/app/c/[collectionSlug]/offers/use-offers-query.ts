@@ -426,11 +426,19 @@ export function useOfferTranslationGaps(collectionId: string, offerId: string, e
 
 /** What the pool holds under these criteria — no pick is run. Disabled until a platform is chosen,
  *  since every availability clause is judged against one. */
+/** The request with the listing wording dropped — what the pool and the pick are actually about. */
+function withoutWording(request: LotBuilderRequest): LotBuilderRequest {
+  return {
+    ...request,
+    criteria: { ...request.criteria, nameTemplate: null, descriptionTemplate: null },
+  };
+}
+
 export function useLotPoolSummary(collectionId: string, request: LotBuilderRequest) {
   // Only the criteria narrow the pool; the seed and the pins describe a pick. Keyed on the criteria
   // alone so a re-roll does not re-ask a question whose answer cannot have changed.
   const params = lotBuilderSearchParams({
-    criteria: request.criteria,
+    criteria: withoutWording(request).criteria,
     seed: "",
     pinnedItemIds: [],
     rejectedItemIds: [],
@@ -452,7 +460,11 @@ export function useLotPoolSummary(collectionId: string, request: LotBuilderReque
  *  Disabled until there is a seed — until then the collector is still stating criteria, and the
  *  readout above is what answers them. */
 export function useLotProposal(collectionId: string, request: LotBuilderRequest) {
-  const params = lotBuilderSearchParams(request).toString();
+  // Keyed on everything **except the wording** (#774). The two templates ride in the criteria so the
+  // preset can keep them and the commit can render exactly what was previewed, but they are not
+  // inputs to the pick: re-asking the server for a hundred copies because a title gained a character
+  // would be a scan of every listable copy in the area, per keystroke.
+  const params = lotBuilderSearchParams(withoutWording(request)).toString();
   return useQuery<LotProposal>({
     queryKey: ["offers", collectionId, "lot-proposal", params] as const,
     queryFn: async () => {

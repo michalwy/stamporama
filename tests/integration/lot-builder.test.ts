@@ -144,6 +144,8 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       series: "neutral",
       maxPerStamp: null,
       duplicates: "neutral",
+    nameTemplate: null,
+    descriptionTemplate: null,
       ...overrides,
     };
   }
@@ -451,6 +453,26 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
         rootAlone.copies < root.copies,
         "narrowed to the area alone, the pool drops its sub-areas"
       );
+    });
+
+    // #773: a lot is counted into an envelope now, so the pool takes only what has arrived — unlike
+    // the shared *not offered on X* worklist, which keeps the in-flight states because a listing can
+    // be written ahead of a parcel.
+    it("takes only copies that are in hand", async () => {
+      const before = await getLotPoolSummary(userId, collectionId, criteria({ areaId: poolAreaId }));
+      const stampId = await stamp(poolAreaId, `In transit ${ts}`, { price: "1.00" });
+      const inTransit = await createItem(userId, collectionId, {
+        stampId,
+        conditionId: mnhId,
+        forSale: true,
+        deliveryState: "in_transit",
+      });
+      const after = await getLotPoolSummary(userId, collectionId, criteria({ areaId: poolAreaId }));
+      assert.equal(after.copies, before.copies, "a copy still in the post is not in the pool");
+
+      await prisma.item.update({ where: { id: inTransit.id }, data: { deliveryState: "delivered" } });
+      const delivered = await getLotPoolSummary(userId, collectionId, criteria({ areaId: poolAreaId }));
+      assert.equal(delivered.copies, before.copies + 1, "and is the moment it arrives");
     });
 
     it("agrees with the pool the proposal is picked from", async () => {

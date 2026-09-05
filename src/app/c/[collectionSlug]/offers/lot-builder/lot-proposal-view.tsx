@@ -94,9 +94,22 @@ interface PickGroup {
   itemIds: string[];
 }
 
+/**
+ * The groups, each in **catalogue order**.
+ *
+ * Which copies came in pinned, whole as a series, or as singles is the pick's *report* — the thing
+ * this screen exists to show — so the grouping follows the pick. The order **inside** a group does
+ * not: `proposal.copies` arrives in catalogue order (#306's derived order, which is what the
+ * committed offer actually uses), and a group ordered by when the shuffle happened to reach each
+ * copy is a random order over a list the collector is checking against a catalogue.
+ */
 function groupPicks(proposal: LotProposal): PickGroup[] {
+  const rank = new Map(proposal.copies.map((copy, index) => [copy.id, index]));
   const of = (test: (pick: LotPick) => boolean) =>
-    proposal.plan.picks.filter(test).map((p) => p.itemId);
+    proposal.plan.picks
+      .filter(test)
+      .map((p) => p.itemId)
+      .sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
 
   const groups: PickGroup[] = [];
   const pinned = of((p) => p.phase === "pinned");
