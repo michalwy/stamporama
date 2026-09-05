@@ -451,6 +451,16 @@ export function AlbumScreen({
             </Tooltip>
           )}
           {initialOverview.pages.length > 0 && (
+            <Tooltip content="What to cut for every sheet, and what the album still needs bought. It is a list, so it prints from the browser — only the album's own pages have to be true to the millimetre.">
+              <Link
+                href={`/c/${collectionSlug}/albums/${album.id}/cutting-list`}
+                style={DOWNLOAD_BTN}
+              >
+                Cutting list
+              </Link>
+            </Tooltip>
+          )}
+          {initialOverview.pages.length > 0 && (
             <Tooltip content="Compose the whole album as a PDF. Print it at 100% / Actual size — Fit to page silently shrinks the sheet and the boxes stop being true.">
               <a
                 href={pdfHref()}

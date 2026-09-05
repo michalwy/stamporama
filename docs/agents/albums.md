@@ -3,7 +3,7 @@
 Printed album pages: what a page is, and what its boxes are cut from. The design was decided in
 **#755** — read that issue before anything here, it is the reasoning this file only summarises — and
 is being built out in #763–#771 and #777/#778. The model itself is **ADR-0045** (#767); printed
-pages are **ADR-0047** (#778).
+pages are **ADR-0047** (#778); the cutting list they all feed is #770, below.
 
 The rule that runs through all of it: **an album is a durable, printed object, and the app's job is
 to plan it, not to render it once.** Pages get glued into. Two things paper cannot take back:
@@ -526,6 +526,67 @@ Both reachable only once a sheet could actually be printed, and both now pinned 
   Otherwise an album with every chapter printed is a run of blank sheets each headed with a year.
   (Not the same case as #768's year heading legitimately alone on a sheet — there the content under it
   moved to the next *live* page.)
+
+## The cutting list (#770)
+
+What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`
+is pure and does **no box arithmetic** — every width and strip height arrives already decided, by
+`hawid.ts` for a live sheet and from the snapshot for a printed one — so what is in there is
+counting, grouping and packing. `album-cutting.ts` is the Prisma side and does one thing beyond
+reading rows: a snapshot calls the strip's stock length `lengthMm`, and that field name is the only
+adaptation in the file.
+
+It prints through the browser (`@media print`, `globals.css`), like the packing list (#643) and the
+sorting slips (#565). ADR-0046's argument for a server-composed PDF is about a card whose boxes get
+cut to; nobody measures a list.
+
+Four things decided here that are worth not re-deriving:
+
+- **The strip count is packed, not divided.** `packStrips` is first-fit-decreasing over the pieces.
+  Total width over stock length under-counts — a piece cannot span two strips, so four 120 mm pieces
+  need four 210 mm strips and not the three `ceil(480/210)` gives — and under-counting is the one
+  direction a shopping list must never be wrong in.
+- **An unmeasured box is uncuttable and does not reach the cuts.** This is the trap. A stamp nothing
+  on its checklist has measured gets a *degenerate* box — the clearances and nothing else — and a
+  degenerate box is **small**, so the rule finds it the shortest strip in the drawer. Read as an
+  ordinary cut it is a plausible instruction to take 2 mm off the 21 mm strip. It goes in the
+  no-hawid section beside the oversize pieces, for a different stated reason.
+- **The demand is two figures, never summed, printed cards first.** *Marking printed* and *mounting*
+  are two moments and the collector marks a sheet **as it leaves the printer** — asked and answered —
+  so a card being on paper says nothing about whether its hawid has been cut. Neither single total is
+  the answer: one over everything counts material mounted a year ago, one over the live sheets alone
+  leaves out the run he is about to sit down with. Each printed sheet therefore carries the minute it
+  went onto paper, which is as far as the model honestly goes — **the album records printing, not
+  mounting**, and a rule deciding *these are mounted and those are not* would be the app inventing a
+  fact it does not hold. Do not "simplify" this into one number; the two-figure shape is the finding.
+- **A printed card's strip is flagged, never remapped.** A copied strip (ADR-0047 §1) can name a
+  height the drawer no longer holds. The row still states what was cut — nothing reaches backwards
+  into a card already made — and carries `inStock: false`, so a line the collector cannot act on says
+  so. Substituting today's nearest height would be the list inventing a cut nobody made.
+- **The per-sheet lists and the album demand are allowed to disagree**, and this is stated in the
+  module because it looks like a bug and somebody will try to fix it: summing every sheet's cuts does
+  not give the shopping list. A sheet's list is a *record for one card*; the album demand is about
+  *work left*, so printed cards sit in a figure of their own. Reconciling them means either dropping
+  printed cards from their own cutting lists — the one thing the snapshot keeps `sizeSource` and the
+  copied strip for — or counting a card's hawid into a shopping list twice.
+- **A printed card whose snapshot cannot be read is named, not dropped.** Nothing may re-derive its
+  boxes from live data (ADR-0047 §1), so the honest answer is a sheet with no cuts and a sentence
+  saying why. A card listed as needing nothing is worse, because only one of the two gets looked at.
+
+It has its own route rather than a section of the album screen, and the reason is not that the album
+screen prints badly: the cutting list is a **working document read at a different moment and in a
+different place** — at the desk, with scissors, away from the surface where entries are dragged
+around. Same reason a packing list hangs off a sale rather than living on it. And it carries **no
+toggles or filters**, like every other print sheet here: paper cannot say which state a control was
+in when it was printed, so both demand figures are always on the page.
+
+The mapping from a plan page to a cutting sheet is in the **pure** module (`albumCutSheets`) rather
+than in the Prisma one, and deliberately: it is where *stepping over printed sheets* is answered, and
+that answer has to be reachable from a test that constructs an album with every page printed and one
+whose entries were reordered after printing. Both are in `tests/unit/album-cutting-list.test.ts`,
+built on `planAlbumPages` with stand-in snapshots, and neither is reachable through Prisma in a unit
+test. The list reads the plan's own sequence and never rebuilds one from the printed index, which is
+what keeps a reordered printed card one card.
 
 ## Configuration is seeded, never referenced
 

@@ -153,6 +153,66 @@ Nor does the album tell you how the plan has changed since you last looked, and 
 an unprinted sheet reshuffling costs nothing, so there is nothing there to act on. The comparison
 that matters is against **paper**, and that is the next section.
 
+## The cutting list
+
+**Cutting list**, beside *Download PDF*, is the sheet you take to the desk with the scissors. It
+answers the two questions that come up there: *what do I cut for this card*, and *how much stock does
+this album need*.
+
+It prints from your browser, unlike the album's own pages. That is not an oversight — nobody measures
+a list, so the *Fit to page* problem above simply does not apply to it, and the browser's print dialog
+is the shortest path to paper.
+
+### Sheet by sheet
+
+Every sheet, in the album's own order, and within a sheet in the order the pieces get stuck down. Each
+line is one instruction: **cut from** which strip, **to** what width, and **how many**. A card already
+on paper says the minute it was printed, so you can pick out the run you have just done.
+
+Identical cuts are one line with a count, because that is how you actually cut them — six 38 mm pieces
+off the 29 mm strip is one trip to the ruler, not six. A line also says when a width came from a
+checklist neighbour rather than from a measured stamp, since that is the figure you are about to cut
+to.
+
+**A box is a slot, not a stamp.** If a stamp is on two of an issue's checklists — basic and
+specialized, perforated and imperforate — and the album gathers both, that is two boxes on the card,
+two hawids and two cuts, and it is counted twice here on purpose.
+
+### No hawid
+
+Two kinds of box are listed apart, because neither has a width to cut:
+
+- **a pocket** — no strip in your stock is tall enough, which is the ordinary answer for a block, a
+  souvenir sheet or a cover, and more useful than naming a strip height you do not own;
+- **no size at all** — nothing on that checklist has been measured, so there is nothing to cut to.
+  Measure one stamp of the set and the rest follow.
+
+### Stock to cut
+
+By strip height: how many pieces, their total width, and **how many stock-length strips that needs**.
+
+That last figure is not the total width divided by the length of a strip, and the difference matters:
+a piece cannot span two strips, so four 120 mm pieces need four 210 mm strips rather than the three
+that division gives. The list counts what the pieces actually need, so it never sends you back to the
+shop with half an album mounted. The gap between the total width and the strips is your offcut.
+
+**It comes in two parts, and they are deliberately not added together.** *Cards already printed*
+first, because you mark a sheet printed as it comes off the printer and cut for it afterwards — so
+the run you have just printed is in that figure, and it is the one you read at the desk today. *Sheets
+still on screen* below it is what the album will need on top.
+
+They are two figures rather than one because the album knows when a card was **printed** and has no
+way to know when it was **mounted**. So the first figure covers every card ever printed: this
+morning's run, which still needs cutting, and the ones glued in last year, which do not. Each card in
+the sheet-by-sheet list below says the minute it was printed, which is how you tell them apart —
+better than the album guessing.
+
+A printed card's cuts are read from what was stored when it was printed, not from your drawer as it
+stands now, so they are the sizes on that card whatever has changed since. If a strip a card was cut
+from is **not in your stock any more** the line says so rather than quietly moving to the nearest
+height you do own — what was cut is what was cut, and a substituted figure would be a cut nobody
+made.
+
 ## Printed cards
 
 When a sheet has gone onto paper and into a binder, tell the album so. **Mark printed…** at the head

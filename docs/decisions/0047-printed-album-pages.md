@@ -64,7 +64,9 @@ sheet. That is *two boxes on the card*, and therefore two rows; the first versio
 The fact generalises past this table and is worth stating once here: **the unit on a card is a box,
 and a box is a slot rather than a stamp.** Anything that counts what a card needs — #770's cutting
 list above all — counts boxes, or it asks the collector to cut too few hawids and he finds out at the
-desk with the card already in front of him.
+desk with the card already in front of him. #770 obeys it structurally rather than carefully:
+`album-cutting-list.ts` carries no stamp id at all, so there is nothing in it a count could be keyed
+on or deduplicated by.
 
 ### 3. Marking a page printed is a deliberate act
 
@@ -118,6 +120,23 @@ chapter heading, stamps so far, and the list is not obviously closed. The inputs
 "stepped over" from "left out" are an album with **every page printed** and one whose entries were
 **reordered after printing**; both are in `tests/unit/album-layout.test.ts`, and #769 and #770 step
 over printed sheets too.
+
+#770 has since done so, and its answer is worth recording because it turned up a **limit of this
+model** rather than another instance of the bug. Its per-sheet lists cover printed cards, read from
+their snapshots — §9 is what makes that possible. Its album-level demand cannot be a single figure at
+all, and the reason is that **this ADR records printing and not mounting**: the collector marks a
+sheet printed as it comes off the printer and cuts for it afterwards, so a card being on paper says
+nothing about whether its hawid exists yet. A demand over everything counts material mounted a year
+ago; a demand over the live sheets alone leaves out the run he is about to sit down with. So there
+are two figures, never summed, printed cards first, and each printed sheet carries the minute it went
+onto paper so the run is visible. A rule deciding *these are mounted and those are not* was
+considered and rejected — the model holds no such fact, and inventing one is how a figure someone
+cuts to becomes wrong.
+
+Both of §4's inputs are constructed again in `tests/unit/album-cutting-list.test.ts`, over
+`planAlbumPages` with stand-in snapshots, because the mapping from a plan page to a cutting sheet is
+where *stepping over* is answered and it is not reachable through Prisma.
+`docs/agents/albums.md` carries the rest.
 
 ### 5. The divergence report is compared against the card's own entries, re-planned on fresh paper
 
