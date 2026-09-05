@@ -10,9 +10,14 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on pull requests only. A run on `main` or on a release tag is never
+# cancelled: it is the only record that the commit somebody tagged, released and deployed actually
+# passed its checks, and a later push must not delete it. Seven of the last forty runs were
+# cancelled this way before this exception existed — every one of them on `main`, including the
+# `chore: bump version to 0.129.0` commit that v0.129.0 was cut from.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
