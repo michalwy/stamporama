@@ -57,12 +57,13 @@ main_worktree() { dirname "$(git_common_dir)"; }
 this_worktree() { echo "$ROOT"; }
 
 # Reads STAMPORAMA_SLOT out of a worktree's .env.slot. Prints nothing when the file, or the
-# worktree itself, is gone — which is the whole of the reclamation story.
+# worktree itself, is gone — which is the whole of the reclamation story. It must also *succeed*
+# when it prints nothing: every caller assigns it in a command substitution, and under `set -e` a
+# non-zero one would kill the script rather than mean "no slot here".
 slot_of() {
-  local file="$1/.env.slot" value
+  local file="$1/.env.slot"
   [ -r "$file" ] || return 0
-  value="$(sed -n 's/^[[:space:]]*STAMPORAMA_SLOT[[:space:]]*=[[:space:]]*\([0-9]\{1,\}\).*$/\1/p' "$file" | head -n 1)"
-  [ -n "$value" ] && echo "$value"
+  sed -n 's/^[[:space:]]*STAMPORAMA_SLOT[[:space:]]*=[[:space:]]*\([0-9]\{1,\}\).*$/\1/p' "$file" | head -n 1
 }
 
 worktree_paths() { git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p'; }
@@ -80,12 +81,14 @@ allocate_slot() {
   main="$(main_worktree)"
   this="$(this_worktree)"
 
-  for path in $(worktree_paths); do
+  while IFS= read -r path; do
     [ "$path" = "$this" ] && continue
     slot="$(slot_of "$path")"
     if [ -z "$slot" ] && [ "$path" = "$main" ]; then slot=0; fi
     [ -n "$slot" ] && taken="$taken $slot "
-  done
+  done <<EOF
+$(worktree_paths)
+EOF
 
   candidate=1
   while [ "$candidate" -le "$MAX_SLOT" ]; do
@@ -175,7 +178,7 @@ cmd_show() {
   main="$(main_worktree)"
   resolve_slot >/dev/null # so the current worktree appears with the number it will actually use
   printf '%-5s %-9s %-9s %-9s %-22s %s\n' slot app dev e2e-db project worktree
-  for path in $(worktree_paths); do
+  while IFS= read -r path; do
     slot="$(slot_of "$path")"
     if [ -z "$slot" ] && [ "$path" = "$main" ]; then slot=0; fi
     if [ -z "$slot" ]; then
@@ -191,7 +194,9 @@ cmd_show() {
       "$(port "$BASE_E2E_DB_PORT" "$slot")" \
       "stamporama$(suffix "$slot")" \
       "$path$mark"
-  done
+  done <<EOF
+$(worktree_paths)
+EOF
 }
 
 cmd_release() {
