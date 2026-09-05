@@ -42,12 +42,17 @@ die() {
 
 abs() { (cd "$1" >/dev/null 2>&1 && pwd -P); }
 
-git_common_dir() { abs "$(git rev-parse --git-common-dir)"; }
+# The worktree this script *belongs to*, not the one the caller happens to be standing in: the
+# script lives inside the worktree it describes, and `pnpm slot` from a sibling directory should
+# still answer for that sibling.
+ROOT="$(abs "$(dirname "$0")/..")"
+
+git_common_dir() { abs "$(git -C "$ROOT" rev-parse --git-common-dir)"; }
 
 # The main worktree is the parent of the shared git directory. Everything else is a linked one.
 main_worktree() { dirname "$(git_common_dir)"; }
 
-this_worktree() { abs "$(git rev-parse --show-toplevel)"; }
+this_worktree() { echo "$ROOT"; }
 
 # Reads STAMPORAMA_SLOT out of a worktree's .env.slot. Prints nothing when the file, or the
 # worktree itself, is gone — which is the whole of the reclamation story.
@@ -58,7 +63,7 @@ slot_of() {
   [ -n "$value" ] && echo "$value"
 }
 
-worktree_paths() { git worktree list --porcelain | sed -n 's/^worktree //p'; }
+worktree_paths() { git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p'; }
 
 validate_slot() {
   case "$1" in
