@@ -200,9 +200,10 @@ children of a design track — the lead reconciles them against everything else 
 ## Design sessions
 
 A large new feature is discussed in **its own session**, not in the lead's. A design dialogue runs
-long and would consume exactly the context the lead exists to hold, and it is the second place the
-user talks to somebody other than the lead — a product conversation cannot go through a proxy,
-because the valuable part is the follow-up question neither side knew to ask.
+long and would consume exactly the context the lead exists to hold. It is also **the one place the
+user talks to somebody other than the lead**, because a product conversation cannot go through a
+proxy: the valuable part is the follow-up question neither side knew to ask, and a relay turns that
+into three round-trips and a lossy summary.
 
 This shape already exists here and had no name. Its output is visible in the repository:
 
