@@ -24,12 +24,12 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 - Use GitHub Issues as the shared backlog. Use Conventional Commits for issue titles. Always assign labels (`backlog` + type + priority when known). Do not maintain a local `TODO.md`.
 - If GitHub connector cannot create issues, use `gh` CLI as fallback.
 - All GitHub content must be in English.
-- Do not create git commits unless the user explicitly asks. **A commit you were asked to make is pushed in the same breath**, unless the user says otherwise — several sessions share one working tree, so "committed but not pushed" is not a state that survives: the next session to push carries your commit up with theirs, and the two then share one CI run instead of getting their own. Holding a commit back buys no isolation here and costs the ability to tell which change broke a build.
-- Solo project: commit directly to `main` by default. Create feature branches only when the user asks for a PR.
-- When pushing to `main`, try `git push origin main` first. If rejected, fetch, rebase, rerun verification, push again.
+- Do not create git commits unless the user explicitly asks. **A commit you were asked to make is pushed in the same breath**, unless the user says otherwise — for a task session, to its own branch. "Committed but not pushed" is not a state that survives: the work is invisible to the lead, and it is invisible to CI, which is the only place the checks a merge depends on actually run. Holding a commit back buys no isolation and costs the ability to tell which change broke a build.
+- **`main` is protected and takes no direct pushes** — a pull request is the only way in, rebase merge is the only method, and four checks must pass. Work on `task/<issue>-<slug>`, branched from `main`; push the branch and open the pull request yourself. Merging and closing the issue are the lead session's, not yours. → [`docs/agents/collaboration.md`](docs/agents/collaboration.md)
+- **When your branch is behind `main`: fetch, rebase onto `main`, re-run the verification, then force-push the branch** — in that order. The re-run is the half that is easy to drop and the only half that is interesting: a suite that was green before the rebase was green against a different `main`.
 - Use Conventional Commits: `feat:`, `fix:`, `docs:`, etc. Include GitHub issue reference when one exists.
 - When a commit title alone would omit useful context, include an extended commit message body.
-- Use a separate git worktree only when the user explicitly asks for one.
+- A task session works in **its own git worktree** — this is the normal arrangement, not something to ask for. The lead removes the worktree when the work has landed; every backlog review sweeps for stragglers.
 
 ## Topic Map
 
@@ -54,6 +54,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | The Overview screen: Value and Progress tiles, their reads and links | [`docs/agents/overview.md`](docs/agents/overview.md) |
 | Dialogs, escape handling, sidebar, settings placement, notifications | [`docs/agents/ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, expansion, reordering, tooltips, icons, tokens, toast | [`docs/agents/ui-patterns.md`](docs/agents/ui-patterns.md) |
+| How sessions divide work: lead and task sessions, branches, pull requests, reporting | [`docs/agents/collaboration.md`](docs/agents/collaboration.md) |
 | Backlog review workflow | [`docs/agents/backlog-review.md`](docs/agents/backlog-review.md) |
 | Releases and version bumps | [`docs/agents/release-versioning.md`](docs/agents/release-versioning.md) |
 
@@ -103,16 +104,9 @@ When a task spans more than one logical area, write an implementation plan befor
 
 ## Agent Collaboration
 
-Use specialized roles only when the task benefits from them. Small, localized tasks can be handled by one agent.
+**One session owns one issue end to end** — the decision, the migration, the code, the tests and the documentation. Nothing is handed to a second agent halfway through, and splitting an issue between agents needs a reason beyond size.
 
-Use specialized roles for larger changes that cross domain, data, authorization, or user-flow boundaries:
-
-- Architect: schema, ADRs, major patterns.
-- Designer: UI flows, dialogs, interaction design.
-- Developer: scoped implementation.
-- Tester/Reviewer: browser flows, regressions.
-
-Prefer Architect before changing Prisma schema, permissions, collection scoping, authentication, routing, or ADR-documented patterns. Prefer Tester/Reviewer after changing forms, dialogs, collection routing, authentication, permissions, or migrations.
+Who spawns whom, what a task session must report, who may answer a question and who merges: [`docs/agents/collaboration.md`](docs/agents/collaboration.md). Read it before spawning a session or reporting back to one.
 
 ## Testing Direction
 
