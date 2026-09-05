@@ -40,7 +40,10 @@ export interface AlbumPhotoBytes {
   heightPx: number;
 }
 
-interface PhotoRef {
+export interface AlbumPhotoRef {
+  /** `Photo.id` — what a printed sheet stores, so the card keeps printing the picture it printed
+   *  (#778). A picture that arrives afterwards is a divergence, not a silent substitution. */
+  id: string;
   storageBackend: string;
   storageKey: string;
   mime: string;
@@ -63,12 +66,13 @@ function rank(role: string | null, primary: string): number {
 export async function resolveAlbumPhotos(
   collectionId: string,
   stampIds: readonly string[]
-): Promise<Map<string, PhotoRef>> {
-  const out = new Map<string, PhotoRef>();
+): Promise<Map<string, AlbumPhotoRef>> {
+  const out = new Map<string, AlbumPhotoRef>();
   const ids = [...new Set(stampIds)];
   if (ids.length === 0) return out;
 
   const select = {
+    id: true,
     stampId: true,
     itemId: true,
     role: true,
@@ -86,8 +90,8 @@ export async function resolveAlbumPhotos(
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 
-  const best = new Map<string, { key: number; photo: PhotoRef }>();
-  const consider = (stampId: string, key: number, photo: PhotoRef) => {
+  const best = new Map<string, { key: number; photo: AlbumPhotoRef }>();
+  const consider = (stampId: string, key: number, photo: AlbumPhotoRef) => {
     const held = best.get(stampId);
     if (!held || key < held.key) best.set(stampId, { key, photo });
   };
@@ -135,7 +139,7 @@ export async function resolveAlbumPhotos(
  * Through `src/lib/storage/` and never the filesystem — the standing invariant, and the reason a
  * GCS-backed collection prints the same page as a filesystem-backed one.
  */
-export async function readAlbumPhotoBytes(photo: PhotoRef): Promise<AlbumPhotoBytes> {
+export async function readAlbumPhotoBytes(photo: AlbumPhotoRef): Promise<AlbumPhotoBytes> {
   const object = await getStorage(photo.storageBackend).get(
     variantKey(photo.storageKey, "full", photo.mime),
     photo.mime,
@@ -151,4 +155,37 @@ export async function readAlbumPhotoBytes(photo: PhotoRef): Promise<AlbumPhotoBy
     widthPx: photo.width,
     heightPx: photo.height,
   };
+}
+
+
+/**
+ * The pictures a **printed** sheet prints, by `Photo.id`.
+ *
+ * A printed page draws stored values and resolves nothing: the sheet in the binder was printed with
+ * a particular picture in each mount, and re-running {@link resolveAlbumPhotos} for it would quietly
+ * swap in whatever has been scanned since — which is not a reprint of that card, and would leave the
+ * divergence report with nothing to report.
+ *
+ * A picture that has since been deleted is simply absent from the result and leaves an empty mount,
+ * exactly as an unreadable one does.
+ */
+export async function getAlbumPhotosByIds(
+  ids: readonly string[]
+): Promise<Map<string, AlbumPhotoRef>> {
+  const out = new Map<string, AlbumPhotoRef>();
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return out;
+  const rows = await prisma.photo.findMany({
+    where: { id: { in: wanted } },
+    select: {
+      id: true,
+      storageBackend: true,
+      storageKey: true,
+      mime: true,
+      width: true,
+      height: true,
+    },
+  });
+  for (const row of rows) out.set(row.id, row);
+  return out;
 }

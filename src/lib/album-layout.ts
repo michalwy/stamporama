@@ -77,13 +77,14 @@ export interface AlbumTextMetrics {
 }
 
 /** The five roles a template sets type for (#766), as this module names them. */
-export type AlbumTextRole = "title" | "chapter" | "heading" | "label" | "footer";
+export type AlbumTextRole =
+  "title" | "chapter" | "heading" | "label" | "footer";
 
 /** The face and size a role is set in. One lookup, so the packing code never reaches for a
  *  differently-named pair of columns per role. */
 export function albumRoleFace(
   preset: AlbumRenderPreset,
-  role: AlbumTextRole
+  role: AlbumTextRole,
 ): { face: string; sizePt: number } {
   switch (role) {
     case "title":
@@ -115,7 +116,7 @@ export function wrapAlbumText(
   widthMm: number,
   face: string,
   sizePt: number,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): string[] {
   const words = text.split(/\s+/).filter((w) => w.length > 0);
   if (words.length === 0) return [];
@@ -156,7 +157,10 @@ export function wrapAlbumText(
  * language (#755), so `(cd.)` would have needed either a table of canned strings — the first in this
  * codebase — or a fifth template field. A number needs neither.
  */
-export function albumContinuationHeading(heading: string, part: number): string {
+export function albumContinuationHeading(
+  heading: string,
+  part: number,
+): string {
   if (part < 2 || !heading.trim()) return heading;
   return `${heading} [${part}]`;
 }
@@ -196,9 +200,15 @@ export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
   /** The rendered checklist heading, already in the album's language. Blank reserves nothing. */
   heading: string;
   boxes: readonly T[];
-  /** The printed page this block is already on (#778), or null while it is live. A block naming one
-   *  is **not planned**: the sheet exists and the plan steps over it. */
-  printedPageId?: string | null;
+  /** The printed sheets this block is already on (#778), in printing order, or null while it is
+   *  live. A block naming any is **not planned**: the sheets exist and the plan steps over them.
+   *
+   *  A **list**, because a checklist too tall for a page is split across two or three sheets and
+   *  every one of them is in the binder — index `n` is the sheet carrying `part` `n + 1`. Ordinarily
+   *  it holds one id. It is never partly filled: a block is printed across all of its sheets or
+   *  across none, since half a checklist on paper and half in the live plan is not a state anything
+   *  could draw. */
+  printedPageIds?: readonly string[] | null;
 }
 
 /** One chapter — a year group (#755). Its heading prints once, and it starts a page. */
@@ -211,7 +221,9 @@ export interface AlbumChapterSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
 }
 
 /** A box as the plan places it. `box` is the caller's own row, handed straight back. */
-export interface AlbumPlacedBox<T extends AlbumBoxSpec = AlbumBoxSpec> extends AlbumRect {
+export interface AlbumPlacedBox<
+  T extends AlbumBoxSpec = AlbumBoxSpec,
+> extends AlbumRect {
   box: T;
   /** The album entry the box belongs to, so a placement is attributable without a second lookup. */
   entryId: string;
@@ -231,6 +243,14 @@ export interface AlbumPlacedBlock {
    *  renderer's question; *which part this is* is the plan's answer, and both renderers have to
    *  agree on it. */
   part: number;
+  /** The heading **this sheet printed for this block** — the block's own on its first sheet, the one
+   *  marked `[2]`, `[3]` on the sheets after that, and blank for a block with no heading.
+   *
+   *  The string the plan measured, not the block's raw heading: those differ on a continuation, and a
+   *  surface that reads the raw one would say a card carries a heading it does not. `headings` on the
+   *  page is the *placed* text and holds nothing for a blank heading, so it cannot be indexed by
+   *  block — this is the per-block answer. */
+  heading: string;
   /** Index of the block's first box on this page, into the block's own box list. */
   firstBoxIndex: number;
   boxCount: number;
@@ -309,19 +329,26 @@ interface PageFrame {
 function pageFrame(
   preset: AlbumRenderPreset,
   albumTitle: string,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): PageFrame {
   const contentX = preset.marginLeftMm;
-  const contentW = preset.pageWidthMm - preset.marginLeftMm - preset.marginRightMm;
+  const contentW =
+    preset.pageWidthMm - preset.marginLeftMm - preset.marginRightMm;
 
   const titleFace = albumRoleFace(preset, "title");
   // A template that prints no running head gets those millimetres back for content — DA's pages
   // start at 30 mm where PL's start at 20, and the difference is exactly this band.
   const titleLines = preset.printTitle
-    ? wrapAlbumText(albumTitle, contentW, titleFace.face, titleFace.sizePt, metrics)
+    ? wrapAlbumText(
+        albumTitle,
+        contentW,
+        titleFace.face,
+        titleFace.sizePt,
+        metrics,
+      )
     : [];
   const titleHeight = roundSizeMm(
-    titleLines.length * metrics.lineHeightMm(titleFace.face, titleFace.sizePt)
+    titleLines.length * metrics.lineHeightMm(titleFace.face, titleFace.sizePt),
   );
 
   const footerFace = albumRoleFace(preset, "footer");
@@ -331,7 +358,7 @@ function pageFrame(
 
   const contentTop = roundSizeMm(preset.marginTopMm + titleHeight);
   const contentBottom = roundSizeMm(
-    preset.pageHeightMm - preset.marginBottomMm - footerHeight
+    preset.pageHeightMm - preset.marginBottomMm - footerHeight,
   );
 
   return {
@@ -432,7 +459,7 @@ function measureHeading(
   text: string,
   widthMm: number,
   preset: AlbumRenderPreset,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): MeasuredHeading {
   const face = albumRoleFace(preset, "heading");
   const lines = wrapAlbumText(text, widthMm, face.face, face.sizePt, metrics);
@@ -440,7 +467,8 @@ function measureHeading(
     lines,
     costMm: lines.length
       ? roundSizeMm(
-          lines.length * metrics.lineHeightMm(face.face, face.sizePt) + preset.headingSpaceBelowMm
+          lines.length * metrics.lineHeightMm(face.face, face.sizePt) +
+            preset.headingSpaceBelowMm,
         )
       : 0,
   };
@@ -450,12 +478,14 @@ function measureBlock<T extends AlbumBoxSpec>(
   block: AlbumBlockSpec<T>,
   widthMm: number,
   preset: AlbumRenderPreset,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): MeasuredBlock<T> {
   const heading = measureHeading(block.heading, widthMm, preset, metrics);
   // With a heading, the collector's own "space above a heading"; without one, the ordinary row gap,
   // so two unheaded blocks do not run together.
-  const leadMm = heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm;
+  const leadMm = heading.lines.length
+    ? preset.headingSpaceAboveMm
+    : preset.boxGapYMm;
 
   const labelFace = albumRoleFace(preset, "label");
   const labelLineMm = metrics.lineHeightMm(labelFace.face, labelFace.sizePt);
@@ -464,14 +494,28 @@ function measureBlock<T extends AlbumBoxSpec>(
   const rows: MeasuredRow<T>[] = [];
   for (const box of block.boxes) {
     const labelLines = labelled
-      ? wrapAlbumText(box.label, box.widthMm, labelFace.face, labelFace.sizePt, metrics)
+      ? wrapAlbumText(
+          box.label,
+          box.widthMm,
+          labelFace.face,
+          labelFace.sizePt,
+          metrics,
+        )
       : [];
     let row = rows[rows.length - 1];
-    const wouldBe = row ? roundSizeMm(row.widthMm + preset.boxGapXMm + box.widthMm) : 0;
+    const wouldBe = row
+      ? roundSizeMm(row.widthMm + preset.boxGapXMm + box.widthMm)
+      : 0;
     // A row always accepts its first box however wide: a mount wider than the page is an oversize
     // piece (#765), and it belongs on the page overhanging rather than dropped.
     if (!row || wouldBe > widthMm + FIT_EPSILON) {
-      row = { boxes: [], boxHeightMm: 0, labelHeightMm: 0, widthMm: box.widthMm, heightMm: 0 };
+      row = {
+        boxes: [],
+        boxHeightMm: 0,
+        labelHeightMm: 0,
+        widthMm: box.widthMm,
+        heightMm: 0,
+      };
       rows.push(row);
     } else {
       row.widthMm = wouldBe;
@@ -480,22 +524,28 @@ function measureBlock<T extends AlbumBoxSpec>(
     row.boxHeightMm = Math.max(row.boxHeightMm, box.heightMm);
     row.labelHeightMm = Math.max(
       row.labelHeightMm,
-      roundSizeMm(labelLines.length * labelLineMm)
+      roundSizeMm(labelLines.length * labelLineMm),
     );
   }
-  for (const row of rows) row.heightMm = roundSizeMm(row.boxHeightMm + row.labelHeightMm);
+  for (const row of rows)
+    row.heightMm = roundSizeMm(row.boxHeightMm + row.labelHeightMm);
 
   return {
     spec: block,
     heading,
     leadMm,
     rows,
-    heightMm: roundSizeMm(leadMm + heading.costMm + rowsHeightMm(rows, preset.boxGapYMm)),
+    heightMm: roundSizeMm(
+      leadMm + heading.costMm + rowsHeightMm(rows, preset.boxGapYMm),
+    ),
   };
 }
 
 /** What a run of rows costs, separated by the vertical box gap. */
-function rowsHeightMm(rows: readonly { heightMm: number }[], gapYMm: number): number {
+function rowsHeightMm(
+  rows: readonly { heightMm: number }[],
+  gapYMm: number,
+): number {
   if (rows.length === 0) return 0;
   const sum = rows.reduce((total, row) => total + row.heightMm, 0);
   return roundSizeMm(sum + gapYMm * (rows.length - 1));
@@ -506,7 +556,7 @@ function rowsThatFit(
   rows: readonly { heightMm: number }[],
   fixedMm: number,
   spaceMm: number,
-  gapYMm: number
+  gapYMm: number,
 ): number {
   let used = fixedMm;
   let count = 0;
@@ -553,7 +603,7 @@ function measureBand<T extends AlbumBoxSpec>(
   from: number,
   preset: AlbumRenderPreset,
   contentWidthMm: number,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): MeasuredBand<T> {
   const cap = Math.max(1, Math.round(preset.blocksPerBand));
   // Only an unbroken run of live blocks can share a band: a printed sheet is a page boundary.
@@ -561,28 +611,40 @@ function measureBand<T extends AlbumBoxSpec>(
   while (
     available < cap &&
     from + available < blocks.length &&
-    !blocks[from + available].printedPageId
+    !blocks[from + available].printedPageIds?.length
   ) {
     available += 1;
   }
 
   for (let n = available; n > 1; n -= 1) {
-    const widthMm = roundSizeMm((contentWidthMm - preset.blockGapMm * (n - 1)) / n);
+    const widthMm = roundSizeMm(
+      (contentWidthMm - preset.blockGapMm * (n - 1)) / n,
+    );
     const slice = blocks.slice(from, from + n);
     const fits = slice.every(
-      (block) => naturalBlockWidthMm(block, preset.boxGapXMm) <= widthMm + FIT_EPSILON
+      (block) =>
+        naturalBlockWidthMm(block, preset.boxGapXMm) <= widthMm + FIT_EPSILON,
     );
     if (!fits) continue;
-    const measured = slice.map((block) => measureBlock(block, widthMm, preset, metrics));
+    const measured = slice.map((block) =>
+      measureBlock(block, widthMm, preset, metrics),
+    );
     return {
       blocks: measured,
       blockWidthMm: widthMm,
-      heightMm: measured.reduce((tallest, block) => Math.max(tallest, block.heightMm), 0),
+      heightMm: measured.reduce(
+        (tallest, block) => Math.max(tallest, block.heightMm),
+        0,
+      ),
     };
   }
 
   const only = measureBlock(blocks[from], contentWidthMm, preset, metrics);
-  return { blocks: [only], blockWidthMm: contentWidthMm, heightMm: only.heightMm };
+  return {
+    blocks: [only],
+    blockWidthMm: contentWidthMm,
+    heightMm: only.heightMm,
+  };
 }
 
 /** A page being filled. */
@@ -612,11 +674,11 @@ interface OpenPage<T extends AlbumBoxSpec> {
  *   pairing never makes a page worse.
  * - Only a single block **taller than an entire empty page** is split, at a row boundary; every page
  *   of it after the first is marked a continuation.
- * - A block already on a **printed page** (#778) is not planned at all. The plan closes whatever page
- *   it was filling, emits the printed sheet in its place, and resumes on fresh paper — it steps over
- *   the sheet rather than routing content around it, because the sheet is in a binder and nothing the
- *   planner decides can change what is on it. An unbroken run of blocks naming one printed page is
- *   one sheet, not several.
+ * - A block already on **printed sheets** (#778) is not planned at all. The plan closes whatever page
+ *   it was filling, files those sheets in its place, and resumes on fresh paper — it steps over them
+ *   rather than routing content around them, because they are in a binder and nothing the planner
+ *   decides can change what is on them. Several blocks naming one sheet are one sheet, and a sheet
+ *   is filed **once**, where its first block puts it, however the entries have since been reordered.
  *
  * Total and deterministic: an album with no chapters plans no pages.
  */
@@ -624,10 +686,15 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   chapters: readonly AlbumChapterSpec<T>[],
   preset: AlbumRenderPreset,
   albumTitle: string,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): AlbumPlan<T> {
   const frame = pageFrame(preset, albumTitle, metrics);
   const pages: AlbumPlannedPage<T>[] = [];
+  /** Printed sheets already filed, by id — see the note where they are emitted. */
+  const filed = new Map<
+    string,
+    Extract<AlbumPlannedPage<T>, { kind: "printed" }>
+  >();
 
   /**
    * What an **ordinary empty page** holds — the figure "taller than an entire page" is measured
@@ -645,7 +712,8 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   const emit = (page: OpenPage<T>): void => {
     // A page nothing landed on is not a page. It happens when a chapter's blocks are all on printed
     // sheets: the chapter opened a page, the sheets were emitted, and nothing was left for it.
-    if (page.boxes.length === 0 && page.headings.length === 0 && !page.chapter) return;
+    if (page.boxes.length === 0 && page.headings.length === 0 && !page.chapter)
+      return;
     pages.push({
       kind: "live",
       chapterKey: page.chapterKey,
@@ -673,22 +741,35 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   };
 
   for (const chapter of chapters) {
-    // A chapter always opens a page, even one whose blocks all turn out to be printed: the heading
-    // belongs at the head of the chapter, and a chapter starting mid-page is not what the
-    // collector's own albums do.
+    // A chapter opens a page and prints its heading at the head of it — unless its **first block is
+    // already on paper** (#778), in which case the card in the binder carries that heading and the
+    // plan must not print a second one. Emitting the year on a live sheet of its own here would put
+    // a blank card headed 1938 in front of the printed card headed 1938, which is what an album with
+    // every chapter printed would otherwise be a whole run of.
+    //
+    // Not the same case as a year heading legitimately alone on a sheet (#768): there the content
+    // under it moved to the next *live* page and the heading is still the plan's to print.
+    const opensOnPaper = !!chapter.blocks[0]?.printedPageIds?.length;
     const chapterFace = albumRoleFace(preset, "chapter");
-    const chapterLines = wrapAlbumText(
-      chapter.heading,
-      frame.contentW,
-      chapterFace.face,
-      chapterFace.sizePt,
-      metrics
-    );
+    const chapterLines = opensOnPaper
+      ? []
+      : wrapAlbumText(
+          chapter.heading,
+          frame.contentW,
+          chapterFace.face,
+          chapterFace.sizePt,
+          metrics,
+        );
     const chapterTextMm = roundSizeMm(
-      chapterLines.length * metrics.lineHeightMm(chapterFace.face, chapterFace.sizePt)
+      chapterLines.length *
+        metrics.lineHeightMm(chapterFace.face, chapterFace.sizePt),
     );
     const chapterBandMm = chapterLines.length
-      ? roundSizeMm(preset.headingSpaceAboveMm + chapterTextMm + preset.headingSpaceBelowMm)
+      ? roundSizeMm(
+          preset.headingSpaceAboveMm +
+            chapterTextMm +
+            preset.headingSpaceBelowMm,
+        )
       : 0;
 
     let page = freshPage(chapter.key, chapterBandMm);
@@ -703,43 +784,54 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       };
     }
 
-    // The printed sheet the block immediately before this one belonged to. Only an unbroken run is
-    // one sheet: reordering entries after printing can separate a sheet's blocks, and merging across
-    // that gap would file live content after a sheet it comes before.
-    let runPrintedId: string | null = null;
     let i = 0;
 
     while (i < chapter.blocks.length) {
       const block = chapter.blocks[i];
 
-      if (block.printedPageId) {
-        const last = pages[pages.length - 1];
-        if (
-          runPrintedId === block.printedPageId &&
-          last &&
-          last.kind === "printed" &&
-          last.printedPageId === block.printedPageId
-        ) {
-          last.entryIds.push(block.entryId);
-          i += 1;
-          continue;
+      const printedIds = block.printedPageIds;
+      if (printedIds && printedIds.length > 0) {
+        let opened = false;
+        for (const id of printedIds) {
+          // **A sheet is filed exactly once, where its first block puts it.** Two blocks of one card
+          // are ordinarily adjacent, but entries can be reordered after printing and then they are
+          // not — and a card that appeared twice in the sequence would be listed twice, drawn twice
+          // and reprinted twice. There is no arrangement that makes a reordered printed sheet read
+          // correctly; there is one that keeps it a single sheet.
+          const held = filed.get(id);
+          if (held) {
+            if (!held.entryIds.includes(block.entryId))
+              held.entryIds.push(block.entryId);
+            continue;
+          }
+          if (!opened) {
+            emit(page);
+            opened = true;
+          }
+          const sheet: Extract<AlbumPlannedPage<T>, { kind: "printed" }> = {
+            kind: "printed",
+            printedPageId: id,
+            chapterKey: chapter.key,
+            entryIds: [block.entryId],
+          };
+          pages.push(sheet);
+          filed.set(id, sheet);
         }
-        emit(page);
-        pages.push({
-          kind: "printed",
-          printedPageId: block.printedPageId,
-          chapterKey: chapter.key,
-          entryIds: [block.entryId],
-        });
-        runPrintedId = block.printedPageId;
-        page = freshPage(chapter.key);
+        if (opened) page = freshPage(chapter.key);
         i += 1;
         continue;
       }
-      runPrintedId = null;
 
-      const band = measureBand(chapter.blocks, i, preset, page.content.widthMm, metrics);
-      const spaceMm = roundSizeMm(page.content.yMm + page.content.heightMm - page.penMm);
+      const band = measureBand(
+        chapter.blocks,
+        i,
+        preset,
+        page.content.widthMm,
+        metrics,
+      );
+      const spaceMm = roundSizeMm(
+        page.content.yMm + page.content.heightMm - page.penMm,
+      );
       const atTop = page.penMm <= page.content.yMm + FIT_EPSILON;
       // Whether a fresh page would give this band more room than the one being filled. Two ways it
       // can: the page is partly used, or it is a chapter's first page and is therefore short by the
@@ -748,7 +840,8 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       // It still terminates, and the reason is worth stating because moving to a fresh page is the
       // one branch that places nothing: a fresh page is full height with the pen at its top, so
       // `roomier` is false there, and every remaining branch places something.
-      const roomier = !atTop || page.content.heightMm + FIT_EPSILON < fullContentHeightMm;
+      const roomier =
+        !atTop || page.content.heightMm + FIT_EPSILON < fullContentHeightMm;
 
       // Fits where the pen is.
       if (band.heightMm <= spaceMm + FIT_EPSILON) {
@@ -765,7 +858,12 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       // Too tall even for an empty page. If it is a pairing, unpair it — pairing must never make a
       // page worse — and let the loop try the first block on its own.
       if (band.blocks.length > 1) {
-        const single = measureBlock(block, page.content.widthMm, preset, metrics);
+        const single = measureBlock(
+          block,
+          page.content.widthMm,
+          preset,
+          metrics,
+        );
         const solo: MeasuredBand<T> = {
           blocks: [single],
           blockWidthMm: page.content.widthMm,
@@ -781,10 +879,16 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           page = freshPage(chapter.key);
           continue;
         }
-        page = splitBlockAcrossPages(solo.blocks[0], page, preset, metrics, (finished) => {
-          emit(finished);
-          return freshPage(chapter.key);
-        });
+        page = splitBlockAcrossPages(
+          solo.blocks[0],
+          page,
+          preset,
+          metrics,
+          (finished) => {
+            emit(finished);
+            return freshPage(chapter.key);
+          },
+        );
         i += 1;
         continue;
       }
@@ -794,10 +898,16 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         continue;
       }
       // One block, taller than a whole page, and the pen is at the top of one: it splits.
-      page = splitBlockAcrossPages(band.blocks[0], page, preset, metrics, (finished) => {
-        emit(finished);
-        return freshPage(chapter.key);
-      });
+      page = splitBlockAcrossPages(
+        band.blocks[0],
+        page,
+        preset,
+        metrics,
+        (finished) => {
+          emit(finished);
+          return freshPage(chapter.key);
+        },
+      );
       i += 1;
     }
     emit(page);
@@ -825,7 +935,7 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
   // Takes the page it has just filled. It must, rather than closing over the caller's variable: the
   // caller's `page` is the one this started on, and emitting that one on every turn of the loop
   // would publish the first page N times and lose the rest.
-  nextPage: (finished: OpenPage<T>) => OpenPage<T>
+  nextPage: (finished: OpenPage<T>) => OpenPage<T>,
 ): OpenPage<T> {
   let current = page;
   let rowIndex = 0;
@@ -843,17 +953,32 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
             albumContinuationHeading(measured.spec.heading, part),
             current.content.widthMm,
             preset,
-            metrics
+            metrics,
           );
     const rest = measured.rows.slice(rowIndex);
     const fixedMm = roundSizeMm(measured.leadMm + heading.costMm);
-    const spaceMm = roundSizeMm(current.content.yMm + current.content.heightMm - current.penMm);
-    const take = Math.max(1, rowsThatFit(rest, fixedMm, spaceMm, preset.boxGapYMm));
+    const spaceMm = roundSizeMm(
+      current.content.yMm + current.content.heightMm - current.penMm,
+    );
+    const take = Math.max(
+      1,
+      rowsThatFit(rest, fixedMm, spaceMm, preset.boxGapYMm),
+    );
 
-    placeBlock(measured, heading, rowIndex, Math.min(take, rest.length), part, current, preset, metrics, {
-      xMm: current.content.xMm,
-      widthMm: current.content.widthMm,
-    });
+    placeBlock(
+      measured,
+      heading,
+      rowIndex,
+      Math.min(take, rest.length),
+      part,
+      current,
+      preset,
+      metrics,
+      {
+        xMm: current.content.xMm,
+        widthMm: current.content.widthMm,
+      },
+    );
     rowIndex += Math.max(1, Math.min(take, rest.length));
     part += 1;
     if (rowIndex >= measured.rows.length) return current;
@@ -866,7 +991,7 @@ function placeBand<T extends AlbumBoxSpec>(
   band: MeasuredBand<T>,
   page: OpenPage<T>,
   preset: AlbumRenderPreset,
-  metrics: AlbumTextMetrics
+  metrics: AlbumTextMetrics,
 ): void {
   const top = page.penMm;
   for (let i = 0; i < band.blocks.length; i += 1) {
@@ -883,9 +1008,11 @@ function placeBand<T extends AlbumBoxSpec>(
       preset,
       metrics,
       {
-        xMm: roundSizeMm(page.content.xMm + i * (band.blockWidthMm + preset.blockGapMm)),
+        xMm: roundSizeMm(
+          page.content.xMm + i * (band.blockWidthMm + preset.blockGapMm),
+        ),
         widthMm: band.blockWidthMm,
-      }
+      },
     );
   }
   page.penMm = roundSizeMm(top + band.heightMm);
@@ -903,14 +1030,15 @@ function placeBlock<T extends AlbumBoxSpec>(
   page: OpenPage<T>,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
-  at: { xMm: number; widthMm: number }
+  at: { xMm: number; widthMm: number },
 ): void {
   page.penMm = roundSizeMm(page.penMm + measured.leadMm);
 
   if (heading.lines.length) {
     const headingFace = albumRoleFace(preset, "heading");
     const textMm = roundSizeMm(
-      heading.lines.length * metrics.lineHeightMm(headingFace.face, headingFace.sizePt)
+      heading.lines.length *
+        metrics.lineHeightMm(headingFace.face, headingFace.sizePt),
     );
     page.headings.push({
       role: "heading",
@@ -937,8 +1065,12 @@ function placeBlock<T extends AlbumBoxSpec>(
     // the widest row and as the collector's own pages are set.
     let x = roundSizeMm(at.xMm + (at.widthMm - row.widthMm) / 2);
     const above = preset.labelPosition === "above";
-    const boxTop = above ? roundSizeMm(page.penMm + row.labelHeightMm) : page.penMm;
-    const labelTop = above ? page.penMm : roundSizeMm(page.penMm + row.boxHeightMm);
+    const boxTop = above
+      ? roundSizeMm(page.penMm + row.labelHeightMm)
+      : page.penMm;
+    const labelTop = above
+      ? page.penMm
+      : roundSizeMm(page.penMm + row.boxHeightMm);
 
     for (const { box, labelLines } of row.boxes) {
       page.boxes.push({
@@ -965,13 +1097,16 @@ function placeBlock<T extends AlbumBoxSpec>(
       placed += 1;
     }
     page.penMm = roundSizeMm(
-      page.penMm + row.heightMm + (i + 1 < fromRow + count ? preset.boxGapYMm : 0)
+      page.penMm +
+        row.heightMm +
+        (i + 1 < fromRow + count ? preset.boxGapYMm : 0),
     );
   }
 
   page.blocks.push({
     entryId: measured.spec.entryId,
     part,
+    heading: heading.lines.join(" "),
     firstBoxIndex,
     boxCount: placed,
   });

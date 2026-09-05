@@ -86,3 +86,49 @@ export function albumPdfFileName(
       : `sheets ${numbers[0]}-${numbers[numbers.length - 1]}`;
   return `${name} ${span}.pdf`;
 }
+
+/**
+ * A fingerprint of the **sheet composition** a listing was read from (#778).
+ *
+ * **Why marking a sheet printed needs one.** Choosing which sheets went onto paper is a *position*
+ * into the plan on screen, exactly as {@link parseAlbumPageSelection} is — but marking is a write,
+ * and a position read from a plan that has since moved would freeze the wrong card. So the screen
+ * sends back this fingerprint with the positions, and a mark against a plan that no longer matches
+ * is refused rather than applied to whatever now sits at those positions.
+ *
+ * This is what lets a position stay a position: it is meaningful only against the plan that produced
+ * it, and this is the proof that it still is. *Reprinting* a card is a different act again and takes
+ * the sheet's own identity — never a position (ADR-0046 §7).
+ *
+ * **It covers composition and nothing else** — which sheets there are, in what order, and which
+ * entry's stamps are on each — deliberately not the rendered texts, the geometry or the range. A
+ * retyped heading or a template colour changes none of *which card a position names*, and a refusal
+ * the collector cannot account for is a refusal they learn to click through, which would cost more
+ * than the case it was guarding. A printed sheet contributes its own id, since that is its identity
+ * and cannot change; a live one contributes its blocks.
+ *
+ * FNV-1a. Not a cryptographic digest: nothing here is a secret and nobody is being kept out — the
+ * failure being caught is a stale browser tab, and any hash that changes when the composition does
+ * catches it.
+ */
+export function albumPlanFingerprint(
+  pages: readonly {
+    printedPageId: string | null;
+    blocks: readonly { entryId: string; part: number; stampIds: readonly string[] }[];
+  }[]
+): string {
+  const text = pages
+    .map(
+      (page) =>
+        `${page.printedPageId ?? ""}|` +
+        page.blocks.map((b) => `${b.entryId}:${b.part}:${b.stampIds.join(",")}`).join(";")
+    )
+    .join("\n");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    // FNV prime, 32-bit, by shifts so the whole thing stays in Number's exact-integer range.
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}

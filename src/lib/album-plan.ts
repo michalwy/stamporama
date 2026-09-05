@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getAlbum, getAlbumEntries, type AlbumData, type AlbumEntryData } from "./albums";
 import { getHawidStrips, type HawidStripData } from "./hawid-stock";
-import { albumHawidMargins } from "./album-template-rules";
+import { albumHawidMargins, albumRenderPreset } from "./album-template-rules";
 import { planHawidBox, type HawidBox } from "./hawid";
 import { resolveStampSize, type StampSizeEntry } from "./stamp-size";
 import { stampSizeFields, STAMP_SIZE_SELECT } from "./stamp-attributes";
@@ -22,8 +22,13 @@ import {
   type TitleTemplateCopy,
 } from "./offer-title-template";
 import { albumTextMetrics } from "./album-metrics";
+import { languageLabel } from "./languages";
+import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pages";
+import { albumPlanFingerprint } from "./album-print-rules";
+import type { AlbumComparablePage } from "./album-divergence";
 import {
   planAlbumPages,
+  type AlbumPlan,
   type AlbumBoxSpec,
   type AlbumBlockSpec,
   type AlbumPlacedText,
@@ -46,27 +51,32 @@ import {
 // would invalidate the numbering of every card already in the binder. A range is derived from the
 // page's own contents, so an insertion disturbs the one card it lands on.
 //
-// ## A live page is a derivation
+// ## A live page is a derivation; a printed one is a record
 //
-// Nothing here is stored. A page is planned from current data every time it is asked for, and only a
-// page the collector marks **printed** becomes a stored result — which is #778's, along with the
-// divergence report and the continuation/reprint choice.
+// Nothing about a live page is stored. It is planned from current data every time it is asked for.
+// A page the collector marks **printed** is the other thing entirely — a stored result, kept whole
+// in `album_printed_page.snapshot` (#778, `album-snapshot.ts`) — and this module never resolves
+// anything for one. `AlbumBlockSpec.printedPageIds` is the seam: a block already on paper names the
+// sheets it is on, states **no boxes**, and the planner steps over it rather than routing content
+// around it.
 //
-// What belongs here is the **seam**: `AlbumBlockSpec.printedPageId` is how a block says it is already
-// on paper, and the planner steps over such a block entirely rather than routing content around it.
-// Until #778 exists it is always null.
+// Three consequences of that seam, all deliberate:
+//
+// - A stamp on a printed page is not in the live plan at all. It is on the card, not in the
+//   derivation.
+// - A stamp that *joins* a checklist whose card is in a binder appears **nowhere**. The whole block
+//   is skipped, and inventing a home for the stamp on the next live page would hide exactly the
+//   thing the collector needs to be told about. That silence is what a **continuation page**
+//   answers: `AlbumEntry.continuesPrintedPageId` set, the stamps on no sheet yet are planned as a
+//   block of their own with its own catalog range, filed after the sheets that already carry them.
+// - A sheet the collector has answered with a **reprint** is not in the printed index at all, so its
+//   content is back in the live plan and re-plans in full. Its row survives to say a superseded card
+//   is still in the binder.
 //
 // There is deliberately **nothing here that compares two plans**. A live page reshuffling harms
-// nothing — that is what makes it live — so the only comparison with a customer is the live plan
-// against the printed snapshots, and #778 owns both halves of it. ADR-0045 states the shape that
-// comparison is expected to take, so it is not re-derived from scratch.
-//
-// Two consequences of that seam are worth stating, because they are what #778 picks up. A stamp on a
-// printed page is not in the live plan at all — it is on the card, not in the derivation. And a stamp
-// that *joins* a checklist whose page is already printed has nowhere to go: the whole block is
-// skipped, so the new stamp appears nowhere rather than being quietly appended to the next live page.
-// That silence is deliberate. It is exactly the state #778's continuation page answers, and inventing
-// a home for the stamp here would hide the thing the collector needs to be told about.
+// nothing — that is what makes it live — so the only comparison with a customer is against paper.
+// That report is `album-printing.ts`, over the pure diff in `album-divergence.ts`; what this module
+// owes it is {@link albumPlanContext}, so the reference it plans is planned by the same reader.
 
 /**
  * One album text, rendered.
@@ -112,7 +122,8 @@ export interface AlbumPlanPage {
   /** The page's catalog range — `PL 303-309` — or blank for a page whose stamps carry no numbers. */
   range: string;
   layout: AlbumPlannedPage<AlbumBoxData>;
-  /** The footer text placed in the reserved band. Null when the template prints none. */
+  /** The footer text placed in the reserved band. Null when the template prints none — and always
+   *  for a printed sheet, whose footer is in its snapshot with everything else it printed. */
   footer: AlbumPlacedText | null;
 }
 
@@ -120,6 +131,9 @@ export interface AlbumPlanResult {
   album: AlbumData;
   entries: AlbumEntryData[];
   pages: AlbumPlanPage[];
+  /** What of this album is already on paper (#778) — read once here so nothing downstream reads it
+   *  a second time and gets a different answer. */
+  printed: AlbumPrintedIndex;
   /** True when the collection has described no hawid stock, which makes **every** box oversize
    *  (#765). Deliberate on the rule's part, and worth saying out loud on the screen rather than
    *  leaving a page of pocket-mounted definitives to be puzzled over. */
@@ -159,23 +173,48 @@ function primaryNumber(
 }
 
 /**
- * Plan an album's pages from current data.
+ * Everything an album needs read and resolved before any geometry happens.
+ *
+ * Split out of {@link planAlbum} because the **divergence report** (#778) has to plan a second time,
+ * over one printed card's own entries rather than the whole album, and it must reach the same
+ * answers: the same sizes, the same boxes out of the same drawer, the same texts in the same
+ * language, the same range under the same prefix. Two readers of that would be two answers to a
+ * question with one, and the answer that is wrong is the one that says a card in a binder is fine.
  *
  * The order of operations matters and is stated because each step depends on the one before it:
  * sizes resolve through the checklist (#763), the box comes from the size plus the album's own
- * clearances and the live stock (#765), the texts render in the album's language (#755), and only
- * then does the geometry happen — once, in `album-layout.ts`.
+ * clearances and the live stock (#765), and the texts render in the album's language (#755). The
+ * geometry happens after all of it, once, in `album-layout.ts`.
  */
-export async function planAlbum(ownerId: string, albumId: string): Promise<AlbumPlanResult | null> {
+export interface AlbumPlanContext {
+  album: AlbumData;
+  entries: AlbumEntryData[];
+  printed: AlbumPrintedIndex;
+  emptyStock: boolean;
+  /** The boxes of `stampIds`, sized through the whole entry's checklist. */
+  boxesFor(entry: AlbumEntryData, stampIds: readonly string[]): AlbumBoxData[];
+  /** The entry's checklist heading, rendered in the album's language. */
+  checklistHeading(entry: AlbumEntryData): string;
+  /** The chapter heading a year group of these entries prints. */
+  chapterHeading(entries: readonly AlbumEntryData[]): string;
+  /** Name each page of a laid-out plan and render its footer into the band reserved for it. */
+  finish(plan: AlbumPlan<AlbumBoxData>): AlbumPlanPage[];
+}
+
+export async function albumPlanContext(
+  ownerId: string,
+  albumId: string
+): Promise<AlbumPlanContext | null> {
   const album = await getAlbum(ownerId, albumId);
   if (!album) return null;
   const entries = await getAlbumEntries(ownerId, albumId);
 
-  const [stock, areas, issuePrefixes, toCopy] = await Promise.all([
+  const [stock, areas, issuePrefixes, toCopy, printed] = await Promise.all([
     getHawidStrips(ownerId, album.collectionId),
     getCollectionAreas(ownerId, album.collectionId),
     loadIssuePrefixMap(album.collectionId),
     makeTitleCopyMapper(ownerId, album.collectionId, album.language),
+    getAlbumPrintedIndex(albumId),
   ]);
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
 
@@ -212,8 +251,13 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
 
   const margins = albumHawidMargins(album);
 
-  /** The boxes of one entry, in the order the album prints them. */
-  const boxesFor = (entry: AlbumEntryData): AlbumBoxData[] => {
+  /** The boxes of `stampIds`, sized through the whole entry.
+   *
+   *  The list is passed rather than taken from the entry because a **continuation page** (#778)
+   *  prints only the stamps of an entry that are on no sheet yet. The size resolution still runs over
+   *  the entry's whole checklist: a neighbour's figure is evidence because the series came off one
+   *  sheet, and which of them happens to be on paper already has nothing to do with that. */
+  const boxesFor = (entry: AlbumEntryData, stampIds: readonly string[]): AlbumBoxData[] => {
     // Sizes resolve through the checklist **in catalog sort order** — that order is the press run,
     // and a neighbour's size is only evidence because `301` and `302` came off the same sheet
     // (#763). The album's own print order is a display choice and must not move the resolution.
@@ -227,7 +271,7 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
       )
       .map((e) => ({ stampId: e.id, ...stampSizeFields(e.row) }));
 
-    return entry.stampIds.flatMap((stampId) => {
+    return stampIds.flatMap((stampId) => {
       const stamp = byId.get(stampId);
       if (!stamp) return [];
       const resolved = resolveStampSize(sizeEntries, stampId);
@@ -260,74 +304,129 @@ export async function planAlbum(ownerId: string, albumId: string): Promise<Album
     });
   };
 
-  /**
-   * Chapters are **runs** of consecutive entries sharing a year, not a re-sort into year buckets.
-   *
-   * The album prints in the collector's own entry order (#767), so a reorder that interleaves years
-   * produces two chapters headed 1938 rather than silently pulling the entries back together. A
-   * layout that quietly re-sorts what the collector arranged is a layout they cannot predict, and
-   * this one is printed.
-   */
-  const chapters: { key: string; heading: string; blocks: AlbumBlockSpec<AlbumBoxData>[] }[] = [];
-  for (const entry of entries) {
-    const key = entry.year === null ? "" : String(entry.year);
-    const copies = entry.stampIds
-      .map((id) => copyById.get(id))
-      .filter((c): c is TitleTemplateCopy => !!c);
-    let chapter = chapters[chapters.length - 1];
-    if (!chapter || chapter.key !== key) {
-      chapter = {
-        key,
-        heading: renderAlbumText(album.chapterTemplate, copies, { albumName: album.name }),
-        blocks: [],
-      };
-      chapters.push(chapter);
-    }
-    chapter.blocks.push({
-      entryId: entry.id,
-      heading: renderAlbumText(album.checklistTemplate, copies, {
-        albumName: album.name,
-        checklistName: entry.checklistName,
-      }),
-      boxes: boxesFor(entry),
-      // #778 fills this in. Until it exists nothing has been printed, so nothing is skipped.
-      printedPageId: null,
-    });
-  }
-
-  const plan = planAlbumPages(chapters, album, album.name, albumTextMetrics);
-
   // The area's own prefix, for the page range. Taken from the album's area rather than per stamp: an
   // album is scoped to one area and the footer names the binder, so `PL 303-309` is the whole of it.
   const areaPrefix = albumAreaPrefix(album, maps, byId);
 
-  const pages: AlbumPlanPage[] = [];
+  const copiesOf = (entries: readonly AlbumEntryData[]): TitleTemplateCopy[] =>
+    entries
+      .flatMap((e) => e.stampIds)
+      .map((id) => copyById.get(id))
+      .filter((c): c is TitleTemplateCopy => !!c);
 
-  for (const page of plan.pages) {
-    if (page.kind === "printed") {
-      // #778 owns what a printed sheet says about itself; the plan only keeps its place.
-      pages.push({ range: "", layout: page, footer: null });
+  return {
+    album,
+    entries,
+    printed,
+    emptyStock: stock.length === 0,
+    boxesFor,
+    checklistHeading: (entry) =>
+      renderAlbumText(album.checklistTemplate, copiesOf([entry]), {
+        albumName: album.name,
+        checklistName: entry.checklistName,
+      }),
+    chapterHeading: (forEntries) =>
+      renderAlbumText(album.chapterTemplate, copiesOf(forEntries), { albumName: album.name }),
+    finish: (plan) =>
+      plan.pages.map((page) => {
+        if (page.kind === "printed") {
+          // A printed sheet is named by what was printed on it, not by what its stamps would now
+          // produce — the range is part of the stored result, like everything else on the card.
+          return {
+            range: printed.pages.get(page.printedPageId)?.range ?? "",
+            layout: page,
+            footer: null,
+          };
+        }
+        const range = pageRange(
+          page.boxes.map((b) => b.box),
+          areaPrefix
+        );
+        let footer: AlbumPlacedText | null = null;
+        if (page.footer) {
+          const text = renderAlbumText(
+            album.footerTemplate,
+            page.boxes
+              .map((b) => copyById.get(b.box.stampId))
+              .filter((c): c is TitleTemplateCopy => !!c),
+            { albumName: album.name, pageRange: range }
+          );
+          // One line by construction. The layout reserved exactly one, because a footer allowed to
+          // wrap would make the height of the page's content depend on the page's own contents — the
+          // plan would be solving for its own output. A footer too long for the sheet overhangs,
+          // visibly.
+          footer = text ? { role: "footer", lines: [text], ...page.footer } : null;
+        }
+        return { range, layout: page, footer };
+      }),
+  };
+}
+
+/**
+ * Plan an album's pages from current data.
+ *
+ * Chapters are **runs** of consecutive entries sharing a year, not a re-sort into year buckets. The
+ * album prints in the collector's own entry order (#767), so a reorder that interleaves years
+ * produces two chapters headed 1938 rather than silently pulling the entries back together: a layout
+ * that quietly re-sorts what the collector arranged is a layout they cannot predict, and this one is
+ * printed.
+ */
+export async function planAlbum(ownerId: string, albumId: string): Promise<AlbumPlanResult | null> {
+  const context = await albumPlanContext(ownerId, albumId);
+  if (!context) return null;
+  const { album, entries, printed } = context;
+
+  const chapters: { key: string; heading: string; blocks: AlbumBlockSpec<AlbumBoxData>[] }[] = [];
+  for (const entry of entries) {
+    const key = entry.year === null ? "" : String(entry.year);
+    let chapter = chapters[chapters.length - 1];
+    if (!chapter || chapter.key !== key) {
+      chapter = { key, heading: context.chapterHeading([entry]), blocks: [] };
+      chapters.push(chapter);
+    }
+    const heading = context.checklistHeading(entry);
+    const onPaper = printed.byEntry.get(entry.id);
+
+    if (!onPaper) {
+      chapter.blocks.push({
+        entryId: entry.id,
+        heading,
+        boxes: context.boxesFor(entry, entry.stampIds),
+        printedPageIds: null,
+      });
       continue;
     }
-    const range = pageRange(page.boxes.map((b) => b.box), areaPrefix);
-    const copies = page.boxes
-      .map((b) => copyById.get(b.box.stampId))
-      .filter((c): c is TitleTemplateCopy => !!c);
-    let footer: AlbumPlacedText | null = null;
-    if (page.footer) {
-      const text = renderAlbumText(album.footerTemplate, copies, {
-        albumName: album.name,
-        pageRange: range,
-      });
-      // One line by construction. The layout reserved exactly one, because a footer allowed to wrap
-      // would make the height of the page's content depend on the page's own contents — the plan
-      // would be solving for its own output. A footer too long for the sheet overhangs, visibly.
-      footer = text ? { role: "footer", lines: [text], ...page.footer } : null;
+
+    // A block already on paper **states no boxes**. What is on that card is in its snapshot, and
+    // resolving a live figure here — even one nothing draws — is exactly what a printed page must
+    // not do: the layout steps over the block whole, and a box computed for it could only ever be a
+    // second, quieter answer to a question the snapshot has already answered.
+    chapter.blocks.push({
+      entryId: entry.id,
+      heading,
+      boxes: [],
+      printedPageIds: onPaper.printedPageIds,
+    });
+
+    // The **continuation page** (#778): the stamps of this entry that are on no sheet yet, filed
+    // straight after the sheets that already carry it, with a catalog range of its own. Only when
+    // the collector has asked for one — without that the stamps appear nowhere, which is the
+    // deliberate silence ADR-0045 describes and the thing they need to be told about.
+    if (entry.continuesPrintedPageId) {
+      const waiting = entry.stampIds.filter((id) => !onPaper.stampIds.has(id));
+      if (waiting.length > 0) {
+        chapter.blocks.push({
+          entryId: entry.id,
+          heading,
+          boxes: context.boxesFor(entry, waiting),
+          printedPageIds: null,
+        });
+      }
     }
-    pages.push({ range, layout: page, footer });
   }
 
-  return { album, entries, pages, emptyStock: stock.length === 0 };
+  const pages = context.finish(planAlbumPages(chapters, album, album.name, albumTextMetrics));
+  return { album, entries, pages, printed, emptyStock: context.emptyStock };
 }
 
 /** The separator between a page range's endpoints.
@@ -411,6 +510,15 @@ export interface AlbumPlanPageView {
   chapterKey: string;
   /** Set for a sheet that has already been printed (#778); the plan steps over it. */
   printedPageId: string | null;
+  /** When it went onto paper, for a printed sheet. */
+  printedAt: string | null;
+  /** The sheets that must go onto paper **with** this one, as one-based positions including its own.
+   *
+   *  A checklist too tall for a page runs across two or three sheets, and marking half of it printed
+   *  is not a state the album can hold. Rather than refusing the gesture and leaving the collector to
+   *  work out which other sheets to pick, the listing says so and the action sends the whole run.
+   *  A single-sheet page holds just its own position. */
+  runWith: number[];
   /** The checklist headings on the sheet, in reading order. */
   headings: string[];
   /** A heading continued from the previous page — a block too tall for one column. The PDF marks
@@ -431,18 +539,70 @@ export interface AlbumPlanPageView {
 export interface AlbumPlanOverview {
   pages: AlbumPlanPageView[];
   emptyStock: boolean;
+  /** The fingerprint of the plan these sheets were listed from (#778).
+   *
+   *  Marking a sheet printed is chosen by **position** in this listing, exactly as printing one is
+   *  — but it is a write, and a position read from a plan that has since moved would freeze the
+   *  wrong card. The screen sends this back with the positions and a mark against a plan that no
+   *  longer matches is refused. *Reprinting* a card takes the card's own identity instead; it is
+   *  never a position. */
+  fingerprint: string;
 }
 
 /** {@link planAlbum}'s result, reduced to what a list of sheets needs. */
 export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
+  // Live sheets joined by a checklist that runs across them. Transitive, because a split block's
+  // last sheet can carry the next checklist too.
+  const runOf = new Map<number, number[]>();
+  {
+    const parent = new Map<number, number>();
+    const find = (i: number): number => {
+      let root = parent.get(i) ?? i;
+      while (root !== (parent.get(root) ?? root)) root = parent.get(root)!;
+      parent.set(i, root);
+      return root;
+    };
+    const firstSheetOf = new Map<string, number>();
+    result.pages.forEach((page, i) => {
+      if (page.layout.kind !== "live") return;
+      parent.set(i, find(i));
+      for (const block of page.layout.blocks) {
+        const held = firstSheetOf.get(block.entryId);
+        if (held === undefined) {
+          firstSheetOf.set(block.entryId, i);
+          continue;
+        }
+        const a = find(held);
+        const b = find(i);
+        if (a !== b) parent.set(b, a);
+      }
+    });
+    const groups = new Map<number, number[]>();
+    result.pages.forEach((page, i) => {
+      if (page.layout.kind !== "live") return;
+      const root = find(i);
+      const held = groups.get(root) ?? [];
+      held.push(i + 1);
+      groups.set(root, held);
+    });
+    result.pages.forEach((page, i) => {
+      if (page.layout.kind !== "live") return;
+      runOf.set(i, groups.get(find(i)) ?? [i + 1]);
+    });
+  }
+
   return {
     emptyStock: result.emptyStock,
-    pages: result.pages.map((page) => {
+    fingerprint: albumPlanFingerprint(albumPlanPrint(result.pages)),
+    pages: result.pages.map((page, index) => {
       if (page.layout.kind === "printed") {
+        const row = result.printed.pages.get(page.layout.printedPageId);
         return {
           range: page.range,
           chapterKey: page.layout.chapterKey,
           printedPageId: page.layout.printedPageId,
+          printedAt: row?.printedAt.toISOString() ?? null,
+          runWith: [],
           headings: [],
           continued: false,
           boxCount: 0,
@@ -457,6 +617,8 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
         range: page.range,
         chapterKey: page.layout.chapterKey,
         printedPageId: null,
+        printedAt: null,
+        runWith: runOf.get(index) ?? [index + 1],
         headings: page.layout.headings.map((h) => h.lines.join(" ")),
         continued: page.layout.blocks.some((b) => b.part > 1),
         boxCount: boxes.length,
@@ -466,5 +628,86 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
         footer: page.footer?.lines.join(" ") ?? null,
       };
     }),
+  };
+}
+
+// -- What the plan is compared and fingerprinted by ---------------------------
+
+/**
+ * The plan reduced to the facts a **position** in it depends on: the sheets in order, and which
+ * stamps of which block each one carries.
+ *
+ * Feeds {@link albumPlanFingerprint}. Deliberately no texts, no geometry and no range — none of
+ * those changes *which card a position names*. A printed sheet contributes its own id and no blocks:
+ * what is on it cannot change, and its identity is the one thing about it that could be reordered.
+ */
+export function albumPlanPrint(
+  pages: readonly AlbumPlanPage[]
+): { printedPageId: string | null; blocks: { entryId: string; part: number; stampIds: string[] }[] }[] {
+  return pages.map((page) => {
+    if (page.layout.kind === "printed") {
+      return { printedPageId: page.layout.printedPageId, blocks: [] };
+    }
+    const layout = page.layout;
+    let cursor = 0;
+    const blocks = layout.blocks.map((block) => {
+      const stampIds = layout.boxes
+        .slice(cursor, cursor + block.boxCount)
+        .map((b) => b.box.stampId);
+      cursor += block.boxCount;
+      return { entryId: block.entryId, part: block.part, stampIds };
+    });
+    return { printedPageId: null, blocks };
+  });
+}
+
+/**
+ * One live sheet as the divergence report compares it (#778): the facts a card can be wrong about,
+ * and none of the coordinates that are consequences of them.
+ *
+ * A **live** sheet, deliberately. This is the *reference* half of the comparison — what the current
+ * data would produce — and the printed half is built from a stored snapshot instead. The two shapes
+ * meeting in `album-divergence.ts` is what keeps that module free of both Prisma and the plan.
+ */
+export function albumComparablePage(
+  album: AlbumData,
+  page: AlbumPlanPage
+): AlbumComparablePage {
+  if (page.layout.kind === "printed") {
+    throw new Error("A printed sheet is compared from its snapshot, not from the plan.");
+  }
+  const layout = page.layout;
+  let cursor = 0;
+  const blocks = layout.blocks.map((block) => {
+    const boxes = layout.boxes.slice(cursor, cursor + block.boxCount).map((placed) => ({
+      stampId: placed.box.stampId,
+      widthMm: placed.box.widthMm,
+      heightMm: placed.box.heightMm,
+      label: placed.box.label,
+      stripId: placed.box.strip?.id ?? null,
+      stripHeightMm: placed.box.strip?.heightMm ?? null,
+      // Resolved by the caller, which is the only half of this that needs a second read. A page
+      // compared with every `photoId` null would report every picture as newly arrived.
+      photoId: null as string | null,
+    }));
+    cursor += block.boxCount;
+    return {
+      entryId: block.entryId,
+      part: block.part,
+      heading: block.heading,
+      boxes,
+    };
+  });
+  return {
+    range: page.range,
+    title: layout.title?.lines.join(" ") ?? "",
+    chapter: layout.chapter?.lines.join(" ") ?? "",
+    footer: page.footer?.lines.join(" ") ?? "",
+    language: languageLabel(album.language),
+    // The **preset**, not the album row. An album is `AlbumRenderPreset` plus an id, a name and a
+    // language, and comparing the row would report a renamed album as a changed template value —
+    // twice over, since its name is already in the texts it renders.
+    preset: albumRenderPreset(album),
+    blocks,
   };
 }

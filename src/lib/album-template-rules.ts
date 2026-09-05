@@ -522,6 +522,22 @@ function coerce<T extends string>(raw: string, allowed: readonly { key: T }[], f
   return allowed.some((a) => a.key === raw) ? (raw as T) : fallback;
 }
 
+/**
+ * Just the render preset out of something that carries one — an `Album` or an `AlbumTemplate` row,
+ * both of which are `AlbumRenderPreset` plus an id and a name.
+ *
+ * The key list comes from {@link DEFAULT_ALBUM_PRESET} rather than being written out again, so it
+ * cannot drift from `AlbumRenderPreset`: that duplication is the one thing this module exists to
+ * prevent. A printed sheet stores the result of this (#778), and storing the whole album row instead
+ * would make its name and its id look like template values that had "changed" whenever they did.
+ */
+export function albumRenderPreset(source: AlbumRenderPreset): AlbumRenderPreset {
+  const from = source as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULT_ALBUM_PRESET)) out[key] = from[key];
+  return out as unknown as AlbumRenderPreset;
+}
+
 export function asAlbumBorderStyle(raw: string): AlbumBorderStyle {
   return coerce(raw, ALBUM_BORDER_STYLES, DEFAULT_ALBUM_PRESET.borderStyle);
 }

@@ -315,12 +315,18 @@ export interface AlbumEntryData {
   /** True when the order above is the album's own rather than the checklist's — what the page editor
    *  (#769) says out loud about a block. */
   ordersItsOwn: boolean;
+  /** The printed sheet whose divergence the collector answered with a **continuation page** (#778),
+   *  or null. Set, the stamps of this entry that are on no sheet yet are planned as a block filed
+   *  after the sheets that already carry it; null — the ordinary state — they appear nowhere until
+   *  the collector gives them a home. */
+  continuesPrintedPageId: string | null;
 }
 
 const ENTRY_SELECT = {
   id: true,
   checklistId: true,
   sortOrder: true,
+  continuesPrintedPageId: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
   checklist: {
     select: {
@@ -368,6 +374,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     sortOrder: row.sortOrder,
     stampIds,
     ordersItsOwn,
+    continuesPrintedPageId: row.continuesPrintedPageId,
   };
 }
 

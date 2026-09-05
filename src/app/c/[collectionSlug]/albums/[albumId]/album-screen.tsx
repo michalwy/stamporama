@@ -1,20 +1,29 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
+  cancelAlbumReprintAction,
   clearAlbumEntryStampOrderAction,
+  closeAlbumContinuationAction,
+  describeAlbumUnprintAction,
   gatherAlbumEntriesAction,
+  markAlbumPagesPrintedAction,
+  openAlbumContinuationAction,
   removeAlbumEntryAction,
   reorderAlbumEntriesAction,
+  reprintAlbumPageAction,
+  unprintAlbumPageAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
 import type { AlbumData, AlbumEntryData } from "@/lib/albums";
 import type { AlbumPlanOverview } from "@/lib/album-plan";
+import type { AlbumPrintedReport } from "@/lib/album-printing";
+import type { AlbumDivergenceKind } from "@/lib/album-divergence";
 import { languageLabel } from "@/lib/languages";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
@@ -27,7 +36,18 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //
 // There is deliberately **no "what changed since last time"** here. A live page reshuffling harms
 // nothing — that is exactly what makes it live — so a live-versus-previous-live diff has no customer.
-// The only comparison anyone can act on is against paper, and that is #778's divergence report.
+// The only comparison anyone can act on is against paper, and that is the third list: **Printed
+// cards** (#778), which reports how each card in the binder differs from what the data would now
+// produce and never resolves any of it.
+//
+// Two rules the screen has to keep, because both are easy to lose in a component:
+//
+// - **Marking a sheet printed is its own gesture.** Downloading the PDF marks nothing; an album that
+//   froze itself on the first preview would be a trap.
+// - **A card may state only what stays true of the objects it describes.** The flags on a live sheet
+//   below — *N in a pocket*, *N sized from a neighbour* — are exactly the staleness-prone kind that
+//   may not be printed, and they are shown here deliberately: they are shown *about* a sheet, on
+//   screen, before it is printed, and never go onto the paper.
 
 const CARD_STYLE: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -61,11 +81,22 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** The divergence kinds, in the words the collector reads them in. Ranked in
+ *  `ALBUM_DIVERGENCE_KINDS`; a picture arriving after the fact is last there and last here. */
+const DIVERGENCE_LABEL: Record<AlbumDivergenceKind, string> = {
+  stamps: "Stamps",
+  size: "Size",
+  text: "Text",
+  template: "Template",
+  photo: "Picture",
+};
+
 interface AlbumScreenProps {
   collectionSlug: string;
   album: AlbumData;
   entries: AlbumEntryData[];
   initialOverview: AlbumPlanOverview;
+  printedReport: AlbumPrintedReport;
 }
 
 export function AlbumScreen({
@@ -73,6 +104,7 @@ export function AlbumScreen({
   album,
   entries,
   initialOverview,
+  printedReport,
 }: AlbumScreenProps) {
   const router = useRouter();
   // Local ordering for optimistic drag-and-drop, re-synced from the server on refresh — the hawid
@@ -83,6 +115,12 @@ export function AlbumScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<AlbumEntryData | null>(null);
+  const [markPrinted, setMarkPrinted] = useState<{ sheets: number[]; label: string } | null>(null);
+  const [unprint, setUnprint] = useState<{ id: string; range: string } | null>(null);
+  // Keyed by the card it describes rather than cleared when the dialog closes: what is being thrown
+  // away is what *that* card kept, and a stale account of a different one is exactly the sentence a
+  // collector would act on without reading.
+  const [unprintSays, setUnprintSays] = useState<{ id: string; says: string[] } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (syncedFrom !== entries) {
@@ -94,10 +132,90 @@ export function AlbumScreen({
   // sheet's identity — that is its catalog range, and it never becomes a number — but asking for a
   // sheet is a different act from naming one: this number is true for the listing on screen right
   // now, and it is never printed onto anything.
+  /**
+   * What can be done to one card in the binder.
+   *
+   * The two answers to a divergence are here side by side and neither is a default: **a continuation
+   * page** for one of its checklists, or **a reprint** of the whole card. Un-printing is a third
+   * thing and sits below a divider — it throws the stored sheet away rather than replacing it.
+   */
+  function printedCardActions(sheet: AlbumPrintedReport["sheets"][number]): RowAction[] {
+    return [
+      sheet.reprinting
+        ? {
+            key: "cancel",
+            label: "Keep the card in the binder",
+            icon: "revert",
+            hint: "Its checklists leave the plan again; nothing was discarded",
+            onSelect: () => run(() => cancelAlbumReprintAction(sheet.id)),
+          }
+        : {
+            key: "reprint",
+            label: "Reprint this card",
+            icon: "print",
+            hint: "Re-planned in full; this card is replaced when the new sheet is marked printed",
+            onSelect: () => run(() => reprintAlbumPageAction(sheet.id)),
+          },
+      ...sheet.entries.flatMap<RowAction>((entry) => {
+        if (entry.continuationOpen) {
+          return [
+            {
+              key: `close-${entry.entryId}`,
+              label: `Withdraw the continuation for "${entry.checklistName}"`,
+              icon: "revert",
+              hint: "Its stamps go back to appearing nowhere until you answer again",
+              onSelect: () => run(() => closeAlbumContinuationAction(entry.entryId)),
+            },
+          ];
+        }
+        if (entry.waiting === 0) return [];
+        return [
+          {
+            key: `continue-${entry.entryId}`,
+            label: `Continuation page for "${entry.checklistName}"`,
+            icon: "add",
+            hint: `${entry.waiting === 1 ? "1 stamp" : `${entry.waiting} stamps`} with nowhere to go`,
+            onSelect: () => run(() => openAlbumContinuationAction(entry.entryId, sheet.id)),
+          },
+        ];
+      }),
+      {
+        key: "unprint",
+        label: "Un-print this card",
+        icon: "delete",
+        danger: true,
+        separatorBefore: true,
+        onSelect: () => setUnprint({ id: sheet.id, range: sheet.range }),
+      },
+    ];
+  }
+
+  // The positions of every sheet not yet on paper, for the gesture that says the whole album has
+  // been printed — which is what a first print actually is.
+  const livePositions = initialOverview.pages
+    .map((page, i) => (page.printedPageId ? null : i + 1))
+    .filter((n): n is number => n !== null);
+
   function pdfHref(sheet?: number): string {
     const base = `/api/collections/${album.collectionId}/albums/${album.id}/pdf`;
     return sheet === undefined ? base : `${base}?sheets=${sheet}`;
   }
+
+  // Un-printing is loud: it says what it will throw away **before** it does. The dialog opens on the
+  // server's own account of the stored sheet rather than on a sentence written here, because what is
+  // lost is what that particular card kept.
+  useEffect(() => {
+    if (!unprint) return;
+    const id = unprint.id;
+    let open = true;
+    void describeAlbumUnprintAction(id).then((says) => {
+      if (open) setUnprintSays({ id, says });
+    });
+    return () => {
+      open = false;
+    };
+  }, [unprint]);
+  const unprintText = unprint && unprintSays?.id === unprint.id ? unprintSays.says : null;
 
   function run(action: () => Promise<AlbumActionState>) {
     setError(null);
@@ -109,6 +227,8 @@ export function AlbumScreen({
       }
       setNotice(result.status === "success" ? (result.message ?? null) : null);
       setConfirm(null);
+      setMarkPrinted(null);
+      setUnprint(null);
       router.refresh();
     });
   }
@@ -309,19 +429,41 @@ export function AlbumScreen({
         }}
       >
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Sheets</h3>
-        {initialOverview.pages.length > 0 && (
-          <Tooltip content="Compose the whole album as a PDF. Print it at 100% / Actual size — Fit to page silently shrinks the sheet and the boxes stop being true.">
-            <a
-              href={pdfHref()}
-              // The file's own name comes from the server's Content-Disposition, which knows the
-              // album; the attribute only makes this a download rather than a navigation.
-              download
-              style={DOWNLOAD_BTN}
-            >
-              ↓ Download PDF
-            </a>
-          </Tooltip>
-        )}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {livePositions.length > 0 && (
+            <Tooltip content="Say that every unprinted sheet below has gone onto paper. The album stores what was on each of them; nothing is frozen by downloading a draft.">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() =>
+                  setMarkPrinted({
+                    sheets: livePositions,
+                    label:
+                      livePositions.length === 1
+                        ? "this sheet"
+                        : `all ${livePositions.length} unprinted sheets`,
+                  })
+                }
+                style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
+              >
+                Mark printed…
+              </button>
+            </Tooltip>
+          )}
+          {initialOverview.pages.length > 0 && (
+            <Tooltip content="Compose the whole album as a PDF. Print it at 100% / Actual size — Fit to page silently shrinks the sheet and the boxes stop being true.">
+              <a
+                href={pdfHref()}
+                // The file's own name comes from the server's Content-Disposition, which knows the
+                // album; the attribute only makes this a download rather than a navigation.
+                download
+                style={DOWNLOAD_BTN}
+              >
+                ↓ Download PDF
+              </a>
+            </Tooltip>
+          )}
+        </div>
       </div>
       <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
         Planned from the entries above, fresh every time you open this screen — there is nothing to
@@ -360,22 +502,86 @@ export function AlbumScreen({
                 {page.range || "(no catalog numbers on this sheet)"}
               </span>
               {page.chapterKey && <span style={CHIP}>{page.chapterKey}</span>}
-              {page.printedPageId && <span style={CHIP}>Printed</span>}
-              {page.continued && <span style={CHIP}>Continued</span>}
-              <span style={{ ...MUTED, marginLeft: "auto" }}>
-                {page.boxCount === 1 ? "1 box" : `${page.boxCount} boxes`}
-              </span>
-              {!page.printedPageId && (
-                <Tooltip content="This sheet on its own — reprinting one card after an insertion. Print at 100% / Actual size.">
-                  <a
-                    href={pdfHref(i + 1)}
-                    download
-                    style={{ ...CHIP, textDecoration: "none", cursor: "pointer" }}
-                  >
-                    PDF
-                  </a>
+              {page.printedPageId && (
+                <Tooltip
+                  content={
+                    page.printedAt
+                      ? `Printed on ${new Date(page.printedAt).toLocaleDateString()}. This sheet is a stored result: it draws what went onto the paper, whatever has changed since.`
+                      : "A stored sheet: it draws what went onto the paper, whatever has changed since."
+                  }
+                >
+                  <span style={CHIP}>Printed</span>
                 </Tooltip>
               )}
+              {page.continued && <span style={CHIP}>Continued</span>}
+              {page.runWith.length > 1 && (
+                <Tooltip content={`One checklist runs across sheets ${page.runWith.join(", ")}; they go onto paper together.`}>
+                  <span style={CHIP}>
+                    Sheets {page.runWith[0]}–{page.runWith[page.runWith.length - 1]}
+                  </span>
+                </Tooltip>
+              )}
+              <span style={{ ...MUTED, marginLeft: "auto" }}>
+                {page.printedPageId
+                  ? "on paper"
+                  : page.boxCount === 1
+                    ? "1 box"
+                    : `${page.boxCount} boxes`}
+              </span>
+              <RowActionsMenu
+                ariaLabel="Sheet actions"
+                actions={
+                  page.printedPageId
+                    ? [
+                        {
+                          key: "pdf",
+                          label: "Download this card",
+                          icon: "print",
+                          href: pdfHref(i + 1),
+                          hint: "Drawn from what was stored when it was printed",
+                        },
+                        {
+                          key: "unprint",
+                          label: "Un-print this sheet",
+                          icon: "revert",
+                          danger: true,
+                          separatorBefore: true,
+                          onSelect: () =>
+                            setUnprint({ id: page.printedPageId!, range: page.range }),
+                        },
+                      ]
+                    : [
+                        {
+                          key: "pdf",
+                          label: "Download this sheet",
+                          icon: "print",
+                          href: pdfHref(i + 1),
+                          hint: "Print at 100% / Actual size",
+                        },
+                        {
+                          key: "printed",
+                          label:
+                            page.runWith.length > 1
+                              ? `Mark sheets ${page.runWith.join(", ")} printed…`
+                              : "Mark printed…",
+                          icon: "check",
+                          separatorBefore: true,
+                          hint:
+                            page.runWith.length > 1
+                              ? "One checklist runs across them, so they go onto paper together"
+                              : undefined,
+                          onSelect: () =>
+                            setMarkPrinted({
+                              sheets: page.runWith,
+                              label:
+                                page.runWith.length > 1
+                                  ? `sheets ${page.runWith.join(", ")}`
+                                  : page.range || "this sheet",
+                            }),
+                        },
+                      ]
+                }
+              />
             </div>
             {page.headings.length > 0 && (
               <div style={{ ...MUTED, marginTop: "0.25rem", lineHeight: 1.5 }}>
@@ -406,6 +612,139 @@ export function AlbumScreen({
           </div>
         ))}
       </div>
+
+      {/* -- Printed cards (#778) -- */}
+
+      {printedReport.sheets.length > 0 && (
+        <>
+          <h3 style={{ margin: "2rem 0 0.75rem", fontSize: "1rem", fontWeight: 600 }}>
+            Printed cards
+          </h3>
+          <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
+            What each card in the binder no longer says. A card is <strong>reported</strong>, never
+            put right on its own: it can be out of date for a good reason for years. Where you do want
+            to act there are two answers and you pick each time — a <strong>continuation page</strong>
+            {" "}carrying the new stamps with a range of its own, filed after the card it continues, or
+            a <strong>reprint</strong> of the whole card.
+          </p>
+          <div style={CARD_STYLE}>
+            {printedReport.sheets.map((sheet, i) => (
+              <div
+                key={sheet.id}
+                style={{
+                  padding: "0.75rem 1rem",
+                  background: "var(--color-bg-elevated)",
+                  borderBottom:
+                    i < printedReport.sheets.length - 1 ? "1px solid var(--color-border)" : "none",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span
+                    style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}
+                  >
+                    {sheet.range || "(no catalog numbers on this card)"}
+                  </span>
+                  <span style={MUTED}>
+                    printed {new Date(sheet.printedAt).toLocaleDateString()}
+                  </span>
+                  {sheet.reprinting && (
+                    <Tooltip content="Its checklists are back in the plan and will be re-planned in full. This stored card stands until the replacement is marked printed in its turn.">
+                      <span style={CHIP}>Awaiting reprint</span>
+                    </Tooltip>
+                  )}
+                  {sheet.divergences.length === 0 && !sheet.reprinting && (
+                    <span style={CHIP}>Still matches</span>
+                  )}
+                  <span style={{ marginLeft: "auto" }} />
+                  <RowActionsMenu
+                    ariaLabel="Printed card actions"
+                    actions={printedCardActions(sheet)}
+                  />
+                </div>
+                {sheet.entries.some((e) => e.continuationOpen) && (
+                  <div style={{ ...MUTED, marginTop: "0.375rem", lineHeight: 1.5 }}>
+                    A continuation sheet is waiting in the plan above for{" "}
+                    {sheet.entries
+                      .filter((e) => e.continuationOpen)
+                      .map((e) => e.checklistName)
+                      .join(", ")}
+                    .
+                  </div>
+                )}
+                {sheet.divergences.length > 0 && (
+                  <ul
+                    style={{
+                      listStyle: "none",
+                      margin: "0.5rem 0 0",
+                      padding: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.25rem",
+                    }}
+                  >
+                    {sheet.divergences.map((d, n) => (
+                      <li
+                        key={n}
+                        style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}
+                      >
+                        <span style={{ ...CHIP, flexShrink: 0 }}>{DIVERGENCE_LABEL[d.kind]}</span>
+                        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)", lineHeight: 1.5 }}>
+                          {d.detail}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {markPrinted && (
+        <ConfirmDialog
+          title="Mark printed"
+          message={`Say that ${markPrinted.label} went onto paper? The album stores everything that was on ${markPrinted.sheets.length === 1 ? "it" : "them"} — the texts as they read now, every box's size in millimetres, the strip each was cut from and the pictures — and draws that from then on, whatever changes in the collection. It can be undone, loudly.`}
+          actionLabel="These went onto paper"
+          isPending={isPending}
+          error={error ?? undefined}
+          onClose={() => !isPending && setMarkPrinted(null)}
+          onConfirm={() =>
+            run(() =>
+              markAlbumPagesPrintedAction(
+                album.id,
+                markPrinted.sheets,
+                initialOverview.fingerprint
+              )
+            )
+          }
+        />
+      )}
+
+      {unprint && (
+        <ConfirmDialog
+          title={`Un-print ${unprint.range || "this card"}`}
+          message={
+            unprintText ? (
+              <>
+                {unprintText.map((line, n) => (
+                  <span key={n} style={{ display: "block", marginBottom: "0.5rem" }}>
+                    {line}
+                  </span>
+                ))}
+              </>
+            ) : (
+              "Reading what this card holds…"
+            )
+          }
+          actionLabel="Discard the stored sheet"
+          variant="destructive"
+          isPending={isPending || !unprintText}
+          error={error ?? undefined}
+          onClose={() => !isPending && setUnprint(null)}
+          onConfirm={() => run(() => unprintAlbumPageAction(unprint.id))}
+        />
+      )}
 
       {confirm && (
         <ConfirmDialog

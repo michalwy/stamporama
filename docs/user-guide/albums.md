@@ -146,10 +146,83 @@ machine and on any printer, and the file you keep today prints the same in ten y
 
 ### There is nothing to refresh
 
-A sheet is not stored. It is planned from your current data every time you open the album, so a stamp
-added to a checklist, a corrected size or a renamed series shows up on its own.
+An unprinted sheet is not stored. It is planned from your current data every time you open the album,
+so a stamp added to a checklist, a corrected size or a renamed series shows up on its own.
 
 Nor does the album tell you how the plan has changed since you last looked, and that is on purpose:
 an unprinted sheet reshuffling costs nothing, so there is nothing there to act on. The comparison
-that will matter is against **paper** — a card already in a binder that no longer matches what your
-data would now produce — and that arrives with printed pages.
+that matters is against **paper**, and that is the next section.
+
+## Printed cards
+
+When a sheet has gone onto paper and into a binder, tell the album so. **Mark printed…** at the head
+of the Sheets list does the whole album; the ⋮ menu on a sheet does that one.
+
+**Downloading the PDF marks nothing.** A draft is generated to be looked at, and an album that froze
+itself the first time you previewed it would be a trap. Saying *these went onto paper* is its own
+gesture, and you make it after the printer has.
+
+If one checklist runs across two or three sheets, they go onto paper together — the row says so
+(*Sheets 4–6*) and the action marks all of them. Half a checklist on a card and half still in the
+plan is not a state the album can hold.
+
+### What a printed card keeps
+
+Everything that was on it: the headings and labels exactly as they read that day, every box's size in
+millimetres, which strip of hawid each box was cut from, the pictures, the catalog range, and the
+page settings the sheet was set under. From then on the album **draws that** — so reprinting the card
+in a year's time gives you the same sheet, whatever has changed in the collection since.
+
+That is why it is stored rather than simply flagged. A flag would stop the layout being re-planned
+while every heading and every measurement went on being looked up fresh, and a reprint would quietly
+stop matching the card it is meant to replace.
+
+A printed card never carries anything that depends on what you **own** — no completion count, no
+valuation, no owned/wanted marker. Such a figure is out of date as the sheet leaves the printer, and
+every stamp you bought afterwards would make the album report that card as needing attention. (The
+flags on an *unprinted* sheet — *in a pocket*, *sized from a neighbour* — are a different thing: they
+are shown on screen, before you print, and never go onto the paper.)
+
+### What the album tells you afterwards
+
+**Printed cards** lists every card in the binder and what no longer matches it:
+
+- **Stamps** — the checklist gained or lost a slot, or would now print in a different order;
+- **Size** — a box would now be cut to a different size, or from a different strip;
+- **Text** — a renamed series or area, a corrected translation, a change of language;
+- **Template** — the album's page settings have moved since the card was set;
+- **Picture** — a stamp has a photo the card prints an empty mount for, or the picture has changed.
+
+They are listed in that order, and **Picture** is deliberately last. It is a real difference and a
+small one, and after an afternoon at the scanner it would otherwise be the only thing you could see.
+
+The album **reports and stops there.** A card can be out of date for a perfectly good reason for
+years, and nothing here is put right on its own.
+
+### The two ways to bring a card up to date
+
+Both are on the card's ⋮ menu, and you choose per difference — there is no setting.
+
+**A continuation page.** The stamps that have joined since get a sheet of their own, with its own
+catalog range (`PL 306`), filed straight after the card they continue. Nothing renumbers, because
+nothing was ever numbered. Until you print it, the continuation sits in the Sheets list like any
+other unprinted sheet, and another stamp arriving in the meantime lands on it too.
+
+Note that until you ask for one, a stamp added to a printed checklist appears **nowhere** in the plan.
+That is deliberate: putting it on the next sheet by itself would hide the fact that the card it
+belongs on is already in a binder.
+
+**A reprint.** The card goes back into the plan and is laid out again in full, so you print a
+replacement and take the old one out of the binder. The stored card stands until you mark the new
+sheet printed in its turn, and the album keeps saying a superseded card is still filed — because
+until you have actually mounted the new one, the old one is still what is in the binder, and that
+gap is however long it takes to get to the printer. So you can change your mind (**Keep the card in
+the binder**) and nothing has been lost, and a reprint you never get round to simply stays there:
+nothing sweeps it and nothing nags.
+
+If that checklist already had a continuation sheet waiting, the reprint takes it back in — the whole
+checklist is laid out again, so there is one card to print rather than a card and a continuation.
+
+**Un-printing** is neither of those. It throws the stored card away — the sizes, the strips, the texts
+as they read then — and the album stops knowing about that sheet at all. It tells you exactly what
+will go before it goes.

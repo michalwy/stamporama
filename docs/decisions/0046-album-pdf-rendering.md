@@ -4,8 +4,8 @@
 
 Accepted, implemented in #768. It renders the plan ADR-0045 defines (#767), over the box rule of
 #765 and the template of #766. The editor canvas (#769) draws the same plan by the same rules; the
-cutting list (#770) states the sizes this prints; printed pages (#778) will draw stored values
-through the same renderer.
+cutting list (#770) states the sizes this prints; printed pages (#778, **ADR-0047**) draw stored
+values through the same renderer.
 
 ## Context
 
@@ -132,8 +132,13 @@ cheapest thing that survives is a position into the plan the collector is lookin
 
 **It is for a live plan and only for one**, and the module says so. A position means something only
 against the plan that produced it, so one must never be stored — and **#778's *reprint this card*
-must not inherit this selector.** A printed page does have an identity, and reprinting is exactly
-the operation where selecting the wrong card is expensive.
+does not inherit this selector.** A printed page does have an identity, and reprinting is exactly
+the operation where selecting the wrong card is expensive: `reprintAlbumPage` takes the row's id.
+
+*Marking* sheets printed does take positions, because that gesture really is "these ones, in the
+list I am looking at" — but it is a write, so it carries `albumPlanFingerprint` of the listing it was
+read from and is refused against a plan that has moved (ADR-0047 §3). That is this rule enforced
+rather than a second one beside it.
 
 ### 8. A continued block is marked `[2]`, `[3]` — and the *plan* writes the mark
 
@@ -195,6 +200,12 @@ forty boxes on it.
   a card — Liberation Sans Narrow has no `ẞ`.
 - #769 must draw through `albumBaselineOffsetMm` as this renderer does, or the two will place a
   heading's ink differently inside a band whose height they agree on.
-- #778 draws stored values through this same module. The seam is already clean: a page the plan
-  marks `printed` is **skipped** here rather than redrawn, because reprinting a sheet that is in a
-  binder is not a decision a renderer may make.
+- #778 now draws printed sheets through this same module, from their stored snapshots (**ADR-0047**).
+  Nothing had to be unpicked, but the file did have to be **parameterised**: every drawing function
+  takes the sheet's own `AlbumRenderPreset` rather than the album row, and `embedFaces` covers every
+  preset in the document. A card is set in the faces and margins it was printed in, which an album
+  that has since changed template no longer names anywhere — a renderer reaching for
+  `album.marginTopMm` while drawing a snapshot would produce a sheet that is neither the old card nor
+  a new one. Pictures split the same way: a live sheet asks what picture a stamp has *now*, a stored
+  one asks for the `Photo.id` its mount printed, which is what makes a picture arriving afterwards a
+  divergence to report rather than a silent substitution.

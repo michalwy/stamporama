@@ -2,7 +2,8 @@
 
 Printed album pages: what a page is, and what its boxes are cut from. The design was decided in
 **#755** — read that issue before anything here, it is the reasoning this file only summarises — and
-is being built out in #763–#771 and #777/#778. The model itself is **ADR-0045** (#767).
+is being built out in #763–#771 and #777/#778. The model itself is **ADR-0045** (#767); printed
+pages are **ADR-0047** (#778).
 
 The rule that runs through all of it: **an album is a durable, printed object, and the app's job is
 to plan it, not to render it once.** Pages get glued into. Two things paper cannot take back:
@@ -161,13 +162,11 @@ Read **ADR-0045** before changing any of this. What follows is the map, not the 
 
 - **There is no `albumTemplateId`.** The duplicated render columns are #308's rule at its strictest —
   see below.
-- **There is no live-page table**, and **no plan-to-plan comparison anywhere in #767.** `planAlbum`
-  runs on read; only #778's printed page is ever a row. A live page reshuffling harms nothing — that
-  is what makes it live — so the only comparison with a customer is the live plan against the printed
-  snapshots, and #778 owns it whole. (An early draft of #767 asked for a refresh report; the bullet
-  was rewritten, the screen has none, and a diff written here was removed rather than shipped ahead
-  of the spec that will shape it. ADR-0045 keeps the two non-obvious parts of that design — pair by
-  contents, never by name; a page that only moved is not a change.)
+- **There is no live-page table**, and **no live-versus-live comparison anywhere.** `planAlbum` runs
+  on read; only a printed page is ever a row. A live page reshuffling harms nothing — that is what
+  makes it live — so the only comparison with a customer is against paper, and that is the printed
+  section below. (An early draft of #767 asked for a refresh report; the bullet was rewritten, the
+  screen has none, and the diff was written in #778 against the ranked-kinds spec instead.)
 - **A page has no number.** `AlbumPlan` states only the order of an array. A number is a position,
   and a position moves.
 - **`Album.language` is not decoration.** The plan depends on it: headings wrap, and wrapping moves
@@ -243,13 +242,15 @@ The **separator stays the app's hyphen**, though: his own sources use an en dash
 names beat matching a dash at 8 pt. Only the shortening is the album's own. Both were asked and
 answered; neither is an oversight to fix.
 
-### The seam #778 picks up
+### The seam #778 picked up
 
-A block already on a printed sheet names it in `AlbumBlockSpec.printedPageId`, and the planner steps
-over it whole. Two consequences are deliberate: a stamp on a printed page is not in the live plan at
-all, and a stamp that **joins** a checklist whose page is printed appears **nowhere** rather than
-being appended to the next live page. That silence is the state #778's continuation page answers, and
-inventing a home for the stamp would hide the thing the collector needs to be told.
+A block already on paper names its sheets in `AlbumBlockSpec.printedPageIds` — a **list**, because a
+checklist too tall for a page is split across two or three cards and all of them are in the binder —
+and the planner steps over it whole. Two consequences are deliberate: a stamp on a printed page is
+not in the live plan at all, and a stamp that **joins** a checklist whose page is printed appears
+**nowhere** rather than being appended to the next live page. That silence is the state the
+continuation page answers, and inventing a home for the stamp would hide the thing the collector
+needs to be told.
 
 ### Two sharp edges worth knowing
 
@@ -369,6 +370,162 @@ one. That is what "a block moves whole" costs. Pulling a later checklist forward
 would break catalogue order, and splitting is the bug that was just fixed; #769 is where the
 collector closes such a gap by hand, on the pages where it actually bothers him, which is the right
 place for a judgement about paper.
+
+### The second family: re-emitting what a printed sheet already holds
+
+#778 shipped two bugs and they are **not** the measurement family above. Their shape is *the live
+plan producing again something a printed sheet already accounts for*:
+
+- a printed sheet was **filed twice** when the entries had been reordered after printing, so one card
+  in the binder was listed twice, drawn twice and reprintable twice;
+- a chapter whose first block is on paper **printed its year again** on a live sheet, so an album
+  with every chapter printed was a run of blank year-headed cards filed in front of the real ones.
+
+Both were unreachable until a sheet could actually be printed, which is why #767's suite was green
+over them, and both look correct in isolation — the sheet really is where that block is, the chapter
+really does start there.
+
+**So: anything that steps over printed sheets must ask what they already account for.** The list so
+far is position, chapter heading and stamps, and it is not obviously closed. #769's canvas and #770's
+cutting list both step over them, so both should be built against an album with **every page
+printed** and one whose entries were **reordered after printing** — the two inputs that separate
+"stepped over" from "left out".
+
+## Printed pages (#778, ADR-0047)
+
+The comparison against paper, and everything a card in a binder knows about itself. **Read ADR-0047
+before changing any of it**; what follows is the map.
+
+### A printed page is a stored result, not a flag
+
+`AlbumPrintedPage.snapshot` keeps what went onto the paper — the resolved texts already wrapped, the
+placed box geometry in millimetres, the stamps and their order, the catalog range, the strip each box
+was cut from, the `Photo.id` each mount printed, and the **render preset the sheet was set under**. A
+renderer drawing it resolves nothing.
+
+A `frozen` boolean on the recompute path is the bug this exists to prevent: it stops the *layout*
+being re-planned while every text and every dimension goes on resolving live, so renaming an issue
+would quietly change what a reprint produces. The point is that a reprint a year later is the same
+sheet.
+
+Two things fall out of that and are easy to undo:
+
+- the **strip is copied**, not referenced — the stock is the one thing read live (#765), and a drawer
+  changes;
+- `album-pdf.ts` takes an `AlbumRenderPreset` **per sheet**. A card is set in the faces and margins it
+  was printed in, which an album that has since changed template no longer names anywhere.
+
+`album_printed_page_stamp` beside it is an **index derived from that snapshot in the same
+transaction**, written from nowhere else. It exists because the planner asks *is this block on paper*
+on every read, and answering that from the snapshots would load a few hundred pages of geometry to
+look at a list of ids.
+
+It is keyed `(page, entry, stamp)`, and that reads like defensive over-keying until you know the fact
+about how he collects that it is there for: **a stamp can be on two checklists of one issue** — basic
+and specialized, perforated and imperforate (ADR-0031) — and an album gathers both from the same
+area. Two such checklists on one sheet is **two boxes on the card**, so it is two rows here, and the
+first version of this key refused to store that sheet at all.
+
+The same fact reaches past this table. **The unit on a card is a box, and a box is a slot, not a
+stamp**: anything that counts what a card needs — #770's cutting list above all — counts boxes, or it
+tells the collector to cut too few hawids and he finds out at the desk with the card in front of
+him.
+
+### The gestures, and which of them takes a position
+
+Marking printed is a **deliberate act**; generating a PDF marks nothing. It takes positions in the
+listing on screen plus `albumPlanFingerprint` of that listing, and is refused against a plan that has
+moved — which is what keeps a position meaningful only against the plan that produced it.
+**Reprinting takes the card's own id**, never a position; ADR-0046 §7 says why, and it is the trap
+this issue was warned about.
+
+The fingerprint covers **composition only** — the sheets, their order, and whose stamps are on each.
+Not the texts, the geometry or the range: none of those changes *which card a position names*, and a
+refusal the collector cannot account for is one they learn to click through.
+
+A block's sheets go onto paper **whole or not at all**. The listing carries `runWith` so the
+collector is told which sheets go together up front, and the refusal names the ones **missing from
+the selection** rather than the run alone — it is not a normalisation waiting to happen, so it has to
+hand back something actionable.
+
+### `album-printed-pages.ts` reads; `album-printing.ts` writes
+
+They are two modules on purpose. The planner reads the index, and the writer plans; one module for
+both would be a cycle between two `src/lib` modules — the kind that passes every test and throws at
+module initialisation in the real app (`docs/agents/platform.md`).
+
+### The divergence report is per card, not per album
+
+`getAlbumPrintedReport` re-plans **each printed card's own entries on fresh paper**, through the same
+`albumPlanContext` the live plan uses, and diffs that against the snapshots with the pure
+`album-divergence.ts`.
+
+The obvious reading of ADR-0045 §3 — re-plan the whole album as if nothing were printed — **cascades**:
+one stamp joining an early checklist re-flows every later sheet, and the report then names a dozen
+cards for one acquisition. That is the failure the issue exists to prevent, arriving by a different
+door. Per-card is also what the planner actually does: a printed sheet is a page boundary and the
+plan resumes on fresh paper after it, so a card's content never re-flows across its edge.
+
+Three things the reference has to get right, each of which is a measurement against the correct
+reference where the wrong one is the common case:
+
+- it **excludes stamps on other printed cards**, or a card would report its own continuation as
+  missing from it, for ever;
+- it **excludes stamps waiting on an open continuation**, because that divergence is answered;
+- it carries the **chapter heading iff the card carried one**, or every chapter's first card would
+  report its own year as newly arrived.
+
+Cards are grouped by **a block that spans sheets**, not by a checklist two sheets share — the
+difference *is* the continuation page. The signal is the snapshot's own block `part` (1, 2, 3 for a
+split; back to 1 for a continuation), not the index's `part` column, which is offset so an entry's
+cards stay in filing order.
+
+The kinds are ranked `stamps`, `size`, `text`, `template`, `photo`, and **`photo` is last on
+purpose**: a picture arriving after a card was printed is real and low-value, and one bulk scanning
+session would otherwise bury every genuine finding. The comparison is over **facts, not
+coordinates**, and the footer is suppressed when the stamps are what changed — it names the range, so
+it changes by arithmetic.
+
+### What a card may carry
+
+Only what stays true of the **objects** it describes. Nothing that is a function of what the collector
+owns — a completion count, a valuation, an owned/wanted marker — because every acquisition would then
+register as a divergence on every page carrying it.
+
+The distinction is *printed onto the card*, not *shown about the card*, and it is as easy to misapply
+in the other direction: the inherited-size and oversize flags on the album screen and in #769's editor
+have the same staleness property and are shown deliberately, because they are shown on screen before
+printing and never reach the paper.
+
+### The two answers, and the third act that is not one
+
+- **A continuation page** — `AlbumEntry.continuesPrintedPageId`. Its stamps are *derived* (the entry's
+  stamps on no sheet yet), not frozen, so a second arrival before printing lands on the continuation
+  still on screen. Cleared when the continuation is itself marked printed: the choice is per
+  divergence, not a setting.
+- **A reprint** — `reprintingAt`. The card leaves the printed index and re-plans in full; the row
+  survives to say a superseded card is still in the binder, and is discarded only when every **stamp**
+  it holds is on a card not itself awaiting one — which is what makes it work when the replacement
+  comes out as two sheets. A reprint nobody finishes stays that way **indefinitely and without
+  nagging**. An open continuation on the card **folds away with it** by construction (the entry plans
+  live and whole, and a continuation block is only emitted for an entry with something on paper); the
+  flag is left standing so that cancelling restores exactly what was there.
+- **Un-printing** is neither, and is loud: it throws the stored result away and says first what will
+  change, from the server's account of *that* card.
+
+### What building this turned up in the layout
+
+Both reachable only once a sheet could actually be printed, and both now pinned in
+`tests/unit/album-layout.test.ts`:
+
+- **A sheet is filed exactly once**, where its first block puts it. Reordering entries after printing
+  separates a sheet's blocks, and #767 then emitted that card twice — listed twice, drawn twice,
+  reprinted twice. There is no arrangement that makes a reordered printed sheet read correctly; there
+  is one that keeps it a single card.
+- **A chapter whose first block is on paper does not print its year again.** The card carries it.
+  Otherwise an album with every chapter printed is a run of blank sheets each headed with a year.
+  (Not the same case as #768's year heading legitimately alone on a sheet — there the content under it
+  moved to the next *live* page.)
 
 ## Configuration is seeded, never referenced
 

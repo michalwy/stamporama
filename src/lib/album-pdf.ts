@@ -2,17 +2,31 @@ import "server-only";
 import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import sharp from "sharp";
-import { albumRoleFace, type AlbumPlacedText, type AlbumRect } from "./album-layout";
+import {
+  albumRoleFace,
+  type AlbumPlacedBox,
+  type AlbumPlacedText,
+  type AlbumPlannedPage,
+  type AlbumRect,
+} from "./album-layout";
+import type { AlbumRenderPreset } from "./album-template-rules";
 import { albumBaselineOffsetMm, albumTextMetrics, MM_TO_PT } from "./album-metrics";
 import { loadAlbumFontBytes, AlbumFontError } from "./album-font-bytes";
 import { isAlbumFaceId, albumFaceLabel } from "./album-fonts";
-import { resolveAlbumPhotos, readAlbumPhotoBytes } from "./album-photos";
+import {
+  resolveAlbumPhotos,
+  readAlbumPhotoBytes,
+  getAlbumPhotosByIds,
+  type AlbumPhotoRef,
+} from "./album-photos";
+import { getAlbumPageSnapshots } from "./album-printed-pages";
+import type { AlbumSnapshotBox } from "./album-snapshot";
 import {
   albumPdfFileName,
   parseAlbumPageSelection,
   AlbumPageSelectionError,
 } from "./album-print-rules";
-import type { AlbumPlanPage, AlbumPlanResult, AlbumBoxData } from "./album-plan";
+import type { AlbumPlanResult } from "./album-plan";
 import type { AlbumData } from "./albums";
 
 // The album as a PDF (#768): the plan (#767) drawn at true millimetres.
@@ -59,13 +73,17 @@ import type { AlbumData } from "./albums";
 // cut to it, so a stamp cropped to fill one would be a printed lie about the object's proportions.
 // The image is scaled by the smaller of the two ratios and centred in the mount.
 //
-// ## The seam #778 picks up
+// ## A printed sheet draws stored values
 //
-// A page the plan marks `printed` is a sheet already in a binder. It is **skipped**, not redrawn:
-// reprinting it is not something this file may decide, and #778 owns the continuation-or-reprint
-// choice along with everything else a printed page knows about itself. Skipping keeps the seam
-// clean — when a printed page becomes a stored snapshot it will draw stored values, and nothing
-// here will need to be unpicked first.
+// A sheet already in a binder is not re-planned and not re-resolved. It arrives as an
+// `AlbumPageSnapshot` (#778) — the placed boxes, the wrapped texts, the strip each box was cut from,
+// the picture each mount printed, and **the render preset the sheet was set under** — and every one
+// of those is drawn as it stands. Nothing about it falls back on the album's current values.
+//
+// That is why the preset is a parameter throughout this file rather than the album row: an album
+// whose margins or faces have moved since a card was printed must still reprint *that card*, and a
+// renderer reaching for `album.marginTopMm` while drawing a snapshot would produce a sheet that is
+// neither the old card nor a new one. The album's own preset is simply the one a live page uses.
 
 /** Millimetres of white between the two rules of a `double` page border.
  *
@@ -93,6 +111,32 @@ const INK = rgb(0, 0, 0);
  *  box with no photo and a page with no catalog numbers are all ordinary pages. */
 export class AlbumPdfError extends Error {}
 
+/**
+ * One sheet the document draws, whichever kind it is.
+ *
+ * A **live** sheet is a plan under the album's current preset. A **stored** one is a snapshot under
+ * the preset it was printed with. From here down the two are the same shape and the renderer does
+ * not branch on them again — except over pictures, where a live sheet resolves whichever image the
+ * stamp has now and a stored one prints the `Photo.id` it printed.
+ */
+interface DrawableSheet {
+  preset: AlbumRenderPreset;
+  page: Extract<AlbumPlannedPage<{ widthMm: number; heightMm: number; label: string; stampId: string }>, { kind: "live" }>;
+  footer: AlbumPlacedText | null;
+  stored: boolean;
+}
+
+/** How a box finds its picture: a stored sheet by the `Photo.id` it printed, a live one by the stamp
+ *  whose current picture it would print. Null for a mount with none. */
+function imageKeyOf(
+  sheet: DrawableSheet,
+  box: AlbumPlacedBox<{ widthMm: number; heightMm: number; label: string; stampId: string }>
+): string {
+  if (!sheet.stored) return `stamp:${box.box.stampId}`;
+  const photoId = (box.box as AlbumSnapshotBox).photoId;
+  return photoId ? `photo:${photoId}` : "photo:";
+}
+
 export interface AlbumPdfResult {
   bytes: Uint8Array;
   fileName: string;
@@ -106,11 +150,17 @@ export interface AlbumPdfResult {
 /** The plan measures y downward from the top of the sheet; a PDF measures it upward from the
  *  bottom. This is the whole of the conversion, and it is here rather than in the layout so the
  *  layout keeps the one direction a page is read and laid out in. */
-function fromTop(preset: AlbumData, yMm: number): number {
+function fromTop(preset: AlbumRenderPreset, yMm: number): number {
   return (preset.pageHeightMm - yMm) * MM_TO_PT;
 }
 
-function strokeRect(page: PDFPage, preset: AlbumData, rect: AlbumRect, widthMm: number, dash?: number[]) {
+function strokeRect(
+  page: PDFPage,
+  preset: AlbumRenderPreset,
+  rect: AlbumRect,
+  widthMm: number,
+  dash?: number[]
+) {
   page.drawRectangle({
     x: rect.xMm * MM_TO_PT,
     y: fromTop(preset, rect.yMm + rect.heightMm),
@@ -134,7 +184,12 @@ type FontResolver = (faceId: string) => PDFFont;
  * {@link albumBaselineOffsetMm} puts it on — also the measurer's, so #769's canvas and this file
  * cannot place the ink differently.
  */
-function drawText(page: PDFPage, preset: AlbumData, text: AlbumPlacedText, fontFor: FontResolver) {
+function drawText(
+  page: PDFPage,
+  preset: AlbumRenderPreset,
+  text: AlbumPlacedText,
+  fontFor: FontResolver
+) {
   const { face, sizePt } = albumRoleFace(preset, text.role);
   const font = fontFor(face);
   const lineMm = albumTextMetrics.lineHeightMm(face, sizePt);
@@ -154,7 +209,7 @@ function drawText(page: PDFPage, preset: AlbumData, text: AlbumPlacedText, fontF
 
 /** The page's decorative border: nothing, one rule, or two. Inset from the sheet's edge and clear
  *  of the content by construction (see {@link DOUBLE_RULE_GAP_MM}). */
-function drawBorder(page: PDFPage, preset: AlbumData) {
+function drawBorder(page: PDFPage, preset: AlbumRenderPreset) {
   if (preset.borderStyle === "none" || preset.borderWidthMm <= 0) return;
   const rule = (insetMm: number) =>
     strokeRect(
@@ -177,7 +232,7 @@ function drawBorder(page: PDFPage, preset: AlbumData) {
 /** The outline around one mount, in the template's own style. `none` is a real choice: a hawid is
  *  visible enough on paper, and a page whose boxes are only implied by the mounts is a legitimate
  *  album (#766). */
-function drawBoxOutline(page: PDFPage, preset: AlbumData, rect: AlbumRect) {
+function drawBoxOutline(page: PDFPage, preset: AlbumRenderPreset, rect: AlbumRect) {
   if (preset.boxBorderStyle === "none" || preset.boxBorderWidthMm <= 0) return;
   const w = preset.boxBorderWidthMm;
   const dash =
@@ -196,7 +251,7 @@ function drawBoxOutline(page: PDFPage, preset: AlbumData, rect: AlbumRect) {
  * proportions. The alternative — filling the mount — would put a stamp of the wrong shape inside a
  * box the collector is about to cut a hawid to.
  */
-function drawPhoto(page: PDFPage, preset: AlbumData, rect: AlbumRect, image: PDFImage) {
+function drawPhoto(page: PDFPage, preset: AlbumRenderPreset, rect: AlbumRect, image: PDFImage) {
   const scale = Math.min(rect.widthMm / image.width, rect.heightMm / image.height);
   const widthMm = image.width * scale;
   const heightMm = image.height * scale;
@@ -251,15 +306,33 @@ export async function renderAlbumPdf(
     if (err instanceof AlbumPageSelectionError) throw new AlbumPdfError(err.message);
     throw err;
   }
-  // A printed sheet is in a binder; the plan keeps its place and this steps over it (#778).
-  const pages = indices.map((i) => plan.pages[i]).filter((p) => p.layout.kind === "live");
-  if (pages.length === 0) {
-    throw new AlbumPdfError(
-      plan.pages.length === 0
-        ? "This album has no sheets to print."
-        : "Nothing to print: every sheet chosen is already printed."
-    );
-  }
+  const selected = indices.map((i) => plan.pages[i]);
+  if (selected.length === 0) throw new AlbumPdfError("This album has no sheets to print.");
+
+  // A printed sheet is drawn from its stored snapshot, so reprinting one after a year produces the
+  // same card. Read here rather than in `planAlbum`, which lists a few hundred sheets and would
+  // otherwise load a page of geometry for every one of them to show a list.
+  const snapshots = await getAlbumPageSnapshots(
+    album.id,
+    selected.flatMap((p) => (p.layout.kind === "printed" ? [p.layout.printedPageId] : []))
+  );
+  const pages: DrawableSheet[] = selected.map((planPage) => {
+    if (planPage.layout.kind !== "printed") {
+      return {
+        preset: album,
+        page: planPage.layout,
+        footer: planPage.footer,
+        stored: false,
+      };
+    }
+    const snapshot = snapshots.get(planPage.layout.printedPageId);
+    if (!snapshot) {
+      throw new AlbumPdfError(
+        `The printed sheet ${planPage.range || "in this album"} has no stored contents and cannot be redrawn.`
+      );
+    }
+    return { preset: snapshot.preset, page: snapshot.page, footer: snapshot.footer, stored: true };
+  });
 
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
@@ -269,7 +342,9 @@ export async function renderAlbumPdf(
 
   // Every face the sheets can ask for, embedded up front — see {@link embedFaces} — so the drawing
   // below is synchronous and a page's contents cannot depend on the order anything resolved in.
-  const fonts = await embedFaces(doc, album);
+  // Every sheet's **own** preset, not the album's: a printed card is set in the faces it was printed
+  // in, which an album that has since changed template no longer names anywhere.
+  const fonts = await embedFaces(doc, pages.map((p) => p.preset));
   const fontFor: FontResolver = (faceId) => {
     const held = fonts.get(faceId);
     // Unreachable: a role's face is a template column and `embedFaces` covered all five. Stated
@@ -280,18 +355,17 @@ export async function renderAlbumPdf(
 
   const images = await loadImages(album, pages, doc);
 
-  for (const planPage of pages) {
-    const layout = planPage.layout;
-    if (layout.kind !== "live") continue;
-    const page = doc.addPage([album.pageWidthMm * MM_TO_PT, album.pageHeightMm * MM_TO_PT]);
+  for (const sheet of pages) {
+    const { preset, page: layout } = sheet;
+    const page = doc.addPage([preset.pageWidthMm * MM_TO_PT, preset.pageHeightMm * MM_TO_PT]);
 
-    drawBorder(page, album);
-    if (layout.title) drawText(page, album, layout.title, fontFor);
-    if (layout.chapter) drawText(page, album, layout.chapter, fontFor);
+    drawBorder(page, preset);
+    if (layout.title) drawText(page, preset, layout.title, fontFor);
+    if (layout.chapter) drawText(page, preset, layout.chapter, fontFor);
 
     // Continuation headings already carry their `[2]`, `[3]` — the plan measured the marked string
     // and reserved room for it (`albumContinuationHeading`), so there is nothing to append here.
-    for (const heading of layout.headings) drawText(page, album, heading, fontFor);
+    for (const heading of layout.headings) drawText(page, preset, heading, fontFor);
 
     for (const box of layout.boxes) {
       const rect: AlbumRect = {
@@ -300,15 +374,15 @@ export async function renderAlbumPdf(
         widthMm: box.widthMm,
         heightMm: box.heightMm,
       };
-      if (album.printPhotos && album.photoOpacityPercent > 0) {
-        const image = images.get(box.box.stampId);
-        if (image) drawPhoto(page, album, rect, image);
+      if (preset.printPhotos && preset.photoOpacityPercent > 0) {
+        const image = images.get(imageKeyOf(sheet, box));
+        if (image) drawPhoto(page, preset, rect, image);
       }
-      drawBoxOutline(page, album, rect);
-      if (box.label) drawText(page, album, box.label, fontFor);
+      drawBoxOutline(page, preset, rect);
+      if (box.label) drawText(page, preset, box.label, fontFor);
     }
 
-    if (planPage.footer) drawText(page, album, planPage.footer, fontFor);
+    if (sheet.footer) drawText(page, preset, sheet.footer, fontFor);
   }
 
   return {
@@ -328,51 +402,84 @@ export async function renderAlbumPdf(
  * so a page of Polish or Greek costs a few kilobytes of glyphs rather than a whole 400 kB face per
  * style used.
  */
-async function embedFaces(doc: PDFDocument, album: AlbumData): Promise<Map<string, PDFFont>> {
+async function embedFaces(
+  doc: PDFDocument,
+  presets: readonly AlbumRenderPreset[]
+): Promise<Map<string, PDFFont>> {
   const fonts = new Map<string, PDFFont>();
   const roles = ["title", "chapter", "heading", "label", "footer"] as const;
-  for (const role of roles) {
-    const { face } = albumRoleFace(album, role);
-    if (fonts.has(face)) continue;
-    if (!isAlbumFaceId(face)) {
-      throw new AlbumPdfError(
-        `This album is set in "${albumFaceLabel(face)}", which this version no longer ships. ` +
-          `Choose a face it does in the album's template before printing.`
-      );
-    }
-    try {
-      fonts.set(face, await doc.embedFont(loadAlbumFontBytes(face), { subset: true }));
-    } catch (err) {
-      if (err instanceof AlbumFontError) throw new AlbumPdfError(err.message);
-      throw err;
+  for (const preset of presets) {
+    for (const role of roles) {
+      const { face } = albumRoleFace(preset, role);
+      if (fonts.has(face)) continue;
+      if (!isAlbumFaceId(face)) {
+        throw new AlbumPdfError(
+          `This sheet is set in "${albumFaceLabel(face)}", which this version no longer ships. ` +
+            `Choose a face it does in the album's template before printing.`
+        );
+      }
+      try {
+        fonts.set(face, await doc.embedFont(loadAlbumFontBytes(face), { subset: true }));
+      } catch (err) {
+        if (err instanceof AlbumFontError) throw new AlbumPdfError(err.message);
+        throw err;
+      }
     }
   }
   return fonts;
 }
 
-/** Every picture the chosen sheets print, read once and embedded once — a stamp appearing on two
- *  sheets of one file is one embedded image, not two. */
+/**
+ * Every picture the chosen sheets print, read once and embedded once — a stamp appearing on two
+ * sheets of one file is one embedded image, not two.
+ *
+ * The two kinds of sheet ask two different questions, and the difference is the whole of what makes
+ * a printed card reproducible. A **live** sheet asks *what picture does this stamp have* and gets
+ * whatever has been scanned by now. A **stored** sheet asks for the `Photo.id` its mount printed, so
+ * a card reprinted a year later carries the picture it carried — and a picture that arrived since is
+ * a divergence to be reported (#778) rather than a silent substitution.
+ */
 async function loadImages(
   album: AlbumData,
-  pages: readonly AlbumPlanPage[],
+  sheets: readonly DrawableSheet[],
   doc: PDFDocument
 ): Promise<Map<string, PDFImage>> {
   const out = new Map<string, PDFImage>();
-  if (!album.printPhotos || album.photoOpacityPercent <= 0) return out;
 
   const stampIds: string[] = [];
-  for (const page of pages) {
-    if (page.layout.kind !== "live") continue;
-    for (const box of page.layout.boxes) stampIds.push((box.box as AlbumBoxData).stampId);
+  const photoIds: string[] = [];
+  for (const sheet of sheets) {
+    // A template that prints no pictures reads none, per sheet — a printed card set under one keeps
+    // its empty mounts however the album is set now.
+    if (!sheet.preset.printPhotos || sheet.preset.photoOpacityPercent <= 0) continue;
+    for (const box of sheet.page.boxes) {
+      if (!sheet.stored) stampIds.push(box.box.stampId);
+      else {
+        const photoId = (box.box as AlbumSnapshotBox).photoId;
+        if (photoId) photoIds.push(photoId);
+      }
+    }
   }
-  const refs = await resolveAlbumPhotos(album.collectionId, stampIds);
+  if (stampIds.length === 0 && photoIds.length === 0) return out;
+
+  const wanted = new Map<string, AlbumPhotoRef>();
+  if (stampIds.length > 0) {
+    for (const [stampId, ref] of await resolveAlbumPhotos(album.collectionId, stampIds)) {
+      wanted.set(`stamp:${stampId}`, ref);
+    }
+  }
+  if (photoIds.length > 0) {
+    for (const [photoId, ref] of await getAlbumPhotosByIds(photoIds)) {
+      wanted.set(`photo:${photoId}`, ref);
+    }
+  }
 
   // One embed per distinct stored image, so a stamp on two sheets costs one copy of the bytes.
   const byKey = new Map<string, PDFImage>();
-  for (const [stampId, ref] of refs) {
+  for (const [key, ref] of wanted) {
     const held = byKey.get(ref.storageKey);
     if (held) {
-      out.set(stampId, held);
+      out.set(key, held);
       continue;
     }
     try {
@@ -380,13 +487,13 @@ async function loadImages(
       const { bytes, png } = await toEmbeddable(read.bytes, read.mime);
       const image = png ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
       byKey.set(ref.storageKey, image);
-      out.set(stampId, image);
+      out.set(key, image);
     } catch (err) {
       // A picture that cannot be read leaves an empty mount, which is what an unowned slot looks
       // like anyway: refusing the whole sheet over one unreadable file would cost the collector the
       // other forty boxes on it. Logged rather than swallowed, though — a page quietly losing its
       // pictures is exactly the kind of failure nobody reports and nobody can reproduce.
-      console.warn(`[album-pdf] no picture for stamp ${stampId}: ${String(err)}`);
+      console.warn(`[album-pdf] no picture for ${key}: ${String(err)}`);
     }
   }
   return out;

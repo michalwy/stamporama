@@ -18,6 +18,16 @@ import {
   AlbumNameTakenError,
   type AlbumEntryData,
 } from "@/lib/albums";
+import {
+  cancelAlbumReprint,
+  closeAlbumContinuation,
+  describeAlbumUnprint,
+  markAlbumPagesPrinted,
+  openAlbumContinuation,
+  reprintAlbumPage,
+  unprintAlbumPage,
+  AlbumPrintError,
+} from "@/lib/album-printing";
 
 // Server actions for albums (#767), `actions/hawid-stock.ts`'s shape: `FormData` in, a state out,
 // every rule in the library beneath.
@@ -37,6 +47,10 @@ async function getSession() {
  *  is worth a sentence rather than a "please try again". */
 function toErrorState(err: unknown, fallback: string): AlbumActionState {
   if (err instanceof AlbumNameTakenError) return { status: "error", message: err.message };
+  // A printing refusal always says something the collector has to act on — a stale listing, half a
+  // checklist chosen, a sheet already on paper — so its own words reach them rather than a "please
+  // try again" they cannot act on.
+  if (err instanceof AlbumPrintError) return { status: "error", message: err.message };
   return { status: "error", message: fallback };
 }
 
@@ -204,3 +218,107 @@ export async function getAlbumEntriesAction(albumId: string): Promise<AlbumEntry
   return getAlbumEntries(session.user.id, albumId);
 }
 
+// -- Printed sheets (#778) ----------------------------------------------------
+
+/**
+ * Say that these sheets went onto paper.
+ *
+ * **A deliberate act, never a side effect.** Downloading the PDF marks nothing: a draft is generated
+ * to be looked at, and an album that froze itself on the first preview would be a trap.
+ *
+ * `sheets` are positions in the listing on screen and `fingerprint` is that listing's own — a
+ * position means something only against the plan that produced it, and this is a write, so a plan
+ * that has moved since is refused rather than frozen at the wrong places.
+ */
+export async function markAlbumPagesPrintedAction(
+  albumId: string,
+  sheets: number[],
+  fingerprint: string
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    const { ranges } = await markAlbumPagesPrinted(session.user.id, albumId, sheets, fingerprint);
+    return {
+      status: "success",
+      message:
+        ranges.length === 1
+          ? `${ranges[0] || "One sheet"} is now a printed card.`
+          : `${ranges.length} sheets are now printed cards.`,
+    };
+  } catch (err) {
+    return toErrorState(err, "Failed to mark the sheets printed. Please try again.");
+  }
+}
+
+/** What un-printing will throw away, said **before** it is done. */
+export async function describeAlbumUnprintAction(printedPageId: string): Promise<string[]> {
+  const session = await getSession();
+  try {
+    return await describeAlbumUnprint(session.user.id, printedPageId);
+  } catch {
+    return ["This sheet cannot be read; un-printing it will discard whatever it holds."];
+  }
+}
+
+export async function unprintAlbumPageAction(printedPageId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await unprintAlbumPage(session.user.id, printedPageId);
+    return { status: "success", message: "The stored sheet is gone; its checklists are back in the plan." };
+  } catch (err) {
+    return toErrorState(err, "Failed to un-print the sheet. Please try again.");
+  }
+}
+
+/** Answer a divergence with a reprint. Takes the card's **own identity**, never a position. */
+export async function reprintAlbumPageAction(printedPageId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await reprintAlbumPage(session.user.id, printedPageId);
+    return {
+      status: "success",
+      message:
+        "This card is back in the plan and will be re-planned in full. The stored sheet stands until " +
+        "the replacement is marked printed in its turn.",
+    };
+  } catch (err) {
+    return toErrorState(err, "Failed to start the reprint. Please try again.");
+  }
+}
+
+export async function cancelAlbumReprintAction(printedPageId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await cancelAlbumReprint(session.user.id, printedPageId);
+    return { status: "success", message: "The card in the binder stands; nothing was discarded." };
+  } catch (err) {
+    return toErrorState(err, "Failed to cancel the reprint. Please try again.");
+  }
+}
+
+/** Answer a divergence with a continuation page: the stamps on no sheet yet get one of their own. */
+export async function openAlbumContinuationAction(
+  entryId: string,
+  printedPageId: string
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await openAlbumContinuation(session.user.id, entryId, printedPageId);
+    return {
+      status: "success",
+      message: "A continuation sheet is now in the plan, filed after the card it continues.",
+    };
+  } catch (err) {
+    return toErrorState(err, "Failed to open a continuation page. Please try again.");
+  }
+}
+
+export async function closeAlbumContinuationAction(entryId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await closeAlbumContinuation(session.user.id, entryId);
+    return { status: "success", message: "The continuation is withdrawn." };
+  } catch (err) {
+    return toErrorState(err, "Failed to withdraw the continuation. Please try again.");
+  }
+}

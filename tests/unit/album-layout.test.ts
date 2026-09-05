@@ -40,8 +40,8 @@ const block = (
   entryId: string,
   heading: string,
   boxes: AlbumBoxSpec[],
-  printedPageId: string | null = null
-) => ({ entryId, heading, boxes, printedPageId });
+  ...printedPageIds: string[]
+) => ({ entryId, heading, boxes, printedPageIds: printedPageIds.length ? printedPageIds : null });
 
 const chapter = (
   key: string,
@@ -364,6 +364,7 @@ describe("planAlbumPages", () => {
     assert.deepEqual(page.blocks[0], {
       entryId: "a",
       part: 1,
+      heading: "Nothing collected yet",
       firstBoxIndex: 0,
       boxCount: 0,
     });
@@ -383,9 +384,11 @@ describe("planAlbumPages", () => {
 });
 
 describe("planAlbumPages and printed sheets", () => {
-  it("does not merge two runs of one printed sheet that live content sits between", () => {
+  it("files one printed sheet once, even when live content has been reordered between its blocks", () => {
     // A collector who reorders entries after printing can leave a printed sheet's blocks separated.
-    // Merging across the gap would file the live block after a sheet it comes before.
+    // There is no arrangement that makes that sequence read correctly — but there is one that keeps
+    // the card a single card. Filing it twice would list it twice, draw it twice and reprint it
+    // twice, which is the one outcome that is definitely wrong.
     const plan = planAlbumPages(
       [
         chapter("y", "", [
@@ -400,11 +403,73 @@ describe("planAlbumPages and printed sheets", () => {
     );
     assert.deepEqual(
       plan.pages.map((p) => p.kind),
-      ["printed", "live", "printed"]
+      ["printed", "live"]
     );
-    for (const page of plan.pages) {
-      if (page.kind === "printed") assert.equal(page.entryIds.length, 1);
-    }
+    const sheet = plan.pages[0];
+    assert.equal(sheet.kind, "printed");
+    if (sheet.kind === "printed") assert.deepEqual(sheet.entryIds, ["a", "c"]);
+  });
+
+  it("files every sheet of a checklist printed across three of them, in part order", () => {
+    // A checklist too tall for a page is on two or three cards, and the seam names them as one list
+    // — index n carrying part n + 1. A block that could name only one sheet could not be marked
+    // printed at all without lying about where half of it is.
+    const plan = planAlbumPages(
+      [
+        chapter("y", "", [
+          block("a", "", [], "printed-1", "printed-2", "printed-3"),
+          block("b", "", [box(30, 36)]),
+        ]),
+      ],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => (p.kind === "printed" ? p.printedPageId : "live")),
+      ["printed-1", "printed-2", "printed-3", "live"]
+    );
+  });
+
+  it("keeps a sheet shared by a split checklist and the block after it as one sheet", () => {
+    // The last card of a split checklist can carry the next checklist too, and both blocks then name
+    // it. That is one card, not two.
+    const plan = planAlbumPages(
+      [
+        chapter("y", "", [
+          block("a", "", [], "printed-1", "printed-2"),
+          block("b", "", [], "printed-2"),
+        ]),
+      ],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => (p.kind === "printed" ? p.printedPageId : "live")),
+      ["printed-1", "printed-2"]
+    );
+    const second = plan.pages[1];
+    if (second.kind === "printed") assert.deepEqual(second.entryIds, ["a", "b"]);
+  });
+
+  it("plans an album whose every checklist is on paper as no live pages at all", () => {
+    const plan = planAlbumPages(
+      [
+        chapter("1938", "1938", [block("a", "One", [], "printed-1")]),
+        chapter("1939", "1939", [block("b", "Two", [], "printed-2")]),
+      ],
+      preset(),
+      "Album",
+      metrics
+    );
+    // Nothing live at all. A chapter whose first block is on paper does not print its year again:
+    // the card in the binder carries it, and a blank sheet headed 1938 filed in front of the printed
+    // sheet headed 1938 is what an album with every chapter printed would otherwise be a run of.
+    assert.deepEqual(
+      plan.pages.map((p) => p.kind),
+      ["printed", "printed"]
+    );
   });
 });
 

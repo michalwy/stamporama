@@ -976,6 +976,7 @@ model Album {
   collection     Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   entries        AlbumEntry[]
+  printedPages   AlbumPrintedPage[]
 
   // An album is picked and printed by name, and two albums called "Polska" would make which binder a
   // footer names depend on which row the database handed back first — `AlbumTemplate`'s rule.
@@ -1002,15 +1003,32 @@ model AlbumEntry {
   // densely renumbered on a reorder exactly as `ChecklistStamp.sortOrder` (#764) is one level down.
   sortOrder   Int    @default(0)
 
-  album      Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  checklist  Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  stampOrder AlbumEntryStampOrder[]
+  // The printed sheet whose divergence the collector answered with a **continuation page** (#778),
+  // or null — which is the ordinary state and the one every entry starts in.
+  //
+  // Set, it says exactly one thing: *plan the stamps of this entry that are on no sheet yet, as a
+  // block filed after the sheets that already carry it.* Without it those stamps appear **nowhere**,
+  // which is the deliberate silence ADR-0045 describes — a stamp that joins a checklist whose card
+  // is in a binder has no home until the collector gives it one, and inventing one would hide the
+  // thing they need to be told.
+  //
+  // It is cleared when the continuation is itself marked printed, because *the choice is per
+  // divergence, not a setting* (#778): the next stamp to arrive asks again. `SetNull` on the sheet's
+  // deletion, so un-printing the card an open continuation answers takes the continuation with it.
+  continuesPrintedPageId String?
+
+  album             Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  checklist         Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  stampOrder        AlbumEntryStampOrder[]
+  continuesPrintedPage AlbumPrintedPage? @relation("AlbumEntryContinuation", fields: [continuesPrintedPageId], references: [id], onDelete: SetNull)
+  printedStamps     AlbumPrintedPageStamp[]
 
   // One entry per checklist: the same checklist printed twice in one album is two cards each
   // claiming to be the same complete unit.
   @@unique([albumId, checklistId])
   @@index([albumId, sortOrder])
   @@index([checklistId])
+  @@index([continuesPrintedPageId])
   @@map("album_entry")
 }
 
@@ -1036,6 +1054,94 @@ model AlbumEntryStampOrder {
   @@index([albumEntryId, sortOrder])
   @@index([stampId])
   @@map("album_entry_stamp_order")
+}
+
+// A sheet that has been printed and glued into (#778, #755).
+//
+// **A stored result, not a flag.** The row keeps what went onto the paper — the resolved texts
+// already translated into the album's language, the box geometry in millimetres, the stamps and
+// their order, the catalog range that is its identity, the strip each box was cut from, and the
+// render preset the sheet was set under — and it is immutable from that moment.
+//
+// A `frozen` boolean on the recompute path was the obvious alternative and is the bug this model
+// exists to prevent: it would stop the *layout* being re-planned while every text and every
+// dimension went on resolving from live data, so renaming an issue would quietly change what a
+// reprint produces and the reprint would no longer match the card it replaces. The whole point is
+// that a reprint a year later is the same sheet. It also means a printed page needs no fallbacks and
+// no resolution at render time: the PDF (#768) draws stored values.
+//
+// A row is created **only** by the collector saying *these sheets went onto paper*. Generating a PDF
+// creates none: a draft is generated to be looked at, and an album that froze itself on the first
+// preview would be a trap.
+model AlbumPrintedPage {
+  id      String @id @default(cuid())
+  albumId String
+
+  // The identity the sheet was printed under — `PL 303-309`. **Stored, never re-derived**: a range
+  // is a function of the sheet's contents, and the contents on the card cannot change.
+  range String
+
+  // When the collector said this went onto paper, which is also the order the sheets were filed in.
+  printedAt DateTime @default(now())
+
+  // Everything that went onto the paper, as an `AlbumPageSnapshot` (`src/lib/album-snapshot.ts`).
+  //
+  // JSON rather than a table of placements: this is a **result**, not data anyone queries. It is
+  // written once, read whole by the renderer and by the divergence report, and never joined against.
+  // What *is* queried — which stamps of this album are on paper — is the index beside it, derived
+  // from this same value in the same transaction and never written from anywhere else.
+  snapshot Json
+
+  // Set when the collector has answered a divergence with a **reprint**: the sheet's content returns
+  // to the live plan and is re-planned in full, while this row survives to say that a card matching
+  // it is still in the binder until it is replaced. The row is discarded when a newly printed sheet
+  // covers every stamp it holds — the replacement, per #778, happens when the new sheet is marked
+  // printed in its turn and not before.
+  //
+  // Not the same act as un-printing, which throws the snapshot away outright and says so first.
+  reprintingAt DateTime?
+
+  album              Album                   @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  stamps             AlbumPrintedPageStamp[]
+  // Entries whose open continuation page answers this sheet.
+  continuationOf     AlbumEntry[]            @relation("AlbumEntryContinuation")
+
+  @@index([albumId, printedAt])
+  @@map("album_printed_page")
+}
+
+// Which stamps of an album are on which printed sheet (#778) — the queryable index over
+// `AlbumPrintedPage.snapshot`.
+//
+// **Derived, never authored.** These rows are written from the same snapshot in the same
+// transaction that stores it, and nothing else writes them. They exist because the page plan asks
+// *is this block already on paper* on every read, and reading a few hundred snapshots to answer it
+// would be a page of geometry loaded to look at a list of ids.
+//
+// `part` is which sheet of a split block this is — 1 for an ordinary block, 2 and 3 for the tails of
+// a checklist too tall for a page. A block that spans sheets is printed across all of them or across
+// none: half a checklist on paper and half in the live plan is not a state the model allows.
+//
+// A row is one **slot**, so the key carries the entry as well as the stamp: a stamp can be on two
+// checklists of one issue — basic and specialized — and both can land on one sheet, which is two
+// boxes on the card.
+model AlbumPrintedPageStamp {
+  albumPrintedPageId String
+  stampId            String
+  albumEntryId       String
+  part               Int    @default(1)
+  sortOrder          Int
+
+  printedPage AlbumPrintedPage @relation(fields: [albumPrintedPageId], references: [id], onDelete: Cascade)
+  stamp       Stamp            @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  albumEntry  AlbumEntry       @relation(fields: [albumEntryId], references: [id], onDelete: Cascade)
+
+  // Keyed by the **slot**, not the stamp: a stamp can be on two checklists — basic and specialized —
+  // and both of them can be on one sheet, which is two boxes on the card and two rows here.
+  @@id([albumPrintedPageId, albumEntryId, stampId])
+  @@index([albumEntryId, part, sortOrder])
+  @@index([stampId])
+  @@map("album_printed_page_stamp")
 }
 
 model CatalogVendor {
@@ -2301,6 +2407,8 @@ model Stamp {
   checklistEntries  ChecklistStamp[]      @relation("ChecklistStampStamp")
   /** Per-album overrides of where this stamp reads within a checklist (#767). */
   albumStampOrders  AlbumEntryStampOrder[]
+  /** The album sheets already in a binder that carry this stamp (#778). */
+  albumPrintedPages AlbumPrintedPageStamp[]
   wants             Want[]                @relation("WantStamp")
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")

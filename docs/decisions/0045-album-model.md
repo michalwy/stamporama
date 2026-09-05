@@ -5,7 +5,12 @@
 Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. The design it applies is #755. The pieces it reads are #763 (stamp
 size), #764 (stamp order within a checklist), #765 (the hawid box rule) and #766 (the album
 template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor), #770
-(the cutting list) and #778 (printed pages).
+(the cutting list) and #778 (printed pages, **ADR-0047**).
+
+Decision 3's open half is now closed: #778 built the printed-page row and the divergence report, and
+**ADR-0047** records what it settled — including that the comparison is per printed card rather than
+against a whole-album shadow plan, which the sentence below about "diffing the live plan against
+printed snapshots" reads as if it meant. It cascades; ADR-0047 §5 says why and what replaced it.
 
 ## Context
 
@@ -211,11 +216,14 @@ is a block the pairing has made worse.
 
 - An album is operational data and gets its own nav screen under **Collection**; the template stays in
   **Settings**, beside the hawid stock.
-- #778 can introduce printed pages without changing anything here: `AlbumBlockSpec.printedPageId` is
-  the channel, and the planner already steps over a sheet that names one. A stamp that joins a
-  checklist whose page is printed appears
-  **nowhere** in the plan rather than being appended to the next live page — a deliberate silence,
-  and exactly the state #778's continuation page answers.
+- #778 introduced printed pages through that channel and changed one thing about it:
+  `AlbumBlockSpec.printedPageId` became `printedPageIds`, an ordered **list**, because a checklist
+  too tall for a page is split across two or three sheets and all of them are in the binder
+  (ADR-0047 §4). The deliberate silence stands and is what the continuation page answers — a stamp
+  that joins a checklist whose card is printed appears **nowhere** until the collector gives it a
+  home. Two corrections came with it, both reachable only once a sheet could actually be printed: a
+  sheet is filed **once** however the entries have since been reordered, and a chapter whose first
+  block is on paper does not print its year a second time.
 - #768 replaced `album-metrics.ts` in place, and — re-reading this geometry under a renderer's
   premise, which is what the issue asked for — corrected one thing in `album-layout.ts`: *taller than
   an entire page* was measured against the page being filled rather than against an ordinary empty
