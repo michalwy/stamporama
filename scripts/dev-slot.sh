@@ -29,7 +29,9 @@ set -euo pipefail
 
 # Slot 0 is the documented default for each of these; a slot shifts all of them by the same
 # stride, so one number is enough to describe a worktree's whole set of ports.
-BASE_APP_PORT=3000  # docker-compose.yml / docker-compose.dev.yml, the app container
+BASE_HTTP_PORT=3000 # docker-compose.yml / docker-compose.dev.yml, the app container
+                    # (STAMPORAMA_HTTP_PORT — the name docker-compose.prod.yml and the
+                    #  installer already use for the host port the app is published on)
 BASE_DEV_PORT=3002  # a bare `next dev` started for verification
 BASE_E2E_DB_PORT=5433 # docker-compose.e2e.yml, the integration-test database
 PORT_STRIDE=10
@@ -161,7 +163,7 @@ cmd_env() {
   slot="$(resolve_slot)"
   echo "export STAMPORAMA_SLOT=$slot"
   echo "export STAMPORAMA_SLOT_SUFFIX=$(suffix "$slot")"
-  echo "export STAMPORAMA_APP_PORT=$(port "$BASE_APP_PORT" "$slot")"
+  echo "export STAMPORAMA_HTTP_PORT=$(port "$BASE_HTTP_PORT" "$slot")"
   echo "export STAMPORAMA_DEV_PORT=$(port "$BASE_DEV_PORT" "$slot")"
   echo "export STAMPORAMA_E2E_DB_PORT=$(port "$BASE_E2E_DB_PORT" "$slot")"
   echo "export STAMPORAMA_E2E_DATABASE_URL=postgresql://stamporama:stamporama@localhost:$(port "$BASE_E2E_DB_PORT" "$slot")/stamporama_test"
@@ -184,7 +186,7 @@ cmd_show() {
     [ "$path" = "$this" ] && mark=" <- this worktree"
     printf '%-5s %-9s %-9s %-9s %-22s %s\n' \
       "$slot" \
-      "$(port "$BASE_APP_PORT" "$slot")" \
+      "$(port "$BASE_HTTP_PORT" "$slot")" \
       "$(port "$BASE_DEV_PORT" "$slot")" \
       "$(port "$BASE_E2E_DB_PORT" "$slot")" \
       "stamporama$(suffix "$slot")" \
