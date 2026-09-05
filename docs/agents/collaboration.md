@@ -194,11 +194,19 @@ that costs one extra CI run, which is cheap next to the alternative.
 Two limits are being worked out in **#781** rather than here, and that issue's files carry the
 detail — do not restate it in this file:
 
-- each worktree needs its own Compose project, ports and test database, or two sessions running
-  `pnpm test:integration` truncate each other's tables;
-- **one schema-touching session at a time**, because the expand/contract ordering
-  `pnpm check:migrations` enforces can only be checked once both migrations are in one tree — and by
-  the time it fails, the fix is a third migration rather than an edit.
+- each worktree needs its own Compose project, ports and test database. `pnpm test:integration`
+  brings up `docker-compose.e2e.yml`, which binds host port **5433**, so the second session's
+  `docker compose up -d --wait` fails outright with `port is already allocated` — loud, and easy to
+  diagnose. The quiet failure is **schema drift**: the suite then runs `prisma migrate deploy`
+  against that one database, so a session whose branch adds a migration changes the schema
+  underneath the other session, whose generated client no longer matches it. The rows themselves are
+  safe either way — the suite isolates by unique ids per test, and nothing in it wipes tables.
+- **one schema-touching session at a time — and here that rule is the only thing there is.**
+  Migrations are hand-written, timestamped directories under `prisma/migrations/`, and **nothing
+  checks their ordering**: no script, no CI job. Two written in parallel each look correct on their
+  own branch and can only be reconciled once both are in one tree, by which point the fix is a
+  *third* migration rather than an edit, because a written migration is never edited (AGENTS.md,
+  `platform.md`). Anything without a migration parallelises freely.
 
 ## No browser verification — a deliberate departure
 
