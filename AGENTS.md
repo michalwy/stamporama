@@ -24,7 +24,7 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 - Use GitHub Issues as the shared backlog. Use Conventional Commits for issue titles. Always assign labels (`backlog` + type + priority when known). Do not maintain a local `TODO.md`.
 - If GitHub connector cannot create issues, use `gh` CLI as fallback.
 - All GitHub content must be in English.
-- Do not create git commits unless the user explicitly asks. Do not push unless explicitly asked.
+- Do not create git commits unless the user explicitly asks. **A commit you were asked to make is pushed in the same breath**, unless the user says otherwise — several sessions share one working tree, so "committed but not pushed" is not a state that survives: the next session to push carries your commit up with theirs, and the two then share one CI run instead of getting their own. Holding a commit back buys no isolation here and costs the ability to tell which change broke a build.
 - Solo project: commit directly to `main` by default. Create feature branches only when the user asks for a PR.
 - When pushing to `main`, try `git push origin main` first. If rejected, fetch, rebase, rerun verification, push again.
 - Use Conventional Commits: `feat:`, `fix:`, `docs:`, etc. Include GitHub issue reference when one exists.
