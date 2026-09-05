@@ -612,6 +612,12 @@ export function InventoryItemRow({
       <RowQuickActions
         actions={pickRowActions(rowActions, [
           "detail-page",
+          // The lot builder's two acts (#760), promoted for the reason the offer verbs are: pinning
+          // a copy and rejecting it is one decision made per row, ninety times in a sitting. They
+          // sit high in the vocabulary because on the screen that offers them they *are* the row's
+          // work; every other screen offers neither and `pickRowActions` skips them in silence.
+          "pin",
+          "reject",
           "edit",
           "edit-stamp",
           "add-to-offer",

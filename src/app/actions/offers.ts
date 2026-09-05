@@ -51,7 +51,18 @@ import {
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
-import { parseLotBuilderRequest } from "@/lib/lot-builder-criteria";
+import {
+  parseLotBuilderRequest,
+  toLotRecipe,
+  type LotRecipe,
+} from "@/lib/lot-builder-criteria";
+import {
+  createLotBuilderPreset,
+  deleteLotBuilderPreset,
+  getLotBuilderPresets,
+  updateLotBuilderPreset,
+  type LotBuilderPresetData,
+} from "@/lib/lot-builder-presets";
 import {
   isOfferState,
   isCreatableOfferState,
@@ -212,6 +223,97 @@ export async function commitLotBuilderAction(
     };
   } catch (e) {
     return fail(e, "Failed to create the lot. Please try again.");
+  }
+}
+
+// ── Lot builder presets (#773) ──────────────────────────────────────────────────────────────────
+
+export type LotPresetActionState =
+  | { status: "success"; presetId: string }
+  | { status: "error"; message: string };
+
+/**
+ * A preset is saved from the **query string on screen**, exactly as the commit is (#717): the
+ * address is the criteria, so parsing it here is what guarantees a preset holds what the collector
+ * was actually looking at rather than a second assembly of the same eleven fields.
+ *
+ * `toLotRecipe` then keeps only the recipe half — the platform, the area and its subtree scope are
+ * dropped here, once, rather than by each caller remembering to.
+ */
+function recipeFromSearch(search: string): LotRecipe {
+  return toLotRecipe(parseLotBuilderRequest(new URLSearchParams(search)).criteria);
+}
+
+/** A name a preset can be found by. Trimmed, because a trailing space makes two presets that look
+ *  identical in the select, and the unique index would let both exist. */
+function readPresetName(raw: string): { ok: true; name: string } | { ok: false; message: string } {
+  const name = raw.trim();
+  if (!name) return { ok: false, message: "Give the preset a name." };
+  if (name.length > 80) return { ok: false, message: "That name is too long (80 characters max)." };
+  return { ok: true, name };
+}
+
+/** The collection's presets, for the builder's select. */
+export async function getLotBuilderPresetsAction(
+  collectionId: string
+): Promise<LotBuilderPresetData[]> {
+  const session = await getSession();
+  return getLotBuilderPresets(session.user.id, collectionId);
+}
+
+export async function createLotBuilderPresetAction(
+  collectionId: string,
+  name: string,
+  search: string
+): Promise<LotPresetActionState> {
+  const session = await getSession();
+  const parsed = readPresetName(name);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const preset = await createLotBuilderPreset(
+      session.user.id,
+      collectionId,
+      parsed.name,
+      recipeFromSearch(search)
+    );
+    return { status: "success", presetId: preset.id };
+  } catch (e) {
+    // The unique index is what refuses a second "Germany job lots", and the collector meant to
+    // overwrite rather than to be told about an index.
+    return fail(e, `A preset called "${parsed.name}" already exists. Pick another name, or update that one.`);
+  }
+}
+
+export async function updateLotBuilderPresetAction(
+  presetId: string,
+  name: string,
+  search: string
+): Promise<LotPresetActionState> {
+  const session = await getSession();
+  const parsed = readPresetName(name);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const preset = await updateLotBuilderPreset(
+      session.user.id,
+      presetId,
+      parsed.name,
+      recipeFromSearch(search)
+    );
+    return { status: "success", presetId: preset.id };
+  } catch (e) {
+    return fail(e, "Failed to update the preset. Please try again.");
+  }
+}
+
+export async function deleteLotBuilderPresetAction(
+  presetId: string
+): Promise<{ status: "success" } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    await deleteLotBuilderPreset(session.user.id, presetId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to delete the preset. Please try again.");
   }
 }
 

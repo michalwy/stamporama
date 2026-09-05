@@ -142,6 +142,7 @@ model Collection {
   acceptanceProfiles AcceptanceProfile[]
   collageTemplates CollageTemplate[]
   refCardTemplates RefCardTemplate[]
+  lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
   locations       Location[]
@@ -600,6 +601,74 @@ model CollageTemplate {
 
   @@index([collectionId])
   @@map("collage_template")
+}
+
+/// A saved set of bulk-lot builder criteria (#773) — *how* a lot of this kind is picked, named so it
+/// need not be retyped. The builder (#760) carries eleven controls, and stating them is most of the
+/// work of building a lot; a collector who builds the same kind of lot repeatedly retypes all eleven
+/// and mistypes some.
+///
+/// **The platform and the area are deliberately absent**, and so is the area's subtree scope. The
+/// area is precisely what varies between two lots of one kind — one recipe is meant to be run over
+/// Germany and then over Poland — so carrying it would need one preset per area; the platform is a
+/// select the collector must state anyway before the screen answers at all. The seed, the pins and
+/// the rejections are not criteria but one lot's own closing-in, and a preset holding them would
+/// propose the same hundred copies for ever. The vocabulary is `LotRecipe` in
+/// `lot-builder-criteria.ts`, and these columns are that type spelled out.
+///
+/// Read **live** and never copied onto anything, like {@link RefCardTemplate} and unlike
+/// {@link CollageTemplate}'s seeding: what a preset produces is a query string, and the offer that
+/// query string commits records its own copies. So there is no in-use check and no snapshot — an
+/// edited preset simply builds the next lot differently, which is what editing it means.
+model LotBuilderPreset {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+
+  // Inclusive bounds on the stamp's issued year. Either alone; a stamp with no year is outside
+  // every span.
+  yearFrom Int?
+  yearTo   Int?
+
+  // Allowed conditions and physical formats — an OR each, **empty meaning every one of them**,
+  // which is why they are plain id arrays rather than join tables: the criteria they restore are a
+  // list of ids in a query string, nothing in the builder joins on them, and a join table would
+  // turn "no opinion" into a row count. `"single"` is a value like any other in `formatIds` and
+  // matches the copies with no format (ADR-0020). Ids of rows since deleted are dropped where the
+  // criteria are read, exactly as a stale link's are.
+  conditionIds String[]
+  formatIds    String[]
+
+  // The per-copy catalogue-value ceiling. Decimal rather than Int: a ceiling of 2.50 is an ordinary
+  // thing to want, and the criterion is compared against a computed catalogue value.
+  maxCatalogValue Decimal? @db.Decimal(12, 2)
+
+  // The two targets, each a range with both bounds optional and either standing alone (#758). An
+  // axis with neither bound is "no opinion" and stays null on both sides.
+  countMin Int?
+  countMax Int?
+  valueMin Decimal? @db.Decimal(12, 2)
+  valueMax Decimal? @db.Decimal(12, 2)
+
+  // `preferComplete` | `preferSingles` | `neutral`, and `preferDuplicates` | `neutral` (#758).
+  // Stored as the words the criteria use, defaulting to the neutral of each — a preset written
+  // before either existed says nothing about it, which is what neutral means.
+  series     String @default("neutral")
+  duplicates String @default("neutral")
+
+  // How many copies of one stamp — rolled up through variants — the lot may hold. Null = no cap.
+  maxPerStamp Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // Unique per collection: the select names a preset by its name, and two rows called "Germany job
+  // lots" would make which one you applied depend on which the database handed back first.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("lot_builder_preset")
 }
 
 /// A blank ref-card format (#569) — the paper stationery the ref-card sheet

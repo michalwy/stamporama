@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { StampConditionData } from "@/lib/conditions";
+import type { LocationData } from "@/lib/locations";
 import type { StampFormatData } from "@/lib/stamp-formats";
-import type { LotPoolSummary } from "@/lib/lot-builder";
 import {
   lotBuilderSearchParams,
   parseLotBuilderRequest,
@@ -16,11 +16,15 @@ import type { DuplicatePolicy, SeriesPreference } from "@/lib/lot-builder-rules"
 import { Icon } from "@/app/icons";
 import { DialogPrimaryButton, DialogSecondaryButton, ErrorBubble } from "@/app/dialog-shell";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
-import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { BAND, Empty, FIGURE_FRAME, NOTE, SectionHeading } from "./lot-builder-chrome";
+import { LotFigures } from "./lot-figures";
+import { LotPresetBar, applyLotRecipe } from "./lot-preset-bar";
 import { useLotPoolSummary, useLotProposal } from "../use-offers-query";
 import { LotProposalView } from "./lot-proposal-view";
 
@@ -42,13 +46,15 @@ import { LotProposalView } from "./lot-proposal-view";
 // nothing more; pressing *Propose a lot* writes a seed, and from then on the proposal follows every
 // change. A re-roll is a new seed and nothing else, which is what makes the pick worth looking at
 // several times.
-
-const CARD: React.CSSProperties = {
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.5rem",
-  background: "var(--color-bg-page)",
-  padding: "0.875rem 1rem",
-};
+//
+// **The screen is one card, and the area rail is inside it.** Every screen in this app that picks an
+// area — the copies list, the stamps list, the bulk listing workspace — draws the rail and the work
+// beside it inside a *single* rounded, clipped, elevated container joined by one divider. This one
+// used to float the rail beside page-coloured boxes on a page-coloured background, so the boxes
+// showed as a hairline and nothing else, and the whole screen read as a different application. The
+// container is that shared shape; what is stacked inside it are **bands** divided by a rule, the way
+// a list screen stacks its toolbar, its selection bar and its rows — a card inside a card would only
+// say "two boxes", never "these controls belong together".
 
 const FIELD_LABEL: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -56,9 +62,13 @@ const FIELD_LABEL: React.CSSProperties = {
   fontWeight: 500,
 };
 
-const NOTE: React.CSSProperties = {
-  fontSize: "0.8125rem",
-  color: "var(--color-text-muted)",
+/** The row a section's controls sit in. `flex-end` puts every control on one line whatever its
+ *  label did above it, which is what makes a wrapped row read as a grid rather than as a drift. */
+const CONTROL_ROW: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-end",
+  gap: "0.875rem 1.25rem",
 };
 
 const NUMBER_STYLE: React.CSSProperties = {
@@ -66,6 +76,9 @@ const NUMBER_STYLE: React.CSSProperties = {
   width: "5.5rem",
 };
 
+/** A labelled control. Sentence-case and small, deliberately not the uppercase micro-label the
+ *  figures carry: one names a thing to fill in, the other names a number to read, and drawing them
+ *  alike made the criteria bands look like readouts nobody could edit. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
@@ -180,72 +193,26 @@ function numberOrNull(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** One figure of the pool readout, drawn **against the target it was asked for** where there is one
- *  (#378's grammar): a pool of 80 under a target of 100 is the fact the criteria panel exists to
- *  surface, and 80 on its own does not say it. */
-function PoolFigure({
-  label,
-  value,
-  note,
-  alarm,
-  hint,
-}: {
-  label: string;
-  value: string;
-  note?: string;
-  alarm?: boolean;
-  hint?: string;
-}) {
-  const body = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem", minWidth: "8rem" }}>
-      <span
-        style={{
-          fontSize: "0.6875rem",
-          fontWeight: 600,
-          color: "var(--color-text-muted)",
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: "1.0625rem",
-          fontWeight: 700,
-          fontVariantNumeric: "tabular-nums",
-          color: alarm ? "var(--color-warning)" : "var(--color-text-primary)",
-        }}
-      >
-        {value}
-      </span>
-      {note ? <span style={NOTE}>{note}</span> : null}
-    </div>
-  );
-  return hint ? <Tooltip content={hint}>{body}</Tooltip> : body;
-}
-
-function poolNote(value: number, min: number | null, max: number | null): string | undefined {
-  if (min === null && max === null) return undefined;
-  const target = min !== null && max !== null ? `${min}–${max}` : min !== null ? `${min}+` : `≤ ${max}`;
-  if (min !== null && value < min) return `short of ${target}`;
-  return `against ${target}`;
-}
-
 export function LotBuilderPanel({
   collectionId,
   collectionSlug,
   areas,
+  locations,
   conditions,
   formats,
   platforms,
+  baseCurrency,
 }: {
   collectionId: string;
   collectionSlug: string;
   areas: CollectionAreaData[];
+  /** Read on the server beside the areas: the proposal draws its copies with the app's own copy
+   *  row, which names each copy's storage location. */
+  locations: LocationData[];
   conditions: StampConditionData[];
   formats: StampFormatData[];
   platforms: { id: string; name: string; platformCurrency: string | null }[];
+  baseCurrency: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -258,9 +225,28 @@ export function LotBuilderPanel({
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
 
-  const request = useMemo(
+  const parsed = useMemo(
     () => parseLotBuilderRequest(new URLSearchParams(searchParams.toString())),
     [searchParams]
+  );
+
+  // Whether the picked area brings its sub-areas with it (#385). The toggle lives inside the area
+  // rail and its state is a **global client preference**, not URL state — so on this screen, where
+  // the address is the proposal and the commit re-plans from it (#717), the flag has to be written
+  // *into* the criteria on the way past. The flag is the source and the address is the record: a
+  // link opened under the opposite preference re-resolves under the reader's own, which is what the
+  // same toggle does on every other screen. With no area picked the scope is about nothing, so it is
+  // pinned true — that is also what keeps the address's round trip exact.
+  const [includeSubAreas] = useSubtreeScope("area");
+  const request = useMemo<LotBuilderRequest>(
+    () => ({
+      ...parsed,
+      criteria: {
+        ...parsed.criteria,
+        areaSubtree: parsed.criteria.areaId ? includeSubAreas : true,
+      },
+    }),
+    [parsed, includeSubAreas]
   );
   const { criteria } = request;
 
@@ -296,8 +282,7 @@ export function LotBuilderPanel({
   const effectiveName = name ?? suggestedName;
   const effectiveDescription = description ?? suggestedDescription;
 
-  const roll = () =>
-    write({ ...request, seed: Math.random().toString(36).slice(2, 10) });
+  const roll = () => write({ ...request, seed: Math.random().toString(36).slice(2, 10) });
 
   const pin = (itemId: string) =>
     write({
@@ -306,7 +291,10 @@ export function LotBuilderPanel({
       rejectedItemIds: request.rejectedItemIds.filter((id) => id !== itemId),
     });
   const unpin = (itemId: string) =>
-    write({ ...request, pinnedItemIds: request.pinnedItemIds.filter((id) => id !== itemId) });
+    write({
+      ...request,
+      pinnedItemIds: request.pinnedItemIds.filter((id) => id !== itemId),
+    });
   // A rejection also lifts a pin: between two contradictory instructions the recoverable one wins,
   // which is the rule the pure pass already keeps about a copy that is both (#758).
   const reject = (itemId: string) =>
@@ -334,9 +322,22 @@ export function LotBuilderPanel({
 
   const platformChosen = !!criteria.platformId;
   const busy = proposalFetching || isPending;
+  const platformName = platforms.find((p) => p.id === criteria.platformId)?.name;
+  const marked = request.pinnedItemIds.length + request.rejectedItemIds.length;
 
   return (
-    <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start", minHeight: 0 }}>
+    <div
+      style={{
+        display: "flex",
+        gap: 0,
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        overflow: "clip",
+        flex: 1,
+        minHeight: "24rem",
+        background: "var(--color-bg-elevated)",
+      }}
+    >
       {/* The area is the rail every list screen picks an area on, and this is the same question:
           which part of the collection the lot is drawn from. One area, resolved to its subtree
           server-side — the lot is named after it (#759). */}
@@ -352,314 +353,382 @@ export function LotBuilderPanel({
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
-          gap: "1rem",
+          borderLeft: "1px solid var(--color-border)",
         }}
       >
-        <div style={{ ...CARD, display: "flex", flexWrap: "wrap", gap: "1rem 1.25rem" }}>
-          {/* The platform comes first because everything else is judged against it: the pool is that
-              platform's own *not offered there yet* reading, and the offer takes its templates. */}
-          <Field label="Platform">
-            <select
-              aria-label="Platform to build the lot for"
-              style={{ ...FILTER_CONTROL_STYLE, minWidth: "10rem" }}
-              value={criteria.platformId}
-              onChange={(e) => patchCriteria({ platformId: e.currentTarget.value })}
-            >
-              <option value="">Choose a platform…</option>
-              {platforms.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+        <section style={BAND}>
+          <SectionHeading title="The pool" note="Which copies this lot may be drawn from at all" />
+          <div style={CONTROL_ROW}>
+            {/* The platform comes first because everything else is judged against it: the pool is
+                that platform's own *not offered there yet* reading, and the offer takes its
+                templates. */}
+            <Field label="Platform">
+              <select
+                aria-label="Platform to build the lot for"
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  minWidth: "10rem",
+                  cursor: "pointer",
+                }}
+                value={criteria.platformId}
+                onChange={(e) => patchCriteria({ platformId: e.currentTarget.value })}
+              >
+                <option value="">Choose a platform…</option>
+                {platforms.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-          <RangeField
-            label="Issued years"
-            min={criteria.yearFrom}
-            max={criteria.yearTo}
-            onChange={(patch) =>
-              patchCriteria({
-                ...(patch.min !== undefined ? { yearFrom: patch.min } : {}),
-                ...(patch.max !== undefined ? { yearTo: patch.max } : {}),
-              })
-            }
-            placeholderMin="from"
-            placeholderMax="to"
-          />
-
-          <Field label="Conditions">
-            <MultiSelectFilter
-              options={conditions.map((c) => ({ id: c.id, label: c.name }))}
-              selected={criteria.conditionIds}
-              onChange={(ids) => patchCriteria({ conditionIds: ids })}
-              allLabel="All conditions"
-              itemNoun="conditions"
-              ariaLabel="Allowed conditions"
+            <RangeField
+              label="Issued years"
+              min={criteria.yearFrom}
+              max={criteria.yearTo}
+              onChange={(patch) =>
+                patchCriteria({
+                  ...(patch.min !== undefined ? { yearFrom: patch.min } : {}),
+                  ...(patch.max !== undefined ? { yearTo: patch.max } : {}),
+                })
+              }
+              placeholderMin="from"
+              placeholderMax="to"
             />
-          </Field>
 
-          {formats.length > 0 && (
-            <Field label="Formats">
+            <Field label="Conditions">
               <MultiSelectFilter
-                options={[
-                  { id: "single", label: "Single" },
-                  ...formats.map((f) => ({ id: f.id, label: f.name })),
-                ]}
-                selected={criteria.formatIds}
-                onChange={(ids) => patchCriteria({ formatIds: ids })}
-                allLabel="All formats"
-                itemNoun="formats"
-                ariaLabel="Allowed formats"
+                options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+                selected={criteria.conditionIds}
+                onChange={(ids) => patchCriteria({ conditionIds: ids })}
+                allLabel="All conditions"
+                itemNoun="conditions"
+                ariaLabel="Allowed conditions"
               />
             </Field>
-          )}
 
-          {/* The one criterion that cannot be SQL: a catalogue value is computed and never stored,
-              so it is applied after the valuation pass. An **unpriced copy passes it** and is
-              counted — a missing value may be read neither as cheap enough nor as too dear (#378),
-              and the readout below says how many there are. */}
-          <Field label="Max value per copy">
-            <NumberField
-              ariaLabel="Per-copy catalogue-value ceiling"
-              placeholder="any"
-              value={criteria.maxCatalogValue}
-              onCommit={(maxCatalogValue) => patchCriteria({ maxCatalogValue })}
-            />
-          </Field>
-        </div>
-
-        <div style={{ ...CARD, display: "flex", flexWrap: "wrap", gap: "1rem 1.25rem" }}>
-          <RangeField
-            label="Pieces"
-            min={criteria.countMin}
-            max={criteria.countMax}
-            onChange={(patch) =>
-              patchCriteria({
-                ...(patch.min !== undefined ? { countMin: patch.min } : {}),
-                ...(patch.max !== undefined ? { countMax: patch.max } : {}),
-              })
-            }
-          />
-          <RangeField
-            label="Catalogue value"
-            min={criteria.valueMin}
-            max={criteria.valueMax}
-            onChange={(patch) =>
-              patchCriteria({
-                ...(patch.min !== undefined ? { valueMin: patch.min } : {}),
-                ...(patch.max !== undefined ? { valueMax: patch.max } : {}),
-              })
-            }
-          />
-          <Segmented<SeriesPreference>
-            label="Complete sets"
-            value={criteria.series}
-            onChange={(series) => patchCriteria({ series })}
-            options={[
-              {
-                value: "preferComplete",
-                label: "Take whole",
-                title: "Every set the pool can assemble is offered the chance to go in whole",
-              },
-              { value: "neutral", label: "Neutral", title: "Sets play no part in the pick" },
-              {
-                value: "preferSingles",
-                label: "Keep back",
-                title:
-                  "Copies covering a set the pool could assemble are picked last, so the set survives the lot",
-              },
-            ]}
-          />
-          <Field label="Max copies per stamp">
-            <NumberField
-              ariaLabel="How many copies of one stamp the lot may hold"
-              placeholder="no cap"
-              value={criteria.maxPerStamp}
-              onCommit={(maxPerStamp) => patchCriteria({ maxPerStamp })}
-            />
-          </Field>
-          <Segmented<DuplicatePolicy>
-            label="Duplicates"
-            value={criteria.duplicates}
-            onChange={(duplicates) => patchCriteria({ duplicates })}
-            options={[
-              {
-                value: "preferDuplicates",
-                label: "Deep piles first",
-                title:
-                  "The stamps you hold five over go before the ones you hold once, so your only copy is the last thing to fall into a job lot",
-              },
-              { value: "neutral", label: "Neutral", title: "Pile depth plays no part" },
-            ]}
-          />
-        </div>
-
-        <PoolReadout
-          criteria={criteria}
-          summary={summary}
-          loading={summaryLoading}
-          platformChosen={platformChosen}
-        />
-
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          {request.seed ? (
-            <DialogSecondaryButton onClick={roll} disabled={!platformChosen || busy}>
-              <Icon name="random" /> Re-roll
-            </DialogSecondaryButton>
-          ) : (
-            <DialogPrimaryButton type="button" onClick={roll} disabled={!platformChosen}>
-              Propose a lot
-            </DialogPrimaryButton>
-          )}
-          {request.pinnedItemIds.length > 0 || request.rejectedItemIds.length > 0 ? (
-            <>
-              <span style={NOTE}>
-                {request.pinnedItemIds.length} pinned · {request.rejectedItemIds.length} rejected
-              </span>
-              <DialogSecondaryButton
-                onClick={() => write({ ...request, pinnedItemIds: [], rejectedItemIds: [] })}
-                disabled={busy}
-              >
-                <Icon name="clear" /> Clear both
-              </DialogSecondaryButton>
-            </>
-          ) : null}
-          {proposalFetching && <span style={NOTE}>Working the pool…</span>}
-        </div>
-
-        {error && <ErrorBubble>{error}</ErrorBubble>}
-
-        {!platformChosen && (
-          <div style={{ ...CARD, ...NOTE }}>
-            Choose a platform to start. Everything else is judged against it: the lot is drawn from
-            the copies that are for sale and not yet offered there, and the offer it builds takes
-            that platform&apos;s own templates and defaults.
-          </div>
-        )}
-
-        {request.seed && proposalLoading && <div style={{ ...CARD, ...NOTE }}>Picking…</div>}
-
-        {proposal && (
-          <>
-            <LotProposalView
-              collectionId={collectionId}
-              proposal={proposal}
-              areas={areas}
-              pinnedItemIds={request.pinnedItemIds}
-              onPin={pin}
-              onUnpin={unpin}
-              onReject={reject}
-              busy={busy}
-            />
-
-            {proposal.plan.itemIds.length > 0 && (
-              <div style={{ ...CARD, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {/* The texts are written here rather than left to the platform's template. Over a
-                    hundred unrelated stamps the generated title is a dozen catalogue ranges, which
-                    is past most platforms' limit — and an over-long text blocks the way to Ready
-                    (#636). What is typed here is stored as yours and stops following the
-                    composition, which the offer's `edited` chip then says. */}
-                <Field label="Listing title">
-                  <input
-                    style={{ ...FILTER_CONTROL_STYLE, width: "100%" }}
-                    value={effectiveName}
-                    onChange={(e) => setName(e.currentTarget.value)}
-                    placeholder="Leave blank to use this platform's template"
-                  />
-                </Field>
-                <Field label="Description">
-                  <textarea
-                    style={{ ...FILTER_CONTROL_STYLE, width: "100%", minHeight: "5rem" }}
-                    value={effectiveDescription}
-                    onChange={(e) => setDescription(e.currentTarget.value)}
-                    placeholder="Leave blank to use this platform's template"
-                  />
-                </Field>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <DialogPrimaryButton type="button" onClick={commit} disabled={busy}>
-                    <Icon name="newOffer" /> Create the offer
-                  </DialogPrimaryButton>
-                  <span style={NOTE}>
-                    A draft on {platforms.find((p) => p.id === criteria.platformId)?.name ?? "this platform"},
-                    one set of {proposal.plan.itemIds.length}. The lot is picked again as it is
-                    created, so anything listed elsewhere since is left out and named.
-                  </span>
-                </div>
-              </div>
+            {formats.length > 0 && (
+              <Field label="Formats">
+                <MultiSelectFilter
+                  options={[
+                    { id: "single", label: "Single" },
+                    ...formats.map((f) => ({ id: f.id, label: f.name })),
+                  ]}
+                  selected={criteria.formatIds}
+                  onChange={(ids) => patchCriteria({ formatIds: ids })}
+                  allLabel="All formats"
+                  itemNoun="formats"
+                  ariaLabel="Allowed formats"
+                />
+              </Field>
             )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
-/**
- * What the pool holds, answered live from the criteria and **before** anything is picked.
- *
- * There is deliberately no "≈ N lots" figure. Dividing the pool by the target answers a different
- * question than it appears to — the cap and the atomic series leave remainders no later lot can pick
- * up — and division is the one thing the collector can do unaided. The cap bound they cannot, so the
- * readout shows that instead: `Σ min(copies of that stamp, cap)` is an exact ceiling, and it is what
- * catches a target of 100 against a pool that can physically yield 80.
- */
-function PoolReadout({
-  criteria,
-  summary,
-  loading,
-  platformChosen,
-}: {
-  criteria: LotBuilderCriteria;
-  summary: LotPoolSummary | undefined;
-  loading: boolean;
-  platformChosen: boolean;
-}) {
-  if (!platformChosen) return null;
-  if (loading || !summary) {
-    return <div style={{ ...CARD, ...NOTE }}>Reading the pool…</div>;
-  }
-  const capBound = criteria.maxPerStamp !== null;
-  return (
-    <div style={{ ...CARD, display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
-      <PoolFigure
-        label="Copies in the pool"
-        value={String(summary.copies)}
-        note={poolNote(summary.copies, criteria.countMin, criteria.countMax)}
-        alarm={criteria.countMin !== null && summary.copies < criteria.countMin}
-        hint="For sale, in hand, and not already offered on this platform"
-      />
-      <PoolFigure
-        label="Different stamps"
-        value={String(summary.stamps)}
-        hint="Rolled up through variants — two copies of 226 and one of 226y are one stamp here"
-      />
-      <PoolFigure
-        label="Catalogue value"
-        value={`${summary.catalogValue.toFixed(2)} ${summary.baseCurrency}`}
-        note={poolNote(summary.catalogValue, criteria.valueMin, criteria.valueMax)}
-        alarm={criteria.valueMin !== null && summary.catalogValue < criteria.valueMin}
-      />
-      <PoolFigure
-        label="No catalogue value"
-        value={String(summary.unpricedCopies)}
-        note={summary.unpricedCopies > 0 ? "pass the ceiling, add nothing to the sum" : undefined}
-        alarm={summary.unpricedCopies > 0}
-      />
-      <PoolFigure
-        label="Complete sets available"
-        value={String(summary.completeChecklists)}
-        hint="Checklists every slot of which a copy in this pool covers"
-      />
-      {capBound && (
-        <PoolFigure
-          label="Cap allows at most"
-          value={String(summary.capBoundedCapacity)}
-          note={poolNote(summary.capBoundedCapacity, criteria.countMin, criteria.countMax)}
-          alarm={criteria.countMin !== null && summary.capBoundedCapacity < criteria.countMin}
-          hint="The largest lot your per-stamp cap permits out of this pool — an exact ceiling, not an estimate"
-        />
-      )}
+            {/* The one criterion that cannot be SQL: a catalogue value is computed and never stored,
+                so it is applied after the valuation pass. An **unpriced copy passes it** and is
+                counted — a missing value may be read neither as cheap enough nor as too dear (#378),
+                and the readout below says how many there are. */}
+            <Field label="Max value per copy">
+              <NumberField
+                ariaLabel="Per-copy catalogue-value ceiling"
+                placeholder="any"
+                value={criteria.maxCatalogValue}
+                onCommit={(maxCatalogValue) => patchCriteria({ maxCatalogValue })}
+              />
+            </Field>
+          </div>
+        </section>
+
+        <section style={BAND}>
+          {/* Saved criteria live on this heading (#773). A preset holds the recipe and not the
+              platform or the area, and this is the band the recipe is mostly stated in — putting the
+              control over the whole screen would have promised it reached the two things it
+              deliberately leaves alone. */}
+          <SectionHeading
+            title="The pick"
+            note="What the lot should come to, and how the copies are chosen to get there"
+            actions={
+              <LotPresetBar
+                collectionId={collectionId}
+                request={request}
+                onApply={(recipe) =>
+                  write({ ...request, criteria: applyLotRecipe(criteria, recipe) })
+                }
+                disabled={busy}
+              />
+            }
+          />
+          <div style={CONTROL_ROW}>
+            <RangeField
+              label="Pieces"
+              min={criteria.countMin}
+              max={criteria.countMax}
+              onChange={(patch) =>
+                patchCriteria({
+                  ...(patch.min !== undefined ? { countMin: patch.min } : {}),
+                  ...(patch.max !== undefined ? { countMax: patch.max } : {}),
+                })
+              }
+            />
+            <RangeField
+              label="Catalogue value"
+              min={criteria.valueMin}
+              max={criteria.valueMax}
+              onChange={(patch) =>
+                patchCriteria({
+                  ...(patch.min !== undefined ? { valueMin: patch.min } : {}),
+                  ...(patch.max !== undefined ? { valueMax: patch.max } : {}),
+                })
+              }
+            />
+            <Field label="Max copies per stamp">
+              <NumberField
+                ariaLabel="How many copies of one stamp the lot may hold"
+                placeholder="no cap"
+                value={criteria.maxPerStamp}
+                onCommit={(maxPerStamp) => patchCriteria({ maxPerStamp })}
+              />
+            </Field>
+            <Segmented<SeriesPreference>
+              label="Complete sets"
+              value={criteria.series}
+              onChange={(series) => patchCriteria({ series })}
+              options={[
+                {
+                  value: "preferComplete",
+                  label: "Take whole",
+                  title: "Every set the pool can assemble is offered the chance to go in whole",
+                },
+                {
+                  value: "neutral",
+                  label: "Neutral",
+                  title: "Sets play no part in the pick",
+                },
+                {
+                  value: "preferSingles",
+                  label: "Keep back",
+                  title:
+                    "Copies covering a set the pool could assemble are picked last, so the set survives the lot",
+                },
+              ]}
+            />
+            <Segmented<DuplicatePolicy>
+              label="Duplicates"
+              value={criteria.duplicates}
+              onChange={(duplicates) => patchCriteria({ duplicates })}
+              options={[
+                {
+                  value: "preferDuplicates",
+                  label: "Deep piles first",
+                  title:
+                    "The stamps you hold five over go before the ones you hold once, so your only copy is the last thing to fall into a job lot",
+                },
+                {
+                  value: "neutral",
+                  label: "Neutral",
+                  title: "Pile depth plays no part",
+                },
+              ]}
+            />
+          </div>
+        </section>
+
+        {/* The figures and the button that changes them, in **one** band (#760's second pass). They
+            were three: a bank of pool tiles, a strip holding Re-roll, and a second bank of tiles at
+            the top of the proposal — most of a screen spent asking the same five questions twice and
+            keeping the answers a scroll apart. The act belongs on the heading row, which is where a
+            card's own control goes everywhere else in this app, and it is the act these very figures
+            are the result of.
+
+            It **pins** while the proposal scrolls under it (`STICKY_TOOLBAR_STYLE`, #358 — the page
+            itself scrolls, so `top: 0` is the app's own top edge and the z-index stays under the
+            portalled row menus and dialogs). That is the whole reason the figures had to come down
+            to three lines: a lot is read a hundred rows at a time, every row of it a decision to pin
+            or reject, and the two things a collector reaches for while reading — what the pick came
+            to, and *Re-roll* — were both off the top of the screen the moment they started. The
+            background is opaque for the same reason a list's toolbar is: rows pass beneath it.
+
+            The band is drawn even with no platform chosen, carrying the disabled button and the
+            reason: an action a precondition blocks is disabled with its reason, never hidden (#273).
+            Only the figures wait — there is no pool to read yet. */}
+        <section
+          style={{
+            ...BAND,
+            ...STICKY_TOOLBAR_STYLE,
+            background: "var(--color-bg-subtle)",
+          }}
+        >
+          <SectionHeading
+            title={proposal ? "Pool and lot" : "What the pool holds"}
+            note={
+              !platformChosen
+                ? "Choose a platform first — the pool is that platform's own reading"
+                : proposal
+                  ? "What the lot took, of what the pool holds"
+                  : "Before anything is picked — read over exactly the criteria above"
+            }
+            actions={
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  flexWrap: "wrap",
+                }}
+              >
+                {proposalFetching && <span style={NOTE}>Working the pool…</span>}
+                {marked > 0 && (
+                  <>
+                    <span style={NOTE}>
+                      {request.pinnedItemIds.length} pinned · {request.rejectedItemIds.length}{" "}
+                      rejected
+                    </span>
+                    <DialogSecondaryButton
+                      onClick={() =>
+                        write({
+                          ...request,
+                          pinnedItemIds: [],
+                          rejectedItemIds: [],
+                        })
+                      }
+                      disabled={busy}
+                    >
+                      <Icon name="clear" /> Clear both
+                    </DialogSecondaryButton>
+                  </>
+                )}
+                {request.seed ? (
+                  <DialogSecondaryButton onClick={roll} disabled={!platformChosen || busy}>
+                    <Icon name="random" /> Re-roll
+                  </DialogSecondaryButton>
+                ) : (
+                  <DialogPrimaryButton type="button" onClick={roll} disabled={!platformChosen}>
+                    Propose a lot
+                  </DialogPrimaryButton>
+                )}
+              </span>
+            }
+          />
+          {platformChosen && (
+            <LotFigures
+              criteria={criteria}
+              summary={summary}
+              proposal={proposal}
+              loading={summaryLoading}
+            />
+          )}
+        </section>
+
+        {/* The work itself. Each state below carries its own padding rather than the column carrying
+            one for all of them: an empty note is set in from the edge further than a list of rows
+            is, which is the difference between a sentence to read and a table to scan. */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {error && (
+            <div style={{ padding: "1rem 1.25rem 0" }}>
+              <ErrorBubble>{error}</ErrorBubble>
+            </div>
+          )}
+
+          {!platformChosen && (
+            <Empty>
+              Choose a platform to start. Everything else is judged against it: the lot is drawn
+              from the copies that are for sale and not yet offered there, and the offer it builds
+              takes that platform&apos;s own templates and defaults.
+            </Empty>
+          )}
+
+          {platformChosen && !request.seed && (
+            <Empty>
+              Set the pool and the pick above, then propose a lot. Nothing is written until you
+              create the offer — a proposal is a re-roll away from a different hundred copies.
+            </Empty>
+          )}
+
+          {request.seed && proposalLoading && <Empty>Picking…</Empty>}
+
+          {proposal && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+                padding: "1rem 1.25rem 1.25rem",
+              }}
+            >
+              <LotProposalView
+                collectionId={collectionId}
+                proposal={proposal}
+                areas={areas}
+                locations={locations}
+                baseCurrency={baseCurrency}
+                pinnedItemIds={request.pinnedItemIds}
+                onPin={pin}
+                onUnpin={unpin}
+                onReject={reject}
+                busy={busy}
+              />
+
+              {proposal.plan.itemIds.length > 0 && (
+                <div style={{ ...FIGURE_FRAME, gap: "0.75rem" }}>
+                  <SectionHeading
+                    title="Create the offer"
+                    note={`A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`}
+                  />
+                  {/* The texts are written here rather than left to the platform's template. Over a
+                      hundred unrelated stamps the generated title is a dozen catalogue ranges, which
+                      is past most platforms' limit — and an over-long text blocks the way to Ready
+                      (#636). What is typed here is stored as yours and stops following the
+                      composition, which the offer's `edited` chip then says. */}
+                  <Field label="Listing title">
+                    <input
+                      style={{ ...FILTER_CONTROL_STYLE, width: "100%" }}
+                      value={effectiveName}
+                      onChange={(e) => setName(e.currentTarget.value)}
+                      placeholder="Leave blank to use this platform's template"
+                    />
+                  </Field>
+                  <Field label="Description">
+                    <textarea
+                      style={{
+                        ...FILTER_CONTROL_STYLE,
+                        width: "100%",
+                        minHeight: "5rem",
+                        resize: "vertical",
+                        fontFamily: "inherit",
+                      }}
+                      value={effectiveDescription}
+                      onChange={(e) => setDescription(e.currentTarget.value)}
+                      placeholder="Leave blank to use this platform's template"
+                    />
+                  </Field>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <DialogPrimaryButton type="button" onClick={commit} disabled={busy}>
+                      <Icon name="newOffer" /> Create the offer
+                    </DialogPrimaryButton>
+                    <span style={NOTE}>
+                      The lot is picked again as it is created, so anything listed elsewhere since
+                      is left out and named.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

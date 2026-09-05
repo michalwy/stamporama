@@ -98,7 +98,15 @@ async function poolFilters(
   collectionId: string,
   criteria: LotBuilderCriteria
 ): Promise<ItemListFiltersPaginated> {
-  const areaIds = criteria.areaId ? await areaSubtreeIds(collectionId, criteria.areaId) : undefined;
+  // The rail's *+ sub-areas / this area only* toggle (#385) reaches the pool as a criterion rather
+  // than as a resolved list of ids, unlike every other screen: the lot keeps its root to be named
+  // after, and the commit re-plans from the query string alone (#717), so a scope the client had
+  // resolved away would be one the server never saw.
+  const areaIds = criteria.areaId
+    ? criteria.areaSubtree
+      ? await areaSubtreeIds(collectionId, criteria.areaId)
+      : [criteria.areaId]
+    : undefined;
   return {
     notOfferedPlatformId: criteria.platformId,
     ...(areaIds ? { areaIds } : {}),

@@ -21,6 +21,7 @@ import type { TitleFallback } from "@/lib/offer-title-template";
 import type { OfferState } from "@/lib/offer-rules";
 import type { LotPoolSummary, LotProposal } from "@/lib/lot-builder";
 import { lotBuilderSearchParams, type LotBuilderRequest } from "@/lib/lot-builder-criteria";
+import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -466,6 +467,25 @@ export function useLotProposal(collectionId: string, request: LotBuilderRequest)
     // the commit re-plans regardless (#717). Re-asking on focus is how the screen stops showing a
     // lot the commit would no longer build.
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * The collection's saved lot criteria (#773).
+ *
+ * Read through the server action rather than a route of its own: it is a short, unfiltered list the
+ * builder needs whole, and there is nothing for a URL to say about it. It lives in the offers key
+ * namespace so `invalidateAll` after a save or a delete refreshes it along with everything else the
+ * builder is showing.
+ */
+export function useLotBuilderPresets(collectionId: string) {
+  return useQuery<LotBuilderPresetData[]>({
+    queryKey: ["offers", collectionId, "lot-presets"] as const,
+    queryFn: async () => {
+      const { getLotBuilderPresetsAction } = await import("@/app/actions/offers");
+      return getLotBuilderPresetsAction(collectionId);
+    },
+    staleTime: 5 * 60_000,
   });
 }
 

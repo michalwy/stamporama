@@ -1125,15 +1125,26 @@ does that choosing.
 
 ### Stating what you want
 
+You state it in two blocks, named for the two questions they answer: **The pool** — which copies this
+lot may be drawn from at all — and **The pick** — what the lot should come to, and how the copies are
+chosen to get there. Under them sits a third block holding the figures and the button that changes
+them. Once you have a set of criteria that works, [save it](#saved-criteria) so you never type it
+again.
+
 The **platform** comes first, because everything else is judged against it. The lot is drawn from the
 copies that are marked *for sale*, are in your hands, are not already listed on that platform, are
 not under bid anywhere, and that you have not set aside as never-on-that-platform. Copies you have
 not marked for sale are not in the pool at all — mark them in bulk on the [Copies list](inventory.md)
 first if that is where your duplicates are sitting.
 
-Then you narrow it: an **area** on the rail down the left side (the area and everything under it), a
-span of **issued years**, the **conditions** and **formats** you will allow, and a **maximum
-catalogue value per copy** so a dear stamp cannot fall into a job lot by accident.
+Then you narrow it: an **area** on the rail down the left side, a span of **issued years**, the
+**conditions** and **formats** you will allow, and a **maximum catalogue value per copy** so a dear
+stamp cannot fall into a job lot by accident.
+
+The rail's **+ sub-areas / this area only** toggle applies here as it does on every other list: pick
+*Germany* with sub-areas on and the lot may be drawn from everything filed under it, turn it off and
+only the copies sitting directly on *Germany* itself are in the pool. The lot is still named after
+the area you picked either way.
 
 A copy with **no catalogue value recorded** passes that ceiling and is counted. A missing value is a
 gap in your data, not a figure, so it can be read neither as "cheap enough" nor as "too dear" — the
@@ -1156,12 +1167,53 @@ And two preferences:
 A duplicate here means **a stamp, rolled up through its variants**: two copies of 226 and one of
 226y are three of the same thing to a buyer.
 
+### Saved criteria
+
+Eleven controls is a lot to state, and most of it repeats: if you build job lots for a living you
+build the same *kind* of lot over and over. **Save as…** on *The pick* keeps what is on screen under
+a name, and the select beside it puts it all back.
+
+What a saved set holds:
+
+- the issued-year span
+- the conditions and formats you allow
+- the maximum catalogue value per copy
+- both targets — the piece range and the catalogue-value range
+- the complete-sets preference, the per-stamp cap and the duplicates preference
+
+What it deliberately does **not** hold, and why:
+
+- **The platform.** You pick it every sitting anyway — nothing on the screen answers until you have.
+- **The area**, and whether it brings its sub-areas. This is the thing you *change* between two lots
+  of the same kind: one saved recipe — *about a hundred used pieces, nothing dearer than five,
+  deepest piles first, at most two of a stamp* — is meant to run over Germany today and Poland
+  tomorrow. Carrying the area would mean one saved set per area.
+- **The roll, your pins and your rejections.** Those belong to one lot you are closing in on, not to
+  a kind of lot. A saved set holding them would propose the same hundred copies for ever.
+
+Applying a saved set replaces the recipe **whole**. A set that says nothing about the year span
+clears the span you left over from the last lot rather than leaving it in — otherwise the same saved
+name would mean different things depending on what happened to be on screen.
+
+Change anything after applying and the select says **· edited**: what you are looking at is no longer
+what the name says. **Update** overwrites it with what is on screen (and renames it if you want),
+**Save as…** keeps it as a second one, and the ✕ deletes it. Deleting changes nothing else — the
+criteria on screen stay put, and lots you already built from it are ordinary offers.
+
 ### Reading the pool before you pick
 
-Above the proposal, the screen answers your criteria **live**, before anything is picked: how many
-copies are in the pool, how many different stamps, what they are worth, how many carry no value at
-all, and how many complete sets the pool could assemble. Where you have set a target, the figure is
-drawn against it.
+**What the pool holds**, the third block, answers your criteria **live** and before anything is
+picked: how many copies are in the pool, how many different stamps, what they are worth, how many
+carry no value at all, and how many complete sets the pool could assemble. Where you have set a
+target, the figure is drawn against it.
+
+Once you have proposed a lot every figure becomes a pair — **what the lot took, of what the pool
+holds**: *26 of 26* copies, *0 of 2* complete sets. A figure only one side can answer says which side
+it is about (*17 in the pool*). The note under each says the useful half: before a pick, whether the
+pool can even reach your target; after one, where the pick actually landed.
+
+The block **stays pinned to the top of the window** while you read down the lot, so what the pick came
+to — and **Re-roll** — are still there a hundred rows in.
 
 If you have set a per-stamp cap there is one more figure: **the largest lot the cap allows**. It is
 an exact ceiling, not an estimate, and it is what catches a target of 100 against a pool that can
@@ -1175,16 +1227,27 @@ pick up.
 
 **Propose a lot** picks one. It is random, and the roll is written into the address — so
 **Re-roll** gives you a different lot from the same criteria, and you can look at several before
-choosing one.
+choosing one. Both buttons sit on the figures block, beside the numbers they change, and that block
+stays pinned as you scroll.
 
-Above the list you get the *why*: the pieces and the catalogue value against their ranges, the
-complete sets that went in whole, the copies with no catalogue value, and — stated rather than left
-to be noticed — the **sets that were left out** and what refused them. A set your per-stamp cap would
+The figures give you most of the *why* — the pieces and the catalogue value against their ranges, the
+complete sets that went in whole, the copies with no catalogue value — and above the list comes the
+rest of it, stated rather than left to be noticed: the **sets that were left out** and what refused
+them. A set your per-stamp cap would
 have broken is named along with the stamp that blocked it: the cap is something you typed, and a
 complete set is only a preference, so the cap wins.
 
 The list itself is grouped the way the pick happened — pinned copies, then each set that went in
-whole, then the singles that topped the lot up.
+whole, then the singles that topped the lot up. Each copy is drawn as a **full copy row**, the same
+one the Copies list draws: the photograph, the area and issue, the catalogue numbers, the condition,
+the catalogue value, where it is filed, and any want or trade promise attached to it. Deciding what
+goes into a job lot is looking at the stamps, so the row you look at here is the one you look at
+everywhere else.
+
+That includes the **catalogue value**, which opens the quick price dialog the way it does everywhere
+else — *+ catalog value* on a copy that has none, a click on one that has. It is worth having here:
+this is the screen that counts the copies with no value and warns you about them, and pricing one
+puts it straight back into the figures and the pick.
 
 Copies **promised in an agreed trade** are kept in the lot and flagged. A draft competes for nothing,
 and you may well be preparing the listing you will post the day the trade falls through — but the
@@ -1192,10 +1255,11 @@ offer will refuse to go live around them, so it is worth seeing now.
 
 ### Closing in on the lot you want
 
-Two actions on every row:
+Two actions on every row, as icons on the row itself and in its **⋮** menu, next to a link to the
+copy's own page:
 
 - **Pin to the lot** keeps that copy through every re-roll. Pinned copies are taken first and eat the
-  target from the top.
+  target from the top, and the row is tinted and chipped so you can see which ones they are.
 - **Reject** means never propose this copy for this lot again.
 
 Both survive a re-roll, which is what makes this a few rounds of closing in rather than a one-shot

@@ -1,10 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyLotRecipe,
   lotBuilderSearchParams,
   parseLotBuilderRequest,
+  toLotRecipe,
   suggestLotTexts,
   toLotCriteria,
+  LOT_RECIPE_KEYS,
   type LotBuilderCriteria,
   type LotBuilderRequest,
   type LotTextFacts,
@@ -21,6 +24,7 @@ function criteria(overrides: Partial<LotBuilderCriteria> = {}): LotBuilderCriter
   return {
     platformId: "plat-1",
     areaId: null,
+    areaSubtree: true,
     yearFrom: null,
     yearTo: null,
     conditionIds: [],
@@ -93,12 +97,93 @@ describe("the bulk-lot criteria round trip (#759)", () => {
     assert.equal(parsed.criteria.yearFrom, 1950);
   });
 
+  it("round-trips an area narrowed to itself (#385)", () => {
+    const input = request({ criteria: criteria({ areaId: "area-pl", areaSubtree: false }) });
+    assert.deepEqual(roundTrip(input), input);
+    assert.equal(lotBuilderSearchParams(input).get("areaScope"), "self");
+  });
+
+  it("writes no areaScope for the subtree, so a link written before the toggle still means the tree", () => {
+    const params = lotBuilderSearchParams(
+      request({ criteria: criteria({ areaId: "area-pl", areaSubtree: true }) })
+    );
+    assert.equal(params.get("areaScope"), null);
+    assert.equal(
+      parseLotBuilderRequest(new URLSearchParams("platform=plat-1&area=area-pl")).criteria
+        .areaSubtree,
+      true
+    );
+  });
+
+  it("reads only the exact word as narrowing — anything else is the tree", () => {
+    const parsed = parseLotBuilderRequest(
+      new URLSearchParams("platform=plat-1&area=area-pl&areaScope=only")
+    );
+    assert.equal(parsed.criteria.areaSubtree, true);
+  });
+
   it("falls back to the neutral preferences on an unknown value", () => {
     const parsed = parseLotBuilderRequest(
       new URLSearchParams("platform=plat-1&series=preferEverything&duplicates=lots")
     );
     assert.equal(parsed.criteria.series, "neutral");
     assert.equal(parsed.criteria.duplicates, "neutral");
+  });
+});
+
+describe("the preset's recipe (#773)", () => {
+  const FULL = criteria({
+    platformId: "plat-1",
+    areaId: "area-pl",
+    areaSubtree: false,
+    yearFrom: 1950,
+    yearTo: 1960,
+    conditionIds: ["cond-u"],
+    formatIds: ["single"],
+    maxCatalogValue: 5,
+    countMin: 90,
+    countMax: 110,
+    valueMin: 40,
+    valueMax: 80,
+    series: "preferComplete",
+    maxPerStamp: 3,
+    duplicates: "preferDuplicates",
+  });
+
+  it("keeps every recipe key and nothing else", () => {
+    const recipe = toLotRecipe(FULL);
+    assert.deepEqual(Object.keys(recipe).sort(), [...LOT_RECIPE_KEYS].sort());
+  });
+
+  // The whole reason the platform and the area are out of the recipe: one recipe is meant to be run
+  // over Germany and then over Poland, on whichever platform the sitting is about.
+  it("leaves the platform, the area and its subtree scope exactly as they stand", () => {
+    const applied = applyLotRecipe(FULL, toLotRecipe(criteria({ countMin: 5 })));
+    assert.equal(applied.platformId, "plat-1");
+    assert.equal(applied.areaId, "area-pl");
+    assert.equal(applied.areaSubtree, false);
+  });
+
+  it("applies whole rather than merging, so a preset means the same thing whatever was on screen", () => {
+    const recipe = toLotRecipe(criteria({ countMin: 5 }));
+    const applied = applyLotRecipe(FULL, recipe);
+    assert.equal(applied.countMin, 5);
+    // Left lying about from the last lot, and said nothing about by this preset.
+    assert.equal(applied.yearFrom, null);
+    assert.equal(applied.maxCatalogValue, null);
+    assert.deepEqual(applied.conditionIds, []);
+    assert.equal(applied.series, "neutral");
+  });
+
+  it("round-trips the criteria through a recipe and back", () => {
+    const applied = applyLotRecipe(criteria(), toLotRecipe(FULL));
+    assert.deepEqual(toLotRecipe(applied), toLotRecipe(FULL));
+  });
+
+  it("copies the lists rather than sharing them", () => {
+    const recipe = toLotRecipe(FULL);
+    recipe.conditionIds.push("cond-mnh");
+    assert.deepEqual(FULL.conditionIds, ["cond-u"]);
   });
 });
 

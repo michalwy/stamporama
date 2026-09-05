@@ -131,6 +131,7 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
     return {
       platformId,
       areaId: null,
+    areaSubtree: true,
       yearFrom: null,
       yearTo: null,
       conditionIds: [],
@@ -437,6 +438,19 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
 
       const root = await getLotPoolSummary(userId, collectionId, criteria({ areaId: rootAreaId }));
       assert.ok(root.copies > span.copies, "the root reads its whole subtree");
+
+      // The rail's *this area only* toggle (#385) is a criterion here rather than a resolved list of
+      // ids, because the commit re-plans from the query string alone (#717). Without it the control
+      // was drawn on this screen and changed nothing.
+      const rootAlone = await getLotPoolSummary(
+        userId,
+        collectionId,
+        criteria({ areaId: rootAreaId, areaSubtree: false })
+      );
+      assert.ok(
+        rootAlone.copies < root.copies,
+        "narrowed to the area alone, the pool drops its sub-areas"
+      );
     });
 
     it("agrees with the pool the proposal is picked from", async () => {

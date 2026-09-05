@@ -23,10 +23,17 @@ export interface LotBuilderCriteria {
   /** The platform the lot is for. Every availability clause is judged against it (#259, #334,
    *  #506), so it is an input to the pool read and not a choice made at commit. */
   platformId: string;
-  /** The area whose subtree the lot is drawn from, or null for the whole collection. **One** area,
-   *  resolved to its subtree server-side — unlike the Copies list, which is handed the resolved set
-   *  by its sidebar, the lot needs the root itself to name the lot after it. */
+  /** The area the lot is drawn from, or null for the whole collection. **One** area, resolved
+   *  server-side — unlike the Copies list, which is handed the resolved set by its sidebar, the lot
+   *  needs the root itself to name the lot after it. */
   areaId: string | null;
+  /** Whether {@link areaId} brings everything under it (#385). The area rail's *+ sub-areas / this
+   *  area only* toggle, which every other screen resolves on the client into a list of ids — this
+   *  one cannot, because it keeps the root to name the lot after and because **the commit re-plans
+   *  from the query string alone** (#717): a scope the client resolved away would be a criterion the
+   *  server never saw, and the lot committed would not be the lot on screen. Absent from the address
+   *  when true, so it is what a link written before this existed still means. */
+  areaSubtree: boolean;
   /** Inclusive bounds on `stamp.issuedYear` (#142/#322). Either alone; a stamp with no year is
    *  outside every span. */
   yearFrom: number | null;
@@ -85,6 +92,98 @@ function range(min: number | null, max: number | null) {
   return min === null && max === null ? null : { min, max };
 }
 
+// ── The recipe ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The half of the criteria a **preset** keeps (#773): how a lot of this kind is picked, with nothing
+ * about *which* lot.
+ *
+ * Stating eleven controls is most of the work of building a lot, and a collector who builds the same
+ * kind of lot repeatedly retypes all eleven and mistypes some. What repeats is the recipe — "about a
+ * hundred pieces, used, nothing dearer than five, deepest piles first, at most two of a stamp" — so
+ * that is what is named and kept.
+ *
+ * **The platform and the area are deliberately not in it.** The area is precisely what *varies*
+ * between two lots of one kind: the same recipe is meant to be run over Germany and then over
+ * Poland, and a preset that carried the area would need one copy per area. The platform is a select
+ * the collector must state anyway before the screen says anything at all, and it is picked per
+ * sitting rather than per kind of lot. The subtree scope goes with the area for the same reason.
+ *
+ * The seed, the pins and the rejections are not criteria at all — they are one lot's own closing-in
+ * (#760), and a preset carrying them would propose the same hundred copies for ever.
+ *
+ * Declared here, beside the criteria it is drawn from, so *which fields are the recipe* is stated
+ * **once**: the preset table's columns, the save and the apply all read it off this one type, and a
+ * criterion added to the wizard is a compile error here rather than a field that silently stops
+ * being remembered.
+ */
+export type LotRecipeKey =
+  | "yearFrom"
+  | "yearTo"
+  | "conditionIds"
+  | "formatIds"
+  | "maxCatalogValue"
+  | "countMin"
+  | "countMax"
+  | "valueMin"
+  | "valueMax"
+  | "series"
+  | "maxPerStamp"
+  | "duplicates";
+
+export type LotRecipe = Pick<LotBuilderCriteria, LotRecipeKey>;
+
+/** The keys, as a value — what the mapping to and from a stored preset iterates. */
+export const LOT_RECIPE_KEYS: readonly LotRecipeKey[] = [
+  "yearFrom",
+  "yearTo",
+  "conditionIds",
+  "formatIds",
+  "maxCatalogValue",
+  "countMin",
+  "countMax",
+  "valueMin",
+  "valueMax",
+  "series",
+  "maxPerStamp",
+  "duplicates",
+];
+
+/** What the collector is looking at, as a recipe worth keeping. Takes anything carrying the recipe's
+ *  keys — the whole criteria, or a recipe being copied — and answers with the recipe alone. */
+export function toLotRecipe(criteria: LotRecipe): LotRecipe {
+  return {
+    yearFrom: criteria.yearFrom,
+    yearTo: criteria.yearTo,
+    conditionIds: [...criteria.conditionIds],
+    formatIds: [...criteria.formatIds],
+    maxCatalogValue: criteria.maxCatalogValue,
+    countMin: criteria.countMin,
+    countMax: criteria.countMax,
+    valueMin: criteria.valueMin,
+    valueMax: criteria.valueMax,
+    series: criteria.series,
+    maxPerStamp: criteria.maxPerStamp,
+    duplicates: criteria.duplicates,
+  };
+}
+
+/**
+ * A recipe over the criteria in force. **Whole, never merged**: applying a preset that says nothing
+ * about the year span has to *clear* a year span the collector left lying about from the last lot,
+ * or a preset would mean something different depending on what was on screen when it was applied —
+ * which is the one thing a saved recipe must not do.
+ *
+ * Everything outside the recipe passes through untouched, which is what leaves the platform, the
+ * area and its subtree scope exactly as the collector has them.
+ */
+export function applyLotRecipe(
+  criteria: LotBuilderCriteria,
+  recipe: LotRecipe
+): LotBuilderCriteria {
+  return { ...criteria, ...toLotRecipe(recipe) };
+}
+
 // ── The query string ────────────────────────────────────────────────────────────────────────────
 
 /** A finite number, or null for blank / absent / unparseable. Anything unrecognised is dropped
@@ -106,6 +205,9 @@ export function parseLotBuilderRequest(params: URLSearchParams): LotBuilderReque
     criteria: {
       platformId: params.get("platform") ?? "",
       areaId: params.get("area") || null,
+      // Only the exact word turns it off. Anything else — absent, empty, a typo — is the tree, which
+      // is both the toggle's own default and the reading every existing link was written under.
+      areaSubtree: params.get("areaScope") !== "self",
       yearFrom: num(params.get("yearFrom")),
       yearTo: num(params.get("yearTo")),
       conditionIds: params.getAll("condition").filter(Boolean),
@@ -134,6 +236,9 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
   const params = new URLSearchParams();
   params.set("platform", criteria.platformId);
   if (criteria.areaId) params.set("area", criteria.areaId);
+  // Written only when it is *not* the default, and only when there is an area for it to be about:
+  // `areaScope=self` with no area is a narrowing of the whole collection to nothing in particular.
+  if (criteria.areaId && !criteria.areaSubtree) params.set("areaScope", "self");
   putNum(params, "yearFrom", criteria.yearFrom);
   putNum(params, "yearTo", criteria.yearTo);
   for (const id of criteria.conditionIds) params.append("condition", id);

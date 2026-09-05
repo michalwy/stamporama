@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
+import { getLocations } from "@/lib/locations";
 import { getStampConditions } from "@/lib/conditions";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { listContacts } from "@/lib/contacts";
@@ -32,8 +33,11 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [areas, conditions, formats, contacts] = await Promise.all([
+  // Locations join the dictionaries for the same reason the rest of them are here: the proposal
+  // draws each picked copy with the app's own copy row, which names where the copy is filed.
+  const [areas, locations, conditions, formats, contacts] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
+    getLocations(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
     listContacts(session.user.id, collection.id),
@@ -87,9 +91,11 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         areas={areas}
+        locations={locations}
         conditions={conditions}
         formats={formats}
         platforms={platforms}
+        baseCurrency={collection.baseCurrency}
       />
     </div>
   );
