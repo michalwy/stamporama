@@ -1,0 +1,315 @@
+# Agent Collaboration
+
+How work is split between sessions: what one session owns, what the long-lived **lead session**
+owns, and how a question, a branch and a closed issue travel between them. The model was adapted
+from the sibling project `michalwy/darkroom`, but the shape it takes here is set by three facts that
+project does not share: **717 issues filed to date**, design tracks that run to nine issues at a
+time, and several releases a day.
+
+Most of this file describes what already happens and had simply never been written down. The parts
+that are genuinely new arrived on **2026-09-06**, when `main` was protected — read *A protected
+`main`, and what it changed* below before believing anything you remember about pushing here.
+
+## One session owns one issue, end to end
+
+One session takes an issue from the first decision to the last test: it reads the design, writes
+the migration by hand, writes the code, updates `docs/user-guide/` and the topic file, runs the
+suites, commits, and opens the pull request. Nothing is handed to a second agent halfway through.
+
+**This is not a new rule; it is the only thing that has ever happened here.** `.claude/plans/` holds
+**261 implementation plans** and every one of them is a single session's, start to finish. Not one
+hands a step to another agent.
+
+AGENTS.md used to describe four roles — Architect, Designer, Developer, Tester/Reviewer — powered
+up in sequence for anything crossing a domain, data or authorization boundary. In 261 plans they
+were **never used once**. They are gone, and this file replaces them.
+
+**Splitting one issue between agents needs a reason beyond size.** The reason it has never been
+worth it here is the invariant list in AGENTS.md: a feature in this project is a hand-written
+migration, the Prisma types it generates, a server component that must not import a client value,
+a dialog built from `dialog-shell.tsx`, an icon added to `icons.tsx`, and a token that needs a value
+in both `:root` and `.dark`. Those are not four specialists' tasks; they are one decision seen from
+six angles. Two agents on the same surface produce two half-designs, and neither has read the
+other's reasoning.
+
+## The two kinds of session
+
+**The lead session** is long-lived. It holds the backlog, decides what is worked on next, writes
+the prompt for each piece of work, spawns the task session, answers its questions, verifies what
+came back **in the repository**, collects the user's go-ahead, merges the pull request and closes
+the issue. It writes little or no code.
+
+What it holds is the state no single task ever sees: forty-odd open issues, the `## Depends on`
+edges between them, which design track an issue belongs to, and what is in flight in another
+worktree right now. None of that is cheaply re-derivable from a file.
+
+**A task session** is short-lived and owns exactly one issue. It works in its own worktree on its
+own branch, asks the lead when it is blocked, commits as it goes, pushes the branch, opens the
+pull request, and **reports back**. It does not merge, does not close issues, and does not file new
+ones.
+
+**The user talks to the lead.** That is much of the point of the split: the user should not have to
+track which of three sessions is asking, or repeat the same decision to each of them. The design
+session below is the one deliberate exception.
+
+## How a task session is actually spawned
+
+Getting this wrong once cost a session's worth of work, so it is stated plainly.
+
+- **A task session is a separate session, not a subagent.** The lead spawns it as a task tile. It
+  gets its own worktree under `.claude/worktrees/` and its own transcript, and it **outlives the
+  lead's turn** — the lead is not blocked waiting for it, and it does not return a value into the
+  lead's context.
+- **The worktree comes with the session; the `task/` branch does not.** The spawn puts the session
+  in a fresh worktree on a throwaway branch. The first thing the session does is
+  `git fetch origin main` and cut `task/<issue>-<slug>` from `origin/main`.
+- **The channel is two-way, and the lead is reachable mid-flight.** Sessions address each other by
+  session id: the task session can ask a question, and the lead can send a correction or an answer
+  while the work is still running. "The lead cannot be reached once the session has started" is
+  false; do not write it down again.
+- **The prompt must carry the lead's session id**, because a session cannot infer who spawned it.
+  Nothing in a fresh session's context says where it came from. The id is a per-round value and
+  belongs in the prompt, not in this file.
+- **One real cost: spawning goes through a tile the user clicks.** The user is therefore in the loop
+  at the start of every task session, whether or not they wanted to be. That is the price of the
+  model as it stands, and it is worth knowing before anybody proposes spawning six sessions at once.
+
+**Everything travelling around this loop is written in English** — the prompt, the questions and the
+report alike, whatever language the user and the lead are speaking. AGENTS.md requires English of
+everything that lands in GitHub or the repository; these messages land in neither, but the work they
+produce does, and a report written in one language and a commit message in another is a translation
+step nobody asked for.
+
+## The loop
+
+1. A backlog review produces an order (`backlog-review.md`).
+2. The lead spawns a task session with a **self-contained prompt**: the issue, the branch name, what
+   is out of scope, which files a parallel session is holding, the decisions the user has already
+   made, and **how to reach the lead**.
+3. The session works, and asks the lead whenever it is blocked.
+4. The session commits on its branch, rebases onto `main`, re-runs the checks, pushes, and opens a
+   pull request.
+5. The session **reports back to the lead**: what landed, on which branch, which pull request, what
+   was verified and how, what was left out and why, and anything it noticed outside its scope.
+6. The lead **verifies the work in the repository** and collects the user's go-ahead.
+7. The lead merges the pull request and closes the issue.
+
+**The report is part of the work, not a closing courtesy.** A session that finishes silently has not
+finished: its branch then waits until somebody happens to look, and the lead's whole job is to be
+the one who does not have to.
+
+## What the lead may answer, and what it must escalate
+
+**The lead answers only what is already written down, and names the source.** AGENTS.md, a
+`docs/agents/` topic file, an ADR under `docs/decisions/`, or an issue body — design tracks record
+their reasoning in a `## Decisions (from design discussion, YYYY-MM-DD)` section, and that section
+is quotable. Naming the source is part of the answer: it lets the task session read the reasoning
+around it, and it makes a wrong answer traceable instead of absorbed.
+
+**Everything else goes to the user.** AGENTS.md opens by forbidding an implementer from assuming
+domain behavior and picking a reading of catalog standards, condition scales, trade workflows or
+pricing. A lead settling one instead is the same failure with more authority behind it and less
+visibility.
+
+## Questions are asynchronous
+
+A lead session acts only while it is awake, and it may itself be waiting on the user. A task session
+that asks a question is not calling a service that answers within the minute.
+
+So **ask, and then carry on with everything the question does not block. If it blocks everything,
+say so and stop.** An idle session that has stated what it is waiting for is a cheap state to
+recover from. A session that guessed is not, because the guess is found only after the code has been
+written around it.
+
+## Verification, not trust
+
+**The lead checks the repository, not the report**: `git log`, the diff, the migration SQL, the
+issue's own *Done when*, and CI. A report is evidence of what a session believes it did.
+
+This is not distrust dressed up as procedure — it is the standard whether or not the check finds
+anything, because a verification performed only when something feels wrong is a hunch with a ritual
+attached, and the reports worth checking are exactly the ones that read as confident.
+
+Two things here reward reading the diff specifically:
+
+- **A migration is never edited once written** (AGENTS.md, `platform.md`) — including one written
+  minutes ago. A migration that should not have been written the way it was costs a second migration
+  to correct, and the cheapest moment to notice is before the merge.
+- **Closing is deliberately done by somebody who did not write the code.** The author is the worst
+  available reader of their own *Done when*.
+
+## A protected `main`, and what it changed
+
+Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, the user included**:
+
+- a pull request is required (0 approvals);
+- **rebase merge only** — merge and squash commits are disabled on the repository, and `main`
+  requires linear history;
+- force-push and deletion are blocked;
+- four checks must pass — `Static checks`, `Unit tests`, `Integration tests`, `Extension checks`
+  (the `name:` values of the jobs in `.github/workflows/ci.yml`).
+
+A direct `git push origin main` was attempted and rejected. This is verified, not assumed.
+
+**`git log` will mislead you about this.** Every pull request in this repository's history before
+2026-09-06 came from Renovate; all feature work went straight to `main`. And the `(#769)`-style
+reference in a commit title is an **issue** number, not a pull request — the convention predates
+pull requests here entirely.
+
+Three consequences:
+
+- **Auto-merge is the normal path.** With the user's go-ahead in, the lead runs
+  `gh pr merge --rebase --auto` and GitHub merges the moment the four checks are green. Without it,
+  somebody sits watching CI for several minutes and nobody can tell whether the work has landed or
+  whether it was forgotten. The user's decision still gates the merge; only the waiting moves off a
+  human.
+- **A merged branch deletes itself** (`delete_branch_on_merge`). The worktree does not — see
+  *Worktree cleanup* below.
+- **A rejected change leaves no trace.** In a linear history it simply drops out and whatever sat
+  above it rebases down over the gap, where a merged branch would have to be reverted and leave both
+  the change and its undoing in `main` forever.
+
+### Rebase, then re-verify, in that order
+
+Fetch, rebase the branch onto `main`, **run the checks again**, force-push the branch. With sessions
+working in parallel, `main` moving underneath a branch is the normal case rather than an accident.
+
+The re-run is the half that is easy to drop and the only half that is interesting. A suite that was
+green before the rebase was green against a *different* `main`; all it establishes is that the
+branch worked in isolation, which is not the claim anybody needs. If GitHub offers to update the
+branch for you, doing it locally is still better — that is where the checks get re-run by somebody
+who then reads the result.
+
+## Branches
+
+`task/<issue>-<slug>`, branched from `main`: `task/780-collaboration-model`. One branch per issue,
+the same issue the session owns.
+
+## What may run in parallel
+
+Sessions run in parallel, each in its own worktree. **Merges serialise, and that is the trade**: the
+second branch ready rebases onto the first and re-runs its checks. At two or three parallel branches
+that costs one extra CI run, which is cheap next to the alternative.
+
+Two limits are being worked out in **#781** rather than here, and that issue's files carry the
+detail — do not restate it in this file:
+
+- each worktree needs its own Compose project, ports and test database, or two sessions running
+  `pnpm test:integration` truncate each other's tables;
+- **one schema-touching session at a time**, because the expand/contract ordering
+  `pnpm check:migrations` enforces can only be checked once both migrations are in one tree — and by
+  the time it fails, the fix is a third migration rather than an edit.
+
+## No browser verification — a deliberate departure
+
+**A session does not start a dev server and does not drive a browser unless the user explicitly asks
+for it.** It verifies with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and `pnpm test:integration`,
+and says in its report what it ran.
+
+**The user tests the application themselves, through Docker Compose.** That is where the app is
+actually exercised here, and a session's dev server is a second, differently-configured copy that
+proves less and leaks memory besides (AGENTS.md, on Turbopack and issue #161).
+
+This is recorded because the darkroom model this file is adapted from requires the **opposite** — it
+has a whole section on exercising work in a browser afterwards. That is right for that project and
+wrong for this one. **It is a decision, not an oversight; do not "fix" it back.** If a change really
+does need a browser, ask the user first.
+
+## Findings go to the lead, not into new issues
+
+A task session that notices something outside its scope — a stale document, a missing index, a bug
+next door — **reports it to the lead and carries on**. It does not open an issue, and it does not
+fix it.
+
+With forty-odd open issues and design tracks spanning nine issues at a time (#763–#771 for albums,
+#744–#750 for multi-stamp copies), five sessions each filing what they happened to notice produce
+five overlapping issues that nobody reconciles, and the backlog grows sideways faster than it is
+worked through. This is the same reason two rules already in force exist: search the backlog for a
+duplicate or a planned child before filing, and split genuinely independent scopes rather than
+bundling them. Both need the whole backlog in view.
+
+## New backlog items come through the lead
+
+Writing an issue here *is* placing it in the backlog. It means a Conventional Commits title, the
+`backlog` label plus a type and a priority, a check that no open issue already covers it, a
+`## Depends on` line naming what must close first, and a position relative to everything else open.
+
+**Drafting can be delegated; the triage never is.** A session may be asked to write out the issues
+for a design track — the lead reconciles them against the rest of the backlog before any of them is
+filed. A dependency edge is only ever wrong *between* two issues, which is the one place a task
+session is not looking.
+
+## Design sessions
+
+A large feature is discussed in **its own session**, not in the lead's: the dialogue runs long, and
+it would consume exactly the context the lead exists to hold.
+
+**This is the one place the user talks to somebody other than the lead**, because a product
+conversation cannot be run through a proxy — the valuable part is the follow-up question neither
+side knew to ask.
+
+Its output is an **ADR** under `docs/decisions/`, a topic file update, and a **proposed set of
+issues** whose bodies carry a `## Decisions (from design discussion, YYYY-MM-DD)` section recording
+what was settled and, just as usefully, what was deliberately left out. This is already the
+established shape here — #755 (albums) produced ADR-0045/0046/0047 and #763–#771/#777/#778; #744
+(multi-stamp copies) produced ADR-0044 and #745–#750; #71 produced #72 and #736–#740. The proposals
+go back to the lead, who reconciles them before any of them becomes backlog.
+
+## Release sessions
+
+Cutting a release is its own kind of session and fits neither shape above. It has no issue and no
+branch, and what it produces is a tag, a GitHub Release and a published image.
+**`release-versioning.md` owns the procedure end to end**; none of it is restated here.
+
+It stays separate rather than becoming the tail of the task session that wrote the last feature,
+because a release session changes nothing else — no code, no documentation, no configuration — so
+that its transcript reads afterwards as the record of one release. Since the version bump was
+dropped from the procedure (#780), that rule is now literally true rather than aspirational: there
+is no longer anything for a release session to commit.
+
+A release session is spawned **fresh** every time, for a reason the procedure itself states in its
+first line: never assume the last released version from memory or from local tags, always run
+`gh release list`. A long-lived release session is a session accumulating exactly the thing that
+file forbids — and the procedure changes between releases, so it would follow the version it
+remembers rather than the one on disk.
+
+The boundary runs the other way too: a session **reviewing the backlog** only *suggests* a release
+and never prepares one (`backlog-review.md`), and the lead is normally the session that applies to.
+
+## Worktree cleanup
+
+Three layers, and the middle one is what makes forgetting the first harmless:
+
+1. **A merged branch deletes itself** on GitHub, and **the lead removes the worktree** — along with
+   the local branch, and the remote branch too if the work was dropped rather than merged.
+2. Per-worktree slots are reclaimed when the worktree goes (#781).
+3. **Every backlog review sweeps**: `git worktree list`, `git worktree prune`, and remove what is
+   stale (`backlog-review.md`).
+
+Two orphaned worktrees from 27 August were found by hand while this model was being written. A
+worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
+in an unrelated session, as a failure with no visible cause.
+
+## How much experience is behind this
+
+**One day.** Before 2026-09-06 every commit in this repository went straight to `main` and every
+session was the only one running. The single-session rule at the top has 261 plans behind it; the
+lead, the pull request and the parallel worktrees have a single afternoon. This file records the
+current state of the practice, not settled practice, and the parts likeliest to be wrong are the
+ones exercised least: more than two sessions at once, and how a design track's issues get spawned as
+a batch.
+
+## Keeping this file honest
+
+Every backlog review asks whether the model above still describes what actually happens, and
+**reports what it finds rather than quietly fixing it** (`backlog-review.md`):
+
+- Did a task session stall waiting on the lead, and for how long?
+- Did the lead answer something that was not written down anywhere?
+- Did anything reach `main` without the user's explicit go-ahead?
+- Did a task session open an issue, close one, or merge a pull request?
+- Are there worktrees or `task/` branches left over from work that has already landed?
+
+Each of these is one of the rules above failing in a way that looks like nothing at the time. A lead
+answering from its own judgement is indistinguishable from a lead answering from the documentation,
+right up until somebody asks where the answer came from.
