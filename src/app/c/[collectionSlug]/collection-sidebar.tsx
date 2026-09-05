@@ -309,9 +309,9 @@ export function CollectionSidebar({
             is built from, but selling is the side worked on daily — offers prepared, batches posted,
             orders caught up with — and the section reached first should be the one opened most. */}
         <p style={sectionLabelStyle}>Selling</p>
-        {/* Four entries, not one (#502, #611), on the reasoning #376 split Auctions with. The offer
-            list is the daily screen, but posting a prepared batch and working through what a
-            marketplace has already done with it are their own sittings — and all of those were
+        {/* Five entries, not one (#502, #611, #760), on the reasoning #376 split Auctions with. The
+            offer list is the daily screen, but building a hundred-copy lot, posting a prepared batch
+            and working through what a marketplace has already done with it are their own sittings — and all of those were
             reachable only by first landing on the list and finding the way out of it. Nested rather
             than flat: they are views of one subject, and Offers leads. The two marketplace entries
             sit last and in the order the work reaches them. */}
@@ -322,10 +322,18 @@ export function CollectionSidebar({
             // Not exact: an offer's own detail screen is still the list's, so it keeps this entry
             // lit. Only the two branches that became siblings are yielded.
             active={isActive(`${base}/offers`, false, [
+              `${base}/offers/lot-builder`,
               `${base}/offers/listing`,
               `${base}/offers/allegro`,
               `${base}/offers/delcampe`,
             ])}
+          />
+          {/* Where a listing is *composed* rather than posted (#760), so it leads the two that
+              follow: the builder makes the offer, Bulk Listing takes the prepared batch live. */}
+          <NavItem
+            href={`${base}/offers/lot-builder`}
+            label="Lot Builder"
+            active={isActive(`${base}/offers/lot-builder`)}
           />
           <NavItem
             href={`${base}/offers/listing`}

@@ -20,6 +20,7 @@ import {
   type LotCandidate,
   type LotChecklist,
   type LotPlan,
+  type RefusedChecklistReason,
 } from "./lot-builder-rules";
 import {
   suggestLotTexts,
@@ -277,6 +278,21 @@ export interface MissingPinnedCopy {
   stampName: string | null;
 }
 
+/** A series the lot took whole, named. The plan carries the ids; the screen states the set. */
+export interface TakenChecklist {
+  checklistId: string;
+  name: string;
+}
+
+/** A series the pool could assemble that the lot did not take, with the reason in the terms the
+ *  collector chose it in: the cap they typed, or the target they set. A `cap` refusal names the
+ *  **stamp** that blocked it (#758), so the sentence says which one rather than only that one did. */
+export interface RefusedChecklistDetail extends TakenChecklist {
+  reason: RefusedChecklistReason;
+  stampId: string | null;
+  stampName: string | null;
+}
+
 export interface LotProposal {
   /** The pick and its whole report — what got in, how close each target came, which series were
    *  refused and why (#758). */
@@ -288,6 +304,10 @@ export interface LotProposal {
   /** Picked copies promised in an agreed trade (#639). Reported, never excluded: a `preparing`
    *  offer competes for nothing, and the gate that does refuse them sits at `active`. */
   tradeCommitments: CommittedCopy[];
+  /** Series taken whole, in the order they were taken — the plan's `takenChecklistIds`, named. */
+  takenChecklists: TakenChecklist[];
+  /** Series the pool could assemble that did not enter, and why. */
+  refusedChecklists: RefusedChecklistDetail[];
   /** The criteria panel's readout over the same pool this proposal was picked from. */
   summary: LotPoolSummary;
   /** What the wizard's title and description fields are pre-filled with. */
@@ -322,10 +342,11 @@ export async function buildLotProposal(
     rejectedItemIds: request.rejectedItemIds,
   });
 
-  const [copies, missingPinned, tradeCommitments] = await Promise.all([
+  const [copies, missingPinned, tradeCommitments, series] = await Promise.all([
     loadPickedCopies(ownerId, collectionId, plan.itemIds),
     nameMissingPinned(collectionId, plan.missingPinnedItemIds),
     findCommittedCopies(collectionId, plan.itemIds),
+    nameChecklists(collectionId, plan),
   ]);
 
   const summary = summarize(pool, criteria, baseCurrency);
@@ -334,6 +355,8 @@ export async function buildLotProposal(
     copies,
     missingPinned,
     tradeCommitments,
+    takenChecklists: series.taken,
+    refusedChecklists: series.refused,
     summary,
     suggested: await suggestTexts(collectionId, criteria, pool, plan),
   };
@@ -376,6 +399,57 @@ async function nameMissingPinned(
       stampName: row?.stamp?.name ?? null,
     };
   });
+}
+
+/**
+ * The names behind the plan's checklist ids, and behind the stamp a cap refusal blames.
+ *
+ * Resolved here rather than on the screen because they are the *reason* the lot looks the way it
+ * does — "Numerals 1955 went in whole" and "Definitives was left out: you already have three of
+ * 226" — and a panel that had to fetch them separately would draw the explanation a beat after the
+ * thing it explains.
+ */
+async function nameChecklists(
+  collectionId: string,
+  plan: LotPlan
+): Promise<{ taken: TakenChecklist[]; refused: RefusedChecklistDetail[] }> {
+  const ids = [...new Set([...plan.takenChecklistIds, ...plan.refusedChecklists.map((r) => r.checklistId)])];
+  if (ids.length === 0) return { taken: [], refused: [] };
+
+  const blamedStampIds = plan.refusedChecklists
+    .map((r) => r.stampId)
+    .filter((id): id is string => id !== null);
+  const [checklists, stamps] = await Promise.all([
+    prisma.checklist.findMany({
+      where: { id: { in: ids }, collectionId },
+      select: { id: true, name: true },
+    }),
+    blamedStampIds.length > 0
+      ? prisma.stamp.findMany({
+          where: { id: { in: blamedStampIds }, collectionId },
+          select: { id: true, name: true },
+        })
+      : [],
+  ]);
+  const nameOf = new Map(checklists.map((c) => [c.id, c.name]));
+  const stampNameOf = new Map(stamps.map((s) => [s.id, s.name]));
+  // A checklist deleted between the read and here would leave an id with no name; it is still the
+  // reason a series is missing, so it is reported as one rather than dropped.
+  const label = (checklistId: string) => nameOf.get(checklistId) ?? "A set";
+
+  return {
+    taken: plan.takenChecklistIds.map((checklistId) => ({
+      checklistId,
+      name: label(checklistId),
+    })),
+    refused: plan.refusedChecklists.map((refusal) => ({
+      checklistId: refusal.checklistId,
+      name: label(refusal.checklistId),
+      reason: refusal.reason,
+      stampId: refusal.stampId,
+      stampName: refusal.stampId ? (stampNameOf.get(refusal.stampId) ?? null) : null,
+    })),
+  };
 }
 
 /**

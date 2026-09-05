@@ -5,14 +5,19 @@ or Colnect. The offer **owns what it lists**: you compose it from your inventory
 more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
 independent offers — each tracked, edited, and sold on its own.
 
-**Offers** is a group of three entries in the **Selling** section of the sidebar:
+**Offers** is a group of entries in the **Selling** section of the sidebar, in the order the work
+reaches them:
 
 - **Offers** — the list itself, and the screen you spend the day on.
+- **Lot builder** — where a job lot of a hundred copies is put together and turned into an offer.
+  See [Building a bulk lot](#building-a-bulk-lot).
 - **Bulk listing** — where you post a batch that is prepared and ready to go live. See
   [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
   list's toolbar as well, which carries the platform filter across.
 - **Sold on Allegro** — the other end of the same job: what has sold there and is still waiting to
   be recorded here. See the [Allegro guide](allegro.md#sold-on-allegro).
+- **On Delcampe** — the same sitting on the marketplace next door. See the
+  [Delcampe guide](delcampe.md).
 
 ## Offer number and short link
 
@@ -1109,6 +1114,125 @@ the next offer still **Preparing** on this platform. It is offered whether or no
 because an offer you have decided to come back to is exactly the one you want to step past.
 
 The wizard is offered on any platform the Assistant can list to, not Colnect alone.
+
+## Building a bulk lot
+
+Selling a hundred stamps as one job lot is an ordinary offer — the copies are catalogued and valued
+like any others, the listing texts, the photos, the pricing and the accounting are unchanged. What is
+hard is **choosing the hundred copies**, and that turns out not to be a filter. The **Lot builder**
+does that choosing.
+
+### Stating what you want
+
+The **platform** comes first, because everything else is judged against it. The lot is drawn from the
+copies that are marked *for sale*, are in your hands, are not already listed on that platform, are
+not under bid anywhere, and that you have not set aside as never-on-that-platform. Copies you have
+not marked for sale are not in the pool at all — mark them in bulk on the [Copies list](inventory.md)
+first if that is where your duplicates are sitting.
+
+Then you narrow it: an **area** on the rail down the left side (the area and everything under it), a
+span of **issued years**, the **conditions** and **formats** you will allow, and a **maximum
+catalogue value per copy** so a dear stamp cannot fall into a job lot by accident.
+
+A copy with **no catalogue value recorded** passes that ceiling and is counted. A missing value is a
+gap in your data, not a figure, so it can be read neither as "cheap enough" nor as "too dear" — the
+screen tells you how many such copies are in play instead, so you can see the risk before the offer
+exists.
+
+Then what the lot should come to. Both targets are **optional** and both are **ranges**:
+
+- **Pieces** — how many copies.
+- **Catalogue value** — what they add up to.
+
+And two preferences:
+
+- **Complete sets** — *Take whole* offers every set your pool can assemble the chance to go into the
+  lot entire, before any single copy is picked; *Keep back* does the opposite and picks those copies
+  last, so a set you could sell whole survives the lot; *Neutral* neither seeks nor avoids one.
+- **Duplicates** — a cap on how many copies of one stamp the lot may hold, and whether to drain your
+  **deepest piles first**, so the stamp you own once is the last thing to fall into a job lot.
+
+A duplicate here means **a stamp, rolled up through its variants**: two copies of 226 and one of
+226y are three of the same thing to a buyer.
+
+### Reading the pool before you pick
+
+Above the proposal, the screen answers your criteria **live**, before anything is picked: how many
+copies are in the pool, how many different stamps, what they are worth, how many carry no value at
+all, and how many complete sets the pool could assemble. Where you have set a target, the figure is
+drawn against it.
+
+If you have set a per-stamp cap there is one more figure: **the largest lot the cap allows**. It is
+an exact ceiling, not an estimate, and it is what catches a target of 100 against a pool that can
+only physically yield 80 — before you have generated anything.
+
+There is deliberately no "about N lots" figure. Dividing the pool by your target answers a different
+question than it looks like it does: the cap and whole sets leave remainders that no later lot can
+pick up.
+
+### The proposal
+
+**Propose a lot** picks one. It is random, and the roll is written into the address — so
+**Re-roll** gives you a different lot from the same criteria, and you can look at several before
+choosing one.
+
+Above the list you get the *why*: the pieces and the catalogue value against their ranges, the
+complete sets that went in whole, the copies with no catalogue value, and — stated rather than left
+to be noticed — the **sets that were left out** and what refused them. A set your per-stamp cap would
+have broken is named along with the stamp that blocked it: the cap is something you typed, and a
+complete set is only a preference, so the cap wins.
+
+The list itself is grouped the way the pick happened — pinned copies, then each set that went in
+whole, then the singles that topped the lot up.
+
+Copies **promised in an agreed trade** are kept in the lot and flagged. A draft competes for nothing,
+and you may well be preparing the listing you will post the day the trade falls through — but the
+offer will refuse to go live around them, so it is worth seeing now.
+
+### Closing in on the lot you want
+
+Two actions on every row:
+
+- **Pin to the lot** keeps that copy through every re-roll. Pinned copies are taken first and eat the
+  target from the top.
+- **Reject** means never propose this copy for this lot again.
+
+Both survive a re-roll, which is what makes this a few rounds of closing in rather than a one-shot
+generator. Everything — the criteria, the roll, the pins and the rejections — lives in the address,
+so a refresh rebuilds exactly this screen and the link still works tomorrow.
+
+If a pinned copy stops being listable between rounds — it sold, or you listed it somewhere else — it
+is **named on screen** and left out, never quietly released.
+
+### Creating the offer
+
+**Create the offer** makes an ordinary **Preparing** offer on that platform holding **one set** with
+the chosen copies, and takes you to it. One set, not one per copy: a set is the thing a buyer buys,
+and one set per copy would describe your lot as a hundred alternative listings.
+
+The lot is **picked again** as the offer is created. Between opening this screen and pressing the
+button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a
+fresh look rather than from what is on your screen — and anything that dropped out is named.
+
+The **title and description** are filled in for you from your criteria and from what the lot actually
+came to. That is not decoration: the automatic title over a hundred unrelated stamps comes out as a
+dozen catalogue-number ranges, which is longer than most platforms allow, and a text over the limit
+blocks the offer's way to **Ready**. What is written here is stored as **yours** — the offer shows
+the *edited* mark and the text stops following later changes to the composition. Clear a field and
+the platform's own template takes over instead.
+
+The piece count in the title is what the lot **actually holds**, not what you asked for: a set goes in
+whole, so a target of 100 often lands at 103.
+
+The catalogue-value sum is deliberately **not** in the suggested description. It is the number a
+buyer decides on, and once written it would not refresh if you trimmed copies from the offer
+afterwards. The offer's own screen shows you the true figure the moment you want to type it in.
+
+Everything after that is an ordinary offer: pricing, photos, the ready gate, publishing.
+
+Nothing is remembered between visits. If you find yourself typing the same criteria for the third
+time, that is worth saying — a named, reusable recipe is a deliberate not-yet rather than an
+oversight.
 
 ## Bulk listing — posting a prepared batch
 

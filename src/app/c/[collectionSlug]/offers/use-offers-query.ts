@@ -19,6 +19,8 @@ import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
 // (offer copies for the rich sets view)
 import type { OfferState } from "@/lib/offer-rules";
+import type { LotPoolSummary, LotProposal } from "@/lib/lot-builder";
+import { lotBuilderSearchParams, type LotBuilderRequest } from "@/lib/lot-builder-criteria";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -410,6 +412,60 @@ export function useOfferTranslationGaps(collectionId: string, offerId: string, e
       return offerTranslationGapsAction(offerId);
     },
     enabled,
+  });
+}
+
+// ── The bulk-lot builder (#760) ──────────────────────────────────────────────────────────────────
+//
+// Two reads over one pool. The **summary** answers the criteria panel live, before anything is
+// picked — which is the whole reason it is a read of its own (#759). The **proposal** runs only once
+// the collector has asked for one, and asking is what puts a seed in the URL, so the seed doubles as
+// "a lot has been proposed". Neither is cached beyond the query key it was asked under: the request
+// *is* the key, so pinning a copy or re-rolling is a different question rather than a stale answer.
+
+/** What the pool holds under these criteria — no pick is run. Disabled until a platform is chosen,
+ *  since every availability clause is judged against one. */
+export function useLotPoolSummary(collectionId: string, request: LotBuilderRequest) {
+  // Only the criteria narrow the pool; the seed and the pins describe a pick. Keyed on the criteria
+  // alone so a re-roll does not re-ask a question whose answer cannot have changed.
+  const params = lotBuilderSearchParams({
+    criteria: request.criteria,
+    seed: "",
+    pinnedItemIds: [],
+    rejectedItemIds: [],
+  }).toString();
+  return useQuery<LotPoolSummary>({
+    queryKey: ["offers", collectionId, "lot-pool", params] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/lot-builder/summary?${params}`
+      );
+      if (!res.ok) throw new Error("Failed to read the candidate pool");
+      return res.json();
+    },
+    enabled: !!request.criteria.platformId,
+  });
+}
+
+/** One round of the builder: the criteria, the seed, the pins and the rejections, answered whole.
+ *  Disabled until there is a seed — until then the collector is still stating criteria, and the
+ *  readout above is what answers them. */
+export function useLotProposal(collectionId: string, request: LotBuilderRequest) {
+  const params = lotBuilderSearchParams(request).toString();
+  return useQuery<LotProposal>({
+    queryKey: ["offers", collectionId, "lot-proposal", params] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/lot-builder/proposal?${params}`
+      );
+      if (!res.ok) throw new Error("Failed to build the lot");
+      return res.json();
+    },
+    enabled: !!request.criteria.platformId && !!request.seed,
+    // The pool moves under an open wizard — a copy sold, listed elsewhere, promised in a trade — and
+    // the commit re-plans regardless (#717). Re-asking on focus is how the screen stops showing a
+    // lot the commit would no longer build.
+    refetchOnWindowFocus: true,
   });
 }
 

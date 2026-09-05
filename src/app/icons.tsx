@@ -79,6 +79,8 @@ import {
   List,
   Lock,
   LockOpen,
+  Pin,
+  PinOff,
   LogOut,
   MapPin,
   Maximize,
@@ -269,6 +271,11 @@ const GLYPHS = {
   excluded: Ban,
   locked: Lock,
   unlocked: LockOpen,
+  /** Kept where it is through whatever gets recomputed around it — a copy the bulk-lot builder
+   *  must keep in the lot across a re-roll (#760). Its own word rather than `locked`, which is
+   *  about a value that may not be changed at all: a pin is a choice, and `unpin` takes it back. */
+  pin: Pin,
+  unpin: PinOff,
   /** Per-language texts (#293–#296). */
   translations: Globe,
   /** Catalogue values recorded for a stamp. */
