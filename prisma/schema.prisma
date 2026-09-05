@@ -2203,10 +2203,12 @@ model CollectionArea {
 
 // Per-language text for an area (#265, #293). The parent's own `titleName` column stays the
 // **default-language** value; a row here overrides it for one language. `language` is a free
-// ISO 639-1 code, and the set of languages a collection uses is derived from its platforms
-// (`Contact.titleLanguage`) — there is no separate language configuration. Cascade-deleted with
-// the area. First of the per-entity translation tables; condition/certificate (#294), issue
-// (#295) and stamp (#296) follow the same shape.
+// ISO 639-1 code, and the set of languages a collection uses is the union of its platforms'
+// listing languages (`Contact.titleLanguage`) and its albums' printed languages (`Album.language`,
+// #767/#777) — derived **from use** either way, never configured: there is no language-configuration
+// screen, and adding one stays the thing not to do. Cascade-deleted with the area. First of the
+// per-entity translation tables; condition/certificate (#294), issue (#295) and stamp (#296)
+// follow the same shape.
 model CollectionAreaTranslation {
   collectionAreaId String
   language         String
@@ -4787,8 +4789,9 @@ model Contact {
   // Language this platform's generated listing text is written in (#265, #293) — a free ISO 639-1
   // code (`"pl"`, `"en"`). Nullable; only platforms carry it. Title tokens resolve translated
   // entity text for this language and fall back to the entity's default-language value when a
-  // translation is missing. The collection's language set is the distinct set of these values, so
-  // entity forms only offer per-language inputs for languages actually in use.
+  // translation is missing. These values are one half of the collection's language set — #777
+  // unions them with the albums' `Album.language` — so entity forms only offer per-language inputs
+  // for languages actually in use.
   titleLanguage    String?
   // Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), in the
   // platform's own `platformCurrency` — an auction house one always opens at the same figure should

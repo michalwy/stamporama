@@ -11,6 +11,7 @@ import {
 } from "../../src/lib/areas";
 import { getCollectionTitleLanguages } from "../../src/lib/contacts";
 import { setCollectionDefaultLanguage } from "../../src/lib/collections";
+import { createAlbum, deleteAlbum, updateAlbum } from "../../src/lib/albums";
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -612,5 +613,83 @@ describe("area title translations", () => {
     await setCollectionDefaultLanguage(userId, collectionId, "pl");
     assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["de", "en"]);
     await setCollectionDefaultLanguage(userId, collectionId, "en");
+  });
+});
+
+describe("translation languages derived from albums (#777)", () => {
+  let userId: string;
+  let collectionId: string;
+  let areaId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`alb-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `alb-${ts}`)).id;
+    areaId = (
+      await createCollectionArea(userId, collectionId, { name: "Denmark", assignable: false })
+    ).id;
+    await prisma.contact.create({
+      data: { collectionId, name: "Allegro", platform: true, titleLanguage: "pl" },
+    });
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("unions album languages with the platform ones, minus the default", async () => {
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["pl"]);
+
+    // An album in a language nothing is sold in: the case the whole issue exists for. Without the
+    // union it would fall back on every token with no dialog offering an input to fix it.
+    const danish = await createAlbum(
+      userId,
+      collectionId,
+      { name: "Danmark", collectionAreaId: areaId, language: "da" },
+      null
+    );
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["da", "pl"]);
+
+    // The default language is subtracted on this side too — its text already lives in the entity's
+    // own columns.
+    const english = await createAlbum(
+      userId,
+      collectionId,
+      { name: "England", collectionAreaId: areaId, language: "en" },
+      null
+    );
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["da", "pl"]);
+
+    // An album agreeing with a platform adds nothing: a set, not a list.
+    await updateAlbum(userId, english, { name: "England", language: "pl" });
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["da", "pl"]);
+
+    // A derivation, so it runs backwards: the second Danish album keeps the language alive, and
+    // only the last one leaving takes the input away again.
+    const danish2 = await createAlbum(
+      userId,
+      collectionId,
+      { name: "Danmark II", collectionAreaId: areaId, language: "da" },
+      null
+    );
+    await deleteAlbum(userId, danish);
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["da", "pl"]);
+    await deleteAlbum(userId, danish2);
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["pl"]);
+  });
+
+  it("drops an album language that becomes the collection's default", async () => {
+    const album = await createAlbum(
+      userId,
+      collectionId,
+      { name: "Deutschland", collectionAreaId: areaId, language: "de" },
+      null
+    );
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["de", "pl"]);
+    await setCollectionDefaultLanguage(userId, collectionId, "de");
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["pl"]);
+    await setCollectionDefaultLanguage(userId, collectionId, "en");
+    await deleteAlbum(userId, album);
   });
 });

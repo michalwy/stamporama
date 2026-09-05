@@ -602,12 +602,16 @@ export async function updateContact(
 }
 
 /**
- * The languages a collection actually needs **translations** for (#293): the distinct listing
- * languages across its platforms, minus the collection's own `defaultLanguage` — text in that
- * language already lives in the entity's default column, so a translation row would duplicate it.
+ * The languages a collection actually needs **translations** for (#293, widened by #777): the
+ * distinct languages it puts to use — its platforms' listing languages (`Contact.titleLanguage`)
+ * and its albums' printed languages (`Album.language`, #767) — minus the collection's own
+ * `defaultLanguage`, since text in that language already lives in the entity's default column and a
+ * translation row would duplicate it.
  * This *is* the collection's translation language set (there is no separate language configuration,
  * #265): entity forms offer a per-language input for exactly these codes, and an empty result
- * means no translation UI at all.
+ * means no translation UI at all. It stays **derived from use** in both directions — an album in a
+ * language nothing is sold in makes that language typeable everywhere, and deleting the last album
+ * in it takes the input away again.
  */
 export async function getCollectionTitleLanguages(
   ownerId: string,
@@ -636,7 +640,7 @@ export async function getCollectionTranslationContext(
   collectionId: string
 ): Promise<CollectionTranslationContext> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [collection, rows] = await Promise.all([
+  const [collection, platformRows, albumRows] = await Promise.all([
     prisma.collection.findUniqueOrThrow({
       where: { id: collectionId },
       select: { defaultLanguage: true },
@@ -646,11 +650,22 @@ export async function getCollectionTranslationContext(
       select: { titleLanguage: true },
       distinct: ["titleLanguage"],
     }),
+    // Albums are the second kind of use (#777, #767). `Album.language` is NOT NULL — an album is a
+    // printed artefact and the language is a fact about it, not a pointer that could go missing —
+    // so unlike `titleLanguage` there is no null to filter out and no null branch below.
+    prisma.album.findMany({
+      where: { collectionId },
+      select: { language: true },
+      distinct: ["language"],
+    }),
   ]);
   const defaultLanguage = normalizeLanguage(collection.defaultLanguage);
   const codes = new Set<string>();
-  for (const r of rows) {
-    const code = normalizeLanguage(r.titleLanguage);
+  for (const value of [
+    ...platformRows.map((r) => r.titleLanguage),
+    ...albumRows.map((r) => r.language),
+  ]) {
+    const code = normalizeLanguage(value);
     if (code && code !== defaultLanguage) codes.add(code);
   }
   return {

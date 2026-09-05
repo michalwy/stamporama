@@ -39,6 +39,14 @@ rather than being chosen when you print.
 Changing it re-plans the album. Pages you have already printed stay in the language they were
 printed in.
 
+An album in a language you sell nothing in is still a language you are using, so it gets its own
+column in every dialog that translates text — area title names, condition and certificate names,
+issue and stamp names, subtypes, formats. Nothing has to be switched on for that: the languages on
+offer are the ones your platforms and your albums use, minus your
+[default language](collections.md#default-language). Delete the last album in a language and its
+column goes away again; whatever you had typed for it stays where it was, ready if the language comes
+back.
+
 ## Entries
 
 Entries are checklists, in the order the album prints them. Drag a row to change that order.

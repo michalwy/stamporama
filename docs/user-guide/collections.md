@@ -143,10 +143,15 @@ something the app wrote, a globe opens per-language texts, a caret expands or co
 ## Default language
 
 **Settings → General** carries a **Default language** — the language the names and title names you
-type into Stamporama are written in. It starts as **English** and only matters once you list on
-platforms writing in another language: a platform set to your default language needs no translations
-at all, so it never adds fields anywhere. See
+type into Stamporama are written in. It starts as **English** and only matters once you write in
+another language: a platform that lists in one, or an [album](albums.md) printed in one. Anything set
+to your default language needs no translations at all, so it never adds fields anywhere. See
 [Contacts → Listing language](contacts.md#adding-and-editing) for how translations work.
+
+The languages you can type translations for are never configured anywhere — they are simply the ones
+you are **using**, whether on a platform or in an album, minus your default. Add an album in Danish
+and every dialog that translates text grows a Danish entry; delete the last Danish album and it goes
+away again.
 
 Changing it later does not rewrite anything — your existing text stays exactly as typed; you are only
 telling Stamporama what language that text is in.
@@ -323,7 +328,7 @@ Each variant comes out the way one added through the single dialog does: the bas
 
 ### Issue and stamp names in other languages
 
-The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).
+The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).
 
 Stamp names are the largest set of text to translate and every entry is typed by hand, so treat it as something you fill in for the stamps you actually list, not a job to finish up front — an untranslated stamp simply lists under its default name.
 
@@ -534,7 +539,7 @@ Certificate and guarantee status is tracked as a separate dimension, not as part
 
 ### Conditions in other languages
 
-Once a platform lists in a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields each grow their own 🌐 button, and both are labelled with your default language (e.g. *Name — English (en)*). Click one to enter that **single** field per language — the two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. Each button's small number counts the languages still missing **that** field, and a blank entry always falls back to the default text, so a title never ends up with a gap. The entries save together with the condition, so cancelling the condition dialog discards them too.
+Once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields each grow their own 🌐 button, and both are labelled with your default language (e.g. *Name — English (en)*). Click one to enter that **single** field per language — the two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. Each button's small number counts the languages still missing **that** field, and a blank entry always falls back to the default text, so a title never ends up with a gap. The entries save together with the condition, so cancelling the condition dialog discards them too.
 
 These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](contacts.md#adding-and-editing).
 

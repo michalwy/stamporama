@@ -106,8 +106,9 @@ Ticking **Platform** also reveals a **Listing language** — the language this p
 written in. Pick the one it uses; platforms that write in your collection's
 [default language](collections.md#default-language) need nothing further, and neither does leaving it
 on **— default language —**. The language does two things: generated titles for this platform use the
-text you entered for that language, and the languages that *differ* from your default are the ones the
-entity forms offer translation fields for. Nothing is translated automatically — where you have not
+text you entered for that language, and the languages that *differ* from your default are among the
+ones the entity forms offer translation fields for — the languages your [albums](albums.md#the-language-is-the-albums-own-and-it-changes-the-plan)
+are printed in count too. Nothing is translated automatically — where you have not
 entered text for a language, the default text is used, so a title is never left with a gap. Every
 token that renders text you typed is translatable: the area
 [title name](#title-names-per-language), [condition and certificate status](collections.md#conditions-in-other-languages)
@@ -400,7 +401,7 @@ So for `Poland › { Second Republic, Third Republic, General Gouvernement }`: l
 
 #### Title names per language
 
-Once a platform lists in a language **other than** your collection's
+Once a platform lists in — or an album is printed in — a language **other than** your collection's
 [default language](collections.md#default-language), a 🌐 button appears **beside** the area's
 **Title name** field (which is then labelled with your default language, e.g. *Title name — English
 (en)*). It opens a fixed-size dialog listing those languages — fill in the ones you care about and
