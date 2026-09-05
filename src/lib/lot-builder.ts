@@ -317,7 +317,9 @@ export interface LotProposal {
   /** The pick and its whole report — what got in, how close each target came, which series were
    *  refused and why (#758). */
   plan: LotPlan;
-  /** The picked copies in **pick order**, enriched as the Copies list enriches a row. */
+  /** The picked copies, enriched as the Copies list enriches a row, in **catalogue order** (#773) —
+   *  the order the finished offer reads in, not the order the pick chose. See
+   *  {@link loadPickedCopies}. */
   copies: ItemListItem[];
   /** The picked copies as the **template engine** takes them (#774) — so the wizard's title and
    *  description previews render against the lot itself rather than random copies of the collection,

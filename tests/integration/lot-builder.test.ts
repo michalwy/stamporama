@@ -503,7 +503,7 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       assert.equal(rolled.plan.itemIds.length, first.plan.itemIds.length);
     });
 
-    it("takes the pins first and enriches the picked copies in pick order", async () => {
+    it("takes the pins first, and shows the copies in the order the offer will (#773)", async () => {
       const pinned = (
         await buildLotProposal(
           userId,
@@ -516,15 +516,26 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
         collectionId,
         request({ criteria: { areaId: pickAreaId, countMin: 3 }, pinnedItemIds: pinned })
       );
+      // Pins lead the **pick**, and the pick is what the plan reports.
       assert.deepEqual(proposal.plan.itemIds.slice(0, 2), pinned);
       assert.deepEqual(
-        proposal.copies.map((c) => c.id),
-        proposal.plan.itemIds,
-        "the display read keeps the order the pick chose (#306)"
+        [...proposal.copies.map((c) => c.id)].sort(),
+        [...proposal.plan.itemIds].sort(),
+        "the display read holds exactly what the pick chose"
+      );
+      // The **display** read is not in pick order (#773): within the offer's one set the copies
+      // start derived (#759), and derived resolves to the catalogue's own order (#306) — so handing
+      // back the pick's order would show a seeded shuffle the finished offer never uses. These
+      // fixture stamps carry no catalog number, so every key ties and the copy number decides,
+      // which is the tie-break the Copies list itself falls back on.
+      assert.deepEqual(
+        proposal.copies.map((c) => c.itemNo),
+        [...proposal.copies.map((c) => c.itemNo)].sort((a, b) => a - b),
+        "the copies read in catalogue order, tie-broken by copy number"
       );
     });
 
-    it("suggests texts from the criteria and the copies actually picked", async () => {
+    it("suggests a template from the criteria, previewed against the lot itself (#774)", async () => {
       const proposal = await buildLotProposal(
         userId,
         collectionId,
@@ -539,15 +550,27 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
           },
         })
       );
-      // The series is atomic, so a target of one lands at two — and the title says two.
+      // The series is atomic, so a target of one lands at two.
       assert.equal(proposal.plan.itemIds.length, 2);
-      assert.equal(proposal.suggested.name, "Picking 1958–1965, 2 stamps");
-      assert.match(proposal.suggested.description, /2 different stamps, including 1 complete set\./);
-      assert.match(proposal.suggested.description, /Conditions: Mint Never Hinged\./);
+      // A **template**, not the finished text (#774): the figures the suggestion used to carry are
+      // tokens now, so the wording follows what the offer holds instead of freezing at commit time.
+      // The criteria decide which tokens appear — an area and a year span were asked for, so both do.
+      assert.equal(proposal.suggested.name, "{area} {year}, {count} stamps");
+      assert.match(
+        proposal.suggested.description,
+        /Bulk lot of \{count\} stamps from \{area\}, issued \{year\}\./
+      );
+      assert.match(proposal.suggested.description, /Conditions: \{condition\}\./);
       assert.equal(
         /catalogue|catalog/i.test(proposal.suggested.description),
         false,
-        "no value claim in a text that is frozen the moment it is stored"
+        "no value claim: the collector has the true sum on that screen, and there is no token for it"
+      );
+      // `{count}` has to preview the figure the listing will carry, so the samples the wizard
+      // renders against are the **whole lot**, not a sample of the collection.
+      assert.deepEqual(
+        [...proposal.templateSamples.map((c) => c.id)].sort(),
+        [...proposal.plan.itemIds].sort()
       );
     });
 
@@ -628,23 +651,36 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       );
     });
 
-    it("stores the wizard's texts as the collector's own, off the template (#380)", async () => {
+    it("stores the wizard's wording as the lot's own template, rendered and unfrozen (#774)", async () => {
       const ask = request({ seed: "texts", criteria: { areaId: commitAreaId, countMin: 1 } });
       const result = await commitLotProposal(userId, collectionId, {
         ...ask,
-        name: "Poland 1955, 1 stamp",
-        description: "Bulk lot of 1 stamp from Poland.",
+        name: "Poland 1955, {count} stamps",
+        description: "Bulk lot of {count} stamps from Poland.",
       });
       const offer = await prisma.offer.findUniqueOrThrow({
         where: { id: result.offerId },
-        select: { name: true, description: true, nameEdited: true, descriptionEdited: true },
+        select: {
+          name: true,
+          description: true,
+          nameTemplate: true,
+          descriptionTemplate: true,
+          nameEdited: true,
+          descriptionEdited: true,
+        },
       });
-      assert.equal(offer.name, "Poland 1955, 1 stamp");
-      assert.equal(offer.description, "Bulk lot of 1 stamp from Poland.");
-      // The flag means *do not regenerate this*, and regeneration is what produces a title past the
-      // platform's cap (#403) — which since #636 blocks the way to `ready`.
-      assert.equal(offer.nameEdited, true);
-      assert.equal(offer.descriptionEdited, true);
+      // Written **as templates**, and as the offer's own rather than the platform's — the lot's is
+      // short by construction, which is what makes regenerating it safe where the platform's is not
+      // (a dozen catalogue ranges over a hundred unrelated stamps, past the cap #403 guards).
+      assert.equal(offer.nameTemplate, "Poland 1955, {count} stamps");
+      assert.equal(offer.descriptionTemplate, "Bulk lot of {count} stamps from Poland.");
+      // …and rendered against what the lot actually holds, right away.
+      assert.equal(offer.name, `Poland 1955, ${result.copies} stamps`);
+      assert.equal(offer.description, `Bulk lot of ${result.copies} stamps from Poland.`);
+      // The flags stay **false** (#774): they mean *do not regenerate this*, and a lot that never
+      // regenerates is one whose title still claims a hundred pieces after one sold elsewhere.
+      assert.equal(offer.nameEdited, false);
+      assert.equal(offer.descriptionEdited, false);
     });
 
     it("re-plans rather than trusting the proposal the client is holding (#717)", async () => {
