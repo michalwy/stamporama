@@ -772,6 +772,35 @@ The difference worth knowing here: a collage template is **copied** onto an offe
 while a ref card template is read as the sheet prints and copied nowhere. Nothing about a printed
 sheet is recorded, so editing or deleting one of these changes only what you print next.
 
+## Hawid stock
+
+**Settings → Albums → Hawid stock** is the list of hawid strips you actually own: the **height**
+printed on the packet, how long one strip is **as sold** (210 mm, usually), and an optional label
+for the packet you reach for.
+
+It is there because an album page's box is a *piece of hawid*, not the stamp plus a few millimetres.
+Hawid comes as strips of a fixed height that you cut across, so the two sides of a box are not the
+same kind of number:
+
+- **The height is chosen from the drawer.** A box is as tall as the shortest strip the stamp fits
+  into, once the album template's vertical clearance is added. Anything else would draw a page that
+  disagrees with the piece lying next to it.
+- **The width is the cut.** It is the stamp plus the template's horizontal margin, to a tenth of a
+  millimetre.
+- **A stamp taller than every strip gets no strip at all.** A block, a souvenir sheet or a cover is
+  drawn at its own size plus the margins and marked as a pocket — because that is where it goes, and
+  a cutting list naming a strip you cannot buy is worse than one saying *pocket*.
+
+Drag the rows to set the order. It matters in one place: where two strips are equally short, the one
+nearer the top is used. Heights are unique — a second row of the same height could never be picked.
+
+**An empty stock is a real state, not an error.** Until you add a strip, every box is planned as a
+pocket. That is what an undescribed drawer honestly comes to; the alternative would be pages quietly
+laid out to a size nobody chose, and hawid cut to a wrong size does not come back.
+
+The stock is read as a page is planned and copied nowhere, so editing it changes the *next* plan.
+Pages you have already printed are paper.
+
 ## Stamp photos
 
 Alongside the photos you attach to an individual owned **copy** (see [Inventory → Photos](inventory.md#photos)), you can attach photos to the **stamp itself** — a representative or reference image of the catalog stamp (or variant). Stamp photos live at the catalog level, so they are shared context for every copy of that stamp rather than a record of one physical piece.

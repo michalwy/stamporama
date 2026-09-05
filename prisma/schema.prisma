@@ -142,6 +142,7 @@ model Collection {
   acceptanceProfiles AcceptanceProfile[]
   collageTemplates CollageTemplate[]
   refCardTemplates RefCardTemplate[]
+  hawidStrips     HawidStrip[]
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
@@ -709,6 +710,42 @@ model RefCardTemplate {
   @@unique([collectionId, name])
   @@index([collectionId])
   @@map("ref_card_template")
+}
+
+// The hawid strips this collection actually owns (#765) — the stock an album page's boxes are cut
+// from, and the reason a box is not simply "the stamp plus a few millimetres".
+//
+// Hawid is sold as **strips of a fixed height that are cut across**: the height is whatever is in
+// the drawer, the width is the cut. So a box's height has to be a real strip's height, or the drawn
+// page and the cut piece disagree — and a piece cut to the wrong size does not come back. This
+// dictionary is what the rule in `src/lib/hawid.ts` chooses from.
+//
+// Shaped like `StampFormat` and the collection's other dictionaries — collection-scoped, ordered by
+// a `sortOrder` the collector drags. **Nothing is seeded**: a collection that has said nothing about
+// its stock has an empty one, and an empty stock makes every box oversize, which is a true statement
+// about a drawer nobody has described rather than a default 4 mm nobody chose.
+model HawidStrip {
+  id           String @id @default(cuid())
+  collectionId String
+  // The strip's height, the fixed axis — millimetres to a tenth, like every other measurement the
+  // album track works in. Float rather than Decimal for `RefCardTemplate`'s reason: these are print
+  // geometry read into arithmetic, not money.
+  heightMm     Float
+  // How long a strip is as sold — 210 mm is the usual. The cutting list (#770) counts pieces
+  // against it; the box rule uses it only to rule out a box wider than any strip could be cut from.
+  stockLengthMm Float
+  // What the collector calls it — `Hawid 264` — optional, because a height is already an identity.
+  label        String?
+  sortOrder    Int
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // Two strips of the same height are one strip: the rule picks by height and a duplicate would be
+  // a row that can never be chosen. Reported as its own error rather than as a failed save.
+  @@unique([collectionId, heightMm])
+  @@index([collectionId])
+  @@map("hawid_strip")
 }
 
 model CatalogVendor {

@@ -28,6 +28,7 @@ import { listDelcampeLearnedCategories } from "@/lib/delcampe-categories";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
 import { getCarriers } from "@/lib/carriers";
+import { getHawidStrips } from "@/lib/hawid-stock";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
@@ -66,6 +67,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     attributes,
     collageTemplates,
     refCardTemplates,
+    hawidStrips,
     carriers,
     colnectMappings,
     colnectConditionMappings,
@@ -95,6 +97,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getStampAttributeLists(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
     getRefCardTemplates(session.user.id, collection.id),
+    getHawidStrips(session.user.id, collection.id),
     getCarriers(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
@@ -156,6 +159,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialAttributes={attributes}
           initialCollageTemplates={collageTemplates}
           initialRefCardTemplates={refCardTemplates}
+          initialHawidStrips={hawidStrips}
           initialCarriers={carriers}
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}

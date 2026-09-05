@@ -28,6 +28,7 @@ import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
+import { HawidStockPanel } from "./hawid-stock-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -45,6 +46,7 @@ import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attri
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
 import type { CarrierData } from "@/lib/carriers";
+import type { HawidStripData } from "@/lib/hawid-stock";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
@@ -74,6 +76,8 @@ interface SettingsTabsProps {
   initialCollageTemplates: CollageTemplateData[];
   /** The collection's ref-card formats (#569) — what the blank ref-card sheet prints. */
   initialRefCardTemplates: RefCardTemplateData[];
+  /** The hawid strips the collection owns (#765) — what an album page's boxes are cut from. */
+  initialHawidStrips: HawidStripData[];
   /** The collection's carriers (#491) — the tracking-address side of shipping. */
   initialCarriers: CarrierData[];
   initialColnectMappings: ColnectMappingData[];
@@ -147,6 +151,10 @@ const TABS = [
   // tab rather than a section under Collages — a screen photo and a printed card share a shape, not
   // a subject, and nothing about one is set up in the same sitting as the other.
   { key: "refcards", label: "Ref cards" },
+  // The album track's own tab (#765). It starts as the hawid stock alone and grows into the album
+  // templates (#766): both are answers to *what does a printed page look like*, and neither is set
+  // up in the same sitting as a listing photo or a filing card.
+  { key: "albums", label: "Albums" },
   { key: "shipping", label: "Shipping" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
@@ -194,6 +202,7 @@ export function SettingsTabs({
   initialAttributes,
   initialCollageTemplates,
   initialRefCardTemplates,
+  initialHawidStrips,
   initialCarriers,
   initialColnectMappings,
   initialColnectConditionMappings,
@@ -236,6 +245,7 @@ export function SettingsTabs({
     rawTab === "attributes" ||
     rawTab === "collages" ||
     rawTab === "refcards" ||
+    rawTab === "albums" ||
     rawTab === "shipping" ||
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
@@ -432,6 +442,15 @@ export function SettingsTabs({
             collectionId={collectionId}
             initialTemplates={initialRefCardTemplates}
           />
+        </section>
+      )}
+      {activeTab === "albums" && (
+        <section>
+          {/* The stock leads the tab because it is the physical fact everything else on a page is
+              planned against: a box's height is a strip's height, and a strip is either in the
+              drawer or it is not. */}
+          <h2 style={sectionHeadingStyle}>Hawid stock</h2>
+          <HawidStockPanel collectionId={collectionId} initialStrips={initialHawidStrips} />
         </section>
       )}
       {activeTab === "shipping" && (
