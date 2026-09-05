@@ -1,8 +1,8 @@
-// The album's text measurer (#767): the **one** implementation of {@link AlbumTextMetrics}.
+// The album's text measurer (#767, #768): the **one** implementation of {@link AlbumTextMetrics}.
 //
-// Pure — no font files, no Prisma, no DOM — so the page plan is measured identically wherever it is
-// planned: on the server for the PDF (#768), in the browser for the editor canvas (#769), and in
-// `test:unit` on plain numbers.
+// It measures the *embedded* faces (`album-font-bytes.ts`), so the width the page plan breaks a
+// block on and the width the PDF draws are the same number rather than two figures that happen to
+// be close.
 //
 // ## Why there is exactly one of these
 //
@@ -12,22 +12,35 @@
 // have. Every surface asks this module, and the layout engine takes it as a port so that staying
 // honest is a one-line import rather than a habit.
 //
-// ## This table is provisional, and #768 replaces it in place
+// The obligation is sharper than "share it": **the client does not measure, because the client is
+// not a planner** (ADR-0045 §7). #769's canvas draws a server-computed plan and its corrections are
+// deltas. So this module reading font files off disk is not a limitation to route around — it is
+// the rule made structural.
 //
-// The exact advances belong to the faces the PDF embeds, and embedding them is #768's deliverable —
-// there are no font bytes in this repository yet. Until they arrive, widths here are estimated from
-// each family's em proportions rather than measured from its glyphs, so a heading may wrap a word
-// earlier or later than the printed sheet will.
+// ## It agrees with pdf-lib by construction, not by luck
 //
-// That is safe for exactly one reason, and it is worth stating because it stops being true later:
-// **nothing can be printed before #768 exists**, since printing is #768. Every page this measurer
-// has ever planned is a live page, and a live page is re-planned whenever anything it reads changes
-// (#755). When the real advances land, every plan simply re-flows. Once a page can be marked printed
-// (#778), its geometry is a stored snapshot and changing this file would no longer reach it — which
-// is the property that makes the snapshot the right shape, not a reason to leave the estimate in.
+// pdf-lib's `CustomFontEmbedder.widthOfTextAtSize` lays the string out with fontkit and sums each
+// glyph's `advanceWidth`, scaled by `1000 / unitsPerEm` and then by `size / 1000`. That reduces to
+// `sum(advanceWidth) / unitsPerEm × size`, which is exactly {@link albumTextMetrics.measureMm}
+// below, and it is the same arithmetic the embedder writes into the PDF's own `W` array — so it is
+// also what a viewer and a printer advance by.
 //
-// **To replace it:** keep {@link albumTextMetrics}'s signature, measure `text` through the embedded
-// face for `faceId`, and delete the estimation below. Nothing else in the app measures text.
+// Two details are deliberate and both are copied from that function rather than improved on:
+//
+// - The sum is over the glyphs' **`advanceWidth`**, not over the run's positioned advances. pdf-lib
+//   draws glyph ids in a plain show-text operator, so no kerning is applied on the paper; measuring
+//   a kerned width would predict a line the printer never sets.
+// - `layout()` is called with **no feature list**, which is what pdf-lib passes unless a caller
+//   customises it. Note that pdf-lib exposes no OpenType feature selection at all (`album-fonts.ts`
+//   says the same, one layer up), so `tnum` and friends are unreachable and a face's default
+//   figures are the figures you get.
+//
+// ## This replaced an estimate, and the estimate is not coming back
+//
+// #767 shipped a table of average advances per family in ems, because there were no font bytes in
+// the repository. It was honest about being provisional and it was safe for one reason — nothing
+// could be printed before #768 — which stopped being true the moment this file did its job. Every
+// plan those estimates produced was a live page and re-flows against the real advances.
 //
 // ## Points in, millimetres out
 //
@@ -35,11 +48,15 @@
 // here, once, at {@link PT_TO_MM}.
 
 import type { AlbumTextMetrics } from "./album-layout";
-import { findAlbumFace } from "./album-fonts";
+import { isAlbumFaceId } from "./album-fonts";
+import { loadAlbumFace } from "./album-font-bytes";
 import { roundSizeMm } from "./stamp-size";
 
 /** A point is a 72nd of an inch; an inch is 25.4 mm. */
 export const PT_TO_MM = 25.4 / 72;
+
+/** Millimetres to points — the PDF's own unit. The only arithmetic in the whole renderer. */
+export const MM_TO_PT = 72 / 25.4;
 
 /**
  * Baseline to baseline as a multiple of the type size.
@@ -47,57 +64,27 @@ export const PT_TO_MM = 25.4 / 72;
  * 1.2 is the default leading of every face here and of every renderer that has an opinion — it is
  * what a PDF viewer, a browser and AlbumEasy all fall back to. A template that wanted looser lines
  * would be asking for a setting, and nobody has.
+ *
+ * Deliberately **not** taken from the faces' own `hhea` metrics now that the bytes are here. The
+ * six families do not agree on line gap, so reading it per face would make an album's page breaks
+ * move when the collector changed a heading from Liberation to Noto — a plan that reflows on a
+ * cosmetic choice. The *baseline within* the line is a different question and does read the face:
+ * see {@link albumBaselineOffsetMm}.
  */
 const LINE_HEIGHT_FACTOR = 1.2;
 
 /**
- * Average advance per character, in ems, per family — the estimate this module is provisional
- * about.
+ * The face a measurement falls back to when a template names one this build no longer ships.
  *
- * The two figures that matter are the ones the collector's own pages are set in: a humanist sans of
- * Arial's proportions averages about half an em across mixed-case running text, and a Times-class
- * serif is narrower at roughly 0.45, which is the whole reason a newspaper is set in one. Noto's
- * two are the same shapes at the same proportions. The narrow and condensed cuts are their family's
- * figure at the ratio those cuts are drawn to.
+ * Measuring must not fail — a screen still has to render an album written against a dropped face,
+ * and a plan is only a derivation. **Drawing** is the opposite: `album-pdf.ts` refuses such a face
+ * by name rather than printing the collector's page in something they did not choose. The split is
+ * the point, and `album-fonts.ts` states the rule.
  */
-const FAMILY_EM: Record<string, number> = {
-  "liberation-serif": 0.45,
-  "liberation-sans": 0.5,
-  "liberation-sans-narrow": 0.41,
-  "noto-serif": 0.46,
-  "noto-sans": 0.5,
-  "noto-sans-condensed": 0.43,
-};
+const FALLBACK_FACE = "liberation-sans";
 
-/** Bold cuts are drawn a little wider than their regular; italics are not systematically narrower
- *  in either family, so only weight moves the figure. */
-const BOLD_FACTOR = 1.04;
-
-/**
- * How wide one character is relative to its family's average.
- *
- * A flat average wraps badly on the strings an album actually prints: a catalog label is `303` and a
- * checklist heading is a Polish sentence, and the two have very different letter mixes. Four buckets
- * are enough to tell them apart and few enough to be worth stating rather than tabulating.
- */
-function charFactor(ch: string): number {
-  if (ch === " ") return 0.56;
-  if ("iljItfr.,;:'!|()[]-".includes(ch)) return 0.5;
-  if ("mwMW@%".includes(ch)) return 1.65;
-  // Digits and capitals are set on wider bodies than lowercase in every text face; digits in
-  // particular are all one width, which is what makes a catalog label measurable at all.
-  if (/[0-9A-ZĄĆĘŁŃÓŚŹŻÄÖÜ]/.test(ch)) return 1.3;
-  return 1;
-}
-
-/** The average advance of one em for a face id, falling back to the sans figure for a face this
- *  build does not ship — a template written against a dropped face still has to be measurable, and
- *  `album-fonts.ts` already refuses such a face at the form. */
-function emFor(faceId: string): number {
-  const face = findAlbumFace(faceId);
-  if (!face) return FAMILY_EM["liberation-sans"];
-  const base = FAMILY_EM[face.family] ?? FAMILY_EM["liberation-sans"];
-  return face.bold ? base * BOLD_FACTOR : base;
+function faceFor(faceId: string) {
+  return loadAlbumFace(isAlbumFaceId(faceId) ? faceId : FALLBACK_FACE);
 }
 
 /**
@@ -105,17 +92,44 @@ function emFor(faceId: string): number {
  *
  * Not rounded to a tenth of a millimetre: this is an input to the layout's own arithmetic, which
  * rounds where it stores a coordinate. Rounding a measurement before it is summed would quantise a
- * per-character estimate into a per-character error.
+ * per-glyph advance into a per-glyph error.
  */
 export const albumTextMetrics: AlbumTextMetrics = {
   measureMm(text: string, faceId: string, sizePt: number): number {
-    const em = emFor(faceId) * sizePt * PT_TO_MM;
-    let width = 0;
-    for (const ch of text) width += charFactor(ch) * em;
-    return width;
+    if (!text) return 0;
+    const font = faceFor(faceId);
+    const { glyphs } = font.layout(text);
+    let units = 0;
+    for (const glyph of glyphs) units += glyph.advanceWidth;
+    return (units / font.unitsPerEm) * sizePt * PT_TO_MM;
   },
 
   lineHeightMm(_faceId: string, sizePt: number): number {
     return roundSizeMm(sizePt * LINE_HEIGHT_FACTOR * PT_TO_MM);
   },
 };
+
+/**
+ * How far below the top of a line box that line's baseline sits, in millimetres.
+ *
+ * The renderers need this and the layout does not — a plan reserves a band of whole lines and never
+ * asks where the ink inside one falls — so it is exported beside the port rather than added to it.
+ * It lives here all the same, for the port's own reason: the PDF and #769's canvas must put a
+ * heading's ink in the same place, and a renderer that works it out for itself is a renderer that
+ * can work it out differently.
+ *
+ * The rule is the browser's: centre the face's own ascent-to-descent box inside the 1.2 line box
+ * (half the difference above, half below) and sit the baseline an ascent below that. Reading the
+ * face here is safe in a way reading it for {@link LINE_HEIGHT_FACTOR} is not — it moves ink within
+ * a band whose height is already fixed, so no page break can depend on it.
+ */
+export function albumBaselineOffsetMm(faceId: string, sizePt: number): number {
+  const font = faceFor(faceId);
+  const sizeMm = sizePt * PT_TO_MM;
+  // fontkit reports `descent` as a negative number of font units, so the content box is the
+  // difference rather than the sum.
+  const ascentMm = (font.ascent / font.unitsPerEm) * sizeMm;
+  const contentMm = ((font.ascent - font.descent) / font.unitsPerEm) * sizeMm;
+  const lineMm = albumTextMetrics.lineHeightMm(faceId, sizePt);
+  return (lineMm - contentMm) / 2 + ascentMm;
+}

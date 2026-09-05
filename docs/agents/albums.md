@@ -101,8 +101,9 @@ collector's own AlbumEasy sources — A4, 10 mm margins, `ALBUM_PAGES_SPACING (1
 
 A face is a **family and a style** — the unit `ALBUM_DEFINE_FONT("Arial Bold Italic")` names — so
 there are no per-role weight columns. Two families ship: Liberation, metrically compatible with the
-Times New Roman and Arial roughly 200 already-printed pages are set in, and Noto. #768 embeds the
-bytes and owns verifying coverage.
+Times New Roman and Arial roughly 200 already-printed pages are set in, and Noto. #768 embedded the
+bytes (`src/fonts/album/`) and verified the coverage — see the PDF section below; the Greek and
+Cyrillic question this file recorded as open is answered, and one small real gap replaced it.
 
 There is deliberately **no mono face**. The case for one is aligning columns of catalog numbers, and
 it fails on the material: text faces already advance digits equally (Arial 1139, Times 1024 units),
@@ -214,11 +215,23 @@ canvas draws a server-computed plan and its corrections are deltas — dragging 
 offset on an existing plan, and the re-plan happens server-side on release. The browser's
 `measureText` never enters the picture.
 
-The table there is **provisional** — the real advances belong to the faces #768 embeds, and there are
-no font bytes in the repo yet. It is safe only because nothing can be printed before #768 exists, so
-every plan it has produced is live and re-flows. It is checked against ground truth: the three
-headings the collector left on one line measure inside his 190 mm content width, and the one he broke
-by hand with a literal `\n` measures 203.
+Since #768 that implementation measures the **embedded faces' own advances**; #767's estimated table
+is gone, and it is not coming back. It reproduces pdf-lib's `CustomFontEmbedder.widthOfTextAtSize`
+exactly — the sum of the glyphs' `advanceWidth` over `unitsPerEm`, times the size — which is also
+what pdf-lib writes into the document's `W` array and therefore what a printer advances by. Two
+details are copied from that function rather than improved on: the **raw** advances rather than the
+run's positioned ones (pdf-lib draws glyph ids in a plain show-text operator, so nothing kerns on
+the paper), and `layout()` with no feature list.
+
+The ground-truth check survives and is now made against real glyphs: the three headings the collector
+left on one line measure 124.7, 147.0 and 164.4 mm inside his 190 mm content width, and the one he
+broke by hand with a literal `\n` measures 211.5.
+
+`albumBaselineOffsetMm` sits beside the port rather than in it. The layout never asks where the ink
+inside a line falls — it reserves whole lines — but both renderers must agree, and a renderer that
+works the offset out for itself is a renderer that can work it out differently. Reading the face for
+*that* is safe in a way reading it for the 1.2 line height would not be: it moves ink inside a band
+whose height is already fixed, so no page break can depend on it.
 
 ### A page range is written out in full
 
@@ -247,6 +260,115 @@ inventing a home for the stamp would hide the thing the collector needs to be to
   so years interleave produces two chapters headed 1938 rather than silently pulling them back
   together: a layout that re-sorts what the collector arranged is one they cannot predict, and this
   one is printed.
+
+## The PDF (#768, ADR-0046)
+
+`src/lib/album-pdf.ts` draws the plan and **decides nothing**. Three kinds of arithmetic and no
+others: millimetres to points, the plan's top-left origin to the PDF's bottom-left one, and centring
+an already-wrapped line with the measurer the plan wrapped with. A fourth kind belongs in
+`album-layout.ts`; anything worked out here is something #769's canvas can work out differently.
+
+pdf-lib 1.17.1 with `@pdf-lib/fontkit`, and the choice was **settled on printed paper before the
+work started** rather than argued — a 150 mm and a 200 mm rule both measured true, boxes measured
+true, a JPEG scaled to its box and not to its own pixels, diacritics through embedded TTFs with
+subsetting on. PDFKit does not need evaluating again. One constraint came out of it and is
+load-bearing: **pdf-lib exposes no OpenType feature selection**, so `tnum` is unreachable and a
+face's default figures are the figures you get.
+
+The bytes are in `src/fonts/album/` — 24 files, 8.7 MB, one per face id, opened by
+`album-font-bytes.ts`, which is the **one** module that opens a font file and is what keeps the
+measurer and the embedder on the same glyphs. Read that directory's README before touching them: it
+carries the provenance, and two things that are easy to get wrong. **Liberation Sans Narrow is not
+OFL** — it exists only as 1.07.x under GPL v2 with the Red Hat font exception, and shipping it was
+decided rather than assumed. And #766's open coverage question is **closed by measurement**:
+Liberation Serif and Sans 2.1.5 carry Greek and Cyrillic in full, checked against the collection's
+whole language set (#777 — album languages, not platform languages) in
+`tests/unit/album-fonts.test.ts`. One real gap remains, pinned there rather than discovered on a
+card: Liberation Sans Narrow has no `ẞ`.
+
+A **continued block is marked `[2]`, `[3]`, …** in its repeated heading, from the second sheet on.
+His own pages append `(cd.)`; a number was chosen instead because `(cd.)` cannot say *which*
+continuation, and bracketed digits need no per-language table — which an album carrying its own
+language would otherwise have forced, that or a fifth template field.
+
+**The mark is made in `album-layout.ts`, and this is the part to get right.** That module leaves
+*how a continuation is marked* to the renderer, and the obvious reading — append it while drawing —
+is wrong: the plan would have measured the unmarked heading and the drawing would put ink outside
+the width the layout reserved, exactly where headings are longest, since a heading that fills its
+block is the one most likely to be continued. So the string the plan measures **is** the string
+that gets printed: page one charges the unmarked heading and pages two onward the marked one
+(`albumContinuationHeading`, `measureHeading`), each measured as its page is made. Nothing is
+circular — whether the block splits at all is settled before any mark exists. `AlbumPlacedBlock`
+carries `part: number` in place of `continued`, which is the ordinal the mark is written from.
+
+The position selector is **for live plans only**, and `album-print-rules.ts` says so: a position
+means something only against the plan that produced it, so it is never stored, and #778's *reprint
+this card* must reach for the printed page's catalog range instead.
+
+Three more rules worth not re-deriving:
+
+- A face this build no longer ships is **refused by name** when drawing, and **fallen back on** when
+  measuring. The asymmetry is the point: a screen is a derivation and re-renders, a card is glued
+  into a binder.
+- A photo **fits, never crops**, and comes through `src/lib/storage/` as a `work` read. One that
+  cannot be read leaves an empty mount and logs — refusing the sheet would cost the other forty
+  boxes on it.
+- Sheets are chosen by **position** (`?sheets=2-4`), which is a request and not an identity. A page
+  is named by its catalog range and never numbered; these numbers are typed by the listing on
+  screen, are true only for it, and are printed onto nothing.
+
+**Nothing is stored.** The file is composed on demand from a plan that is itself a derivation, so
+there is nothing to go stale and nothing to sweep. If one is ever kept it is generated bytes and
+takes a TTL, per `storage-and-jobs.md`.
+
+And the part server-side composition cannot fix: **the sheet must be printed at 100% / Actual
+size**. Printers cannot print to the edge, so the dialog defaults to *Fit to page* and shrinks
+everything by a few percent, and a card printed that way looks entirely normal. It is said in
+`docs/user-guide/albums.md`, on the download's own tooltip, and in ADR-0046. Measuring on a screen
+proves nothing — a viewer applies its own zoom.
+
+### What re-reading the geometry turned up
+
+#768 was told to construct the rare shapes deliberately rather than trust #767's green suite, and it
+found a third bug of the same family. **"Taller than an entire page" was measured against the page
+being filled.** On a chapter's first page that is short by the year heading, so a 252 mm checklist
+met a 235 mm chapter page and was *split across two cards and marked Continued* on a template whose
+ordinary page holds 260 mm — a block that moves whole by the stated rule. It is now measured against
+`fullContentHeightMm`, an ordinary empty page, and the chapter heading gets the sheet it was
+entitled to.
+
+The shapes are in `tests/unit/album-layout.test.ts` under "on the rare shapes": a block spanning
+three pages (not two — #767's splitter was wrong only from three), a chapter heading alone on its
+sheet, a single oversize mount that fits nothing and must be placed overhanging, and a band unpaired
+because its second block is taller than any page. Note while you are there that a band is as tall as
+its **tallest** block and never the sum, so unpairing can only ever help when the *first* block
+alone fits the space left.
+
+### The shape all three bugs had
+
+Worth stating, because #769, #770 and #778 are all about to write code of the same kind. The three
+bugs this module has shipped are one bug:
+
+- a splitter that closed over its **caller's** page variable rather than the page it had just
+  filled;
+- a template field read from the schema rather than from the **page frame** that was supposed to
+  carry it;
+- *taller than an entire page* measured against **the page being filled** rather than an ordinary
+  empty one.
+
+Each is **a measurement taken against the wrong reference, where the wrong reference is the common
+case and the right one is rare.** The first page of a split is the caller's page; an ordinary page is
+a full-height page; the two agree on every input anyone would think to test. A suite built from
+realistic pages therefore stays green over all three, and none of them was found by running the
+tests. So when you take a figure off something here, name what it is a figure *of* — and then build
+the input where the two disagree.
+
+The consequence of the third fix is one to leave alone: **a year heading can now sit on a sheet by
+itself**, where the chapter's first page is short by that heading and the block under it needs a full
+one. That is what "a block moves whole" costs. Pulling a later checklist forward to fill the gap
+would break catalogue order, and splitting is the bug that was just fixed; #769 is where the
+collector closes such a gap by hand, on the pages where it actually bothers him, which is the right
+place for a judgement about paper.
 
 ## Configuration is seeded, never referenced
 

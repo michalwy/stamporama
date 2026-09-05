@@ -74,8 +74,13 @@ Both ends are written out in full, the way your existing pages write them.
 
 A chapter is a **year**, and a year starts a new sheet with its heading printed once at the top —
 the shape your hand-written pages already have. Checklists stack down the sheet; one that does not
-fit moves whole to the next, and only a checklist too tall for an entire page is ever split, in which
-case the continuation says so.
+fit moves whole to the next, and only a checklist too tall for an entire page is ever split.
+
+When one is split, every sheet after the first repeats the checklist's heading with the sheet's
+number in brackets after it — `Bloki okolicznościowe [2]`, then `[3]`. The first sheet carries no
+mark. That is your `(cd.)`, with the number added so four cards of one long checklist can be put back
+in order on a desk. The mark is part of the heading, so it is wrapped and centred with it and never
+runs into the margin.
 
 Two short checklists can **share a band** — sit side by side — when both are narrow enough, which is
 what your own pages do a few times per page. It is a ceiling set on the template, not a frame: the
@@ -95,6 +100,49 @@ Each sheet also flags what needs a look before you print it:
 If the collection has **no hawid stock** at all, the screen says so and every box is planned as a
 pocket. That is honest rather than broken: describe your drawer in Settings → Albums and the boxes
 are cut from it.
+
+## Printing
+
+**Download PDF** composes the whole album. Each sheet also has its own **PDF** link, which is the
+one you want after adding a stamp: it reprints that card and nothing else.
+
+### Print it at 100%, and check the first one with a ruler
+
+This is the one thing that can go wrong after everything else has gone right.
+
+The PDF is composed here rather than printed by your browser, so the page is exactly A4 and a box
+drawn at 30 mm is 30 mm. But **printers cannot print to the edge of the paper**, so almost every
+print dialog defaults to *Fit to page* — and that silently shrinks the whole sheet by a few percent
+to make room. A card printed that way looks completely normal. Every box on it is a little too
+small, and you will not find out until a hawid you cut to the cutting list does not fit the box you
+stuck it beside.
+
+So, in the print dialog:
+
+- set the scale to **100%**, **Actual size**, or **None** — whichever your printer driver calls it;
+- turn **Fit to page** / **Shrink oversized pages** off;
+- print on A4 (or whatever page size the album's template says).
+
+Then take a ruler to the first sheet and measure one box against what it should be. Once that comes
+out right, the setting stays right and you never have to think about it again.
+
+**Measuring it on screen proves nothing** — PDF viewers apply their own zoom, and "100%" in a viewer
+is not 100% of a sheet of paper.
+
+### What is on the page
+
+Everything the sheets list above describes, drawn to size: the album's name at the top if the
+template prints it, the year, each checklist's heading, a box per slot with its label, and the
+sheet's catalog range in the footer.
+
+A box also prints the picture of its stamp where there is one — the stamp's own image, or failing
+that a photo of your copy. It is **fitted, never cropped**: a stamp of a different shape from its
+box sits inside it with white around it, because a picture stretched or trimmed to fill a
+size-true box would be telling you the wrong thing about the object's proportions. The template
+decides whether pictures are printed at all and how strongly.
+
+The fonts travel inside the file, so a Polish, Czech or German page prints identically on any
+machine and on any printer, and the file you keep today prints the same in ten years.
 
 ### There is nothing to refresh
 

@@ -4,8 +4,8 @@
 
 Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. The design it applies is #755. The pieces it reads are #763 (stamp
 size), #764 (stamp order within a checklist), #765 (the hawid box rule) and #766 (the album
-template); the pieces it hands over to are #768 (the PDF), #769 (the page editor), #770 (the cutting
-list) and #778 (printed pages).
+template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor), #770
+(the cutting list) and #778 (printed pages).
 
 ## Context
 
@@ -156,10 +156,11 @@ The plan needs to measure text, and the layout module may not own the fonts. It 
 must use. A canvas that measures with the browser's own `measureText` is the same bug as a renderer
 doing its own arithmetic, one level down.
 
-That implementation is currently an **estimate**, because the faces it should measure are the ones
-#768 embeds and there are no font bytes in the repository yet. It is safe only because nothing can be
-printed before #768 exists: every page it has ever planned is a live page, and a live page re-flows.
-The module says so, and says how to replace it.
+That implementation was an **estimate** until #768, which embedded the faces and replaced the table
+with their real advances in place, exactly as this ADR anticipated. It was safe in the meantime for
+one reason and one only — nothing could be printed before #768 existed, so every page it had planned
+was a live page and re-flowed. See ADR-0046 §4 for what it measures now and why the measurer and the
+PDF cannot disagree.
 
 The obligation that comes with the port is stronger than "there should be one implementation": the
 **client is not allowed to measure at all, because the client is not a planner.** #769's canvas draws
@@ -215,7 +216,12 @@ is a block the pairing has made worse.
   checklist whose page is printed appears
   **nowhere** in the plan rather than being appended to the next live page — a deliberate silence,
   and exactly the state #778's continuation page answers.
-- #768 replaces `album-metrics.ts` in place and changes no other file.
+- #768 replaced `album-metrics.ts` in place, and — re-reading this geometry under a renderer's
+  premise, which is what the issue asked for — corrected one thing in `album-layout.ts`: *taller than
+  an entire page* was measured against the page being filled rather than against an ordinary empty
+  one, so a block that fits a sheet whole was split across two when it met a chapter's first page,
+  which is short by the year heading. Decision 7's third packing rule is what it now obeys. Nothing
+  else in `album-layout.ts` moved, and no other file did. See ADR-0046.
 - #769 attaches its relative corrections to entries and stamps, which survive a re-flow, rather than
   to pages, which are not rows.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table

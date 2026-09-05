@@ -40,6 +40,18 @@ const MUTED: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+const DOWNLOAD_BTN: React.CSSProperties = {
+  padding: "0.375rem 0.75rem",
+  background: "transparent",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  textDecoration: "none",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
   padding: "0.0625rem 0.375rem",
@@ -76,6 +88,15 @@ export function AlbumScreen({
   if (syncedFrom !== entries) {
     setSyncedFrom(entries);
     setItems(entries);
+  }
+
+  // The whole album, or one sheet by its **position in the list below** (#768). A position is not a
+  // sheet's identity — that is its catalog range, and it never becomes a number — but asking for a
+  // sheet is a different act from naming one: this number is true for the listing on screen right
+  // now, and it is never printed onto anything.
+  function pdfHref(sheet?: number): string {
+    const base = `/api/collections/${album.collectionId}/albums/${album.id}/pdf`;
+    return sheet === undefined ? base : `${base}?sheets=${sheet}`;
   }
 
   function run(action: () => Promise<AlbumActionState>) {
@@ -279,12 +300,40 @@ export function AlbumScreen({
 
       {/* ── Sheets ── */}
 
-      <h3 style={{ margin: "0 0 0.75rem", fontSize: "1rem", fontWeight: 600 }}>Sheets</h3>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: "0.75rem",
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Sheets</h3>
+        {initialOverview.pages.length > 0 && (
+          <Tooltip content="Compose the whole album as a PDF. Print it at 100% / Actual size — Fit to page silently shrinks the sheet and the boxes stop being true.">
+            <a
+              href={pdfHref()}
+              // The file's own name comes from the server's Content-Disposition, which knows the
+              // album; the attribute only makes this a download rather than a navigation.
+              download
+              style={DOWNLOAD_BTN}
+            >
+              ↓ Download PDF
+            </a>
+          </Tooltip>
+        )}
+      </div>
       <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
         Planned from the entries above, fresh every time you open this screen — there is nothing to
         refresh and nothing stored. A sheet is named by the catalog numbers on it, not by a page
         number: a number is a position, and a position moves when the collection grows, so one added
         stamp would invalidate every card already in the binder.
+      </p>
+      <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
+        The PDF is composed here rather than printed from the browser, so a box on the paper measures
+        what the cutting list says. That only holds if you print it at <strong>100% / Actual
+        size</strong> — the print dialog defaults to <em>Fit to page</em>, which shrinks the sheet by
+        a few percent, and nothing on the card shows it except a ruler.
       </p>
 
       <div style={CARD_STYLE}>
@@ -316,6 +365,17 @@ export function AlbumScreen({
               <span style={{ ...MUTED, marginLeft: "auto" }}>
                 {page.boxCount === 1 ? "1 box" : `${page.boxCount} boxes`}
               </span>
+              {!page.printedPageId && (
+                <Tooltip content="This sheet on its own — reprinting one card after an insertion. Print at 100% / Actual size.">
+                  <a
+                    href={pdfHref(i + 1)}
+                    download
+                    style={{ ...CHIP, textDecoration: "none", cursor: "pointer" }}
+                  >
+                    PDF
+                  </a>
+                </Tooltip>
+              )}
             </div>
             {page.headings.length > 0 && (
               <div style={{ ...MUTED, marginTop: "0.25rem", lineHeight: 1.5 }}>

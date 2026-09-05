@@ -135,6 +135,32 @@ export function wrapAlbumText(
   return lines;
 }
 
+/**
+ * The heading a continuation sheet prints: the block's own heading with its part number after it.
+ *
+ * The collector's convention, one step on. `PL-1948.txt` repeats the whole checklist heading on the
+ * continuation page with `(cd.)` appended, six times over; the album numbers it instead — `[2]`,
+ * `[3]` — because `(cd.)` cannot say *which* continuation, and that starts to matter as soon as a
+ * checklist runs to three or four cards on a desk. The first sheet of a block carries no mark.
+ * Decided with the collector.
+ *
+ * **It lives here, in the plan, rather than in a renderer.** The module that decides a block
+ * continues is the module that must measure what that page will actually print: a marker appended
+ * at drawing time would put ink outside the width the layout reserved, and precisely where headings
+ * are longest, since a heading that fills its block is the one most likely to be continued. So page
+ * one charges the unmarked heading and pages two onward charge the marked one, each measured when
+ * its page is made. Nothing is circular — the decision to split at all is taken before any marker
+ * exists.
+ *
+ * Bracketed digits also settle a question a word would have opened: an album is printed in its own
+ * language (#755), so `(cd.)` would have needed either a table of canned strings — the first in this
+ * codebase — or a fifth template field. A number needs neither.
+ */
+export function albumContinuationHeading(heading: string, part: number): string {
+  if (part < 2 || !heading.trim()) return heading;
+  return `${heading} [${part}]`;
+}
+
 /** A rectangle in page millimetres, origin at the **top-left of the sheet**, `y` growing downward —
  *  the direction a page is read and laid out in. A PDF's own origin is bottom-left, and flipping it
  *  is the renderer's one line of conversion rather than a second convention in here. */
@@ -196,10 +222,15 @@ export interface AlbumPlacedBox<T extends AlbumBoxSpec = AlbumBoxSpec> extends A
 /** What a page says about a block that landed on it. */
 export interface AlbumPlacedBlock {
   entryId: string;
-  /** True when this is the tail of a block too tall for one column, which had to be split. Only ever
-   *  set on such a block — an ordinary one moves whole. *How* a continuation is marked on the paper
-   *  is the renderer's question (#768); *that* it is one is the plan's answer. */
-  continued: boolean;
+  /** Which sheet of this block this page is: **1** for an ordinary block, which moves whole, and
+   *  2, 3, … for the tails of one too tall for a column and therefore split.
+   *
+   *  A number rather than a `continued` flag because the collector's own convention needs the
+   *  ordinal: a continuation heading is repeated with `[2]`, `[3]` appended (#768), so the second
+   *  and third sheets of one checklist can be told apart on a desk. *How* it is marked is the
+   *  renderer's question; *which part this is* is the plan's answer, and both renderers have to
+   *  agree on it. */
+  part: number;
   /** Index of the block's first box on this page, into the block's own box list. */
   firstBoxIndex: number;
   boxCount: number;
@@ -352,12 +383,20 @@ interface MeasuredRow<T extends AlbumBoxSpec> {
   heightMm: number;
 }
 
+/** A heading measured against a width: the lines it wrapped to and what they cost with the space
+ *  below them. Its own type because a **continued** block measures a second one — the same heading
+ *  with its part number appended — for every sheet after the first. */
+interface MeasuredHeading {
+  lines: string[];
+  /** What the heading costs including the space below it — 0 when there is no heading. */
+  costMm: number;
+}
+
 /** A block measured against a width. */
 interface MeasuredBlock<T extends AlbumBoxSpec> {
   spec: AlbumBlockSpec<T>;
-  headingLines: string[];
-  /** What the heading costs including the space below it — 0 when there is no heading. */
-  headingCostMm: number;
+  /** The heading as the block's **first** sheet prints it, unmarked. */
+  heading: MeasuredHeading;
   /** The space separating this block from whatever is above it, whether or not it has a heading.
    *  Part of the block, so its height never changes when it moves. */
   leadMm: number;
@@ -389,29 +428,34 @@ function naturalBlockWidthMm(block: AlbumBlockSpec, gapXMm: number): number {
  * A label wraps to **its own box's width**, and a row's label band is as tall as the tallest label in
  * the row, so one row's labels sit on one baseline however wide their boxes are.
  */
+function measureHeading(
+  text: string,
+  widthMm: number,
+  preset: AlbumRenderPreset,
+  metrics: AlbumTextMetrics
+): MeasuredHeading {
+  const face = albumRoleFace(preset, "heading");
+  const lines = wrapAlbumText(text, widthMm, face.face, face.sizePt, metrics);
+  return {
+    lines,
+    costMm: lines.length
+      ? roundSizeMm(
+          lines.length * metrics.lineHeightMm(face.face, face.sizePt) + preset.headingSpaceBelowMm
+        )
+      : 0,
+  };
+}
+
 function measureBlock<T extends AlbumBoxSpec>(
   block: AlbumBlockSpec<T>,
   widthMm: number,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics
 ): MeasuredBlock<T> {
-  const headingFace = albumRoleFace(preset, "heading");
-  const headingLines = wrapAlbumText(
-    block.heading,
-    widthMm,
-    headingFace.face,
-    headingFace.sizePt,
-    metrics
-  );
-  const headingCostMm = headingLines.length
-    ? roundSizeMm(
-        headingLines.length * metrics.lineHeightMm(headingFace.face, headingFace.sizePt) +
-          preset.headingSpaceBelowMm
-      )
-    : 0;
+  const heading = measureHeading(block.heading, widthMm, preset, metrics);
   // With a heading, the collector's own "space above a heading"; without one, the ordinary row gap,
   // so two unheaded blocks do not run together.
-  const leadMm = headingLines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm;
+  const leadMm = heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm;
 
   const labelFace = albumRoleFace(preset, "label");
   const labelLineMm = metrics.lineHeightMm(labelFace.face, labelFace.sizePt);
@@ -443,11 +487,10 @@ function measureBlock<T extends AlbumBoxSpec>(
 
   return {
     spec: block,
-    headingLines,
-    headingCostMm,
+    heading,
     leadMm,
     rows,
-    heightMm: roundSizeMm(leadMm + headingCostMm + rowsHeightMm(rows, preset.boxGapYMm)),
+    heightMm: roundSizeMm(leadMm + heading.costMm + rowsHeightMm(rows, preset.boxGapYMm)),
   };
 }
 
@@ -586,6 +629,19 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   const frame = pageFrame(preset, albumTitle, metrics);
   const pages: AlbumPlannedPage<T>[] = [];
 
+  /**
+   * What an **ordinary empty page** holds — the figure "taller than an entire page" is measured
+   * against.
+   *
+   * Not `page.content.heightMm`, which is the page being filled. On a chapter's first page those
+   * two differ by the year heading, and using the wrong one splits a block that would have fitted
+   * the next sheet whole: a 252 mm checklist met a chapter page with 235 mm under its heading and
+   * was broken across two cards, marked *Continued*, on a template whose ordinary page holds
+   * 260 mm. The rule is "a block moves whole; only a block taller than an entire page is split"
+   * (ADR-0045 §7), and an entire page is this.
+   */
+  const fullContentHeightMm = pageContent(frame, 0).heightMm;
+
   const emit = (page: OpenPage<T>): void => {
     // A page nothing landed on is not a page. It happens when a chapter's blocks are all on printed
     // sheets: the chapter opened a page, the sheets were emitted, and nothing was left for it.
@@ -685,6 +741,14 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       const band = measureBand(chapter.blocks, i, preset, page.content.widthMm, metrics);
       const spaceMm = roundSizeMm(page.content.yMm + page.content.heightMm - page.penMm);
       const atTop = page.penMm <= page.content.yMm + FIT_EPSILON;
+      // Whether a fresh page would give this band more room than the one being filled. Two ways it
+      // can: the page is partly used, or it is a chapter's first page and is therefore short by the
+      // height of the year heading. The second is what makes this a condition rather than `!atTop`.
+      //
+      // It still terminates, and the reason is worth stating because moving to a fresh page is the
+      // one branch that places nothing: a fresh page is full height with the pen at its top, so
+      // `roomier` is false there, and every remaining branch places something.
+      const roomier = !atTop || page.content.heightMm + FIT_EPSILON < fullContentHeightMm;
 
       // Fits where the pen is.
       if (band.heightMm <= spaceMm + FIT_EPSILON) {
@@ -693,7 +757,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         continue;
       }
       // Fits an empty page, just not what is left of this one: move it whole.
-      if (!atTop && band.heightMm <= page.content.heightMm + FIT_EPSILON) {
+      if (roomier && band.heightMm <= fullContentHeightMm + FIT_EPSILON) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
@@ -712,7 +776,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           i += 1;
           continue;
         }
-        if (!atTop) {
+        if (roomier) {
           emit(page);
           page = freshPage(chapter.key);
           continue;
@@ -724,12 +788,12 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         i += 1;
         continue;
       }
-      if (!atTop) {
+      if (roomier) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
       }
-      // One block, taller than a whole page, and the pen is at the top: it splits.
+      // One block, taller than a whole page, and the pen is at the top of one: it splits.
       page = splitBlockAcrossPages(band.blocks[0], page, preset, metrics, (finished) => {
         emit(finished);
         return freshPage(chapter.key);
@@ -765,20 +829,33 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
 ): OpenPage<T> {
   let current = page;
   let rowIndex = 0;
-  let continued = false;
+  let part = 1;
 
   for (;;) {
+    // The heading this sheet actually prints, and therefore the heading this sheet is charged for.
+    // Page one is the block's own; every page after it carries the part number, which can wrap to a
+    // line the unmarked heading did not need. Measured here, when the page is made, so nothing is
+    // circular: whether the block splits at all was decided before any marker existed.
+    const heading =
+      part === 1
+        ? measured.heading
+        : measureHeading(
+            albumContinuationHeading(measured.spec.heading, part),
+            current.content.widthMm,
+            preset,
+            metrics
+          );
     const rest = measured.rows.slice(rowIndex);
-    const fixedMm = roundSizeMm(measured.leadMm + measured.headingCostMm);
+    const fixedMm = roundSizeMm(measured.leadMm + heading.costMm);
     const spaceMm = roundSizeMm(current.content.yMm + current.content.heightMm - current.penMm);
     const take = Math.max(1, rowsThatFit(rest, fixedMm, spaceMm, preset.boxGapYMm));
 
-    placeBlock(measured, rowIndex, Math.min(take, rest.length), continued, current, preset, metrics, {
+    placeBlock(measured, heading, rowIndex, Math.min(take, rest.length), part, current, preset, metrics, {
       xMm: current.content.xMm,
       widthMm: current.content.widthMm,
     });
     rowIndex += Math.max(1, Math.min(take, rest.length));
-    continued = true;
+    part += 1;
     if (rowIndex >= measured.rows.length) return current;
     current = nextPage(current);
   }
@@ -796,10 +873,20 @@ function placeBand<T extends AlbumBoxSpec>(
     // Every block in a band starts at the band's top, so two paired checklists read as one row of
     // the page rather than as two things that happen to be near each other.
     page.penMm = top;
-    placeBlock(band.blocks[i], 0, band.blocks[i].rows.length, false, page, preset, metrics, {
-      xMm: roundSizeMm(page.content.xMm + i * (band.blockWidthMm + preset.blockGapMm)),
-      widthMm: band.blockWidthMm,
-    });
+    placeBlock(
+      band.blocks[i],
+      band.blocks[i].heading,
+      0,
+      band.blocks[i].rows.length,
+      1,
+      page,
+      preset,
+      metrics,
+      {
+        xMm: roundSizeMm(page.content.xMm + i * (band.blockWidthMm + preset.blockGapMm)),
+        widthMm: band.blockWidthMm,
+      }
+    );
   }
   page.penMm = roundSizeMm(top + band.heightMm);
 }
@@ -808,9 +895,11 @@ function placeBand<T extends AlbumBoxSpec>(
  *  page, advancing the pen. */
 function placeBlock<T extends AlbumBoxSpec>(
   measured: MeasuredBlock<T>,
+  /** The heading **this sheet** prints — the block's own on its first, the marked one after that. */
+  heading: MeasuredHeading,
   fromRow: number,
   count: number,
-  continued: boolean,
+  part: number,
   page: OpenPage<T>,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
@@ -818,20 +907,20 @@ function placeBlock<T extends AlbumBoxSpec>(
 ): void {
   page.penMm = roundSizeMm(page.penMm + measured.leadMm);
 
-  if (measured.headingLines.length) {
+  if (heading.lines.length) {
     const headingFace = albumRoleFace(preset, "heading");
     const textMm = roundSizeMm(
-      measured.headingLines.length * metrics.lineHeightMm(headingFace.face, headingFace.sizePt)
+      heading.lines.length * metrics.lineHeightMm(headingFace.face, headingFace.sizePt)
     );
     page.headings.push({
       role: "heading",
-      lines: measured.headingLines,
+      lines: heading.lines,
       xMm: at.xMm,
       yMm: page.penMm,
       widthMm: at.widthMm,
       heightMm: textMm,
     });
-    page.penMm = roundSizeMm(page.penMm + measured.headingCostMm);
+    page.penMm = roundSizeMm(page.penMm + heading.costMm);
   }
 
   const firstBoxIndex = measured.rows
@@ -882,7 +971,7 @@ function placeBlock<T extends AlbumBoxSpec>(
 
   page.blocks.push({
     entryId: measured.spec.entryId,
-    continued,
+    part,
     firstBoxIndex,
     boxCount: placed,
   });

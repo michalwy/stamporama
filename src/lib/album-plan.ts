@@ -413,7 +413,8 @@ export interface AlbumPlanPageView {
   printedPageId: string | null;
   /** The checklist headings on the sheet, in reading order. */
   headings: string[];
-  /** A heading continued from the previous page — a block too tall for one column. */
+  /** A heading continued from the previous page — a block too tall for one column. The PDF marks
+   *  such a sheet `[2]`, `[3]` on the heading itself (#768); this flag is just the chip. */
   continued: boolean;
   boxCount: number;
   /** Boxes no strip in stock can supply, which go in a pocket (#765). */
@@ -457,7 +458,7 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
         chapterKey: page.layout.chapterKey,
         printedPageId: null,
         headings: page.layout.headings.map((h) => h.lines.join(" ")),
-        continued: page.layout.blocks.some((b) => b.continued),
+        continued: page.layout.blocks.some((b) => b.part > 1),
         boxCount: boxes.length,
         oversizeCount: boxes.filter((b) => b.strip === null).length,
         inheritedSizeCount: boxes.filter((b) => b.sizeSource === "inherited").length,
