@@ -98,6 +98,22 @@ step nobody asked for.
 finished: its branch then waits until somebody happens to look, and the lead's whole job is to be
 the one who does not have to.
 
+### `Refs #NNN`, never a closing keyword
+
+A pull request references its issue as **`Refs #NNN`** — never `Closes`, `Fixes`, `Resolves` or any
+of their variants, in the body or in a commit message that will land on `main`. A closing keyword
+hands the close to GitHub at merge time, which is exactly the human step 7 above puts *after*
+verification.
+
+This is the one rule here the platform works against, so it needs stating rather than reasoning
+about: every convention outside this repository says to write `Closes`, and there is no repository
+or GitHub setting that turns the keywords off.
+
+#783's body opened with `Closes #780 (the lead closes it, not this pull request — the reference is
+here for the trail)`. GitHub does not read the parenthetical: merging #783 closed #780 one second
+later, at the merge timestamp, before anything had been verified. #784 carried `Closes #781.` for
+the same reason and was changed by hand minutes before it merged — that is a catch, not a control.
+
 ## What the lead may answer, and what it must escalate
 
 **The lead answers only what is already written down, and names the source.** AGENTS.md, a
