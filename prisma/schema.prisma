@@ -143,6 +143,7 @@ model Collection {
   collageTemplates CollageTemplate[]
   refCardTemplates RefCardTemplate[]
   hawidStrips     HawidStrip[]
+  stampSizePresets StampSizePreset[]
   albumTemplates  AlbumTemplate[]
   albums          Album[]
   lotBuilderPresets LotBuilderPreset[]
@@ -757,6 +758,74 @@ model HawidStrip {
   @@unique([collectionId, heightMm])
   @@index([collectionId])
   @@map("hawid_strip")
+}
+
+// A pair of millimetres the collector already knows, saved so it can be put onto a stamp — or onto
+// forty — without a scan (#803; ADR-0048).
+//
+// The gap it fills is #763's fallback boundary. Both ways of *obtaining* a size need the stamp in
+// hand (the ruler in `TileZoomView` through `Collection.scanDpi`, or an estimate off a `ScanTile`'s
+// crop), and a stamp with none borrows the nearest neighbour **of the same checklist**. A new
+// overprint run is its own checklist, so it has no neighbour to borrow from and every stamp in it
+// resolves to nothing — while the collector knows the figure perfectly well, having measured the
+// base issue years ago on another list.
+//
+// **Copied, never referenced** — `AlbumTemplate` below, and `AcceptanceProfile`'s rule before it.
+// Applying a preset writes `Stamp.widthMm` / `Stamp.heightMm` and the relationship ends there:
+// there is no `stampSizePresetId` on `Stamp`, and that absence *is* the decision (ADR-0048 §1), so
+// nothing downstream can tell a stamp sized from a preset from one sized with a ruler. #763's own
+// architecture refused an `inherited` column and an `estimated` flag on the argument that a size is
+// either set on this stamp or absent, one source of truth; a reference would be a third state —
+// *set, but somewhere else, and liable to change under you* — and every surface that draws a box
+// (#769) or cuts a strip (#770) would have to learn about it. The accepted cost is that correcting
+// a preset does not correct the stamps already set from it.
+//
+// **Width × height and nothing else.** No strip, no clearance, no box: `hawid.ts` (#765) picks the
+// strip out of the collector's drawer, and a second claim about that number would disagree with it
+// the first time the drawer changed. That separation earned itself inside a day — #793 rewrote the
+// strip model underneath ADR-0048 while it was being drafted, and nothing in this track moved,
+// because none of it names a strip column.
+//
+// **The pair is the identity and the name is a label**, `HawidStrip`'s shape one model up. It is
+// not only symmetry: a preset is saved from the middle of a measurement, beside the width and
+// height fields on the attributes tab (#736/#761), and a required name would put a text field
+// between finishing a measurement and keeping it. Two presets with the same pair are one preset,
+// and the collision is reported as its own error rather than as a failed save.
+//
+// `Decimal(5, 1)`, **not** `Float` — and `HawidStrip.heightMm` being `Float` is not a precedent
+// against it. Those numbers are print geometry read into arithmetic; these two are a verbatim copy
+// of a `Decimal(5, 1)` column, and they feed an exact-match unique index, where a binary float's
+// last bit is the difference between one preset and two.
+//
+// **Nothing is seeded**, in a real collection or in the demo dataset — the standing habit of
+// `HawidStrip`, `StampFormat` and the four attribute dictionaries, with a sharper edge here: a
+// seeded preset is the app asserting a millimetre nobody measured, and the collector cuts material
+// to it. **Not translatable**, either: #344's rule turns on a dictionary value reaching a listing a
+// buyer reads, and a preset's name is never written to a stamp, so the only thing that travels is
+// the pair of numbers, which is not language.
+model StampSizePreset {
+  id           String   @id @default(cuid())
+  collectionId String
+  widthMm      Decimal  @db.Decimal(5, 1)
+  heightMm     Decimal  @db.Decimal(5, 1)
+  // What the collector calls it — `Germania` — optional, because the pair is already an identity.
+  // The picker reads `25 × 30 mm · Germania`, or plain `25 × 30 mm` where there is none.
+  name         String?
+  // The collector's own order, dragged in Settings. Deliberately not a most-recently-used ordering:
+  // that would cost a column and a write per application, and a list that reorders itself cannot be
+  // found by muscle memory (ADR-0048, *Deliberately left out*).
+  sortOrder    Int
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // Two presets stating the same pair are one preset. The numbers are the identity (ADR-0048 §3),
+  // so this is the row's own key rather than a convenience — `HawidStrip`'s
+  // `@@unique([collectionId, heightMm])` exactly, and the reason both figures are `Decimal` rather
+  // than `Float`.
+  @@unique([collectionId, widthMm, heightMm])
+  @@index([collectionId])
+  @@map("stamp_size_preset")
 }
 
 // A collection-level **render preset** for album pages (#766) — everything about how an album
