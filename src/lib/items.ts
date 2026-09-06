@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma } from "./db";
+import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import {
   COMMITTING_FULFILLMENTS,
@@ -3284,6 +3285,46 @@ export interface ItemYearFacet {
   /** null represents the "No year" bucket. */
   year: number | null;
   count: number;
+}
+
+/**
+ * Rows per area for the Copies rail's counts (#843), each area's **own** copies — the roll-up onto
+ * parents is the client's (`rollUpAreaCounts`), which is where the subtree scope (#385) lives.
+ *
+ * The mirror of {@link listItemYearFacets}: that one drops the year and keeps the areas, this one
+ * drops the area selection and keeps the year, so each row promises what selecting it would list.
+ * With no year picked the two are counted over one `where` and an area's number is the sum of the
+ * years drawn under it.
+ *
+ * Counted in memory for the same reason the year facets are, and one more besides: the area lives
+ * on the related stamp, through a link table `groupBy` cannot reach. A copy whose stamp is filed in
+ * two areas is counted under both — each of those areas would show it — so the rail's numbers need
+ * not add up to the length of the list. Only the link ids come back, so the cost is one narrow scan
+ * of the filtered set rather than a page of enriched copies.
+ */
+export async function listItemAreaFacets(
+  ownerId: string,
+  collectionId: string,
+  filters: Omit<ItemListFiltersPaginated, "areaIds" | "offset" | "pageSize" | "sortBy" | "sortDir">
+): Promise<AreaFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+  const rows = await prisma.item.findMany({
+    where,
+    select: { stamp: { select: { stampAreaLinks: { select: { collectionAreaId: true } } } } },
+  });
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    for (const link of row.stamp.stampAreaLinks) {
+      counts.set(link.collectionAreaId, (counts.get(link.collectionAreaId) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([areaId, count]) => ({ areaId, count }));
 }
 
 /** Distinct issued years (of the linked stamps) present in the copy list for the

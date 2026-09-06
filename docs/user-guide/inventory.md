@@ -91,13 +91,21 @@ than it says. Clear them from the area panel (**All areas**) and the year panel.
 
 - **Area** — the panel on the left lists your collection's [areas](collections.md) as a
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
-  area includes its nested sub-areas. Choose **All areas** to clear it.
+  area includes its nested sub-areas. Choose **All areas** to clear it — clicking the area you
+  already have selected does nothing, so a stray second click cannot silently widen the list back
+  to everything. Each area carries a **count** of the copies selecting it would show, counted
+  against everything else on the screen — the search box, the year, the toolbar filters — but not
+  against the area filter itself, so the number always says what clicking it would give you. Areas
+  with nothing in them show **0** rather than an empty space. A copy whose stamp is filed in two
+  areas is counted under both, so the counts down the panel can add up to more than the list holds
+  — that is the same copy seen from two places, not two copies.
   Once you pick an area that *has* sub-areas, a small **+ sub-areas / this area only** switch
   appears above the tree. **+ sub-areas** is the default and the usual way to browse; **this
   area only** narrows the list to what sits directly on the area you picked, which is how you
   find pieces that were never filed into a sub-area. The switch is remembered, and it applies to
   every list with an area panel — Issues, Stamps, Copies and the stamp picker — so they always
-  agree about what an area selection means.
+  agree about what an area selection means. The counts follow it: with **+ sub-areas** a parent
+  shows its whole subtree, with **this area only** just what is filed on it directly.
 
 The rest sit in the toolbar, and they are listed here in the order they appear on it — left to
 right, from *which copies* to *how they are shown*.
