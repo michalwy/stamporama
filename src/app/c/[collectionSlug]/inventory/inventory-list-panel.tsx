@@ -48,10 +48,12 @@ import {
   useHoldingsValuation,
   useItemCount,
   useItemYears,
+  useItemAreaFacets,
   useInvalidateInventory,
   useCollectionItemNoPad,
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
+  type InventoryAreaFacetFilters,
 } from "./use-inventory-query";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { useGroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
@@ -526,6 +528,17 @@ export function InventoryListPanel({
     yearFacetFilters
   );
 
+  // The area rail's counts (#843): the year facets' filter set one axis over — the year stays in,
+  // the area selection drops out, so a row says what selecting it would list. Spread from the year
+  // filters rather than restated, so a filter added to one rail cannot be forgotten on the other.
+  const areaFacetFilters: InventoryAreaFacetFilters = useMemo(() => {
+    const rest: InventoryYearFacetFilters = { ...yearFacetFilters };
+    delete rest.areaIds;
+    return { ...rest, year: year || undefined };
+  }, [yearFacetFilters, year]);
+
+  const { data: areaFacets } = useItemAreaFacets(collectionId, areaFacetFilters);
+
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   // The open wants a freshly added copy could satisfy (#532; ADR-0032 §7). Raised after the add
@@ -979,6 +992,7 @@ export function InventoryListPanel({
           areas={areas}
           filterAreaId={filterAreaId}
           onNavigateArea={handleNavigateFilter}
+          areaFacets={areaFacets}
           yearFacets={yearFacets}
           yearsLoading={yearsLoading}
           selectedYear={year || null}

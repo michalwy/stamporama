@@ -11,6 +11,7 @@ import type {
   ItemVariantHistoryData,
   ItemYearFacet,
 } from "@/lib/items";
+import type { AreaFacet } from "@/lib/area-facets";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
 import type { LocationGroupBy } from "@/lib/location-groups";
 import type { HoldingsSummary } from "@/lib/valuation";
@@ -135,6 +136,14 @@ export interface InventoryYearFacetFilters {
   includeDisposed?: boolean;
 }
 
+/** Filters that affect the area facet counts (#843) — everything except the area selection itself,
+ *  which is why `year` is in here and `areaIds` is not. */
+export interface InventoryAreaFacetFilters
+  extends Omit<InventoryYearFacetFilters, "areaIds"> {
+  /** "none" for the no-year bucket, otherwise a numeric year string. */
+  year?: string;
+}
+
 export const inventoryKeys = {
   all: (collectionId: string) => ["inventory", collectionId] as const,
   list: (collectionId: string, filters: InventoryItemFilters) =>
@@ -158,6 +167,8 @@ export const inventoryKeys = {
   ) => ["inventory", collectionId, "issueGroupCompleteness", filters, issueIds] as const,
   years: (collectionId: string, filters: InventoryYearFacetFilters) =>
     ["inventory", collectionId, "years", filters] as const,
+  areaFacets: (collectionId: string, filters: InventoryAreaFacetFilters) =>
+    ["inventory", collectionId, "area-facets", filters] as const,
 };
 
 /** The copy-set half of the query string — everything that decides *which* copies, and nothing
@@ -473,6 +484,33 @@ export function useItemYears(
       if (!res.ok) throw new Error("Failed to fetch inventory years");
       const data = await res.json();
       return data.years;
+    },
+  });
+}
+
+/** Copies per area, with counts (#843) — the mirror of {@link useItemYears}. Respects every active
+ * filter except the area selection itself, the year included, so each row on the rail says what
+ * selecting it would list.
+ *
+ * Built through `itemFilterParams`, the same builder the list uses, rather than a hand-written
+ * query string beside it: the rail's numbers and the rows they promise have to be narrowed by one
+ * question, and a filter added to the list later must reach this count without anyone remembering
+ * to come here. `areaIds` is simply not on {@link InventoryAreaFacetFilters}, so the builder cannot
+ * write it. */
+export function useItemAreaFacets(
+  collectionId: string,
+  filters: InventoryAreaFacetFilters
+) {
+  return useQuery<AreaFacet[]>({
+    queryKey: inventoryKeys.areaFacets(collectionId, filters),
+    queryFn: async () => {
+      const params = itemFilterParams(filters);
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/areas?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch inventory area facets");
+      const data = await res.json();
+      return data.areas;
     },
   });
 }

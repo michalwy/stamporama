@@ -1,0 +1,66 @@
+import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { listItemAreaFacets } from "@/lib/items";
+import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
+
+/** The area rail's counts (#843) — the mirror of `../years`: the same filters as the list, except
+ *  that this one keeps `year` and drops the area selection, so each row says what selecting it
+ *  would list. Everything else, `excludeGone` and `includeDisposed` included, has to match the year
+ *  route exactly or the two rails answer different questions. */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ collectionId: string }> }
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { collectionId } = await params;
+  const sp = request.nextUrl.searchParams;
+  const yearParam = sp.get("year");
+  const year =
+    yearParam === null || yearParam === ""
+      ? undefined
+      : yearParam === "none"
+        ? ("none" as const)
+        : Number.isFinite(Number(yearParam))
+          ? Number(yearParam)
+          : undefined;
+
+  try {
+    const areas = await listItemAreaFacets(session.user.id, collectionId, {
+      conditionIds: readConditionIds(sp),
+      certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
+      formatIds: readCsvParam(sp, "formatIds"),
+      year,
+      search: sp.get("search") || undefined,
+      catalogVendorId: sp.get("catalogVendorId") || undefined,
+      catalogNumber: sp.get("catalogNumber") || undefined,
+      stampId: sp.get("stampId") || undefined,
+      issueId: sp.get("issueId") || undefined,
+      locationId: sp.get("locationId") || undefined,
+      inCollection: boolParam(sp.get("inCollection")),
+      forSale: boolParam(sp.get("forSale")),
+      forTrade: boolParam(sp.get("forTrade")),
+      noPhotos: boolParam(sp.get("noPhotos")),
+      missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
+      notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
+      excludedPlatformId: sp.get("excludedPlatformId") || undefined,
+      deliveryStates: readDeliveryStates(sp),
+      // Match the list: copies that have left — sold (#207) or traded away (#644) — are excluded
+      // unless includeGone=true, and copies no longer held unless includeDisposed=true (#395).
+      excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
+      includeDisposed: boolParam(sp.get("includeDisposed")),
+    });
+    return NextResponse.json({ areas });
+  } catch {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+}
+
+/** Only an explicit "true" narrows to that disposition; mirrors the list endpoint. */
+function boolParam(value: string | null): boolean | undefined {
+  return value === "true" ? true : undefined;
+}
