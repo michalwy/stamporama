@@ -15,7 +15,7 @@ import {
   type AuctionLotOutcome,
   type AuctionLotStatus,
 } from "@/lib/auction-rules";
-import { lotOutcome } from "@/lib/auction-lot";
+import { closingPricePrefill, lotOutcome } from "@/lib/auction-lot";
 import { formatInstant } from "./auction-format";
 
 // **Closing a lot** (#354, rewritten for ADR-0021 §4) — the fork at the end of §7.
@@ -31,8 +31,16 @@ import { formatInstant } from "./auction-format";
 // and the outcome is read back out of them — which is why *Mark as won* is gone and no menu can
 // file a lot as won that the money says was outbid.
 //
-// Two questions survive, and only because arithmetic cannot answer either. What it went for, since
-// nothing may be inferred from the last observed bid; and, at exactly equal figures, who bid first.
+// Two questions survive, and only because arithmetic cannot answer either. What it went for; and,
+// at exactly equal figures, who bid first.
+//
+// The first now opens **carrying the last observed bid** (#851), which reverses the original rule
+// that it be offered blank. Nothing about the figure changed — it is still a lower bound on the
+// hammer price, and still not an answer — but a default that is right in the ordinary case and
+// visibly labelled beats making the collector read the number off the row above and retype it,
+// which is the slower path *and* the one where a transposed digit becomes a real lot's recorded
+// price. `closingPricePrefill` in `auction-lot.ts` holds the rule and the reasoning behind it,
+// including why the bid it takes is `currentBid` and no other.
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -82,7 +90,11 @@ export interface OutcomeLot {
   /** How it went, as derived — what the dialog explains back to the collector. */
   outcome: AuctionLotOutcome;
   currency: string;
+  /** The last bid observed on the lot — what the closing-price field opens carrying (#851). */
   currentBid: string | null;
+  /** When that bid was read. Shown beside the prefilled figure, because a default taken from an
+   * observation has to say how old the observation is. */
+  checkedAt: string | null;
   /** The collector's own maximum. Its **absence** is what makes closing without a price legitimate:
    * a lot nobody bid on is an observation, not a loss. */
   myBid: string | null;
@@ -105,10 +117,18 @@ type TieAnswer = boolean | null;
 /**
  * The lot's lifecycle entries for a `RowActionsMenu`, plus the dialog they open.
  *
- * *Close the lot* asks one question — what it went for — and never pre-fills it from the last bid:
- * that figure is a lower bound on the result, and offering it as the answer is how a guess ends up
- * stored as an observation. The dialog then **says back** what the figures make of it, because the
- * outcome is derived and the collector should see the conclusion before committing to it, not after.
+ * *Close the lot* asks one question — what it went for — and opens it carrying the last bid observed
+ * on the lot (#851), dated by `checkedAt` and freely editable. That figure is a lower bound on the
+ * result rather than the result, which is why it is labelled as an observation and not simply
+ * dropped into the field silently. The dialog then **says back** what the figures make of it,
+ * because the outcome is derived and the collector should see the conclusion before committing to
+ * it, not after — so a prefill that is wrong announces itself in the paragraph below the field
+ * before it is ever saved.
+ *
+ * **Clearing means clearing.** The field is seeded once, when the menu entry is selected, and
+ * nothing re-applies it: a value that came back after being deleted would read as the app arguing
+ * with the collector, and a lot really can close at a figure the app has no way to guess. A lot
+ * with no bid on it opens the field **empty**, never at zero.
  *
  * Blank is refused when a bid was placed. That combination used to be filed as "lost with no
  * figure", and it is retired: with the outcome derived there is no honest reading of it. The honest
@@ -150,6 +170,9 @@ export function useLotOutcomeActions(
     lot.myBid !== null &&
     finalPrice.trim() !== "" &&
     Number(finalPrice) === Number(lot.myBid);
+  // Whether the field was opened at an observed bid rather than at a confirmed result. Only then is
+  // there something to disclose: a recorded `finalPrice` coming back is the collector's own figure.
+  const seededFromBid = lot.finalPrice === null && closingPricePrefill(lot) !== "";
 
   function close() {
     if (isPending) return;
@@ -179,9 +202,9 @@ export function useLotOutcomeActions(
       disabled: lot.settled,
       hint: settledHint,
       onSelect: () => {
-        // Only a price already confirmed on this lot seeds the field. The last observed bid does
-        // not: it is a lower bound, and pre-filling it is how a guess becomes a datapoint.
-        setFinalPrice(lot.finalPrice ?? "");
+        // Seeded **here and only here** — on opening. Nothing re-applies it while the dialog is up,
+        // which is what makes a cleared field stay cleared.
+        setFinalPrice(closingPricePrefill(lot));
         setWonTie(lot.status === "closed" && lot.outcome === "won" ? true : null);
         setError(undefined);
         setDialog({ kind: "close" });
@@ -270,6 +293,19 @@ export function useLotOutcomeActions(
                   it.
                 </p>
 
+                {/* The prefill says what it is. It is the last bid *seen*, which is a lower bound on
+                    the hammer price — usually the answer, and on a lot that moved after the last
+                    refresh, not. Dated, because how old the observation is decides how far to trust
+                    it. */}
+                {seededFromBid && (
+                  <p style={NOTE}>
+                    Opened at the last bid seen on this lot — {lot.currentBid} {lot.currency}
+                    {lot.checkedAt ? `, checked ${formatInstant(lot.checkedAt)}` : ""}. That is what
+                    it <em>stood at</em>, not what it went for: if it moved after that, type what it
+                    actually fetched.
+                  </p>
+                )}
+
                 {/* The tie: the one thing the money cannot say, asked only where it arises. */}
                 {isTie && (
                   <div style={TIE_BOX}>
@@ -312,7 +348,9 @@ export function useLotOutcomeActions(
                       You bid {lot.myBid} {lot.currency} on this lot, so a price is needed to close
                       it. If you never really placed that bid, clear it on the row first and this
                       becomes a lot you only watched. If you simply never saw the result, leave the
-                      lot open — nothing here will be guessed from the last bid anyone recorded.
+                      lot open rather than accepting whatever this field opened at — the last bid
+                      observed is a lower bound, and storing it as the result would put a figure
+                      nobody saw into the market data.
                     </>
                   ) : isTie && wonTie === null ? (
                     <>Answer the question above and this lot will be filed accordingly.</>

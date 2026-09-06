@@ -7,6 +7,7 @@ import {
   lotHasSignal,
   lotNeedsComposition,
   lotOutcome,
+  closingPricePrefill,
   maxBidWithin,
   bidCosting,
   ceilingAllowing,
@@ -577,6 +578,54 @@ describe("lotNeedsComposition", () => {
     for (const status of ["open", "closed", "cancelled"] as const) {
       assert.equal(lotNeedsComposition({ status, lineCount: 1 }), false, status);
     }
+  });
+});
+
+// closingPricePrefill --------------------------------------------------------
+//
+// What the close dialog's price field opens carrying (#851). The rule is a default, not a
+// constraint, so the interesting cases are the two that must produce *nothing*.
+
+describe("closingPricePrefill", () => {
+  it("opens at the last bid observed on the lot", () => {
+    assert.equal(closingPricePrefill({ currentBid: "40.00" }), "40.00");
+  });
+
+  it("normalises what it offers, as the row does", () => {
+    assert.equal(closingPricePrefill({ currentBid: "40" }), "40.00");
+    assert.equal(closingPricePrefill({ currentBid: 40.5 }), "40.50");
+  });
+
+  it("prefers a price already confirmed on the lot", () => {
+    // Reopening the dialog on a closed lot is editing that figure, not guessing again — the
+    // recorded result is newer than any observation of the bidding.
+    assert.equal(closingPricePrefill({ finalPrice: "55.00", currentBid: "40.00" }), "55.00");
+  });
+
+  it("offers nothing on a lot nobody bid on", () => {
+    // Not "0.00": a zero is a recorded price rather than an absent one, and it would drag every
+    // average over closed lots down with it.
+    assert.equal(closingPricePrefill({}), "");
+    assert.equal(closingPricePrefill({ currentBid: null, finalPrice: null }), "");
+    assert.equal(closingPricePrefill({ currentBid: "" }), "");
+  });
+
+  it("reads a bid of zero as no bid", () => {
+    // Nobody bids nothing. A zero standing on the lot is the absence of bidding, not a price.
+    assert.equal(closingPricePrefill({ currentBid: "0" }), "");
+    assert.equal(closingPricePrefill({ currentBid: "0.00" }), "");
+    assert.equal(closingPricePrefill({ currentBid: -5 }), "");
+  });
+
+  it("shows a recorded result of zero, because that one was typed by hand", () => {
+    assert.equal(closingPricePrefill({ finalPrice: "0.00", currentBid: "40.00" }), "0.00");
+  });
+
+  it("ignores the collector's own figures", () => {
+    // `myBid` is a commitment and `maxBid` a private ceiling; neither is a bid the lot stands at,
+    // and taking the highest figure held would offer a number nobody ever bid.
+    const lot = { currentBid: "40.00", myBid: "500", maxBid: "900" };
+    assert.equal(closingPricePrefill(lot), "40.00");
   });
 });
 

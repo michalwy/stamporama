@@ -309,7 +309,9 @@ Once a lot has closed, the row's ⋮ menu files it:
 
 - **Close the lot** — asks for **what it went for**: the hammer price, before the seller's premium,
   in the sale's currency. The premium and the shipping belong to the parcel and are added there,
-  once.
+  once. The field **opens at the last bid you recorded** on the lot, dated by when you checked it,
+  and you can type over it or empty it: most lots close at the last bid you saw, and the ones that
+  do not are the ones you were watching anyway.
 - **Mark as cancelled** — the seller withdrew the listing, or it ended without a sale. No price, and
   no record of a result.
 - **Back to open** — undoes either, for a lot filed by mistake. If a final price was recorded, it
@@ -338,11 +340,19 @@ the composition you were going to enter anyway. Such a lot has no bid of yours o
 files it as **Watched**: a real price on a real date, and nothing you owe anything on. It is not a
 loss, and the list never calls it one.
 
+**About the figure it opens with.** It is the last bid you recorded on the lot — what the price had
+reached the last time you looked, which is a *floor* under what it went for and not the result
+itself. The dialog says so, and says when you last checked, so you can tell at a glance whether it
+is worth trusting: a bid read five minutes before the close usually is, one read a week earlier
+usually is not. A lot **nobody has bid on** opens with an empty field rather than a zero — a zero
+would be a price you recorded, and it would pull down every average taken over your closed lots. And
+if you clear the field it **stays** clear; nothing puts the number back.
+
 **If you never saw the result.** A lot you bid on cannot be closed without a price — with your bid
-and the final price being the whole of the answer, half of it is not an answer. The last bid you
-recorded is not a substitute: it is only what the price had reached the last time you looked, which
-is why it is never filled in for you. Leave the lot **open** until you know, or — if you never
-really placed that bid — clear your bid on the row, and the lot becomes one you simply watched.
+and the final price being the whole of the answer, half of it is not an answer. Do not accept the
+figure the field opened with just to get past it: that only records the last bid you happened to
+see as though it were the result. Leave the lot **open** until you know, or — if you never really
+placed that bid — clear your bid on the row, and the lot becomes one you simply watched.
 
 **When it goes for exactly your maximum.** Then the figures genuinely cannot say. Whoever bid that
 amount first won it, and that is not something either the platform's page or Stamporama can work

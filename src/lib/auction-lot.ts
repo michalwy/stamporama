@@ -246,6 +246,49 @@ export function lotOutcome(lot: LotOutcomeInput): AuctionLotOutcome {
   return lot.wonTie === true ? "won" : "lost";
 }
 
+/** What {@link closingPricePrefill} reads: the price already confirmed on this lot, if any, and the
+ * last bid observed on it. */
+export interface ClosingPrefillInput {
+  /** A result already recorded — reopening the close dialog is editing that figure, not guessing
+   * again. */
+  finalPrice?: Amount;
+  /** The last bid **observed on the lot**, as `AuctionLot.currentBid` holds it. */
+  currentBid?: Amount;
+}
+
+/**
+ * What the closing-price field opens carrying (#851).
+ *
+ * The order is: a price already confirmed on this lot, else the last bid observed on it, else
+ * nothing.
+ *
+ * **Which bid — and it is `currentBid`, never the highest figure the lot holds.** A lot carries
+ * three amounts before it closes and only one of them is a bid anyone actually made *on the lot*:
+ * `currentBid` is what it stood at when it was last read, `myBid` is the proxy maximum placed at
+ * the platform (which the platform bids up only as far as it must), and `maxBid` is a private
+ * ceiling that may never have been placed anywhere. Highest and most recent cannot disagree
+ * *within* `currentBid` — ADR-0021 §5: "`currentBid` is overwritten in place and `checkedAt`
+ * records when it was read. There is no bid history table." — so the question only arises across
+ * the three fields, and there the highest figure is routinely `maxBid`, a number nobody ever bid.
+ * Taking the most recent observation is therefore the only reading that always names a real bid.
+ *
+ * **No bid gives an empty field, never a zero.** A zero is a recorded price rather than an absent
+ * one, and it would land in the market data #24 consumes and drag every average over closed lots
+ * down with it. A `currentBid` of zero or less is read the same way: nobody bids nothing, so that
+ * is an empty field too.
+ *
+ * This is a **default, not an answer**. The last observed bid is a lower bound on the hammer price
+ * — the reason ADR-0021 §5/§7 originally left the field blank — so the dialog labels the figure as
+ * an observation and dates it, and clearing the field leaves it cleared.
+ */
+export function closingPricePrefill(lot: ClosingPrefillInput): string {
+  const recorded = num(lot.finalPrice);
+  if (recorded !== null) return money(recorded);
+  const observed = num(lot.currentBid);
+  if (observed === null || observed <= 0) return "";
+  return money(observed);
+}
+
 /**
  * The **derived** states a live lot can be in — what the row already shows as tint and chip, made
  * filterable.
