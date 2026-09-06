@@ -527,10 +527,6 @@ export function InventoryListPanel({
   );
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
-  const hasChildLocations = useMemo(
-    () => !!locationId && locations.some((l) => l.parentId === locationId),
-    [locations, locationId]
-  );
 
   // The open wants a freshly added copy could satisfy (#532; ADR-0032 §7). Raised after the add
   // dialog has closed, and never on an edit — an edit is not a copy arriving.
@@ -1544,19 +1540,31 @@ export function InventoryListPanel({
                     selectedId={locationId}
                     onSelectedIdChange={(id) => updateParams({ locationId: id })}
                     noneOptionLabel="All locations"
+                    /* A filter's dropdown stays open on a pick (#846): the list behind it is what
+                       says what the pick did, so there is nothing to go back to, and the switch
+                       below has to survive the pick it qualifies. Escape and a click outside still
+                       close it — and the other filters on this bar already work this way, a
+                       `MultiSelectFilter` applying each tick and staying open. */
+                    closeOnSelect={false}
                     /* Scope of the location filter (#385), inside the dropdown rather than beside
                        it (#846): it says nothing on its own and only ever qualifies the node just
                        picked, so as a sibling control it was a second thing to find and a second
-                       thing to read past on every visit. Still drawn only once a location with
-                       boxes under it is picked — on a leaf both readings select the same copies. */
+                       thing to read past on every visit.
+
+                       **Always drawn, even with nothing picked or a leaf picked**, which is the
+                       opposite of what this control's own rule says elsewhere — and deliberately.
+                       Hiding it until a branch node is chosen made it appear only *after* the
+                       interaction that used to dismiss the panel, so it could not be discovered at
+                       all: you had to already know it was there to go looking. Its own rule is
+                       about a control competing for room on the filter bar; in here it competes
+                       with nothing, and it is a *reading of the tree* rather than a narrowing, so
+                       it is legible before a pick and applies to the next one. */
                     panelFooter={
-                      hasChildLocations ? (
-                        <SubtreeScopeToggle
-                          axis="location"
-                          includeDescendants={includeSubLocations}
-                          onChange={setIncludeSubLocations}
-                        />
-                      ) : undefined
+                      <SubtreeScopeToggle
+                        axis="location"
+                        includeDescendants={includeSubLocations}
+                        onChange={setIncludeSubLocations}
+                      />
                     }
                   />
                 </div>

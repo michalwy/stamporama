@@ -28,9 +28,18 @@ const LABELS: Record<SubtreeAxis, { all: string; only: string; noun: string }> =
 };
 
 /**
- * The two-state control for {@link useSubtreeScope}. Callers render it **only when the selected
- * node actually has children** — with a leaf selected the two states pick out the same copies, and
- * a control that cannot change anything is noise on a screen already dense with filters.
+ * The two-state control for {@link useSubtreeScope}.
+ *
+ * A caller that renders it **beside** its tree shows it only when the selected node actually has
+ * children — with a leaf selected the two states pick out the same copies, and a control that
+ * cannot change anything is noise on a screen already dense with filters. That is the area panel's
+ * rule and it stands.
+ *
+ * A caller that renders it **inside a dropdown** shows it always (#846). The rule above is about
+ * room on a crowded surface, and inside a panel it competes with nothing; against that, a control
+ * that appears only once a branch node is picked cannot be *found* — the Copies location filter
+ * hid it that way and the collector never learned it existed. What it says is true before any pick
+ * as well: this is how a location filter reads, and it applies to the next node chosen.
  */
 export function SubtreeScopeToggle({
   axis,

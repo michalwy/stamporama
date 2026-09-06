@@ -153,12 +153,15 @@ right, from *which copies* to *how they are shown*.
   once your collection defines formats.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
-  shows the copies in all of its stockbooks at once. Pick a location that has others nested
-  inside it and a **+ sub-locations / this location only** switch appears **at the foot of the
-  location dropdown itself** — *this location only* answers "what is loose in the cabinet itself".
-  It lives inside the dropdown because it says nothing on its own: it only qualifies the location
-  you just picked. Like the area one, it is remembered, and the holdings totals and year panel
-  follow it.
+  shows the copies in all of its stockbooks at once. A **+ sub-locations / this location only**
+  switch sits **at the foot of the location dropdown** — *this location only* answers "what is
+  loose in the cabinet itself". It is there whenever the dropdown is open, before you have picked
+  anything, so you can see how the filter is going to read; it lives inside the dropdown because it
+  says nothing on its own, only qualifying the location you pick.
+  The dropdown **stays open when you pick a location**, so you can pick and then set the scope
+  without reopening it — the list behind it updates as you go. Press Escape or click outside to
+  close it. Like the area one, the switch is remembered, and the holdings totals and year panel
+  follow the filter.
 - **More filters** — four switches that used to be four buttons across the toolbar. They are in one
   dropdown now, under two headings, because **two of them narrow the list and two widen it**:
   - *Show only* — **No photos** shows only copies with no [photo](#photos) attached, so you can
