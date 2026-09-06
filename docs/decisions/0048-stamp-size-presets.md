@@ -2,7 +2,11 @@
 
 ## Status
 
-Proposed. Designed 2026-09-06 with the collector; no issue filed yet. It extends #763 (the stamp's
+Accepted, not yet implemented. Designed 2026-09-06 with the collector. The work is tracked in #803
+(the dictionary, the migration and the write module), #804 (the Settings panel), #805 (the row beside
+the stamp's width and height), #806 (applying to an issue or a checklist), #807 (choosing one while
+creating a stamp range), #808 (multi-select on the stamp tree) and #809 (applying to a tree
+selection). It extends #763 (the stamp's
 size, **`src/lib/stamp-size.ts`**) and is read by nothing new: everything downstream — the hawid box
 rule (#765), the page plan (#767), the PDF (#768), the editor canvas (#769), the cutting list (#770)
 — goes on reading `Stamp.widthMm` / `Stamp.heightMm` and never learns that presets exist.
