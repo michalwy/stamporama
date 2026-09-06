@@ -46,6 +46,7 @@ import {
   useIssueGroupsInfinite,
   useIssueGroupCompleteness,
   useHoldingsValuation,
+  useItemCount,
   useItemYears,
   useInvalidateInventory,
   useCollectionItemNoPad,
@@ -583,6 +584,9 @@ export function InventoryListPanel({
   // filtered set whatever the grouping mode: no mode narrows the copies on its own any more, so
   // there is nothing left here to re-narrow with.
   const { data: holdingsTotal } = useHoldingsValuation(collectionId, filters);
+  // How many copies the filter holds (#845) — the figure the summary bar states and the
+  // cursor-paginated list can never know about itself.
+  const { data: itemCount } = useItemCount(collectionId, filters);
 
   const allCopies = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -956,7 +960,11 @@ export function InventoryListPanel({
           are in the filter bar now (#847), where the Offers screen has kept its own — the controls
           were spread across the width, and using two of them in a row was a trip across the
           window. */}
-      <HoldingsSummaryBar total={holdingsTotal} />
+      <HoldingsSummaryBar
+        total={holdingsTotal}
+        storageKey={`stamporama:inventory:summaryExpanded:${collectionId}`}
+        itemCount={itemCount?.count}
+      />
 
       {/* Sidebar + list, mirroring the stamps list layout (#106) */}
       <div

@@ -1727,6 +1727,33 @@ export async function listItemsPaginated(
   return { items, nextCursor };
 }
 
+/**
+ * How many copies the current filter holds (#845) — the figure the Copies list's summary bar states
+ * and the toolbar cannot, the list itself being cursor-paginated and so never knowing its own
+ * length.
+ *
+ * Deliberately **the list's own `where`**, built by the same three calls {@link listItemsPaginated}
+ * makes, rather than derived from the holdings summary beside it. The two scopes are not the same:
+ * `getHoldingsValuation` lifts the disposal exclusion on purpose (#396) so it can state a write-off
+ * line, so a count read off its buckets would be wrong by exactly the disposed copies, and wrong in
+ * a way nobody would notice until they counted. A count that disagrees with the rows under it is
+ * worse than no count.
+ */
+export async function countItems(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+  return prisma.item.count({ where });
+}
+
 // ── Duplicate groups (#372) ──────────────────────────────────────────────────
 
 /** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for

@@ -767,7 +767,15 @@ export function PurchaseDetailPanel({
 
       {/* Catalog value vs. actual purchase cost across the whole order (#179), and what selling
           the order's copies has realized (#559) — one bar over the one set of copies */}
-      <HoldingsSummaryBar total={purchaseHoldings} ret={purchaseReturn} />
+      {/* Two of these bars sit on this page — this one over the whole order, and one inside every
+          expanded lot — so the expanded/collapsed choice is keyed by **role** rather than shared
+          (#845). The order's values and a lot's values are different questions, opened for
+          different reasons, and one key would have made them open and close together. */}
+      <HoldingsSummaryBar
+        total={purchaseHoldings}
+        ret={purchaseReturn}
+        storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
+      />
 
       {/* Card scans (#566, moved here by #586). **Above the lots**, because that is the order the
           pass runs in and the level the card exists at: a parcel arrives, its cards are scanned and
@@ -2623,7 +2631,15 @@ function LotCard({
               {/* Catalog value vs. actual purchase cost for this lot (#179), and what selling its
                   copies has brought back (#559) — one bar, since both are about these copies */}
               <div style={{ padding: "0.75rem 1.25rem" }}>
-                <HoldingsSummaryBar total={summary?.holdings} ret={lotReturn} />
+                {/* Every lot bar on the page shares one key (#845), deliberately: they are the
+                    same question asked of different lots, so "do I want lot detail today" is the
+                    preference, not "do I want it for lot 3". A key per lot would grow localStorage
+                    a row at a time and leave a newly opened lot collapsed beside an expanded one. */}
+                <HoldingsSummaryBar
+                  total={summary?.holdings}
+                  ret={lotReturn}
+                  storageKey={`stamporama:purchase:lotSummaryExpanded:${collectionId}`}
+                />
               </div>
 
               {groupByIssue ? (
