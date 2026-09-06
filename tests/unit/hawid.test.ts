@@ -74,6 +74,34 @@ describe("planHawidBox", () => {
     assert.equal(box.heightMm, 34);
   });
 
+  it("draws the box at the whole strip even when that is taller than the stamp needs", () => {
+    // The case that separates the two readings, and the one to reach for if you are working out
+    // which rule is in force. 27 + 4 = 31 mm of strip needed; the 26 mm packet is only 30, so the
+    // answer is the 30 mm packet — and its box is **34**, the strip, not 31, the requirement. The
+    // two coincide only when a strip fits exactly, which is why the 26 mm case above cannot settle
+    // it on its own.
+    const drawer = [strip(26, 30, "Hawid 264"), strip(30, 34, "Hawid 304")];
+    const box = planHawidBox(
+      { widthMm: 21, heightMm: 27 },
+      { verticalClearanceMm: 4, horizontalMarginMm: 3 },
+      drawer
+    );
+    assert.equal(box.strip?.label, "Hawid 304");
+    assert.equal(box.heightMm, 34);
+  });
+
+  it("keeps the oversize box at the stamp plus the clearance, there being no strip to read", () => {
+    // The one place stamp + clearance is still the box height: nothing was chosen, so there is no
+    // strip whose height could be taken. 27 + 4 = 31, and no packet in this drawer reaches it.
+    const box = planHawidBox(
+      { widthMm: 21, heightMm: 27 },
+      { verticalClearanceMm: 4, horizontalMarginMm: 3 },
+      [strip(24, 28), strip(26, 30)]
+    );
+    assert.equal(box.strip, null);
+    assert.equal(box.heightMm, 31);
+  });
+
   it("takes its height from the shortest strip the stamp fits into", () => {
     const box = planHawidBox({ widthMm: 21, heightMm: 25 }, MARGINS, STOCK);
     // 25 + 2 = 27, which the 24 mm packet takes: it is 28 mm of strip. The box is drawn at 28.
