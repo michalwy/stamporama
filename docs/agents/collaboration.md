@@ -98,6 +98,33 @@ step nobody asked for.
 finished: its branch then waits until somebody happens to look, and the lead's whole job is to be
 the one who does not have to.
 
+### A prompt carries its reasons, not only its instructions
+
+**Five sessions in one day came back having refuted something in the brief they were given, and all
+five were right.**
+
+- **#785** was told the trap was the reference line. It is not: the closing keyword counts in ordinary
+  prose too, and #787 armed a closing reference twice while explaining that very mistake.
+- **#793** found that the test case the brief specified could not distinguish the two readings it was
+  written to settle — a 26 mm stamp with 8 mm of clearance needs 34, and the 30 mm packet is exactly
+  34, so both readings agree there — and wrote the case that does separate them.
+- **#814** found that the lead's own spelling would have automerged the dependency the list exists to
+  protect: `matchPackageNames` misses the CI Node pin, whose `depName` is `node` but whose
+  `packageName` is `actions/node-versions`.
+- **#815** found a better precedent than the three the lead pointed at — the lot builder's spelling of
+  a viewport-height workbench — and a second bug beside the one it was sent to fix (#820).
+- **#816** found that the carried ref could go stale and stay stale, and fixed a latent `splice(-1)`
+  in three places that nobody had asked about.
+
+The conclusion is not that sessions are clever. It is that **a reason can be refuted and an
+instruction can only be obeyed.** In every one of those five the session had what it needed to see
+the mistake, and what let it act was knowing what the instruction was *for*.
+
+So the self-contained prompt of step 2 carries the reasoning with the constraint: which precedent was
+chosen and why, what a specified test case is meant to separate, what a rule is protecting against.
+And it says which parts are the **lead's reading** rather than the user's decision — that is the
+sentence a session can answer, and #793 and #814 are both answers to it.
+
 ### `Refs #NNN`, never a closing keyword
 
 A pull request references its issue as **`Refs #NNN`** — never `Closes`, `Fixes`, `Resolves` or any
@@ -160,6 +187,39 @@ Two things here reward reading the diff specifically:
 - **Closing is deliberately done by somebody who did not write the code.** The author is the worst
   available reader of their own *Done when*.
 
+**It earns its keep, and the day this file was written proves it.** Reading #783's diff caught two
+defects that the report, the four required checks and the session's own confidence had all passed
+over: a claim that two concurrent suites truncate each other's tables, when this suite performs no
+`TRUNCATE` at all, and a reference to a `pnpm check:migrations` script that does not exist — which
+inverts the point, since nothing here checks migration ordering. Both were a sentence away from
+shipping as documented rules in this very file. Neither was anybody's failure of diligence: both were
+imported from the sibling project, where they are true.
+
+**A finding about a file may simply be stale, and that is the first thing to check about it.** A
+design session reported that `albums.md` documented a defective box rule; #793 had corrected it three
+commits earlier, and the session was reading a worktree cut before that. So the first question about
+a finding of that shape is **whether `main` moved underneath it**, asked before anybody reasons about
+the content. The mirror-image error is just as available and the lead made it in the same exchange:
+telling a session its *branch* was behind when only its working tree was.
+
+**"Did the assertions pass" is not the check. "Would this have failed if the code were wrong" is.**
+#814's first ordering control passed for the wrong reason — the never-alone rule was placed first and
+Prisma came out protected, but by the blanket rule's own exclusion list rather than by ordering, so
+the test could not see the mechanism it claimed to test. The corrected control strips the exclusions
+until ordering is the only thing left, and the trap reproduces. The session caught this on itself
+with nobody looking, which is the only way it ever gets caught: a control that passes for the wrong
+reason is indistinguishable from one that works, and it is green either way.
+
+**And a check that cannot see the failure is not a check.** The never-alone list in `renovate.json`
+has two criteria, and the second is the one that gets missed: a dependency waits for a person either
+because something written in this tree states a reason a bump could invalidate, **or because its
+failure mode is invisible to every required check** (*Automerge is the one exception* below). That
+second criterion is not about dependencies. Lint, typecheck and build see types, `test:unit` is pure
+logic, `test:integration` is server-side — so nothing in the four checks exercises a React Query
+cache, and nothing in them looks at a screen at all. Green means *the failure modes these four can
+see did not occur*, and **which failure modes they cannot see** is worth asking of any change, not
+only of a bump.
+
 ## A protected `main`, and what it changed
 
 Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, the user included**:
@@ -169,7 +229,10 @@ Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, t
   requires linear history;
 - force-push and deletion are blocked;
 - four checks must pass — `Static checks`, `Unit tests`, `Integration tests`, `Extension checks`
-  (the `name:` values of the jobs in `.github/workflows/ci.yml`).
+  (the `name:` values of the jobs in `.github/workflows/ci.yml`) — and they are **strict**
+  (`strict_required_status_checks_policy: true`), so a branch must be up to date with `main` before
+  it can merge at all. That last clause is what makes merges serialise; see *What may run in
+  parallel*.
 
 A direct `git push origin main` was attempted and rejected. This is verified, not assumed.
 
@@ -289,6 +352,19 @@ the same issue the session owns.
 Sessions run in parallel, each in its own worktree. **Merges serialise, and that is the trade**: the
 second branch ready rebases onto the first and re-runs its checks. At two or three parallel branches
 that costs one extra CI run, which is cheap next to the alternative.
+
+**Where two branches touch the same file, that trade is not one extra CI run — it is a round trip.**
+A rebase that conflicts is not something GitHub can do for you: *Update branch* fails, and the branch
+waits for whoever can resolve it. Dependency updates and one `pnpm-lock.yaml` are the worked example.
+Merging one of them leaves the others **conflicted** rather than merely behind, and Renovate has to
+regenerate the lockfile on its own next run, so draining N updates costs N Renovate cycles and N
+serialised CI runs — which is the reasoning behind the weekly batch in #814.
+
+The shape is general, and it is the thing to reason about before starting two sessions: **work that
+shares a file serialises whatever this section says about parallelism**, and choosing what runs at
+once is choosing which files are shared. The lead already does this by hand in feature work — #815's
+amendment held it back while #816 and #820 were in the same renderer, on the grounds that three
+changes at once in one file is how a conflict happens.
 
 Two limits are being worked out in **#781** rather than here, and that issue's files carry the
 detail — do not restate it in this file:
