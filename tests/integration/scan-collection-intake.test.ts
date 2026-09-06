@@ -19,7 +19,7 @@ import {
   setBatchLabel,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
-import { assignTileToCopy, identifyTilesAsNewCopies } from "../../src/lib/scan-tiles";
+import { assignTileToCopy, discardTile, identifyTilesAsNewCopies } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-collection-"));
@@ -348,6 +348,24 @@ describe("scanning into the collection, with no purchase (#725)", () => {
       assert.deepEqual(counts, {
         unidentifiedTileCount: 2,
         parkedTileCount: 0,
+        discardedTileCount: 0,
+        scanSheetCount: 1,
+      });
+
+      // The discards are counted too (#853), and they are the one header figure that is **not**
+      // outstanding work: the chip they draw is the worklist for the physical card, pressed once
+      // the identification is done. Discarding a tile has to move both numbers — out of the sweep
+      // and into the pull list — or the chip would be offered over nothing, or never offered at all.
+      const [firstTile] = await prisma.scanTile.findMany({
+        where: { collectionId: fresh },
+        orderBy: { position: "asc" },
+        select: { id: true },
+      });
+      await discardTile(userId, firstTile.id, "junk");
+      assert.deepEqual(await getScanCounts(userId, { collectionId: fresh }), {
+        unidentifiedTileCount: 1,
+        parkedTileCount: 0,
+        discardedTileCount: 1,
         scanSheetCount: 1,
       });
 
