@@ -16,7 +16,7 @@ import { OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { catalogKeyMatches } from "@/lib/catalog-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -24,6 +24,7 @@ import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
 import {
   useComposeTargets,
+  useComposeTargetSetCopies,
   useInvalidateOffers,
   useStampConditionCollisions,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
@@ -88,10 +89,9 @@ interface RowCtx {
   baseCurrency: string;
   areas: CollectionAreaData[];
   locations: LocationData[];
-  byId: Map<string, ItemListItem>;
   primaryVendorByArea: Map<string, string | null>;
   /** Catalog-entry lookup resolved from the copy's area *and* issue, so a per-issue prefix override
-   * (#377) reaches the rows and the search keys alike. */
+   * (#377) reaches the rows. */
   vendorMapFor: AreaVendorMaps["vendorMapFor"];
 }
 
@@ -105,24 +105,18 @@ function targetKey(t: Target): string {
 /** Does a set match the search? Its label, its copies' stamp/issue names, their location refs
  * (#303), and — crucially — their normalized catalog keys (vendor + area prefix + number), so
  * "Mi PL 200", "PL200", or bare "200" all hit (mirrors the offer compose + add-sold-sets
- * pickers). */
-function setMatches(s: ComposeTargetSet, raw: string, q: string, ctx: RowCtx): boolean {
+ * pickers).
+ *
+ * All four now come off the set itself (#867). They used to be assembled here from the enriched
+ * copies the picker was handed for every set in the collection — the keys resolved per copy through
+ * the area/issue vendor maps — which meant loading a copy in full in order to ask one string
+ * question of it. The prefix resolution is the same one, run once on the server where the labeller
+ * had already done it to name the set. */
+function setMatches(s: ComposeTargetSet, raw: string, q: string): boolean {
   if (s.label.toLowerCase().includes(q)) return true;
   if (s.itemLabels.join(" ").toLowerCase().includes(q)) return true;
-  for (const id of s.itemIds) {
-    const c = ctx.byId.get(id);
-    if (!c) continue;
-    if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
-    if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
-    if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
-    const vm = ctx.vendorMapFor(c.areaId, c.issueId);
-    const keys = c.catalogNumbers.map((cn) => {
-      const v = vm.get(cn.catalogVendorId);
-      return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
-    });
-    if (catalogKeyMatches(raw, keys)) return true;
-  }
-  return false;
+  if (s.searchText.includes(q)) return true;
+  return catalogKeyMatches(raw, s.catalogKeys);
 }
 
 export interface AddToOfferDialogProps {
@@ -294,7 +288,6 @@ export function AddToOfferDialog({
   // In the direct "create new offer" flow (#277) the picker never shows, so don't fetch its targets.
   const { data, isLoading } = useComposeTargets(collectionId, itemIds, !startInCreate);
   const offers = useMemo(() => data?.offers ?? [], [data]);
-  const copies = useMemo(() => data?.copies ?? [], [data]);
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const ctx: RowCtx = useMemo(
@@ -303,11 +296,10 @@ export function AddToOfferDialog({
       baseCurrency,
       areas,
       locations,
-      byId: new Map(copies.map((c) => [c.id, c])),
       primaryVendorByArea,
       vendorMapFor,
     }),
-    [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapFor]
+    [collectionId, baseCurrency, areas, locations, primaryVendorByArea, vendorMapFor]
   );
 
   const raw = search.trim();
@@ -323,11 +315,11 @@ export function AddToOfferDialog({
         out.push({ offer: o, sets: o.sets });
         continue;
       }
-      const matching = o.sets.filter((s) => setMatches(s, raw, q, ctx));
+      const matching = o.sets.filter((s) => setMatches(s, raw, q));
       if (matching.length > 0) out.push({ offer: o, sets: matching });
     }
     return out;
-  }, [offers, raw, q, ctx]);
+  }, [offers, raw, q]);
 
   const stateCounts = useMemo(() => {
     const counts: Record<string, number> = { preparing: 0, ready: 0, active: 0, paused: 0 };
@@ -942,7 +934,20 @@ function SetPickRow({
   // Only the *offer* disables a set: an offer never lists a copy twice, so a set already holding
   // one of the picked copies can still take the others.
   const disabled = offerDisabled;
-  const detailCopies = set.itemIds.map((id) => ctx.byId.get(id)).filter((c): c is ItemListItem => !!c);
+  // The set's copies, enriched only once the collector opens them (#867) — the picker no longer
+  // arrives holding every copy in the collection's offers. Kept by React Query, so a set opened a
+  // second time is instant. Rendered in the set's own copy order, which is what the list of ids
+  // carries; a copy the read did not return is simply skipped, as it was before.
+  const { data: fetched, isLoading: copiesLoading } = useComposeTargetSetCopies(
+    ctx.collectionId,
+    set.offerSetId,
+    detailsShown
+  );
+  const byId = useMemo(() => new Map((fetched ?? []).map((c) => [c.id, c])), [fetched]);
+  const detailCopies = useMemo(
+    () => set.itemIds.map((id) => byId.get(id)).filter((c): c is ItemListItem => !!c),
+    [set.itemIds, byId]
+  );
   return (
     <div style={{ borderBottom: isLast && !detailsShown ? undefined : "1px solid var(--color-border)" }}>
       <label
@@ -971,7 +976,7 @@ function SetPickRow({
             <span style={{ fontSize: "0.75rem", color: MUTED }}>
               {set.itemIds.length} cop{set.itemIds.length === 1 ? "y" : "ies"}
             </span>
-            {detailCopies.length > 0 && (
+            {set.itemIds.length > 0 && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -998,8 +1003,36 @@ function SetPickRow({
         </div>
       </label>
 
-      {/* Expandable contents: the exact copies in this set, as full inventory rows. */}
-      {detailsShown && detailCopies.length > 0 && (
+      {/* Expandable contents: the exact copies in this set, as full inventory rows — fetched when
+          the toggle is opened (#867). */}
+      {detailsShown && copiesLoading && (
+        <div
+          style={{
+            padding: "0.5rem 1rem 0.5rem 2.5rem",
+            fontSize: "0.75rem",
+            color: MUTED,
+            background: "var(--color-bg-page)",
+          }}
+        >
+          Loading copies…
+        </div>
+      )}
+      {/* The toggle is drawn from the set's own copy count, so an empty result here is the read
+          having failed rather than a set with nothing in it — say so instead of opening onto
+          nothing. */}
+      {detailsShown && !copiesLoading && detailCopies.length === 0 && (
+        <div
+          style={{
+            padding: "0.5rem 1rem 0.5rem 2.5rem",
+            fontSize: "0.75rem",
+            color: MUTED,
+            background: "var(--color-bg-page)",
+          }}
+        >
+          Couldn&apos;t load this set&apos;s copies.
+        </div>
+      )}
+      {detailsShown && !copiesLoading && detailCopies.length > 0 && (
         <div style={{ background: "var(--color-bg-page)", paddingLeft: "2.5rem" }}>
           {detailCopies.map((copy, i) => {
             const primaryVendorId = copy.areaId ? (ctx.primaryVendorByArea.get(copy.areaId) ?? null) : null;
