@@ -24,7 +24,7 @@
     "slot": "scripts/dev-slot.sh show"
   },
   "dependencies": {
-    "@google-cloud/storage": "7.22.0",
+    "@google-cloud/storage": "8.0.1",
     "@pdf-lib/fontkit": "1.1.1",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
