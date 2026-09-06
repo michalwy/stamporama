@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
 
@@ -29,6 +29,7 @@ export function MultiSelectFilter({
   selected,
   onChange,
   allLabel,
+  clearLabel,
   itemNoun,
   ariaLabel,
   disabled = false,
@@ -36,12 +37,22 @@ export function MultiSelectFilter({
   zIndex = DEFAULT_MENU_Z_INDEX,
   onOpenChange,
 }: {
-  options: { id: string; label: string }[];
+  /** `group` puts the option under a heading in the menu (#846). Options carrying the same heading
+   * must be **adjacent** — the menu draws a heading whenever the value changes, so the caller's
+   * order is the grouping. Used where one control holds options that do not all pull the same way:
+   * the Copies list's spare filters both narrow the list and widen it, and the headings are what
+   * say which is which. Leave it off and the menu is a flat checklist as before. */
+  options: { id: string; label: string; group?: string }[];
   /** The selected ids. Empty is "every value" — the absence of a filter, not an empty set. */
   selected: string[];
   onChange: (ids: string[]) => void;
   /** What the control reads when nothing is selected, e.g. `All conditions`. */
   allLabel: string;
+  /** What the menu's clear row reads, when "everything" and "nothing selected" are not the same
+   * sentence. A condition filter clears to *All conditions* and the trigger says so too; a control
+   * holding a handful of unrelated switches has no "all" to offer, so its trigger names the control
+   * (*More filters*) and its clear row says what clearing does. Defaults to {@link allLabel}. */
+  clearLabel?: string;
   /** What several selected values are counted in, e.g. `conditions` → `3 conditions`. */
   itemNoun: string;
   ariaLabel: string;
@@ -215,27 +226,31 @@ export function MultiSelectFilter({
                 borderRadius: 0,
               }}
             >
-              {allLabel}
+              {clearLabel ?? allLabel}
             </button>
-            {options.map((o) => (
-              <label
-                key={o.id}
-                style={{ ...ITEM_STYLE, cursor: "pointer" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--color-bg-row-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={chosen.has(o.id)}
-                  onChange={() => toggle(o.id)}
-                  style={{ cursor: "pointer" }}
-                />
-                {o.label}
-              </label>
+            {options.map((o, i) => (
+              <Fragment key={o.id}>
+                {o.group && o.group !== options[i - 1]?.group && (
+                  <span style={GROUP_HEADING_STYLE}>{o.group}</span>
+                )}
+                <label
+                  style={{ ...ITEM_STYLE, cursor: "pointer" }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--color-bg-row-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(o.id)}
+                    onChange={() => toggle(o.id)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  {o.label}
+                </label>
+              </Fragment>
             ))}
           </div>,
           document.body
@@ -257,5 +272,17 @@ const ITEM_STYLE: React.CSSProperties = {
   fontSize: "0.8125rem",
   fontWeight: 500,
   textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+/** A heading over a run of options that pull the same way (#846). Deliberately not a control: it is
+ * a label on the group below it, so it takes no tick and no hover. */
+const GROUP_HEADING_STYLE: React.CSSProperties = {
+  padding: "0.4rem 0.55rem 0.15rem",
+  fontSize: "0.6875rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
 };

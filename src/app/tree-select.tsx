@@ -78,6 +78,7 @@ export const TREE_SELECT_NONE_ID = "__none__";
 export function TreeSelectPanel({
   activeId,
   children,
+  footer,
   listboxAriaLabelledby,
   noneOptionLabel,
   panelMinWidth,
@@ -93,6 +94,12 @@ export function TreeSelectPanel({
 }: {
   activeId?: string;
   children: ReactNode;
+  /** A strip under the option list, inside the panel. For a control that qualifies the choice just
+   * made rather than being another choice — the Copies list's "this location only / + sub-locations"
+   * switch (#385), which used to stand beside the dropdown as a second control and only ever meant
+   * anything about what the dropdown holds (#846). Outside the `role="listbox"`, so it is not one
+   * more option to arrow through. */
+  footer?: ReactNode;
   listboxAriaLabelledby?: string;
   noneOptionLabel?: string;
   panelMinWidth?: number;
@@ -152,6 +159,9 @@ export function TreeSelectPanel({
           ) : null}
           {children}
         </div>
+        {footer ? (
+          <div className="border-t border-[var(--color-border)] p-2">{footer}</div>
+        ) : null}
       </div>
     </div>,
     portalTarget ?? document.body
