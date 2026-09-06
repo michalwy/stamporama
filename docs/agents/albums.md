@@ -316,6 +316,34 @@ needs to be told.
   together: a layout that re-sorts what the collector arranged is one they cannot predict, and this
   one is printed.
 
+### The album's name is suggested from its area, and the suggestion declines the roll-up (#797)
+
+`suggestAlbumName` (`src/lib/album-name.ts`) offers the create dialog a name built from the chosen
+area and the album's language. Two decisions in it are worth more than the six lines of code:
+
+- **It reads the area's *own* name — `areaOwnTitleName`, not `buildAreaTitleMap`.** The map rolls a
+  blank-`titleName` area up to a public parent, which is what an auto-generated listing title wants:
+  a grouping level is deliberately invisible to a buyer. An album is the other case. The collector
+  *picked* that area, so naming their binder after a parent they did not choose is a substitution,
+  not a fallback — and it prints at the top of every page. Both readings live in `area-vendor.ts`
+  over one shared per-node resolver (`statedTitleName`), so they cannot drift apart on the language
+  fallback while disagreeing on the walk, which is the only thing they are meant to disagree about.
+  The `{area}` **token** in an album's printed texts still rolls up (`title-copy.ts`), and that is
+  consistent: the token is a label about the stamps on a page, not the name of the thing chosen.
+- **The language chooses the spelling; it is never appended.** No `(polski)` on a running head. Where
+  a translation exists the language is already what the name *says*, and where none does an appended
+  tag would decorate a name that had not changed. The cost is that two albums on one untranslated
+  area in two languages are suggested one string and the second is refused by
+  `@@unique([collectionId, name])` — a clear refusal in that one case, against a parenthesis on
+  everybody's pages.
+
+The suggestion is **derived, not synced**: `AlbumForm` renders the suggestion until the collector
+types and their own text afterwards, with no effect writing into the input. That is what makes "a
+typed name is never overwritten" unreachable rather than merely unlikely — an effect keyed on the
+area would have to be *argued* not to fire. #797 also lifted the whole form to controlled for this;
+the posted field names stayed `name`, `collectionAreaId`, `language`, `templateId`, so
+`actions/albums.ts` never learned about any of it.
+
 ## The PDF (#768, ADR-0046)
 
 `src/lib/album-pdf.ts` draws the plan and **decides nothing**. Three kinds of arithmetic and no
