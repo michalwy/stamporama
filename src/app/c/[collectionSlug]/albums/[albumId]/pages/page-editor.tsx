@@ -464,7 +464,13 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             // scrolls whatever height it has. What it must not do is stop short of the window (#815).
             overflow: "auto",
             display: "flex",
-            justifyContent: "center",
+            // **`safe` centre, not plain centre** (#820). A sheet wider than this viewport — a
+            // narrow window at 150% or 200% — overflows it on *both* sides under plain centring,
+            // and only the right side can be reached: a scroll container will not scroll to a
+            // negative position, so the left edge of the page is simply unreachable. `safe` falls
+            // back to start alignment exactly when centring would overflow, which is the one case
+            // it goes wrong; a sheet that fits is still centred.
+            justifyContent: "safe center",
           }}
         >
           {sheet ? (
