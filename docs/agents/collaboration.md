@@ -483,13 +483,18 @@ indistinguishable from one that broke.
 tests — all of that belongs to the session or the lead and is done *before* anything is shown.
 **He judges what a machine cannot**: whether the copy says what it should, whether the layout makes
 sense, whether this is the thing he asked for, and whether something obvious is missing. A showing
-that spends his attention on a checklist has spent it on the wrong thing.
+that spends his attention on a checklist has spent it on the wrong thing. (The source procedure also
+has him check **both locales**; this app has no i18n, so that item is omitted rather than overlooked
+— stated here so the omission reads as a decision.)
 
-**What this is not.** It is not a review gate on every pull request: for a documentation change, a
-configuration change, or a rule with unit tests behind it, the four required checks are the
-verification and the user's time is not the price of merging. And it is **not a general licence to
-run the app.** AGENTS.md says not to leave dev servers running, and *No browser verification* above
-says a session starts nothing; **the showcase is the one exception to both, and it is the lead's.**
+**What this is not.** It is not a review gate on every pull request, and his time is not the price
+of merging. For a configuration change or a rule with unit tests behind it, **the four required
+checks are the verification**. For a documentation change they are precisely what does *not* run —
+`Detect changes` reports all four as skipped — and the verification is **the lead's read of the diff
+in step 6** of *The loop*, which is a thing this file already has the lead doing. And it is **not a
+general licence to run the app.** AGENTS.md says not to leave dev servers running, and *No browser
+verification* above says a session starts nothing; **the showcase is the one exception to both, and
+it is the lead's.**
 A task session still starts nothing. The lead starts nothing for its own verification either — step
 6 of *The loop* is a check of the change as written, in the repository. The stack goes up to be
 shown to the user, and for nothing else.
