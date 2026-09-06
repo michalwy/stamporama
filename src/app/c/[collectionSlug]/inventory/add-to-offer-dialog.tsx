@@ -11,12 +11,14 @@ import {
 } from "@/app/dialog-shell";
 import type { ItemListItem } from "@/lib/items";
 import type { ComposeTargetOffer, ComposeTargetSet } from "@/lib/offers";
+// The picker's search is one behaviour with two ends: the server builds each set's keys, this
+// matches against them (#867). Both live in the pure module, unit-tested as a pair.
+import { composeSetMatches } from "@/lib/offer-compose-search";
 import type { OfferState } from "@/lib/offer-rules";
 import { OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { catalogKeyMatches } from "@/lib/catalog-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -100,23 +102,6 @@ type Target = { kind: "new"; offerId: string } | { kind: "set"; offerId: string;
 
 function targetKey(t: Target): string {
   return t.kind === "new" ? `new:${t.offerId}` : `set:${t.offerSetId}`;
-}
-
-/** Does a set match the search? Its label, its copies' stamp/issue names, their location refs
- * (#303), and — crucially — their normalized catalog keys (vendor + area prefix + number), so
- * "Mi PL 200", "PL200", or bare "200" all hit (mirrors the offer compose + add-sold-sets
- * pickers).
- *
- * All four now come off the set itself (#867). They used to be assembled here from the enriched
- * copies the picker was handed for every set in the collection — the keys resolved per copy through
- * the area/issue vendor maps — which meant loading a copy in full in order to ask one string
- * question of it. The prefix resolution is the same one, run once on the server where the labeller
- * had already done it to name the set. */
-function setMatches(s: ComposeTargetSet, raw: string, q: string): boolean {
-  if (s.label.toLowerCase().includes(q)) return true;
-  if (s.itemLabels.join(" ").toLowerCase().includes(q)) return true;
-  if (s.searchText.includes(q)) return true;
-  return catalogKeyMatches(raw, s.catalogKeys);
 }
 
 export interface AddToOfferDialogProps {
@@ -315,7 +300,7 @@ export function AddToOfferDialog({
         out.push({ offer: o, sets: o.sets });
         continue;
       }
-      const matching = o.sets.filter((s) => setMatches(s, raw, q));
+      const matching = o.sets.filter((s) => composeSetMatches(s, raw));
       if (matching.length > 0) out.push({ offer: o, sets: matching });
     }
     return out;
