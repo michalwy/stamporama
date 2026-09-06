@@ -91,8 +91,12 @@ step nobody asked for.
    pull request.
 5. The session **reports back to the lead**: what landed, on which branch, which pull request, what
    was verified and how, what was left out and why, and anything it noticed outside its scope.
-6. The lead **verifies the work in the repository** and collects the user's go-ahead.
-7. The lead merges the pull request and closes the issue.
+6. The lead **verifies the work in the repository**: the diff, the migration SQL, the issue's *Done
+   when*, CI. This is a check of the change as written.
+7. The lead **collects the user's go-ahead**. Where the session reported that it could not verify the
+   appearance, that go-ahead is the user having **looked at the branch running** — a second act, not
+   the same one, because it cannot be done from a diff (*No browser verification* below).
+8. The lead merges the pull request and closes the issue.
 
 **The report is part of the work, not a closing courtesy.** A session that finishes silently has not
 finished: its branch then waits until somebody happens to look, and the lead's whole job is to be
@@ -129,7 +133,7 @@ sentence a session can answer, and #793 and #814 are both answers to it.
 
 A pull request references its issue as **`Refs #NNN`** — never `Closes`, `Fixes`, `Resolves` or any
 of their variants, in the body or in a commit message that will land on `main`. A closing keyword
-hands the close to GitHub at merge time, which is exactly the human step 7 above puts *after*
+hands the close to GitHub at merge time, which is exactly the human step 8 above puts *after*
 verification.
 
 This is the one rule here the platform works against, so it needs stating rather than reasoning
@@ -256,7 +260,7 @@ Three consequences:
 
 ### Automerge is the one exception, and where its boundary runs
 
-Everything above says a **person** decides and the lead is who asks — step 6 of the loop, and the
+Everything above says a **person** decides and the lead is who asks — step 7 of the loop, and the
 sentence just above that the user's decision still gates the merge. **Renovate is the single
 exception to it.** A dependency pull request inside the boundary below merges itself, with nobody's
 go-ahead, the moment the four required checks are green. The boundary was decided by the user on
@@ -397,6 +401,49 @@ This is recorded because the darkroom model this file is adapted from requires t
 has a whole section on exercising work in a browser afterwards. That is right for that project and
 wrong for this one. **It is a decision, not an oversight; do not "fix" it back.** If a change really
 does need a browser, ask the user first.
+
+### If nobody could see it, the user looks before the merge
+
+The rule above says no session can verify a visual change. It did not say who does, or when, and in
+practice the answer had been *after the merge*. That cost two rounds in one day. **#815** merged, the
+user looked, and the scrolling was wrong — the sidebars moved with the page instead of staying pinned
+— so a follow-up now exists for something a five-minute look would have caught. **#824** — the pull
+request carrying #816's drag feedback and #820's safe centring — merged while this was being
+discussed, and both are on `main` unseen. Neither session did anything wrong: both said plainly that the appearance was unverified. The
+gap was that *unverified* had no consequence attached to it.
+
+**So: if a session reports that the appearance is unverified, the pull request goes to the user
+before it is merged, and the user's confirmation is what releases the merge** (step 7 of *The loop*).
+The trigger is that sentence in the report, not the lead's judgement about whether the change looks
+risky. **A session that could not see its own work is the signal**, and it is the one the lead is
+worst placed to second-guess, having not seen it either.
+
+**How the user actually looks at it.** He tests through Docker Compose, and the dev overlay
+bind-mounts the working tree — so **switching the branch in the main worktree is enough**; nothing
+rebuilds for a source change.
+
+1. The lead checks the tree is clean and **asks before touching it**. The main worktree is the
+   user's, and switching a branch under him while he is mid-something is not the lead's to do
+   unannounced.
+2. The lead fetches, and checks the branch out in `/Users/michalwy/stamporama`.
+3. The user raises his usual stack and looks. **The pull request body should already say what to look
+   for**: #815's own pull request lists what to look for *and* what would say it is still wrong,
+   which is what makes this cheap.
+4. **A problem becomes a fix on the same branch**, not a new issue and a second pull request. That is
+   the whole saving, and #815 is what it costs when the order is the other way round.
+5. On his confirmation the lead merges, then restores `main` in the main worktree.
+
+**What this is not.** It is not a review gate on every pull request: for a documentation change, a
+configuration change, or a rule with unit tests behind it, the four required checks are the
+verification and the user's time is not the price of merging. And it is **not a licence for a session
+to start a dev server** — nothing about who may run what changes here, only about when the user is
+asked.
+
+**Where this came from, recorded because the same misreading is available to the next person
+comparing the two projects.** The darkroom model has a section — *The main worktree is the user's
+showcase* — saying exactly this: when work is ready to be looked at, the lead brings the branch into
+the main worktree and starts it there. **The lead read that as being about dev-server ports and
+dismissed it as not applying here.** It is about review order, and it applies exactly.
 
 ## Findings go to the lead, not into new issues
 
