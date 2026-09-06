@@ -67,6 +67,28 @@ export function matchesTileFilter(tile: FilterableTile, filter: TileFilter): boo
 }
 
 /**
+ * The tiles a narrowed strip is actually showing.
+ *
+ * **A control over "everything here" means everything the filter is showing, not everything the
+ * data holds** (#863) — so any control that acts on a whole batch reads its tiles through this,
+ * and never off `batch.tiles`. A box that reports *partial* while every square beneath it is
+ * ticked, or that ticks pieces the chip is hiding, is describing rows the collector is not looking
+ * at; #853 met the same mismatch one step further along, where a filter that ignored what the
+ * screen showed answered a press with a blank strip.
+ *
+ * It is deliberately **not** the whole of the `batch.tiles` / `shown` distinction: a batch's own
+ * summary line counts every tile on purpose, since what a card held must not change because a chip
+ * is pressed, and so does anything shaping a write over the card itself — the cut being redrawn,
+ * the pieces a back scan is paired against. The question this answers is only *what is on screen*.
+ */
+export function tilesInView<T extends FilterableTile>(
+  tiles: readonly T[],
+  filter: TileFilter
+): T[] {
+  return tiles.filter((t) => matchesTileFilter(t, filter));
+}
+
+/**
  * The narrowing actually in force.
  *
  * **A chip retires with what it counts.** The chip is its own only control, so working the last
