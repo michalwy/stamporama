@@ -47,6 +47,25 @@ export const STICKY_TOOLBAR_STYLE: React.CSSProperties = {
   zIndex: 5,
 };
 
+/**
+ * The one shape and the one colour for a **banner pinned above a list** — quick offer mode's
+ * parameters (#537) and the bar over the ticked selection (#373). They are two states of the same
+ * slot, were built a year apart, and had drifted into slightly different widths and paddings
+ * (#848). Both already reached for the same tokens, so the fix is not a colour but a single style
+ * neither can restyle on its own; the width now comes from the toolbar block both sit in rather
+ * than from a margin one of them chose.
+ */
+export const LIST_BANNER_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: "0.75rem",
+  padding: "0.5rem 0.75rem",
+  borderRadius: "0.5rem",
+  border: "1px solid var(--color-accent)",
+  background: "var(--color-accent-soft)",
+};
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface SortOption {
@@ -72,10 +91,27 @@ export interface ListToolbarProps {
   catalogNumber?: string;
   onCatalogSearchChange?: (vendorId: string, number: string) => void;
   children?: React.ReactNode;
-  /** A last row inside the sticky block — a bulk action bar over the current selection (#373).
-   * Rendered here rather than above the rows so it is pinned by the same `position: sticky` and
-   * can never overlap the toolbar it would otherwise have to sit below. */
+  /** A last row inside the sticky block. Rendered here rather than above the rows so it is pinned
+   * by the same `position: sticky` and can never overlap the toolbar it would otherwise have to sit
+   * below. It is part of the block's flow, so putting one up **does** push the rows down — which is
+   * right for a banner raised by a deliberate click (arming quick offer mode, #537/#848) and wrong
+   * for one that appears as a side effect of working the list. For the latter, see
+   * {@link ListToolbarProps.overlayFooter}. */
   footer?: React.ReactNode;
+  /** A strip hanging *below* the sticky block, pinned with it but **drawn over the rows instead of
+   * displacing them** (#848). For a banner that appears as a side effect of what the collector is
+   * doing to the list rather than from a click aimed at the banner — the selection bar over the
+   * ticked copies (#373), which used to arrive on the first ticked checkbox, grow the block, and
+   * move the row the collector was reaching for next. It is absolutely positioned against the
+   * block, so no height of it ever reaches the flow; it is drawn full-bleed on the block's own
+   * opaque background and carries the block's bottom border (the block drops its own while a strip
+   * is up, or the two would draw a double rule) so that it reads as the toolbar having grown.
+   *
+   * The cost is that the strip **covers** the rows underneath it while it is up. That is deliberate
+   * and it is the cheaper of the two: displacing moves the list under the pointer on *every* tick,
+   * wherever the collector is working, while covering only reaches the one or two rows immediately
+   * under the toolbar, and a scroll notch brings them back. */
+  overlayFooter?: React.ReactNode;
   /** Drop the sort control entirely. For a view whose ordering is not the list's — the duplicate
    * groups order by how many copies each holds (#372) — where leaving the control up would offer
    * a choice it cannot honour. */
@@ -97,6 +133,7 @@ export function ListToolbar({
   onCatalogSearchChange,
   children,
   footer,
+  overlayFooter,
   hideSort = false,
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
@@ -146,7 +183,9 @@ export function ListToolbar({
         flexDirection: "column",
         gap: "0.5rem",
         padding: "0.75rem 1.25rem",
-        borderBottom: "1px solid var(--color-border)",
+        // While an overlay strip is up it carries the bottom rule, so the block drops its own —
+        // two of them a `1px` gap apart read as a double line.
+        borderBottom: overlayFooter ? "none" : "1px solid var(--color-border)",
         // Opaque: rows scroll underneath it.
         background: "var(--color-bg-elevated)",
       }}
@@ -271,6 +310,29 @@ export function ListToolbar({
       )}
 
       {footer}
+
+      {/* Pinned with the block, but out of its flow: the rows below never move when this appears
+          or goes away (#848). `top: 100%` hangs it off the block's bottom edge, so it follows the
+          footer above it; `left/right: 0` and the block's own background make it read as one more
+          band of the toolbar rather than a pill floating over the list. */}
+      {overlayFooter && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+            padding: "0 1.25rem 0.75rem",
+            borderBottom: "1px solid var(--color-border)",
+            background: "var(--color-bg-elevated)",
+          }}
+        >
+          {overlayFooter}
+        </div>
+      )}
     </div>
   );
 }

@@ -793,6 +793,12 @@ appears under the toolbar saying how many are picked, with **Clear**, [**Bulk
 edit…**](#bulk-editing-the-selection), the [new-offer shortcuts](#the-new-offer-shortcuts) and
 **🏷 Add selected to offer**.
 
+The bar **stays put while you scroll**, like the toolbar above it, and it is drawn **over** the top
+of the list rather than pushing it down: ticking the first checkbox does not move the rows, so the
+next one is still exactly where you were aiming. The price of that is that the bar covers the row or
+two directly under the toolbar while it is up — scroll a notch, or press **Clear**, to see them
+again.
+
 A copy you [no longer hold](#copies-you-no-longer-hold) gets no checkbox — there is nothing left to
 list, move or re-flag. Everything else can be ticked.
 
@@ -873,11 +879,16 @@ Listing a hundred and seventy-eight copies one at a time means a hundred and sev
 through the create form, each asking for the same platform and the same status. **Quick offer mode**
 sets those once and takes the form out of the loop.
 
-Press **Quick offer mode** at the top of the list. A bar appears above the rows with two things in
-it:
+Press **Quick offer mode** at the top of the list. A bar appears under the toolbar, pinned there
+while you scroll, with two things in it:
 
 - **Platform** — which marketplace these offers are listed on.
 - **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
+
+When copies are ticked as well, this bar sits **above** the selection bar: quick offer mode is the
+mode you are in, the selection is what you are doing inside it. Unlike the selection bar, arming the
+mode does shift the list down once to make room — you asked for it with a click, so nothing is under
+way at that moment.
 
 From then on, every **Add to new offer** — the entry in a copy's **⋮** menu, its promoted icon on the
 row, and the **New offer** buttons in the selection bar — creates the offer **straight away**, with

@@ -22,7 +22,11 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { usePersistedFilterParams } from "@/app/c/[collectionSlug]/shared/use-persisted-filter-params";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SubtreeScopeToggle, useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
-import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import {
+  LIST_BANNER_STYLE,
+  ListToolbar,
+  type SortOption,
+} from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
@@ -1071,19 +1075,36 @@ export function InventoryListPanel({
             }}
             sortOptions={SORT_OPTIONS}
             hideSort={!flatList}
+            /* The mode's parameters, and the only thing on screen that says a click will now list
+               something without asking (#537). It lives inside the pinned block so that it stays
+               put while the rows scroll under it, and **above** the selection bar (#848): quick
+               offer is the mode you are in, the selection is what you are doing inside it. In the
+               block's flow rather than in the overlay strip, deliberately — it goes up on a click
+               aimed at it, at a moment when nobody is mid-tick, so the one shift it causes is
+               feedback rather than an ambush, and paying for it in flow keeps the strip covering
+               one row instead of three. */
             footer={
+              quickOffer ? (
+                <QuickOfferBar
+                  platforms={offerPlatforms}
+                  platformId={quickPlatformId}
+                  onPlatformIdChange={setQuickPlatformId}
+                  state={quickState}
+                  onStateChange={setQuickState}
+                  created={quickCreated}
+                  error={quickError}
+                  isPending={isPending}
+                  onExit={() => setQuickOffer(false)}
+                />
+              ) : undefined
+            }
+            /* The selection bar is the one that arrives **while the collector is working the
+               list** — on the first ticked checkbox — so it goes in the overlay strip, which is
+               pinned like the rest of the block but takes no space in it (#848). Ticking one copy
+               no longer moves the row the next tick is aimed at. */
+            overlayFooter={
               selectedCopies.length > 0 ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: "0.5rem",
-                    border: "1px solid var(--color-accent)",
-                    background: "var(--color-accent-soft)",
-                  }}
-                >
+                <div style={LIST_BANNER_STYLE}>
                   <span
                     style={{
                       fontSize: "0.8125rem",
@@ -1682,22 +1703,6 @@ export function InventoryListPanel({
               )}
             </div>
           </ListToolbar>
-
-          {/* The mode's parameters, and the only thing on screen that says a click will now list
-              something without asking (#537). Directly above the rows it acts on. */}
-          {quickOffer && (
-            <QuickOfferBar
-              platforms={offerPlatforms}
-              platformId={quickPlatformId}
-              onPlatformIdChange={setQuickPlatformId}
-              state={quickState}
-              onStateChange={setQuickState}
-              created={quickCreated}
-              error={quickError}
-              isPending={isPending}
-              onExit={() => setQuickOffer(false)}
-            />
-          )}
 
           {/* A platform-exclusion write that failed (#506) has no dialog to report into, so it
               reports here, directly above the rows it did not change. */}
