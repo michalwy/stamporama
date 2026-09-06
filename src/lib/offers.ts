@@ -57,7 +57,8 @@ import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
-import { catalogChipCopyValueFromLabel, normalizeCatalogKey } from "./catalog-number";
+import { catalogChipCopyValueFromLabel } from "./catalog-number";
+import { composeSetCatalogKeys, composeSetSearchText } from "./offer-compose-search";
 import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
   listedVariantKey,
@@ -4334,6 +4335,23 @@ const COMPOSE_TARGET_SELECT = {
  * copies, for rows almost none of which are ever looked at. The rows now come from
  * {@link listComposeTargetSetCopies} when a set is actually expanded, and what stays behind is the
  * one thing the closed picker genuinely needs them for — the search keys on each set.
+ *
+ * **It still reads every non-terminal offer, and that is a decision.** Two narrower reads were
+ * considered against the same measurement and both rejected, so that neither is proposed again as
+ * an easy saving:
+ *
+ * - *Skip the picker on the known-destination path* — the selection bar's **Add to #NNNN instead**
+ *   (#513) arrives with the offer already chosen, so the list could be skipped or resolved to that
+ *   one offer. But **the picker opening is the confirmation**: the shortcut exists to let the
+ *   collector look at the listing that already holds these stamps before adding to it, and a path
+ *   that resolves without opening removes the step it was built for. That is worth more than the
+ *   latency it would buy. It would also help only that one caller — the plain *Add to offer* is the
+ *   same picker paying the same cost with no destination in hand.
+ * - *Narrow the list to the platform, or to the colliding offers* — the cheap quarter of the cost
+ *   (25% of the time, 6% of the response). The picker's facet panel counts **All / Preparing /
+ *   Ready / Active / Paused** off this very list, so a narrowed first read makes all five wrong
+ *   until a second one lands, and a count that is briefly a lie is worse than one that is briefly
+ *   absent.
  */
 export async function listComposeTargets(
   ownerId: string,
@@ -4360,22 +4378,18 @@ export async function listComposeTargets(
         itemIds: s.items.map((li) => li.itemId),
         itemLabels: s.items.map((li) => labeller.copy(li.item.stamp)),
         containsItemIds: s.items.map((li) => li.itemId).filter((id) => adding.has(id)),
-        searchText: s.items
-          .flatMap((li) => [
+        // Built through the same pure pair the client matches with (`offer-compose-search.ts`), so
+        // the two halves of one behaviour cannot drift apart unnoticed.
+        searchText: composeSetSearchText(
+          s.items.flatMap((li) => [
             li.item.stamp.name,
             li.item.stamp.issueMemberships[0]?.issue.name ?? null,
             li.item.locationRef,
           ])
-          .filter((v): v is string => !!v)
-          .join(" ")
-          .toLowerCase(),
-        catalogKeys: [
-          ...new Set(
-            s.items.flatMap((li) =>
-              labeller.catalogNumbers(li.item.stamp).map(normalizeCatalogKey)
-            )
-          ),
-        ],
+        ),
+        catalogKeys: composeSetCatalogKeys(
+          s.items.flatMap((li) => labeller.catalogNumbers(li.item.stamp))
+        ),
       }));
       return {
         offerId: r.id,
