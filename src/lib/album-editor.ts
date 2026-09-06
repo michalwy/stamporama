@@ -421,11 +421,7 @@ function printedSheet(
       label: placed.label ? editorText(placed.label, preset, []) : null,
       catalogNumber: box.catalogNumber,
       stripLabel: box.strip
-        ? hawidStripLabel({
-            heightMm: box.strip.heightMm,
-            stockLengthMm: box.strip.lengthMm,
-            label: box.strip.label,
-          })
+        ? hawidStripLabel({ heightMm: box.strip.heightMm, label: box.strip.label })
         : null,
       sizeSource: box.sizeSource,
       sizeFromCatalogNumber: null,

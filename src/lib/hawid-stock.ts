@@ -32,9 +32,10 @@ async function resolveStripCollection(stripId: string): Promise<string> {
   return strip.collectionId;
 }
 
-/** Raised on `@@unique([collectionId, heightMm])`. Its own error rather than a generic failed save
- *  (`RefCardTemplateNameTakenError`'s rule, #569): the rule picks the shortest strip that fits, so a
- *  second row of the same height is one that could never be chosen — worth saying out loud. */
+/** Raised on `@@unique([collectionId, heightMm])`, which is the *packet* height (#793). Its own
+ *  error rather than a generic failed save (`RefCardTemplateNameTakenError`'s rule, #569): the rule
+ *  picks the shortest strip that fits, so a second packet taking the same stamp height is a row that
+ *  could never be reached for — worth saying out loud. */
 export class HawidStripHeightTakenError extends Error {
   constructor(heightMm: number) {
     super(`A ${heightMm} mm strip is already in the stock.`);
@@ -50,6 +51,7 @@ export interface HawidStripData extends HawidStripInput {
 const STRIP_SELECT = {
   id: true,
   heightMm: true,
+  totalHeightMm: true,
   stockLengthMm: true,
   label: true,
   sortOrder: true,

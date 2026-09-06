@@ -1,0 +1,14 @@
+-- A hawid strip is labelled by the stamp it takes, not by its own height (#793).
+--
+-- `heightMm` is the number printed on the packet — the tallest stamp the strip accepts — while the
+-- strip itself is taller, because the welded border is part of the product. The box an album page
+-- draws is the piece that ends up on the card, so it has to be the outer height; selection has to
+-- compare against it too, or a 26 mm stamp with 4 mm of clearance skips the 26 mm packet it belongs
+-- in and reaches for the 30 mm one.
+--
+-- Existing rows carry no second figure and it cannot be derived: the border differs by product, and
+-- a guessed millimetre is a hawid cut wrong. **0 is therefore "not measured yet"**, and the rule
+-- reads `heightMm` as the total for such a row — exactly the arithmetic that ran before #793, so
+-- nothing an existing collection has planned changes size until the collector types a real figure.
+-- The dictionary says which rows are still undescribed.
+ALTER TABLE "hawid_strip" ADD COLUMN "totalHeightMm" DOUBLE PRECISION NOT NULL DEFAULT 0;

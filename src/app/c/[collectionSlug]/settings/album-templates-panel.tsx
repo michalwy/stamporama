@@ -366,8 +366,9 @@ function TemplateForm({
       <h3 style={SECTION_STYLE}>Hawid clearances</h3>
       <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
         What a box adds to the stamp itself. The two are not the same kind of number: the vertical one
-        is added <em>before a strip is chosen</em> — how much hawid has to be there above and below —
-        while the horizontal one is the cut. Together they replace AlbumEasy&apos;s single global 4 mm.
+        is added <em>before a strip is chosen</em> — the stamp plus it has to fit inside a strip&apos;s
+        whole outer height, welded border and all — while the horizontal one is the cut. Together they
+        replace AlbumEasy&apos;s single global 4 mm.
       </p>
       <div style={GRID_STYLE}>
         <MmField
@@ -375,7 +376,7 @@ function TemplateForm({
           label="Vertical clearance (mm)"
           value={preset.verticalClearanceMm}
           disabled={isPending}
-          hint="Added to the stamp's height, then the shortest strip that fits is used."
+          hint="Added to the stamp's height; the shortest strip that whole figure fits inside is used. Raise it for a deliberately roomier mount."
         />
         <MmField
           name="horizontalMarginMm"

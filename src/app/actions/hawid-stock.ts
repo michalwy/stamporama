@@ -32,13 +32,14 @@ function readForm(formData: FormData) {
   const str = (key: string) => ((formData.get(key) as string | null) ?? "").trim();
   return parseHawidStripInput({
     heightMm: str("heightMm"),
+    totalHeightMm: str("totalHeightMm"),
     stockLengthMm: str("stockLengthMm"),
     label: str("label"),
   });
 }
 
-/** A duplicate height is reported in its own words — a row that can never be chosen is worth a
- *  sentence, not a "please try again". */
+/** A duplicate packet height is reported in its own words — a row that can never be chosen is worth
+ *  a sentence, not a "please try again". */
 function toErrorState(err: unknown, fallback: string): HawidStripActionState {
   if (err instanceof HawidStripHeightTakenError) {
     return { status: "error", message: err.message };

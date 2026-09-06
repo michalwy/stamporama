@@ -83,12 +83,14 @@ describe("album plan (#767)", () => {
       })
     ).id;
 
-    // Hawid stock: one 29 mm strip. A 32 mm stamp plus the 4 mm clearance needs 36, so it will not
-    // fit — that is the oversize case, deliberately kept in the fixture.
+    // Hawid stock: a 29 mm and a 40 mm packet, both measured — 4 mm of welded border each, so the
+    // strips themselves are 33 and 44 mm tall (#793). A 32 mm stamp plus the 4 mm clearance needs
+    // 36 mm of strip, which the 29 mm packet cannot give, so it comes off the 40 mm one and its box
+    // is drawn at 44: the piece that ends up on the card, not the number on the packet.
     await prisma.hawidStrip.createMany({
       data: [
-        { collectionId, heightMm: 29, stockLengthMm: 210, sortOrder: 0 },
-        { collectionId, heightMm: 40, stockLengthMm: 210, sortOrder: 1 },
+        { collectionId, heightMm: 29, totalHeightMm: 33, stockLengthMm: 210, sortOrder: 0 },
+        { collectionId, heightMm: 40, totalHeightMm: 44, stockLengthMm: 210, sortOrder: 1 },
       ],
     });
 
@@ -289,16 +291,18 @@ describe("album plan (#767)", () => {
     assert.equal(borrowed!.widthMm, 30);
   });
 
-  it("boxes a 32 mm stamp out of the 40 mm strip, not the 29 mm one", async () => {
+  it("boxes a 32 mm stamp out of the 40 mm packet, and draws it at the strip's own height", async () => {
     const plan = await planAlbum(userId, albumId);
     const boxes = plan!.pages.flatMap((p) =>
       p.layout.kind === "live" ? p.layout.boxes.map((b) => b.box) : []
     );
     const box = boxes.find((b) => b.stampId === s303);
     assert.ok(box);
-    // 32 + 4 = 36 mm of strip needed; the shortest in stock that holds it is 40.
-    assert.equal(box!.heightMm, 40);
+    // 32 + 4 = 36 mm of strip needed. The 29 mm packet is only 33 mm of strip, so the 40 mm one is
+    // the shortest that holds it — and the box is 44 mm tall, which is that strip, border included.
+    assert.equal(box!.heightMm, 44);
     assert.equal(box!.strip?.heightMm, 40);
+    assert.equal(box!.strip?.totalHeightMm, 44);
   });
 
   it("prints the entries in the album's own order once it has one", async () => {
