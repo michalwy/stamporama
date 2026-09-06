@@ -1666,15 +1666,26 @@ export async function countParkedTiles(owner: ScanOwner): Promise<number> {
 export async function getScanCounts(
   ownerId: string,
   ref: ScanOwnerRef
-): Promise<{ unidentifiedTileCount: number; parkedTileCount: number; scanSheetCount: number }> {
+): Promise<{
+  unidentifiedTileCount: number;
+  parkedTileCount: number;
+  /** Tiles taken out during identification (#853) — the pull list for the cards on the desk.
+   * Counted here beside the outstanding two so the chip that narrows to them can be drawn from the
+   * server's answer rather than from whichever batches the strip happens to have fetched: the chip
+   * decides what the strip shows, so a count derived from the strip would settle after it. */
+  discardedTileCount: number;
+  scanSheetCount: number;
+}> {
   const owner = await assertScanOwner(ownerId, ref);
   const scope = scanOwnerWhere(owner);
-  const [unidentifiedTileCount, parkedTileCount, scanSheetCount] = await Promise.all([
-    prisma.scanTile.count({ where: { ...scope, state: "unidentified" } }),
-    prisma.scanTile.count({ where: { ...scope, state: "parked" } }),
-    prisma.scanSheet.count({ where: scope }),
-  ]);
-  return { unidentifiedTileCount, parkedTileCount, scanSheetCount };
+  const [unidentifiedTileCount, parkedTileCount, discardedTileCount, scanSheetCount] =
+    await Promise.all([
+      prisma.scanTile.count({ where: { ...scope, state: "unidentified" } }),
+      prisma.scanTile.count({ where: { ...scope, state: "parked" } }),
+      prisma.scanTile.count({ where: { ...scope, state: "discarded" } }),
+      prisma.scanSheet.count({ where: scope }),
+    ]);
+  return { unidentifiedTileCount, parkedTileCount, discardedTileCount, scanSheetCount };
 }
 
 /** Resolve a sheet for the serving route: its owning collection + owner for the auth check, plus

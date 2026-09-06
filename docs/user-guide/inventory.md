@@ -454,6 +454,13 @@ recorded and only missing pictures. On each piece, **Assign to a copy already re
 copy in the collection whose front (or back) is still empty; pick one and the piece's images move
 onto it, with no new copy created.
 
+**Taking the discarded pieces back out of the stockbook.** When you have finished identifying a card,
+the **N discarded** chip on the header shows only the tiles you rejected — in the order they sit on
+the card, with their pictures at full strength and the notes you left underneath, so you can walk the
+strip against the stockbook and pull those stamps out. It is the same chip the purchases screen has,
+and [that guide describes it in
+full](purchases.md#pulling-the-discarded-pieces-off-the-card).
+
 ## Adding a copy
 
 1. Click **Add copy**.
