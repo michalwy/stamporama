@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WantIssueGroupRow, WantListItem, WantYearFacet } from "@/lib/wants";
 import type { WantPriority } from "@/lib/want-rules";
+import type { AreaFacet } from "@/lib/area-facets";
 
 interface WantsPage {
   items: WantListItem[];
@@ -29,12 +30,18 @@ export interface WantListFilters {
 /** The filters the year facets are counted against — everything except the year itself. */
 export type WantYearFacetFilters = Omit<WantListFilters, "year">;
 
+/** The filters the area facets are counted against (#843) — everything except the area selection,
+ *  which is why the year stays and `areaIds` goes. */
+export type WantAreaFacetFilters = Omit<WantListFilters, "areaIds">;
+
 export const wantKeys = {
   all: (collectionId: string) => ["wants", collectionId] as const,
   list: (collectionId: string, filters: WantListFilters) =>
     ["wants", collectionId, "list", filters] as const,
   years: (collectionId: string, filters: WantYearFacetFilters) =>
     ["wants", collectionId, "years", filters] as const,
+  areaFacets: (collectionId: string, filters: WantAreaFacetFilters) =>
+    ["wants", collectionId, "area-facets", filters] as const,
   issueGroups: (collectionId: string, filters: WantListFilters) =>
     ["wants", collectionId, "issue-groups", filters] as const,
 };
@@ -89,6 +96,21 @@ export function useWantYears(collectionId: string, filters: WantYearFacetFilters
         `/api/collections/${collectionId}/wants/years?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch the want year facets");
+      const data = await res.json();
+      return data.facets;
+    },
+  });
+}
+
+export function useWantAreaFacets(collectionId: string, filters: WantAreaFacetFilters) {
+  return useQuery<AreaFacet[]>({
+    queryKey: wantKeys.areaFacets(collectionId, filters),
+    queryFn: async () => {
+      const params = toParams(filters);
+      const res = await fetch(
+        `/api/collections/${collectionId}/wants/areas?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the want area facets");
       const data = await res.json();
       return data.facets;
     },

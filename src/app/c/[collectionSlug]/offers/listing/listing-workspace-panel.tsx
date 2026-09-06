@@ -10,6 +10,7 @@ import {
   buildOfferGroups,
   offerMatchesFilters,
   offerYearFacets,
+  offerAreaFacets,
   type GroupKey,
 } from "@/lib/listing-groups";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -163,6 +164,14 @@ export function ListingWorkspacePanel({
   const yearFacets = useMemo(
     () => (mixedOnly ? [] : offerYearFacets(offers, { areaIds })),
     [offers, areaIds, mixedOnly]
+  );
+  // Each rail drops its own dimension and keeps the other (#843), so the area counts honour the
+  // year the same way the year counts honour the area. Under a Mixed selection they keep counting
+  // rather than going quiet the way the years do: clicking an area here *leaves* Mixed (and clears
+  // the year with it), so what the row promises is its plain, unnarrowed count.
+  const areaFacets = useMemo(
+    () => offerAreaFacets(offers, { year: mixedOnly ? null : (parsedYear ?? null) }),
+    [offers, parsedYear, mixedOnly]
   );
   const mixedCount = useMemo(
     () => offers.filter((o) => offerMatchesFilters(o, { mixedOnly: true })).length,
@@ -625,6 +634,7 @@ export function ListingWorkspacePanel({
                     { group: MIXED_GROUP, areaId: "all", year: "all" }
               ),
           }}
+          areaFacets={areaFacets}
           yearFacets={yearFacets}
           yearsLoading={isLoading}
           selectedYear={mixedOnly ? null : year || null}

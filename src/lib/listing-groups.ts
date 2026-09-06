@@ -14,6 +14,8 @@
 // single year to be filed under), yet it is still a Poland offer and appears under the area "Poland".
 // Narrowing by year is the stricter question, and such an offer answers no to every year.
 
+import type { AreaFacet } from "./area-facets";
+
 /** The area/year coordinates of one offer, as the read model reports them: one entry per distinct
  * pair across its copies. A copy's area is its stamp's primary area link and its year is the stamp's
  * issued year (#142), so an offer of one stamp has exactly one pair. */
@@ -167,4 +169,32 @@ export function offerYearFacets(
       if (b.year === null) return -1;
       return a.year - b.year;
     });
+}
+
+/**
+ * Area facets for the rail (#843): how many offers each area would show, counted exactly the way
+ * the filter counts — the mirror of {@link offerYearFacets}, so this one ignores the area dimension
+ * and honours the year. A Mixed offer belongs to no area facet, for the same reason it belongs to
+ * no year one: Mixed exists to say those coordinates have no single answer.
+ *
+ * The counts are per **leaf** area, one row per area the rail draws; rolling them onto a parent is
+ * `rollUpAreaCounts`, which is where the subtree scope lives. That roll-up and `offerMatchesFilters`
+ * agree here rather than merely resemble each other: a non-mixed offer has one area, so "every copy
+ * inside the subtree" and "the offer's own area is somewhere in the subtree" are the same claim.
+ *
+ * Offers with no `(area, year)` pairs at all, and copies filed under no area, are counted nowhere —
+ * they answer to no row on the rail either.
+ */
+export function offerAreaFacets(
+  offers: GroupableOffer[],
+  filters: { year?: number | "none" | null; mixedOnly?: boolean } = {}
+): AreaFacet[] {
+  const counts = new Map<string, number>();
+  for (const offer of offers) {
+    if (!offerMatchesFilters(offer, filters)) continue;
+    const key = offerGroupKey(offer);
+    if (key.mixed || key.areaId === null) continue;
+    counts.set(key.areaId, (counts.get(key.areaId) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([areaId, count]) => ({ areaId, count }));
 }

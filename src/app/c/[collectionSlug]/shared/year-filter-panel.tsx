@@ -86,7 +86,12 @@ export function YearFilterPanel({
             <button
               key={value}
               type="button"
-              onClick={() => onSelect(isSelected ? null : value)}
+              // Selected already: nothing to do (#843). The panel has its own "All years" row, so
+              // clearing is on screen and unambiguous; a second click on the year just chosen used
+              // to widen the list back to everything, which reads as the filter failing.
+              onClick={() => {
+                if (!isSelected) onSelect(value);
+              }}
               onMouseEnter={(e) => {
                 if (!isSelected)
                   e.currentTarget.style.background = "var(--color-bg-muted)";

@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
@@ -1087,6 +1088,39 @@ export async function listWantYearFacets(
       if (b.year === null) return -1;
       return a.year - b.year;
     });
+}
+
+/**
+ * Rows per area for the area rail's counts (#843), each area's **own** wants — the roll-up onto
+ * parents is the client's (`rollUpAreaCounts`), where the subtree scope (#385) lives.
+ *
+ * The mirror of {@link listWantYearFacets}: that one drops the year and keeps the areas, this one
+ * drops the area selection and keeps the year, so each row promises what selecting it would list.
+ * With no year picked the two are counted over one `where` and an area's number is the sum of the
+ * years drawn under it.
+ *
+ * A projection rather than a `groupBy`, for the same reason the year facets are one and one more
+ * besides: the area lives on the related `Stamp`, through a link table Prisma cannot group a want
+ * by. A want whose stamp is filed in two areas is counted in both — each of those areas would show
+ * it, so the rail's numbers need not add up to the length of the list.
+ */
+export async function listWantAreaFacets(
+  ownerId: string,
+  collectionId: string,
+  filters: WantListFilters = {}
+): Promise<AreaFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.want.findMany({
+    where: buildWantListWhere(collectionId, { ...filters, areaIds: undefined }),
+    select: { stamp: { select: { stampAreaLinks: { select: { collectionAreaId: true } } } } },
+  });
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    for (const link of r.stamp.stampAreaLinks) {
+      counts.set(link.collectionAreaId, (counts.get(link.collectionAreaId) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([areaId, count]) => ({ areaId, count }));
 }
 
 /** One want, for the edit form.

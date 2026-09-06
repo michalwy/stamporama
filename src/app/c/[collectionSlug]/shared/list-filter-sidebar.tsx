@@ -1,6 +1,7 @@
 "use client";
 
 import type { CollectionAreaData } from "@/lib/areas";
+import type { AreaFacet } from "@/lib/area-facets";
 import { AreaFilterSidebar, type AreaExtraEntry } from "./area-filter-sidebar";
 import { YearFilterPanel, type YearFacet } from "./year-filter-panel";
 
@@ -11,6 +12,9 @@ interface ListFilterSidebarProps {
   onNavigateArea: (areaId: string | null) => void;
   /** A list-specific bucket alongside the areas — the listing workspace's "Mixed" group (#322). */
   areaExtraEntry?: AreaExtraEntry;
+  /** Per-area row counts (#843), counted like the year facets but with the area selection left out
+   *  — see `@/lib/area-facets`. Omitted on a screen that has no such facet to read. */
+  areaFacets?: AreaFacet[];
 
   // ── Year filter ──
   /** null represents "no facets loaded yet". */
@@ -39,6 +43,7 @@ export function ListFilterSidebar({
   filterAreaId,
   onNavigateArea,
   areaExtraEntry,
+  areaFacets,
   yearFacets,
   yearsLoading,
   selectedYear,
@@ -51,6 +56,7 @@ export function ListFilterSidebar({
       filterAreaId={filterAreaId}
       onNavigate={onNavigateArea}
       extraEntry={areaExtraEntry}
+      counts={areaFacets}
     />
   );
   const years = (

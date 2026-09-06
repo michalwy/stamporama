@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback, useSyncExternalStore } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
+import { rollUpAreaCounts, type AreaFacet } from "@/lib/area-facets";
 import { getDescendantIds, flattenAreaTree, hasChildAreas } from "./area-helpers";
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 import { Tooltip } from "./tooltip";
@@ -64,6 +65,15 @@ interface AreaFilterSidebarProps {
   filterAreaId: string | null;
   onNavigate: (areaId: string | null) => void;
   extraEntry?: AreaExtraEntry;
+  /**
+   * Per-area row counts (#843), each area's **own** rows — the roll-up onto parents happens here,
+   * following the subtree-scope toggle. Counted against every filter on the screen except the area
+   * selection itself, so a row promises what selecting it would list; see `@/lib/area-facets`.
+   * Omit it and the rows carry no count, which is the honest rendering for a screen with no facet
+   * to read (`ui-patterns.md`: a control promising a number it cannot compute is worse than a bare
+   * one).
+   */
+  counts?: AreaFacet[];
 }
 
 export function AreaFilterSidebar({
@@ -71,6 +81,7 @@ export function AreaFilterSidebar({
   filterAreaId,
   onNavigate,
   extraEntry,
+  counts,
 }: AreaFilterSidebarProps) {
   const flatTree = useMemo(() => flattenAreaTree(areas), [areas]);
 
@@ -147,6 +158,13 @@ export function AreaFilterSidebar({
     return desc;
   }, [areas, filterAreaId, includeDescendants]);
 
+  // The number on each row (#843). It follows the same toggle the shading above does, because the
+  // count and the shading are two renderings of one claim: this is the set selecting this row shows.
+  const countByArea = useMemo(
+    () => rollUpAreaCounts(areas, counts, includeDescendants),
+    [areas, counts, includeDescendants]
+  );
+
   return (
     <CollapsibleFilterPanel
       title="Filter by area"
@@ -206,7 +224,12 @@ export function AreaFilterSidebar({
           <Tooltip content={extraEntry.title} placement="bottom" style={{ width: "100%" }}>
             <button
               type="button"
-              onClick={extraEntry.onSelect}
+              // A click on the row already chosen does nothing (#843) — the rule is enforced here
+              // rather than left to each caller, so a screen wiring up a toggling `onSelect` cannot
+              // reintroduce the clear-on-second-click this issue exists to remove.
+              onClick={() => {
+                if (!extraEntry.selected) extraEntry.onSelect();
+              }}
               onMouseEnter={(e) => {
                 if (!extraEntry.selected)
                   e.currentTarget.style.background = "var(--color-bg-muted)";
@@ -261,12 +284,21 @@ export function AreaFilterSidebar({
           const isInScope = activeIds ? activeIds.has(area.id) : false;
           const hasChildren = parentIds.has(area.id);
           const isCollapsed = collapsed.has(area.id);
+          // `undefined` — this screen supplies no facet — is not the same claim as `0`, and only
+          // the second one gets a number drawn.
+          const rowCount = countByArea?.get(area.id);
 
           return (
             <button
               key={area.id}
               type="button"
-              onClick={() => onNavigate(isSelected ? null : area.id)}
+              // Selected already: nothing to do (#843). Toggle-off is the idiom for a chip standing
+              // alone; this list carries an explicit "All areas" row, so the way to clear is already
+              // on screen — and an accidental double click that silently widened the list back to
+              // everything read as the filter failing rather than as something the collector did.
+              onClick={() => {
+                if (!isSelected) onNavigate(area.id);
+              }}
               onMouseEnter={(e) => {
                 if (!isSelected)
                   e.currentTarget.style.background = "var(--color-bg-muted)";
@@ -377,7 +409,25 @@ export function AreaFilterSidebar({
                     }}
                   />
                 )}
-                {area.name}
+                {/* Wrapped only so the count below can be pushed to the right edge. No overflow
+                    rule of its own: a long area name still wraps exactly as it did as a bare text
+                    node, rather than being truncated to make room for a number. */}
+                <span style={{ minWidth: 0 }}>{area.name}</span>
+                {rowCount !== undefined && (
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      paddingLeft: "0.5rem",
+                      flexShrink: 0,
+                      fontSize: "0.75rem",
+                      fontWeight: 400,
+                      color: "var(--color-text-muted)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {rowCount}
+                  </span>
+                )}
               </span>
             </button>
           );

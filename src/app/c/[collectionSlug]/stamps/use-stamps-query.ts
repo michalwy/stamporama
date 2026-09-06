@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
+import type { AreaFacet } from "@/lib/area-facets";
 import {
   STAMP_ATTRIBUTE_FILTER_KEYS,
   type StampAttributeFilters,
@@ -42,6 +43,17 @@ export interface StampYearFacetFilters extends StampAttributeFilters {
   issueId?: string;
 }
 
+/** Filters that affect the area facet counts (#843) — everything except the area selection itself,
+ *  which is why `year` is in here and out of {@link StampYearFacetFilters}. */
+export interface StampAreaFacetFilters extends StampAttributeFilters {
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  issueId?: string;
+  /** "none" for the no-year bucket, otherwise a numeric year string. */
+  year?: string;
+}
+
 /** Writes the four attribute filters onto a request's query string, in the shape the API route
  *  reads back. Empty sets are left off entirely, so a request carries only what is narrowing. */
 function appendAttributeFilters(params: URLSearchParams, filters: StampAttributeFilters) {
@@ -57,6 +69,8 @@ export const stampKeys = {
     ["stamps", collectionId, "list", filters] as const,
   years: (collectionId: string, filters: StampYearFacetFilters) =>
     ["stamps", collectionId, "years", filters] as const,
+  areaFacets: (collectionId: string, filters: StampAreaFacetFilters) =>
+    ["stamps", collectionId, "area-facets", filters] as const,
   issueSearch: (collectionId: string, query: string, areaIds?: string[]) =>
     ["stamps", collectionId, "issueSearch", query, areaIds ?? "all"] as const,
 };
@@ -114,6 +128,30 @@ export function useStampYears(
       if (!res.ok) throw new Error("Failed to fetch stamp years");
       const data = await res.json();
       return data.years;
+    },
+  });
+}
+
+export function useStampAreaFacets(
+  collectionId: string,
+  filters: StampAreaFacetFilters
+) {
+  return useQuery<AreaFacet[]>({
+    queryKey: stampKeys.areaFacets(collectionId, filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.issueId) params.set("issueId", filters.issueId);
+      if (filters.year) params.set("year", filters.year);
+      appendAttributeFilters(params, filters);
+      const res = await fetch(
+        `/api/collections/${collectionId}/stamps/areas?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch stamp area facets");
+      const data = await res.json();
+      return data.areas;
     },
   });
 }

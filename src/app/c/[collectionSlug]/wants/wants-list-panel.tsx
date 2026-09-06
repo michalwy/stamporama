@@ -23,8 +23,10 @@ import {
   useWantsInfinite,
   useWantIssueGroups,
   useWantYears,
+  useWantAreaFacets,
   useInvalidateWants,
   type WantListFilters,
+  type WantAreaFacetFilters,
 } from "./use-wants-query";
 import { WantIssueGroupRow } from "./want-issue-group-row";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
@@ -157,6 +159,20 @@ export function WantsListPanel({
   const grouped = useWantIssueGroups(collectionId, listFilters, groupByIssue);
   const { data: yearFacets, isLoading: yearsLoading } = useWantYears(collectionId, facetFilters);
 
+  // The area rail's counts (#843): the list's filters with the year kept and the area dropped, so
+  // each row says what selecting it would leave.
+  const areaFacetFilters: WantAreaFacetFilters = useMemo(
+    () => ({
+      status,
+      priorities: priorities.length > 0 ? priorities : undefined,
+      conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
+      year: year || undefined,
+      search: debouncedQuery.trim() || undefined,
+    }),
+    [status, priorities, conditionIds, year, debouncedQuery]
+  );
+  const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
+
   const { isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = groupByIssue
     ? grouped
     : flat;
@@ -257,6 +273,7 @@ export function WantsListPanel({
         areas={areas}
         filterAreaId={filterAreaId}
         onNavigateArea={(areaId) => writeStore({ areaId, year })}
+        areaFacets={areaFacets}
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year}

@@ -6,6 +6,7 @@ import {
   offerGroupKey,
   offerMatchesFilters,
   offerYearFacets,
+  offerAreaFacets,
   type OfferAreaYear,
 } from "../../src/lib/listing-groups";
 
@@ -168,5 +169,65 @@ describe("offerYearFacets", () => {
     // Two copies on different years: no year facet may claim this offer, because selecting either
     // year would filter it out.
     assert.deepEqual(offerYearFacets([offer(["pl", 1960], ["pl", 1961])]), []);
+  });
+});
+
+describe("offerAreaFacets (#843)", () => {
+  const byArea = (rows: { areaId: string; count: number }[]) =>
+    [...rows].sort((a, b) => a.areaId.localeCompare(b.areaId));
+
+  it("counts offers per area, ignoring Mixed ones", () => {
+    const rows = [
+      offer(["pl", 1960]),
+      offer(["pl", 1961]),
+      offer(["de", 1972]),
+      // Spans two areas: no area facet may claim it, because selecting either would filter it out.
+      offer(["pl", 1960], ["de", 1972]),
+    ];
+    assert.deepEqual(byArea(offerAreaFacets(rows)), [
+      { areaId: "de", count: 1 },
+      { areaId: "pl", count: 2 },
+    ]);
+  });
+
+  it("respects the year selection but not its own dimension", () => {
+    const rows = [offer(["pl", 1960]), offer(["pl", 1961]), offer(["de", 1960])];
+    assert.deepEqual(byArea(offerAreaFacets(rows, { year: 1960 })), [
+      { areaId: "de", count: 1 },
+      { areaId: "pl", count: 1 },
+    ]);
+  });
+
+  it("selects the no-year bucket with \"none\", like the list does", () => {
+    const rows = [offer(["pl", null]), offer(["pl", 1960])];
+    assert.deepEqual(offerAreaFacets(rows, { year: "none" }), [{ areaId: "pl", count: 1 }]);
+  });
+
+  it("counts nothing for a copy filed under no area", () => {
+    assert.deepEqual(offerAreaFacets([offer([null, 1960])]), []);
+  });
+
+  it("agrees with the filter it stands for", () => {
+    // The property the rail is judged on: the number on a row is the length of the list that row
+    // opens. Asserted against `offerMatchesFilters` rather than a hand-count, so the two cannot
+    // drift apart without this failing.
+    const rows = [
+      offer(["pl", 1960]),
+      offer(["pl", 1960]),
+      offer(["pl", 1961]),
+      offer(["de", 1960]),
+      offer(["pl", null]),
+      offer(["pl", 1960], ["de", 1960]),
+    ];
+    for (const year of [1960, 1961, "none", null] as const) {
+      const facets = offerAreaFacets(rows, { year });
+      for (const areaId of ["pl", "de"]) {
+        const listed = rows.filter((o) =>
+          offerMatchesFilters(o, { areaIds: [areaId], year })
+        ).length;
+        const shown = facets.find((f) => f.areaId === areaId)?.count ?? 0;
+        assert.equal(shown, listed, `${areaId} @ ${String(year)}`);
+      }
+    }
   });
 });
