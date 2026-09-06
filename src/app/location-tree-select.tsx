@@ -69,6 +69,7 @@ export function LocationTreeSelect({
   noneOptionLabel = "— None",
   buttonClassName = defaultTreeSelectButtonClassName,
   panelFooter,
+  closeOnSelect = true,
 }: {
   locations: LocationData[];
   locationTree: LocationTreeItem[];
@@ -83,6 +84,9 @@ export function LocationTreeSelect({
   /** Drawn at the foot of the open panel — for a control that qualifies the location just picked
    * rather than picking one. The Copies filter puts the subtree switch (#385) there (#846). */
   panelFooter?: React.ReactNode;
+  /** Whether picking a location dismisses the panel. See `useTreeSelect`; a filter passes `false`
+   * so the `panelFooter` beside the pick can still be reached. */
+  closeOnSelect?: boolean;
 }) {
   const buttonId = `${name}-button`;
   const searchId = `${name}-search`;
@@ -111,6 +115,7 @@ export function LocationTreeSelect({
     filterTree: filterLocationTree,
     onSelectedIdChange,
     noneOptionLabel,
+    closeOnSelect,
   });
 
   function isSelectable(id: string): boolean {

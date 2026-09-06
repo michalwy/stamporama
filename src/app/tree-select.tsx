@@ -9,6 +9,7 @@ import {
   type RefObject,
   type SetStateAction,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -176,6 +177,7 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
   onSelectedIdChange,
   includeEmptyOption = false,
   noneOptionLabel,
+  closeOnSelect = true,
 }: {
   items: T[];
   tree: TreeNode<T>[];
@@ -184,6 +186,18 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
   onSelectedIdChange: (id: string) => void;
   includeEmptyOption?: boolean;
   noneOptionLabel?: string;
+  /**
+   * Whether picking a node dismisses the panel. True for a **form field**, where the pick is the
+   * whole act and the form is waiting underneath. False for a **filter** (#846), where it is not:
+   * the list behind the panel is what says what the pick did, so there is nothing to go back to,
+   * and the panel carries a `footer` that qualifies the choice just made — a panel that shut on
+   * the pick put that control on screen only after the interaction that dismissed it, which is
+   * how it went undiscovered. Escape and a click outside still close it either way.
+   *
+   * It is also what the other filters on that bar already do: `MultiSelectFilter` applies each
+   * tick and stays open, so closing here was the exception rather than the rule.
+   */
+  closeOnSelect?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -251,6 +265,18 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
     };
   }, [isOpen]);
 
+  // A panel that survives the pick (`closeOnSelect: false`) has to survive whatever the pick does to
+  // the page. It is `position: fixed` at a style computed from the trigger, and until now that was
+  // only ever recomputed on scroll and resize — safe, because a pick used to close it. A filter
+  // pick re-renders the screen behind it (the Copies bar grows a *Reset filters* control the moment
+  // anything is narrowed), so the trigger can move out from under a panel that is still open.
+  // Measured in a layout effect, after the pick's DOM has landed and before it is painted.
+  useLayoutEffect(() => {
+    if (!isOpen || closeOnSelect) return;
+    const nextStyle = getFloatingPanelStyle(containerRef.current);
+    if (nextStyle) setPanelStyle(nextStyle);
+  }, [isOpen, closeOnSelect, selectedId]);
+
   function openSelect() {
     setExpandedIds(getAncestorIds(items, selectedId));
     setActiveId(selectedId);
@@ -261,8 +287,12 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
 
   function setSelected(id: string) {
     onSelectedIdChange(id);
-    setIsOpen(false);
-    setSearchQuery("");
+    if (closeOnSelect) {
+      setIsOpen(false);
+      // Only worth clearing on the way out. Left standing while the panel stays open, so a search
+      // that narrowed the tree to one branch still has it narrowed for the next pick.
+      setSearchQuery("");
+    }
     setActiveId(id);
     setExpandedIds(getAncestorIds(items, id));
   }
