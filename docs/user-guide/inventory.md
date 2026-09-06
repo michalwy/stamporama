@@ -818,11 +818,16 @@ appears under the toolbar saying how many are picked, with **Clear**, [**Bulk
 edit…**](#bulk-editing-the-selection), the [new-offer shortcuts](#the-new-offer-shortcuts) and
 **🏷 Add selected to offer**.
 
-The bar **stays put while you scroll**, like the toolbar above it, and it is drawn **over** the top
-of the list rather than pushing it down: ticking the first checkbox does not move the rows, so the
-next one is still exactly where you were aiming. The price of that is that the bar covers the row or
-two directly under the toolbar while it is up — scroll a notch, or press **Clear**, to see them
-again.
+The bar **stays put while you scroll**, like the toolbar above it, and **ticking a checkbox does not
+move the list**: the bar takes its space from the page's scrolling rather than from the rows, so the
+next row you were aiming at is exactly where you left it. Nothing is covered — every row can still
+be read in full, including the first one. What moves instead is what sits *above* the toolbar: at
+the very top of the page the holdings summary slides up by the height of the bar, and once you have
+scrolled past it there is nothing to see move at all.
+
+The one exception is a list short enough to fit on the screen with no scrollbar: there is no
+scrolling for the bar to take its space from, so the rows do shift down by its height. Every row is
+in front of you in that case, so nothing can be lost behind it.
 
 A copy you [no longer hold](#copies-you-no-longer-hold) gets no checkbox — there is nothing left to
 list, move or re-flag. Everything else can be ticked.

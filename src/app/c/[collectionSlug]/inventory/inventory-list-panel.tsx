@@ -1128,10 +1128,11 @@ export function InventoryListPanel({
               ) : undefined
             }
             /* The selection bar is the one that arrives **while the collector is working the
-               list** — on the first ticked checkbox — so it goes in the overlay strip, which is
-               pinned like the rest of the block but takes no space in it (#848). Ticking one copy
-               no longer moves the row the next tick is aimed at. */
-            overlayFooter={
+               list** — on the first ticked checkbox — so it goes in the block's *stable* slot
+               (#848): an ordinary row of the block whose arrival is paid for by moving the
+               viewport rather than the rows. Ticking one copy does not move the row the next tick
+               is aimed at, and unlike the overlay this started as, it never covers one either. */
+            stableFooter={
               selectedCopies.length > 0 ? (
                 <div style={LIST_BANNER_STYLE}>
                   <span
