@@ -115,6 +115,10 @@ are cut from it.
 **Page editor** on the Sheets header — or *Open in the page editor* on one sheet's `⋮` — draws a
 sheet at **1:1** and lets you overrule the layout by hand.
 
+It is a workbench and it takes the window. **Only the sheet scrolls**: the list of sheets on the
+left and the panel of numbers on the right stay where they are while you move down a page, so what
+you are working on and what you are working with are never both off screen at once.
+
 Everything you set there is a **correction**, not a position: *this box 2 mm wider*, *5 mm more
 before this series*, *break here*, these stamps in this order. That distinction is the whole reason
 the automatic layout goes on running underneath — add a stamp to a checklist and the page re-flows
