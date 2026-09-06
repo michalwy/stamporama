@@ -32,8 +32,13 @@ describe("stamp size presets (#803)", () => {
   let areaId: string;
   /** `309` and its tree: `309A` (variant) → `309AP` (variant) → `309APa` (variant, three deep). */
   let base: string, a: string, ap: string, apa: string;
-  /** `309 I`, a **distinct entry** under `309` — a plate flaw, not another way of holding it. */
-  let flaw: string;
+  /** `309 I`, a **distinct entry** under `309` — a plate flaw, not another way of holding it — and
+   *  `309 Ia`, a *variant* hanging under **it**. Together they are what separates the two readings
+   *  of ADR-0048 §7 that were live while this was written: a walk filtering `childIsVariant` reaches
+   *  neither, and `309 Ia`'s own flag says variant, so only a filter applied at **every** level
+   *  keeps it out. Without this pair the `309 → 309A → 309AP` tree cannot tell the readings apart at
+   *  all — #793's trap, a case that cannot separate the two things it was written to settle. */
+  let flaw: string, flawChild: string;
   /** `310`, a second issue member with a child of its own: every root expands, not just the first. */
   let second: string, secondChild: string;
   /** `450`, in the collection but on no issue and no checklist. The blast-radius control. */
@@ -131,6 +136,7 @@ describe("stamp size presets (#803)", () => {
     ap = await stamp("309AP", { parentId: a, subtypeId: variantSubtypeId });
     apa = await stamp("309APa", { parentId: ap, subtypeId: variantSubtypeId });
     flaw = await stamp("309 I", { parentId: base, subtypeId: distinctSubtypeId });
+    flawChild = await stamp("309 Ia", { parentId: flaw, subtypeId: variantSubtypeId });
     second = await stamp("310");
     secondChild = await stamp("310A", { parentId: second, subtypeId: variantSubtypeId });
     outsider = await stamp("450");
@@ -164,7 +170,7 @@ describe("stamp size presets (#803)", () => {
     await prisma.stampCatalogNumber.deleteMany({ where: { stamp: { collectionId } } });
     await prisma.stampCollectionArea.deleteMany({ where: { stamp: { collectionId } } });
     // Children first: `Stamp.parent` is `Restrict`-free but the rows still reference one another.
-    for (const id of [apa, ap, a, flaw, secondChild, base, second, outsider]) {
+    for (const id of [apa, ap, a, flawChild, flaw, secondChild, base, second, outsider]) {
       await prisma.stamp.deleteMany({ where: { id } });
     }
     await prisma.collection.delete({ where: { id: collectionId } });
@@ -295,10 +301,11 @@ describe("stamp size presets (#803)", () => {
       subject: { kind: "issue", issueId },
     });
 
-    // `309` + `309A` + `309AP` + `309APa` + `309 I` + `310` + `310A`. Seven, and `450` is not here.
-    assert.equal(result.total, 7);
-    assert.equal(result.withoutSize, 7);
-    assert.equal(result.written, 7);
+    // `309` + `309A` + `309AP` + `309APa` + `309 I` + `309 Ia` + `310` + `310A`. Eight, and `450`
+    // is not among them.
+    assert.equal(result.total, 8);
+    assert.equal(result.withoutSize, 8);
+    assert.equal(result.written, 8);
 
     // The control that matters: `309APa` hangs three levels below the member. A walk that stopped
     // at the member itself, or at depth one, or at depth two, leaves this null and fails here —
@@ -312,13 +319,28 @@ describe("stamp size presets (#803)", () => {
     assert.deepEqual(await sizeOf(second), { widthMm: 25, heightMm: 30 });
     assert.deepEqual(await sizeOf(secondChild), { widthMm: 25, heightMm: 30 });
 
-    // A distinct entry is on the same paper as its parent, so it takes the figure too — ADR-0048
-    // §7 is a *write*, where `checklist-variant-rollup.ts`'s `actsAsVariant` filter answers a
-    // question about collecting rather than about printing.
-    assert.deepEqual(await sizeOf(flaw), { widthMm: 25, heightMm: 30 });
-
     // And the counterweight, without which every assertion above would also pass for a write that
     // simply updated the collection: `450` is in this collection, on no issue, and untouched.
+    assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null });
+  });
+
+  it("takes a distinct entry and everything under it, the same as a variant", async () => {
+    const { id: presetId } = await preset();
+    await applyStampSizePreset(userId, { presetId, subject: { kind: "issue", issueId } });
+
+    // The assertions that separate the two readings of ADR-0048 §7 live in a test of their own,
+    // deliberately: in the subtree test above they sit behind `assert.equal(result.total, 8)`, which
+    // a filtered walk trips first — so they would never run in the very case they exist to catch,
+    // and the suite would be red for a reason that says nothing about distinct entries.
+    //
+    // Decided with the collector, 2026-09-06: the walk consults `actsAsVariant` at no level. A plate
+    // flaw came off the same press at the same size, so it takes the figure like any variant does;
+    // and the walk carries on *through* it, which is what `309 Ia` is here to say. A filter on
+    // direct children misses both of these; a filter at every level still misses `309 Ia`, whose own
+    // flag says variant and which is unreachable only because its parent is a distinct entry.
+    assert.deepEqual(await sizeOf(flaw), { widthMm: 25, heightMm: 30 }, "the distinct entry itself");
+    assert.deepEqual(await sizeOf(flawChild), { widthMm: 25, heightMm: 30 }, "a variant below it");
+    // And the counterweight for this test too: reaching them is not the same as reaching everything.
     assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null });
   });
 
@@ -328,9 +350,9 @@ describe("stamp size presets (#803)", () => {
       presetId,
       subject: { kind: "checklist", checklistId },
     });
-    // The checklist names `309` alone; the subtree is what makes it five.
-    assert.equal(result.total, 5);
-    assert.equal(result.written, 5);
+    // The checklist names `309` alone; the subtree is what makes it six.
+    assert.equal(result.total, 6);
+    assert.equal(result.written, 6);
     assert.deepEqual(await sizeOf(apa), { widthMm: 25, heightMm: 30 });
     // `310` is an issue member but not on this checklist, so the subject really did narrow.
     assert.deepEqual(await sizeOf(second), { widthMm: null, heightMm: null });
@@ -364,9 +386,10 @@ describe("stamp size presets (#803)", () => {
       {
         widthMm: 25,
         heightMm: 30,
-        total: 7,
-        withoutSize: 6,
+        total: 8,
+        withoutSize: 7,
         withStatedSize: 1,
+        withPartialSize: 0,
         written: 0,
       }
     );
@@ -384,7 +407,8 @@ describe("stamp size presets (#803)", () => {
       subject: { kind: "issue", issueId },
     });
     assert.equal(skipped.withStatedSize, 1);
-    assert.equal(skipped.written, 6);
+    assert.equal(skipped.withPartialSize, 0);
+    assert.equal(skipped.written, 7);
     // The measurement survives the write that filled in everything around it.
     assert.deepEqual(await sizeOf(a), { widthMm: 22, heightMm: 26 });
     assert.deepEqual(await sizeOf(ap), { widthMm: 25, heightMm: 30 });
@@ -394,7 +418,7 @@ describe("stamp size presets (#803)", () => {
       subject: { kind: "issue", issueId },
       overwriteStated: true,
     });
-    assert.equal(overwritten.written, 7);
+    assert.equal(overwritten.written, 8);
     assert.deepEqual(await sizeOf(a), { widthMm: 25, heightMm: 30 });
   });
 
@@ -410,6 +434,11 @@ describe("stamp size presets (#803)", () => {
       subject: { kind: "issue", issueId },
     });
     assert.equal(skipped.withStatedSize, 1);
+    // …and the dialog is told *which* of the skipped stamps state only half, because decision 6's
+    // wording is "3 already state one" and a collector reading that about a stamp showing a width
+    // and no height cannot tell why it was skipped. #805 picks the wording; the count is what lets
+    // it. A single bucket would leave the dialog no way to be more precise than that sentence.
+    assert.equal(skipped.withPartialSize, 1);
     assert.deepEqual(await sizeOf(a), { widthMm: 22, heightMm: null });
 
     await applyStampSizePreset(userId, {
@@ -499,6 +528,7 @@ describe("stamp size presets (#803)", () => {
       total: 0,
       withoutSize: 0,
       withStatedSize: 0,
+      withPartialSize: 0,
       written: 0,
     });
     await prisma.checklist.delete({ where: { id: emptyChecklistId } });
