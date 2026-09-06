@@ -304,6 +304,16 @@ export interface StampSizePresetApplyResult extends StampSizePresetPair {
   withoutSize: number;
   /** Stamps storing at least one figure. Skipped unless `overwriteStated`. */
   withStatedSize: number;
+  /**
+   * How many of `withStatedSize` state only **one** of the two figures.
+   *
+   * A subset, not a fourth bucket — the skipping rule does not distinguish them. It is here because
+   * decision 6's dialog says *"3 already state one"*, and a collector reading that about a stamp
+   * showing a width and no height cannot tell why it was skipped. Splitting the count in the write
+   * lets #805 decide the wording with the fact in hand; a single number would leave the dialog no
+   * way to be more precise than the sentence it was given.
+   */
+  withPartialSize: number;
   /** Rows actually written. **Zero on a preview**, which is how a caller tells the two apart. */
   written: number;
 }
@@ -365,12 +375,20 @@ async function resolveSubjectRoots(
  * would then fall back to a checklist neighbour, which is the borrowing this feature exists to
  * avoid.
  *
- * **No `actsAsVariant` filter, deliberately.** `checklist-variant-rollup.ts` walks the same edges
- * and does filter, because *holding* a distinct entry is not another way of holding its parent
- * (ADR-0010 §3) — a question about collecting. This one is a question about paper: a plate flaw
- * under `309` was printed on the same press at the same size, and it is exactly the sort of stamp a
- * specialized page is made of. ADR-0048 §7's body and #803's scope line both say *every descendant
- * at any depth*, and this is the reading that matches them.
+ * **No `actsAsVariant` filter, and its absence is deliberate** — *decided with the collector,
+ * 2026-09-06*, recorded in ADR-0048 §7. Say so here rather than only in the pull request, because
+ * every other walk of these edges in this codebase filters — `checklist-variant-rollup.ts`, the
+ * unknown-variant valuation, the headline-price rollup — so a reader who knows the codebase will
+ * read an unfiltered descent as an oversight and restore the predicate.
+ *
+ * They filter because `actsAsVariant` decides whether *holding* a child is another way of holding
+ * its parent (ADR-0010 §3), which is a question about **collecting** — and it is the collector's own
+ * classification, per subtype and overridable per stamp (`variant-classification.ts`), not a fact the
+ * app derives. This walk asks a question about **paper**: a plate flaw under `309` came off the same
+ * press at the same size, and it is as much of a specialized page as `309A` is. Gating the write on
+ * that flag would answer a question about millimetres with an answer about collecting, and leave
+ * sizeless a stamp whose size nobody doubts. So the walk descends **through** a distinct entry as
+ * well as into it — the flag is not consulted at any level.
  *
  * One recursive walk whatever the subject's size — `pricing.ts`'s `buildDescendantMap`, the walk the
  * price rollup and the completeness rollup already take.
@@ -425,6 +443,7 @@ export async function applyStampSizePreset(
     total: 0,
     withoutSize: 0,
     withStatedSize: 0,
+    withPartialSize: 0,
     written: 0,
   };
   if (stampIds.length === 0) return empty;
@@ -436,9 +455,13 @@ export async function applyStampSizePreset(
 
   const sizeless: string[] = [];
   const stated: string[] = [];
+  let partial = 0;
   for (const row of rows) {
     if (row.widthMm === null && row.heightMm === null) sizeless.push(row.id);
-    else stated.push(row.id);
+    else {
+      stated.push(row.id);
+      if (row.widthMm === null || row.heightMm === null) partial += 1;
+    }
   }
 
   const result: StampSizePresetApplyResult = {
@@ -447,6 +470,7 @@ export async function applyStampSizePreset(
     total: rows.length,
     withoutSize: sizeless.length,
     withStatedSize: stated.length,
+    withPartialSize: partial,
     written: 0,
   };
   if (input.preview) return result;

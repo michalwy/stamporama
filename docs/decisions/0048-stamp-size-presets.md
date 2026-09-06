@@ -126,8 +126,8 @@ It is not starting from nothing, and saying "this does not exist" without that c
 tree and misleading about the app: **multi-select with bulk actions is already built on the inventory
 list** (#373, #682, #683, #723, #497). The tree work follows that established pattern — its selection
 model, its bulk-action affordance and its confirmation shape — rather than inventing a second one, and
-the only genuinely new question is what selecting a node means for its variant children, which is
-answered by the same subtree rule as decision 7.
+the only genuinely new question is what selecting a node means for the children under it, which is
+answered by the same subtree rule as decision 7 — every descendant at any depth, variant or not.
 
 ### 5. A preset is created from **one button beside the width/height fields**
 
@@ -162,7 +162,7 @@ decision, taken with the counts on screen.
 There is nothing to preview about *inherited* sizes: #763 stores none, so a stamp resolving through
 its checklist is, to this write, a stamp with no size.
 
-### 7. Applying descends the **whole variant subtree**
+### 7. Applying descends the **whole subtree, every descendant at any depth**
 
 Applying to an issue or a checklist reaches every member and every descendant of every member, at any
 depth: `309`, `309A`, `309AP`, `309APa`.
@@ -175,6 +175,25 @@ impression on the same paper. Writing it to the subtree stores a real value on e
 what every other size in the app is. Leaving the subtree out would leave exactly the stamps that
 reach an album page — variants are what a specialized page is made of — sizeless, and they would then
 fall back to a checklist neighbour anyway, which is the borrowing this feature exists to avoid.
+
+**The walk is not gated on `actsAsVariant`, and a child filed as a distinct entry — an error, a plate
+flaw, an overprint — takes the figure exactly as a variant does.** *Decided with the collector,
+2026-09-06.* This paragraph exists because the argument above reaches only variants and was read, on
+the strength of the heading this decision used to carry, as implying the opposite: that the walk
+should filter `childIsVariant` at every level the way `checklist-variant-rollup.ts` does.
+
+The reason it does not is that **a size is a fact about the paper, not about what counts as a separate
+thing to collect.** `actsAsVariant` is the collector's own classification, per subtype and
+overridable per stamp (`variant-classification.ts`), and what it classifies is *collecting*:
+ADR-0010 §3 uses it to decide whether holding a child is another way of holding its parent, which is
+why the completeness rollup, the unknown-variant valuation and the headline-price rollup all consult
+it. None of those is a question about millimetres. A plate flaw under `309` came off the same press
+at the same size, and it is as much a part of a specialized page as `309A` is — so gating this write
+on that flag would answer a question about paper with an answer about collecting, and would leave
+sizeless a stamp whose size nobody doubts.
+
+That is the same resolution-versus-write distinction the paragraph above draws, applied one level
+further in: the flag governs what a copy *counts as*, never what a stamp *measures*.
 
 The preview from decision 6 counts the subtree, so the number of stamps about to be touched is on
 screen before the write.
