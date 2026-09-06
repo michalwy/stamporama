@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -29,6 +29,15 @@ import type {
   ScanTileData,
 } from "@/lib/scan-sheets";
 import { tileSideViews } from "@/lib/scan-tile-view";
+import {
+  TILE_FILTER_PARAM,
+  effectiveTileFilter,
+  isNarrowed,
+  matchesTileFilter,
+  parseTileFilter,
+  reachesFinishedBatches,
+  type TileFilter,
+} from "@/lib/scan-tile-filter";
 import {
   batchBoxState,
   isSelectableTile,
@@ -129,6 +138,13 @@ interface Props {
    * because the two are different kinds of outstanding: one is work for now, the other is work for
    * the sitting with the colour key on the desk. */
   parkedTileCount: number;
+  /** Tiles on this card that were **discarded** (#853) — taken out during identification. Not
+   * outstanding work like the two above and it nags about nothing; it is here because the chip it
+   * draws is a **worklist for the physical card**: the collector finishes identifying, then goes
+   * back to the stockbook on the desk and pulls out exactly these pieces. Server-rendered beside
+   * the other two, because the chip decides which batches the strip fetches at all and a count
+   * read off the fetched batches would therefore settle after it. */
+  discardedTileCount: number;
   scanSheetCount: number;
   /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies, but
    * a tile can still be assigned to one of its copies or discarded — closing froze the money, not
@@ -164,28 +180,6 @@ interface Props {
   scanDpi: number;
 }
 
-/**
- * What the strip is narrowed to (#567, second value added by #597).
- *
- * Both chips answer the same question — *which tiles do I want to see* — so they are one value and
- * not two toggles: pressing one releases the other, and no combination can narrow the strip to
- * nothing. `all` is the resting state and what a chip retires to when it stops counting anything.
- */
-type TileFilter = "all" | "waiting" | "parked";
-
-const TILE_FILTERS: readonly TileFilter[] = ["all", "waiting", "parked"];
-
-/** Read a stored chip back, falling to the unnarrowed strip for anything unrecognised — a filter
- * only ever narrows, so an unknown one is a wider answer and never the wrong tiles. */
-function parseTileFilter(raw: string): TileFilter {
-  return TILE_FILTERS.find((f) => f === raw) ?? "all";
-}
-
-function matchesTileFilter(tile: ScanTileData, filter: TileFilter): boolean {
-  if (filter === "all") return true;
-  return filter === "waiting" ? tile.state === "unidentified" : tile.state === "parked";
-}
-
 /** The editor's subject: a sheet, the boxes to open on, and the batch it belongs to. */
 interface EditorTarget {
   sheet: ScanCutEditorSheet;
@@ -201,6 +195,7 @@ export function ScansCard({
   alwaysOpen = false,
   unidentifiedTileCount,
   parkedTileCount,
+  discardedTileCount,
   scanSheetCount,
   canIdentify,
   onIdentifyTiles,
@@ -217,28 +212,80 @@ export function ScansCard({
   const open = alwaysOpen || scansUi.open;
   const setOpen = (next: boolean) => patchScansUi({ open: next });
   /**
-   * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #597
-   * there are **two of them**: the tiles still waiting, and the tiles parked for the trip to the
-   * colour key. One state rather than two booleans, because they are two answers to one question and
-   * two independent toggles could be pressed into a filter that shows nothing.
+   * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #853
+   * there are **three of them**: the tiles still waiting, the tiles parked for the trip to the
+   * colour key, and the tiles discarded. One state rather than three booleans, because they are
+   * three answers to one question and independent toggles could be pressed into a filter that shows
+   * nothing. The vocabulary and the rules are `scan-tile-filter.ts`; what is here is where the
+   * value is kept.
    *
    * **This is where the parked pieces gather** (#597). No new section: the strip is a map of the
    * card, the parked pieces sit in each parcel's own tray in that order, and a *to check* list that
    * left the strip would be a list of pictures with nothing saying which card to pull. The chip
    * narrows the strips that already exist, which is exactly what the *unidentified* chip does.
    *
+   * **And this is where the discards gather** (#853), for the same reason and one more. The chip is
+   * not a review screen — it is the worklist for the card on the desk: the collector finishes
+   * identifying, then pulls the rejected pieces out of the stockbook physically, one tile at a time.
+   * A list anywhere else would be pictures with nothing saying which card to pull, and any order but
+   * the sheet's would make him walk the card twice.
+   *
    * A chip retires with what it counts — derived rather than reset, because the chip is its own only
    * control, and working the last tile through would otherwise leave the section narrowed to nothing
    * with nothing to press to get out of it.
+   *
+   * **The address bar wins, and then carries it** (#844). A narrowing that is on screen is in the
+   * URL: the parameter is read first, so a link somebody pasted means exactly what it says, and the
+   * remembered choice is the fallback for a plain visit. Whichever one answered is then mirrored
+   * back into the URL by the effect below — with `replace`, so restoring a remembered filter is not
+   * a history entry to walk back through. Both are written on a press, so the memory that resumes
+   * the next sitting and the address that can be sent to another window never disagree.
    */
-  const filterChoice = parseTileFilter(scansUi.filter);
-  const setFilterChoice = (next: TileFilter) => patchScansUi({ filter: next });
-  const filter: TileFilter =
-    (filterChoice === "waiting" && unidentifiedTileCount === 0) ||
-    (filterChoice === "parked" && parkedTileCount === 0)
-      ? "all"
-      : filterChoice;
-  const filtered = filter !== "all";
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const filterInUrl = searchParams.get(TILE_FILTER_PARAM);
+  const filterChoice =
+    filterInUrl != null ? parseTileFilter(filterInUrl) : parseTileFilter(scansUi.filter);
+  const filter = effectiveTileFilter(filterChoice, {
+    unidentified: unidentifiedTileCount,
+    parked: parkedTileCount,
+    discarded: discardedTileCount,
+  });
+  const filtered = isNarrowed(filter);
+  /** Write one narrowing into the address bar, keeping every other parameter (`?lot=` on the order
+   * screen) exactly as it was. `all` deletes it: a resting strip leaves nothing behind. */
+  const writeFilterToUrl = (next: TileFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete(TILE_FILTER_PARAM);
+    else params.set(TILE_FILTER_PARAM, next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const setFilterChoice = (next: TileFilter) => {
+    patchScansUi({ filter: next });
+    writeFilterToUrl(next);
+  };
+  /**
+   * Keep the address bar describing the strip that is actually on screen (#844).
+   *
+   * It has two jobs and they are the same write. **The restore**: a remembered narrowing that no URL
+   * asked for is put into the address, so the next reload can read it back — which is the whole of
+   * the bug #844 names. **The retirement**: a chip that stops counting anything un-narrows the strip
+   * on its own, and the parameter that named it has to go with it, or a link would carry a filter
+   * the screen has already left.
+   *
+   * Guarded on equality, so it writes once and never loops; and a press needs no help from it,
+   * having written both halves itself.
+   */
+  const filterUrlRef = useRef(writeFilterToUrl);
+  useEffect(() => {
+    filterUrlRef.current = writeFilterToUrl;
+  });
+  useEffect(() => {
+    if (parseTileFilter(filterInUrl) === filter) return;
+    filterUrlRef.current(filter);
+  }, [filter, filterInUrl]);
   const { data, isLoading } = useScans(collectionId, owner, open);
   const { invalidateScans } = useInvalidateScans();
   /** The owner as the server actions name it. Built once here so the three batch-level writes
@@ -614,6 +661,39 @@ export function ScansCard({
             <Icon name="pause" size="sm" /> {parkedTileCount} to check
           </FilterChip>
         )}
+        {/* **The pull list** (#853). The third chip, and the first one that is not about work left
+            in the app: it exists for the minutes *after* a card is identified, when the collector
+            picks the stockbook back up and takes out the pieces he rejected on this screen. Every
+            tile it shows is one stamp to pull.
+
+            Named *discarded* and not *rejected*, which is the word the request used: exactly one
+            state ends up under it (`scan_tile.state = discarded`), that state is called discarded
+            on the badge, on the tile, in the batch summary line and in the dialog that sets it, and
+            a chip that renamed it would be the only place in the app using a second word for one
+            thing. The hint is where the purpose is said.
+
+            In the plain chip rather than the warning hue the other two wear: those mean *this needs
+            you*, and a discard needs nobody — it is a decision already taken, and this chip is a way
+            of reading it back. */}
+        {discardedTileCount > 0 && (
+          <FilterChip
+            tone="plain"
+            on={filter === "discarded"}
+            hint={
+              filter === "discarded"
+                ? "Showing only the tiles you discarded — click to show every tile"
+                : "Tiles you took out during identification — click to show just those, in card order, and pull them off the physical card"
+            }
+            onClick={() => {
+              setFilterChoice(filterChoice === "discarded" ? "all" : "discarded");
+              // Pressing a filter opens the section: a filter over something nobody can see is a
+              // click that appears to do nothing. Releasing one leaves it as it was.
+              if (filter !== "discarded") setOpen(true);
+            }}
+          >
+            <Icon name="excluded" size="sm" /> {discardedTileCount} discarded
+          </FilterChip>
+        )}
         <span style={{ flex: 1 }} />
         {/* A name for the card being added (#587), optional and never in the way: leave it blank
             and the flow is the single click it was. It sits beside the button rather than behind a
@@ -681,6 +761,19 @@ export function ScansCard({
           one press or through the picker as any other tile.
         </Banner>
       )}
+      {/* Says what the list is *for*, because that is the half the pictures cannot say: this is the
+          card in your hands, not a report. It also names the two things that change while it is on
+          — the finished cards come back, and the pictures stop receding — so neither reads as the
+          screen having gone odd. */}
+      {filter === "discarded" && (
+        <Banner tone="info">
+          Showing only the tiles you discarded, in the order they sit on the card — walk each batch
+          left to right and take those pieces out of the stockbook. Cards you had finished with come
+          back for this, and the pictures are shown at full strength so you can match them against
+          what is in your hand. Click any tile to read why you discarded it, or to put it back in the
+          queue.
+        </Banner>
+      )}
 
       {isLoading && <Muted>Loading scans…</Muted>}
       {!isLoading && batches.length === 0 && (
@@ -713,7 +806,11 @@ export function ScansCard({
           and a bar per batch would make the collector answer once per card for one decision.
           It says how many copies it is about to create before anything is created, as every other
           bulk action on this screen does. */}
-      {selectedTiles.length > 0 && (
+      {/* Never over the pull list (#853): every tile it shows has already reached an end and can
+          take no identification, so a bar offering to identify a selection would be about squares
+          that are not on screen. The selection itself is left alone — release the chip and it is
+          still ticked, exactly where it was. */}
+      {selectedTiles.length > 0 && !reachesFinishedBatches(filter) && (
         <TileSelectionBar
           count={selectedTiles.length}
           busy={uploading || pending || detecting}
@@ -729,13 +826,24 @@ export function ScansCard({
         // Worked-through batches are set aside until asked for — and come back **in place** when
         // they are, never gathered at the end: batch order is card order, and the pile on the desk
         // is in the same order.
-        .filter((b) => showDone || b.doneAt == null)
+        //
+        // **Except under the discards chip** (#853), which is the one narrowing whose tiles live
+        // almost entirely on cards that are finished with — a card is *finished* precisely because
+        // every tile on it reached an end, and a discard is one of the two ends. Left in force, the
+        // pull list would answer the press with a blank screen on the ordinary case.
+        .filter((b) => showDone || b.doneAt == null || reachesFinishedBatches(filter))
         .map((batch) => (
         <BatchSection
           key={batch.batchNo}
           batch={batch}
           collectionId={collectionId}
           filter={filter}
+          // A batch is folded shut when it has no work left in it (`useBatchExpansion`), which is
+          // true of nearly every batch the discards chip selects — so under it the batches it chose
+          // are drawn open and lose their caret (#853). The rule is not overruled and nothing is
+          // written to the remembered choices: releasing the chip leaves every batch exactly as
+          // folded as it was.
+          pinnedOpen={reachesFinishedBatches(filter)}
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
@@ -987,6 +1095,7 @@ function BatchSection({
   batch,
   collectionId,
   filter,
+  pinnedOpen,
   expanded,
   onToggleExpanded,
   onOpenTile,
@@ -1006,6 +1115,12 @@ function BatchSection({
   collectionId: string;
   /** What the whole card is narrowed to, applied to this batch's tiles. */
   filter: TileFilter;
+  /** Held open regardless of `expanded`, with no caret (#853). The discards chip selects batches
+   * that are almost all finished with, and a finished batch is folded shut — so a pull list that
+   * honoured the fold would be a column of one-line headers with the tiles it was pressed for
+   * behind each of them. The caret goes with it rather than becoming a control that does nothing;
+   * the fold is not overruled, only suspended, and releasing the chip restores it. */
+  pinnedOpen: boolean;
   /** Whether this batch shows its tiles, or only its summary line (#583). Derived from
    * `batchDoneAt` by the section above, which owns the rule for the whole card. */
   expanded: boolean;
@@ -1034,6 +1149,7 @@ function BatchSection({
   onPair: (backTileId: string, frontTileId: string) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
+  const open = pinnedOpen || expanded;
   /** Whether the name is being typed. Off by default: the name is read far more often than it is
    * written, and a text box standing where a name should be reads as a form rather than as a card
    * that is called something. */
@@ -1086,29 +1202,32 @@ function BatchSection({
         {/* The lot card's own caret (#382), one level down. Batch order is card order and the pile
             on the desk is in the same order, so a worked batch folds up where it stands and is
             never moved to the bottom — the numbering exists for that one correspondence. */}
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          aria-label={expanded ? "Collapse this batch" : "Show this batch's tiles"}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            padding: 0,
-            display: "inline-flex",
-          }}
-        >
-          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-        </button>
+        {!pinnedOpen && (
+          <button
+            type="button"
+            onClick={onToggleExpanded}
+            aria-label={expanded ? "Collapse this batch" : "Show this batch's tiles"}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--color-text-muted)",
+              padding: 0,
+              display: "inline-flex",
+            }}
+          >
+            <Icon name={expanded ? "collapse" : "expand"} size="sm" />
+          </button>
+        )}
         {/* Tick the whole card (#596), the copy list's group box one level down: it ticks what is
             beneath it and shows a dash while only part of it is. Only over tiles still waiting —
             a settled tile can take no identification, which is also why a batch with nothing left
             waiting has no box at all rather than a box that does nothing. */}
         {/* Over every tile that can still be identified, parked ones included (#597) — the batch
             box has to tick exactly what the tile boxes beneath it offer, or it would claim to be
-            *on* while a square with a box of its own sat unticked. */}
-        {expanded && selectableCount > 0 && (
+            *on* while a square with a box of its own sat unticked. Which is also why it is not
+            drawn over the pull list (#853): none of the squares there has a box. */}
+        {open && selectableCount > 0 && !reachesFinishedBatches(filter) && (
           <TickBox
             state={batchBoxState(selected, batch.tiles)}
             label={`Select the ${selectableCount} tile${selectableCount === 1 ? "" : "s"} still to be identified in batch ${batch.batchNo}`}
@@ -1156,7 +1275,7 @@ function BatchSection({
         {/* The buttons belong to the batch's contents, so they fold away with them: a finished
             batch is one line, and Re-cut / Delete on a line that shows nothing would be a
             destructive click over a card the collector cannot currently see. */}
-        {expanded && batch.front && !batch.front.cut && (
+        {open && batch.front && !batch.front.cut && (
           <SmallButton
             onClick={() => onReview(editorSheet(batch.front!), null)}
             disabled={busy}
@@ -1164,7 +1283,7 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the front cut"}
           </SmallButton>
         )}
-        {expanded && batch.front?.cut && !batch.back && (
+        {open && batch.front?.cut && !batch.back && (
           <UploadButton
             label="Add back scan"
             small
@@ -1173,7 +1292,7 @@ function BatchSection({
             onFile={onUploadBack}
           />
         )}
-        {expanded && batch.back && !batch.back.cut && (
+        {open && batch.back && !batch.back.cut && (
           <SmallButton
             onClick={() => onReview(editorSheet(batch.back!), frontTiles.length)}
             disabled={busy}
@@ -1181,7 +1300,7 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the back cut"}
           </SmallButton>
         )}
-        {expanded && batch.tiles.length > 0 && !scansPurged && (
+        {open && batch.tiles.length > 0 && !scansPurged && (
           <SmallButton
             onClick={() =>
               onRecut(
@@ -1201,21 +1320,21 @@ function BatchSection({
             <Icon name="refresh" size="sm" /> Re-cut
           </SmallButton>
         )}
-        {expanded && (
+        {open && (
           <SmallButton onClick={onDelete} disabled={busy} danger>
             <Icon name="delete" size="sm" /> Delete batch
           </SmallButton>
         )}
       </div>
 
-      {expanded && batch.tiles.length === 0 && batch.front && !batch.front.cut && (
+      {open && batch.tiles.length === 0 && batch.front && !batch.front.cut && (
         <Muted>
           The scan is stored. Review the proposed boxes — correcting them, and drawing any the
           detection missed — to cut it into tiles.
         </Muted>
       )}
 
-      {expanded && frontTiles.length > 0 && (
+      {open && frontTiles.length > 0 && (
         <div
           style={{
             display: "grid",
@@ -1228,6 +1347,9 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
+              // The strip is the pull list (#853): every square on it is a discard, so the tile
+              // stops drawing the state it is in and draws what finds the stamp on the card.
+              worklist={reachesFinishedBatches(filter)}
               // A parked tile takes a dragged back like any other outstanding one (#597) — and is
               // one of the likeliest to want it, the doubt that parked it often being something the
               // other side settles.
@@ -1244,16 +1366,22 @@ function BatchSection({
         </div>
       )}
 
-      {expanded && backOnly.length > 0 && (
+      {open && backOnly.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           {/* Deliberately says nothing about *why* a back is here. Three routes lead to this strip
               — a back that found no front, a whole card the counts sent to manual pairing (#647),
               and a back taken off a tile it did not belong to (#648) — and the one instruction is
               the same for all three. The report banner above says which route it was, on the one
               occasion that is news. */}
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-warning)" }}>
-            These backs are not on a tile yet. Drag each one onto the tile it belongs to.
-          </span>
+          {/* Not over the pull list (#853): an unpaired back that was discarded is on that strip
+              because of its state, and *drag it onto the tile it belongs to* is an instruction about
+              a tile still to be identified. The squares stay — the strip is the record of the card —
+              but the sentence would be telling the collector to do something the piece is past. */}
+          {!reachesFinishedBatches(filter) && (
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-warning)" }}>
+              These backs are not on a tile yet. Drag each one onto the tile it belongs to.
+            </span>
+          )}
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             {backOnly.map((tile) => (
               <BackOnlyTile
@@ -1373,11 +1501,18 @@ function BatchName({
  */
 function FilterChip({
   on,
+  tone = "warning",
   hint,
   onClick,
   children,
 }: {
   on: boolean;
+  /** Which hue this chip wears. `warning` is the app's *this needs you* — what a count of
+   * outstanding work is drawn in. `plain` (#853) is for a chip counting something already
+   * decided: the discards are not work, and colouring them like work would put a permanent
+   * demand on the header of every card ever finished. The pressed state is the same shape in
+   * both, so the two read as one control. */
+  tone?: "warning" | "plain";
   /** The hover hint, in the shared `Tooltip` — never the browser's `title`, which cannot be styled,
    * cannot be read on a touch device and appears a second and a half after the pointer stops.
    * Named `hint` for that reason: `title` would read as the attribute it deliberately is not. */
@@ -1385,6 +1520,7 @@ function FilterChip({
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const warning = tone === "warning";
   return (
     <Tooltip content={hint}>
       <button
@@ -1392,10 +1528,12 @@ function FilterChip({
         onClick={onClick}
         aria-pressed={on}
         style={{
-          ...WARNING_CHIP,
+          ...(warning ? WARNING_CHIP : PRESSABLE_CHIP),
           cursor: "pointer",
           fontWeight: on ? 700 : 500,
-          boxShadow: on ? "0 0 0 1px var(--color-warning)" : undefined,
+          boxShadow: on
+            ? `0 0 0 1px ${warning ? "var(--color-warning)" : "var(--color-border-strong)"}`
+            : undefined,
         }}
       >
         {children}
@@ -1428,6 +1566,15 @@ const WARNING_CHIP: React.CSSProperties = {
   color: "var(--color-warning)",
   borderColor: "var(--color-warning-border, var(--color-border))",
   background: "var(--color-warning-soft, var(--color-bg-page))",
+};
+
+/** The plain chip, laid out to hold an icon beside its count the way the warning one is — what a
+ * chip counting something already settled wears (#853). */
+const PRESSABLE_CHIP: React.CSSProperties = {
+  ...CHIP,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
 };
 
 const LABEL_INPUT_STYLE: React.CSSProperties = {
@@ -1486,6 +1633,7 @@ const LABEL_INPUT_STYLE: React.CSSProperties = {
 function TileCell({
   tile,
   collectionId,
+  worklist,
   droppable,
   selected,
   onToggleSelected,
@@ -1494,6 +1642,14 @@ function TileCell({
 }: {
   tile: ScanTileData;
   collectionId: string;
+  /** Drawn as one line of the **pull list** (#853) — the strip narrowed to the discards, read with
+   * a stamp in the other hand. Two things change, and both are the same change: what is on the
+   * square stops describing the app and starts describing the piece. The picture is at full
+   * strength, because there is nothing here for a discard to recede *from* any more and a dimmed
+   * scan is the harder one to match against the card; and the note is on the square rather than
+   * only in the hover, because it is what confirms this is the right piece to take out. The word
+   * *discarded* goes the other way — twelve squares all saying it is twelve things to read past. */
+  worklist: boolean;
   droppable: boolean;
   /** Ticked to be identified with the others (#596). */
   selected: boolean;
@@ -1578,7 +1734,7 @@ function TileCell({
           // the record of the card, and a discarded one is the only record there is. The *picture*
           // is what recedes, never the badge or the label over it — a mark that faded with the
           // scan would be the fade this replaced, wearing a shape.
-          dimmed={settled}
+          dimmed={settled && !worklist}
           // The one honest placeholder: the copy this tile became has been deleted, so its images
           // went with it and there is nothing left to show. Said in words, because a broken-looking
           // square is what every consumed tile used to look like.
@@ -1603,7 +1759,11 @@ function TileCell({
             {tile.item ? formatItemNo(tile.item.itemNo) : "copy deleted"}
           </span>
         ) : tile.state === "discarded" ? (
-          <span>discarded</span>
+          // Silent on the pull list, where every square is a discard and the word is the noise the
+          // chip was pressed to get away from. The corner mark stays either way.
+          worklist ? null : (
+            <span>discarded</span>
+          )
         ) : parked ? (
           // In words as well as in the corner mark, for the same reason a discard says so: the
           // badge is what is legible at a glance across a strip of forty, and the label is what is
@@ -1630,6 +1790,24 @@ function TileCell({
           }}
         >
           {tile.candidates.map(candidateShortLabel).join(" · ")}
+        </div>
+      )}
+      {/* **Why this one was taken out** (#853), on the square and not only in the hover — the same
+          place and the same shape the parked tile's shortlist takes, for the same reason: on a strip
+          of a dozen it is what tells them apart, and hovering twelve squares one at a time is not
+          something to do with a stamp in the other hand. Only on the pull list; on the full strip a
+          discard's note stays in the hover, where a settled tile's detail belongs. */}
+      {worklist && tile.state === "discarded" && tile.note && (
+        <div
+          style={{
+            padding: "0 0.25rem 0.25rem",
+            fontSize: "0.625rem",
+            lineHeight: 1.3,
+            color: "var(--color-text-muted)",
+            overflow: "hidden",
+          }}
+        >
+          {tile.note}
         </div>
       )}
     </>

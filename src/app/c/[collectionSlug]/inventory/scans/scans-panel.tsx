@@ -44,6 +44,7 @@ export function ScansPanel({
   locations,
   unidentifiedTileCount,
   parkedTileCount,
+  discardedTileCount,
   scanSheetCount,
 }: {
   collectionId: string;
@@ -54,6 +55,7 @@ export function ScansPanel({
   locations: LocationData[];
   unidentifiedTileCount: number;
   parkedTileCount: number;
+  discardedTileCount: number;
   scanSheetCount: number;
 }) {
   const router = useRouter();
@@ -119,6 +121,7 @@ export function ScansPanel({
         alwaysOpen
         unidentifiedTileCount={unidentifiedTileCount}
         parkedTileCount={parkedTileCount}
+        discardedTileCount={discardedTileCount}
         scanSheetCount={scanSheetCount}
         // Always. There is no lot whose closing could have frozen anything here.
         canIdentify

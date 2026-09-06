@@ -786,6 +786,7 @@ export function PurchaseDetailPanel({
         owner={{ kind: "purchase", purchaseId: purchase.id }}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
+        discardedTileCount={purchase.discardedTileCount}
         scanSheetCount={purchase.scanSheetCount}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={tileChain.onIdentifyTiles}

@@ -855,9 +855,9 @@ desk is in that order too — moving the unfinished ones to the top would break 
 numbering is for. Revealed batches come back **in place**, among the live ones, not gathered at the
 end.
 
-Either chip on the section's own header — **N tiles unidentified** or **N to check** — does the same
-hiding for its own reason, so while one is pressed the count is not offered: one question should not
-have two controls that can disagree.
+Any chip on the section's own header — **N tiles unidentified**, **N to check** or **N discarded** —
+does the same hiding for its own reason, so while one is pressed the count is not offered: one
+question should not have two controls that can disagree.
 
 The picture on a consumed tile is the copy's own front photograph — the same image, which moved to
 the copy rather than being duplicated, so you will see it again on the copy's row below. The only
@@ -867,6 +867,41 @@ says so rather than showing a broken square.
 The **N tiles unidentified** chip on the Card scans header is also a filter — press it to show only
 the tiles still waiting, and the section opens if it was collapsed. It counts the whole **order's**
 tiles, because that is what a card holds: pieces belonging to any of its lots.
+
+#### Pulling the discarded pieces off the card
+
+The third chip is **N discarded**, and it is not about work left in the app at all. It is for the
+minutes *after* you finish identifying a card: you pick the stockbook back up and take out the
+pieces you rejected on screen. Press it and the strips show **only the tiles you discarded** — every
+square is one stamp to pull.
+
+It is drawn in the plain grey the other counts are not, because a discard is not something waiting
+on you. It is a decision you already made, and the chip is the way to read it back.
+
+Three things about it are chosen for the card in your hands rather than for the screen:
+
+- **The order is the card's.** Tiles keep the positions they had on the sheet, and the batches keep
+  the order the cards came in, so you walk each strip left to right against the stockbook in front
+  of you. Nothing is sorted by when you discarded it.
+- **Cards you had finished with come back.** A card is *finished* precisely because every tile on it
+  reached an end — and a discard is one of those ends, so almost every piece on this list is on a
+  card that had been put away. While the chip is pressed those batches are back in the list and
+  drawn open. Release it and they fold away again exactly as they were.
+- **The pictures are at full strength.** A discarded tile normally lets its scan recede, so the work
+  still to do stands out. On this list there is nothing for it to recede from, and the picture is the
+  thing you are matching against the stamp in your fingers — so it is drawn as brightly as any other
+  tile, with the **note** you left underneath it. Click any square to read the whole note, or to put
+  the piece back in the queue if you decide to keep it after all.
+
+If nothing on the card was discarded there is no chip: the count only appears when there is
+something to count, exactly like the other two.
+
+**The chip is in the address bar.** Whichever narrowing is on shows as `?tiles=discarded` (or
+`waiting`, or `parked`) on the screen's own URL, so a reload keeps it and the address can be sent to
+another window. A link that names one wins over what this screen last remembered; a plain visit
+falls back to the remembered one. Turning the chip off clears the parameter, and so does working the
+last piece through — the chip retires with what it counts, and never leaves the strip narrowed to
+nothing.
 
 **A tile that matches no auction line is worth knowing about.** If an order came from a settled sale
 and a tile turns out to be a stamp none of its lines described, the Card scans section says so. That

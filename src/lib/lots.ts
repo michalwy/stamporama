@@ -157,6 +157,15 @@ export interface PurchaseDetail {
    * work that can be done now; folding them together would put the parked pieces back into the
    * sweep they were parked to leave. */
   parkedTileCount: number;
+  /** Scan tiles on this order that were **discarded** (#567) — taken out during identification
+   * because the piece was junk, damaged beyond interest or unidentifiable.
+   *
+   * Not outstanding work, unlike the two above, and it nags about nothing: it exists so the Card
+   * scans header can offer the chip that narrows the strip to exactly those pieces (#853), which
+   * is the **worklist for the physical card** — every tile it shows is one stamp to pull off the
+   * stockbook now that the app's side of the pass is done. Served from here rather than counted
+   * off the fetched batches because the chip decides which batches the strip fetches at all. */
+  discardedTileCount: number;
   /** Retained card scans on this order (#566), so the section can say it has scans before any of
    * them has been cut. */
   scanSheetCount: number;
@@ -219,12 +228,13 @@ export async function getPurchaseDetail(
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
 
-  // The two outstanding tile states in one pass (#597), rather than two filtered relation counts:
-  // Prisma's `_count` cannot carry the same relation twice under two `where`s, and the header wants
-  // them apart — *N unidentified* is the sweep, *N to check* is the trip to the colour key.
+  // The tile states the header draws a chip for, in one pass (#597, #853), rather than a filtered
+  // relation count each: Prisma's `_count` cannot carry the same relation twice under two `where`s,
+  // and the header wants them apart — *N unidentified* is the sweep, *N to check* is the trip to
+  // the colour key, and *N discarded* is the trip back to the stockbook on the desk.
   const tileStates = await prisma.scanTile.groupBy({
     by: ["state"],
-    where: { purchaseId, state: { in: ["unidentified", "parked"] } },
+    where: { purchaseId, state: { in: ["unidentified", "parked", "discarded"] } },
     _count: { _all: true },
   });
   const tilesInState = (state: string) =>
@@ -285,6 +295,7 @@ export async function getPurchaseDetail(
       : null,
     unidentifiedTileCount: tilesInState("unidentified"),
     parkedTileCount: tilesInState("parked"),
+    discardedTileCount: tilesInState("discarded"),
     scanSheetCount: row._count.scanSheets,
   };
 }

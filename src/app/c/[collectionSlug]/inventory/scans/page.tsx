@@ -40,8 +40,8 @@ export default async function ScansPage({ params }: ScansPageProps) {
     getCertificateStatuses(session.user.id, collection.id),
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
-    // The header's three figures, so the section can say what is inside while still collapsed —
-    // the order screen gets the same three from `getPurchaseDetail`.
+    // The header's figures, so the section can say what is inside while still collapsed — the
+    // order screen gets the same ones from `getPurchaseDetail`.
     getScanCounts(session.user.id, { collectionId: collection.id }),
   ]);
 
@@ -90,6 +90,7 @@ export default async function ScansPage({ params }: ScansPageProps) {
         locations={locations}
         unidentifiedTileCount={counts.unidentifiedTileCount}
         parkedTileCount={counts.parkedTileCount}
+        discardedTileCount={counts.discardedTileCount}
         scanSheetCount={counts.scanSheetCount}
       />
     </div>
