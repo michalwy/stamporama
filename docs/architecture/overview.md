@@ -92,7 +92,7 @@ The `STAMPORAMA_VERSION` build argument is baked into the image and exposed at r
 
 Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` driver adapter. The adapter uses the `pg` npm package for PostgreSQL connections — no native query engine binary is required.
 
-**Generated client:** `pnpm prisma:generate` writes the TypeScript client to `src/generated/prisma/`. This directory is generated and should not be edited by hand; it is committed to the repository so that CI jobs that do not run `prisma:generate` before type-checking can still compile.
+**Generated client:** `pnpm prisma:generate` writes the TypeScript client to `src/generated/prisma/`. This directory is generated and should not be edited by hand, and it is **not** committed — `.gitignore` excludes it, so a fresh clone or worktree has no client at all and every import of it fails to type-check. The root `postinstall` script therefore runs `prisma generate` as part of `pnpm install`, which is what makes a fresh checkout compile without a remembered extra step (#791). It guards itself on `prisma/schema.prisma` being present, because the Dockerfile's `deps` stage installs from `package.json` and the lockfile alone, before `prisma/` exists in the image; the builder stage generates the client explicitly, as do the CI jobs that type-check.
 
 **Migration workflow:**
 

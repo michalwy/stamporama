@@ -96,14 +96,21 @@ App is available at <http://localhost:3000>.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-**Run checks:**
+**Run checks** — in a fresh clone or worktree, `pnpm install` first:
 
 ```sh
+pnpm install
 pnpm lint
 pnpm typecheck
 pnpm test:unit
 pnpm test:integration   # starts its own throwaway Postgres via docker-compose.e2e.yml
 ```
+
+The install is not optional the way it usually is. The Prisma client under `src/generated/prisma/`
+is generated rather than committed, and nothing else creates it: without it `pnpm typecheck`
+fails in hundreds of places that are perfectly correct, which reads as a broken tree rather than a
+missing step. `pnpm install` generates it (a `postinstall` script), so an installed tree compiles.
+Re-run `pnpm prisma:generate` after editing `prisma/schema.prisma`.
 
 **Working in more than one git worktree?** Every host port this project pins is derived from a
 *slot* — a small integer belonging to the worktree — so a second worktree can run the integration
@@ -116,6 +123,9 @@ shifting every port by ten per slot — slot 1 is 3010 and 5443, slot 2 is 3020 
 pnpm slot            # every worktree, its slot and its ports
 pnpm e2e:db:down     # stop this worktree's test database
 ```
+
+A new worktree carries no `node_modules` and no generated Prisma client, so run `pnpm install` in
+it before anything else.
 
 Removing the worktree releases the number; `scripts/dev-slot.sh release` releases it without.
 
