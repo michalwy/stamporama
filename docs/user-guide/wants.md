@@ -171,7 +171,10 @@ Down the left is the same rail every other list screen carries: the **area tree*
 **year facets**. Your area and year selection is shared across Stamps, Issues, Inventory
 and this screen, so opening the want list lands you on the scope you were last working in.
 The year is the stamp's own issue year, and the counts say how many wants each year would
-leave given everything else you have narrowed by.
+leave given everything else you have narrowed by. The areas are counted the same way, one
+axis over — each area's number is how many wants selecting it would leave, the year
+included and the area filter itself left out. A want whose stamp is filed in two areas is
+counted under both, so the rail's numbers need not add up to the length of the list.
 
 The list **loads as you scroll**, like the Stamps and Inventory lists — a want list for a
 whole collecting plan runs to thousands of rows, and every filter above narrows it on the

@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
@@ -1023,6 +1024,35 @@ export async function listIssueYearFacets(
       if (b.year === null) return -1;
       return a.year - b.year;
     });
+}
+
+/**
+ * Rows per area for the area rail's counts (#843), each area's **own** issues — the roll-up onto
+ * parents is the client's (`rollUpAreaCounts`), because what a parent shows depends on the
+ * collector's subtree scope (#385) and the server does not hold that.
+ *
+ * `areaIds` is deliberately **not** in the options: a facet is counted against every filter except
+ * its own dimension, so that clicking a row shows exactly the number the row promised. That is the
+ * mirror of {@link listIssueYearFacets}, which drops `year` and keeps the areas — and it is what
+ * makes the two rails agree: with no year selected they are two `groupBy`s over one `where`, so an
+ * area's count *is* the sum of the years drawn under it.
+ */
+export async function listIssueAreaFacets(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<
+    IssueListFilterOpts,
+    "areaIds" | "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId"
+  >
+): Promise<AreaFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = buildIssueListWhere(collectionId, opts);
+  const groups = await prisma.issue.groupBy({
+    by: ["collectionAreaId"],
+    where,
+    _count: { _all: true },
+  });
+  return groups.map((g) => ({ areaId: g.collectionAreaId, count: g._count._all }));
 }
 
 export async function listIssuesPaginated(

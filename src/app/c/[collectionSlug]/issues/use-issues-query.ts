@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
+import type { AreaFacet } from "@/lib/area-facets";
 
 interface IssuesPage {
   items: IssueListItem[];
@@ -41,12 +42,26 @@ export interface IssueYearFacetFilters {
   catalogNumber?: string;
 }
 
+/** Filters that affect the area facet counts (#843) — everything except the area selection itself,
+ *  which is why `year` is in here and out of {@link IssueYearFacetFilters}. */
+export interface IssueAreaFacetFilters {
+  search?: string;
+  searchCatalogVendorId?: string;
+  searchCatalogNumber?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  /** "none" for the no-year bucket, otherwise a numeric year string. */
+  year?: string;
+}
+
 export const issueKeys = {
   all: (collectionId: string) => ["issues", collectionId] as const,
   list: (collectionId: string, filters: IssueListFilters) =>
     ["issues", collectionId, "list", filters] as const,
   years: (collectionId: string, filters: IssueYearFacetFilters) =>
     ["issues", collectionId, "years", filters] as const,
+  areaFacets: (collectionId: string, filters: IssueAreaFacetFilters) =>
+    ["issues", collectionId, "area-facets", filters] as const,
   members: (
     collectionId: string,
     issueId: string,
@@ -120,6 +135,32 @@ export function useIssueYears(
       if (!res.ok) throw new Error("Failed to fetch issue years");
       const data = await res.json();
       return data.years;
+    },
+  });
+}
+
+export function useIssueAreaFacets(
+  collectionId: string,
+  filters: IssueAreaFacetFilters
+) {
+  return useQuery<AreaFacet[]>({
+    queryKey: issueKeys.areaFacets(collectionId, filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.search) params.set("search", filters.search);
+      if (filters.searchCatalogVendorId)
+        params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
+      if (filters.searchCatalogNumber)
+        params.set("searchCatalogNumber", filters.searchCatalogNumber);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.year) params.set("year", filters.year);
+      const res = await fetch(
+        `/api/collections/${collectionId}/issues/areas?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch issue area facets");
+      const data = await res.json();
+      return data.areas;
     },
   });
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
+import type { AreaFacet } from "./area-facets";
 import {
   catalogKeyMatches,
   catalogMatchKey,
@@ -741,6 +742,36 @@ export async function listStampYearFacets(
       if (b.year === null) return -1;
       return a.year - b.year;
     });
+}
+
+/**
+ * Rows per area for the area rail's counts (#843), each area's **own** stamps — the roll-up onto
+ * parents is the client's (`rollUpAreaCounts`), which is where the subtree scope (#385) lives.
+ *
+ * `areaIds` is deliberately not an option: a facet is counted against every filter except its own
+ * dimension, the mirror of {@link listStampYearFacets} dropping `year`. With no year selected the
+ * two are `groupBy`s over one `where`, so an area's count is the sum of the years drawn under it.
+ *
+ * Counted over the **link** rows, not the stamps: a stamp may be filed in more than one area
+ * (#675's `stampAreaLinks`), and each of those areas would show it, so each of those areas counts
+ * it. The rail's numbers therefore need not add up to the size of the list, and should not — that
+ * is the same stamp seen from two places, not two stamps.
+ */
+export async function listStampAreaFacets(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<
+    StampListFilterOpts,
+    "areaIds" | "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId"
+  >
+): Promise<AreaFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const groups = await prisma.stampCollectionArea.groupBy({
+    by: ["collectionAreaId"],
+    where: { stamp: buildStampListWhere(collectionId, opts) },
+    _count: { _all: true },
+  });
+  return groups.map((g) => ({ areaId: g.collectionAreaId, count: g._count._all }));
 }
 
 export async function listStampsPaginated(

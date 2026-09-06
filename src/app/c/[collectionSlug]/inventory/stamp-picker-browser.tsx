@@ -43,8 +43,10 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   useIssuesInfinite,
   useIssueYears,
+  useIssueAreaFacets,
   type IssueListFilters,
   type IssueYearFacetFilters,
+  type IssueAreaFacetFilters,
 } from "@/app/c/[collectionSlug]/issues/use-issues-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
@@ -247,6 +249,20 @@ export function StampPickerBrowser({
     yearFacetFilters
   );
 
+  // The same rule one axis over (#843): the area counts drop the area and keep the year, so a row
+  // says what picking that area would leave.
+  const areaFacetFilters: IssueAreaFacetFilters = useMemo(
+    () => ({
+      search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
+      year: year || undefined,
+    }),
+    [search, parsedSearch, year]
+  );
+
+  const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
+
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useIssuesInfinite(collectionId, filters);
   const issues = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
@@ -348,6 +364,7 @@ export function StampPickerBrowser({
             areas={areas}
             filterAreaId={areaId}
             onNavigateArea={setAreaId}
+            areaFacets={areaFacets}
             yearFacets={yearFacets}
             yearsLoading={yearsLoading}
             selectedYear={year}

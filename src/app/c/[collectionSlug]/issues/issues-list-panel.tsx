@@ -45,9 +45,11 @@ import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-
 import {
   useIssuesInfinite,
   useIssueYears,
+  useIssueAreaFacets,
   useInvalidateIssues,
   type IssueListFilters,
   type IssueYearFacetFilters,
+  type IssueAreaFacetFilters,
 } from "./use-issues-query";
 import {
   IssueRow,
@@ -289,6 +291,22 @@ export function IssuesListPanel({
     yearFacetFilters
   );
 
+  // The area rail's counts (#843) — everything the year facets are counted against, plus the year,
+  // minus the area selection. Each row then says what selecting it would list.
+  const areaFacetFilters: IssueAreaFacetFilters = useMemo(
+    () => ({
+      search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
+      catalogVendorId: effectiveCatalogVendorId || undefined,
+      catalogNumber: effectiveCatalogNumber || undefined,
+      year: year || undefined,
+    }),
+    [search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, year]
+  );
+
+  const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
+
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -478,6 +496,7 @@ export function IssuesListPanel({
         areas={areas}
         filterAreaId={filterAreaId}
         onNavigateArea={handleNavigateFilter}
+        areaFacets={areaFacets}
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year || null}

@@ -22,9 +22,11 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import {
   useStampsInfinite,
   useStampYears,
+  useStampAreaFacets,
   useInvalidateStamps,
   type StampListFilters,
   type StampYearFacetFilters,
+  type StampAreaFacetFilters,
 } from "./use-stamps-query";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionStampAttributes } from "@/app/c/[collectionSlug]/shared/use-stamp-attributes";
@@ -187,6 +189,22 @@ export function StampsListPanel({
     yearFacetFilters
   );
 
+  // The area rail's counts (#843): the same filter set one axis over — the year stays in, the area
+  // selection drops out, so a row says what selecting it would list.
+  const areaFacetFilters: StampAreaFacetFilters = useMemo(
+    () => ({
+      search: search || undefined,
+      catalogVendorId: effectiveCatalogVendorId || undefined,
+      catalogNumber: effectiveCatalogNumber || undefined,
+      issueId: issueId || undefined,
+      year: year || undefined,
+      ...attributeFilters,
+    }),
+    [search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters]
+  );
+
+  const { data: areaFacets } = useStampAreaFacets(collectionId, areaFacetFilters);
+
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -267,6 +285,7 @@ export function StampsListPanel({
         areas={areas}
         filterAreaId={filterAreaId}
         onNavigateArea={handleNavigateFilter}
+        areaFacets={areaFacets}
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year || null}
