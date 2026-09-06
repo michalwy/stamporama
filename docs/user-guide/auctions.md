@@ -201,10 +201,13 @@ Your figures turn **amber** when the bid you placed would, all-in, cost more tha
 is a different kind of news from the price running away from you — it is your own commitment, and
 the only one of the two you can still take back.
 
-**Clicking a row opens the parcel it belongs to**, with that lot scrolled to and marked so you do
-not have to find it again among the sale's other lots. The mark is not a flash you can miss: the
-card is outlined and carries an *Opened from the watchlist* strip, and it **stays** until you clear
-it with the ✕ on that strip. Clicking any of the row's own controls does what that control does
+**Clicking a row opens the parcel it belongs to**, with that lot scrolled to and its card open.
+The card **flashes once** as it arrives — a tint and a brief outline — and then reads like every
+other card on the screen. There is nothing to close and nothing left behind: the flash says how you
+got here, which stops being useful the moment you have got here. The address bar drops the lot from
+it too, so reloading the page gives you the parcel and no flash. (If your system is set to reduce
+motion, there is no flash: the scroll and the opened card are the arrival.) Clicking any of the
+row's own controls does what that control does
 instead — the figures stay editable in place, the chips and the ⋮ menu
 keep their own behaviour — and selecting text on the row does not navigate. Hold ⌘ or Ctrl to open
 the sale in a new tab.
@@ -707,8 +710,8 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   number, price, name — with a direction toggle.
 - **Collapse all** / **Expand all** for the cards themselves. Lot cards start **collapsed**: a
   parcel is read as the lots in it, and a lot's composition is a second question. Two lots open
-  by themselves — the one you arrived at by clicking a lot on the watchlist (the highlighted
-  card), and one added while the screen is open.
+  by themselves — the one you arrived at by clicking a lot on the watchlist (the card that
+  flashed), and one added while the screen is open. Either can be closed by hand afterwards.
 
 The grouping and sorting choices are remembered per collection, exactly as they are on the other two
 screens. The **Only** filters are not: they are a job you do and finish.

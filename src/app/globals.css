@@ -225,6 +225,43 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 }
 
+/* One-shot flash on the card the collector **navigated to** (#850) — #374's `?lot=` deep link into
+   an auction sale. What it says is *provenance*: how you got here, which is true for a second and
+   irrelevant afterwards. So it is stated once and then gone, with no control to acknowledge it and
+   nothing left behind.
+
+   It is `just-added-flash` plus a **ring**, and the ring is why this is a second animation rather
+   than the same class: the card's own header row paints an opaque --color-bg-elevated over the
+   card, so a tint alone is invisible on exactly the part being pointed at. A `box-shadow` is
+   outside the box model, so nothing on the screen moves as it appears or as it goes — which is the
+   whole point of the issue. Two animations cannot be composed by putting both classes on one
+   element (the second `animation` declaration replaces the first), hence one keyframes doing both.
+
+   It holds before it fades: the card smooth-scrolls itself into view at the same moment, and a
+   flash that has finished by the time the scroll settles was never shown. Suppressed under
+   reduced-motion, as #158's is — there the scroll and the card opening are the arrival. */
+@keyframes arrival-flash {
+  0%,
+  45% {
+    background-color: var(--color-bg-highlight-flash);
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+  100% {
+    background-color: var(--color-bg-elevated);
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+.arrival-flash {
+  animation: arrival-flash 2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrival-flash {
+    animation: none;
+  }
+}
+
 /* Confirmation toasts (#541). The card slides a little way in from the edge it sits against and
    fades up, so a stack that gains an entry reads as one arriving rather than as the whole column
    jumping. Short and eased-out: this is feedback on something already done, not an event. */

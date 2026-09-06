@@ -28,6 +28,13 @@ import { CONTROL_STYLE, FilterChip, SIGNALS } from "../../auction-controls";
 import { formatBase, formatDay } from "../../auction-format";
 import { Icon } from "@/app/icons";
 
+/** When to release the arrival mark on a deep-linked lot card. This is a **floor** under the 2s
+ * `.arrival-flash` animation in `globals.css`, not a duration of its own: the animation starts a
+ * commit or two after this timer does (the card waits for the view preferences to be read), and
+ * dropping the class early would cut the fade off part-way. Nothing is on screen once the
+ * animation has ended, so overshooting costs nothing. */
+const ARRIVAL_FLASH_MS = 2400;
+
 type DialogState =
   | { kind: "none" }
   | { kind: "addLot" }
@@ -83,19 +90,18 @@ export function AuctionSaleDetailPanel({
   const now = useMinuteClock();
   // Which lot the collector arrived to see (#374). A click on the flat watchlist lands here with
   // `?lot=<id>`, and the card for it scrolls into view and flashes once.
+  //
+  // That is **all** it does (#850). The param carries one fact — how you got here — which is true
+  // for a second and irrelevant afterwards, so it is *consumed on arrival*: latched here, dropped
+  // from the address bar, and released again once the flash has run. What it replaced was a
+  // persistent ring and a labelled strip with a ✕ to dismiss it, which asked the collector to
+  // acknowledge their own click.
   const searchParams = useSearchParams();
-  const highlightLotId = searchParams.get("lot");
-  // Clearing the mark is dropping the param that carries it — that one only, so anything else in
-  // the address bar survives — and `replace` rather than `push`, since undoing a highlight is not a
-  // step anyone wants to walk back through.
   const pathname = usePathname();
   const router = useRouter();
-  function clearHighlight() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("lot");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }
+  // Read once, on the render the screen opens on: the param is about to be taken out of the URL,
+  // and the flash must outlive that.
+  const [arrivedLotId, setArrivedLotId] = useState<string | null>(() => searchParams.get("lot"));
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   // Which outcome the lot list below is narrowed to. Local state rather than a URL param, unlike
   // the flat list: this is one parcel being worked through — "what is still running", then "what
@@ -108,6 +114,31 @@ export function AuctionSaleDetailPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
   const { data: sale, isLoading } = useAuctionSaleDetail(collectionId, saleId);
+
+  // Take the param out of the address bar as soon as it has been read. A reload is then an
+  // ordinary sale screen — the provenance is spent, and re-flashing it minutes later would be
+  // telling the collector something that stopped being true the moment they arrived. That one
+  // param only, so anything else in the URL survives; `replace`, since undoing an arrival is not a
+  // step anyone walks back through; and `scroll: false`, or the navigation would jump the window
+  // to the top against the card scrolling itself into view.
+  useEffect(() => {
+    if (!searchParams.get("lot")) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lot");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, pathname, router]);
+
+  // And release the mark once the flash is over, so a card that remounts later — the grouping
+  // toggled, a filter changed — does not replay an arrival from ten minutes ago. Gated on the
+  // parcel having loaded, because the cards mount with it and a timer started against the
+  // "Loading sale…" line would expire before anything was on screen.
+  const saleLoaded = Boolean(sale);
+  useEffect(() => {
+    if (!arrivedLotId || !saleLoaded) return;
+    const timer = setTimeout(() => setArrivedLotId(null), ARRIVAL_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [arrivedLotId, saleLoaded]);
 
   function runLotAction(
     action: () => Promise<{ status: "success" } | { status: "error"; message: string }>
@@ -502,8 +533,7 @@ export function AuctionSaleDetailPanel({
           issueHeaderById={issueHeaderById}
           now={now}
           isPending={isPending}
-          highlightLotId={highlightLotId}
-          onClearHighlight={clearHighlight}
+          arrivedLotId={arrivedLotId}
           onChanged={() => invalidateAll(collectionId)}
           onEditLot={(row) => setDialog({ kind: "editLot", lot: row })}
           onDeleteLot={(row) => setDialog({ kind: "deleteLot", lot: row })}
