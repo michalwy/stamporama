@@ -779,25 +779,37 @@ sheet is recorded, so editing or deleting one of these changes only what you pri
 
 ## Hawid stock
 
-**Settings → Albums → Hawid stock** is the list of hawid strips you actually own: the **height**
-printed on the packet, how long one strip is **as sold** (210 mm, usually), and an optional label
-for the packet you reach for.
+**Settings → Albums → Hawid stock** is the list of hawid strips you actually own: the **stamp
+height** printed on the packet, the strip's own **outer height**, how long one strip is **as sold**
+(210 mm, usually), and an optional label for the packet you reach for.
+
+Two heights, because a packet is named after the stamp it takes and not after itself. A packet marked
+26 mm accepts a 26 mm stamp and is about 30 mm tall — the welded border is part of the product. Type
+the packet number in the first field and lay a ruler against the strip for the second.
 
 It is there because an album page's box is a *piece of hawid*, not the stamp plus a few millimetres.
 Hawid comes as strips of a fixed height that you cut across, so the two sides of a box are not the
 same kind of number:
 
-- **The height is chosen from the drawer.** A box is as tall as the shortest strip the stamp fits
-  into, once the album template's vertical clearance is added. Anything else would draw a page that
-  disagrees with the piece lying next to it.
+- **The height is chosen from the drawer.** The stamp plus the album template's vertical clearance
+  has to fit inside a strip's *whole* height, and the box is drawn at that whole height — that is the
+  piece that ends up on the card. Anything else would draw a page that disagrees with the piece lying
+  next to it.
 - **The width is the cut.** It is the stamp plus the template's horizontal margin, to a tenth of a
   millimetre.
 - **A stamp taller than every strip gets no strip at all.** A block, a souvenir sheet or a cover is
   drawn at its own size plus the margins and marked as a pocket — because that is where it goes, and
   a cutting list naming a strip you cannot buy is worse than one saying *pocket*.
 
+**The outer height may be left blank** on a packet you have not measured. The row then says *outer
+height not measured* and its boxes are planned at the packet number, which is a border too short —
+nothing is guessed on your behalf, because a guessed millimetre is a hawid cut wrong. Strips added
+before this field existed all start out that way, so pages keep the sizes they had until you fill
+them in.
+
 Drag the rows to set the order. It matters in one place: where two strips are equally short, the one
-nearer the top is used. Heights are unique — a second row of the same height could never be picked.
+nearer the top is used. Stamp heights are unique — a second packet taking the same stamp could never
+be picked.
 
 **An empty stock is a real state, not an error.** Until you add a strip, every box is planned as a
 pocket. That is what an undescribed drawer honestly comes to; the alternative would be pages quietly
@@ -821,9 +833,10 @@ is not an evening of retyping page sizes and font names. One template covers:
   It is a ceiling and not a frame — the page is never divided into fixed columns and nothing ever
   runs off the side of one.
 - **Hawid clearances** — what a box adds to the stamp. Two numbers rather than one, because the two
-  axes are different: the vertical clearance is added *before a strip is chosen* (how much hawid has
-  to be there above and below the stamp), while the horizontal margin is the cut. Together they
-  replace AlbumEasy's single global 4 mm.
+  axes are different: the vertical clearance is added *before a strip is chosen* (the stamp plus it
+  has to fit inside a strip's whole outer height), while the horizontal margin is the cut. Raise the
+  vertical one to move a stamp deliberately onto the next packet up. Together they replace
+  AlbumEasy's single global 4 mm.
 - **Type** — a face and a size for each of the five roles: album title, chapter heading, checklist
   heading, box label, footer. Sizes are in **points**, the unit type is set in. The album title also
   has a switch for whether it is printed as a **running head** on every page — your Polska, Bohemia,

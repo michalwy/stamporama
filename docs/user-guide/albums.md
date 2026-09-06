@@ -127,10 +127,11 @@ What you can set:
   and **says so**, on the block and in the sheet's own summary, so you never find out from a card in
   your hand.
 - **A box's width and height.** Type millimetres **on the piece**, not on the box. The width is the
-  cut and moves with what you type. The **height comes out of your drawer** — it is the shortest
-  strip the piece fits into — so it moves in strip steps and may not move at all: two more
-  millimetres might change nothing, or might take a 24 mm box to a 29 mm one. Raise it past your
-  tallest strip and the box becomes a pocket, and the cutting list says so.
+  cut and moves with what you type. The **height comes out of your drawer** — the box is drawn at the
+  whole height of the shortest strip the piece fits into — so it moves in strip steps and may not
+  move at all: two more millimetres might change nothing, or might take a box off the 24 mm packet
+  and onto the 29 mm one. Raise it past your tallest strip and the box becomes a pocket, and the
+  cutting list says so.
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
   order for the whole checklist; *Follow the checklist's order* puts it back.
 - **A note of your own**, set in one of the template's five voices and **filed before or after a

@@ -66,11 +66,29 @@ Note that the defaults in `DEFAULT_ALBUM_PRESET` (#766) and the packing rules in
 (#767) are all measured from these files, and each says which line it came from. Anything added later
 should be able to do the same, or should say plainly that it is an invention.
 
-## Hawid stock and the box rule (#765)
+## Hawid stock and the box rule (#765, corrected by #793)
 
-`HawidStrip` is a collection-level dictionary — height, the stock length a strip is sold at, an
+`HawidStrip` is a collection-level dictionary — two heights, the stock length a strip is sold at, an
 optional label, a drag order — shaped and placed like `StampFormat`, edited in **Settings → Albums**.
 Nothing is seeded and nothing is backfilled.
+
+**A strip is named after the stamp it takes, so it carries two heights, and confusing them is what
+#793 was.** `heightMm` is the number printed on the packet: a `26 mm` packet accepts a 26 mm stamp
+and is itself about 30 mm tall, because the welded border is part of the product. `totalHeightMm` is
+that outer height — what a ruler laid against the strip reads. The field is stored rather than the
+border because the total is the figure a collector can establish without inferring anything; the
+border is derived (`hawidStripBorderMm`) and both are shown on the row.
+
+Reading one number as both got both jobs wrong at once. A 26 mm stamp with 4 mm of clearance demanded
+a *label* of 30 and so skipped the packet it belongs in, and the box was then drawn 4 mm shorter than
+the mount about to be glued down — the page-disagrees-with-the-desk failure this rule exists to
+prevent, arrived at from the inside.
+
+**A total of 0 means "not measured yet",** which is what the migration left every existing row at.
+The border differs by product and cannot be derived, so `hawidStripTotalHeightMm` falls back to the
+packet number: the arithmetic that ran before #793, unchanged, until the collector types a figure.
+Guessing it would invent the one number the module exists to keep honest, so the dictionary says
+`outer height not measured` on the row instead.
 
 `src/lib/hawid.ts` is the rule, and it is **pure**: no Prisma, no rendering. Four surfaces will draw
 from it — the page plan (#767), the PDF (#768), the editor canvas (#769) and the cutting list (#770)
@@ -79,11 +97,18 @@ from it — the page plan (#767), the PDF (#768), the editor canvas (#769) and t
 
 What the rule says, and why each half is the way it is:
 
-- **Height comes out of the drawer.** The box takes the height of the *shortest strip in stock* that
-  the stamp plus the template's vertical clearance fits into. Not the stamp's height plus a margin:
-  hawid is sold as strips of a fixed height that are cut across, so a box drawn at a height no strip
-  has is a page that disagrees with the piece on the desk. Ties go to the earlier strip in the
-  collector's order, so two callers cannot resolve one stamp two ways.
+- **Height comes out of the drawer, and it is the strip's own height.** The stamp plus the
+  template's vertical clearance must fit inside a strip's **total** height; the shortest strip in
+  stock that takes it wins, and the box is drawn **at that total** — that is the piece of hawid that
+  ends up on the card. Not the stamp's height plus a margin, and not the packet number: hawid is sold
+  as strips of a fixed height that are cut across, so a box drawn at a height no strip has is a page
+  that disagrees with the piece on the desk. Short means the outer height too, since that is the
+  material being spent; ties go to the earlier strip in the collector's order, so two callers cannot
+  resolve one stamp two ways.
+- **The template's vertical clearance is not redundant and is not the strip's border.** It is how
+  much room the collector wants around the stamp, and it keeps working the way it reads: raise it to
+  8 mm and a 26 mm stamp moves off the 26 mm packet (30 mm of strip) onto the 30 mm one (34 mm),
+  which is a deliberately roomier mount rather than an accident of arithmetic.
 - **Width is the cut,** and is continuous: the stamp plus the template's horizontal margin.
 - **A strip must also be long enough** for the box's width. A 210 mm strip cannot yield a 240 mm
   piece however tall it is, and a cutting list must not ask for a cut nobody can make.
@@ -101,6 +126,11 @@ artefact.
 The clearances themselves are **not** here — they belong to the album template (#766) and are passed
 in. The rule takes plain numbers on purpose; it is unit-tested on plain numbers in
 `tests/unit/hawid.test.ts`.
+
+**Printed pages laid out before #793 will diverge, and that is correct.** A snapshot (#778) froze the
+heights it was printed with, so a live page now reports `boxes would now be cut to a different size`
+against it. Those pages *were* laid out on the wrong figure; the report's existing wording covers the
+cause without change, and nothing about a printed sheet is rewritten.
 
 ## The album template (#766)
 
