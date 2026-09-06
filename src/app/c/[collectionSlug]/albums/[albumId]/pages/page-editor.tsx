@@ -83,20 +83,28 @@ const MUTED: React.CSSProperties = {
 };
 
 /** The card every area-picking screen in this app is (`ui-patterns.md`): one bordered box with the
- *  rail inside it, not a floating rail beside a separate panel. */
+ *  rail inside it, not a floating rail beside a separate panel — and, this being a workbench rather
+ *  than a document, the card **fills what the screen's heading leaves** (#815). It is the lot
+ *  builder's spelling (`offers/lot-builder/lot-builder-panel.tsx`), the app's other three-region
+ *  screen: `flex: 1` inside a `minHeight: 100vh` column, with a floor so a short window makes the
+ *  page scroll instead of squeezing the card to nothing. The three columns then take their height
+ *  from *this* box rather than from a constant repeated three times, which is what keeps them level. */
 const SCREEN_CARD: React.CSSProperties = {
   display: "flex",
   gap: 0,
   border: "1px solid var(--color-border)",
   borderRadius: "0.75rem",
   overflow: "clip",
+  flex: 1,
+  minHeight: "24rem",
   background: "var(--color-bg-elevated)",
 };
 
+/** The two side columns keep their widths — they are column widths, not a cap on the screen — and
+ *  carry no height of their own: stretched to the card, each scrolls inside itself. */
 const RAIL: React.CSSProperties = {
   width: "13rem",
   flexShrink: 0,
-  maxHeight: "42rem",
   overflowY: "auto",
 };
 
@@ -105,7 +113,6 @@ const PANEL: React.CSSProperties = {
   flexShrink: 0,
   borderLeft: "1px solid var(--color-border)",
   padding: "0.875rem 1.25rem",
-  maxHeight: "42rem",
   overflowY: "auto",
 };
 
@@ -321,10 +328,22 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "84rem" }}>
+    // A workbench, not a document: the screen takes the window (#815). The heading, the zoom and the
+    // paragraph stay put at the top and the card below them takes the rest, so the three columns are
+    // as tall as the window allows and each scrolls its own contents. There was a `maxWidth: 84rem`
+    // here and it was the only one in the application — on the one screen whose whole subject is
+    // looking at a sheet of paper at 1:1.
+    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Link
         href={`/c/${collectionSlug}/albums/${album.id}`}
-        style={{ ...MUTED, textDecoration: "none", display: "inline-block", marginBottom: "0.5rem" }}
+        style={{
+          ...MUTED,
+          textDecoration: "none",
+          display: "inline-block",
+          // The parent is a column now, and a stretched link would be a full-window click target.
+          alignSelf: "flex-start",
+          marginBottom: "0.5rem",
+        }}
       >
         ← {album.name}
       </Link>
@@ -441,8 +460,9 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             borderLeft: "1px solid var(--color-border)",
             padding: "1.25rem",
             background: "var(--color-bg-page)",
+            // The sheet is drawn in real millimetres and an A4 page is 297 mm tall, so this viewport
+            // scrolls whatever height it has. What it must not do is stop short of the window (#815).
             overflow: "auto",
-            maxHeight: "42rem",
             display: "flex",
             justifyContent: "center",
           }}

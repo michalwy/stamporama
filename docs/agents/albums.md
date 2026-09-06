@@ -698,6 +698,21 @@ reason: everything inside the frame has to stay legible over white paper and pri
 theme, and a token that inverts would make dark mode mean a black album page. Everything outside the
 frame is tokens.
 
+**The screen is a workbench and takes the window** (#815). It shipped inside a `maxWidth: 84rem` with
+its three columns each capped at `maxHeight: 42rem` — the only such width cap in the application, on
+the one screen whose whole subject is looking at a sheet of paper at 1:1, and three constants that
+had to be kept in step to stay level. Both are gone. The root is the shape every other screen here
+has (`padding: 2rem`, `minHeight: 100vh`) turned into a **column**, and the card takes what the
+heading leaves — `flex: 1` with a `24rem` floor, which is the lot builder's spelling
+(`offers/lot-builder`), the app's other three-region screen. **The columns then have no height of
+their own**: stretched to one card, they cannot disagree about how tall they are, and each scrolls
+its own contents — the sheet list, the canvas (297 mm of paper never fits a window) and the
+inspector. The floor is what makes a short window scroll the *page* rather than squeeze the card to
+nothing. What is deliberately kept is the `48rem` **measure on the explanatory paragraph**: a line
+length limit on prose is a different job from a cap on a layout, and sweeping it away with the cap
+would be the same mistake in the other direction. The 13rem and 20rem side columns are column
+widths, likewise kept.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`
