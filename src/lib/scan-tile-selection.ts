@@ -29,7 +29,15 @@
  * several settle at once, and five parked pieces that turn out to be the same variant should be one
  * pass and not five. Leaving them out would have made the state a way of *removing* work from the
  * screen instead of deferring it.
+ *
+ * **And the batch box is about the tiles the chip is showing, not the ones the batch holds**
+ * (#863) — which is why the two batch-level functions take the filter rather than a list somebody
+ * narrowed first. `tilesInView` in `scan-tile-filter.ts` states that rule in general; here it is
+ * the difference between a box that says *partial* over a strip whose every square is ticked and
+ * one that can be read.
  */
+
+import { tilesInView, type TileFilter } from "./scan-tile-filter";
 
 /** A tile as the selection sees it: its id, and what state it is in. */
 export interface SelectableTile {
@@ -44,6 +52,19 @@ export function isSelectableTile(tile: SelectableTile): boolean {
   return tile.state === "unidentified" || tile.state === "parked";
 }
 
+/**
+ * The tiles one batch box is about: the ones still to be identified **among those the chip is
+ * showing** (#863).
+ *
+ * The filter is a required argument rather than something the caller applies first, because the
+ * mistake this corrects is exactly a caller handing over the whole batch — the box then reported a
+ * state computed from parked tiles the *waiting* chip was hiding, and one press ticked them.
+ * `all` makes it the whole batch again, so nothing is lost by there being no unfiltered spelling.
+ */
+function boxTiles<T extends SelectableTile>(tiles: readonly T[], filter: TileFilter): T[] {
+  return tilesInView(tiles, filter).filter(isSelectableTile);
+}
+
 export type TileBoxState = "on" | "off" | "partial";
 
 /** Tick or untick one tile. */
@@ -55,29 +76,34 @@ export function toggleTile(selected: ReadonlySet<string>, tileId: string): Set<s
 
 /**
  * The state of the box standing for a batch: **on** when every tile of it that could be identified
- * is ticked, **partial** while only some are, **off** otherwise. A batch with nothing left to identify
- * is `off` and draws no box at all — there is nothing under it to tick.
+ * *and is on screen* is ticked, **partial** while only some are, **off** otherwise. A batch with
+ * nothing left to identify is `off` and draws no box at all — there is nothing under it to tick.
  */
 export function batchBoxState(
   selected: ReadonlySet<string>,
-  tiles: readonly SelectableTile[]
+  tiles: readonly SelectableTile[],
+  filter: TileFilter
 ): TileBoxState {
-  const waiting = tiles.filter(isSelectableTile);
+  const waiting = boxTiles(tiles, filter);
   if (waiting.length === 0) return "off";
   const ticked = waiting.filter((t) => selected.has(t.id)).length;
   if (ticked === 0) return "off";
   return ticked === waiting.length ? "on" : "partial";
 }
 
-/** Tick every tile of a batch that is still waiting, or untick all of them. Partial counts as not
- *  yet on, so one press from a half-ticked batch fills it rather than clearing it. */
+/** Tick every tile of a batch that is still waiting **and on screen**, or untick all of them.
+ *  Partial counts as not yet on, so one press from a half-ticked batch fills it rather than
+ *  clearing it. A tile the chip is hiding is neither ticked nor unticked: the collector cannot see
+ *  it, so the press says nothing about it either way, and the selection it is already part of
+ *  survives the chip (#853). */
 export function toggleBatch(
   selected: ReadonlySet<string>,
-  tiles: readonly SelectableTile[]
+  tiles: readonly SelectableTile[],
+  filter: TileFilter
 ): Set<string> {
-  const waiting = tiles.filter(isSelectableTile);
+  const waiting = boxTiles(tiles, filter);
   const next = new Set(selected);
-  if (batchBoxState(selected, tiles) === "on") {
+  if (batchBoxState(selected, tiles, filter) === "on") {
     for (const t of waiting) next.delete(t.id);
   } else {
     for (const t of waiting) next.add(t.id);

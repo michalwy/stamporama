@@ -36,6 +36,7 @@ import {
   matchesTileFilter,
   parseTileFilter,
   reachesFinishedBatches,
+  tilesInView,
   type TileFilter,
 } from "@/lib/scan-tile-filter";
 import {
@@ -849,7 +850,10 @@ export function ScansCard({
           onOpenTile={setTileId}
           selected={live}
           onToggleTile={(id) => setSelected((s) => toggleTile(s, id))}
-          onToggleBatchSelection={() => setSelected((s) => toggleBatch(s, batch.tiles))}
+          // The whole batch, and the chip that says how much of it is on screen (#863): a box
+          // over "everything here" means everything the filter is showing, so a press under the
+          // *waiting* chip cannot tick — or untick — the parked pieces it is hiding.
+          onToggleBatchSelection={() => setSelected((s) => toggleBatch(s, batch.tiles, filter))}
           busy={uploading || pending || detecting}
           detecting={detecting}
           onReview={(sheet, frontTileCount) => void openProposed(sheet, frontTileCount)}
@@ -1155,13 +1159,17 @@ function BatchSection({
    * that is called something. */
   const [naming, setNaming] = useState(false);
 
-  const shown = batch.tiles.filter((t) => matchesTileFilter(t, filter));
+  const shown = tilesInView(batch.tiles, filter);
   const frontTiles = shown.filter((t) => t.frontBox != null);
   const backOnly = shown.filter((t) => t.frontBox == null);
+  // The pieces the **card** holds, whatever the chip is showing — which is a different question
+  // from `frontTiles` above and is asked wherever the answer shapes a write over the card itself
+  // rather than something drawn on screen (#863).
+  const frontTilesHeld = batch.tiles.filter((t) => t.frontBox != null);
   // Counted off every tile, not the filtered ones: what the batch says about itself must not
   // change because a chip is pressed — and when the batch is collapsed (#583) this line is the
   // whole of it, so it has to say how many tiles the card held and what became of them.
-  const held = batch.tiles.filter((t) => t.frontBox != null).length;
+  const held = frontTilesHeld.length;
   const waiting = batch.tiles.filter((t) => t.state === "unidentified").length;
   // **Counted apart from the waiting ones** (#597) — *12 waiting · 3 to check*. Both are still to
   // be identified, so a batch with either is not finished with; what differs is that only the first
@@ -1170,7 +1178,10 @@ function BatchSection({
   const parked = batch.tiles.filter((t) => t.state === "parked").length;
   const consumed = batch.tiles.filter((t) => t.state === "consumed").length;
   const discarded = batch.tiles.filter((t) => t.state === "discarded").length;
-  const selectableCount = batch.tiles.filter(isSelectableTile).length;
+  // Over the tiles **on screen** (#863), because this is what the box's own label promises to
+  // select — a count taken off the whole batch would name pieces the chip is hiding, and the box
+  // beside it would then act on a different set than the number it is standing next to.
+  const selectableCount = shown.filter(isSelectableTile).length;
   // The retention sweep has taken this batch's scans (#578). The tiles are all still here — what is
   // gone is the ability to draw the cut again, so Re-cut stops being offered rather than being
   // offered and refused. The server refuses it too; this is only the part that keeps a collector
@@ -1229,7 +1240,7 @@ function BatchSection({
             drawn over the pull list (#853): none of the squares there has a box. */}
         {open && selectableCount > 0 && !reachesFinishedBatches(filter) && (
           <TickBox
-            state={batchBoxState(selected, batch.tiles)}
+            state={batchBoxState(selected, batch.tiles, filter)}
             label={`Select the ${selectableCount} tile${selectableCount === 1 ? "" : "s"} still to be identified in batch ${batch.batchNo}`}
             disabled={busy}
             onToggle={onToggleBatchSelection}
@@ -1294,7 +1305,11 @@ function BatchSection({
         )}
         {open && batch.back && !batch.back.cut && (
           <SmallButton
-            onClick={() => onReview(editorSheet(batch.back!), frontTiles.length)}
+            // How many pieces the **front of the card** holds, never how many of them are on
+            // screen (#863): since #647 this count is not a report but the thing that decides
+            // whether the commit pairs by position at all, so a chip narrowing it would hand a
+            // perfectly ordinary card to manual pairing and say *front 3, back 12* about it.
+            onClick={() => onReview(editorSheet(batch.back!), frontTilesHeld.length)}
             disabled={busy}
           >
             {detecting ? "Finding the stamps…" : "Review the back cut"}
@@ -1307,7 +1322,11 @@ function BatchSection({
                 batch.front
                   ? {
                       sheet: editorSheet(batch.front),
-                      initialBoxes: frontTiles
+                      // The **whole** previous cut (#863). A re-cut draws the card again and
+                      // destroys every tile on it, discarded ones included, so reopening on the
+                      // boxes the chip happens to be showing would silently drop the rest and
+                      // leave them to be drawn by hand.
+                      initialBoxes: frontTilesHeld
                         .map((t) => t.frontBox)
                         .filter((b): b is Box => b != null),
                       frontTileCount: null,

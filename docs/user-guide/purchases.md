@@ -578,6 +578,12 @@ condition step is fifteen passes over a decision you took once. Every tile still
 a bar appears above the batches saying how many are selected. The batch header has a box of its own
 that ticks every tile still waiting on that card, showing a dash while only some of them are.
 
+**With a chip pressed, that box is about the tiles you can see.** Under **waiting** it ticks the
+tiles still waiting and leaves the ones parked to be checked exactly as they were; under **to
+check** it is the other way round. It reads as full when every square on the strip beneath it is
+ticked — not when tiles the chip is hiding are ticked too — so what it says and what it does are
+both about the card as it is in front of you.
+
 Ticking changes nothing about clicking: the rest of the square still opens the tile's dialog, and a
 tile you have already dealt with has no box, having reached its end.
 

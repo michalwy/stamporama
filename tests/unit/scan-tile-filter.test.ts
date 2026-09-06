@@ -7,6 +7,7 @@ import {
   matchesTileFilter,
   parseTileFilter,
   reachesFinishedBatches,
+  tilesInView,
   type TileFilter,
   type TileFilterCounts,
 } from "../../src/lib/scan-tile-filter";
@@ -30,6 +31,22 @@ describe("card-scan tile filter (#567, #597, #853)", () => {
     // Exactly one state ends up under the chip, which is what lets it be named after what it shows:
     // a consumed tile became a copy and a parked one is still a question.
     assert.deepEqual(shown("discarded"), ["discarded"]);
+  });
+
+  it("hands back what is on screen, in the order the card is laid out in (#863)", () => {
+    const tiles = [
+      { id: "t1", state: "unidentified" },
+      { id: "t2", state: "parked" },
+      { id: "t3", state: "consumed" },
+      { id: "t4", state: "unidentified" },
+    ];
+    const seen = (filter: TileFilter) => tilesInView(tiles, filter).map((t) => t.id);
+
+    assert.deepEqual(seen("waiting"), ["t1", "t4"]);
+    assert.deepEqual(seen("parked"), ["t2"]);
+    // Sheet order is card order, and a strip that reordered under a chip would stop being a map of
+    // the card — so the answer is the input with things removed and never rearranged.
+    assert.deepEqual(seen("all"), ["t1", "t2", "t3", "t4"]);
   });
 
   it("falls to the unnarrowed strip for anything it does not recognise", () => {
