@@ -2,77 +2,124 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":pinVersions"],
   "minimumReleaseAge": "3 days",
-  "prConcurrentLimit": 5,
+  "prConcurrentLimit": 10,
   "labels": ["dependencies"],
   "commitMessagePrefix": "chore(deps):",
+  "automergeType": "pr",
+  "automergeStrategy": "rebase",
   "packageRules": [
     {
-      "description": "Framework: Next.js, React, React DOM — always bump together",
+      "description": "The weekly automerge batch. Patch and minor for everything OUTSIDE the never-alone list below, in one grouped pull request, merged without a human once the four required checks pass. Two things about this rule are load-bearing. It is FIRST because packageRules are applied in array order and later rules override earlier ones (mergeChildConfig), so every rule below wins over it. And the exclusion is a negated matchDepNames list rather than the removed excludePackageNames: in a list of only negative patterns, a dependency matches when none of them match it. matchDepNames, not matchPackageNames, because they are different matchers over different fields — node in .github/workflows/ci.yml has depName node but packageName actions/node-versions, so matchPackageNames would silently miss it and automerge a Node bump.",
+      "matchUpdateTypes": ["patch", "minor"],
+      "matchDepNames": [
+        "!next",
+        "!react",
+        "!react-dom",
+        "!@types/react",
+        "!@types/react-dom",
+        "!eslint-config-next",
+        "!eslint",
+        "!prisma",
+        "!@prisma/client",
+        "!@prisma/adapter-pg",
+        "!postgres",
+        "!pdf-lib",
+        "!@pdf-lib/fontkit",
+        "!lucide-react",
+        "!marked",
+        "!dompurify",
+        "!sharp",
+        "!better-auth",
+        "!node",
+        "!pnpm",
+        "!@google-cloud/storage"
+      ],
+      "groupName": "weekly dependency batch",
+      "schedule": ["* 0-3 * * 1"],
+      "automerge": true
+    },
+
+    {
+      "description": "NEVER ALONE — framework. AGENTS.md: Turbopack leaks memory, dev is pinned to --webpack, and Turbopack must be re-tested after every Next.js upgrade (#161). eslint belongs here because #47 proved it cannot move without eslint-config-next: split across two groups it sat red for eight weeks with TypeError: Cannot read properties of undefined (reading 'Cjs'). No schedule — these reach the user promptly rather than waiting for the Monday window. The empty schedule is redundant while the exclusion list above is complete, and is here so that 'unscheduled' stays true by construction if the two lists ever drift.",
       "groupName": "Next.js / React framework",
-      "matchPackageNames": [
+      "matchDepNames": [
         "next",
         "react",
         "react-dom",
-        "eslint-config-next",
         "@types/react",
-        "@types/react-dom"
+        "@types/react-dom",
+        "eslint-config-next",
+        "eslint"
       ],
+      "schedule": [],
       "automerge": false
     },
     {
-      "description": "Prisma: client, adapter, and CLI must stay in sync",
+      "description": "NEVER ALONE — Prisma client, adapter and CLI must stay in sync. platform.md: migration checksums live in _prisma_migrations and the migrations are hand-written SQL.",
       "groupName": "Prisma",
-      "matchPackageNames": [
-        "prisma",
-        "@prisma/client",
-        "@prisma/adapter-pg"
-      ],
+      "matchDepNames": ["prisma", "@prisma/client", "@prisma/adapter-pg"],
+      "schedule": [],
       "automerge": false
     },
     {
-      "description": "Auth: better-auth requires manual review",
+      "description": "NEVER ALONE — the bundled Postgres image. platform.md: minimum v15 (NULLS NOT DISTINCT, ADR-0006), and a major needs a dump and restore, never a tag change (docs/development/postgres-upgrade.md).",
+      "groupName": "Postgres image",
+      "matchDepNames": ["postgres"],
+      "schedule": [],
+      "automerge": false
+    },
+    {
+      "description": "NEVER ALONE — PDF generation. ADR-0046 §1 names the exact versions (pdf-lib 1.17.1, @pdf-lib/fontkit 1.1.1); font metrics and millimetres have to survive to paper.",
+      "groupName": "PDF generation",
+      "matchDepNames": ["pdf-lib", "@pdf-lib/fontkit"],
+      "schedule": [],
+      "automerge": false
+    },
+    {
+      "description": "NEVER ALONE — icons. ADR-0030: pinned, one dependency, and src/app/icons.tsx is its only importer.",
+      "groupName": "Icons",
+      "matchDepNames": ["lucide-react"],
+      "schedule": [],
+      "automerge": false
+    },
+    {
+      "description": "NEVER ALONE — Markdown rendering and sanitising. ADR-0019: breaks: true, and a sanitising allowlist limited to the tags a listing may carry.",
+      "groupName": "Markdown rendering",
+      "matchDepNames": ["marked", "dompurify"],
+      "schedule": [],
+      "automerge": false
+    },
+    {
+      "description": "NEVER ALONE — image processing. storage-and-jobs.md: a native module in the scan path, taking a path so that nothing ever holds a card whole in memory.",
+      "groupName": "Image processing",
+      "matchDepNames": ["sharp"],
+      "schedule": [],
+      "automerge": false
+    },
+    {
+      "description": "NEVER ALONE — authentication. No written reason in the tree; on the user's instruction (2026-09-06), because it is the authentication library.",
       "groupName": "Auth",
-      "matchPackageNames": ["better-auth"],
+      "matchDepNames": ["better-auth"],
+      "schedule": [],
       "automerge": false
     },
     {
-      "description": "TanStack: query and table together",
-      "groupName": "TanStack",
-      "matchPackageNames": [
-        "@tanstack/react-query",
-        "@tanstack/react-table"
-      ],
+      "description": "NEVER ALONE — the toolchain the build runs on: node is pinned in Dockerfile and in .github/workflows/ci.yml, pnpm in packageManager and in CI. Grouped so the two CI pins and the Dockerfile pin move in one pull request rather than three.",
+      "groupName": "Node and pnpm toolchain",
+      "matchDepNames": ["node", "pnpm"],
+      "schedule": [],
       "automerge": false
     },
     {
-      "description": "Dev tooling: patch and minor automerge when CI passes",
-      "groupName": "Dev tooling",
-      "matchPackageNames": [
-        "typescript",
-        "eslint",
-        "tailwindcss",
-        "@tailwindcss/postcss",
-        "postcss",
-        "tsx",
-        "@types/node"
-      ],
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true,
-      "automergeType": "pr",
-      "automergeStrategy": "squash"
+      "description": "NEVER ALONE — one of the two storage backends (ADR-0011).",
+      "groupName": "Cloud storage",
+      "matchDepNames": ["@google-cloud/storage"],
+      "schedule": [],
+      "automerge": false
     },
+
     {
-      "description": "Dev tooling: major bumps require manual review",
-      "groupName": "Dev tooling (major)",
-      "matchPackageNames": [
-        "typescript",
-        "eslint",
-        "tailwindcss",
-        "@tailwindcss/postcss",
-        "postcss",
-        "tsx",
-        "@types/node"
-      ],
+      "description": "Every major waits for a person, whatever matched above. LAST on purpose: it is the safety net, so it must override every rule before it, including any future automerge rule someone adds without reading this file.",
       "matchUpdateTypes": ["major"],
       "automerge": false
     }
