@@ -74,6 +74,13 @@ The toolbar **stays pinned to the top of the window** as you scroll a long list,
 sorting and the filter chips are always in reach — on every list that has one: Issues,
 Stamps, Copies, Offers, Sales and Purchases.
 
+The screen's three actions — **Quick offer mode**, **Scan a card** and **Add copy** — sit at the
+**right-hand end of that same toolbar row**, the way the [Offers](offers.md) screen arranges its
+own. They used to stand in the header above it, which made using a filter and then an action a trip
+across the window. Nothing about what they do has changed. On a narrow window the filters wrap onto
+further lines first and the actions stay put on the right; only when even that runs out do the three
+drop to a line of their own, still right-aligned.
+
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, certificate,
 location, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the

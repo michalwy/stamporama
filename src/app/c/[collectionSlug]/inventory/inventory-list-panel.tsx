@@ -952,107 +952,11 @@ export function InventoryListPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
-      {/* Header: holdings total (left) + Add copy (right) */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "1rem",
-        }}
-      >
-        <HoldingsSummaryBar total={holdingsTotal} />
-        {/* The header's actions, as **one** right-aligned group. Two siblings each carrying their
-            own `marginLeft: auto` is not that — auto margins consume the free space *before*
-            `space-between` does and share it equally, which left Quick offer mode adrift in the
-            middle of the header instead of beside Add copy. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "0.5rem",
-            marginLeft: "auto",
-            flexShrink: 0,
-          }}
-        >
-          {/* Quick offer mode (#537). Offered only where there is a platform to list on, and armed
-              from here rather than from the filter toolbar: it is a way of *working through* the
-              list, not a way of narrowing it — so it belongs beside Add copy, with the screen's
-              other actions. Switching it on seeds the platform from the same signal the create
-              dialog uses: the worklist filter, else the last platform listed on. */}
-          {offerPlatforms.length > 0 && (
-            <Tooltip content="Set the platform and status once, then every “Add to new offer” creates the offer on the spot — for listing many copies in one pass.">
-              <button
-                type="button"
-                onClick={() => {
-                  if (quickOffer) {
-                    setQuickOffer(false);
-                    return;
-                  }
-                  setQuickPlatformId(
-                    (prev) => prev || preferredPlatform?.id || offerPlatforms[0]?.id || ""
-                  );
-                  setQuickCreated(0);
-                  setQuickError(undefined);
-                  setQuickOffer(true);
-                }}
-                style={{
-                  ...CONTROL_STYLE,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  // Weight and border width are held constant across the two states: this is a
-                  // button one presses and unpresses, and a label that thickens on click re-lays the
-                  // whole header out under the cursor. Only the colours say which state it is in.
-                  fontWeight: 600,
-                  color: quickOffer ? "var(--color-accent)" : "var(--color-text-secondary)",
-                  borderColor: quickOffer ? "var(--color-accent)" : "var(--color-border-strong)",
-                  background: quickOffer ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                }}
-              >
-                <Icon name="newOffer" size="sm" /> Quick offer mode
-              </button>
-            </Tooltip>
-          )}
-          {/* The other way copies are added (#725): a whole stockbook card scanned, cut and
-              identified piece by piece. A **link** and not a dialog — the pass runs over days, so it
-              has its own screen — and it sits beside *Add copy* because the two answer the same
-              question: one stamp in the tweezers, or forty on a card. */}
-          <Tooltip content="Scan a whole stockbook card and identify its stamps into the collection — for cataloguing what is already owned.">
-            <Link
-              href={`/c/${collectionSlug}/inventory/scans`}
-              style={{
-                ...CONTROL_STYLE,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                textDecoration: "none",
-                cursor: "pointer",
-                fontWeight: 600,
-                color: "var(--color-text-secondary)",
-                flexShrink: 0,
-              }}
-            >
-              <Icon name="scan" size="sm" /> Scan a card
-            </Link>
-          </Tooltip>
-          <button
-            type="button"
-            onClick={() => setDialog({ kind: "add" })}
-            style={{
-              ...CONTROL_STYLE,
-              cursor: "pointer",
-              fontWeight: 600,
-              color: "#fff",
-              background: "var(--color-action-primary)",
-              border: "none",
-              padding: "0.375rem 0.875rem",
-              flexShrink: 0,
-            }}
-          >
-            Add copy
-          </button>
-        </div>
-      </div>
+      {/* Header: the holdings summary, alone. The screen's three actions used to sit beside it and
+          are in the filter bar now (#847), where the Offers screen has kept its own — the controls
+          were spread across the width, and using two of them in a row was a trip across the
+          window. */}
+      <HoldingsSummaryBar total={holdingsTotal} />
 
       {/* Sidebar + list, mirroring the stamps list layout (#106) */}
       <div
@@ -1106,6 +1010,92 @@ export function InventoryListPanel({
                of working — it is the one control here that is never left set — and on a row
                carrying eleven others its width was the cheapest to give back. */
             searchMaxWidth="13rem"
+            /* The screen's three actions, trailing the filters as they do on Offers (#847) — the
+               arrangement is followed rather than re-invented, and the primary one is filled for
+               the same reason it is there. They are what the screen *does*, so they are one group
+               apart from the eleven controls that narrow it, and the row's answer to running out
+               of width is the Offers one too: the filter half shrinks and wraps within itself
+               first, and only once that is exhausted does this group drop to a line of its own,
+               still right-aligned. */
+            actions={
+              <>
+                {/* Quick offer mode (#537). Offered only where there is a platform to list on.
+                    Switching it on seeds the platform from the same signal the create dialog uses:
+                    the worklist filter, else the last platform listed on. */}
+                {offerPlatforms.length > 0 && (
+                  <Tooltip content="Set the platform and status once, then every “Add to new offer” creates the offer on the spot — for listing many copies in one pass.">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (quickOffer) {
+                          setQuickOffer(false);
+                          return;
+                        }
+                        setQuickPlatformId(
+                          (prev) => prev || preferredPlatform?.id || offerPlatforms[0]?.id || ""
+                        );
+                        setQuickCreated(0);
+                        setQuickError(undefined);
+                        setQuickOffer(true);
+                      }}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        // Weight and border width are held constant across the two states: this is
+                        // a button one presses and unpresses, and a label that thickens on click
+                        // re-lays the whole row out under the cursor. Only the colours say which
+                        // state it is in.
+                        fontWeight: 600,
+                        color: quickOffer ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: quickOffer ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: quickOffer ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      <Icon name="newOffer" size="sm" /> Quick offer mode
+                    </button>
+                  </Tooltip>
+                )}
+                {/* The other way copies are added (#725): a whole stockbook card scanned, cut and
+                    identified piece by piece. A **link** and not a dialog — the pass runs over
+                    days, so it has its own screen — and it sits beside *Add copy* because the two
+                    answer the same question: one stamp in the tweezers, or forty on a card. */}
+                <Tooltip content="Scan a whole stockbook card and identify its stamps into the collection — for cataloguing what is already owned.">
+                  <Link
+                    href={`/c/${collectionSlug}/inventory/scans`}
+                    style={{
+                      ...CONTROL_STYLE,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      textDecoration: "none",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      color: "var(--color-text-secondary)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon name="scan" size="sm" /> Scan a card
+                  </Link>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => setDialog({ kind: "add" })}
+                  style={{
+                    ...CONTROL_STYLE,
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    color: "#fff",
+                    background: "var(--color-action-primary)",
+                    border: "none",
+                    padding: "0.375rem 0.875rem",
+                    flexShrink: 0,
+                  }}
+                >
+                  Add copy
+                </button>
+              </>
+            }
             /* The mode's parameters, and the only thing on screen that says a click will now list
                something without asking (#537). It lives inside the pinned block so that it stays
                put while the rows scroll under it, and **above** the selection bar (#848): quick
