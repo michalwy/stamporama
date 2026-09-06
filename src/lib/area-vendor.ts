@@ -200,6 +200,43 @@ export interface AreaTitleEntry {
   sourceAreaId: string;
 }
 
+/** The title name **one area states about itself**, in a language: its translated `titleName`,
+ * else its default-language `titleName`, else the empty string when it states none. Whitespace-only
+ * counts as none.
+ *
+ * The per-node half of the roll-up below, factored out so the two readings of an area's name — the
+ * one that rolls up ({@link buildAreaTitleEntries}) and the one that does not
+ * ({@link areaOwnTitleName}) — cannot drift apart on the language fallback. */
+function statedTitleName(
+  area: CollectionAreaData,
+  language?: string | null
+): { value: string; translated: boolean } {
+  const translated = language ? area.titleNameByLanguage[language]?.trim() : undefined;
+  return { value: translated || area.titleName?.trim() || "", translated: !!translated };
+}
+
+/**
+ * The name **this area itself** carries in a language — its translated `titleName`, else its
+ * default-language `titleName`, else its own `name` — with **no roll-up** to an ancestor. Null when
+ * the id names no area.
+ *
+ * The roll-up in {@link buildAreaTitleEntries} is right for a generated listing title, where a
+ * grouping level is deliberately invisible to a buyer and a public parent should speak for it. It is
+ * wrong wherever the *collector picked this area*: naming their thing after a parent they did not
+ * choose is a substitution, not a fallback. That is why an album's suggested name reads this and not
+ * the map (#797); the `{area}` token in the album's printed texts still rolls up, because that token
+ * is a label about the stamps on the page rather than the name of the thing they picked.
+ */
+export function areaOwnTitleName(
+  areas: CollectionAreaData[],
+  areaId: string,
+  language?: string | null
+): string | null {
+  const area = areas.find((a) => a.id === areaId);
+  if (!area) return null;
+  return statedTitleName(area, language).value || area.name;
+}
+
 /** {@link buildAreaTitleMap}, additionally reporting the per-area fallback (#298) so the title
  * preview can mark an `{area}` that is not really translated. */
 export function buildAreaTitleEntries(
@@ -217,11 +254,10 @@ export function buildAreaTitleEntries(
     // *is* the leaf's own `name`, and a `titleName` translation written on the leaf would win.
     let sourceAreaId = area.id;
     while (current && depth < 50) {
-      const t = language ? current.titleNameByLanguage[language]?.trim() : undefined;
-      const value = t || current.titleName?.trim();
-      if (value) {
-        resolved = value;
-        translated = !!t;
+      const stated = statedTitleName(current, language);
+      if (stated.value) {
+        resolved = stated.value;
+        translated = stated.translated;
         sourceAreaId = current.id;
         break;
       }

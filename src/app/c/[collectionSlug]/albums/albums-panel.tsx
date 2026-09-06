@@ -22,6 +22,7 @@ import type { AlbumTemplateData } from "@/lib/album-templates";
 import type { CollectionAreaData } from "@/lib/areas";
 import { albumTemplateSummary } from "@/lib/album-template-rules";
 import { COMMON_LANGUAGES, languageLabel } from "@/lib/languages";
+import { suggestAlbumName } from "@/lib/album-name";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
@@ -104,9 +105,28 @@ function AlbumForm({
   withArea: boolean;
 }) {
   const areaTree = useMemo(() => (withArea ? buildAreaTree(areas) : []), [withArea, areas]);
-  // The area is a controlled value where every other field on this form is uncontrolled: the shared
-  // tree-select posts it through a hidden `collectionAreaId`, so the action is untouched.
+  // Controlled throughout (#797). The area was the one controlled field since #788, and a suggested
+  // name has to be *set* while the area and language are watched — so the whole form is state now
+  // rather than one more exception. The posted names are untouched (`name`, `collectionAreaId`,
+  // `language`, `templateId`), so the server action never learns any of this happened.
   const [selectedAreaId, setSelectedAreaId] = useState(album?.collectionAreaId ?? "");
+  const [language, setLanguage] = useState(album?.language ?? defaultLanguage);
+  const [templateId, setTemplateId] = useState("");
+  const [typedName, setTypedName] = useState(album?.name ?? "");
+  // Whether the name still follows the area and the language. Create only: an existing album has a
+  // name that is already on paper, and the edit dialog has no area picker to follow anyway.
+  const [suggesting, setSuggesting] = useState(withArea);
+
+  const suggested = useMemo(
+    () => (withArea ? suggestAlbumName(areas, selectedAreaId, language) : ""),
+    [withArea, areas, selectedAreaId, language]
+  );
+  // Derived, not synced: the suggestion is what the field *shows* until the collector types, and
+  // typing flips the source for good. There is no effect writing into the input, so nothing can
+  // overwrite a typed name later — the failure this feature is most able to cause is a name silently
+  // replaced, and this is what makes it unreachable rather than merely unlikely.
+  const nameValue = suggesting ? suggested : typedName;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
@@ -115,12 +135,17 @@ function AlbumForm({
           id="f-album-name"
           name="name"
           type="text"
-          defaultValue={album?.name}
+          value={nameValue}
+          onChange={(e) => {
+            setTypedName(e.target.value);
+            setSuggesting(false);
+          }}
           disabled={isPending}
           style={INPUT_STYLE}
         />
         <span style={HINT_STYLE}>
           Printed at the top of every page, and what a footer can name.
+          {suggesting && " Suggested from the area, in the album's language — type to replace it."}
         </span>
       </div>
 
@@ -149,7 +174,8 @@ function AlbumForm({
         <select
           id="f-album-language"
           name="language"
-          defaultValue={album?.language ?? defaultLanguage}
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
           disabled={isPending}
           style={INPUT_STYLE}
         >
@@ -172,7 +198,8 @@ function AlbumForm({
           <select
             id="f-album-template"
             name="templateId"
-            defaultValue=""
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
             disabled={isPending}
             style={INPUT_STYLE}
           >
