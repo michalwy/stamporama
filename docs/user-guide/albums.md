@@ -16,7 +16,9 @@ texts — are an [album template](collections.md#album-templates) in Settings, a
 **+ New album** asks for four things:
 
 - **Name** — printed at the top of every page, and available to a footer.
-- **Area** — entries are gathered from it and everything under it.
+- **Area** — entries are gathered from it and everything under it. Pick it from the same
+  searchable, collapsible area tree the rest of the app uses; any area will do, including one
+  you only use for grouping, since the album reads the whole branch below it.
 - **Language** — see below; it is more than the words.
 - **Template** — page size, spacing, fonts and the four texts; its values are **copied** onto the album. The album does not point back at it, so
   editing or deleting that template later never changes this album, and can never change a page you

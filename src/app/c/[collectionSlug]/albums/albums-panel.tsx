@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,7 +22,7 @@ import type { AlbumTemplateData } from "@/lib/album-templates";
 import type { CollectionAreaData } from "@/lib/areas";
 import { albumTemplateSummary } from "@/lib/album-template-rules";
 import { COMMON_LANGUAGES, languageLabel } from "@/lib/languages";
-import { flattenAreaTree } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
 
@@ -103,7 +103,10 @@ function AlbumForm({
   isPending: boolean;
   withArea: boolean;
 }) {
-  const tree = flattenAreaTree(areas);
+  const areaTree = useMemo(() => (withArea ? buildAreaTree(areas) : []), [withArea, areas]);
+  // The area is a controlled value where every other field on this form is uncontrolled: the shared
+  // tree-select posts it through a hidden `collectionAreaId`, so the action is untouched.
+  const [selectedAreaId, setSelectedAreaId] = useState(album?.collectionAreaId ?? "");
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
@@ -123,21 +126,18 @@ function AlbumForm({
 
       {withArea && (
         <div>
-          <LabelWithError htmlFor="f-album-area">Area</LabelWithError>
-          <select
-            id="f-album-area"
+          <LabelWithError htmlFor="collectionAreaId-button">Area</LabelWithError>
+          {/* No `onlyAssignableSelectable`: an album gathers from its area and everything under it
+              (#767), so a grouping-only area (#263) is a perfectly good anchor. */}
+          <AreaTreeSelect
+            areas={areas}
+            areaTree={areaTree}
             name="collectionAreaId"
-            defaultValue={album?.collectionAreaId ?? ""}
+            selectedId={selectedAreaId}
+            onSelectedIdChange={setSelectedAreaId}
             disabled={isPending}
-            style={INPUT_STYLE}
-          >
-            <option value="">Choose an area…</option>
-            {tree.map(({ area, depth }) => (
-              <option key={area.id} value={area.id}>
-                {`${"  ".repeat(depth)}${area.name}`}
-              </option>
-            ))}
-          </select>
+            noneOptionLabel={areas.length === 0 ? "— No areas yet —" : "— Choose an area…"}
+          />
           <span style={HINT_STYLE}>
             Entries are gathered from this area and everything under it.
           </span>
