@@ -213,12 +213,21 @@ go-ahead, the moment the four required checks are green. The boundary was decide
 
 - **Every `major`, of every dependency, without exception.** The last rule in `renovate.json` says so
   whatever matched before it, and it is last for exactly that reason.
-- **Anything on the never-alone list**: the Next.js/React framework group (`eslint` included), Prisma,
-  the bundled Postgres image, `pdf-lib`, `lucide-react`, `marked`/`dompurify`, `sharp`, `better-auth`,
-  `node`/`pnpm`, `@google-cloud/storage`. Each is there because something written *in this tree* —
-  AGENTS.md, a topic file, an ADR — states a reason a bump could invalidate; each rule in
-  `renovate.json` names its source. These are grouped and **unscheduled**, so they reach the user
-  promptly instead of waiting for the Monday window, and they wait for a person however small the bump.
+- **Anything on the never-alone list**: the Next.js/React framework group (`eslint` included),
+  TanStack, Prisma, the bundled Postgres image, `pdf-lib`, `lucide-react`, `marked`/`dompurify`,
+  `sharp`, `better-auth`, `node`/`pnpm`, `@google-cloud/storage`. These are grouped and
+  **unscheduled**, so they reach the user promptly instead of waiting for the Monday window, and they
+  wait for a person however small the bump.
+
+  **Two things put a dependency on that list, and the second is the one that gets missed.** The first
+  is a reason written *in this tree* — AGENTS.md, a topic file, an ADR — that a bump could invalidate;
+  every rule in `renovate.json` names its source. The second is that **its failure mode is invisible
+  to all four required checks**, which is a different question and a sharper one, because automerge
+  trusts exactly those four checks and nothing else. TanStack is the example: lint, typecheck and
+  build see types, `test:unit` is pure logic, `test:integration` is server-side, and nothing in the
+  suite exercises a Query cache or a Table interaction — so a minor that changes refetch or
+  invalidation semantics goes green on all four and reaches the browser. Ask both questions before
+  leaving something off.
 - **Anything that is not a dependency update.** No feature, fix or documentation branch automerges,
   and no `task/` branch does. The lead still asks; the user still answers.
 
