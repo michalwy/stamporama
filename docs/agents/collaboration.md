@@ -109,6 +109,12 @@ This is the one rule here the platform works against, so it needs stating rather
 about: every convention outside this repository says to write `Closes`, and there is no repository
 or GitHub setting that turns the keywords off.
 
+**It is not only the reference line.** GitHub matches the keyword wherever it appears, so a sentence
+of ordinary prose that puts the verb in front of the number arms it just as well — the pull request
+adding this rule did exactly that twice in its own body, the second time while quoting the first
+mistake in order to explain it. Read the reference back rather than the text:
+`gh pr view <n> --json closingIssuesReferences` returns `[]` when the body and the commits are clean.
+
 #783's body opened with `Closes #780 (the lead closes it, not this pull request — the reference is
 here for the trail)`. GitHub does not read the parenthetical: merging #783 closed #780 one second
 later, at the merge timestamp, before anything had been verified. #784 carried `Closes #781.` for
