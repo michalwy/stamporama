@@ -807,12 +807,24 @@ describe("identifying scan tiles into copies (#567)", () => {
       1,
       "a discarded tile stops counting as unidentified"
     );
+    // …and starts counting on the header's own third figure (#853), which is the pull list: the
+    // pieces to take back out of the stockbook once the identification is done. It is the one count
+    // here that is not outstanding work, so it is asserted where the discard happens rather than
+    // beside the nagging two.
+    assert.equal(
+      (await getPurchaseDetail(userId, purchaseId))?.discardedTileCount,
+      1,
+      "and the order header can offer the chip that narrows the strip to it"
+    );
 
     // And it can be put back, because a mis-click on a card of forty should not need a re-cut —
     // which is exactly what makes the one-click discard safe.
     await returnTilesToQueue(userId, [tileIds[0]]);
     const back = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(back.state, "unidentified");
+    // The chip retires with what it counts (#853): put the last discard back and the header has no
+    // pull list to offer, which is what keeps the strip from being left narrowed to nothing.
+    assert.equal((await getPurchaseDetail(userId, purchaseId))?.discardedTileCount, 0);
     assert.equal(back.note, null);
 
     // A note belongs to a discard. A tile back in the queue has nothing to carry one about.
