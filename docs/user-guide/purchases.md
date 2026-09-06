@@ -166,6 +166,12 @@ copies (no catalog price for their condition) and *pending* cost (a copy whose l
 open, so its cost-basis is not frozen yet). The order-level bar totals every copy across all
 lots; each lot's bar totals just that lot.
 
+Both bars are **collapsed to their catalog-value line by default**, with a **More** button for the
+rest — the same shape the [Offers](offers.md) summary has. The order's bar and the lot bars
+**remember their own choice separately**: opening the order's detail does not open every lot's, and
+every lot bar on the page shares one setting, because "do I want lot detail today" is the question
+being answered rather than "do I want it for lot 3".
+
 **Spent vs. realized.** Once a copy in view has been **sold** ([Sales](sales.md)), three more rows
 appear on that same bar — under a rule, because the rows above are what these copies are *worth* and
 the rows below what they have *made*. Both levels answer it for their own copies: the order-level

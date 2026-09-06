@@ -217,11 +217,21 @@ list. Totals are summed in the base currency. A price in a currency with no avai
 exchange rate is shown in its own currency only and left out of the total.
 
 Above the list, the holdings summary bar sums three figures over every copy that matches your
-current filters (change the filters and all of them follow):
+current filters (change the filters and all of them follow).
 
-- **Catalog value** — what your holdings are worth, as described above. It also tells you
-  how much of the total is uncertain (unknown-variant estimates) and how many copies are
-  unpriced or could not be converted.
+It is **collapsed to one line by default**, the way the [Offers](offers.md) summary is: the catalog
+value, how many copies the current filter holds, and a **More** button. Press it and the rest of
+the figures appear; the choice is remembered per collection, so a bar you open stays open on your
+next visit. Collapsing is the default because a block of figures between you and the list is
+something to read past on every visit, while most of what it can say is a question you ask
+occasionally.
+
+- **Catalog value** — the headline, on the collapsed line. What your holdings are worth, as
+  described above. It also tells you **how many copies are on the list** — the count of the whole
+  filtered set, not just the rows loaded so far, and not changed by
+  [grouping](#grouping-the-list), which decides what a *row* is rather than which copies are in
+  scope. Beside that it says how much of the total is uncertain (unknown-variant estimates) and how
+  many copies are unpriced or could not be converted.
 - **Market value** — what the same copies have actually fetched, each valued at the median of the
   closed auction lots recorded for its own condition, certificate and format (see
   [Market value](collections.md#market-value)). The line always says **how many copies are behind

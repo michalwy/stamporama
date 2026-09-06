@@ -198,6 +198,24 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   return params;
 }
 
+/** How many copies the current filter holds (#845) — the whole set, which the infinite list itself
+ * never learns. Keyed on the same filter set the list is, through `itemFilterParams`, so the two
+ * cannot drift; a grouped view leaves it alone, grouping deciding what a *row* is and not which
+ * copies are in scope. */
+export function useItemCount(collectionId: string, filters: InventoryItemFilters, enabled = true) {
+  return useQuery<{ count: number }>({
+    queryKey: ["inventory", collectionId, "count", filters] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/count?${itemFilterParams(filters).toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to count copies");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
 export function useInventoryItemsInfinite(
   collectionId: string,
   filters: InventoryItemFilters,
