@@ -358,3 +358,5 @@ Every backlog review asks whether the model above still describes what actually 
 Each of these is one of the rules above failing in a way that looks like nothing at the time. A lead
 answering from its own judgement is indistinguishable from a lead answering from the documentation,
 right up until somebody asks where the answer came from.
+
+<!-- probe: verifying the #798 gate against a protected main; this branch is deleted straight after. -->
