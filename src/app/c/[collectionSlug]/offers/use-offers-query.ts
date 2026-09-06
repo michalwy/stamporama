@@ -401,6 +401,32 @@ export function useComposeTargets(collectionId: string, itemIds: string[], enabl
   });
 }
 
+/**
+ * The enriched copies of one target set, for the picker's expandable *Show contents* (#867).
+ *
+ * Fetched when the collector opens a set rather than shipped with every target offer — the closed
+ * picker needs the copies for nothing, and enriching all of them was 94% of what
+ * `compose-targets` returned. Under the offers key, so composing anything refreshes it, and cached
+ * per set, so re-opening one costs nothing.
+ */
+export function useComposeTargetSetCopies(
+  collectionId: string,
+  offerSetId: string,
+  enabled: boolean
+) {
+  return useQuery<ItemListItem[]>({
+    queryKey: ["offers", collectionId, "compose-target-set-copies", offerSetId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/compose-targets/set-copies?offerSetId=${encodeURIComponent(offerSetId)}`
+      );
+      if (!res.ok) throw new Error("Failed to load the set's copies");
+      return (await res.json()).copies as ItemListItem[];
+    },
+    enabled,
+  });
+}
+
 /** The entity translations missing behind an offer's generated texts, in the platform's listing
  * language (#299) — the offer screen's "fill it here" panel. Read through the server action rather
  * than a route handler: it is a small, screen-specific read, and it lives under the offers key so

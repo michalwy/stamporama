@@ -57,7 +57,7 @@ import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
-import { catalogChipCopyValueFromLabel } from "./catalog-number";
+import { catalogChipCopyValueFromLabel, normalizeCatalogKey } from "./catalog-number";
 import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
   listedVariantKey,
@@ -4238,6 +4238,16 @@ export interface ComposeTargetSet {
    * it holds every one of them (nothing left to add); holding some is a note, and those copies are
    * dropped from the add — a selection is rarely all-or-nothing (#372/#373). */
   containsItemIds: string[];
+  /** What the picker's search matches this set on beyond its own labels (#867): its copies' stamp
+   * names, issue names and location refs (#303), lowercased and run together. One string per set
+   * rather than a field per copy — the client only ever asks *does this set match*, and a set of
+   * forty singles would otherwise send forty objects to answer it. */
+  searchText: string;
+  /** The same set's copies' catalog numbers as **match keys** — vendor + area prefix + number,
+   * normalized (#104) — so `Mi PL 200`, `PL200` and bare `200` all hit. Resolved here rather than
+   * on the client because the prefix depends on the stamp's area and its issue's override (#377),
+   * which is exactly what the labeller already had to work out to name the set. */
+  catalogKeys: string[];
 }
 
 export interface ComposeTargetOffer {
@@ -4262,19 +4272,69 @@ export interface ComposeTargetOffer {
 
 export interface ComposeTargets {
   offers: ComposeTargetOffer[];
-  /** Enriched copies across the target offers' sets, for the picker's expandable set details. */
-  copies: ItemListItem[];
 }
 
 const COMPOSE_TARGET_STATES = ["preparing", "ready", "active", "paused"] as const;
 const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, active: 2, paused: 3 };
+
+/**
+ * What the picker draws of an offer, and nothing else (#867).
+ *
+ * `OFFER_SELECT` served this read until the picker's opening cost was measured: the picker prints a
+ * label, a platform, a price and a state, so the auction pair, the drift and listing dates, the
+ * bidder count and the per-set `saleLines` probe were all read and thrown away. What it adds is the
+ * two fields the set's own search keys need — the copy's location ref and its stamp's issue *name*
+ * — neither of which belongs in the shared select, since no other reader of a set searches it.
+ *
+ * A superset of `STAMP_LABEL_SELECT`, because the labeller names these sets.
+ */
+const COMPOSE_TARGET_SELECT = {
+  id: true,
+  platformId: true,
+  price: true,
+  currency: true,
+  state: true,
+  platform: { select: { name: true } },
+  sets: {
+    select: {
+      id: true,
+      title: true,
+      items: {
+        select: {
+          itemId: true,
+          sortOrder: true,
+          item: {
+            select: {
+              locationRef: true,
+              stamp: {
+                select: {
+                  ...STAMP_LABEL_SELECT.stamp.select,
+                  issueMemberships: { select: { issueId: true, issue: { select: { name: true } } }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: OFFER_SETS_ORDER_BY,
+  },
+} as const;
 
 /** Offers copies can be added to from the inventory list (#188): the collection's non-terminal
  * offers (preparing / ready / active / paused, all platforms), each with its sets, ordered
  * preparing → ready → active → paused then newest first. When `itemIds` is given, the sets and
  * offers already holding any of those copies report which ones, so the picker can disable a
  * destination that has nothing left to gain and note the rest (an offer never lists a copy twice).
- * Enriched copies for every listed set ride along for the picker's expandable set details. */
+ *
+ * **It enriches nothing** (#867). It used to hand back every copy in every set of every one of
+ * those offers, run through `listItemsPaginated`, so that a set's *Show contents* had rows ready —
+ * details that stay collapsed unless the collector opens one. Measured on a seeded collection that
+ * was two thirds of the read's time and **94% of its response**: 4.1 MiB of JSON at 2700 listed
+ * copies, for rows almost none of which are ever looked at. The rows now come from
+ * {@link listComposeTargetSetCopies} when a set is actually expanded, and what stays behind is the
+ * one thing the closed picker genuinely needs them for — the search keys on each set.
+ */
 export async function listComposeTargets(
   ownerId: string,
   collectionId: string,
@@ -4285,7 +4345,7 @@ export async function listComposeTargets(
   const rows = await prisma.offer.findMany({
     where: { collectionId, state: { in: [...COMPOSE_TARGET_STATES] } },
     orderBy: { createdAt: "desc" },
-    select: OFFER_SELECT,
+    select: COMPOSE_TARGET_SELECT,
   });
   const labeller = await makeOfferLabeller(collectionId);
   // Which offers would list a stamp twice in one condition (#513). Read for every listed offer at
@@ -4300,6 +4360,22 @@ export async function listComposeTargets(
         itemIds: s.items.map((li) => li.itemId),
         itemLabels: s.items.map((li) => labeller.copy(li.item.stamp)),
         containsItemIds: s.items.map((li) => li.itemId).filter((id) => adding.has(id)),
+        searchText: s.items
+          .flatMap((li) => [
+            li.item.stamp.name,
+            li.item.stamp.issueMemberships[0]?.issue.name ?? null,
+            li.item.locationRef,
+          ])
+          .filter((v): v is string => !!v)
+          .join(" ")
+          .toLowerCase(),
+        catalogKeys: [
+          ...new Set(
+            s.items.flatMap((li) =>
+              labeller.catalogNumbers(li.item.stamp).map(normalizeCatalogKey)
+            )
+          ),
+        ],
       }));
       return {
         offerId: r.id,
@@ -4318,12 +4394,34 @@ export async function listComposeTargets(
       (a, b) => (COMPOSE_STATE_RANK[a.state] ?? 9) - (COMPOSE_STATE_RANK[b.state] ?? 9)
     );
 
-  const ids = [...new Set(rows.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId))))];
-  const copies = ids.length
-    ? (await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })).items
-    : [];
+  return { offers };
+}
 
-  return { offers, copies };
+/**
+ * The enriched copies of **one** set of the picker's target offers (#867), for the rows behind its
+ * *Show contents* toggle.
+ *
+ * This is what {@link listComposeTargets} used to do for every set of every non-terminal offer in
+ * the collection before the picker had drawn anything. Per set and on demand, the same read costs
+ * what one opened detail is worth, and React Query keeps it for the rest of the dialog's life.
+ *
+ * Scoped through the set's own offer, so a set id from another collection reads as absent rather
+ * than as somebody else's copies; `null` is that answer, and the route turns it into a 404.
+ */
+export async function listComposeTargetSetCopies(
+  ownerId: string,
+  collectionId: string,
+  offerSetId: string
+): Promise<ItemListItem[] | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const set = await prisma.offerSet.findFirst({
+    where: { id: offerSetId, offer: { collectionId } },
+    select: { items: { select: { itemId: true } } },
+  });
+  if (!set) return null;
+  const ids = set.items.map((li) => li.itemId);
+  if (ids.length === 0) return [];
+  return (await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })).items;
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────

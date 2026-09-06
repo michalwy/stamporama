@@ -4,9 +4,12 @@ import { auth } from "@/lib/auth";
 import { listComposeTargets } from "@/lib/offers";
 
 // Offer picker for the inventory "Add to offer" action (#188): the collection's non-terminal
-// offers (preparing / active / paused) with their sets, plus the enriched copies each set holds.
-// Repeated `itemId` params name the copies being added; the sets/offers already holding any of
-// them report which, so the picker can disable a destination with nothing left to gain (#372/#373).
+// offers (preparing / active / paused) with their sets. Repeated `itemId` params name the copies
+// being added; the sets/offers already holding any of them report which, so the picker can disable
+// a destination with nothing left to gain (#372/#373).
+//
+// It carries **no enriched copies** since #867 — those were 94% of this response and are read one
+// set at a time by `set-copies/` beside it, when a set's contents are actually opened.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
