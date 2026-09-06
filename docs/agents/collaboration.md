@@ -191,6 +191,59 @@ Three consequences:
   above it rebases down over the gap, where a merged branch would have to be reverted and leave both
   the change and its undoing in `main` forever.
 
+### Automerge is the one exception, and where its boundary runs
+
+Everything above says a **person** decides and the lead is who asks — step 6 of the loop, and the
+sentence just above that the user's decision still gates the merge. **Renovate is the single
+exception to it.** A dependency pull request inside the boundary below merges itself, with nobody's
+go-ahead, the moment the four required checks are green. The boundary was decided by the user on
+2026-09-06 and is expressed in `renovate.json`; #814 carries the reasoning and the citations.
+
+**What may land without a person:**
+
+- **`patch` and `minor` only**, and only for dependencies **outside the never-alone list** in
+  `renovate.json`;
+- as **one grouped pull request a week** — `weekly dependency batch`, opened early Monday — never as
+  a stream of individual merges;
+- by **rebase**, the only method `main` allows;
+- behind the same four required checks as everything else, and no sooner than
+  `minimumReleaseAge: "3 days"` after the release.
+
+**What may not, ever:**
+
+- **Every `major`, of every dependency, without exception.** The last rule in `renovate.json` says so
+  whatever matched before it, and it is last for exactly that reason.
+- **Anything on the never-alone list**: the Next.js/React framework group (`eslint` included), Prisma,
+  the bundled Postgres image, `pdf-lib`, `lucide-react`, `marked`/`dompurify`, `sharp`, `better-auth`,
+  `node`/`pnpm`, `@google-cloud/storage`. Each is there because something written *in this tree* —
+  AGENTS.md, a topic file, an ADR — states a reason a bump could invalidate; each rule in
+  `renovate.json` names its source. These are grouped and **unscheduled**, so they reach the user
+  promptly instead of waiting for the Monday window, and they wait for a person however small the bump.
+- **Anything that is not a dependency update.** No feature, fix or documentation branch automerges,
+  and no `task/` branch does. The lead still asks; the user still answers.
+
+**How to tell an authorised exception from a broken process**, which is the reason this is written
+down at all: somebody reading `main`'s history later will find merges nobody approved, and needs to
+be able to tell which kind they are looking at. An authorised one is a pull request **opened by
+`app/renovate`**, titled `chore(deps): …`, and merged with no human in the timeline — #561, merged
+by `app/renovate` on 13 August, is what one looks like. **Renovate is the only actor permitted to
+merge without a person.** Anything else that reached `main` without somebody having said yes is the
+process failing, not an exception being exercised — report it as a finding rather than assuming it
+was fine.
+
+The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
+only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
+behind four required checks.
+
+**An arrangement whose whole point is that nobody watches it is one where nobody notices it break.**
+That is not a hypothetical here. Automerge was silently impossible from the moment `main` was
+protected until #814: `renovate.json` asked to merge by squash, which this repository does not allow
+and the ruleset does not permit, and *nothing anywhere said so* — five stale pull requests, one red
+for eight weeks, thirteen further updates rate-limited behind them and visible only on the Dependency
+Dashboard. So **every backlog review sweeps the open Renovate pull requests** and reports the red and
+the stale ones (`backlog-review.md`). That sweep is not decoration on the automerge; it is the half
+that makes the other half safe, and neither half may be enabled without the other.
+
 ### A documentation-only pull request skips all four
 
 Since #798, a `Detect changes` job runs first and the four required jobs are gated on its output, so
@@ -351,7 +404,10 @@ Every backlog review asks whether the model above still describes what actually 
 
 - Did a task session stall waiting on the lead, and for how long?
 - Did the lead answer something that was not written down anywhere?
-- Did anything reach `main` without the user's explicit go-ahead?
+- Did anything reach `main` without the user's explicit go-ahead? A Renovate automerge inside
+  the boundary above is the one authorised answer — check that it really was inside it.
+- Is automerge still working at all? Its whole failure mode is silence, so the answer comes from
+  the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
 - Are there worktrees or `task/` branches left over from work that has already landed?
 
