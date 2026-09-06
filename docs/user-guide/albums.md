@@ -15,7 +15,14 @@ texts — are an [album template](collections.md#album-templates) in Settings, a
 
 **+ New album** asks for four things:
 
-- **Name** — printed at the top of every page, and available to a footer.
+- **Name** — printed at the top of every page, and available to a footer. It is **suggested from
+  the area you pick, spelled in the album's language**, and keeps following both until you type a
+  name of your own; from that moment it is yours and changing the area or the language never touches
+  it again. The suggestion is the area's *own* name — an area you only use for grouping is suggested
+  under its own name, not its parent's, because that is the branch you chose. Where you have written
+  a [title name translation](contacts.md#title-names-per-language) for the album's language, that is
+  the spelling you get; where you have not, the area's plain name. The language is never added to the name — an album
+  printed in Polish is called *Rzesza Niemiecka*, not *Deutsches Reich (polski)*.
 - **Area** — entries are gathered from it and everything under it. Pick it from the same
   searchable, collapsible area tree the rest of the app uses; any area will do, including one
   you only use for grouping, since the album reads the whole branch below it.
