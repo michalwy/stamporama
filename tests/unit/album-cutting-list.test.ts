@@ -124,8 +124,8 @@ describe("albumSheetCuts", () => {
     //
     // Built through `planHawidBox` rather than by hand, so this is the box the app really produces.
     const stock = [
-      { id: "a", heightMm: 21, stockLengthMm: 210, label: null, sortOrder: 0 },
-      { id: "b", heightMm: 29, stockLengthMm: 210, label: null, sortOrder: 1 },
+      { id: "a", heightMm: 21, totalHeightMm: 25, stockLengthMm: 210, label: null, sortOrder: 0 },
+      { id: "b", heightMm: 29, totalHeightMm: 33, stockLengthMm: 210, label: null, sortOrder: 1 },
     ];
     const degenerate = planHawidBox(
       { widthMm: 0, heightMm: 0 },

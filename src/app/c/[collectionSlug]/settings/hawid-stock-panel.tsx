@@ -19,8 +19,11 @@ import {
 import type { HawidStripData } from "@/lib/hawid-stock";
 import {
   DEFAULT_STOCK_LENGTH_MM,
+  hawidStripBorderMm,
   HAWID_MM_STEP,
   hawidStripLabel,
+  hawidStripTotalHeightMm,
+  isHawidStripMeasured,
   MAX_STOCK_LENGTH_MM,
   MAX_STRIP_HEIGHT_MM,
   MIN_STOCK_LENGTH_MM,
@@ -36,6 +39,11 @@ import { Icon } from "@/app/icons";
 // The paragraph at the top is doing real work. A collector who leaves this empty gets pages where
 // every stamp is drawn as a pocket, and that has to read as *you have not described your drawer*
 // rather than as a bug.
+//
+// So is the wording on the two height fields (#793). A bare "Strip height (mm)" is what let a packet
+// number be typed where an outer height was meant and read back the other way round, which sent a
+// 26 mm stamp to the 30 mm packet and then drew its box 4 mm shorter than the mount. Each field now
+// says which of the two figures it wants, and each row prints both back.
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -80,7 +88,7 @@ function StripForm({ strip, isPending }: { strip?: HawidStripData; isPending: bo
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div>
-          <LabelWithError htmlFor="f-hawid-height">Strip height (mm)</LabelWithError>
+          <LabelWithError htmlFor="f-hawid-height">Stamp height (mm)</LabelWithError>
           <input
             id="f-hawid-height"
             name="heightMm"
@@ -93,7 +101,27 @@ function StripForm({ strip, isPending }: { strip?: HawidStripData; isPending: bo
             style={INPUT_STYLE}
           />
           <span style={HINT_STYLE}>
-            The height printed on the packet — the axis you do not cut.
+            The number printed on the packet: the tallest stamp this strip takes. Not the strip&apos;s
+            own height.
+          </span>
+        </div>
+        <div>
+          <LabelWithError htmlFor="f-hawid-total">Outer height (mm)</LabelWithError>
+          <input
+            id="f-hawid-total"
+            name="totalHeightMm"
+            type="number"
+            step={HAWID_MM_STEP}
+            min={MIN_STRIP_HEIGHT_MM}
+            max={MAX_STRIP_HEIGHT_MM}
+            defaultValue={strip && strip.totalHeightMm > 0 ? strip.totalHeightMm : ""}
+            disabled={isPending}
+            style={INPUT_STYLE}
+          />
+          <span style={HINT_STYLE}>
+            The strip itself, welded border included — lay a ruler against it. A 26 mm packet is
+            usually about 30. This is what a box on the page is drawn at. Leave it blank until you
+            have measured: boxes are then drawn at the packet figure, which is a border too short.
           </span>
         </div>
         <div>
@@ -240,9 +268,12 @@ export function HawidStockPanel({ collectionId, initialStrips }: HawidStockPanel
       <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
         The hawid strips you actually own. An album page&apos;s box is a piece cut from one of these,
         not the stamp plus a margin: the height is whichever strip the stamp fits into, and only the
-        width is cut. A stamp taller than every strip here is drawn at its own size with no strip —
-        a block or a cover goes in a pocket, and the cutting list says so. Drag rows to change the
-        order; where two strips are equally short, the one nearer the top is used.
+        width is cut. A packet is named after the stamp it takes, so it is a few millimetres taller
+        than its own number — both figures are asked for, and the box is drawn at the outer one,
+        because that is the piece that ends up on the card. A stamp taller than every strip here is
+        drawn at its own size with no strip — a block or a cover goes in a pocket, and the cutting
+        list says so. Drag rows to change the order; where two strips are equally short, the one
+        nearer the top is used.
       </p>
 
       {listError && (
@@ -300,6 +331,11 @@ export function HawidStockPanel({ collectionId, initialStrips }: HawidStockPanel
               }}
             >
               {hawidStripLabel(strip)}
+            </span>
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              {isHawidStripMeasured(strip)
+                ? `${hawidStripTotalHeightMm(strip)} mm tall · ${hawidStripBorderMm(strip)} mm border`
+                : "outer height not measured"}
             </span>
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               {strip.stockLengthMm} mm long

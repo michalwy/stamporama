@@ -166,9 +166,9 @@ describe("the preset's defaults", () => {
 
   it("hands the box rule its two clearances the right way round", () => {
     // The one place the template and #765 meet. A 20 × 25 mm stamp with 4 mm on both axes needs
-    // 29 mm of strip height and cuts 24 mm wide.
+    // 29 mm of strip, which the 25 mm packet supplies — 29 mm of hawid — and cuts 24 mm wide.
     const box = planHawidBox({ widthMm: 20, heightMm: 25 }, albumHawidMargins(DEFAULT_ALBUM_PRESET), [
-      { heightMm: 29, stockLengthMm: 210 },
+      { heightMm: 25, totalHeightMm: 29, stockLengthMm: 210 },
     ]);
     assert.equal(box.widthMm, 24);
     assert.equal(box.heightMm, 29);

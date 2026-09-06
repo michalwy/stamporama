@@ -729,10 +729,19 @@ model RefCardTemplate {
 model HawidStrip {
   id           String @id @default(cuid())
   collectionId String
-  // The strip's height, the fixed axis — millimetres to a tenth, like every other measurement the
-  // album track works in. Float rather than Decimal for `RefCardTemplate`'s reason: these are print
-  // geometry read into arithmetic, not money.
+  // The height printed on the packet: **the tallest stamp this strip takes**, not the strip's own
+  // height (#793). A packet marked 26 mm accepts a 26 mm stamp and is itself about 30 mm tall,
+  // because the welded border is part of the product. Millimetres to a tenth, like every other
+  // measurement the album track works in; Float rather than Decimal for `RefCardTemplate`'s reason:
+  // these are print geometry read into arithmetic, not money.
   heightMm     Float
+  // The strip's own outer height, border included — what a ruler laid against it reads, and the
+  // figure a page's box is drawn at, because that is the piece that ends up on the card (#793).
+  // **0 means the collector has not measured it yet**, and the rule then reads `heightMm` as the
+  // total — exactly the arithmetic that ran before #793, so no existing page changes size until a
+  // real figure is typed. Never guessed: the border differs by product, and a guessed millimetre is
+  // a hawid cut wrong.
+  totalHeightMm Float @default(0)
   // How long a strip is as sold — 210 mm is the usual. The cutting list (#770) counts pieces
   // against it; the box rule uses it only to rule out a box wider than any strip could be cut from.
   stockLengthMm Float
@@ -743,8 +752,8 @@ model HawidStrip {
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
-  // Two strips of the same height are one strip: the rule picks by height and a duplicate would be
-  // a row that can never be chosen. Reported as its own error rather than as a failed save.
+  // Two packets that take the same stamp height are one strip: a duplicate would be a row the rule
+  // could never reach for. Reported as its own error rather than as a failed save.
   @@unique([collectionId, heightMm])
   @@index([collectionId])
   @@map("hawid_strip")
