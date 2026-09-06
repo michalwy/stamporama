@@ -565,7 +565,6 @@ export function AuctionLotRow({
   baseAmounts = "headline",
 }: AuctionLotRowProps) {
   const router = useRouter();
-  const outcome = useLotOutcomeActions(lot, onOutcomeRecorded);
   const [hovered, setHovered] = useState(false);
   // What an inline edit just committed, shown until the list comes back carrying it. Two things
   // come out of this: the figure appears **as it will be stored** (`40` → `40.00`) rather than as
@@ -578,6 +577,11 @@ export function AuctionLotRow({
   const currentBid = resolvePending(pendingBid, lot.currentBid, setPendingBid);
   const maxBid = resolvePending(pendingMax, lot.maxBid, setPendingMax);
   const myBid = resolvePending(pendingMine, lot.myBid, setPendingMine);
+  // The closing-price field opens at the last bid observed (#851), and an inline refresh made a
+  // second ago is the last observation — so the dialog is given the bid **as displayed**, not the
+  // one the last fetch happened to carry. Refreshing a bid and closing the lot in the same breath is
+  // exactly the sequence the prefill exists for.
+  const outcome = useLotOutcomeActions({ ...lot, currentBid }, onOutcomeRecorded);
   const terminal = isTerminalLotStatus(lot.status);
   const urgency = closingUrgency({ status: lot.status, endsAt: new Date(lot.endsAt) }, now);
   // Past tense whenever the moment has passed — a lot still being watched an hour after its close

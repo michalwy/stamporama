@@ -147,9 +147,34 @@ that is an absent observation, not an error state to be filled in.
 What that optionality **stopped** covering under §4 is "I bid, and never saw how it ended". With the
 outcome derived, a bid and no result cannot be read at all, so closing refuses it. The honest answers
 are to leave the lot `open` until the result is known, or — if the bid was never really placed — to
-clear it, which files the lot as `observed`. Nothing is ever inferred from the last observed bid:
-that figure is a lower bound on the result, and promoting it would poison the very data #24 consumes.
-Rows written before §4 can still hold that shape and read as `lost`, which is what they always meant.
+clear it, which files the lot as `observed`. Nothing is ever *inferred* into `finalPrice` behind the
+collector's back: that figure is a lower bound on the result, and promoting it silently would poison
+the very data #24 consumes. Rows written before §4 can still hold that shape and read as `lost`,
+which is what they always meant.
+
+**Amended by #851: the close form opens at `currentBid`, labelled.** This section and §7 originally
+read that lower bound as a reason to offer the field blank. That went too far. A lower bound the
+collector can see, date and type over is a *default*; only one written into the record unasked is a
+guess, and closing still refuses a blank price on a lot that was bid on, so nothing is ever stored
+without the figure passing under someone's eye. What the blank field bought instead was retyping a
+number already on the row above — the slower path, and the one where a transposed digit becomes a
+real lot's recorded price.
+
+Three rules keep the default from hardening into an answer, and they are what `closingPricePrefill`
+in `src/lib/auction-lot.ts` states:
+
+- **`currentBid`, never the highest figure the lot holds.** It is the only one of the three amounts
+  that is a bid made *on the lot*: `myBid` is a proxy maximum the platform bids up only as far as it
+  must, and `maxBid` is a private ceiling that may never have been placed anywhere. Highest and most
+  recent cannot disagree *within* `currentBid`, because §5 keeps no history — so the question only
+  arises across the three fields, where the highest is routinely a number nobody ever bid.
+- **No bid gives an empty field, never a zero**, a `currentBid` of zero included: nobody bids
+  nothing, and a zero is a recorded price rather than an absent one.
+- **Clearing means clearing.** The field is seeded once, on opening; nothing re-applies it.
+
+The dialog names the figure as the last bid *seen* and dates it from `checkedAt`, so how far to
+trust it is on screen next to it, and the outcome preview below still says what the figures make of
+whatever stands in the field before it is saved.
 
 ### 6. Composition is structured, and reuses the pricing machinery that exists
 
@@ -279,9 +304,9 @@ Three consequences of that, settled with #354 and amended by §4. The rate is st
 there is a price to convert**: null covers "the sale is already in base currency", "no rate could be
 had" and "no result was ever seen", all of which mean the same thing to a reader, and freezing
 today's rate against an absent observation would only look like data. Nothing is ever **inferred**
-into `finalPrice` — the last bid recorded is a lower bound on the result, so the entry form leaves
-the field blank rather than offering a guess, and closing a lot you bid on without a price is refused
-outright. And `cancelled` is a **lifecycle state, not a flavour of lost**: a listing withdrawn or
+into `finalPrice` unseen — the last bid recorded is a lower bound on the result, so closing a lot you
+bid on without a price is refused outright; the entry form originally left the field blank as well,
+and since #851 it opens at that bid, labelled as an observation and dated (see §5). And `cancelled` is a **lifecycle state, not a flavour of lost**: a listing withdrawn or
 ended without a sale produces no datapoint at all, so recording one clears the price, its rate and
 the tie-break together, exactly as putting a lot back to `open` does. Every move is reversible,
 because misfiling a lot is a clerical error and a watchlist that cannot take one back invites leaving
