@@ -116,6 +116,14 @@ export interface ListToolbarProps {
    * groups order by how many copies each holds (#372) — where leaving the control up would offer
    * a choice it cannot honour. */
   hideSort?: boolean;
+  /** Put the sort control **after** `children` instead of straight after the search box. For a bar
+   * whose filters read as an order the collector was given (#846 sets the Copies list's, ending
+   * *grouping, sorting*), where a sort control wedged between the search and the first filter reads
+   * as one of them. */
+  sortLast?: boolean;
+  /** Cap on the search box's width. Shortened where the row is carrying a dozen other controls and
+   * the search is a lookup one finishes rather than a way of working (#846). */
+  searchMaxWidth?: string;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -135,6 +143,8 @@ export function ListToolbar({
   footer,
   overlayFooter,
   hideSort = false,
+  sortLast = false,
+  searchMaxWidth = "20rem",
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
   // and push the settled value up, skipping the initial mount so it doesn't refetch.
@@ -175,6 +185,45 @@ export function ListToolbar({
   const showCatalogSearch =
     catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;
 
+  const sortControl = (
+    <div
+      style={{
+        display: hideSort ? "none" : "flex",
+        gap: "0.375rem",
+        alignItems: "center",
+      }}
+    >
+      <span style={LABEL_STYLE}>Sort</span>
+      <select
+        value={sortBy}
+        onChange={(e) => onSortChange(e.target.value, sortDir)}
+        style={SELECT_STYLE}
+      >
+        {sortOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
+        <button
+          type="button"
+          onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
+          aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+          style={{
+            ...INPUT_STYLE,
+            cursor: "pointer",
+            padding: "0.375rem 0.5rem",
+            fontSize: "0.75rem",
+            lineHeight: 1,
+          }}
+        >
+          {sortDir === "asc" ? "↑" : "↓"}
+        </button>
+      </Tooltip>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -190,9 +239,10 @@ export function ListToolbar({
         background: "var(--color-bg-elevated)",
       }}
     >
-      {/* Row 1: Search + Sort */}
-      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-        <div style={{ position: "relative", flex: 1, maxWidth: "20rem" }}>
+      {/* Row 1: Search + Sort + the screen's filters and actions. Wraps, so a bar carrying a dozen
+          controls breaks where it must instead of overflowing the card. */}
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
           <input
             type="text"
             placeholder="Search..."
@@ -223,44 +273,11 @@ export function ListToolbar({
           )}
         </div>
 
-        <div
-          style={{
-            display: hideSort ? "none" : "flex",
-            gap: "0.375rem",
-            alignItems: "center",
-          }}
-        >
-          <span style={LABEL_STYLE}>Sort</span>
-          <select
-            value={sortBy}
-            onChange={(e) => onSortChange(e.target.value, sortDir)}
-            style={SELECT_STYLE}
-          >
-            {sortOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
-            <button
-              type="button"
-              onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
-              aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-              style={{
-                ...INPUT_STYLE,
-                cursor: "pointer",
-                padding: "0.375rem 0.5rem",
-                fontSize: "0.75rem",
-                lineHeight: 1,
-              }}
-            >
-              {sortDir === "asc" ? "↑" : "↓"}
-            </button>
-          </Tooltip>
-        </div>
+        {!sortLast && sortControl}
 
         {children}
+
+        {sortLast && sortControl}
       </div>
 
       {/* Row 2: Catalog search (optional) */}

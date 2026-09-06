@@ -62,9 +62,9 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 **area panel** plus a toolbar of filters, all kept in the page URL.
 
 Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
-the way you left it — condition, format, certificate, delivery state, location, issue, the
-disposition toggles, *No photos*, *Missing catalog value* and both *Include* toggles, alongside the
-grouping mode and sort that were already remembered. Switching a filter off is remembered too, so
+the way you left it — condition, format, certificate, delivery state, location, the disposition
+filter and all four **More filters** switches, alongside the grouping mode and sort that were
+already remembered. Switching a filter off is remembered too, so
 clearing one clears it for next time. A link that names a filter still wins over what is remembered,
 so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
 is never remembered, so you are never greeted by a list narrowed to a phrase you have forgotten
@@ -75,8 +75,8 @@ sorting and the filter chips are always in reach — on every list that has one:
 Stamps, Copies, Offers, Sales and Purchases.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
-one click: every chip and toggle, condition, delivery state, format, certificate, location, issue,
-the *Not offered on…* worklist, and the search box. It clears what is remembered as well, so the
+one click: every filter on it — condition, delivery state, disposition, format, certificate,
+location, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It appears only while something is actually filtering.
 The **area** and the **year** are deliberately left as they are — those two are shared with the
 Stamps and Wants lists, and a reset here that quietly re-shaped those screens would be doing more
@@ -91,6 +91,10 @@ than it says. Clear them from the area panel (**All areas**) and the year panel.
   find pieces that were never filed into a sub-area. The switch is remembered, and it applies to
   every list with an area panel — Issues, Stamps, Copies and the stamp picker — so they always
   agree about what an area selection means.
+
+The rest sit in the toolbar, and they are listed here in the order they appear on it — left to
+right, from *which copies* to *how they are shown*.
+
 - **Search** — type in the search box to match copies by the linked stamp's **name**, its
   **issue name**, a **catalog number**, or the copy's own **location ref** (case-insensitive).
   A catalog number can be typed bare (`200`) or with its full prefix and any spacing
@@ -99,17 +103,6 @@ than it says. Clear them from the area panel (**All areas**) and the year panel.
   it, so you can go from a piece in hand straight to its record. A plain number also looks up an
   **internal copy number** — `123`, `00123` and `#00123` all find copy `#00123` — alongside the
   text matches, so a number that is also a catalog number still finds both.
-- **Issue** — filter to copies of stamps in a single issue. Start typing to pick one; the
-  suggestions are scoped to the area selected on the left.
-- **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none
-  selected, all copies are shown. Selecting several narrows to copies matching every
-  chosen marker.
-- **No photos** — toggle to show only copies that have no [photo](#photos) attached, so
-  you can quickly find the pieces still waiting to be photographed.
-- **Missing catalog value** — toggle to show only copies with **no catalog value** recorded
-  for their condition (those showing **—**), so you can find and fill pricing gaps in bulk.
-  Pairs with the **+ catalog value** price link below. The holdings totals and year panel
-  follow this filter too.
 - **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
   that have **no offer** on it yet — your worklist of what still needs listing there. A copy
   already listed on a *different* platform still shows up, since the same copy can be offered on
@@ -131,36 +124,51 @@ than it says. Clear them from the area panel (**All areas**) and the year panel.
   above it makes no assumption about disposition: it shows exactly what carries the marking. This
   one is **not** remembered between visits — it is somewhere you go to look, not the list you work
   from.
-- **Include sold & traded** — copies that have [sold](sales.md), and copies you gave to a partner in
-  a closed [trade](trades.md), are **hidden by default**, so the list shows only what you still hold.
-  Toggle this on to bring them back into view (for example to look up what a piece went for); each
-  one then carries a **Sold** or **Traded away · #7** chip, so a copy that has left the collection is
-  never mistaken for one still in it. One toggle covers both, because gone is gone. The holdings
-  totals and year panel follow this filter too.
-- **Include no longer held** — copies you have marked as [no longer held](#copies-you-no-longer-hold)
-  are **hidden by default**, for the same reason sold ones are: the list answers *what do I have*.
-  Toggle this on to bring them back into view. The year panel follows this filter too; the holdings
-  totals always account for them, on their own **Written off** line.
 - **Delivery state** — show only copies in the delivery states you tick. Like the condition filter
   it takes **several at once**, which is how you ask the question that actually comes up: ticking
   *Ordered*, *In transit* and *To sort* together is "everything still on its way to me". Or tick one
   — every copy marked *Damaged*. See [Delivery state](#delivery-state).
-- **Certificate** — show only copies carrying the certificate statuses you tick, **No certificate**
-  among them: a copy having none is an answer, not the absence of the question, so you can ask for
-  the uncertified pieces on their own or for "certified *or* not yet certified" together. Like the
-  format filter it appears only once your collection defines certificate statuses.
+- **Disposition** — tick *In collection*, *For sale*, and *For trade*. With none ticked, all copies
+  are shown. These three are **marks a copy can carry at once**, not three kinds of copy, so ticking
+  two narrows to the copies carrying **both** — the control says so on hover. (It used to be three
+  separate buttons; it is one dropdown now, and it filters exactly as it did.)
 - **Condition** — show only copies in the conditions you tick. It takes **several at once**: click
   it and tick as many grades as you like, and the list shows copies in *any* of them — "the mint
   grades" is as ordinary a question as one grade is. The control reads the grade's name when one is
   ticked and counts them when more are (`3 conditions`); **All conditions** at the top of the list
   clears it. Everything that follows the list follows this filter too — the year panel, the holdings
   totals, and the grouped views.
+- **Certificate** — show only copies carrying the certificate statuses you tick, **No certificate**
+  among them: a copy having none is an answer, not the absence of the question, so you can ask for
+  the uncertified pieces on their own or for "certified *or* not yet certified" together. Like the
+  format filter it appears only once your collection defines certificate statuses.
+- **Format** — see [Filtering the list by format](#filtering-the-list-by-format). It appears only
+  once your collection defines formats.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once. Pick a location that has others nested
-  inside it and the same **+ sub-locations / this location only** switch appears beside the
-  select — *this location only* answers "what is loose in the cabinet itself". Like the area
-  one, it is remembered, and the holdings totals and year panel follow it.
+  inside it and a **+ sub-locations / this location only** switch appears **at the foot of the
+  location dropdown itself** — *this location only* answers "what is loose in the cabinet itself".
+  It lives inside the dropdown because it says nothing on its own: it only qualifies the location
+  you just picked. Like the area one, it is remembered, and the holdings totals and year panel
+  follow it.
+- **More filters** — four switches that used to be four buttons across the toolbar. They are in one
+  dropdown now, under two headings, because **two of them narrow the list and two widen it**:
+  - *Show only* — **No photos** shows only copies with no [photo](#photos) attached, so you can
+    find the pieces still waiting to be photographed; **Missing catalog value** shows only copies
+    with no catalog value recorded for their condition (those showing **—**), so you can fill
+    pricing gaps in bulk — it pairs with the **+ catalog value** price link below. Tick both and a
+    copy must satisfy both.
+  - *Also include* — **Include sold & traded** brings back copies that have [sold](sales.md) and
+    copies you gave to a partner in a closed [trade](trades.md), both hidden by default so the list
+    shows only what you still hold; each then carries a **Sold** or **Traded away · #7** chip, so a
+    copy that has left is never mistaken for one still in it. **Include no longer held** brings back
+    copies marked as [no longer held](#copies-you-no-longer-hold), hidden for the same reason.
+  - So ticking one from each heading reads as one sentence: *No photos* + *Include sold & traded* is
+    "copies with no photo, counting the ones that have sold". The holdings totals and year panel
+    follow all four; the totals always account for no-longer-held copies, on their own **Written
+    off** line.
+- **Grouping** — see [Grouping the list](#grouping-the-list).
 - **Sort** — by date added, ascending or descending.
 
 The holdings summary totals follow whatever the filters are showing, so a filtered view

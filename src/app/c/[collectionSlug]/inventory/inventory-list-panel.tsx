@@ -31,7 +31,6 @@ import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
-import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import {
@@ -154,6 +153,25 @@ const DISPOSITION_FILTERS = [
   { key: "forTrade", label: "For trade" },
 ] as const;
 
+/**
+ * The four switches that share one control (#846). They were four chips and between them the width
+ * of a third of the filter bar, for questions asked once in a while: *has this copy a photo yet*,
+ * *does its condition have a catalog price*, and the two that reach for copies the list hides.
+ *
+ * They are grouped rather than merely gathered, because **two of them pull the other way**. The
+ * `Show only` pair narrows — each ticked one is a further `AND` a copy must satisfy — while the
+ * `Also include` pair widens the set those narrowings are applied to. One list of four labels
+ * would have made that unguessable; the headings are the whole reason the control is legible with
+ * two ticked. The labels keep the word *Include* so a single tick still reads correctly on the
+ * trigger, where the heading is not on screen.
+ */
+const SPARE_FILTERS = [
+  { key: "noPhotos", label: "No photos", group: "Show only" },
+  { key: "missingCatalogValue", label: "Missing catalog value", group: "Show only" },
+  { key: "includeGone", label: "Include sold & traded", group: "Also include" },
+  { key: "includeDisposed", label: "Include no longer held", group: "Also include" },
+] as const;
+
 /** The filters this list remembers per collection (#693) — every one of them except the search box,
  * which is a lookup one finishes rather than a way of working (a list silently narrowed to a phrase
  * typed last week is the failure that rule avoids). The area and the year are absent because
@@ -167,7 +185,6 @@ const REMEMBERED_FILTER_KEYS = [
   "certificateStatusIds",
   "deliveryStates",
   "locationId",
-  "issueId",
   "noPhotos",
   "missingCatalogValue",
   "includeGone",
@@ -310,7 +327,6 @@ export function InventoryListPanel({
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
   const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
-  const issueId = readFilterParam("issueId") ?? "";
   const noPhotos = readFilterParam("noPhotos") === "true";
   const missingCatalogValue = readFilterParam("missingCatalogValue") === "true";
   // "For sale, not yet offered on platform X" (#259), remembered per collection (#275): the URL
@@ -407,6 +423,16 @@ export function InventoryListPanel({
     searchParams.get("sortDir"),
     ["created"]
   );
+  /** Which of the four spare filters (#846) are on — the selection the one control they share
+   * reads from. Their individual booleans stay above, because that is what the query takes. */
+  const spareFilters = useMemo(() => {
+    const set = new Set<string>();
+    for (const { key } of SPARE_FILTERS) {
+      if (readFilterParam(key) === "true") set.add(key);
+    }
+    return set;
+  }, [readFilterParam]);
+
   const activeDispositions = useMemo(() => {
     const set = new Set<string>();
     for (const { key } of DISPOSITION_FILTERS) {
@@ -451,7 +477,6 @@ export function InventoryListPanel({
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
-      issueId: issueId || undefined,
       year: year || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
@@ -466,7 +491,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -481,7 +506,6 @@ export function InventoryListPanel({
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
-      issueId: issueId || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
@@ -493,7 +517,7 @@ export function InventoryListPanel({
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -895,7 +919,6 @@ export function InventoryListPanel({
   // here that silently re-shaped two other screens would be a bigger act than the button says.
   const hasResettableFilters =
     !!search ||
-    !!issueId ||
     conditionIds.length > 0 ||
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
@@ -1075,6 +1098,14 @@ export function InventoryListPanel({
             }}
             sortOptions={SORT_OPTIONS}
             hideSort={!flatList}
+            /* The bar's order is the user's (#846) and it ends *grouping, sorting* — so the sort
+               control follows the filters rather than sitting between the search box and the first
+               of them, where it read as one more way of narrowing the list. */
+            sortLast
+            /* Shorter than the 20rem default (#846). This box is a lookup one finishes, not a way
+               of working — it is the one control here that is never left set — and on a row
+               carrying eleven others its width was the cheapest to give back. */
+            searchMaxWidth="13rem"
             /* The mode's parameters, and the only thing on screen that says a click will now list
                something without asking (#537). It lives inside the pinned block so that it stays
                put while the rows scroll under it, and **above** the selection bar (#848): quick
@@ -1340,247 +1371,15 @@ export function InventoryListPanel({
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: "0.5rem",
-                flex: 1,
+                flex: "1 1 auto",
+                minWidth: 0,
               }}
             >
-              <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-                {DISPOSITION_FILTERS.map(({ key, label }) => {
-                  const active = activeDispositions.has(key);
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => updateParams({ [key]: active ? "" : "true" })}
-                      style={{
-                        ...CONTROL_STYLE,
-                        cursor: "pointer",
-                        fontWeight: active ? 600 : 400,
-                        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                        borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
-                        background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-                <Tooltip content="Show only copies with no attached photos">
-                  <button
-                    type="button"
-                    onClick={() => updateParams({ noPhotos: noPhotos ? "" : "true" })}
-                    style={{
-                      ...CONTROL_STYLE,
-                      cursor: "pointer",
-                      fontWeight: noPhotos ? 600 : 400,
-                      color: noPhotos ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: noPhotos ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: noPhotos ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                    }}
-                  >
-                    No photos
-                  </button>
-                </Tooltip>
-                <Tooltip content="Show only copies with no catalog value recorded for their condition">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateParams({ missingCatalogValue: missingCatalogValue ? "" : "true" })
-                    }
-                    style={{
-                      ...CONTROL_STYLE,
-                      cursor: "pointer",
-                      fontWeight: missingCatalogValue ? 600 : 400,
-                      color: missingCatalogValue ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: missingCatalogValue ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: missingCatalogValue ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                    }}
-                  >
-                    Missing catalog value
-                  </button>
-                </Tooltip>
-                <Tooltip content="Also show copies that have left — sold, or given to a partner in a closed trade (hidden by default)">
-                  <button
-                    type="button"
-                    onClick={() => updateParams({ includeGone: includeGone ? "" : "true" })}
-                    style={{
-                      ...CONTROL_STYLE,
-                      cursor: "pointer",
-                      fontWeight: includeGone ? 600 : 400,
-                      color: includeGone ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: includeGone ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: includeGone ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                    }}
-                  >
-                    Include sold &amp; traded
-                  </button>
-                </Tooltip>
-                {/* Copies no longer held (#394/#395), beside the one above: between them these are
-                    the ways a copy leaves the shelf — sold, given to a partner (#644), or lost.
-                    Hidden by default for the same reason — the list answers "what do I have". */}
-                <Tooltip content="Also show copies you no longer hold — lost, damaged in storage, discarded (hidden by default)">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateParams({ includeDisposed: includeDisposed ? "" : "true" })
-                    }
-                    style={{
-                      ...CONTROL_STYLE,
-                      cursor: "pointer",
-                      fontWeight: includeDisposed ? 600 : 400,
-                      color: includeDisposed ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: includeDisposed ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: includeDisposed ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                    }}
-                  >
-                    Include no longer held
-                  </button>
-                </Tooltip>
-              </div>
-
-              {/* Grouping (#372, #421, #424). *Duplicates* collapses the list to one row per
-                  `stamp × condition` — Colnect's own rule, since it refuses a second offer for the
-                  same stamp in the same condition — *Location* and *Ref* collapse it by where the
-                  copies are filed, and *Issue* by the series they belong to. One select rather than
-                  a chip each: they are readings of the same list and exactly one can be in effect.
-                  The two splits join a further axis to the duplicate key; with both on, every group
-                  has one unambiguous per-copy catalog value. They only appear under Duplicates,
-                  because elsewhere they name nothing. */}
-              <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-                {/* The icon sits *beside* the select, not inside its options: a native `<option>`
-                    renders text only, which is what the ▦ in each label used to work around. */}
-                <Icon
-                  name="group"
-                  size="sm"
-                  style={{
-                    color: groupMode === "none" ? "var(--color-text-muted)" : "var(--color-accent)",
-                  }}
-                />
-                <Tooltip content="Collapse the list into groups: interchangeable duplicates, the copies filed in one place, or what you hold of one issue. Grouping never changes which copies are shown — the filters decide that.">
-                  <select
-                    value={groupMode}
-                    onChange={(e) => setGroupMode(e.target.value)}
-                    aria-label="Group rows"
-                    style={{
-                      ...CONTROL_STYLE,
-                      cursor: "pointer",
-                      ...(groupMode !== "none"
-                        ? {
-                            fontWeight: 600,
-                            color: "var(--color-accent)",
-                            border: "1px solid var(--color-accent)",
-                            background: "var(--color-accent-soft)",
-                          }
-                        : null),
-                    }}
-                  >
-                    <option value="none">No grouping</option>
-                    <option value="duplicates">Group duplicates</option>
-                    {locations.length > 0 && <option value="location">Group by location</option>}
-                    {locations.length > 0 && <option value="ref">Group by location ref</option>}
-                    <option value="issue">Group by issue</option>
-                  </select>
-                </Tooltip>
-                {groupDuplicates && formats.length > 0 && (
-                  <Tooltip content="Treat a pair, block or strip as a different item from a single, instead of grouping them together.">
-                    <button
-                      type="button"
-                      onClick={() => setGroupByFormat(!groupByFormat)}
-                      style={{
-                        ...CONTROL_STYLE,
-                        cursor: "pointer",
-                        fontWeight: groupByFormat ? 600 : 400,
-                        color: groupByFormat ? "var(--color-accent)" : "var(--color-text-secondary)",
-                        borderColor: groupByFormat ? "var(--color-accent)" : "var(--color-border-strong)",
-                        background: groupByFormat ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                      }}
-                    >
-                      Split by format
-                    </button>
-                  </Tooltip>
-                )}
-                {groupDuplicates && certificateStatuses.length > 0 && (
-                  <Tooltip content="Treat a certified copy as a different item from an uncertified one, instead of grouping them together.">
-                    <button
-                      type="button"
-                      onClick={() => setGroupByCertificate(!groupByCertificate)}
-                      style={{
-                        ...CONTROL_STYLE,
-                        cursor: "pointer",
-                        fontWeight: groupByCertificate ? 600 : 400,
-                        color: groupByCertificate ? "var(--color-accent)" : "var(--color-text-secondary)",
-                        borderColor: groupByCertificate ? "var(--color-accent)" : "var(--color-border-strong)",
-                        background: groupByCertificate ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                      }}
-                    >
-                      Split by certificate
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-
-              {/* Several conditions at once (#425): a copy is in exactly one condition, but the
-                  question asked of the list is routinely a group of them ("the mint grades"). */}
-              <MultiSelectFilter
-                options={conditions.map((c) => ({ id: c.id, label: c.name }))}
-                selected={conditionIds}
-                onChange={(ids) => updateParams({ conditionIds: ids.join(",") })}
-                allLabel="All conditions"
-                itemNoun="conditions"
-                ariaLabel="Filter by condition"
-              />
-
-              {/* Delivery state filter (#272), beside the condition one: the axis the row chip
-                  shows, so "what is still in transit?" is one click from seeing it flagged. A
-                  multi-select (#427) because the states worth asking about come in groups —
-                  *Ordered*, *In transit* and *To sort* together are "what is still on its way". */}
-              <MultiSelectFilter
-                options={DELIVERY_STATES.map((state) => ({
-                  id: state,
-                  label: DELIVERY_STATE_META[state].label,
-                }))}
-                selected={deliveryStates}
-                onChange={(ids) => updateParams({ deliveryStates: ids.join(",") })}
-                allLabel="All delivery states"
-                itemNoun="delivery states"
-                ariaLabel="Filter by delivery state"
-              />
-
-              {/* Format filter (#343), beside the condition one, and a multi-select like it (#427).
-                  Absent entirely when the collection defines no formats — most never do. "Single" is
-                  a tickable choice because it is a real answer (no format set), not the absence of a
-                  filter, and it can be ticked *alongside* a format: null is never a member of an
-                  `in`, so the server ORs the two branches. */}
-              {formats.length > 0 && (
-                <MultiSelectFilter
-                  options={[
-                    { id: "single", label: "Single" },
-                    ...formats.map((f) => ({ id: f.id, label: f.name })),
-                  ]}
-                  selected={formatIds}
-                  onChange={(ids) => updateParams({ formatIds: ids.join(",") })}
-                  allLabel="All formats"
-                  itemNoun="formats"
-                  ariaLabel="Filter by format"
-                />
-              )}
-
-              {/* Certificate filter (#428), beside the format one and built the same way: absent
-                  when the collection defines no statuses, and "No certificate" is a tickable value
-                  rather than the absence of the filter — null *is* a value on this axis
-                  (ADR-0006 §2), so the server ORs the two branches exactly as it does for Single. */}
-              {certificateStatuses.length > 0 && (
-                <MultiSelectFilter
-                  options={[
-                    { id: "none", label: "No certificate" },
-                    ...certificateStatuses.map((c) => ({ id: c.id, label: c.name })),
-                  ]}
-                  selected={certificateStatusIds}
-                  onChange={(ids) => updateParams({ certificateStatusIds: ids.join(",") })}
-                  allLabel="All certificates"
-                  itemNoun="certificates"
-                  ariaLabel="Filter by certificate status"
-                />
-              )}
+              {/* The order of this bar is the user's, set in #846: search, the platform worklist,
+                  delivery, disposition, condition, certificate, format, location, the spare
+                  filters, grouping, sorting. It reads outward from *which copies* to *how they are
+                  shown*, and the two controls that are not filters at all — the spare-filter
+                  bundle and grouping — sit at the end where they cannot be mistaken for one. */}
 
               {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface
                   for-sale copies still needing a listing there. Lists every platform contact
@@ -1649,6 +1448,94 @@ export function InventoryListPanel({
                 </Tooltip>
               )}
 
+              {/* Delivery state filter (#272): the axis the row chip shows, so "what is still in
+                  transit?" is one click from seeing it flagged. A multi-select (#427) because the
+                  states worth asking about come in groups — *Ordered*, *In transit* and *To sort*
+                  together are "what is still on its way". */}
+              <MultiSelectFilter
+                options={DELIVERY_STATES.map((state) => ({
+                  id: state,
+                  label: DELIVERY_STATE_META[state].label,
+                }))}
+                selected={deliveryStates}
+                onChange={(ids) => updateParams({ deliveryStates: ids.join(",") })}
+                allLabel="All delivery states"
+                itemNoun="delivery states"
+                ariaLabel="Filter by delivery state"
+              />
+
+              {/* Disposition (#846), one control where there were three chips. The three flags are
+                  **independent booleans on a copy**, not values of one axis, so ticking two asks for
+                  copies carrying **both** — the same predicate the three chips had, since each was
+                  its own `AND`ed term (`buildItemWhere`). That is the one place this control could
+                  mislead, a multi-select usually reading as *any of these*, so the hint says it. */}
+              <Tooltip content="For sale, For trade and In collection are three marks a copy can carry at once, not three kinds of copy. Tick two and you get the copies carrying both.">
+                <MultiSelectFilter
+                  options={DISPOSITION_FILTERS.map((f) => ({ id: f.key, label: f.label }))}
+                  selected={DISPOSITION_FILTERS.map((f) => f.key).filter((key) =>
+                    activeDispositions.has(key)
+                  )}
+                  onChange={(ids) =>
+                    updateParams(
+                      Object.fromEntries(
+                        DISPOSITION_FILTERS.map((f) => [f.key, ids.includes(f.key) ? "true" : ""])
+                      )
+                    )
+                  }
+                  allLabel="Any disposition"
+                  itemNoun="dispositions"
+                  ariaLabel="Filter by disposition"
+                />
+              </Tooltip>
+
+              {/* Several conditions at once (#425): a copy is in exactly one condition, but the
+                  question asked of the list is routinely a group of them ("the mint grades"). */}
+              <MultiSelectFilter
+                options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+                selected={conditionIds}
+                onChange={(ids) => updateParams({ conditionIds: ids.join(",") })}
+                allLabel="All conditions"
+                itemNoun="conditions"
+                ariaLabel="Filter by condition"
+              />
+
+              {/* Certificate filter (#428), built like the format one: absent when the collection
+                  defines no statuses, and "No certificate" is a tickable value rather than the
+                  absence of the filter — null *is* a value on this axis (ADR-0006 §2), so the
+                  server ORs the two branches exactly as it does for Single. */}
+              {certificateStatuses.length > 0 && (
+                <MultiSelectFilter
+                  options={[
+                    { id: "none", label: "No certificate" },
+                    ...certificateStatuses.map((c) => ({ id: c.id, label: c.name })),
+                  ]}
+                  selected={certificateStatusIds}
+                  onChange={(ids) => updateParams({ certificateStatusIds: ids.join(",") })}
+                  allLabel="All certificates"
+                  itemNoun="certificates"
+                  ariaLabel="Filter by certificate status"
+                />
+              )}
+
+              {/* Format filter (#343), a multi-select like the condition one (#427). Absent
+                  entirely when the collection defines no formats — most never do. "Single" is a
+                  tickable choice because it is a real answer (no format set), not the absence of a
+                  filter, and it can be ticked *alongside* a format: null is never a member of an
+                  `in`, so the server ORs the two branches. */}
+              {formats.length > 0 && (
+                <MultiSelectFilter
+                  options={[
+                    { id: "single", label: "Single" },
+                    ...formats.map((f) => ({ id: f.id, label: f.name })),
+                  ]}
+                  selected={formatIds}
+                  onChange={(ids) => updateParams({ formatIds: ids.join(",") })}
+                  allLabel="All formats"
+                  itemNoun="formats"
+                  ariaLabel="Filter by format"
+                />
+              )}
+
               {locations.length > 0 && (
                 <div style={{ width: "12rem" }}>
                   <LocationTreeSelect
@@ -1658,32 +1545,134 @@ export function InventoryListPanel({
                     selectedId={locationId}
                     onSelectedIdChange={(id) => updateParams({ locationId: id })}
                     noneOptionLabel="All locations"
+                    /* Scope of the location filter (#385), inside the dropdown rather than beside
+                       it (#846): it says nothing on its own and only ever qualifies the node just
+                       picked, so as a sibling control it was a second thing to find and a second
+                       thing to read past on every visit. Still drawn only once a location with
+                       boxes under it is picked — on a leaf both readings select the same copies. */
+                    panelFooter={
+                      hasChildLocations ? (
+                        <SubtreeScopeToggle
+                          axis="location"
+                          includeDescendants={includeSubLocations}
+                          onChange={setIncludeSubLocations}
+                        />
+                      ) : undefined
+                    }
                   />
                 </div>
               )}
 
-              {/* Scope of the location filter (#385), shown only once a location with boxes
-                  under it is picked — on a leaf both readings select the same copies. */}
-              {hasChildLocations && (
-                <SubtreeScopeToggle
-                  axis="location"
-                  includeDescendants={includeSubLocations}
-                  onChange={setIncludeSubLocations}
+              {/* The four switches that were four chips (#846) — between them the width of a third
+                  of this bar, for questions asked occasionally. They are **not one axis**, and the
+                  menu says so with two headings rather than by stacking four labels: the *Show
+                  only* pair narrows the list and every one ticked must hold, the *Also include*
+                  pair widens the pool those narrowings are applied to. The option labels keep
+                  saying "Include", so the trigger still reads unambiguously with one ticked, where
+                  the heading is not on screen. */}
+              <Tooltip content="Two kinds of switch in one control. Show only narrows the list — tick both and a copy must satisfy both. Also include widens what is being narrowed, adding copies the list hides by default.">
+                <MultiSelectFilter
+                  options={SPARE_FILTERS.map((f) => ({
+                    id: f.key,
+                    label: f.label,
+                    group: f.group,
+                  }))}
+                  selected={SPARE_FILTERS.map((f) => f.key).filter((key) => spareFilters.has(key))}
+                  onChange={(ids) =>
+                    updateParams(
+                      Object.fromEntries(
+                        SPARE_FILTERS.map((f) => [f.key, ids.includes(f.key) ? "true" : ""])
+                      )
+                    )
+                  }
+                  allLabel="More filters"
+                  clearLabel="No extra filters"
+                  itemNoun="extra filters"
+                  ariaLabel="Photo, catalog-value and departed-copy filters"
                 />
-              )}
+              </Tooltip>
 
-              <IssueFilterAutocomplete
-                collectionId={collectionId}
-                areaIds={filterAreaIds}
-                selectedIssueId={issueId}
-                onSelect={(id) => updateParams({ issueId: id })}
-              />
+              {/* Grouping (#372, #421, #424). *Duplicates* collapses the list to one row per
+                  `stamp × condition` — Colnect's own rule, since it refuses a second offer for the
+                  same stamp in the same condition — *Location* and *Ref* collapse it by where the
+                  copies are filed, and *Issue* by the series they belong to. One select rather than
+                  a chip each: they are readings of the same list and exactly one can be in effect.
+                  The two splits join a further axis to the duplicate key; with both on, every group
+                  has one unambiguous per-copy catalog value. They only appear under Duplicates,
+                  because elsewhere they name nothing.
+
+                  The ▦ that stood beside the select is gone (#846): the select's own label says
+                  *Group …* in every state it can be in, so the icon was a second word for the one
+                  already there, on the row the user asked to give width back. */}
+              <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                <Tooltip content="Collapse the list into groups: interchangeable duplicates, the copies filed in one place, or what you hold of one issue. Grouping never changes which copies are shown — the filters decide that.">
+                  <select
+                    value={groupMode}
+                    onChange={(e) => setGroupMode(e.target.value)}
+                    aria-label="Group rows"
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: "pointer",
+                      ...(groupMode !== "none"
+                        ? {
+                            fontWeight: 600,
+                            color: "var(--color-accent)",
+                            border: "1px solid var(--color-accent)",
+                            background: "var(--color-accent-soft)",
+                          }
+                        : null),
+                    }}
+                  >
+                    <option value="none">No grouping</option>
+                    <option value="duplicates">Group duplicates</option>
+                    {locations.length > 0 && <option value="location">Group by location</option>}
+                    {locations.length > 0 && <option value="ref">Group by location ref</option>}
+                    <option value="issue">Group by issue</option>
+                  </select>
+                </Tooltip>
+                {groupDuplicates && formats.length > 0 && (
+                  <Tooltip content="Treat a pair, block or strip as a different item from a single, instead of grouping them together.">
+                    <button
+                      type="button"
+                      onClick={() => setGroupByFormat(!groupByFormat)}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: groupByFormat ? 600 : 400,
+                        color: groupByFormat ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: groupByFormat ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: groupByFormat ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      Split by format
+                    </button>
+                  </Tooltip>
+                )}
+                {groupDuplicates && certificateStatuses.length > 0 && (
+                  <Tooltip content="Treat a certified copy as a different item from an uncertified one, instead of grouping them together.">
+                    <button
+                      type="button"
+                      onClick={() => setGroupByCertificate(!groupByCertificate)}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: groupByCertificate ? 600 : 400,
+                        color: groupByCertificate ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: groupByCertificate ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: groupByCertificate ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      Split by certificate
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
 
               {/* Back to an unfiltered list in one click (#733). Rendered only while something is
                   on — a reset with nothing to reset is noise on a row already this dense — and
                   drawn as bare accent text rather than one more chip, for the same reason: it is
-                  not a filter, and a control that looks like its neighbours reads as a fourteenth
-                  way of narrowing the list. Same shape as the Allegro worklist's *Clear filters*. */}
+                  not a filter, and a control that looks like its neighbours reads as one more way
+                  of narrowing the list. Same shape as the Allegro worklist's *Clear filters*. */}
               {hasResettableFilters && (
                 <Tooltip content="Clear every filter on this screen, the search box included. The area and the year are shared with the other lists and are left as they are.">
                   <button

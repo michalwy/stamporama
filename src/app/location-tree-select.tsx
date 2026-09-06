@@ -68,6 +68,7 @@ export function LocationTreeSelect({
   onlyAssignableSelectable = false,
   noneOptionLabel = "— None",
   buttonClassName = defaultTreeSelectButtonClassName,
+  panelFooter,
 }: {
   locations: LocationData[];
   locationTree: LocationTreeItem[];
@@ -79,6 +80,9 @@ export function LocationTreeSelect({
   noneOptionLabel?: string;
   /** Override the trigger button class, e.g. to match a taller input row. */
   buttonClassName?: string;
+  /** Drawn at the foot of the open panel — for a control that qualifies the location just picked
+   * rather than picking one. The Copies filter puts the subtree switch (#385) there (#846). */
+  panelFooter?: React.ReactNode;
 }) {
   const buttonId = `${name}-button`;
   const searchId = `${name}-search`;
@@ -146,6 +150,7 @@ export function LocationTreeSelect({
       {isOpen ? (
         <TreeSelectPanel
           activeId={activeId}
+          footer={panelFooter}
           listboxAriaLabelledby={buttonId}
           noneOptionLabel={noneOptionLabel}
           panelMinWidth={280}
