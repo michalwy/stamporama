@@ -9,7 +9,8 @@ import { useMemo, useState } from "react";
  *
  *  - `initiallyExpandedId` — the card the collector navigated *to* (#374's `?lot=` deep link).
  *    It is seeded into the state rather than forced on every render, so the card can still be
- *    collapsed by hand once it has been read, and clearing the highlight does not shut it.
+ *    collapsed by hand once it has been read, and the arrival flash ending does not shut it
+ *    (#850 — on the auction sale that id goes null a couple of seconds after the screen opens).
  *  - a card that **appears while the screen is open** — it was created here, so it is what the
  *    collector is looking at. The first render is the baseline (these views all mount after
  *    their data has loaded), so an ordinary page load opens nothing.

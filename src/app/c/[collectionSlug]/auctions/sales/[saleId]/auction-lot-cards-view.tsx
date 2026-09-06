@@ -321,13 +321,10 @@ function LotCompositionFooter({ lot }: { lot: AuctionLotDetailView }) {
 interface LotCardProps {
   lot: AuctionLotDetailView;
   lines: AuctionLotLineItem[];
-  /** This is the lot the collector arrived here to see (#374) — scrolled into view, flashed once on
-   * arrival, and then **kept marked** until they say otherwise, so a parcel of thirty lots does not
-   * have to be scanned again for the row that was clicked. */
-  highlighted: boolean;
-  /** Drop the mark. It is the URL that carries it, so this is how the collector puts the screen
-   * back to an ordinary sale rather than a sale with one lot singled out. */
-  onClearHighlight: () => void;
+  /** This is the lot the collector arrived here to see (#374) — scrolled into view and flashed
+   * **once** (#850). It is provenance, not state: how you got here is true for a second and
+   * irrelevant afterwards, so nothing is kept and there is nothing to dismiss. */
+  arrived: boolean;
   expanded: boolean;
   byIssue: boolean;
   collectionSlug: string;
@@ -350,8 +347,7 @@ interface LotCardProps {
 function LotCard({
   lot,
   lines,
-  highlighted,
-  onClearHighlight,
+  arrived,
   expanded,
   byIssue,
   collectionSlug,
@@ -377,64 +373,28 @@ function LotCard({
   // the toolbar it just scrolled past.
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [highlighted]);
+    if (arrived) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [arrived]);
 
   return (
     <div
       ref={cardRef}
-      // The one-shot tint every other "here it is" moment in the app uses (#158) — it ends on the
-      // card's own surface colour, so the fade finishes seamlessly. It is the *arrival*, not the
-      // mark: the ring and the strip below outlive it.
-      className={highlighted ? "just-added-flash" : undefined}
+      // The arrival, said once and then gone (#850): #158's tint plus a ring that fades out with
+      // it. Both are painted outside the box model or onto the card's own surface, so nothing
+      // below this card moves either as the flash appears or as it passes — which is the whole
+      // point. What replaced a persistent ring and a labelled strip with a ✕: the strip asked the
+      // collector to acknowledge how they had got here, which is the interaction budget of
+      // something that needs a decision, and the ring implied the state was worth dismissing
+      // permanently. It is not state, it is provenance.
+      className={arrived ? "arrival-flash" : undefined}
       style={{
         border: "1px solid var(--color-border)",
         borderRadius: "0.75rem",
         overflow: "clip",
         background: "var(--color-bg-elevated)",
-        // The mark itself, and it **stays** — a flash is gone by the time the eye has finished
-        // reading the parcel's other lots, and the collector then has to find the row again. Drawn
-        // as a ring rather than a border so the card does not change size when it appears.
-        boxShadow: highlighted ? "0 0 0 2px var(--color-accent)" : undefined,
       }}
     >
       <div ref={sentinelRef} style={{ height: 0 }} />
-      {/* Why this one card is ringed, and the way to stop it being. Deliberately not sticky: the
-          ring is what carries the mark once the strip has scrolled off, and a second sticky band
-          above the row would push the figures down the screen on the one card being read. */}
-      {highlighted && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            padding: "0.375rem 1.25rem",
-            borderBottom: "1px solid var(--color-border)",
-            background: "var(--color-accent-soft)",
-            fontSize: "0.75rem",
-            color: "var(--color-accent)",
-          }}
-        >
-          <span>Opened from the watchlist</span>
-          <button
-            type="button"
-            onClick={onClearHighlight}
-            aria-label="Clear the highlight"
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "inherit",
-              fontSize: "0.75rem",
-              lineHeight: 1,
-            }}
-          >
-            <Icon name="close" size="sm" />
-          </button>
-        </div>
-      )}
       {/* The header **is** the watchlist row — the same figures, the same inline bid editing, the
           same ⋮ — so a bid is refreshed from the parcel screen exactly as it is from the list. */}
       <div
@@ -531,11 +491,10 @@ interface AuctionLotCardsViewProps {
   issueHeaderById: Record<string, IssueHeader>;
   now: Date;
   isPending: boolean;
-  /** The lot named by `?lot=` in the URL — what a click on the flat watchlist arrived to see
-   * (#374). Null when the sale was opened on its own. */
-  highlightLotId: string | null;
-  /** Drop that mark — the panel owns the URL it lives in. */
-  onClearHighlight: () => void;
+  /** The lot the collector arrived to see — `?lot=` in the URL when the screen opened (#374),
+   * latched by the panel and released once the flash has run (#850). Null when the sale was
+   * opened on its own, and null again a couple of seconds after an arrival. */
+  arrivedLotId: string | null;
   /** Refresh the sale after a composition change. */
   onChanged: () => void;
   onEditLot: (lot: AuctionLotDetailView) => void;
@@ -562,8 +521,7 @@ export function AuctionLotCardsView({
   issueHeaderById,
   now,
   isPending,
-  highlightLotId,
-  onClearHighlight,
+  arrivedLotId,
   onChanged,
   onEditLot,
   onDeleteLot,
@@ -584,7 +542,7 @@ export function AuctionLotCardsView({
   // this screen was navigated to (#374's `?lot=`) and a lot added while it is open.
   const expansion = useCardExpansion(
     lots.map((l) => l.id),
-    highlightLotId
+    arrivedLotId
   );
 
   const [onlyUnpriced, setOnlyUnpriced] = useState(false);
@@ -768,8 +726,7 @@ export function AuctionLotCardsView({
               lines={sortLines(lot.lines.filter(matches))}
               // Only once the preferences have been read: the scroll happens on the effect this
               // flag fires, and running it against a not-yet-laid-out list would land nowhere.
-              highlighted={hydrated && lot.id === highlightLotId}
-              onClearHighlight={onClearHighlight}
+              arrived={hydrated && lot.id === arrivedLotId}
               // Held closed until the view preferences have been read, so the deep-linked lot
               // does not flash open before the list around it has settled.
               expanded={hydrated && expansion.isExpanded(lot.id)}
