@@ -121,6 +121,13 @@ export interface ListToolbarProps {
    * *grouping, sorting*), where a sort control wedged between the search and the first filter reads
    * as one of them. */
   sortLast?: boolean;
+  /** The screen's own actions, as **one** trailing group pinned to the right of the row — the shape
+   * `offers-list-panel.tsx` uses, and where the Copies list's three went when they came off its
+   * header (#847). The filter half (`children`) grows into whatever the actions leave and wraps
+   * within itself first; only when even that is exhausted does this group drop to a line of its
+   * own, still right-aligned. Actions, never filters: this group is what the screen *does*, and a
+   * control that narrows the list belongs among the ones beside it. */
+  actions?: React.ReactNode;
   /** Cap on the search box's width. Shortened where the row is carrying a dozen other controls and
    * the search is a lookup one finishes rather than a way of working (#846). */
   searchMaxWidth?: string;
@@ -145,6 +152,7 @@ export function ListToolbar({
   hideSort = false,
   sortLast = false,
   searchMaxWidth = "20rem",
+  actions,
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
   // and push the settled value up, skipping the initial mount so it doesn't refetch.
@@ -278,6 +286,20 @@ export function ListToolbar({
         {children}
 
         {sortLast && sortControl}
+
+        {actions && (
+          <div
+            style={{
+              marginLeft: "auto",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            {actions}
+          </div>
+        )}
       </div>
 
       {/* Row 2: Catalog search (optional) */}
