@@ -684,6 +684,28 @@ Six things worth not re-deriving:
   card group in the divergence report without `printedCardGroups` being told about it. Both are
   handled; a third of the same shape is what to look for next.
 
+**A reorder is carried in state and drawn; the mark and the drop read one function** (#816). The
+three millimetre gestures ride in `CanvasDrag` and the canvas draws them, but reordering was held in
+a `useRef` — which by design does not re-render, so between press and release nothing knew a drag was
+happening and nothing could be drawn. It is `useState` now, and deliberately **not** folded into
+`CanvasDrag`: that shape is millimetres already moved, it has a second writer (a figure typed in the
+panel), and it is read on release to commit a number, none of which a reorder has. What the mark
+means is `src/lib/album-drag.ts`, pure and unit-tested, and it is the **same** `insertBefore` the
+screen writes the order with — a mark under the pointer is a promise about what the drop will do, and
+the only way that promise stays true is for the drawing and the writing to read one function. Three
+things fall out of it and are the whole of the visual language: **insert-before, never swap**, so the
+mark is a bar in the gap in front of the target rather than a second highlighted box (two boxes lit as
+if they exchanged places would teach a rule the app does not follow, and the collector would predict
+the wrong result every time and be right about the picture); **a note is filed, not positioned**, so
+carrying one shades the block it would be filed against instead of drawing it a slot in a sequence it
+is not in — deliberately the *less* specific mark, since a note dropped on one filed elsewhere joins
+that anchor without promising a place among its new siblings; and **no mark means nothing happens**,
+which is what a box carried over another block's boxes and a checklist carried onto a note both get.
+The canvas also sets `user-select: none` **always** rather than only while carrying: it is a drawing
+surface and not a document — a press-and-move over it selected the catalog numbers under the boxes —
+every word on it exists as a row elsewhere, and a rule that only holds during a gesture is one more
+thing to keep in step.
+
 **The client does not measure.** `album-editor.ts` ships the *results* of measuring — the wrapped
 lines, each run's band, its line height and its `albumBaselineOffsetMm` — and the canvas positions
 what the renderer positioned. The one thing that is genuinely the browser's is centring an
