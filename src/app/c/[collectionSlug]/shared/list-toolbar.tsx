@@ -93,10 +93,10 @@ export interface ListToolbarProps {
   children?: React.ReactNode;
   /** A last row inside the sticky block. Rendered here rather than above the rows so it is pinned
    * by the same `position: sticky` and can never overlap the toolbar it would otherwise have to sit
-   * below. It is part of the block's flow, so putting one up **does** push the rows down — which is
-   * right for a banner raised by a deliberate click (arming quick offer mode, #537/#848) and wrong
-   * for one that appears as a side effect of working the list. For the latter, see
-   * {@link ListToolbarProps.overlayFooter}. */
+   * below. Putting one up **does** push the rows down, nothing being done to compensate for the
+   * height it adds — which is right for a banner raised by a deliberate click (arming quick offer
+   * mode, #537/#848), where the shift reads as feedback, and wrong for one that appears as a side
+   * effect of working the list. For the latter, see {@link ListToolbarProps.stableFooter}. */
   footer?: React.ReactNode;
   /** A last row like {@link ListToolbarProps.footer}, in the block's flow and below it — but one
    * whose arrival and departure **do not move the list** (#848). For a banner that appears as a
