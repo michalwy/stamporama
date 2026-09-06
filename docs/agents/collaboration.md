@@ -191,6 +191,21 @@ Three consequences:
   above it rebases down over the gap, where a merged branch would have to be reverted and leave both
   the change and its undoing in `main` forever.
 
+### A documentation-only pull request skips all four
+
+Since #798, a `Detect changes` job runs first and the four required jobs are gated on its output, so
+a pull request touching only `*.md`, `docs/**` and `.claude/**` reports them as **skipped** and is
+mergeable in seconds. GitHub counts a skipped required check as satisfied, which is why the gate is
+a job-level `if:` and never a workflow-level `paths-ignore:` — a workflow that does not run reports
+no contexts at all and the pull request would wait on four `expected` checks for ever. The reasoning
+lives in full in `.github/workflows/ci.yml`, next to the job.
+
+Two things follow for a session. **The list is a whitelist**: anything else — `package.json`,
+`pnpm-lock.yaml`, `prisma/**`, `.github/**`, `scripts/**`, the compose files, `extension/**` other
+than its `*.md` — runs everything, as does a tag and as does anything the detection cannot answer
+confidently. And a pull request that merges in seconds is still a pull request the lead verifies;
+the gate removes the waiting, not the reading.
+
 ### Rebase, then re-verify, in that order
 
 Fetch, rebase the branch onto `main`, **run the checks again**, force-push the branch. With sessions
