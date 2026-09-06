@@ -713,6 +713,15 @@ length limit on prose is a different job from a cap on a layout, and sweeping it
 would be the same mistake in the other direction. The 13rem and 20rem side columns are column
 widths, likewise kept.
 
+**The canvas viewport centres `safe`ly** (#820). It is a centred flex container that also scrolls,
+and that pair is a trap: a sheet wider than the viewport — a narrow window at 150% or 200% — is
+pushed out on *both* sides, and only the right side can be reached, because a scroll container will
+not scroll to a negative position. The left edge of the page was simply unreachable. `justify-content:
+safe center` falls back to start alignment exactly when centring would overflow and leaves a sheet
+that fits centred, so it costs nothing in the ordinary case. It is the only scroll container in the
+application that centres its content on the overflowing axis; there is nothing else to fix here, but
+it is the shape to recognise if another screen ever grows one.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`
