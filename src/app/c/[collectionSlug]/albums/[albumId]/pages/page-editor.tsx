@@ -87,9 +87,18 @@ const MUTED: React.CSSProperties = {
  *  rail inside it, not a floating rail beside a separate panel — and, this being a workbench rather
  *  than a document, the card **fills what the screen's heading leaves** (#815). It is the lot
  *  builder's spelling (`offers/lot-builder/lot-builder-panel.tsx`), the app's other three-region
- *  screen: `flex: 1` inside a `minHeight: 100vh` column, with a floor so a short window makes the
- *  page scroll instead of squeezing the card to nothing. The three columns then take their height
- *  from *this* box rather than from a constant repeated three times, which is what keeps them level. */
+ *  screen: `flex: 1` in the screen's column, with a floor below which the column scrolls instead of
+ *  squeezing the card to nothing. The three columns then take their height from *this* box rather
+ *  than from a constant repeated three times, which is what keeps them level.
+ *
+ *  **The floor is not what used to make the page scroll**, and it is worth saying because the
+ *  obvious repair is to attack the wrong number. Under `minHeight: 100vh` the column's height was
+ *  indefinite, so `flex: 1` had no space to distribute and the card sized to its *content* — a sheet
+ *  of A4 drawn at 1:1 is 1122 px — which is far past any floor. A definite height is what fixes it;
+ *  `24rem` only ever bit below a window of roughly 580 px. It is `18rem` now so that the exception
+ *  is rarer still: below about 480 px of window, which on the desktop browsers this app supports is
+ *  a window nobody works in. A card that short still leaves the canvas ~250 px, half a sheet at the
+ *  50% zoom. */
 const SCREEN_CARD: React.CSSProperties = {
   display: "flex",
   gap: 0,
@@ -97,7 +106,7 @@ const SCREEN_CARD: React.CSSProperties = {
   borderRadius: "0.75rem",
   overflow: "clip",
   flex: 1,
-  minHeight: "24rem",
+  minHeight: "18rem",
   background: "var(--color-bg-elevated)",
 };
 
@@ -334,7 +343,27 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     // as tall as the window allows and each scrolls its own contents. There was a `maxWidth: 84rem`
     // here and it was the only one in the application — on the one screen whose whole subject is
     // looking at a sheet of paper at 1:1.
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    //
+    // **`height`, not `minHeight`, and that one word is the whole of #815's amendment.** A floor
+    // leaves the column's height indefinite, and a flex child with `flex: 1` in an indefinite column
+    // has no space to distribute: the card sized to its own content instead, which is a 297 mm sheet
+    // — so the *page* scrolled, and the sheet list and the panel scrolled away with it. Only the
+    // canvas is supposed to move. A definite height is what gives the card a share to take and the
+    // side columns a height to be stretched to.
+    //
+    // `overflow: auto` is where the exception goes. The card keeps a floor (`SCREEN_CARD`), so a
+    // window too short for it overflows this column — and it scrolls *here* rather than at the
+    // document, which keeps the app's own sidebar where it is and means the browser never grows a
+    // second scrollbar beside the canvas's.
+    <div
+      style={{
+        padding: "2rem",
+        height: "100vh",
+        overflow: "auto",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Link
         href={`/c/${collectionSlug}/albums/${album.id}`}
         style={{

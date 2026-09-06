@@ -724,16 +724,30 @@ frame is tokens.
 its three columns each capped at `maxHeight: 42rem` — the only such width cap in the application, on
 the one screen whose whole subject is looking at a sheet of paper at 1:1, and three constants that
 had to be kept in step to stay level. Both are gone. The root is the shape every other screen here
-has (`padding: 2rem`, `minHeight: 100vh`) turned into a **column**, and the card takes what the
-heading leaves — `flex: 1` with a `24rem` floor, which is the lot builder's spelling
-(`offers/lot-builder`), the app's other three-region screen. **The columns then have no height of
-their own**: stretched to one card, they cannot disagree about how tall they are, and each scrolls
-its own contents — the sheet list, the canvas (297 mm of paper never fits a window) and the
-inspector. The floor is what makes a short window scroll the *page* rather than squeeze the card to
-nothing. What is deliberately kept is the `48rem` **measure on the explanatory paragraph**: a line
-length limit on prose is a different job from a cap on a layout, and sweeping it away with the cap
-would be the same mistake in the other direction. The 13rem and 20rem side columns are column
-widths, likewise kept.
+has (`padding: 2rem`) turned into a **column**, and the card takes what the heading leaves —
+`flex: 1` with a floor, which is the lot builder's spelling (`offers/lot-builder`), the app's other
+three-region screen. **The columns then have no height of their own**: stretched to one card, they
+cannot disagree about how tall they are, and each scrolls its own contents — the sheet list, the
+canvas (297 mm of paper never fits a window) and the inspector. What is deliberately kept is the
+`48rem` **measure on the explanatory paragraph**: a line length limit on prose is a different job
+from a cap on a layout, and sweeping it away with the cap would be the same mistake in the other
+direction. The 13rem and 20rem side columns are column widths, likewise kept.
+
+**`height: 100vh`, not `minHeight` — and the floor was never the thing that made the page scroll.**
+The first cut of the above wrote `minHeight: 100vh`, the shape every other screen here has, and
+reported the floor as the deliberate degradation for a short window. On this screen that produced the
+opposite of a workbench: the whole page scrolled and the sheet list and the inspector went with it,
+which is the amendment the user filed against #815 after looking at it. **A floor leaves the column's
+height indefinite, and `flex: 1` in an indefinite column has no space to distribute** — so the card
+sized to its own content instead, and its content is a sheet of A4 at 1:1, 1122 px. The `24rem` floor
+had nothing to do with it and could not have: it only bites below a window of about 580 px, and the
+card was three times that. **The lesson generalises past this screen: `minHeight: 100vh` and
+`height: 100vh` are not a strict/lenient pair. One of them hands a flex child a share of the window
+and the other hands it nothing**, and the difference is invisible until a child is taller than the
+window — which on every other screen here it is not, and on this one it always is. The floor stays,
+lowered to `18rem` so the exception is rarer still (below roughly 480 px of window), and the overflow
+now goes to `overflow: auto` **on the screen's own column** rather than to the document: the app
+sidebar stays put, and the browser never grows a second scrollbar beside the canvas's own.
 
 **The canvas viewport centres `safe`ly** (#820). It is a centred flex container that also scrolls,
 and that pair is a trap: a sheet wider than the viewport — a narrow window at 150% or 200% — is
