@@ -15,6 +15,12 @@ ENV FONTCONFIG_PATH=/etc/fonts
 # aborts install with ERR_PNPM_IGNORED_BUILDS for prisma/esbuild/sharp/etc.
 FROM base AS deps
 WORKDIR /app
+# Only these three files, deliberately: the layer is cached on the dependency set alone, so a
+# schema or source change does not re-install. That is also why the root `postinstall` guards
+# itself on `prisma/schema.prisma` being present (#791) — `prisma/` does not exist here, it
+# arrives with `COPY . .` in the builder below, and an unguarded `prisma generate` would fail
+# this layer. Do not "fix" that by copying the schema in: the client is generated in the builder
+# stage, and adding the schema here would invalidate the install cache on every migration.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
