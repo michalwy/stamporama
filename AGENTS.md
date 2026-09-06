@@ -118,7 +118,7 @@ The rest of the model — the long-lived lead session, how a task session is spa
 - Never run `prisma migrate dev`, `prisma migrate reset`, or `prisma db push` directly. Exception: `pnpm e2e:db:reset` is safe.
 - When starting a local dev server for verification, use `pnpm exec next dev --webpack -p 3002` and stop it before finishing.
 - Always run the dev server on **webpack** (`next dev --webpack`), never the default Turbopack: Turbopack's dev/HMR leaks memory until the container OOMs (an open, idle browser tab grows the server heap unbounded; webpack plateaus). The `docker-compose.dev.yml` overlay is pinned to `--webpack` for this reason. See issue #161; re-test Turbopack after Next.js upgrades and revert once fixed upstream.
-- The user tests the app through Docker Compose. Do not leave dev servers running.
+- The user tests the app through Docker Compose. Do not leave dev servers running. **The one exception is the lead's showcase**: when a change is one a person looks at, the lead brings the branch up in the main worktree for the user and leaves it running until he has looked — raising it is the lead's, lowering it is the user's alone. That exception is the showcase and nothing else: a task session still starts nothing, and the lead starts nothing for its own verification. Never stop a stack that is not yours. → [`docs/agents/collaboration.md`](docs/agents/collaboration.md)
 
 ## Before Implementing Features
 

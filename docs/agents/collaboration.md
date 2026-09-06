@@ -93,9 +93,10 @@ step nobody asked for.
    was verified and how, what was left out and why, and anything it noticed outside its scope.
 6. The lead **verifies the work in the repository**: the diff, the migration SQL, the issue's *Done
    when*, CI. This is a check of the change as written.
-7. The lead **collects the user's go-ahead**. Where the session reported that it could not verify the
-   appearance, that go-ahead is the user having **looked at the branch running** — a second act, not
-   the same one, because it cannot be done from a diff (*No browser verification* below).
+7. The lead **collects the user's go-ahead**. Where the change is one a person looks at, that
+   go-ahead is the user having **looked at the branch running** — a second act, not the same one,
+   because it cannot be done from a diff, and the lead raises the stack for it (*No browser
+   verification* below).
 8. The lead merges the pull request and closes the issue.
 
 **The report is part of the work, not a closing courtesy.** A session that finishes silently has not
@@ -409,35 +410,89 @@ practice the answer had been *after the merge*. That cost two rounds in one day.
 user looked, and the scrolling was wrong — the sidebars moved with the page instead of staying pinned
 — so a follow-up now exists for something a five-minute look would have caught. **#824** — the pull
 request carrying #816's drag feedback and #820's safe centring — merged while this was being
-discussed, and both are on `main` unseen. Neither session did anything wrong: both said plainly that the appearance was unverified. The
-gap was that *unverified* had no consequence attached to it.
+discussed, and both are on `main` unseen. Neither session did anything wrong: both said plainly that
+the appearance was unverified. The gap was that *unverified* had no consequence attached to it.
 
-**So: if a session reports that the appearance is unverified, the pull request goes to the user
-before it is merged, and the user's confirmation is what releases the merge** (step 7 of *The loop*).
-The trigger is that sentence in the report, not the lead's judgement about whether the change looks
-risky. **A session that could not see its own work is the signal**, and it is the one the lead is
-worst placed to second-guess, having not seen it either.
+**So: if the change is one a person looks at, the pull request goes to the user before it is merged,
+and his confirmation is what releases the merge** (step 7 of *The loop*). A screen, a layout, copy,
+a flow — anything with a surface. Not documentation, not a refactor that leaves no trace on an
+interface, not a mechanism nobody sees. **If you are unsure, show it**: five minutes before the merge
+is the cheaper side of that trade, and #815 already paid the dearer one.
+
+**This trigger replaces #826's, rather than standing beside it.** #826's was *the session reported
+that the appearance is unverified* — a good signal and a bad gate, because it depends on the session
+thinking to write the sentence, and a session can simply not mention that it could not see something.
+Whether a change has a surface does not depend on anyone remembering to say so. The report is still
+worth reading; it is no longer the thing that decides.
+
+**Verify first, then show — never the other way round.** Branch shape, scope against the issue's
+*Done when*, CI green, the suites the session says it ran: all of it before he is asked to look.
+Showing a branch with red CI, or one whose scope has not been checked, collects his comments against
+a version that is going to change anyway, and every one of them then has to be collected again
+against the version that ships. Step 6 of *The loop* comes before step 7, and this is why.
 
 **How the user actually looks at it.** He tests through Docker Compose, and the dev overlay
-bind-mounts the working tree — so **switching the branch in the main worktree is enough**; nothing
-rebuilds for a source change.
+bind-mounts the working tree — so for a source-only change **switching the branch in the main
+worktree is enough**; nothing rebuilds. Anything else on the branch — a dependency, a migration, an
+environment variable, a change to the Compose files themselves — does need a rebuild, and it is the
+lead that does it.
 
-1. The lead checks the tree is clean and **asks before touching it**. The main worktree is the
+**One address, always the same.** The main worktree at `/Users/michalwy/stamporama`, on the stable
+ports the README documents — it is slot 0, so the app is at `http://localhost:3000` (#781). Never a
+session's worktree and never a slot port. He is not to be remembering which session is on which
+port, and an address that moves is an address he has to ask about before he can look at anything.
+
+1. **The lead checks the tree is clean and asks before touching it.** The main worktree is the
    user's, and switching a branch under him while he is mid-something is not the lead's to do
    unannounced.
-2. The lead fetches, and checks the branch out in `/Users/michalwy/stamporama`.
-3. The user raises his usual stack and looks. **The pull request body should already say what to look
-   for**: #815's own pull request lists what to look for *and* what would say it is still wrong,
-   which is what makes this cheap.
-4. **A problem becomes a fix on the same branch**, not a new issue and a second pull request. That is
-   the whole saving, and #815 is what it costs when the order is the other way round.
-5. On his confirmation the lead merges, then restores `main` in the main worktree.
+2. **The lead fetches and checks the branch out** in `/Users/michalwy/stamporama`.
+3. **The lead brings the stack up to the branch — the user does not.** Check out, rebuild if the
+   change needs it, and only then send the message. Asking him to raise it himself puts the one step
+   that can fail on the person who did not make the change.
+4. **Open the addresses yourself before saying it is up.** Every URL you are about to send: it
+   answers, the page renders, and the thing being shown is actually on it. *Do not hand him a link
+   you have not opened yourself — half of all failed showings are a link returning an error that
+   nobody clicked before sending.*
+5. **Then the message, and it carries four things:**
+   - **the exact addresses**, full paths, one per screen he needs to see — not "have a look at the
+     panel";
+   - **three to five specific things to look at** — not "check it works", but "click it a second
+     time and see whether the first one is still in the list". #815's own pull request does this,
+     listing what to look for *and* what would say it is still wrong, which is what makes a showing
+     cheap;
+   - **what is deliberately absent, and which issue owns it.** This is the point that rescues a
+     showing: without it, the first thing he reports is the missing thing, and the showing is spent
+     on something that was never in scope;
+   - **what is a stub.** If the data is seeded, say it looks artificial and why — otherwise he is
+     judging the appearance of something that was never meant to have one.
+6. **Sort what he says; do not tip it all into the current issue.** Three destinations: it belongs to
+   this issue → **a fix on the same branch, before the merge**, which is the whole saving and what
+   #815 cost by doing it the other way round; it is a different issue → file it and tell him where it
+   went; it is already planned elsewhere → say where, so he does not report it twice. **And say
+   plainly which of his comments block the merge and which do not** — otherwise everything he
+   mentioned reads as a condition, including the parts that are not.
+7. **On his confirmation the lead merges, then restores `main` in the main worktree and rebuilds**,
+   so what is running there is what was merged. Skipping the rebuild leaves him looking at code that
+   exists nowhere two hours later.
+
+**Raising the stack is the lead's; lowering it is his alone.** Never take the stack down and never
+delete seeded data without his word. He manages Docker, and a stack that disappears under him is
+indistinguishable from one that broke.
+
+**What not to ask him for.** Keyboard traversal, contrast, no overflow on a narrow screen, green
+tests — all of that belongs to the session or the lead and is done *before* anything is shown.
+**He judges what a machine cannot**: whether the copy says what it should, whether the layout makes
+sense, whether this is the thing he asked for, and whether something obvious is missing. A showing
+that spends his attention on a checklist has spent it on the wrong thing.
 
 **What this is not.** It is not a review gate on every pull request: for a documentation change, a
 configuration change, or a rule with unit tests behind it, the four required checks are the
-verification and the user's time is not the price of merging. And it is **not a licence for a session
-to start a dev server** — nothing about who may run what changes here, only about when the user is
-asked.
+verification and the user's time is not the price of merging. And it is **not a general licence to
+run the app.** AGENTS.md says not to leave dev servers running, and *No browser verification* above
+says a session starts nothing; **the showcase is the one exception to both, and it is the lead's.**
+A task session still starts nothing. The lead starts nothing for its own verification either — step
+6 of *The loop* is a check of the change as written, in the repository. The stack goes up to be
+shown to the user, and for nothing else.
 
 **Where this came from, recorded because the same misreading is available to the next person
 comparing the two projects.** The darkroom model has a section — *The main worktree is the user's
