@@ -149,6 +149,15 @@ What you can set:
   against nothing, *before* is the head of the album and *after* is the end of it. Dragging a note's
   heading onto another block files it before that block.
 
+**While you are dragging, the sheet says what will happen.** What you picked up goes pale with a
+dashed ring round it, and where it would land is marked in the same blue: a **bar in the gap in front
+of** the box or the heading it would go before. That is the rule the drop follows — the thing in your
+hand takes that place and everything from there moves along one — so nothing is ever swapped. A note
+is the exception, because a note is not in an order to begin with: it is **filed against** a
+checklist, so dropping it shades the block it would be filed against rather than drawing it a slot.
+Where you see no mark at all, dropping there does nothing — a box only reorders inside its own block,
+and a checklist dropped on a note has nowhere to go.
+
 The order the blocks themselves print in is the **Entries** list on the album screen — dragging
 there is what moves one checklist before another.
 

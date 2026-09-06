@@ -32,6 +32,7 @@ import {
   ALBUM_TEXT_BLOCK_ROLES,
   ALBUM_TEXT_BLOCK_SIDES,
 } from "@/lib/album-corrections";
+import { insertBefore } from "@/lib/album-drag";
 import {
   addAlbumTextBlockAction,
   clearAlbumBoxAdjustmentsAction,
@@ -251,14 +252,16 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
    * The order is written **whole** (ADR-0045 §6) and over the entry's *own* stamp list rather than
    * the sheet's: a checklist too tall for a page runs across two or three cards, and reordering from
    * what happens to be on the sheet in front of you would drop everything on the others.
+   *
+   * The splice itself is `insertBefore` (`album-drag.ts`) — **insert-before, not swap** — which is
+   * the same function the canvas draws its insertion mark from, so what the collector was shown and
+   * what is written cannot describe two different rules (#816).
    */
   function reorderStamps(blockId: string, fromStampId: string, toStampId: string) {
     const entry = data.entries.find((e) => e.id === blockId);
     if (!entry) return;
-    const next = entry.stampIds.filter((id) => id !== fromStampId);
-    const at = next.indexOf(toStampId);
-    if (at === -1) return;
-    next.splice(at, 0, fromStampId);
+    const next = insertBefore(entry.stampIds, fromStampId, toStampId);
+    if (!next) return;
     run(() => setAlbumEntryStampOrderAction(blockId, next));
   }
 
@@ -294,8 +297,8 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 n.anchorAlbumEntryId === note.anchorAlbumEntryId && n.side === note.side
             )
             .map((n) => n.id);
-          const next = siblings.filter((id) => id !== note.id);
-          next.splice(next.indexOf(ontoNote.id), 0, note.id);
+          const next = insertBefore(siblings, note.id, ontoNote.id);
+          if (!next) return;
           run(() =>
             reorderAlbumTextBlocksAction(
               album.id,
@@ -320,10 +323,8 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
       run(() => updateAlbumTextBlockAction(note.id, form));
       return;
     }
-    const order = data.entries.map((e) => e.id);
-    if (!order.includes(fromBlockId) || !order.includes(toBlockId)) return;
-    const next = order.filter((id) => id !== fromBlockId);
-    next.splice(next.indexOf(toBlockId), 0, fromBlockId);
+    const next = insertBefore(data.entries.map((e) => e.id), fromBlockId, toBlockId);
+    if (!next) return;
     run(() => reorderAlbumEntriesAction(album.id, next));
   }
 
