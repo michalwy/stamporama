@@ -2,6 +2,7 @@
 
 import type { ContactData } from "@/lib/contacts";
 import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
+import { LIST_BANNER_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 
@@ -61,20 +62,11 @@ export function QuickOfferBar({
       ? `${platform.name} has no currency yet. List one offer on it through the ordinary form first — that is where its currency is set.`
       : null;
 
+  // Shape and colour come from `LIST_BANNER_STYLE`, shared with the selection bar this stacks with
+  // (#848), and the width from the pinned toolbar block it now lives inside — the bar used to set
+  // its own margin and padding, which is how the two came to sit at different widths.
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: "0.75rem",
-        margin: "0.75rem 1rem 0",
-        padding: "0.625rem 0.875rem",
-        borderRadius: "0.5rem",
-        border: "1px solid var(--color-accent)",
-        background: "var(--color-accent-soft)",
-      }}
-    >
+    <div style={LIST_BANNER_STYLE}>
       <span
         style={{
           display: "inline-flex",
