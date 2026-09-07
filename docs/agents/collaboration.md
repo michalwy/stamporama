@@ -64,7 +64,8 @@ Getting this wrong once cost a session's worth of work, so it is stated plainly.
 - **A task session is a separate session, not a subagent.** The lead spawns it as a task tile. It
   gets its own worktree under `.claude/worktrees/` and its own transcript, and it **outlives the
   lead's turn** — the lead is not blocked waiting for it, and it does not return a value into the
-  lead's context.
+  lead's context. The tile is normally spawned **without a task**, from a pool, and the issue reaches
+  it by message afterwards (*The pool of generic workers*); everything below holds either way.
 - **The worktree comes with the session; the `task/` branch does not.** The spawn puts the session
   in a fresh worktree on a throwaway branch. The first thing the session does is
   `git fetch origin main` and cut `task/<issue>-<slug>` from `origin/main`.
@@ -126,9 +127,13 @@ one of those three, and each is load-bearing:
    signal names what actually landed, and **the lead re-briefs at that point** rather than assuming
    a prompt written hours earlier still describes the issue.
 
-**The chip's title says that it is held** — *"Hold for the lead's signal"*. He is choosing what to
-click and when, and a title saying so tells him it costs nothing to start it now; one that does not,
-does not. It is a convention, not a nicety.
+**The chip's title says that it is waiting — in whatever words.** *"Hold for the lead's signal"* is
+the usual phrasing and *"Pool worker 07 — awaiting assignment"* discharges it just as well. He is
+choosing what to click and when, and a title saying so tells him it costs nothing to start it now;
+one that does not, does not. **The convention is what a title says, not which phrase it uses**, and
+it is load-bearing twice over: since *A held session's worktree is not stale* the same marker also
+tells a sweep to leave the worktree alone, and a rule matched against one phrase would strand every
+session that worded it differently.
 
 **The lead spawns its own successor** the same way: the handover as the prompt, and a hold on the
 signal. That removes the one interruption that used to be unavoidable — a handover being something
@@ -141,6 +146,53 @@ alongside what is running, and spawning ten at once is still not a thing to prop
 too early can still go stale, which is what point 5 guards. And **none of this moves a decision off
 the user**: he still chooses what is worked on, still answers what is escalated, still gives the
 go-ahead before a merge. What goes is being paged at moments a machine chose.
+
+### The pool of generic workers
+
+**The lead spawns a pool of generic workers rather than a chip per task.** Twelve on the first round,
+clicked in one batch; they start with no task, read AGENTS.md and this file, and wait. The lead then
+hands each one an issue **by message**. Decided by the user on 2026-09-07 (#906), the same
+afternoon as *Spawn ahead and hold*.
+
+**The reason is device-bound clicking, and it is the part worth carrying.** A chip is expensive not
+because it is a click but because it can only be clicked **at the computer**, while a question can be
+answered from a phone. So what is being minimised is not the number of his interactions but **how
+many of them require him at the desk**: the pool turns a stream of per-task chips into one batch he
+clicks when he is there anyway, and everything after that reaches him wherever he is. It is *Spawn
+ahead and hold* taken one step further — that section removed the moment a machine chose, and the
+pool removes the task from the chip altogether.
+
+What was settled with it:
+
+- **One task per worker, and no recycling.** A worker on its fifth task carries four tasks of context
+  and reads the fifth through them, which is the objection this file already makes to a long-lived
+  release session. The pool is consumed one worker per task and topped up when convenient.
+- **Two or three sessions working at once**, four or five for small tasks. **The pool size is not the
+  concurrency**; most of the pool is idle by design.
+- **The lead reports the count of free workers in every status table**, so the user tops up when he
+  is at the computer rather than when the lead runs out.
+
+**A dozen idle worktrees are the worktree sweep's problem, and it already has the answer**: an
+unassigned worker is indistinguishable from a held session by every git signal, so it is removed on
+the session lookup and never on age (*A held session's worktree is not stale*).
+
+**Two mechanical steps go with an assignment, and both are the lead's reasoning rather than the
+user's decision** — #906 marks them as such, and they are refutable:
+
+- **The wake-up drill, unconditionally, on every assignment**: `git fetch origin main`, cut the
+  `task/` branch from `origin/main`, `pnpm install`, `pnpm prisma:generate`. The last step looks
+  redundant and is not. A pooled worktree may be hours old by the time it is assigned, and if `main`
+  has taken a migration since, `pnpm install` reports *"Already up to date"*, skips the postinstall,
+  and leaves a Prisma client that is **stale rather than missing** — which compiles, and whose tests
+  pass against a schema the branch no longer declares (#862). A stale client looks exactly like a
+  sound one, and regenerating costs seconds.
+- **A worker that used the integration suite releases its slot before it finishes**:
+  `pnpm e2e:db:down && pnpm slot release`. A slot is allocated **lazily**, on first use of that
+  suite, so releasing it holds demand at the number of sessions actually running rather than the size
+  of the pool. `scripts/dev-slot.sh` caps at slot 9 and that is **not** a ceiling on the pool; no
+  change to it is needed and none should be made. **Do not run `pnpm slot` from that worktree
+  afterwards** — printing the table allocates, and hands the number straight back (#922, open and
+  undecided).
 
 ## The loop
 
@@ -158,8 +210,10 @@ go-ahead before a merge. What goes is being paged at moments a machine chose.
 7. The lead **collects the user's go-ahead**. Where the change is one a person looks at, that
    go-ahead is the user having **looked at the branch running** — a second act, not the same one,
    because it cannot be done from a diff, and the lead raises the stack for it (*No browser
-   verification* below).
-8. The lead merges the pull request and closes the issue.
+   verification* below). **A documentation-only pull request is the exception and needs no
+   go-ahead** — *A documentation-only pull request skips all four*.
+8. The lead **re-reads the head it is about to merge**, merges the pull request and closes the
+   issue (*Who moves a branch that has fallen behind*).
 
 **The report is part of the work, not a closing courtesy.** A session that finishes silently has not
 finished: its branch then waits until somebody happens to look, and the lead's whole job is to be
@@ -366,7 +420,9 @@ Three consequences:
   whether it was forgotten. The user's decision still gates the merge; only the waiting moves off a
   human. **Arming it is not the same as landing it**: GitHub waits for a branch to *become*
   mergeable here and never makes it so, so an armed `task/` branch that has fallen behind stays
-  armed and stays behind — see *Who moves a branch that has fallen behind*.
+  armed and stays behind. Arming is also the last moment a person looks at the head, so the checks
+  that belong at merge time belong here instead — both in *Who moves a branch that has fallen
+  behind*.
 - **A merged branch deletes itself** (`delete_branch_on_merge`). The worktree does not — see
   *Worktree cleanup* below.
 - **A rejected change leaves no trace.** In a linear history it simply drops out and whatever sat
@@ -411,16 +467,28 @@ go-ahead, the moment the four required checks are green. The boundary was decide
   invalidation semantics goes green on all four and reaches the browser. Ask both questions before
   leaving something off.
 - **Anything that is not a dependency update.** No feature, fix or documentation branch automerges,
-  and no `task/` branch does. The lead still asks; the user still answers.
+  and no `task/` branch does — nothing in this repository merges itself but Renovate. For a feature
+  or a fix the lead still asks and the user still answers. **A documentation-only pull request no
+  longer needs the question**, and that is a second licence rather than a second automerge: see
+  *A documentation-only pull request skips all four*, and the paragraph below for how to tell them
+  apart.
 
 **How to tell an authorised exception from a broken process**, which is the reason this is written
 down at all: somebody reading `main`'s history later will find merges nobody approved, and needs to
 be able to tell which kind they are looking at. An authorised one is a pull request **opened by
 `app/renovate`**, titled `chore(deps): …`, and merged with no human in the timeline — #561, merged
 by `app/renovate` on 13 August, is what one looks like. **Renovate is the only actor permitted to
-merge without a person.** Anything else that reached `main` without somebody having said yes is the
-process failing, not an exception being exercised — report it as a finding rather than assuming it
-was fine.
+merge with nothing read at all.**
+
+**There are now two authorised shapes, and they are not the same licence.** A Renovate merge has had
+**nobody** verify it — the four required checks are the whole of the review, which is why the
+boundary above is drawn so tightly. A documentation-only pull request merged by the lead **has been
+read by a person, and by one who did not write it**; what was dropped is the user's second yes after
+that reading, not the reading. So the second shape has its own signature in the history: only
+`*.md`, `docs/**` and `.claude/**` touched, opened by a task session, merged by the lead rather than
+by `app/renovate`. Anything outside those two shapes that reached `main` without somebody having said
+yes is the process failing, not an exception being exercised — report it as a finding rather than
+assuming it was fine.
 
 The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
 only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
@@ -449,6 +517,14 @@ Two things follow for a session. **The list is a whitelist**: anything else — 
 than its `*.md` — runs everything, as does a tag and as does anything the detection cannot answer
 confidently. And a pull request that merges in seconds is still a pull request the lead verifies;
 the gate removes the waiting, not the reading.
+
+**So the lead merges one without asking the user**, and reports what it merged — the user's other
+decision that afternoon (#906). The authorisation reuses this whitelist exactly, and for the reason
+the whitelist exists: where the four checks report *skipped* there is no CI signal to wait for, so
+the verification **is** the lead's read of the diff, which this file already says in *What this is
+not*. What goes is a question whose answer was never in doubt; anything touching `src/`, `prisma/`,
+`.github/`, `scripts/`, the compose files or dependencies still asks. **It is not automerge** — a
+person still verifies, and that person is the lead.
 
 ### Rebase, then re-verify, in that order
 
@@ -510,6 +586,37 @@ The #803 branch was rebased and fully re-verified **four times** while waiting t
 time a local run of all four suites plus a ten-minute CI run, with `main` moving *during* three of
 them. Every one of the four re-runs caught nothing (#854).
 
+**Draining a queue of verified branches is one branch at a time, and the head is re-read at the
+moment of merging.** Both halves are the lead's merge loop and both failed on 2026-09-07 (#905);
+they are written here together, under the verb they are about, because split across two sections one
+of them gets read without the other.
+
+1. **Update one branch. Not two.** `gh pr update-branch --rebase`, wait for green, merge — and only
+   then touch the next. The intuition to update several at once is that their CI runs would overlap;
+   the arithmetic kills it before either run finishes, because **merging the first invalidates the
+   second**, which then needs another update and another run. Draining N verified branches costs
+   N−1 update cycles: that is the floor, not a target to beat, and parallelising the updates does
+   not lower it — it only spends the waste earlier.
+2. **Re-read the head immediately before merging.** `gh pr view <n> --json headRefOid`, against the
+   SHA the verification was performed at. Verification is a snapshot and merging is a later act, and
+   nothing else here says to re-take the snapshot at the moment of the act: this section's opening
+   covers the **base** moving (#854), and *Verification, not trust* covers what is **already on the
+   branch** (#891). This is the third case — the branch itself growing in between. **A session that
+   has reported is not necessarily finished**; it may still be acting on a message from the lead,
+   which is exactly what had happened when `540712f` went to `main` unread.
+3. **A refused merge is a signal, not a transient.** `gh pr merge` declining with *"add the `--auto`
+   flag"* means the requirements are not met **right now**, and for a documentation-only pull
+   request whose four checks are skipped that is very nearly a guarantee that something just
+   changed. Go back to step 2 before retrying; retrying without re-checking is the exact sequence
+   that produced the unread merge.
+
+**Neither failure is a case for more diligence, which is why both are mechanical steps.** The
+verification that missed a third commit was correct when it was performed, and the lead that updated
+two branches at once knew quite well that merges serialise. **And the one-at-a-time rule is a
+repeat**: the same correction had been made to an earlier lead, about a drain loop pushing four
+branches per cycle when only one could merge. It was known, said once to somebody who is no longer
+in the conversation, and nowhere in the repository — which is the whole case for writing it here.
+
 ## Branches
 
 `task/<issue>-<slug>`, branched from `main`: `task/780-collaboration-model`. One branch per issue,
@@ -526,7 +633,9 @@ Renovate pull requests and three task branches were in flight together and somet
 minutes; `strict_required_status_checks_policy` makes up-to-date a merge precondition, so the real
 cost is one run **per move, per branch**. Under those conditions a verified branch is not a mergeable
 branch — **it is mergeable only until the next thing lands** — which is why updating it stops being
-the session's job at all (*Who moves a branch that has fallen behind*).
+the session's job at all (*Who moves a branch that has fallen behind*). **That section carries the
+loop; this one only prices it.** Knowing that branches serialise does not by itself stop you from
+pre-emptively updating all of them, and #905 is that gap being fallen into.
 
 **Where two branches touch the same file, that trade is not one extra CI run — it is a round trip.**
 A rebase that conflicts is not something GitHub can do for you: *Update branch* fails, and the branch
@@ -815,8 +924,9 @@ carries the `cwd` it runs in, which for a task session is its worktree path. So 
 anything, resolve the path to its session:
 
 - **No session** for the path → orphaned; remove it.
-- **Holding** — the title says so, *"Hold for the lead's signal"*, which *Spawn ahead and hold*
-  already requires → **not stale, whatever its age**; leave it.
+- **Holding, or pooled and unassigned** — the title says so in whatever words, *"Hold for the
+  lead's signal"* or *"awaiting assignment"*, which *Spawn ahead and hold* already requires →
+  **not stale, whatever its age**; leave it.
 - **Finished** — its pull request merged, or its work dropped → remove it.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
@@ -868,8 +978,10 @@ Every backlog review asks whether the model above still describes what actually 
 
 - Did a task session stall waiting on the lead, and for how long?
 - Did the lead answer something that was not written down anywhere?
-- Did anything reach `main` without the user's explicit go-ahead? A Renovate automerge inside
-  the boundary above is the one authorised answer — check that it really was inside it.
+- Did anything reach `main` without the user's explicit go-ahead? **Two answers are authorised and
+  no more**: a Renovate automerge inside the boundary above, and a documentation-only pull request
+  the lead read and merged (#906). Check that each really was inside its own boundary — they are
+  different boundaries.
 - Is automerge still working at all? Its whole failure mode is silence, so the answer comes from
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
