@@ -874,14 +874,16 @@ Every backlog review asks whether the model above still describes what actually 
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
 - Are there worktrees or `task/` branches left over from work that has already landed?
-- Did every **held** session's title say that it was held? *Spawn ahead and hold* asks for it and
-  *A held session's worktree is not stale* now depends on it, so this is a lookup in the app's
-  session list — machine-local, and no part of the repository — rather than a memory. **The one to
-  check is the hold a session releases by itself**: #868 waited for `main` to carry #844, needed no
-  signal, and its title said nothing, where a session gated on the lead's signal is the case nobody
-  forgets. Both are worktrees with no branch, and only the title tells either from an abandoned one.
-  It fails safe when it is missed — an unmarked session that is not finished goes to the user rather
-  than to deletion.
+- Did every **waiting** session's title say that it was waiting? *Spawn ahead and hold* asks for it
+  and *A held session's worktree is not stale* now depends on it, so this is a lookup in the app's
+  session list — machine-local, and no part of the repository — rather than a memory. **Read the
+  title for what it says rather than for a set phrase**: held for a signal, waiting on a
+  precondition and awaiting an assignment all tell a reader the same thing, and the worktree, having
+  no branch, is otherwise indistinguishable from an abandoned one. **The one to check is the wait a
+  session ends by itself** — #868 waited for `main` to carry #844, needed no signal, and its title
+  said nothing, where a session gated on the lead's signal is the case nobody forgets. It fails safe
+  when it is missed: an unmarked session that is not finished goes to the user rather than to
+  deletion.
 - Did a held session **start writing before the thing it waited for had landed**? A commit's author
   date survives the rebase merge, so `main` records when work was actually written; compare it
   against the `mergedAt` of the pull request the session was held on. #868 waited correctly by
