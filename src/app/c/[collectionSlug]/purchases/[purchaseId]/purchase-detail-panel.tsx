@@ -144,6 +144,14 @@ import {
   type PendingSelection,
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 
+/** When to release the arrival mark on a deep-linked lot card (#876). A **floor** under the 2s
+ * `.arrival-flash` animation in `globals.css`, not a duration of its own: the animation starts a
+ * commit or two after this timer does (the card holds the flash until the persisted view
+ * preferences have been read), and dropping the class early would cut the fade off part-way.
+ * Nothing is on screen once the animation has ended, so overshooting costs nothing. The auction
+ * sale's arrival uses the same figure for the same reason (#850). */
+const ARRIVAL_FLASH_MS = 2400;
+
 /** The label in front of a group of toolbar controls ("Group by", "Sort copies") — the same shape
  *  the offer and auction-sale toolbars use, which is what lets the three read as one control row. */
 const TOOLBAR_LABEL: React.CSSProperties = {
@@ -299,19 +307,40 @@ export function PurchaseDetailPanel({
   // the panel refreshes with it (#158).
   const [justAddedLotId, markLotAdded] = useJustAdded();
   // Which lot the collector arrived to see (#387). A copy's "Go to purchase" lands here with
-  // `?lot=<id>`; the card for it opens, scrolls into view and stays marked — the same arrival
-  // treatment an auction sale gives #374's deep link.
+  // `?lot=<id>`; the card for it opens, scrolls into view and flashes once.
+  //
+  // That is **all** it does (#876). The param carries one fact — how you got here — which is true
+  // for a second and irrelevant afterwards, so it is *consumed on arrival*: latched here, dropped
+  // from the address bar, and released again once the flash has run. What it replaced was a
+  // persistent ring and a labelled strip with a ✕ to dismiss it, which asked the collector to
+  // acknowledge their own click. The auction sale was given the same treatment first (#850).
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const highlightLotId = searchParams.get("lot");
-  // Clearing the mark drops that one param and `replace`s, so undoing a highlight is not a step
-  // to walk back through.
-  function clearHighlight() {
+  // Read once, on the render the screen opens on: the param is about to be taken out of the URL,
+  // and both the flash and the card's own seeded expansion must outlive that.
+  const [arrivedLotId, setArrivedLotId] = useState<string | null>(() => searchParams.get("lot"));
+  // Take the param out of the address bar as soon as it has been read. A reload is then an
+  // ordinary order screen — the provenance is spent, and re-flashing it minutes later would be
+  // telling the collector something that stopped being true the moment they arrived. That one
+  // param only, so the intake filters in the URL survive; `replace`, since undoing an arrival is
+  // not a step anyone walks back through; and `scroll: false`, or the navigation would jump the
+  // window to the top against the card scrolling itself into view.
+  useEffect(() => {
+    if (!searchParams.get("lot")) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("lot");
     const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, pathname, router]);
+  // And release the mark once the flash is over, so a card that remounts later — the grouping
+  // toggled, a filter changed — does not replay an arrival from ten minutes ago. No load gate is
+  // needed here, unlike the auction sale's: the order and its lots arrive as props from the server
+  // render, so the cards are on screen from the first commit.
+  useEffect(() => {
+    if (!arrivedLotId) return;
+    const timer = setTimeout(() => setArrivedLotId(null), ARRIVAL_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [arrivedLotId]);
   // Lot cards are collapsed by default (#382): an order is read as its lots, and a lot's copies
   // are a second question. A lot added while the screen is open opens itself, as does the one
   // that was navigated to.
@@ -320,7 +349,9 @@ export function PurchaseDetailPanel({
   const lotExpansionStore = usePurchaseLotExpansion(collectionId, purchase.id);
   const lotExpansion = useCardExpansion(
     purchase.lots.map((l) => l.id),
-    highlightLotId,
+    // The latched value, not the URL: the hook seeds the deep-linked card on its first render, and
+    // the param is gone from the address bar by the second one.
+    arrivedLotId,
     lotExpansionStore
   );
 
@@ -1077,8 +1108,7 @@ export function PurchaseDetailPanel({
               index={idx}
               lot={lot}
               justAdded={lot.id === justAddedLotId}
-              highlighted={lot.id === highlightLotId}
-              onClearHighlight={clearHighlight}
+              arrived={lot.id === arrivedLotId}
               expanded={lotExpansion.isExpanded(lot.id)}
               onToggleExpanded={() => lotExpansion.toggle(lot.id)}
               issueHeaderById={issueHeaderById}
@@ -1369,12 +1399,11 @@ interface LotCardProps {
   lot: LotSummary;
   /** Flash the card once right after this lot is created (#158). */
   justAdded: boolean;
-  /** The lot named by `?lot=` — what a copy's "Go to purchase" arrived to see (#387). The mark
-   * **persists** (a ring plus a labelled strip), unlike the one-shot `justAdded` flash: an order
-   * can hold a dozen lots, and a flash is over before the eye has finished reading them. */
-  highlighted: boolean;
-  /** Drop that mark — the panel owns the URL it lives in. */
-  onClearHighlight: () => void;
+  /** The lot named by `?lot=` when the screen opened — what a copy's "Go to purchase" arrived to
+   * see (#387), latched by the panel and released once the flash has run (#876). It is scrolled
+   * into view and flashed **once**: provenance, not state, so nothing is kept and there is nothing
+   * to dismiss. Null again a couple of seconds after an arrival. */
+  arrived: boolean;
   /** Whether this lot's copies are shown. Owned by the panel (#382) so the whole order shares
    * one collapsed-by-default rule and a lot added here opens by itself. */
   expanded: boolean;
@@ -2157,8 +2186,7 @@ function LotCard({
   index,
   lot,
   justAdded,
-  highlighted,
-  onClearHighlight,
+  arrived,
   expanded,
   onToggleExpanded,
   issueHeaderById,
@@ -2212,13 +2240,18 @@ function LotCard({
   const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(stickyTop);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
 
+  // Held until the persisted view preferences have been read: both the scroll and the flash fire
+  // on this flag, and a card that is still collapsed at that moment is scrolled to at a height it
+  // is about to stop having, then flashed while the copies list unfolds underneath it.
+  const arrivedNow = arrived && hydrated;
+
   // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
   // default: this card's own header is sticky, so a card scrolled to the top edge would sit under
   // the toolbar it just scrolled past.
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [highlighted]);
+    if (arrivedNow) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [arrivedNow]);
 
   const copy = useCopyEditing({
     collectionId,
@@ -2404,52 +2437,32 @@ function LotCard({
   return (
     <div
       ref={cardRef}
-      className={justAdded ? "just-added-flash" : undefined}
+      // The arrival, said once and then gone (#876): #158's tint plus a ring that fades out with
+      // it. Both are painted outside the box model or onto the card's own surface, so nothing
+      // below this card moves either as the flash appears or as it passes. What it replaced was a
+      // persistent ring and a labelled strip with a ✕: the strip asked the collector to
+      // acknowledge how they had got here, which is the interaction budget of something that needs
+      // a decision, and the ring implied the state was worth dismissing permanently. It is not
+      // state, it is provenance.
+      //
+      // `.arrival-flash` rather than `.just-added-flash` for a reason this card shares with the
+      // auction sale's (#850): the sticky lot header below carries an opaque --color-bg-elevated of
+      // its own — always, not only once pinned, since a sticky element that gains a background on
+      // sticking would flicker — so a tint on the card shows only *below* the part being pointed
+      // at. The ring is what makes it visible there, and the two live in one `@keyframes` because
+      // two classes each declaring `animation` do not compose.
+      //
+      // One class or the other, never both, for that same reason. The two cannot overlap in
+      // practice — an arrival is latched on the render the screen opens on and a lot created here
+      // is not on it — but the pair reads as a choice rather than as an accident of ordering.
+      className={arrivedNow ? "arrival-flash" : justAdded ? "just-added-flash" : undefined}
       style={{
         border: `1px solid ${blockMessage ? "var(--color-error)" : "var(--color-border)"}`,
         borderRadius: "0.75rem",
         background: "var(--color-bg-elevated)",
         overflow: "clip",
-        // Drawn as a ring rather than a border so the card does not change size when it appears.
-        boxShadow: highlighted ? "0 0 0 2px var(--color-accent)" : undefined,
       }}
     >
-      {/* Why this one card is ringed, and the way to stop it being. Deliberately not sticky: the
-          ring carries the mark once the strip has scrolled off, and a second sticky band would
-          push this lot's figures down the screen. */}
-      {highlighted && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            padding: "0.375rem 1.25rem",
-            borderBottom: "1px solid var(--color-border)",
-            background: "var(--color-accent-soft)",
-            fontSize: "0.75rem",
-            color: "var(--color-accent)",
-          }}
-        >
-          <span>Opened from a copy</span>
-          <button
-            type="button"
-            onClick={onClearHighlight}
-            aria-label="Clear the highlight"
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "inherit",
-              fontSize: "0.75rem",
-              lineHeight: 1,
-            }}
-          >
-            <Icon name="close" size="sm" />
-          </button>
-        </div>
-      )}
       {/* Lot header + pool line — pinned to the top while scrolling through this lot's copies
           (#172), so the lot name / counts / pool / actions stay in view; released at the card's
           bottom, where the next lot's header takes over. A drop shadow appears once pinned.

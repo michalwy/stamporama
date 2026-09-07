@@ -320,9 +320,13 @@ and close it again.
 
 A copy bought through a [purchase order](purchases.md) carries a **Go to purchase** entry in its
 **⋮** menu, naming the order (supplier and date) underneath. It opens that purchase and takes you
-straight to the **lot the copy is in**: the lot's card opens, scrolls into view and stays ringed
-until you dismiss the mark with its **✕**. A copy you added by hand has no purchase behind it, so
-the entry is simply not there.
+straight to the **lot the copy is in**: the lot's card opens and scrolls into view, and **flashes
+once** as it arrives — a tint and a brief outline — then reads like every other card on the screen.
+There is nothing to close and nothing left behind: the flash says how you got here, which stops
+being useful the moment you have got here. The address bar drops the lot from it too, so reloading
+the page gives you the order and no flash. (If your system is set to reduce motion, there is no
+flash: the scroll and the opened card are the arrival.) A copy you added by hand has no purchase
+behind it, so the entry is simply not there.
 
 If a copy *should* have a purchase behind it but doesn't — you entered it before recording the
 receipt — you can
