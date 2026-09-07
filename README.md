@@ -133,7 +133,7 @@ pnpm e2e:db:down     # stop this worktree's test database
 A new worktree carries no `node_modules` and no generated Prisma client, so run `pnpm install` in
 it before anything else.
 
-Removing the worktree releases the number; `scripts/dev-slot.sh release` releases it without.
+Removing the worktree releases the number; `pnpm slot release` releases it without.
 
 ## License
 
