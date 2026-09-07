@@ -70,6 +70,16 @@ so a shared or bookmarked list keeps meaning what it meant. The **search box** i
 is never remembered, so you are never greeted by a list narrowed to a phrase you have forgotten
 typing.
 
+The **area** and the **year** are shared with the Issues, Stamps and Wants lists, so arriving from
+one of those opens this one on the same country and year. When that happens the address bar is
+brought up to date with it, exactly as if you had picked them here — so refreshing the page keeps
+the filter, the back button steps through the selections you actually made, and the address can be
+copied to another window and show the same list. A list you have not narrowed keeps a plain
+address.
+
+If a link names an area you have since deleted, the list opens on **All areas** rather than on an
+empty screen, and the address is corrected to say so.
+
 The toolbar **stays pinned to the top of the window** as you scroll a long list, so search,
 sorting and the filter chips are always in reach — on every list that has one: Issues,
 Stamps, Copies, Offers, Sales and Purchases.

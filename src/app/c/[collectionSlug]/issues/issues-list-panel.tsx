@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DialogShell,
@@ -59,7 +59,7 @@ import {
   type IssueRowCallbacks,
 } from "./issue-row";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
-import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -151,23 +151,10 @@ export function IssuesListPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Area + year are shared across the lists (#143). The URL keeps priority: when
-  // the `areaId` / `year` param is present it wins (an explicit "all" is carried
-  // as the `all` sentinel so it is distinguishable from an absent param); when
-  // absent — a fresh navigation to this list — we fall back to the per-collection
-  // store. The effective selection is mirrored back into the store below.
-  const { storedAreaId, storedYear, writeStore } =
-    useCollectionFilterStore(collectionId);
-  const urlAreaId = searchParams.get("areaId");
-  const urlYear = searchParams.get("year");
-  const filterAreaId =
-    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
-  const year =
-    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
-
-  useEffect(() => {
-    writeStore({ areaId: filterAreaId, year: year || null });
-  }, [filterAreaId, year, writeStore]);
+  // Area + year, the one selection every list rail shares (#143, #844): the address bar wins where
+  // it names one, the per-collection memory fills in otherwise, and whichever answered is mirrored
+  // back into both — the precedence and the two mirrors are `use-list-area-year-filter.ts`.
+  const { filterAreaId, year } = useListAreaYearFilter(collectionId, areas);
 
   // Whether a selected area brings its sub-areas with it is the collector's choice (#385); the
   // toggle lives in the area sidebar and the resolution is shared so every list agrees.
