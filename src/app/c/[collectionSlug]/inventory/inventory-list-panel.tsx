@@ -85,6 +85,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -389,6 +390,7 @@ export function InventoryListPanel({
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const { data: contacts = [] } = useContacts(collectionId);
   const offerPlatforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
@@ -963,6 +965,9 @@ export function InventoryListPanel({
     setDialog({ kind: "none" });
     setActionError(undefined);
     invalidateList(collectionId);
+    // The stamp edit reached from a row lands here, and a copy write moves the copies-held badge
+    // the Stamps list draws — both stale the catalogue side (#918).
+    void invalidateStampsAndIssues(collectionId);
     // What was picked has been dealt with; leaving it ticked invites doing it twice.
     clearSelection();
   }

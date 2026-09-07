@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { matchedStampsInIssue, type StampFilterQuery } from "@/lib/issue-stamp-match";
 import { useIssueMembers, useInvalidateIssues } from "./use-issues-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { RecomputeRangeDialog } from "./recompute-range-dialog";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
@@ -543,7 +544,8 @@ export function IssueRow({
   // list shows many issues at once, so there is no single parameter this could be, and the detail
   // page keeps its own copy for the same rule.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
-  const { invalidateList, invalidateMembers } = useInvalidateIssues();
+  const { invalidateMembers } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   // Manual ordering (#549). The hook owns the optimistic order, so the tree below is built from
   // *its* members rather than the query's — a drag has to show before the round trip.
@@ -640,7 +642,7 @@ export function IssueRow({
   const variantPrices = useVariantPriceGrid({
     defaultScope: { kind: "issue", issueId: issue.id },
     onSaved: async () => {
-      await invalidateList(collectionId);
+      await invalidateStampsAndIssues(collectionId);
       await invalidateMembers(collectionId, issue.id);
     },
   });
@@ -792,7 +794,7 @@ export function IssueRow({
               issueLabel={issue.name ?? "(unnamed issue)"}
               onApplied={async () => {
                 setRecomputeOpen(false);
-                await invalidateList(collectionId);
+                await invalidateStampsAndIssues(collectionId);
               }}
               onClose={() => setRecomputeOpen(false)}
             />
@@ -1033,7 +1035,7 @@ export function IssueRow({
                   displayCondition={displayCondition}
                   displayFormat={displayFormat}
                   expandStamp={expandStamp}
-                  onPriceSaved={() => invalidateList(collectionId)}
+                  onPriceSaved={() => void invalidateStampsAndIssues(collectionId)}
                   onEdit={(stampId) => {
                     const stampNode = members?.find(
                       (m) => m.stampId === stampId

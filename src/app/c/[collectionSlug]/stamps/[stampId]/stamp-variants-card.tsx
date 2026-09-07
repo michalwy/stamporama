@@ -12,7 +12,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { ReorderModeButton } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
@@ -67,7 +67,7 @@ export function StampVariantsCard({
   maps: ReturnType<typeof useAreaVendorMaps>;
 }) {
   const router = useRouter();
-  const { invalidateList: invalidateStamps } = useInvalidateStamps();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
@@ -113,7 +113,7 @@ export function StampVariantsCard({
    */
   function afterWrite() {
     router.refresh();
-    void invalidateStamps(collectionId);
+    void invalidateStampsAndIssues(collectionId);
   }
 
   function onSaved() {

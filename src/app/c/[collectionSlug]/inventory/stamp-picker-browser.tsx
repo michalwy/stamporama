@@ -25,6 +25,7 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
@@ -158,6 +159,7 @@ export function StampPickerBrowser({
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { invalidatePickerData } = useInvalidateInventory();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const router = useRouter();
 
   // **Opening the picker is what makes its answer current** (#654). Its two halves go stale in
@@ -294,6 +296,7 @@ export function StampPickerBrowser({
         setCreate(null);
         setCreateError(undefined);
         invalidatePickerData(collectionId);
+        void invalidateStampsAndIssues(collectionId);
       } else if (result.status === "error") {
         setCreateError(result.message);
       }
@@ -311,6 +314,9 @@ export function StampPickerBrowser({
         setCreate(null);
         setCreateError(undefined);
         invalidatePickerData(collectionId);
+        // The stamp exists everywhere, not only in this picker (#918): `invalidatePickerData`
+        // covers the issue caches the rows are drawn from and nothing at all on the Stamps list.
+        void invalidateStampsAndIssues(collectionId);
       } else if (result.status === "error") {
         setCreateError(result.message);
       }
@@ -327,6 +333,7 @@ export function StampPickerBrowser({
         setCreate(null);
         setCreateError(undefined);
         invalidatePickerData(collectionId);
+        void invalidateStampsAndIssues(collectionId);
       } else if (result.status === "error") {
         setCreateError(result.message);
       }

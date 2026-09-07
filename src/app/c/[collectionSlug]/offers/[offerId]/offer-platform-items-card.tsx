@@ -18,6 +18,7 @@ import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
 import { useInvalidateOffers } from "../use-offers-query";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import {
   STAMP_PRIMARY_CHIP,
@@ -321,6 +322,7 @@ export function OfferPlatformItemsCard({
   // A stamp edited from a row is a stamp every copy list also names (#676) — cheap to be generous
   // with, those queries being inactive while this screen is up.
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   // Re-read the offer on demand (#677). What a row says about Colnect goes stale from writes this
   // card never hears about — a match made in another tab, a variant priced elsewhere — and the
@@ -1285,6 +1287,7 @@ export function OfferPlatformItemsCard({
               else {
                 setQuickPriceItem(null);
                 void invalidateAll(collectionId); // the row's gap closes, and the offer's totals move
+                void invalidateStampsAndIssues(collectionId); // a catalog price is a stamp write
               }
             });
           }}
@@ -1325,6 +1328,7 @@ export function OfferPlatformItemsCard({
                 // The numbers, the name and the links a row is built from all come off this stamp.
                 void invalidateAll(collectionId);
                 void invalidateInventory(collectionId);
+                void invalidateStampsAndIssues(collectionId);
               }
             });
           }}

@@ -190,13 +190,13 @@ export function useIssueMembers(
   });
 }
 
+// The whole-issues-cache counterpart to this lives in `shared/use-invalidate-stamps-and-issues.ts`
+// and invalidates the stamps cache with it (#918) — an issue's name, year and checklists are drawn
+// on the stamp rows that belong to it, so the two never go stale singly. What is left here is the
+// genuinely narrower act: one issue's expanded tree, after a reorder that moved nothing else.
 export function useInvalidateIssues() {
   const queryClient = useQueryClient();
   return {
-    invalidateList: (collectionId: string) =>
-      queryClient.invalidateQueries({
-        queryKey: issueKeys.all(collectionId),
-      }),
     invalidateMembers: (collectionId: string, issueId: string) =>
       // Prefix match so every display-condition / display-format variant of this issue's members
       // is invalidated (the full key carries both as trailing segments, #238/#343).
