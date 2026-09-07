@@ -10,6 +10,7 @@ import { FormatsPanel } from "./formats-panel";
 import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { AttributeDictionaryPanel } from "./attributes-panel";
+import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
@@ -42,6 +43,7 @@ import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { StampAttributeLists } from "@/lib/stamp-attributes";
+import type { StampSizePresetData } from "@/lib/stamp-size-presets";
 import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
@@ -73,6 +75,9 @@ interface SettingsTabsProps {
   initialSubtypes: StampSubtypeData[];
   /** The four stamp-attribute dictionaries (#72) — colour, watermark, paper, printing method. */
   initialAttributes: StampAttributeLists;
+  /** The collection's stamp size presets (#804) — the seventh and eighth attribute's dictionary,
+   *  a saved pair of millimetres copied onto a stamp rather than referenced by it. */
+  initialStampSizePresets: StampSizePresetData[];
   initialCollageTemplates: CollageTemplateData[];
   /** The collection's ref-card formats (#569) — what the blank ref-card sheet prints. */
   initialRefCardTemplates: RefCardTemplateData[];
@@ -201,6 +206,7 @@ export function SettingsTabs({
   initialCertificateStatuses,
   initialSubtypes,
   initialAttributes,
+  initialStampSizePresets,
   initialCollageTemplates,
   initialRefCardTemplates,
   initialHawidStrips,
@@ -393,10 +399,10 @@ export function SettingsTabs({
       {activeTab === "attributes" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", margin: 0 }}>
-            The values a stamp&apos;s colour, watermark, paper and printing method are chosen from.
-            Nothing here is required: a stamp that states none of them simply has none, so there is
-            no default and a new collection starts with every list empty. Drag rows to change the
-            order they are offered in.
+            The values a stamp&apos;s colour, watermark, paper and printing method are chosen from,
+            and the sizes it can be given without measuring one. Nothing here is required: a stamp
+            that states none of them simply has none, so there is no default and a new collection
+            starts with every list empty. Drag rows to change the order they are offered in.
           </p>
           {STAMP_ATTRIBUTE_KINDS.map((kind) => (
             <section key={kind}>
@@ -410,6 +416,18 @@ export function SettingsTabs({
               />
             </section>
           ))}
+          {/* The fifth list on this tab, and it belongs here rather than on Albums beside the hawid
+              drawer (#804; ADR-0048 §8): a size is the seventh and eighth stamp attribute (#763) on
+              exactly the same terms as the four above — catalogue identity — and it is a fact for a
+              collection that never prints a page. Last of the five because it is the one a collector
+              fills in later, once he is laying pages out. */}
+          <section>
+            <h2 style={sectionHeadingStyle}>Size presets</h2>
+            <StampSizePresetsPanel
+              collectionId={collectionId}
+              initialPresets={initialStampSizePresets}
+            />
+          </section>
         </div>
       )}
       {activeTab === "collages" && (

@@ -11,6 +11,7 @@ import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getStampAttributeLists } from "@/lib/stamp-attributes";
+import { getStampSizePresets } from "@/lib/stamp-size-presets";
 import {
   getColnectMappings,
   getColnectConditionMappings,
@@ -76,6 +77,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     certificateStatuses,
     subtypes,
     attributes,
+    stampSizePresets,
     collageTemplates,
     refCardTemplates,
     hawidStrips,
@@ -106,6 +108,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
     getStampAttributeLists(session.user.id, collection.id),
+    getStampSizePresets(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
     getRefCardTemplates(session.user.id, collection.id),
     getHawidStrips(session.user.id, collection.id),
@@ -169,6 +172,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
           initialAttributes={attributes}
+          initialStampSizePresets={stampSizePresets}
           initialCollageTemplates={collageTemplates}
           initialRefCardTemplates={refCardTemplates}
           initialHawidStrips={hawidStrips}

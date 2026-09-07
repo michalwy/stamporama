@@ -628,7 +628,7 @@ The token follows the same rule as the tag: a stamp on the collection's **defaul
 
 ## Stamp attributes
 
-A catalogue states a handful of facts about every stamp beyond its number: what it is denominated, how it is perforated, its colour, its watermark, its paper and how it was printed. The app keeps six such attributes on a stamp — **denomination**, **perforation**, **colour**, **watermark**, **paper** and **printing method** — and the last four are chosen from lists the collection keeps. Manage those four lists on the **Settings → Attributes** tab.
+A catalogue states a handful of facts about every stamp beyond its number: what it is denominated, how it is perforated, its colour, its watermark, its paper and how it was printed. The app keeps six such attributes on a stamp — **denomination**, **perforation**, **colour**, **watermark**, **paper** and **printing method** — and the last four are chosen from lists the collection keeps. Manage those four lists on the **Settings → Attributes** tab, which also holds the [size presets](#size-presets).
 
 - **Nothing here is required.** A stamp that states no colour simply has none, so there is no default entry and a new collection starts with every list empty. Add the values your catalogues actually use; the demo collection comes with a representative set.
 - **Add** an entry with a name — *Carmine*, *Lozenges*, *Thin paper*, *Photogravure*. **Reorder** entries by dragging rows; the order is the order they are offered in. **Delete** an entry you no longer need — one already assigned to stamps cannot be deleted until those stamps are changed.
@@ -679,6 +679,39 @@ catalog order — a series is printed on one press at one size, so this is right
 is wrong. Nothing is written by that: the stamp still states no size, the page says which boxes came
 from a borrowed figure, and typing a real size on the stamp ends the borrowing for it. The stamp's
 own page and the lists show only what the stamp itself states.
+
+### Size presets
+
+The two ways of not typing a size both need the stamp in front of you, scanned. Often neither is
+available and you know the figure anyway: a new run of overprints is the same impression as the base
+issue you measured years ago, so there is nothing left to measure — but it is its own checklist, so
+there is no neighbour to borrow from either, and every stamp in it would otherwise sit sizeless while
+you lay out the page.
+
+A **size preset** is that pair of millimetres, saved under a name you choose. Keep them on the
+**Settings → Attributes** tab, below the four lists.
+
+- **Add** a preset with a **Width (mm)** and a **Height (mm)**. Both are required — unlike a stamp,
+  which is free to state half a size, a preset is a complete one. Millimetres to a tenth, and a comma
+  works as a decimal point.
+- The **Name** is optional — *Germania*, *Small definitives*. The pair of numbers is what identifies
+  a preset, so two presets can never hold the same width and height; try to save one that is already
+  on the list and you are told which pair it is rather than shown a failed save. The name is there so
+  you can recognise it.
+- **Correct** a preset from its **⋮ → Edit** — the figures as well as the name. Stamps you have
+  already sized from it keep the numbers they hold: a preset is *copied* onto a stamp, never linked
+  to it, so a later correction does not travel. Fix those on the stamps themselves, or by applying
+  the corrected preset over them again.
+- **Reorder** by dragging rows. That order is the order they are offered in, and it is yours — the
+  list deliberately does not shuffle itself to put the last-used one on top, because a list that
+  moves cannot be found by muscle memory.
+- **Delete** one you no longer want. **This is always safe**: nothing points at a preset, so no stamp
+  can be left dangling by removing one, and every stamp sized from it keeps its size. It is unlike
+  the four lists above, where an entry in use cannot be deleted at all.
+
+Nothing is set up here to begin with, in a new collection or in the demo one. An empty list is a
+collection that has not needed one — a preset is a millimetre somebody measured, and the app inventing
+one would be a figure you might cut a mount to.
 
 ### Attributes on the lists
 
