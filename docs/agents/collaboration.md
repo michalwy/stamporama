@@ -470,6 +470,23 @@ Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, t
 
 A direct `git push origin main` was attempted and rejected. This is verified, not assumed.
 
+**The ruleset itself is in the repository, and the list above defers to it.**
+[`.github/rulesets/main.json`](../../.github/rulesets/main.json) is a normalised snapshot of it,
+fetched from the API and committed; [`.github/rulesets/README.md`](../../.github/rulesets/README.md)
+carries the normalisation contract, how to reproduce the file, and the one rule that matters when it
+disagrees with GitHub. **Where this file and that one differ, that one is right** — the bullets above
+are a summary written for a reader, and a summary drifts from the thing it summarises without either
+of them looking wrong. That is not hypothetical: it is what #937 was filed about, after a sweep found
+the same claim asserted as live fact in fourteen places across five files.
+
+Two consequences for anybody working here. **A change to how `main` is protected is now two acts, in
+this order**: the pull request that edits the artifact, and the ruleset change on GitHub — which is
+the lead's, and which nothing in git can perform. **And between those two acts a comparison of the
+artifact against the live ruleset is legitimately red.** The artifact is the intent and GitHub is the
+current state; editing the artifact to match GitHub makes the two agree by construction and is how a
+control quietly stops being one. The full reasoning is in that README rather than here, because the
+person who meets a red comparison is looking at `.github/rulesets/`.
+
 **`git log` will mislead you about this.** Every pull request in this repository's history before
 2026-09-06 came from Renovate; all feature work went straight to `main`. And the `(#769)`-style
 reference in a commit title is an **issue** number, not a pull request — the convention predates

@@ -57,6 +57,7 @@ Read the file for the area you are touching. Each one carries the decisions and 
 | Splitting work between sessions: the lead, task sessions, branches and pull requests | [`docs/agents/collaboration.md`](docs/agents/collaboration.md) |
 | Backlog review workflow | [`docs/agents/backlog-review.md`](docs/agents/backlog-review.md) |
 | Releases and version bumps | [`docs/agents/release-versioning.md`](docs/agents/release-versioning.md) |
+| How `main` is protected: the branch ruleset, as a checked-in artifact rather than as prose | [`.github/rulesets/README.md`](.github/rulesets/README.md) |
 
 Architecture overview: `docs/architecture/overview.md`. Decisions: `docs/decisions/` (ADR-0001…). User-facing behavior: `docs/user-guide/`.
 
