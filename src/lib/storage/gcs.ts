@@ -8,10 +8,10 @@ import type {
   ResolveResult,
 } from "./types";
 
-// GCS storage binding (#138, ADR-0011). The planned second binding, purely additive: the same
-// backend-agnostic keys used on the filesystem become GCS object names (optionally under a
-// configured prefix), and `resolveUrl` returns a short-lived signed URL so image bytes bypass
-// the app. Credentials come from Application Default Credentials (ADC) — set
+// GCS storage binding (#138, ADR-0011). The second binding ADR-0011 planned for, purely
+// additive: the same backend-agnostic keys used on the filesystem become GCS object names
+// (optionally under a configured prefix), and `resolveUrl` returns a short-lived signed URL so
+// image bytes bypass the app. Credentials come from Application Default Credentials (ADC) — set
 // `GOOGLE_APPLICATION_CREDENTIALS` to a mounted service-account key file; that key is also what
 // signs the read URLs. Async + streaming throughout, matching seam 1 of the interface.
 

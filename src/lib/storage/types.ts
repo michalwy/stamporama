@@ -35,8 +35,8 @@ export interface StorageObject {
 }
 
 /** Result of {@link Storage.resolveUrl}. `stream` means the app must stream the bytes itself
- * (filesystem); `redirect` means send the client to a pre-authorized URL (future GCS signed
- * URL) so bytes bypass the app. */
+ * (filesystem); `redirect` means send the client to a pre-authorized URL (the GCS binding's
+ * short-lived signed URL) so bytes bypass the app. */
 export type ResolveResult =
   | { kind: "stream"; object: StorageObject }
   | { kind: "redirect"; url: string };
@@ -77,7 +77,7 @@ export interface Storage {
   /** Delete the bytes at `key`. Best-effort: absent keys are a no-op, not an error. */
   delete(key: string): Promise<void>;
   /** Move bytes from one key to another within this backend (staging → permanent). On
-   * filesystem this is a cheap rename; a future GCS binding pays a server-side-copy cost. */
+   * filesystem this is a cheap rename; the GCS binding pays a server-side-copy cost. */
   move(fromKey: string, toKey: string): Promise<void>;
   /** Resolve how the serving route should hand `key` to a client. */
   resolveUrl(key: string, mime: string): Promise<ResolveResult>;

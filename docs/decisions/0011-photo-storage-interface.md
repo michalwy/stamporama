@@ -23,6 +23,9 @@ fixes the storage seam now so the GCS binding is later purely additive.
 
 ### 1. A storage interface, filesystem-first
 
+> Realised in #138; §7 below records the binding as built. The future tense in this
+> section and §2 is the decision as taken, not the state of the code.
+
 Photo bytes sit behind a `Storage` interface (`src/lib/storage/`) with
 `put` / `get` / `delete` / `move` / `resolveUrl`. The only implementation in this issue
 is `FilesystemStorage`, rooted at a configurable data directory
