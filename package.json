@@ -18,6 +18,7 @@
     "assistant:zip": "cd extension && node build.mjs --release && node pack.mjs",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:integration": "scripts/e2e-db.sh test",
+    "test:integration:time": "scripts/e2e-db.sh time",
     "e2e:db:up": "scripts/e2e-db.sh up",
     "e2e:db:reset": "scripts/e2e-db.sh reset",
     "e2e:db:down": "scripts/e2e-db.sh down",

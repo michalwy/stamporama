@@ -253,8 +253,24 @@ jobs:
       - name: Apply database migrations
         run: pnpm exec prisma migrate deploy
 
+      # The pattern is **quoted**, so it reaches the Node test runner intact and that runner's own
+      # glob — which does understand `**` — selects the files. Unquoted it worked only by
+      # accident, and the accident is worth stating because the obvious "tidy-up" is to take the
+      # quotes back off (#880).
+      #
+      # A `run:` block is `bash -e` with `globstar` **off**, where `**` is simply `*`. So
+      # `tests/integration/**/*.test.ts` means `tests/integration/*/*.test.ts`, which today
+      # matches nothing — every test file sits directly in `tests/integration/`, and the one
+      # subdirectory, `shims/`, holds no test. Matching nothing, bash leaves the word alone and
+      # the runner receives the pattern it wanted all along.
+      #
+      # **The day somebody groups these tests into folders, that stops being true**: with one
+      # `tests/integration/<dir>/x.test.ts` present, the shell expands to that single argument and
+      # this step runs *one* file out of 142 — and reports `Integration tests` green. A required
+      # check that silently stopped running 141 files looks exactly like a fast one.
+      # `scripts/e2e-db.sh` quotes its own copy for this reason; the two now agree.
       - name: Run integration tests
-        run: pnpm exec tsx --tsconfig tests/integration/tsconfig.json --test tests/integration/**/*.test.ts
+        run: pnpm exec tsx --tsconfig tests/integration/tsconfig.json --test 'tests/integration/**/*.test.ts'
 
   # The extension is a separate workspace package, excluded from the app's lint/typecheck. Its own
   # checks run here — notably the packaging tests (#288), whose output would otherwise only fail
