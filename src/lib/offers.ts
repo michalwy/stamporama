@@ -119,8 +119,8 @@ import {
 import { offerScreenUrl } from "./app-url";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 import {
-  applyCollagePairing,
   normalizePhotoSides,
+  seedCollagePairing,
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
@@ -315,8 +315,11 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
   return {
     // The platform says *which* sides; its template says how the two are arranged (#694), so a
     // paired template upgrades a both-sides platform to `paired` and leaves a front-only or
-    // back-only one exactly as it is. See `applyCollagePairing`.
-    photoSides: applyCollagePairing(
+    // back-only one exactly as it is. Seeding **only ever upgrades** (#878): a platform with no
+    // default template — or one that does not pair — has stated nothing about arrangement, so a
+    // platform already on `paired` stays there rather than being silently downgraded to `both`.
+    // That is `seedCollagePairing`, and it is deliberately not the picker's `applyCollagePairing`.
+    photoSides: seedCollagePairing(
       normalizePhotoSides(platform.photoSides),
       template?.pairSides ?? false
     ),

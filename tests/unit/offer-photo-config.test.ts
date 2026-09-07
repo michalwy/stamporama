@@ -7,6 +7,8 @@ import {
   normalizePhotoSides,
   parseOfferPhotoConfigInput,
   parsePlatformPhotoLimits,
+  PHOTO_SIDES,
+  seedCollagePairing,
 } from "../../src/lib/offer-photo-config";
 
 const NO_LIMITS = { maxPhotos: "", maxPhotoEdge: "", maxPhotoFileSizeMib: "" };
@@ -47,8 +49,10 @@ describe("normalizePhotoSides", () => {
   });
 });
 
-describe("applyCollagePairing (#694)", () => {
+describe("applyCollagePairing — the offer dialog's template picker (#694)", () => {
   it("upgrades a both-sides answer and downgrades a paired one", () => {
+    // Both directions, and the downgrade is the half that must survive #878's fix: picking an
+    // unpaired template by hand is a deliberate act, so the offer unpairs with it.
     assert.equal(applyCollagePairing("both", true), "paired");
     assert.equal(applyCollagePairing("paired", false), "both");
     assert.equal(applyCollagePairing("paired", true), "paired");
@@ -60,6 +64,44 @@ describe("applyCollagePairing (#694)", () => {
     // paired template has nothing to arrange here and must not quietly add the other side.
     assert.equal(applyCollagePairing("front", true), "front");
     assert.equal(applyCollagePairing("back", true), "back");
+  });
+});
+
+describe("seedCollagePairing — the platform's seeding (#308, #878)", () => {
+  it("keeps a platform's paired answer when no template pairs", () => {
+    // The bug: a platform set to `paired` seeded offers on `both`, because an absent (or unpaired)
+    // default collage template was read as an explicit "do not pair". Nobody chose anything at
+    // creation, so there is nothing to follow — the platform's own answer stands.
+    assert.equal(seedCollagePairing("paired", false), "paired");
+    assert.equal(seedCollagePairing("paired", true), "paired");
+  });
+
+  it("still upgrades a both-sides platform under a paired template", () => {
+    assert.equal(seedCollagePairing("both", true), "paired");
+    assert.equal(seedCollagePairing("both", false), "both");
+  });
+
+  it("leaves a one-sided platform alone, whatever the template says", () => {
+    assert.equal(seedCollagePairing("front", true), "front");
+    assert.equal(seedCollagePairing("back", true), "back");
+    assert.equal(seedCollagePairing("front", false), "front");
+    assert.equal(seedCollagePairing("back", false), "back");
+  });
+
+  it("only ever upgrades, over every input there is", () => {
+    // Stated over the whole domain rather than as four more cases, so a later edit that
+    // reintroduces the downgrade in some other spelling is caught too: the only move seeding may
+    // make is `both` → `paired` under a paired template. Everything else comes back untouched.
+    for (const sides of PHOTO_SIDES) {
+      for (const pairSides of [true, false]) {
+        const expected = sides === "both" && pairSides ? "paired" : sides;
+        assert.equal(
+          seedCollagePairing(sides, pairSides),
+          expected,
+          `seeding ${sides} with pairSides=${pairSides}`
+        );
+      }
+    }
   });
 });
 

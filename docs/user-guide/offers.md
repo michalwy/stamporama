@@ -485,8 +485,11 @@ listing:
   [collage templates](collections.md#collage-templates)). Use **Copy from
   template** to fill them from one of your
   [collage templates](collections.md#collage-templates), then adjust the numbers for this listing if
-  you like; the offer does not follow the template afterwards. **Clear** empties them, leaving the
-  offer with no collage.
+  you like; the offer does not follow the template afterwards. Copying a template also sets **Sides
+  to photograph** above to match its **Front and back in one cell**, both ways — an unpaired
+  template turns a paired listing back into plain *Front and back*, since picking it is a choice you
+  just made. (The platform's seeding at creation only ever pairs, never unpairs.) **Clear** empties
+  them, leaving the offer with no collage.
 
 Rows × columns is a maximum, not a frame in either grid: fewer stamps simply make a smaller image.
 

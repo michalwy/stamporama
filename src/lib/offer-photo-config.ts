@@ -66,7 +66,8 @@ export function includesBothSides(sides: PhotoSides): boolean {
 }
 
 /**
- * The sides a collage template's pairing flag (#694) resolves an answer to.
+ * **The offer dialog's template picker rule** (#694): the sides a template a collector has just
+ * picked by hand resolves an answer to.
  *
  * The two settings answer **different questions** and this is where they meet: the platform (or the
  * offer) says *which* sides to photograph, the template says *how* the two are arranged. So pairing
@@ -75,12 +76,33 @@ export function includesBothSides(sides: PhotoSides): boolean {
  * returned untouched. Neither setting can therefore contradict the other, whichever is edited: a
  * paired template on a front-only platform simply has nothing to arrange.
  *
- * Total, so it is the one rule both the platform's seeding (#308) and the offer dialog's template
- * picker apply.
+ * The downgrade is right **here and only here**: picking a template is a deliberate act, so the
+ * arrangement follows what was picked. At creation nobody has picked anything, and seeding uses
+ * {@link seedCollagePairing} instead — see its doc for why the two differ (#878).
  */
 export function applyCollagePairing(sides: PhotoSides, pairSides: boolean): PhotoSides {
   if (!includesBothSides(sides)) return sides;
   return pairSides ? "paired" : "both";
+}
+
+/**
+ * **The platform's seeding rule** (#308, #878): the sides a *new* offer starts on, given its
+ * platform's answer and its platform's default collage template.
+ *
+ * Same meeting point as {@link applyCollagePairing} and the same upgrade — `both` plus a paired
+ * template starts the offer on `paired`, and `front` / `back` are untouched — but **it never
+ * downgrades**, which is the whole difference between the two. A platform with no default collage
+ * template, or one that does not pair, has said nothing about arrangement, and reading that silence
+ * as an explicit "do not pair" is what silently turned a platform set to `paired` into offers on
+ * `both` (#878). `paired` therefore stays `paired` unless the collector unpairs the offer itself.
+ *
+ * This is what the model beside it has always said: `CollageTemplate.pairSides` in `schema.prisma`
+ * specifies that seeding *upgrades* rather than overrides. Use this at creation; use
+ * `applyCollagePairing` for a template picked by hand.
+ */
+export function seedCollagePairing(sides: PhotoSides, pairSides: boolean): PhotoSides {
+  if (!pairSides) return sides;
+  return includesBothSides(sides) ? "paired" : sides;
 }
 
 // ── Platform limits ──────────────────────────────────────────────────────────

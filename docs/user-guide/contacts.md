@@ -508,7 +508,10 @@ Below them sit the defaults each **new** offer on this platform is seeded from:
 - **Sides to photograph** — *Front only*, *Back only*, *Front and back*, or *Front and back,
   paired* ([what pairing does](offers.md#paired-front-and-back)). A collage template below whose
   **Front and back in one cell** is ticked upgrades a *Front and back* platform to the paired mode
-  on every new offer, and leaves a one-sided platform as it is.
+  on every new offer, and leaves a one-sided platform as it is. Seeding only ever *adds* the
+  pairing: set this platform to *Front and back, paired* and its new offers are paired whether or
+  not the collage template below pairs — the template can turn pairing on for you, never off. To
+  unpair, change the setting here, or on the offer itself.
 - **Collage template** — which of your [collage templates](collections.md#collage-templates)
   supplies the render numbers (rows, columns, gap, background, label strip). Leave it on *none* and
   new offers simply start without collage numbers until you pick a template on the offer itself.
