@@ -241,7 +241,8 @@ describe("entity short numbers + quick jump (#431/#432)", () => {
     const sale = await newSale();
     assert.equal(await jump(`s ${sale.no}`), `/c/${collectionSlug}/sales/${sale.id}`);
 
-    // A lot is read in the company of its parcel, highlighted there (#374).
+    // A lot is read in the company of its parcel, scrolled to and flashed once there
+    // (#374, #850).
     const lot = await newLot();
     assert.equal(
       await jump(`lot ${lot.no}`),

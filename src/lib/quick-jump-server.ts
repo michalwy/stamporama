@@ -19,8 +19,9 @@ import { quickJumpLabel, type QuickJumpTarget } from "./quick-jump";
 //     canonical URL: this is the same address a marketplace note carries, so a jump and a followed
 //     link are the same journey.
 //   • purchase, sale, trade → their own detail screens.
-//   • auction lot → its **sale's** screen with the lot highlighted, which is exactly what clicking
-//     the lot on the watchlist does (#374). A lot is read in the company of its parcel.
+//   • auction lot → its **sale's** screen with the lot scrolled to and flashed once, which is
+//     exactly what clicking the lot on the watchlist does (#374; the flash replaced a persistent
+//     mark in #850). A lot is read in the company of its parcel.
 
 export interface QuickJumpResult {
   /** Where to go. */
