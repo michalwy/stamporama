@@ -33,11 +33,22 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+prelude_started=$SECONDS
+
+# The generated Prisma client, before any of the three checks below reads it. This is here, in the
+# serial prelude, rather than as a `prebuild`/`prelint` pre-script, precisely because those three run
+# concurrently: a `prisma generate` rewriting `src/generated/prisma/` while `tsc` reads it is the
+# same race as point 1 above. `pnpm typecheck`, `pnpm test:unit` and `pnpm test:integration` carry
+# their own pre-script, since none of them is run from here (#862).
+if ! scripts/ensure-prisma-client.sh; then
+  echo "::error title=prisma::prisma generate failed"
+  exit 1
+fi
+
 # `next typegen` writes `.next/types/` and `next-env.d.ts`. Doing it here, alone, means the build
 # below finds `next-env.d.ts` already correct and leaves it alone — Next rewrites that file only
 # when its content would change.
 echo "==> Generating route types"
-prelude_started=$SECONDS
 if ! pnpm exec next typegen; then
   echo "::error title=typegen::next typegen failed"
   exit 1
