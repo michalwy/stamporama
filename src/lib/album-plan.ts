@@ -11,7 +11,12 @@ import {
 } from "./albums";
 import { albumCorrectedStampSize } from "./album-corrections";
 import { getHawidStrips, type HawidStripData } from "./hawid-stock";
-import { albumHawidMargins, albumRenderPreset } from "./album-template-rules";
+import {
+  albumHawidMargins,
+  albumRenderPreset,
+  renderAlbumText,
+  type AlbumRenderPreset,
+} from "./album-template-rules";
 import { planHawidBox, type HawidBox } from "./hawid";
 import { resolveStampSize, type StampSizeEntry } from "./stamp-size";
 import { stampSizeFields, STAMP_SIZE_SELECT } from "./stamp-attributes";
@@ -25,9 +30,7 @@ import {
   type TitleCopyStampRow,
 } from "./title-copy";
 import {
-  renderTitleTemplate,
   templateFallbacks,
-  type ListingTemplateContext,
   type TitleFallback,
   type TitleTemplateCopy,
 } from "./offer-title-template";
@@ -87,24 +90,6 @@ import {
 // nothing — that is what makes it live — so the only comparison with a customer is against paper.
 // That report is `album-printing.ts`, over the pure diff in `album-divergence.ts`; what this module
 // owes it is {@link albumPlanContext}, so the reference it plans is planned by the same reader.
-
-/**
- * One album text, rendered.
- *
- * **A blank template renders blank**, and that is why this exists rather than a bare
- * `renderTitleTemplate` call: the shared renderer falls back to `DEFAULT_TITLE_TEMPLATE` for an empty
- * template, which is right for an offer title (an offer must be called something) and wrong for all
- * four album texts, where blank is a real value a collector chooses (#766) — a page with no footer is
- * an ordinary thing to want, and it must not silently print a generated listing title instead.
- */
-function renderAlbumText(
-  template: string,
-  copies: readonly TitleTemplateCopy[],
-  context: ListingTemplateContext
-): string {
-  if (!template.trim()) return "";
-  return renderTitleTemplate(template, copies, context);
-}
 
 /** One box of the plan: the piece of hawid, and everything a surface has to be able to say about it
  *  that is not geometry. */
@@ -200,6 +185,10 @@ function primaryNumber(
  * sizes resolve through the checklist (#763), the box comes from the size plus the album's own
  * clearances and the live stock (#765), and the texts render in the album's language (#755). The
  * geometry happens after all of it, once, in `album-layout.ts`.
+ *
+ * `presetOverride` answers *what would this album look like under that preset* and has one caller,
+ * the album template's preview (#795). Nothing is written and the album keeps the values copied onto
+ * it; see the note where it is substituted for why it has to be substituted there and not later.
  */
 export interface AlbumPlanContext {
   album: AlbumData;
@@ -235,10 +224,20 @@ export interface AlbumPlanContext {
 
 export async function albumPlanContext(
   ownerId: string,
-  albumId: string
+  albumId: string,
+  presetOverride: AlbumRenderPreset | null = null
 ): Promise<AlbumPlanContext | null> {
-  const album = await getAlbum(ownerId, albumId);
-  if (!album) return null;
+  const row = await getAlbum(ownerId, albumId);
+  if (!row) return null;
+  // The album's own values, unless a caller is asking *what would this album look like under that
+  // preset* — which is the album template's preview (#795) and nothing else. It is read-only in the
+  // strongest sense: the override never reaches a write, the album keeps the values copied onto it
+  // (#308's rule, #766), and the next read of this album is unaffected. It is substituted **here**,
+  // before anything is resolved, because the clearances are read once into `margins` below and the
+  // texts are read through this object — a caller swapping the preset afterwards would get the new
+  // faces with the old box heights, which is precisely the confident wrong answer a preview must
+  // never produce.
+  const album: AlbumData = presetOverride ? { ...row, ...presetOverride } : row;
   const [entries, textBlocks] = await Promise.all([
     getAlbumEntries(ownerId, albumId),
     getAlbumTextBlocks(ownerId, albumId),

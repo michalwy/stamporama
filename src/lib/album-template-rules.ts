@@ -33,6 +33,11 @@
 
 import { parseHawidMillimetres, HAWID_MM_DECIMALS, HAWID_MM_STEP } from "./hawid";
 import { isAlbumFaceId, albumFaceLabel } from "./album-fonts";
+import {
+  renderTitleTemplate,
+  type ListingTemplateContext,
+  type TitleTemplateCopy,
+} from "./offer-title-template";
 
 export const ALBUM_MM_DECIMALS = HAWID_MM_DECIMALS;
 export const ALBUM_MM_STEP = HAWID_MM_STEP;
@@ -548,4 +553,28 @@ export function asAlbumBoxBorderStyle(raw: string): AlbumBoxBorderStyle {
 
 export function asAlbumLabelPosition(raw: string): AlbumLabelPosition {
   return coerce(raw, ALBUM_LABEL_POSITIONS, DEFAULT_ALBUM_PRESET.labelPosition);
+}
+
+/**
+ * One album text, rendered.
+ *
+ * **A blank template renders blank**, and that is why this exists rather than a bare
+ * `renderTitleTemplate` call: the shared renderer falls back to `DEFAULT_TITLE_TEMPLATE` for an empty
+ * template, which is right for an offer title (an offer must be called something) and wrong for all
+ * four album texts, where blank is a real value a collector chooses (#766) — a page with no footer is
+ * an ordinary thing to want, and it must not silently print a generated listing title instead.
+ *
+ * It lives in the **pure** half of the album template rather than in the plan, because the plan is
+ * not its only caller: the template's own preview (#795) renders the same four texts over a sample,
+ * and it does so before any album exists. Two renderers would be two answers to *what does this
+ * template print*, and the blank-template guard above is exactly the sort of half that gets left out
+ * of the second one.
+ */
+export function renderAlbumText(
+  template: string,
+  copies: readonly TitleTemplateCopy[],
+  context: ListingTemplateContext
+): string {
+  if (!template.trim()) return "";
+  return renderTitleTemplate(template, copies, context);
 }

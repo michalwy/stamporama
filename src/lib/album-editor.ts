@@ -60,6 +60,22 @@ import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
 // lives on the album screen (#778). Nothing here writes to a printed sheet and nothing here
 // re-resolves one: a renderer drawing a snapshot resolves nothing (ADR-0047 §1).
 
+/**
+ * What a live sheet is actually built from — a **subset** of {@link AlbumPlanContext}, not the whole
+ * of it.
+ *
+ * Named because there are two callers with very different amounts to hand over. The editor (#769)
+ * has a full context and passes it, unchanged; the album template's preview (#795) has a preset, a
+ * fabricated set of entries and no database row anywhere, and stating the four things a sheet needs
+ * saves it from implementing the resolvers it would never be asked for. A half-implemented
+ * interface reads as *this cannot be asked* where the truth is *nothing asks*, and the next person
+ * to add a caller would have to work out which of the two it was.
+ */
+export type AlbumSheetSource = Pick<
+  AlbumPlanContext,
+  "album" | "entries" | "textBlocks" | "textGaps"
+>;
+
 /** How a run of text is set, resolved once here so the canvas and the PDF put ink in the same place. */
 export interface AlbumEditorFace {
   /** The stored face id, so a face this build no longer ships is still nameable. */
@@ -248,11 +264,17 @@ function dedupeGaps(gaps: readonly TitleFallback[]): TitleFallback[] {
  * box list and not the page's — `placeBlock` pushes a block's boxes contiguously and `placeBand`
  * calls it once per block, so the page's boxes are grouped in block order by construction
  * (`snapshotBlocks` reads them the same way, and for the same reason).
+ *
+ * Exported for the album template's preview (#795), which plans a **synthetic** album from the
+ * preset being edited and draws it through this same function. Reaching for a second sheet builder
+ * there would be a second answer to *what does this template produce*, which is the one question the
+ * preview exists to answer — and a preview that disagreed with the page editor and the PDF would be
+ * worse than none.
  */
-function liveSheet(
+export function liveSheet(
   page: AlbumPlanPage,
   position: number,
-  context: AlbumPlanContext,
+  context: AlbumSheetSource,
   photoIdFor: (stampId: string) => string | null,
 ): AlbumEditorSheet | null {
   if (page.layout.kind !== "live") return null;
