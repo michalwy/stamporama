@@ -126,10 +126,17 @@ export interface ListToolbarProps {
    * have to be paid for at all — rather than a cleverer compensation. If you are about to write
    * one, that issue is where the work belongs. */
   footer?: React.ReactNode;
-  /** Drop the sort control entirely. For a view whose ordering is not the list's — the duplicate
-   * groups order by how many copies each holds (#372) — where leaving the control up would offer
-   * a choice it cannot honour. */
-  hideSort?: boolean;
+  /** Why the list's ordering is not this control's to set — grey the control and say so, instead
+   * of taking it off the bar.
+   *
+   * A view whose ordering is its own (the Copies list under any grouping: duplicate groups by how
+   * many copies each holds, filing groups by location, issue groups by the Issues list's order)
+   * cannot honour a sort choice. Until #868 the control was **removed** in that case, and that was
+   * the wrong half of the trade twice over: about ten characters of bar width came and went as the
+   * grouping was picked, moving every control to its right at the moment the collector was working
+   * them — and the collector was left to work out for themselves where their ordering had gone.
+   * A control that is still there, greyed, wearing the reason on hover, answers both. */
+  sortDisabledReason?: string | null;
   /** Put the sort control **after** `children` instead of straight after the search box. For a bar
    * whose filters read as an order the collector was given (#846 sets the Copies list's, ending
    * *grouping, sorting*), where a sort control wedged between the search and the first filter reads
@@ -162,7 +169,7 @@ export function ListToolbar({
   onCatalogSearchChange,
   children,
   footer,
-  hideSort = false,
+  sortDisabledReason = null,
   sortLast = false,
   searchMaxWidth = "20rem",
   actions,
@@ -206,19 +213,27 @@ export function ListToolbar({
   const showCatalogSearch =
     catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;
 
-  const sortControl = (
+  // Still on the bar when it cannot be honoured, greyed and carrying the reason (#868) — see
+  // `sortDisabledReason`. The reason is hung on the **whole group** rather than on the select: a
+  // disabled control is the one a collector reaches for to find out why it is disabled, and half of
+  // what they can point at (the *Sort* label, the arrow) is not the select. The arrow keeps its own
+  // hint only while it is live, where the group has nothing to say and the arrow does.
+  const sortDisabled = !!sortDisabledReason;
+  const sortGroup = (
     <div
       style={{
-        display: hideSort ? "none" : "flex",
+        display: "flex",
         gap: "0.375rem",
         alignItems: "center",
+        ...(sortDisabled ? { opacity: 0.5 } : null),
       }}
     >
       <span style={LABEL_STYLE}>Sort</span>
       <select
         value={sortBy}
         onChange={(e) => onSortChange(e.target.value, sortDir)}
-        style={SELECT_STYLE}
+        disabled={sortDisabled}
+        style={{ ...SELECT_STYLE, cursor: sortDisabled ? "default" : "pointer" }}
       >
         {sortOptions.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -226,23 +241,34 @@ export function ListToolbar({
           </option>
         ))}
       </select>
-      <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
-        <button
-          type="button"
-          onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
-          aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-          style={{
-            ...INPUT_STYLE,
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.75rem",
-            lineHeight: 1,
-          }}
-        >
+      {sortDisabled ? (
+        <span style={{ ...INPUT_STYLE, padding: "0.375rem 0.5rem", fontSize: "0.75rem", lineHeight: 1 }}>
           {sortDir === "asc" ? "↑" : "↓"}
-        </button>
-      </Tooltip>
+        </span>
+      ) : (
+        <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
+          <button
+            type="button"
+            onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
+            aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+            style={{
+              ...INPUT_STYLE,
+              cursor: "pointer",
+              padding: "0.375rem 0.5rem",
+              fontSize: "0.75rem",
+              lineHeight: 1,
+            }}
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
+        </Tooltip>
+      )}
     </div>
+  );
+  const sortControl = sortDisabled ? (
+    <Tooltip content={sortDisabledReason}>{sortGroup}</Tooltip>
+  ) : (
+    sortGroup
   );
 
   return (

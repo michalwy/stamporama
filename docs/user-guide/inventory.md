@@ -91,10 +91,20 @@ across the window. Nothing about what they do has changed. On a narrow window th
 further lines first and the actions stay put on the right; only when even that runs out do the three
 drop to a line of their own, still right-aligned.
 
+**Using a filter never moves the filter bar.** Each control keeps the same width whatever is picked
+in it — a long value is shortened with an ellipsis rather than allowed to stretch the control — and
+nothing appears or disappears from the row as you narrow the list. The bar is therefore a little
+wider at rest than a bar sized to its current labels would be, and in exchange it never reflows
+under your pointer while you are working it. The only controls that come and go are the ones for an
+axis your collection does not use at all: with no formats defined there is no format filter, with no
+storage locations there is no location filter or filing grouping.
+
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, certificate,
 location, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
-list comes back unfiltered next time too. It appears only while something is actually filtering.
+list comes back unfiltered next time too. It is only there to click while something is actually
+filtering, but its place on the row is held either way, so the first filter you switch on does not
+shunt the rest of the bar sideways.
 The **area** and the **year** are deliberately left as they are — those two are shared with the
 Stamps and Wants lists, and a reset here that quietly re-shaped those screens would be doing more
 than it says. Clear them from the area panel (**All areas**) and the year panel.
@@ -196,8 +206,11 @@ right, from *which copies* to *how they are shown*.
     "copies with no photo, counting the ones that have sold". The holdings totals and year panel
     follow all four; the totals always account for no-longer-held copies, on their own **Written
     off** line.
-- **Grouping** — see [Grouping the list](#grouping-the-list).
-- **Sort** — by date added, ascending or descending.
+- **Grouping** — a dropdown that also holds duplicate grouping's two **Split by …** switches. See
+  [Grouping the list](#grouping-the-list).
+- **Sort** — by date added, ascending or descending. Greyed under any grouping, which brings its
+  own order: duplicate groups run by how many copies each holds, filing groups by where the copies
+  are kept, issue groups in the Issues list's own order. Hover it and it says which.
 
 The holdings summary totals follow whatever the filters are showing, so a filtered view
 tells you the catalog value and purchase cost of just those copies.
@@ -1029,7 +1042,7 @@ catalogue it came out of is something you already know in the box you are pastin
 
 ## Grouping the list
 
-The toolbar's **grouping** select collapses the list into groups. There are four, and they answer
+The toolbar's **grouping** dropdown collapses the list into groups. There are four, and they answer
 different questions:
 
 - **Group duplicates** — what stock do I hold several of? (below)
@@ -1038,6 +1051,14 @@ different questions:
 - **Group by location ref** — the same, split down to the ref written on the shelf.
 - **Group by issue** — what have I got of this series? ([Grouping by
   issue](#grouping-by-issue))
+
+The dropdown also carries the two **Split by …** switches that duplicate grouping uses (below).
+They are in there from the moment it opens, under a heading saying when they apply, rather than
+appearing on the toolbar once you have picked *Group duplicates* — so you can see what duplicate
+grouping offers before choosing it, and picking a grouping never moves the controls beside it. They
+are greyed while another grouping is in effect, because they only ever change what counts as a
+duplicate. With one on, the closed dropdown says so (*Duplicates + format*); with both, it counts
+them (*Duplicates + 2 splits*).
 
 Only one can be in effect, and the choice is remembered per collection. Every group row works the
 same way: the count leads it, the **caret** expands it into the copies underneath, and the **checkbox** in
@@ -1069,12 +1090,16 @@ Two copies count as duplicates when they are the **same stamp in the same condit
 never optional: Colnect refuses more than one offer for the same stamp in the same condition and
 expects a quantity offer instead, so a group mixing conditions could not be posted.
 
-Two further toggles appear once duplicate grouping is on, and each adds an axis to that rule:
+Two further switches, inside the grouping dropdown, each add an axis to that rule:
 
 - **Split by format** — a pair or a block becomes a different item from a single, rather than
   joining the same group. Only shown once your collection has [formats](#pairs-blocks-and-other-multiples).
 - **Split by certificate** — a certified copy becomes a different item from an uncertified one. Only
   shown once your collection has certificate statuses.
+
+They stay visible under every grouping and are greyed unless duplicate grouping is the one in
+effect. A switch you left on keeps showing as on while it is greyed: it is waiting for the next time
+you group duplicates, not silently applying to the grouping you are looking at.
 
 Leave both off and you get the plain rule. Turn both on and each group has one unambiguous per-copy
 **catalog value**, because the key is then exactly what a catalog price is recorded against. A group
