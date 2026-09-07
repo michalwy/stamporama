@@ -106,11 +106,17 @@ pnpm test:unit
 pnpm test:integration   # starts its own throwaway Postgres via docker-compose.e2e.yml
 ```
 
-The install is not optional the way it usually is. The Prisma client under `src/generated/prisma/`
-is generated rather than committed, and nothing else creates it: without it `pnpm typecheck`
-fails in hundreds of places that are perfectly correct, which reads as a broken tree rather than a
-missing step. `pnpm install` generates it (a `postinstall` script), so an installed tree compiles.
-Re-run `pnpm prisma:generate` after editing `prisma/schema.prisma`.
+The Prisma client under `src/generated/prisma/` is generated rather than committed, and nothing in
+git creates it: without it `pnpm typecheck` fails in hundreds of places that are perfectly correct,
+which reads as a broken tree rather than a missing step. `pnpm typecheck`, `pnpm test:unit` and
+`pnpm test:integration` each generate it for you when it is missing or out of date, so there is no
+extra step to remember — including after editing `prisma/schema.prisma`, and after rebasing onto a
+branch that changed it. (`pnpm lint` is the one above that never needs it.)
+
+`pnpm install` also generates it, through a `postinstall` script, but do not rely on that: pnpm skips
+lifecycle scripts whenever it decides an install is already up to date, which is exactly what happens
+in a worktree that arrives with `node_modules` already populated (#862). Run `pnpm prisma:generate`
+by hand if you need the client for anything else — the dev server, or `tsc` invoked directly.
 
 **Working in more than one git worktree?** Every host port this project pins is derived from a
 *slot* — a small integer belonging to the worktree — so a second worktree can run the integration
