@@ -26,9 +26,11 @@ import { MAX_SIZE_MM, MIN_SIZE_MM, roundSizeMm } from "./stamp-size";
 // draws a box (#769) or cuts a strip (#770) would have to learn about it.
 //
 // The cost is real and accepted: **correcting a preset does not correct stamps already set from it**
-// (ADR-0048 §1). Under the scope this module was built to, the pair is immutable and only the label
-// is editable, so correcting one is a delete and a create — which lands exactly where §1 says it
-// lands, and keeps the duplicate-pair error on the single path that can raise it.
+// (ADR-0048 §1). Correcting one is an ordinary edit of this row — `updateStampSizePreset` takes the
+// pair as well as the label — and the stamps it already sized keep the figures they hold, which is
+// what §1 says the bargain is. #803 scoped this module to a rename and stated that the pair was not
+// editable; #804 needed a panel where a preset can be *corrected*, and the reasoning for the change
+// is on `updateStampSizePreset` itself rather than summarised here.
 //
 // ## `src/lib/stamp-size.ts` gains nothing
 //
@@ -223,22 +225,49 @@ export async function createStampSizePreset(
 }
 
 /**
- * Renames a preset. **The pair is not editable, and that is the shape #803 scoped**: the numbers are
- * the identity, so changing them is changing which preset this is — a delete and a create, which is
- * also what ADR-0048 §1 describes correcting one as, since the stamps already set from it do not
- * follow either way.
+ * Corrects a preset: the pair, the label, or both.
+ *
+ * **#803 scoped this as a rename and said the pair was not editable; #804 is where that stops
+ * holding**, so the reasoning is recorded here rather than left as a silent widening. The argument
+ * for immutability was that the numbers are the identity, so changing them changes which preset this
+ * is — a delete and a create. Three things say otherwise once there is a panel:
+ *
+ * - **ADR-0048 §1 describes correcting a preset in place.** *"A preset saved as 25.0 × 30.0 and later
+ *   found to be 25.0 × 29.5 leaves every stamp it touched holding the old pair."* That sentence needs
+ *   an *it* that survives the correction; under a delete and a create there are two presets and
+ *   nothing was corrected.
+ * - **`HawidStrip` — the shape §3 borrowed for the identity rule — edits its identity height** through
+ *   `updateHawidStrip`. Taking the precedent for what the identity *is* and refusing it for whether
+ *   the identity may be fixed is half a precedent.
+ * - **A delete and a create loses the collector's dragged position**, because {@link
+ *   createStampSizePreset} appends at the end. ADR-0048 keeps a dragged order precisely so the list
+ *   can be found by muscle memory, and correcting a typo by re-adding reproduces the very reordering
+ *   that argument rules out.
+ *
+ * Nothing points at a preset, so correcting one writes to no stamp — the same property that makes
+ * deleting safe. The stamps already set from the old pair keep it, which is ADR-0048 §1's accepted
+ * cost and is unchanged by this.
+ *
+ * The duplicate-pair error stays a single error class: this path maps P2002 through the same
+ * {@link rethrowPairClash} the create path uses, so correcting one preset onto another's pair reads
+ * as *that pair is already saved* rather than as a save that went wrong.
  */
-export async function renameStampSizePreset(
+export async function updateStampSizePreset(
   ownerId: string,
   presetId: string,
-  name: string | null
+  input: StampSizePresetInput
 ): Promise<void> {
   const collectionId = await resolvePresetCollection(presetId);
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.stampSizePreset.update({
-    where: { id: presetId },
-    data: { name: name?.trim() || null },
-  });
+  const pair = normalizePair(input);
+  try {
+    await prisma.stampSizePreset.update({
+      where: { id: presetId },
+      data: { ...pair, name: input.name?.trim() || null },
+    });
+  } catch (err) {
+    rethrowPairClash(err, pair);
+  }
 }
 
 /** Deletes a preset. **Nothing points at one** — applying copies the pair onto the stamp — so there
