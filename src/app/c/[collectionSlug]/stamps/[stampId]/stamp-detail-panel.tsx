@@ -38,7 +38,7 @@ import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offer
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
 import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
 import { StampVariantsCard } from "./stamp-variants-card";
 
@@ -93,7 +93,7 @@ export function StampDetailPanel({
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const areaVendors = [...vendorMap.values()];
-  const { invalidateList: invalidateStamps } = useInvalidateStamps();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   function closeDialog() {
     if (isPending) return;
     setEditing(false);
@@ -107,7 +107,7 @@ export function StampDetailPanel({
     setEditing(false);
     setError(undefined);
     router.refresh();
-    void invalidateStamps(collectionId);
+    void invalidateStampsAndIssues(collectionId);
   }
 
   return (

@@ -25,7 +25,7 @@ import {
 } from "@/lib/catalog-import-rules";
 import type { CatalogImportPlanResult, CatalogImportRunResult } from "@/lib/catalog-import";
 import type { CollectionAreaData } from "@/lib/areas";
-import { useInvalidateIssues } from "./use-issues-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 
 // **The import dialog** (#718) — the collector's end of the CSV catalog import track whose rules
 // are `catalog-import-rules.ts` (#716) and whose writes are `catalog-import.ts` (#717).
@@ -163,7 +163,7 @@ export function CatalogImportDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
-  const { invalidateList } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const areaTree = useMemo(() => buildAreaTree(areas), [areas]);
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas, collectionId);
 
@@ -261,8 +261,9 @@ export function CatalogImportDialog({
       setReport(result);
       setStep("report");
       // The list behind the dialog is now stale — and so are its year facets, which live under
-      // the same key prefix.
-      invalidateList(collectionId);
+      // the same key prefix. An import creates stamps as well as issues, so the Stamps list is
+      // stale for the same reason (#918).
+      void invalidateStampsAndIssues(collectionId);
       toast({
         message: `Imported ${result.report.issuesCreated} new ${
           result.report.issuesCreated === 1 ? "issue" : "issues"

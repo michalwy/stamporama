@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
 import type { AreaFacet } from "@/lib/area-facets";
@@ -179,12 +179,8 @@ export function useIssueSearch(
   });
 }
 
-export function useInvalidateStamps() {
-  const queryClient = useQueryClient();
-  return {
-    invalidateList: (collectionId: string) =>
-      queryClient.invalidateQueries({
-        queryKey: stampKeys.all(collectionId),
-      }),
-  };
-}
+// **There is deliberately no `useInvalidateStamps` here** (#918). Invalidating the stamps cache on
+// its own was the half-answer that nine call sites gave five different versions of: a stamp row
+// carries its issue's name, year and checklists, so the two caches always go stale together. The
+// hook that does both is `shared/use-invalidate-stamps-and-issues.ts`, and `stampKeys.all` above is
+// what it invalidates.

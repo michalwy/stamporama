@@ -23,7 +23,6 @@ import {
   useStampsInfinite,
   useStampYears,
   useStampAreaFacets,
-  useInvalidateStamps,
   type StampListFilters,
   type StampYearFacetFilters,
   type StampAreaFacetFilters,
@@ -40,6 +39,7 @@ import { StampRow } from "./stamp-row";
 import { useToast } from "@/app/toast-provider";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 
 type DialogState =
   | { kind: "none" }
@@ -84,7 +84,7 @@ export function StampsListPanel({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
-  const { invalidateList } = useInvalidateStamps();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const search = searchParams.get("search") ?? "";
   const { sortBy, sortDir, persistSort } = usePersistedSort<StampSortBy>(
@@ -241,7 +241,7 @@ export function StampsListPanel({
   function handleSuccess() {
     setDialog({ kind: "none" });
     setActionError(undefined);
-    invalidateList(collectionId);
+    void invalidateStampsAndIssues(collectionId);
   }
 
   // Confirmation toasts (#541). Both actions here are taken from a dialog over a long, virtualised

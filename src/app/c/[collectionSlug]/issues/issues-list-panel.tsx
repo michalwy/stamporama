@@ -42,6 +42,7 @@ import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { CatalogImportDialog } from "./catalog-import-dialog";
 import { Icon } from "@/app/icons";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import {
   useIssuesInfinite,
   useIssueYears,
@@ -173,7 +174,8 @@ export function IssuesListPanel({
   // visible instead of disappearing behind a collapsed arrow. The nonce makes a repeat add under
   // the same parent a fresh signal.
   const [autoExpandStamp, setAutoExpandStamp] = useState<ExpandStampSignal | null>(null);
-  const { invalidateList, invalidateMembers } = useInvalidateIssues();
+  const { invalidateMembers } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const search = searchParams.get("search") ?? "";
   const { sortBy, sortDir, persistSort } = usePersistedSort<IssueSortBy>(
@@ -339,13 +341,16 @@ export function IssuesListPanel({
 
   function handleSuccess() {
     setDialog({ kind: "none" });
-    invalidateList(collectionId);
+    // Both caches on every write from this screen (#918). Issue writes go through here, and an
+    // issue's name, year and checklists are drawn on the *stamp* rows that belong to it — the
+    // mirror of the direction below, and the half that was missing everywhere.
+    void invalidateStampsAndIssues(collectionId);
   }
 
   function handleStampSuccess(issueId: string) {
     setDialog({ kind: "none" });
     invalidateMembers(collectionId, issueId);
-    invalidateList(collectionId);
+    void invalidateStampsAndIssues(collectionId);
   }
 
   /** After a bulk add-range (#219) or merge (#218), refresh the issue and — if the new
@@ -353,7 +358,7 @@ export function IssuesListPanel({
    *  it, mirroring the Add-stamp widen-vs-keep choice. Otherwise just close. */
   async function finishWithRangeCheck(issueId: string, issueLabel: string) {
     invalidateMembers(collectionId, issueId);
-    invalidateList(collectionId);
+    void invalidateStampsAndIssues(collectionId);
     setAutoExpandIssueId(issueId);
     const suggestions = await getIssueRangeSuggestionsAction(collectionId, issueId);
     if (suggestions.length > 0) {
@@ -386,7 +391,7 @@ export function IssuesListPanel({
     startTransition(async () => {
       if (!issueId && (newIssueName !== null || newIssueYear !== null)) {
         setDialog({ kind: "none" });
-        invalidateList(collectionId);
+        void invalidateStampsAndIssues(collectionId);
         return;
       }
       if (!issueId) {
@@ -1000,7 +1005,7 @@ export function IssuesListPanel({
                   s.proposedLast
                 );
               }
-              invalidateList(collectionId);
+              void invalidateStampsAndIssues(collectionId);
               setDialog({ kind: "none" });
             });
           }}

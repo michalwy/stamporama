@@ -5,8 +5,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { WantCreateInput } from "@/lib/wants";
 import type { RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { PickedStamp } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
-import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
-import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { WantFormDialog } from "./want-form-dialog";
 import { useInvalidateWants } from "./use-wants-query";
 
@@ -45,8 +44,7 @@ export function useAddWantAction({
   const [isPending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const { invalidate } = useInvalidateWants();
-  const { invalidateList: invalidateStamps } = useInvalidateStamps();
-  const { invalidateList: invalidateIssues } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const action: RowAction = {
     key: "add-want",
@@ -83,8 +81,7 @@ export function useAddWantAction({
         void invalidate(collectionId);
         // The catalogue lists carry the want chip; `issueKeys.all` prefix-matches an issue's
         // expanded members too, so a tree open on screen redraws with the rest.
-        void invalidateStamps(collectionId);
-        void invalidateIssues(collectionId);
+        void invalidateStampsAndIssues(collectionId);
         onSaved?.();
       }}
     />

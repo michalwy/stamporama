@@ -29,6 +29,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { useInvalidateOffers } from "../use-offers-query";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon, type IconName } from "@/app/icons";
 
 
@@ -907,6 +908,7 @@ export function OfferSetsView({
   const { invalidateAll } = useInvalidateOffers();
   // The stamp behind a listed copy is named by every copy list too (#676).
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -1295,6 +1297,7 @@ export function OfferSetsView({
                 setEditStampItem(null);
                 invalidateAll(collectionId); // the rows, and the listing text built off them
                 void invalidateInventory(collectionId);
+                void invalidateStampsAndIssues(collectionId);
               }
             });
           }}

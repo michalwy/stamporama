@@ -15,8 +15,7 @@ import {
   rememberProfileFor,
 } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 import { useToast } from "@/app/toast-provider";
-import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
-import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useInvalidateWants } from "./use-wants-query";
 
 /**
@@ -133,8 +132,7 @@ function AddIssueWantsDialog({
   }
 
   const { invalidate: invalidateWants } = useInvalidateWants();
-  const { invalidateList: invalidateStamps } = useInvalidateStamps();
-  const { invalidateList: invalidateIssues } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const { data: gaps, isLoading, isFetching, isError } = useQuery<IssueWantGapChecklist[]>({
     // Its own namespace: this is a snapshot taken to be confirmed, not a list the screen renders,
@@ -200,8 +198,7 @@ function AddIssueWantsDialog({
       // three caches go — the rule `useAddWantAction` states: whatever a value is copied onto has
       // to be invalidated with it.
       void invalidateWants(collectionId);
-      void invalidateStamps(collectionId);
-      void invalidateIssues(collectionId);
+      void invalidateStampsAndIssues(collectionId);
       toast({
         message:
           result.created === 0

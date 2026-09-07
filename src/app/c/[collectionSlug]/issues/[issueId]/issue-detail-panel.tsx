@@ -55,7 +55,7 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
-import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
 
 // The issue detail screen (#519). Two things the list row cannot give: the stamp tree with enough
@@ -132,7 +132,7 @@ export function IssueDetailPanel({
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
-  const { invalidateList: invalidateIssues } = useInvalidateIssues();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   function closeDialog() {
     if (isPending) return;
     setEditing(false);
@@ -144,7 +144,7 @@ export function IssueDetailPanel({
     setEditing(false);
     setError(undefined);
     router.refresh();
-    void invalidateIssues(collectionId);
+    void invalidateStampsAndIssues(collectionId);
   }
   // Dropped while reordering: a drag inside a narrowed tree would move a stamp past a sibling
   // that was never on screen, and the server refuses a partial group.

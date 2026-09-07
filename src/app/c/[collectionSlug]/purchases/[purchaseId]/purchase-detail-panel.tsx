@@ -91,6 +91,7 @@ import {
   useTileIdentifyChain,
 } from "@/app/c/[collectionSlug]/shared/tile-identify-chain";
 import { useInvalidateScans } from "@/app/c/[collectionSlug]/shared/use-scans-query";
+import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -504,6 +505,7 @@ export function PurchaseDetailPanel({
 
 
   const { invalidateScans } = useInvalidateScans();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   /** The picker → condition chain a scan tile is identified through (#567/#584/#595), shared with
    * the collection's own card scans since #725. The screen keeps the runner and the error slot; the
    * chain keeps where it is and what it is carrying. */
@@ -532,6 +534,9 @@ export function PurchaseDetailPanel({
         // opened. What it buys is that the picker cannot open on the state of the collection as it
         // was before the last copy was taken in — which is exactly what it did.
         invalidateInventory(collectionId);
+        // The Stamps list and the Issues tree for the same reason, and because the stamp edit
+        // reached from a purchase row is one of the writes that comes through here (#918).
+        void invalidateStampsAndIssues(collectionId);
         onDone?.(result);
         // Asked *after* the intake dialog has closed and only when something matches: a review with
         // nothing in it is a dialog that says "no news", which is not worth a click.
