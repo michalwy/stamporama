@@ -139,6 +139,46 @@ describe("offer photo configuration (#308)", () => {
     }
   });
 
+  it("keeps a platform's paired answer when no template pairs (#878)", async () => {
+    // Seeding upgrades but never downgrades. `configuredPlatformId`'s template has `pairSides`
+    // false and `barePlatformId` has no template at all — neither has said anything about the
+    // arrangement, and reading that silence as "do not pair" is what turned a platform set to
+    // *Front and back, paired* into offers on plain *Front and back*.
+    await prisma.contact.updateMany({
+      where: { id: { in: [configuredPlatformId, barePlatformId] } },
+      data: { photoSides: "paired" },
+    });
+    try {
+      const withUnpairedTemplate = await getOfferDetail(userId, await offerOn(configuredPlatformId));
+      assert.equal(withUnpairedTemplate?.photoConfig.photoSides, "paired");
+
+      const withNoTemplate = await getOfferDetail(userId, await offerOn(barePlatformId));
+      assert.equal(withNoTemplate?.photoConfig.photoSides, "paired");
+
+      // A duplicate seeds through the same path, so it inherits the same rule.
+      const { id } = await duplicateOffer(userId, await offerOn(configuredPlatformId), {
+        platformId: barePlatformId,
+        url: null,
+        price: "5.00",
+        currency: "EUR",
+        listingDate: null,
+        state: "preparing",
+      });
+      assert.equal((await getOfferDetail(userId, id))?.photoConfig.photoSides, "paired");
+    } finally {
+      await prisma.contact.update({
+        where: { id: configuredPlatformId },
+        data: { photoSides: "both" },
+      });
+      // Back to the column default it was created with — a later case asserts a bare platform
+      // seeds `front`.
+      await prisma.contact.update({
+        where: { id: barePlatformId },
+        data: { photoSides: "front" },
+      });
+    }
+  });
+
   it("reads the platform's limits live rather than from the offer", async () => {
     const offerId = await offerOn(configuredPlatformId);
     assert.deepEqual((await getOfferDetail(userId, offerId))?.platformPhotoLimits, {

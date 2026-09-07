@@ -189,10 +189,15 @@ export function PhotoSettingsDialog({
     };
   }, [collectionId]);
 
-  /** Copy a template's numbers onto the offer — the same seeding the platform does at creation.
-   * The pairing flag (#694) reaches the sides select above rather than the numbers below, because
-   * that is where the offer says it: `applyCollagePairing` moves between the two both-sides answers
-   * and leaves a front-only or back-only listing alone, exactly as seeding does. */
+  /** Copy a template's numbers onto the offer. The pairing flag (#694) reaches the sides select
+   * above rather than the numbers below, because that is where the offer says it:
+   * `applyCollagePairing` moves between the two both-sides answers and leaves a front-only or
+   * back-only listing alone.
+   *
+   * This is the one place the move runs **both** ways, and it differs from the platform's seeding
+   * on purpose (#878): picking a template here is a deliberate act, so an unpaired one unpairs the
+   * offer. Seeding at creation upgrades only — nobody has picked anything then, and a platform
+   * without a paired default template has said nothing about arrangement. */
   function applyTemplate(templateId: string) {
     if (!templateId) {
       setCollage(EMPTY_COLLAGE);

@@ -86,7 +86,9 @@ export const COLLAGE_LABEL_STEP = 0.1;
  * The arrangement belongs to the template because it is part of the look a collector settles on and
  * reuses — "my paired layout" is a template, not a decision to retake per listing. What it cannot
  * decide is *which* sides get photographed: that is the offer's (and the platform's) answer, and
- * pairing only refines it. `applyCollagePairing` in `offer-photo-config.ts` is where the two meet.
+ * pairing only refines it. `offer-photo-config.ts` is where the two meet, in two rules rather than
+ * one (#878): `seedCollagePairing` at creation, which only ever upgrades, and `applyCollagePairing`
+ * for a template picked by hand on the offer, which also unpairs.
  *
  * Off for a new template, which is what every template written before this renders as.
  */
