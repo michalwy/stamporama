@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
@@ -17,7 +17,7 @@ import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-di
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
-import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { usePersistedFilterParams } from "@/app/c/[collectionSlug]/shared/use-persisted-filter-params";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -273,21 +273,10 @@ export function InventoryListPanel({
   const offerPlatforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
 
-  // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
-  // an explicit "all"); absent param falls back to the per-collection store. The
-  // effective selection is mirrored back into the store below.
-  const { storedAreaId, storedYear, writeStore } =
-    useCollectionFilterStore(collectionId);
-  const urlAreaId = searchParams.get("areaId");
-  const urlYear = searchParams.get("year");
-  const filterAreaId =
-    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
-  const year =
-    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
-
-  useEffect(() => {
-    writeStore({ areaId: filterAreaId, year: year || null });
-  }, [filterAreaId, year, writeStore]);
+  // Area + year, the one selection every list rail shares (#143, #844): the address bar wins where
+  // it names one, the per-collection memory fills in otherwise, and whichever answered is mirrored
+  // back into both — the precedence and the two mirrors are `use-list-area-year-filter.ts`.
+  const { filterAreaId, year } = useListAreaYearFilter(collectionId, areas);
 
   // Whether a selected area brings its sub-areas with it is the collector's choice (#385); the
   // toggle lives in the area sidebar and the resolution is shared so every list agrees.

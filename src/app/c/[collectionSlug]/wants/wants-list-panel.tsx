@@ -99,6 +99,13 @@ export function WantsListPanel({
   // them. No URL parameter, for the reason the stamp picker has none: every other filter on this
   // screen is local state too, and one half of the toolbar living in the address bar would be a
   // second mechanism for one job.
+  //
+  // **#844 left this alone deliberately**, having widened its fix to every list that *is* URL-backed.
+  // The bug it names cannot occur here: this screen only ever reads the memory, so a reload restores
+  // the selection the same way the first visit did, and there is no second home for it to disagree
+  // with. Backing area and year with the URL here would not close a gap between two screens, it
+  // would open one *within* this screen — half its toolbar in the address bar and half not — which
+  // is the shape of incoherence #853 widened its own change to avoid.
   const { storedAreaId, storedYear, writeStore } = useCollectionFilterStore(collectionId);
   const filterAreaId = storedAreaId;
   const year = storedYear;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -16,7 +16,7 @@ import {
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { flattenAreaTree, resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
@@ -120,18 +120,13 @@ export function ListingWorkspacePanel({
       (storedPlatform && platforms.some((p) => p.id === storedPlatform) ? storedPlatform : "")) ||
     undefined;
 
-  // Area + year are the shared list selection (#143): the URL wins, else the per-collection store.
-  const { storedAreaId, storedYear, writeStore } = useCollectionFilterStore(collectionId);
-  const urlAreaId = searchParams.get("areaId");
-  const urlYear = searchParams.get("year");
+  // Area + year, the one selection every list rail shares (#143, #844): the address bar wins where
+  // it names one, the per-collection memory fills in otherwise, and whichever answered is mirrored
+  // back into both — the precedence and the two mirrors are `use-list-area-year-filter.ts`. A Mixed
+  // session needs nothing from either: entering it writes `areaId=all&year=all` itself, so there is
+  // no selection left to mirror and the address is already saying so.
   const mixedOnly = searchParams.get("group") === MIXED_GROUP;
-  const filterAreaId =
-    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
-  const year = urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
-
-  useEffect(() => {
-    writeStore({ areaId: filterAreaId, year: year || null });
-  }, [filterAreaId, year, writeStore]);
+  const { filterAreaId, year } = useListAreaYearFilter(collectionId, areas);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { StampListItem, StampSortBy } from "@/lib/stamps";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
-import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -69,21 +69,10 @@ export function StampsListPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
-  // an explicit "all"); absent param falls back to the per-collection store. The
-  // effective selection is mirrored back into the store below.
-  const { storedAreaId, storedYear, writeStore } =
-    useCollectionFilterStore(collectionId);
-  const urlAreaId = searchParams.get("areaId");
-  const urlYear = searchParams.get("year");
-  const filterAreaId =
-    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
-  const year =
-    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
-
-  useEffect(() => {
-    writeStore({ areaId: filterAreaId, year: year || null });
-  }, [filterAreaId, year, writeStore]);
+  // Area + year, the one selection every list rail shares (#143, #844): the address bar wins where
+  // it names one, the per-collection memory fills in otherwise, and whichever answered is mirrored
+  // back into both — the precedence and the two mirrors are `use-list-area-year-filter.ts`.
+  const { filterAreaId, year } = useListAreaYearFilter(collectionId, areas);
 
   // Whether a selected area brings its sub-areas with it is the collector's choice (#385); the
   // toggle lives in the area sidebar and the resolution is shared so every list agrees.
