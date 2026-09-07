@@ -626,6 +626,13 @@ export function PurchaseDetailPanel({
               </Link>
             </Tooltip>
           )}
+          {/* The order date, moved up out of a row of its own (#852). That second row held the
+              date, the currency, a shipping chip and the order total; the last two are now rows of
+              the values table below and the currency rides on every amount there, so the whole row
+              went and the header is a line shorter for it. */}
+          <Tooltip content="When this order was placed">
+            <span style={CHIP}>{purchase.purchasedAt}</span>
+          </Tooltip>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {(() => {
               const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
@@ -743,20 +750,6 @@ export function PurchaseDetailPanel({
             )}
           </span>
         </div>
-        <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-          <span style={CHIP}>{purchase.purchasedAt}</span>
-          <span style={CHIP}>{purchase.currency}</span>
-          {purchase.shippingCost && (
-            <Tooltip content="Shipping / shared cost">
-              <span style={CHIP}>
-                <Icon name="shipping" size="sm" /> {purchase.shippingCost} {purchase.currency}
-              </span>
-            </Tooltip>
-          )}
-          <span style={{ marginLeft: "auto", fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {purchase.total} {purchase.currency}
-          </span>
-        </div>
         {purchase.fxRateToBase == null && purchase.currency !== purchase.baseCurrency && (
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.75rem", color: "var(--color-warning, var(--color-text-muted))" }}>
             No exchange rate to {purchase.baseCurrency} is known for this purchase yet, so
@@ -774,6 +767,11 @@ export function PurchaseDetailPanel({
       <HoldingsSummaryBar
         total={purchaseHoldings}
         ret={purchaseReturn}
+        // What the order cost, in its own currency and in the base one (#852) — the figure the
+        // header used to state in part and never in whole. It leads the bar, so it is on screen
+        // collapsed; the price/shipping breakdown is behind the expander, those two being what the
+        // collector already had separately.
+        spend={purchase.spend}
         storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
       />
 
@@ -2638,6 +2636,11 @@ function LotCard({
                 <HoldingsSummaryBar
                   total={summary?.holdings}
                   ret={lotReturn}
+                  // A lot gets the same total (#852): its price plus its share of the order's
+                  // shipping, which is what a cost basis is split from. The pool chips above say
+                  // the sum but never the share, and they are the *collapsed* lot's only answer,
+                  // so both stay — the chip is the shut lot's line, this is the open one's table.
+                  spend={lot.spend}
                   storageKey={`stamporama:purchase:lotSummaryExpanded:${collectionId}`}
                 />
               </div>
