@@ -7,6 +7,10 @@ node_modules/
 next-env.d.ts
 out/
 tsconfig.tsbuildinfo
+# the typecheck's private copy of Next's generated route types and of `next-env.d.ts`, made by
+# `scripts/static-checks.sh` (#881)
+.next-typecheck/
+tsconfig.typecheck.tsbuildinfo
 
 # production
 dist/

@@ -142,6 +142,14 @@ jobs:
           echo "code=false" >> "$GITHUB_OUTPUT"
           echo "Documentation only - the application suite is skipped."
 
+  # Lint, typecheck and build run **concurrently inside this one job** (#881), not one after
+  # another. The job keeps its name, so `main`'s ruleset is untouched and nothing had to be
+  # decided: splitting them into three jobs would have made each its own required context and
+  # needed the ruleset changed first, which is the user's call and not a session's.
+  #
+  # The arrangement, the failure output and the reason `tsc` reads a copy of Next's generated
+  # route types rather than the live `.next/types/` all live in `scripts/static-checks.sh`, next
+  # to the code that does it.
   static-checks:
     name: Static checks
     runs-on: ubuntu-latest
@@ -169,14 +177,8 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma:generate
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Build
-        run: pnpm build
+      - name: Lint, typecheck and build
+        run: scripts/static-checks.sh
 
   unit:
     name: Unit tests

@@ -1,0 +1,26 @@
+{
+  // The typecheck's view of the tree, used only by `scripts/static-checks.sh` (#881), where
+  // `tsc` runs at the same time as `next build`.
+  //
+  // Both want Next's generated route types. `next build` rewrites `<distDir>/types/*.d.ts` with a
+  // plain, non-atomic `fs.writeFile` partway through every build, so a `tsc` reading
+  // `.next/types/routes.d.ts` concurrently can be handed a truncated file. This config points the
+  // typecheck at `.next-typecheck/types/`, a copy the script takes before the build starts and
+  // nothing writes to afterwards.
+  //
+  // `next-env.d.ts` has to be swapped for the same reason: Next generates it with the dist
+  // directory baked in, so the real one imports `./.next/types/routes.d.ts`. The script derives
+  // `.next-typecheck/env.d.ts` from it rather than keeping a hand-written copy — a shim that stops
+  // matching what Next generates is a typecheck that quietly checks less.
+  //
+  // Everything else is inherited: this file overrides `include` and `exclude` and nothing more,
+  // so `pnpm typecheck` and the CI typecheck cannot disagree about a compiler option.
+  "extends": "./tsconfig.json",
+  "include": [
+    ".next-typecheck/env.d.ts",
+    ".next-typecheck/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": ["node_modules", "extension", "next-env.d.ts"]
+}
