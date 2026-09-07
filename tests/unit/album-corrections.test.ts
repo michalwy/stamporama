@@ -149,3 +149,8 @@ describe("a corrected box still comes out of the drawer", () => {
     assert.equal(widened.strip, null);
   });
 });
+
+// Deliberate, temporary: #881 has to show what a red `Static checks` prints now that three
+// checks run at once. Reverted in the next commit.
+const brokenOnPurpose: number = "a string, so the typecheck fails";
+void brokenOnPurpose;
