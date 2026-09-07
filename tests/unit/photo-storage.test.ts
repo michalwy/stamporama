@@ -9,7 +9,7 @@ import {
   permanentPrefix,
   stagingPrefix,
   variantKey,
-} from "../../src/lib/storage";
+} from "../../src/lib/storage/keys";
 import { FilesystemStorage } from "../../src/lib/storage/filesystem";
 
 describe("storage key helpers", () => {

@@ -2,7 +2,7 @@ import { FilesystemStorage } from "./filesystem";
 import { GcsStorage } from "./gcs";
 import { withCache } from "./cache";
 import { cacheMaxBytes, describeCacheMax } from "./cache-rules";
-import type { PhotoVariant, SheetVariant, Storage, StorageBackend } from "./types";
+import type { Storage, StorageBackend } from "./types";
 
 export type {
   PhotoVariant,
@@ -23,6 +23,16 @@ export {
   type StorageCacheUsage,
 } from "./cache";
 export { describeCacheMax } from "./cache-rules";
+// Key arithmetic lives in `keys.ts` so it can be unit-tested without this barrel's Prisma-backed
+// cache coming with it (#861); re-exported here because every caller reaches it through `@/lib/storage`.
+export {
+  extForMime,
+  permanentPrefix,
+  sheetPrefix,
+  sheetVariantKey,
+  stagingPrefix,
+  variantKey,
+} from "./keys";
 
 const filesystem = new FilesystemStorage();
 
@@ -101,60 +111,4 @@ export async function logStorageStartup(): Promise<void> {
       }`
     );
   }
-}
-
-/** File extension for a stored variant, derived from its mime. Accepted upload formats only. */
-export function extForMime(mime: string): string {
-  switch (mime) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    default:
-      throw new Error(`Unsupported mime for storage key: ${mime}`);
-  }
-}
-
-// A photo/upload persists a `storageKey` *prefix*; the two variant files hang under it as
-// `<prefix>/{full,thumb}.<ext>` (#112 variant addressing). Storing the prefix keeps the two
-// derivatives addressable from the single column and lets a whole photo's bytes be moved or
-// deleted as a unit.
-
-/** Permanent prefix for a committed photo: `<collectionId>/<photoId>`. */
-export function permanentPrefix(collectionId: string, photoId: string): string {
-  return `${collectionId}/${photoId}`;
-}
-
-/** Staging prefix for an eager pre-Save upload: `staging/<uploadId>`. Namespaced apart from
- * permanent keys so the GC sweep and tooling can target staging alone. */
-export function stagingPrefix(uploadId: string): string {
-  return `staging/${uploadId}`;
-}
-
-/** The concrete key of one variant under a stored prefix: `<prefix>/{full,thumb}.<ext>`. */
-export function variantKey(
-  prefix: string,
-  variant: PhotoVariant,
-  mime: string
-): string {
-  return `${prefix}/${variant}.${extForMime(mime)}`;
-}
-
-/** Permanent prefix for a retained scan sheet (#566): `<collectionId>/sheets/<sheetId>`. Under the
- * collection like every other permanent key, in a segment of its own so the retained originals —
- * far the largest objects the app stores — can be found, measured and swept as a group without
- * pattern-matching photo ids. */
-export function sheetPrefix(collectionId: string, sheetId: string): string {
-  return `${collectionId}/sheets/${sheetId}`;
-}
-
-/** The concrete key of one sheet variant: `<prefix>/{original,view}.<ext>`. */
-export function sheetVariantKey(
-  prefix: string,
-  variant: SheetVariant,
-  mime: string
-): string {
-  return `${prefix}/${variant}.${extForMime(mime)}`;
 }

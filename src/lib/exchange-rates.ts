@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import type { BaseCurrency } from "./currencies";
+import { convertViaEur, parseEcbXml } from "./ecb-rates";
 
 // **One dated snapshot of the ECB table per collection, never a bag of per-pair rates.**
 //
@@ -31,32 +32,6 @@ export type RateResult = {
   fetchedAt: Date;
   isStale: boolean;
 };
-
-export function parseEcbXml(xml: string): Map<string, number> {
-  const rates = new Map<string, number>();
-  rates.set("EUR", 1);
-  const regex = /<Cube\s+currency='([A-Z]+)'\s+rate='([0-9.]+)'\s*\/>/g;
-  let match;
-  while ((match = regex.exec(xml)) !== null) {
-    rates.set(match[1], parseFloat(match[2]));
-  }
-  return rates;
-}
-
-export function convertViaEur(
-  rates: Map<string, number>,
-  from: string,
-  to: string
-): number {
-  const fromRate = rates.get(from);
-  const toRate = rates.get(to);
-  if (fromRate === undefined || toRate === undefined) {
-    throw new Error(
-      `Unsupported currency pair: ${from} → ${to}`
-    );
-  }
-  return toRate / fromRate;
-}
 
 async function fetchEcbRates(): Promise<Map<string, number>> {
   const response = await fetch(ECB_DAILY_URL);
