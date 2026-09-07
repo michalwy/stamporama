@@ -874,7 +874,29 @@ Every backlog review asks whether the model above still describes what actually 
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
 - Are there worktrees or `task/` branches left over from work that has already landed?
+- Did every **held** session's title say that it was held? *Spawn ahead and hold* asks for it and
+  *A held session's worktree is not stale* now depends on it, so this is a lookup in the app's
+  session list — machine-local, and no part of the repository — rather than a memory. **The one to
+  check is the hold a session releases by itself**: #868 waited for `main` to carry #844, needed no
+  signal, and its title said nothing, where a session gated on the lead's signal is the case nobody
+  forgets. Both are worktrees with no branch, and only the title tells either from an abandoned one.
+  It fails safe when it is missed — an unmarked session that is not finished goes to the user rather
+  than to deletion.
+- Did a held session **start writing before the thing it waited for had landed**? A commit's author
+  date survives the rebase merge, so `main` records when work was actually written; compare it
+  against the `mergedAt` of the pull request the session was held on. #868 waited correctly by
+  twenty minutes, and that is still provable today. **It runs forwards only.** The comparison needs
+  the held session's own pull request body to name what it waited for — one line, the convention
+  from 2026-09-07 — and nothing that merged before that date recorded it, so there is no history
+  here to audit.
 
 Each of these is one of the rules above failing in a way that looks like nothing at the time. A lead
 answering from its own judgement is indistinguishable from a lead answering from the documentation,
 right up until somebody asks where the answer came from.
+
+**One failure here deliberately has no question.** Nothing records when a chip was *written*: a
+session's first transcript record is its spawn prompt, but that timestamp is when the session
+started, not when the lead composed it — across forty sessions the two are never more than fifty
+milliseconds apart. So *"did a held chip go stale?"* can be answered only by remembering, and a
+question answered that way is this section's own failure mode wearing a checklist. The guard stays
+where #897 put it: the session asks rather than proceeds, and the lead re-briefs at the signal.
