@@ -12,11 +12,12 @@ const connectionString =
 // nothing else should have a vote. A client that is *checked out* for a query is still refed, so
 // no in-flight work can be cut short by it.
 //
-// The cost of not having it was the whole of CI's ten minutes. `pg` defaults `idleTimeoutMillis`
-// to 10 s and keeps the idle socket refed, so a process whose last query has returned sits doing
-// nothing for ten seconds and then exits. The integration suite is 142 processes, one per file:
-// 134 of them paid that ten seconds — 92% of the suite's wall clock was processes waiting to be
-// allowed to die. The seven files that were fast were exactly the seven that happened to call
+// `pg` defaults `idleTimeoutMillis` to 10 s and keeps the idle socket refed, so a process whose
+// last query has returned sits doing nothing for ten seconds and then exits. The integration
+// suite is 143 processes, one per file: 135 of them paid that ten seconds. That is a fixed
+// ~1,350 seconds of worker time thrown away per run, and removing it took CI's
+// `Integration tests` job from **10 min 03 s to 3 min 31 s**. The eight files that were already
+// fast were exactly the eight that either never opened the database or happened to call
 // `prisma.$disconnect()` in an `after` hook.
 const adapter = new PrismaPg({ connectionString, allowExitOnIdle: true });
 
