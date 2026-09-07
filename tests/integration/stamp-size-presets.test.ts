@@ -6,7 +6,7 @@ import {
   createStampSizePreset,
   deleteStampSizePreset,
   getStampSizePresets,
-  renameStampSizePreset,
+  updateStampSizePreset,
   reorderStampSizePresets,
   StampSizePresetFigureError,
   StampSizePresetPairTakenError,
@@ -247,7 +247,7 @@ describe("stamp size presets (#803)", () => {
     const one = await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
     const two = await createStampSizePreset(userId, collectionId, { widthMm: 21.5, heightMm: 25 });
 
-    await renameStampSizePreset(userId, one.id, " Germania ");
+    await updateStampSizePreset(userId, one.id, { widthMm: 25, heightMm: 30, name: " Germania " });
     await reorderStampSizePresets(userId, collectionId, [two.id, one.id]);
     assert.deepEqual(
       (await getStampSizePresets(userId, collectionId)).map((p) => [p.id, p.name]),
@@ -258,13 +258,71 @@ describe("stamp size presets (#803)", () => {
     );
 
     // A blank name is *no name*, not an empty label.
-    await renameStampSizePreset(userId, one.id, "   ");
+    await updateStampSizePreset(userId, one.id, { widthMm: 25, heightMm: 30, name: "   " });
     assert.equal((await getStampSizePresets(userId, collectionId))[1].name, null);
 
     await deleteStampSizePreset(userId, two.id);
     assert.deepEqual(
       (await getStampSizePresets(userId, collectionId)).map((p) => p.id),
       [one.id]
+    );
+  });
+
+  // The pair is correctable, and **the position is what proves it is a correction** (#804). A delete
+  // and a create would produce the same two numbers and pass any assertion about them — it appends,
+  // so the preset would arrive last. Asserting the order is the only thing here that can tell the
+  // two implementations apart, which is what this case is for.
+  it("corrects a preset's pair in place, keeping its position", async () => {
+    const one = await createStampSizePreset(userId, collectionId, {
+      widthMm: 25,
+      heightMm: 30,
+      name: "Germania",
+    });
+    await createStampSizePreset(userId, collectionId, { widthMm: 21.5, heightMm: 25 });
+
+    await updateStampSizePreset(userId, one.id, { widthMm: 25, heightMm: 29.5, name: "Germania" });
+
+    assert.deepEqual(
+      (await getStampSizePresets(userId, collectionId)).map((p) => [p.widthMm, p.heightMm]),
+      [
+        [25, 29.5],
+        [21.5, 25],
+      ]
+    );
+  });
+
+  // Correcting one preset onto another's pair is the collision the create path already names, and it
+  // must say the same thing — the numbers are the identity, so this is *that pair is already saved*
+  // rather than a save that went wrong (ADR-0048 §3).
+  it("refuses a correction onto a pair another preset already holds", async () => {
+    const one = await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
+    await createStampSizePreset(userId, collectionId, { widthMm: 21.5, heightMm: 25 });
+
+    await assert.rejects(
+      () => updateStampSizePreset(userId, one.id, { widthMm: 21.5, heightMm: 25 }),
+      StampSizePresetPairTakenError
+    );
+    assert.deepEqual(
+      (await getStampSizePresets(userId, collectionId)).map((p) => [p.widthMm, p.heightMm]),
+      [
+        [25, 30],
+        [21.5, 25],
+      ]
+    );
+  });
+
+  // A figure the module will not accept is refused on this door as it is on the create door — the
+  // asymmetry #763 draws, one layer down: a size that cannot be read is nothing at all, and a
+  // correction that quietly stored one would be a hawid cut to a number nobody accepted.
+  it("refuses a correction to a figure it cannot accept", async () => {
+    const one = await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
+    await assert.rejects(
+      () => updateStampSizePreset(userId, one.id, { widthMm: 0, heightMm: 30 }),
+      StampSizePresetFigureError
+    );
+    assert.deepEqual(
+      (await getStampSizePresets(userId, collectionId)).map((p) => [p.widthMm, p.heightMm]),
+      [[25, 30]]
     );
   });
 
@@ -277,7 +335,10 @@ describe("stamp size presets (#803)", () => {
   it("does not answer to somebody else's user id", async () => {
     const one = await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
     await assert.rejects(() => getStampSizePresets(otherUserId, collectionId), /access denied/);
-    await assert.rejects(() => renameStampSizePreset(otherUserId, one.id, "x"), /access denied/);
+    await assert.rejects(
+      () => updateStampSizePreset(otherUserId, one.id, { widthMm: 25, heightMm: 30, name: "x" }),
+      /access denied/
+    );
     await assert.rejects(() => deleteStampSizePreset(otherUserId, one.id), /access denied/);
     await assert.rejects(
       () =>
