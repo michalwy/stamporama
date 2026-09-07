@@ -261,7 +261,12 @@ or GitHub setting that turns the keywords off.
 of ordinary prose that puts the verb in front of the number arms it just as well — the pull request
 adding this rule did exactly that twice in its own body, the second time while quoting the first
 mistake in order to explain it. Read the reference back rather than the text:
-`gh pr view <n> --json closingIssuesReferences` returns `[]` when the body and the commits are clean.
+`gh pr view <n> --json closingIssuesReferences` returns `[]` when the **body** is clean — and only the
+body. **That query does not see commit messages at all**, which was measured against a throwaway
+pull request whose sole commit said `Closes #914` over a body with no keyword in it: the query
+answered `[]` while the merge would have closed the issue (#790). So the by-hand check every
+session has been told to run covers half of the rule stated above, and the missing half is the
+half a rebase-merge repository replays verbatim onto `main`. The job below covers both.
 
 **Read it back again at the moment auto-merge is armed**, and not only when the body is written.
 Arming is the last point at which a person is looking: the pull request then merges when GitHub
@@ -272,6 +277,53 @@ the issue closes before step 8 of *The loop* has happened at all. Noticed by the
 here for the trail)`. GitHub does not read the parenthetical: merging #783 closed #780 one second
 later, at the merge timestamp, before anything had been verified. #784 carried `Closes #781.` for
 the same reason and was changed by hand minutes before it merged — that is a catch, not a control.
+
+#### The check that enforces it
+
+Since #790 a job named **`Closing reference check`** runs on every pull request in
+`.github/workflows/ci.yml`, and everything above stops depending on anybody remembering it. It needs
+no checkout and answers in about three seconds.
+
+**It reads two sources, because they need different instruments.** The body goes through
+`closingIssuesReferences` — GitHub's own parse of what it will act on, which no regular expression
+can beat and which a regular expression would actively lose to: **a keyword inside a code span is
+inert**, measured on the pull request that added the job, whose body needs to quote the trap in
+order to explain it. Put the same clause in backticks and the query goes from `[780]` to `[]`. The
+commit messages are matched by pattern instead, because of the paragraph above — the query cannot
+see them.
+
+**It is deliberately not gated on `Detect changes`.** Every other job asks whether a change touches
+the application; this one asks what the pull request *says*, which is independent of which files it
+touches. Both incidents that produced this rule were documentation-only pull requests — exactly the
+ones that gate skips — so gating it there would switch it off in the case that produced it.
+
+**It fails closed.** If the API cannot be reached it reports red, because green here means *safe to
+merge*. `Detect changes` fails the other way for the opposite reason: its safe direction is to run
+more, not less.
+
+**Renovate is unaffected**, which had to be established before the job was written rather than
+after: a dependency batch merges itself with nobody watching, so a check that failed one would stop
+an automerge silently — the failure mode *Automerge is the one exception* warns about for that whole
+arrangement. Renovate renders `#595` in upstream release notes as `#&#8203;595`, a zero-width space
+GitHub does not parse, and its commit messages are a single `chore(deps):` line. All 80 of its pull
+requests here pass.
+
+**The evidence that it fires is the job's own pull request.** The first push carried
+`… and closed #780 one second later` in both the body and the commit message — an ordinary clause of
+prose, written while explaining the trap, which is #787's mistake exactly, made by the session
+building the guard against it. The check went red in three seconds and named the issue. Nothing was
+armed deliberately and nothing broken reached the branch: [that run](https://github.com/michalwy/stamporama/actions/runs/34156034548) is an accident
+being caught. Beyond that the script was run against **all 130 pull requests in this repository's
+history** — it passes 129 and fails one, #783 — and its commit pattern over all **971 commits** on
+`main` gives 49 hits, every one genuine, and no false positives.
+
+**The user decided on 2026-09-06 that it is a fifth required check**, so that an armed pull request
+cannot be merged rather than merely warned about. The `name:` is `Closing reference check`. **The
+lead adds it to the `main` ruleset only once the job is green on `main`** — a required check that
+does not yet exist there blocks every pull request in the repository. Until that happens the count
+of required checks is still four, and when it changes, four places say so: the protected-`main`
+bullet in `AGENTS.md`, the ruleset list under *A protected `main`, and what it changed*, and two
+`description` fields in `renovate.json`. `git grep -nE 'four (required )?(checks|jobs)'` finds them.
 
 ## What the lead may answer, and what it must escalate
 
