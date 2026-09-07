@@ -16,13 +16,16 @@ One session takes an issue from the first decision to the last test: it reads th
 the migration by hand, writes the code, updates `docs/user-guide/` and the topic file, runs the
 suites, commits, and opens the pull request. Nothing is handed to a second agent halfway through.
 
-**This is not a new rule; it is the only thing that has ever happened here.** `.claude/plans/` holds
-**261 implementation plans** and every one of them is a single session's, start to finish. Not one
-hands a step to another agent.
+**This is not a new rule; it is the only thing that has ever happened here.** `.claude/plans/` in the
+main checkout holds **261 implementation plans**, and every one of them is a single session's, start
+to finish. Not one hands a step to another agent. **That is a count from the single-checkout era and
+it stopped growing on 2026-09-06**, the day the worktree model started — a task session's plan now
+lives and dies inside its own worktree (*Worktree cleanup*, and #875). Read the 261 as evidence about
+how this project worked for its whole history to that date, not as a running total.
 
 AGENTS.md used to describe four roles — Architect, Designer, Developer, Tester/Reviewer — powered
-up in sequence for anything crossing a domain, data or authorization boundary. In 261 plans they
-were **never used once**. They are gone, and this file replaces them.
+up in sequence for anything crossing a domain, data or authorization boundary. In those 261 plans
+they were **never used once**. They are gone, and this file replaces them.
 
 **Splitting one issue between agents needs a reason beyond size.** The reason it has never been
 worth it here is the invariant list in AGENTS.md: a feature in this project is a hand-written
@@ -147,6 +150,11 @@ adding this rule did exactly that twice in its own body, the second time while q
 mistake in order to explain it. Read the reference back rather than the text:
 `gh pr view <n> --json closingIssuesReferences` returns `[]` when the body and the commits are clean.
 
+**Read it back again at the moment auto-merge is armed**, and not only when the body is written.
+Arming is the last point at which a person is looking: the pull request then merges when GitHub
+decides the four checks are green, so a keyword that survived the body fires with nobody watching and
+the issue closes before step 8 of *The loop* has happened at all. Noticed by the #803 session (#854).
+
 #783's body opened with `Closes #780 (the lead closes it, not this pull request — the reference is
 here for the trail)`. GitHub does not read the parenthetical: merging #783 closed #780 one second
 later, at the merge timestamp, before anything had been verified. #784 carried `Closes #781.` for
@@ -192,6 +200,29 @@ Two things here reward reading the diff specifically:
 - **Closing is deliberately done by somebody who did not write the code.** The author is the worst
   available reader of their own *Done when*.
 
+**On a rebase-merge repository the diff is not the whole of what lands: read
+`git log origin/main..<branch>` as well.** Every commit on the branch becomes a commit on `main`, so
+a clean net diff says nothing about what is replayed. #881's branch carried a deliberate type error,
+pushed in order to photograph a red `Static checks`, and the revert of it. The lead reviewed the net
+diff and the file list, both clean — the revert had already been applied, so the change as a whole
+introduced nothing — and never looked at the commits. `main` now carries a commit that does not
+compile, and in a linear history with force-push blocked that cannot be undone: a `git bisect` across
+that range lands on it for a reason unrelated to whatever is being bisected (#891). Nothing is broken
+at `HEAD`; the whole cost falls on whoever reads or bisects the history later.
+
+**A deliberate breakage goes on a throwaway branch, never on the branch that will merge.** The
+session did nothing wrong by its brief — it was asked to *demonstrate* a red run rather than assert
+one, which was the right instruction and produced the best evidence in that pull request. **Nobody
+said where.** Push the breakage to a branch that is allowed to die, read the run, and let the pull
+request quote the output and link to the run. The evidence is identical and nothing enters `main`'s
+history.
+
+**Whether *every* commit on a task branch must build is deliberately left open (#891).** That is the
+wider rule which would also have caught this, and it is a much bigger claim: it would forbid an
+ordinary work-in-progress sequence in which a commit compiles only once the next one lands. Nobody
+has weighed that trade, so it is **not** a rule here — do not enforce it as though it were, and do
+not write it in until it has been decided.
+
 **It earns its keep, and the day this file was written proves it.** Reading #783's diff caught two
 defects that the report, the four required checks and the session's own confidence had all passed
 over: a claim that two concurrent suites truncate each other's tables, when this suite performs no
@@ -225,6 +256,28 @@ cache, and nothing in them looks at a screen at all. Green means *the failure mo
 see did not occur*, and **which failure modes they cannot see** is worth asking of any change, not
 only of a bump.
 
+**A correction is verified by grepping for the retired claim, not by re-reading the passage you
+fixed.** #880 had stated a local speed-up ratio as a fact about CI, noticed, and shipped the
+correction as its own commit — deliberately, because the wrong number had reached the durable record.
+That commit (`5e89146`) reached `src/lib/db.ts` and the `platform.md` bullet the correction was
+*about*, and **missed a second bullet four lines away that merely mentioned the number**. So the file
+opened by asserting `92% of CI's wall clock` as fact, with the bullet below it teaching against
+exactly that error; a reader stopping after the first took away the wrong number *and* the wrong
+habit. `bf69b84` is the second correction that should not have been needed.
+
+**The failure is structural rather than careless**, which is why the answer is a procedure and not
+more care: correcting means editing the place you reasoned about, and a claim spreads to the places
+you did not reason about — a sibling paragraph, a code comment, a pull request body, an issue, a
+closing comment. The correcting edit goes where the thinking is; the stale copy sits where it is not.
+This project multiplies those copies on purpose, writing long prose beside its code, with the same
+figure often in a schema comment, a topic file and an ADR.
+
+**So state it as a grep, not as care.** "Be thorough" is not a procedure; `git grep '92%'` across the
+whole tree is, plus a look at the pull request and issue text if the claim ever left the repository.
+The #880 session's own words are the part worth keeping: *a correction is not done when the thing you
+were thinking about is fixed; it is done when the retired claim does not appear anywhere. That is a
+grep, and I did not run it until you pointed at the line* (#854).
+
 ## A protected `main`, and what it changed
 
 Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, the user included**:
@@ -252,7 +305,9 @@ Three consequences:
   `gh pr merge --rebase --auto` and GitHub merges the moment the four checks are green. Without it,
   somebody sits watching CI for several minutes and nobody can tell whether the work has landed or
   whether it was forgotten. The user's decision still gates the merge; only the waiting moves off a
-  human.
+  human. **Arming it is not the same as landing it**: GitHub waits for a branch to *become*
+  mergeable here and never makes it so, so an armed `task/` branch that has fallen behind stays
+  armed and stays behind — see *Who moves a branch that has fallen behind*.
 - **A merged branch deletes itself** (`delete_branch_on_merge`). The worktree does not — see
   *Worktree cleanup* below.
 - **A rejected change leaves no trace.** In a linear history it simply drops out and whatever sat
@@ -343,9 +398,58 @@ working in parallel, `main` moving underneath a branch is the normal case rather
 
 The re-run is the half that is easy to drop and the only half that is interesting. A suite that was
 green before the rebase was green against a *different* `main`; all it establishes is that the
-branch worked in isolation, which is not the claim anybody needs. If GitHub offers to update the
-branch for you, doing it locally is still better — that is where the checks get re-run by somebody
-who then reads the result.
+branch worked in isolation, which is not the claim anybody needs. Do it locally, because that is
+where the checks get re-run by somebody who then reads the result. **Nothing here updates a branch on
+its own**: an update happens because a person asked for one, and who that is depends on whether the
+branch is still being worked on (*Who moves a branch that has fallen behind*, below).
+
+**When the rebase pulled in a lockfile change it is four steps, not three: `pnpm install` goes
+between the rebase and the suites.** Otherwise the installed tree is still the old one and the suites
+verify against dependencies the branch no longer declares. **Check rather than reinstall every
+time** — `git diff ORIG_HEAD --name-only -- pnpm-lock.yaml package.json` answers it in a second, and
+a rule that says *always reinstall* will simply be ignored on the many rebases where it is pointless.
+
+`main` moved **three times** under #867 and one of those moves was a `better-auth` bump; that session
+noticed and reinstalled, and nothing in this file had told it to (#854). It matters more than when
+the section above was written: with a Renovate batch draining alongside feature branches, a
+dependency landing under an open branch stopped being the exception — on 2026-09-06 it happened to
+most branches that stayed open for more than an hour.
+
+### Who moves a branch that has fallen behind
+
+**The session stops rebasing once it has pushed and reported; the lead updates the branch from
+there**, with `gh pr update-branch --rebase`, and reads the CI run that follows.
+
+Both halves are separate claims and both are needed. **The session stops** because a further
+re-verify costs a full local suite run and buys nothing CI is not about to run anyway: the discipline
+above is for a branch **still being worked on**, and nothing had ever said where it ends. **The lead
+updates** because otherwise the branch never merges at all, and because the lead is the one who then
+reads the run — an `update-branch` costs one CI run and no local suite run, and that asymmetry is the
+whole point.
+
+**Nothing here closes the loop by itself, and that was got wrong twice before anybody checked:**
+
+- **`allow_update_branch` is `false` on this repository** (`gh api repos/michalwy/stamporama`).
+  GitHub's auto-merge waits for a branch to become mergeable and **never makes it so**. Verify that
+  yourself rather than trusting this line — it is a repository setting and a setting can change.
+- **Renovate's branches self-update because *Renovate* rebases them** — `automergeStrategy: "rebase"`
+  in `renovate.json` — not because GitHub does. That is its bot, and a `task/` branch has none.
+- **So a `task/` branch left armed and alone sits at `BEHIND` for ever.** #837 and #839 did exactly
+  that.
+
+**Two formulations were considered and rejected. Both are recorded because both are tempting.**
+
+1. **"Skip the re-run when the bump looks unrelated."** It is a judgement about code the session has
+   not read, which is the shape of reasoning this file warns against everywhere else. And it
+   misidentifies the reason: the value of a local run was never that it might fail, it is that
+   **somebody reads the result** — and once auto-merge is armed, nobody will.
+2. **"Arm auto-merge and GitHub takes it from there."** False here, for the reason above, and the
+   more dangerous of the two, because it sounds like the mechanism working. What it actually produces
+   is a branch nobody is watching that never merges.
+
+The #803 branch was rebased and fully re-verified **four times** while waiting to be merged — each
+time a local run of all four suites plus a ten-minute CI run, with `main` moving *during* three of
+them. Every one of the four re-runs caught nothing (#854).
 
 ## Branches
 
@@ -357,6 +461,13 @@ the same issue the session owns.
 Sessions run in parallel, each in its own worktree. **Merges serialise, and that is the trade**: the
 second branch ready rebases onto the first and re-runs its checks. At two or three parallel branches
 that costs one extra CI run, which is cheap next to the alternative.
+
+**That estimate assumes nothing else is landing, and a busy day is not that.** On 2026-09-06 four
+Renovate pull requests and three task branches were in flight together and something landed every few
+minutes; `strict_required_status_checks_policy` makes up-to-date a merge precondition, so the real
+cost is one run **per move, per branch**. Under those conditions a verified branch is not a mergeable
+branch — **it is mergeable only until the next thing lands** — which is why updating it stops being
+the session's job at all (*Who moves a branch that has fallen behind*).
 
 **Where two branches touch the same file, that trade is not one extra CI run — it is a round trip.**
 A rebase that conflicts is not something GitHub can do for you: *Update branch* fails, and the branch
@@ -475,6 +586,40 @@ port, and an address that moves is an address he has to ask about before he can 
    so what is running there is what was merged. Skipping the rebuild leaves him looking at code that
    exists nowhere two hours later.
 
+**A fix pushed to a branch under showcase must be laid into the main worktree.** Steps 2 and 3 cover
+the first checkout and nothing covers the second round, which is precisely where it gets skipped: the
+first checkout is deliberate and remembered, the re-lay is not. When he rejects something and the
+session pushes a fix, verifying `origin/<branch>` is not the end of it: **the lead must put that
+commit into the main worktree** — fetch, move the checkout on, rebuild if the change needs it, open
+the address again, and only then say it is there. Verifying the remote and putting a change in front
+of him are two different acts.
+
+It failed exactly there. The main worktree sat on `e743339` while the fix was `fad16ca` on the
+remote; the lead verified the remote, told the user the fix was in front of him, and it was not —
+`grep -c closeOnSelect` on his tree returned `0`. **He was looking at precisely the code the lead had
+given him.** Worse than the omission was what followed: the lead explained his correct report away
+with a container restart time from `docker ps`, an inference built on top of the error and reached
+because it was available and it fitted — he had restarted the container for certainty, not after the
+fact. **Between "the session pushed it" and "he can see it" there is a step, and it is the lead's**
+(#854).
+
+**When a showcase reaches "we disagree about what is on screen", the check has to separate the two
+builds that actually differ.** Choose it against the commit in dispute, not against whatever boundary
+is easiest to describe — and choose one that does **not** require performing the interaction being
+complained about, because a check that makes him repeat the broken step cannot tell *not fixed* from
+*fixed, and I did it wrong*.
+
+The lead handed him a one-glance test — *four separate chips means old code, one More filters control
+means new* — which was true and useless: it separates pre-#846 from post-#846, a boundary **four
+commits away** from the one being argued about. His build sat on the far side of the lead's test and
+the near side of the real one, so *"I am looking at good code"* and *"you are on old code"* were both
+correct, about different commits, and nothing in the test could tell them apart. **A discriminating
+test that does not discriminate the thing in question is worse than no test**: it converts a
+disagreement into confidence on both sides and closes off the question that would have found the
+error. The implementing session supplied the right one unprompted — *open the location dropdown and
+pick nothing; the switch is at the foot of the panel, or it is not* — which pins the disputed commit
+against its predecessor and touches none of the interaction under complaint (#854).
+
 **Raising the stack is the lead's; lowering it is his alone.** Never take the stack down and never
 delete seeded data without his word. He manages Docker, and a stack that disappears under him is
 indistinguishable from one that broke.
@@ -580,14 +725,30 @@ Two orphaned worktrees from 27 August were found by hand while this model was be
 worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
 in an unrelated session, as a failure with no visible cause.
 
+**A task session's implementation plan dies at layer 1, and the lead is what kills it.** AGENTS.md
+tells a session to write a plan under `.claude/plans/` for multi-area work; `.gitignore` ignores
+`.claude/`, so `git ls-files .claude/plans` returns **0** and no plan has ever been committed. The
+harness copies the checkout's plans into each new worktree — a session that writes one holds 262
+where the checkout holds 261 — and that 262nd file is the only copy of it anywhere. Removing the
+worktree removes it. **Five worktrees were removed on 2026-09-06**, and whatever those sessions wrote
+is gone and is not recoverable.
+
+Neither rule was written knowing about the other, and together they **instruct sessions to produce a
+record and the lead to destroy it**. Nothing about that is settled here: **#875 holds the choice**
+— commit the plans under a narrower ignore rule, copy the plan out before removing the worktree,
+drop the requirement, or move the plan into the pull request body — and it is the user's to make.
+What follows already, and is stated at each of the three places the figure appears, is that **the
+261 above is a count frozen on the day the worktree model started**, not a number anyone should
+expect to grow.
+
 ## How much experience is behind this
 
 **One day.** Before 2026-09-06 every commit in this repository went straight to `main` and every
-session was the only one running. The single-session rule at the top has 261 plans behind it; the
-lead, the pull request and the parallel worktrees have a single afternoon. This file records the
-current state of the practice, not settled practice, and the parts likeliest to be wrong are the
-ones exercised least: more than two sessions at once, and how a design track's issues get spawned as
-a batch.
+session was the only one running. The single-session rule at the top has those 261 plans behind it —
+all of them written before that date, and the count has not moved since (#875); the lead, the pull
+request and the parallel worktrees have a single afternoon. This file records the current state of
+the practice, not settled practice, and the parts likeliest to be wrong are the ones exercised least:
+more than two sessions at once, and how a design track's issues get spawned as a batch.
 
 ## Keeping this file honest
 
