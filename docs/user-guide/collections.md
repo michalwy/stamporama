@@ -25,8 +25,8 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - The collection name, at the top, with the [Action items](action-items.md) bell beside it
 - **Overview**, pinned above everything else — the one screen about the collection as a whole
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
-  variant-price worklist under it), **Collection** (Inventory with Card scans under it, and
-  Locations), **Selling** (the Offers group, the Marketplaces group, Sales), **Buying** (Want list,
+  variant-price worklist under it), **Collection** (Inventory with Card scans under it, then Areas,
+  Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Buying** (Want list,
   Purchases, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
   and selling alike). A subject read through more than one screen carries the extra ones indented
   under it: **Stamps**, **Inventory** and **Offers** are themselves the list you open every day,
@@ -158,7 +158,7 @@ telling Stamporama what language that text is in.
 
 ## Organizing collecting areas
 
-Areas are managed in **Settings → Areas**, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves.
+Areas are managed on the **Areas** screen, in the sidebar's **Collection** section, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves. (Areas used to live under Settings; the old address still works and takes you to the screen.)
 
 ### Grouping-only areas
 
@@ -193,11 +193,11 @@ Within each level of the tree, areas can be arranged in whatever order you like 
 
 An issue can be moved to a different collecting area after it is created. Open the issue's **⋮** menu on the **Issues** list and choose **Move to another area…**, then pick the target area from the tree and click **Move**. The issue's whole **stamp tree moves with it** — its stamps are re-tagged to the new area (a stamp that also belongs to another issue still in the old area keeps its place there too). Grouping-only areas are shown but can't be chosen as the destination.
 
-Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area in **Settings → Areas**.
+Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area on the **Areas** screen.
 
 ## Overriding an issue's catalog prefix
 
-Catalog numbers are stored bare (`200`) and shown with the prefix your **area** sets (`Mi·PL 200`) — the area's own prefix, or a per-vendor exception to it, inherited down the area tree from [**Settings → Areas**](#catalog-settings-numbering-and-price-sources). Some issues legitimately number under a different prefix than the area they sit in — a special or commemorative sub-catalog that does not follow the country's ordinary numbering.
+Catalog numbers are stored bare (`200`) and shown with the prefix your **area** sets (`Mi·PL 200`) — the area's own prefix, or a per-vendor exception to it, inherited down the area tree from [the **Areas** screen](#catalog-settings-numbering-and-price-sources). Some issues legitimately number under a different prefix than the area they sit in — a special or commemorative sub-catalog that does not follow the country's ordinary numbering.
 
 The **Add issue** and **Edit issue** dialogs therefore give every catalog a small **prefix** box, in front of its **First** / **Last** range — which is exactly where the prefix appears when the number is printed. Its placeholder shows the prefix the area supplies, so leaving it **blank means "use the area's"**, which is what every ordinary issue does. Type something into it and that issue's stamps carry it instead, for that one catalog: enter `SP` on the Michel row and its stamps read `Mi·SP 200` while the rest of the area keeps `Mi·PL`. Each catalog is overridden separately; the ones you leave blank are unaffected.
 
@@ -255,7 +255,7 @@ There is **no fixed set of column names** — you say which column is which in t
 
 The dialog walks four steps:
 
-1. **The file, and where it goes.** Pick a file from disk, or paste the rows straight into the box below — they are two ways in to the same import, and everything after this point is identical. Choose the **area** the issues belong to: the file itself carries no country, so one import fills one area, a file per country. The dialog names the catalog those numbers will be filed under — the area's **primary catalog**, with its prefix, so you can see that `200` will become `Mi·PL 200` before anything is read. An area with no primary catalog set cannot take an import; set one first in [**Settings → Areas**](#catalog-settings-numbering-and-price-sources).
+1. **The file, and where it goes.** Pick a file from disk, or paste the rows straight into the box below — they are two ways in to the same import, and everything after this point is identical. Choose the **area** the issues belong to: the file itself carries no country, so one import fills one area, a file per country. The dialog names the catalog those numbers will be filed under — the area's **primary catalog**, with its prefix, so you can see that `200` will become `Mi·PL 200` before anything is read. An area with no primary catalog set cannot take an import; set one first on [the **Areas** screen](#catalog-settings-numbering-and-price-sources).
 2. **Which column is which.** Every column the file has is listed with the first few values under it, and three boxes below assign **catalog numbers** (required), **year** and **issue name** (both optional). Familiar header names are pre-selected as a starting point — always worth a glance, never a rule.
 3. **What this would do.** One line per row of the file, each naming its outcome before anything is written:
    - **New issue** — nothing in the collection holds these numbers, so the issue is created with all its stamps.

@@ -4,7 +4,6 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { SettingsPanel } from "./settings-panel";
 import { CatalogPanel } from "../catalog/catalog-panel";
-import { AreasPanel } from "../areas/areas-panel";
 import { ConditionsPanel } from "./conditions-panel";
 import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { FormatsPanel } from "./formats-panel";
@@ -33,7 +32,7 @@ import { AlbumTemplatesPanel } from "./album-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
-import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
+import type { CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/colnect";
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { AssistantTokenData } from "@/lib/api-tokens";
@@ -63,7 +62,6 @@ interface SettingsTabsProps {
   defaultLanguage: string;
   collectionSlug: string;
   initialAreas: CollectionAreaData[];
-  catalogNames: CatalogNameFlat[];
   /** Listing languages in use across the collection's platforms (#293); drives the per-language
    * title-name inputs on the area form. */
   titleLanguages: string[];
@@ -149,7 +147,6 @@ const TABS = [
   // The four stamp-attribute dictionaries on one tab, not four (#72): they are one subject — what a
   // catalogue says about a stamp — set up in one sitting, and the strip is already long.
   { key: "attributes", label: "Attributes" },
-  { key: "areas", label: "Areas" },
   { key: "collages", label: "Collage templates" },
   // Beside the collage templates (#569): the collection's other named dictionary of render numbers,
   // one for the images a listing carries and one for the paper cards a box is filed onto. Its own
@@ -172,15 +169,15 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-/** How wide the settings screen is allowed to get, per tab (#691). Almost every tab is a column of
- * labelled fields, which reads badly stretched across a wide monitor — hence the 56rem the whole
- * screen used to be capped at. The **areas** tab is the exception: it is a tree, every level of
- * nesting spends width on indentation, and each row states the catalog configuration in force
- * beside the name. At 56rem a fourth-level area's catalog name was being cut mid-word with its
- * chips crowded against the stamp count. It is still bounded — an unbounded row would strand the
- * chips at the far edge of the screen from the name they describe. */
-const TAB_MAX_WIDTH: Partial<Record<TabKey, string>> = { areas: "80rem" };
-const DEFAULT_MAX_WIDTH = "56rem";
+/** How wide the settings screen is allowed to get (#691). Every tab is a column of labelled
+ * fields, and a form field stretched across a wide monitor is harder to read, not easier.
+ *
+ * The cap stays **here** rather than on `settings/page.tsx` because it is the tabs' answer and not
+ * the page's — that is what #691 settled, and it is why there was ever a per-tab override. The one
+ * tab that asked for a different number was **Areas**, being a tree rather than a form; it left for
+ * a screen of its own (#775) and took its 80rem with it, so the override table went with it too. A
+ * tab that needs its own width again brings the table back. */
+const MAX_WIDTH = "56rem";
 
 const sectionHeadingStyle: React.CSSProperties = {
   fontSize: "1rem",
@@ -196,7 +193,6 @@ export function SettingsTabs({
   defaultLanguage,
   collectionSlug,
   initialAreas,
-  catalogNames,
   titleLanguages,
   initialTree,
   initialConditions,
@@ -245,7 +241,6 @@ export function SettingsTabs({
   const rawTab = searchParams.get("tab");
   const activeTab: TabKey =
     rawTab === "catalogs" ||
-    rawTab === "areas" ||
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "attributes" ||
@@ -273,7 +268,7 @@ export function SettingsTabs({
   }
 
   return (
-    <div style={{ maxWidth: TAB_MAX_WIDTH[activeTab] ?? DEFAULT_MAX_WIDTH }}>
+    <div style={{ maxWidth: MAX_WIDTH }}>
       <div
         style={{
           display: "flex",
@@ -416,21 +411,6 @@ export function SettingsTabs({
             </section>
           ))}
         </div>
-      )}
-      {activeTab === "areas" && (
-        <AreasPanel
-          collectionId={collectionId}
-          collectionSlug={collectionSlug}
-          initialAreas={initialAreas}
-          catalogNames={catalogNames}
-          catalogVendors={initialTree.map((v) => ({
-            id: v.id,
-            name: v.name,
-            abbreviation: v.abbreviation,
-          }))}
-          titleLanguages={titleLanguages}
-          defaultLanguage={defaultLanguage}
-        />
       )}
       {activeTab === "collages" && (
         <section>
