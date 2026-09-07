@@ -139,8 +139,12 @@ size per type role, box treatment, photos, and four texts — edited in **Settin
 the stock. It is `CollageTemplate`'s analogue and follows #307/#308's decisions rather than parallel
 ones.
 
-`src/lib/album-template-rules.ts` is the pure half: bounds, parsing, and `AlbumRenderPreset`, the
-type an `AlbumTemplate` is *plus an id and a name*. #767's `Album` embeds the same preset, and that
+`src/lib/album-template-rules.ts` is the pure half: bounds, parsing, `AlbumRenderPreset` — the type
+an `AlbumTemplate` is *plus an id and a name* — and `renderAlbumText`, which is where a blank
+template renders blank rather than falling back to a generated listing title. That last one sits here
+rather than in the plan because the plan is not its only caller: the template's own preview (#795)
+renders the same four texts before any album exists, and the blank-template guard is exactly the sort
+of half that gets left out of a second renderer. #767's `Album` embeds the same preset, and that
 shared type is the only thing keeping the two field lists in step.
 
 **It stays a shared type — never a shared row, never a foreign key.** The duplicated columns are the
@@ -151,6 +155,81 @@ here.
 The defaults are **measured, not invented**: `DEFAULT_ALBUM_PRESET` is the geometry of the
 collector's own AlbumEasy sources — A4, 10 mm margins, `ALBUM_PAGES_SPACING (1.0 6.0)`, and
 `STAMP_BOXES_SIZE_ADJUST(4)` split across the two clearances that single global figure becomes.
+
+### The preview beside the fields (#795)
+
+Thirty-odd numbers, none of which showed what it did until an album was generated and a PDF produced
+— *"the flow of setting up a page template is practically impossible to get through"*. The preview
+**adds no capability**; it makes an existing one usable, and that is the whole measure of it: can he
+change a number and see it.
+
+`album-preview-sample.ts` is the sample and is pure; `album-preview.ts` is the server side;
+`album-template-preview.tsx` is the panel. What is worth not re-deriving:
+
+- **It draws through `AlbumPageCanvas` and plans through `planAlbumPages`**, and every millimetre on
+  it comes from one of the two. This is `hawid.ts`'s rule at its sharpest — four surfaces agree on a
+  millimetre only because none of them does its own arithmetic — and here it is sharper still,
+  because the collector is about to change a number *because of* what this sheet shows him. **A
+  preview that disagreed with the PDF would be worse than no preview: it would be a confident wrong
+  answer.**
+- **The canvas grew a second shape rather than a set of no-op handlers.** `AlbumPageCanvasStatic`
+  (`interactive: false`) has none of the six callbacks and draws no grab cursors, no drop marks and
+  no handles. A canvas handed six functions that do nothing still *promises* what a gesture will do,
+  on a surface where nothing happens — and the editor's own props stay required, so a forgotten
+  handler there is still a type error.
+- **`liveSheet` takes `AlbumSheetSource`, a four-member subset of `AlbumPlanContext`.** The editor
+  passes a whole context; the preview has a preset, fabricated entries and no row anywhere. Stating
+  what a sheet is actually built from beat implementing three resolvers nothing would ever call — a
+  half-implemented interface reads as *this cannot be asked* where the truth is *nothing asks*.
+- **The sample stops at `planAlbumPages`; a real album goes through `planAlbumFrom`.** Not a
+  difference in geometry: what `planAlbumFrom` adds is notes, corrections and stepping over printed
+  cards, and a preset has none of the three. It also buys the thing that makes the sample checkable —
+  `planAlbumFrom` is unreachable from `test:unit` (Prisma), so a sample that needed it would have had
+  its two-page claim pinned against a *second* reference that agrees with the app today. That is the
+  measurement-against-the-wrong-reference family this file already carries three examples of.
+- **The sample states its own chapters** rather than being grouped by year at runtime. It is fixed
+  data; grouping it again would be a second answer to a question that has none.
+- **Every figure in the sample was counted, and this file is why.** It is the one part of #795 that
+  would otherwise have been entirely invented, so it is not: all eighteen stamps are the collector's
+  own, at the sizes he measured, under the headings he wrote, cited line by line from `PL-1950.txt`
+  and `PL-1951.txt`. The second sheet reproduces one of his printed pages — `1951, 15 XI` puts the
+  two Festiwal Muzyki Polskiej stamps and the Zjazd PZF block on one card, which is where they are in
+  his binder. *Eight definitives fill a row* is then a claim about real Liberation advances at a real
+  mount size on real A4, which is the only version of that claim worth making.
+- **They were chosen for six properties, and the unit suite pins each one rather than a snapshot**:
+  four mount heights (23/26/32/45 — a page of one size selects one strip and says nothing about the
+  vertical clearance), a souvenir sheet no strip fits, a run of eight that fills a row and starts a
+  second, two pairs of short checklists that band at a ceiling of two and stack at one, a heading
+  long enough to wrap inside a band, and two chapters — which is how it is two sheets without any
+  pagination being built for it. Measured with the **shipped** measurer, not the layout suite's
+  arithmetic stand-in.
+- **The souvenir sheet closes the second chapter, and that is arithmetic.** In 1950 it spilled the
+  sample onto a third page and left the whole of 1951 unseen behind a preview that draws two.
+- **The sample states every size and carries no corrections**, so no box is inherited, unmeasured or
+  hand-corrected. Those flags are facts about a collection's data (#763) or one collector's page
+  (#769), and a *template* preview showing one would report a problem nobody can fix from that
+  dialog. On a real album they are real and are shown.
+- **`albumPlanContext` takes a preset override**, which is the whole of the real-album path: the
+  album is re-planned in memory under the dialog's preset. It is substituted before anything is
+  resolved, because the clearances are read once into `margins` — swapping the preset afterwards
+  gives the new faces with the old box heights.
+- **Redraws as you type, and that was measured before it was promised.** Planning the sample — 18
+  boxes through the hawid rule, four texts rendered, the page packed against real advances — is
+  **1.2 ms** warm and about 30 ms on the first call while fontkit parses a face. The cost of a
+  keystroke is the round trip, not the planning, so the request is debounced (260 ms) rather than the
+  redraw made explicit.
+- **It goes through the same parser a save goes through**, so it can never draw a page the template
+  would refuse to store. The name is the one field it stands in for: a template being written has no
+  name yet, and the running head prints the **album's** name anyway — the same stand-in
+  `ALBUM_PREVIEW_CONTEXT` already gives the four text builders.
+- **Beside the fields, not behind a tab**, and the dialog is 76 rem for it — wider than anything else
+  in the application, for #815's reason: the right-hand column is a piece of A4. A preview behind a
+  tab is one nobody looks at *while typing*, which is the only moment it is worth anything. The
+  fields keep the ~800 px they had at 52 rem.
+- **The fields stay uncontrolled.** The preview reads the same `FormData` the save reads, so there is
+  no second copy of the preset that could disagree with what a save would store. The dialog only
+  counts changes — from the fields' own `onChange` *and* from the four text builders, which are React
+  state written into hidden inputs and fire no `input` event of their own.
 
 ### Fonts are a fixed set (`src/lib/album-fonts.ts`)
 

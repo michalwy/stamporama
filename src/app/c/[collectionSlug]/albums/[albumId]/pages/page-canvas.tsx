@@ -53,6 +53,14 @@ import {
 // the height of the shortest strip in the drawer the piece fits into (#765), so it moves in strip
 // steps rather than continuously.
 //
+// ## Two shapes: the editor's canvas, and a picture of a sheet
+//
+// `interactive: false` is the album template's preview (#795) — the same drawing with nothing to
+// pick up. It is a **separate props shape** rather than six no-op handlers, and that is the point:
+// a canvas handed functions that do nothing still draws grab cursors and drop marks, which is a
+// promise about what a gesture will do, made by a surface where nothing happens. The editor's own
+// handlers stay required, so forgetting one there is still a type error.
+//
 // ## The sheet is paper in both themes
 //
 // White ground, black ink, and the flag colours below are literals rather than semantic tokens. That
@@ -132,10 +140,29 @@ function boxKey(blockId: string, stampId: string): string {
  *  shared reorder kit draws its line at (`reorder-list.tsx`). */
 const MARK_MM = 0.8;
 
-interface AlbumPageCanvasProps {
+// What a non-interactive canvas has instead of handlers. Module constants rather than inline
+// closures so a render never creates a new identity for them.
+const NO_SELECT: (selection: CanvasSelection) => void = () => {};
+const NO_DRAG: (drag: CanvasDrag | null) => void = () => {};
+const NO_DRAG_END: (drag: CanvasDrag) => void = () => {};
+const NO_REORDER: (blockId: string, from: string, to: string) => void = () => {};
+const NO_REORDER_BLOCKS: (from: string, to: string) => void = () => {};
+const NO_OPEN_GAPS: (
+  text: AlbumEditorText,
+  at: { left: number; bottom: number }
+) => void = () => {};
+
+interface AlbumPageCanvasBase {
   sheet: AlbumEditorSheet;
   collectionId: string;
   zoom: number;
+}
+
+/** The editor's canvas: everything on the sheet can be picked up, and every gesture has somewhere to
+ *  go. This is the shape #769 uses and the reason the handlers below are required rather than
+ *  optional — a forgotten one would leave a gesture that draws a promise and then does nothing. */
+interface AlbumPageCanvasInteractive extends AlbumPageCanvasBase {
+  interactive?: true;
   selection: CanvasSelection;
   onSelect: (selection: CanvasSelection) => void;
   drag: CanvasDrag | null;
@@ -152,22 +179,41 @@ interface AlbumPageCanvasProps {
   onOpenGaps: (text: AlbumEditorText, at: { left: number; bottom: number }) => void;
 }
 
-export function AlbumPageCanvas({
-  sheet,
-  collectionId,
-  zoom,
-  selection,
-  onSelect,
-  drag,
-  onDrag,
-  onDragEnd,
-  onReorder,
-  onReorderBlocks,
-  onOpenGaps,
-}: AlbumPageCanvasProps) {
+/**
+ * The same sheet as a **picture** — the album template's preview (#795).
+ *
+ * Nothing on it can be picked up, selected or dragged, and the cursors say so. A separate shape
+ * rather than a set of no-op handlers, for the reason the union above exists: a canvas handed six
+ * functions that do nothing still draws grab cursors and drop marks, which is a promise about what a
+ * gesture will do, made by a surface where nothing happens.
+ *
+ * The template dialog draws it because reusing this component is the only way its preview and the
+ * printed card can be guaranteed to agree — see `album-preview.ts`.
+ */
+interface AlbumPageCanvasStatic extends AlbumPageCanvasBase {
+  interactive: false;
+}
+
+type AlbumPageCanvasProps = AlbumPageCanvasInteractive | AlbumPageCanvasStatic;
+
+export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
+  const { sheet, collectionId, zoom } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const preset = sheet.preset;
-  const readOnly = sheet.readOnly;
+  /** Whether this canvas is the editor's or a picture of a sheet. */
+  const interactive = props.interactive !== false;
+  const selection = props.interactive === false ? null : props.selection;
+  const drag = props.interactive === false ? null : props.drag;
+  const onSelect = props.interactive === false ? NO_SELECT : props.onSelect;
+  const onDrag = props.interactive === false ? NO_DRAG : props.onDrag;
+  const onDragEnd = props.interactive === false ? NO_DRAG_END : props.onDragEnd;
+  const onReorder = props.interactive === false ? NO_REORDER : props.onReorder;
+  const onReorderBlocks = props.interactive === false ? NO_REORDER_BLOCKS : props.onReorderBlocks;
+  const onOpenGaps = props.interactive === false ? NO_OPEN_GAPS : props.onOpenGaps;
+  /** A printed sheet may be looked at and selected but not changed (#778); a preview may only be
+   *  looked at. Everything that writes reads this; everything that only highlights reads
+   *  `interactive`. */
+  const readOnly = sheet.readOnly || !interactive;
   /** What is being carried between press and release — a box, or a block by its heading. State
    *  rather than a ref, because the whole point of holding it is to draw it (#816). */
   const [carry, setCarry] = useState<AlbumCarry | null>(null);
@@ -298,7 +344,11 @@ export function AlbumPageCanvas({
             stroke={FLAG.inherited.colour}
             strokeWidth={0.3 * MM}
             strokeDasharray="0.6 0.6"
-            style={{ cursor: "pointer" }}
+            // On a preview the rule still says the text fell back — that is worth seeing on a real
+            // album drawn under a template being edited — but it opens nothing, so it neither takes
+            // the pointer nor claims it can be clicked.
+            style={{ cursor: interactive ? "pointer" : "default" }}
+            pointerEvents={interactive ? undefined : "none"}
             onClick={(e) => {
               e.stopPropagation();
               const r = (e.target as Element).getBoundingClientRect();
@@ -539,7 +589,9 @@ export function AlbumPageCanvas({
               stroke={preset.boxBorderStyle === "none" ? "none" : INK}
               strokeWidth={preset.boxBorderWidthMm}
               strokeDasharray={boxDash}
-              style={{ cursor: readOnly ? "pointer" : "grab" }}
+              style={{
+                cursor: !interactive ? "default" : readOnly ? "pointer" : "grab",
+              }}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 onSelect({ kind: "box", entryId: box.entryId, stampId: box.stampId });

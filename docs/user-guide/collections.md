@@ -879,6 +879,40 @@ is not an evening of retyping page sizes and font names. One template covers:
   prints the photo it has, at what opacity.
 - **Texts** — the chapter heading, the checklist heading, the box label and the footer.
 
+### The page beside the fields
+
+The dialog draws the page those numbers produce, next to the fields, and redraws it as you type.
+Nothing on it can be clicked or dragged — it is a picture of a sheet, not the page editor.
+
+It is drawn the same way the printed card is: the same box rule, the same packing, the same type
+measured against the same embedded faces. So a change you can see here is a change that will be on
+the paper, which is the only thing that makes the preview worth consulting.
+
+By default it draws a **sample page** — two sheets, 1950 and 1951, built out of your own AlbumEasy
+files. The stamps are yours at the sizes you measured, under the headings you wrote, chosen so that
+every setting in the dialog does something visible: four different mount heights so the vertical
+clearance has some boxes to move and not others, the run of eight Bierut definitives that fills a row
+and starts a second, two short checklists sharing a band in each chapter, a heading long enough to
+wrap, and the Zjazd PZF souvenir sheet, which no strip is tall enough for and which comes out as a
+pocket. The 1951 sheet is one of your own printed pages, block and all.
+
+It is still a *sample*: nothing on it is a copy you own, and none of it is in any album.
+
+You can point it at one of your own albums instead, from the list above the sheet. That draws that
+album's stamps under the template you are editing — **nothing is written to the album**, and it keeps
+its own values as always. Pages of it that are already printed are not drawn: a card in a binder is
+set in the template it was printed under, and showing it under a different one would be showing you a
+sheet that exists nowhere.
+
+Two things it will tell you that are worth knowing before you print anything:
+
+- **No hawid stock described** — then every box is a pocket and the vertical clearance changes
+  nothing, because the box rule has no drawer to choose a strip from. Describe your stock above and
+  the boxes take their real heights.
+- **Not redrawn** — a field is currently something the template could not be saved with (a margin
+  wider than the page, a type size out of range). The last good sheet stays on screen; fix the field
+  named and it redraws.
+
 ### The fonts are a fixed set
 
 You pick from the faces the app itself ships and embeds, not from the fonts installed on a machine.
