@@ -778,11 +778,48 @@ Three layers, and the middle one is what makes forgetting the first harmless:
    the local branch, and the remote branch too if the work was dropped rather than merged.
 2. Per-worktree slots are reclaimed when the worktree goes (#781).
 3. **Every backlog review sweeps**: `git worktree list`, `git worktree prune`, and remove what is
-   stale (`backlog-review.md`).
+   stale (`backlog-review.md`) — where *stale* is the test below, not a judgement.
 
 Two orphaned worktrees from 27 August were found by hand while this model was being written. A
 worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
 in an unrelated session, as a failure with no visible cause.
+
+### A held session's worktree is not stale
+
+On 2026-09-07 the outgoing lead ran the sweep over **every** worktree rather than only finished
+ones, and removed the **release session's worktree while that session was holding for its signal**.
+Nothing was lost — the branch survived, `git worktree add` restored it, and a release session writes
+nothing into the repository — which is luck about which session it was. A session mid-edit loses its
+uncommitted work, and AGENTS.md notes that an unpushed commit does not survive its worktree going.
+
+The rule could not have caught it. Layer 1 removes the worktree of a **merged branch**; a held
+session has no branch, no pull request, and has sat untouched for exactly as long as the hold has
+lasted — which is the shape of an abandoned one. #897 made *spawn ahead and hold* the default the
+day before, and the room is four or five held at once, so worktrees that look abandoned are now the
+normal case rather than the exception.
+
+**Git cannot tell the two apart, and that was checked rather than assumed:** branch, commit,
+`git status`, mtime, the `.git` file and the contents of `.claude/` are identical for both, and
+mtime is the worst of them, because holding *is* doing nothing. Git proves staleness in one
+direction only — a merged or dropped `task/` branch is finished. **A worktree carrying no `task/`
+branch is the case git is silent about, and is exactly the shape of a held session**; never remove
+one on git evidence alone.
+
+**What answers it is a lookup, and the list already exists.** Every session the app knows about
+carries the `cwd` it runs in, which for a task session is its worktree path. So before removing
+anything, resolve the path to its session:
+
+- **No session** for the path → orphaned; remove it.
+- **Holding** — the title says so, *"Hold for the lead's signal"*, which *Spawn ahead and hold*
+  already requires → **not stale, whatever its age**; leave it.
+- **Finished** — its pull request merged, or its work dropped → remove it.
+- Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
+  them.
+
+**The lead keeps no list of its own, and deliberately not.** A list the lead kept would die with the
+lead; this one is the app's, is keyed by the worktree path, and outlives both the worktree and the
+lead — the release session above is still in it, still titled *hold*, with a `cwd` that no longer
+exists. An incoming lead reads the same list on its first sweep, with nothing handed over.
 
 **A task session's implementation plan dies at layer 1, and for one day that was a defect.**
 AGENTS.md required a plan under `.claude/plans/` for multi-area work; `.gitignore` ignores
