@@ -26,7 +26,7 @@
     "e2e:db:up": "scripts/e2e-db.sh up",
     "e2e:db:reset": "scripts/e2e-db.sh reset",
     "e2e:db:down": "scripts/e2e-db.sh down",
-    "slot": "scripts/dev-slot.sh show"
+    "slot": "scripts/dev-slot.sh"
   },
   "dependencies": {
     "@google-cloud/storage": "8.0.1",

@@ -20,10 +20,14 @@
 # `.env.slot`, or set STAMPORAMA_SLOT in the environment for one command.
 #
 # Usage:
-#   scripts/dev-slot.sh env       # shell `export` lines — this is what the pnpm scripts eval
+#   scripts/dev-slot.sh env       # shell `export` lines — this is what scripts/e2e-db.sh evals
 #   scripts/dev-slot.sh number    # just the slot number
-#   scripts/dev-slot.sh show      # every worktree, its slot and its ports
+#   scripts/dev-slot.sh show      # every worktree, its slot and its ports — the default
 #   scripts/dev-slot.sh release   # forget this worktree's slot
+#
+# `pnpm slot <verb>` reaches every one of them, because `package.json` declares the script path
+# with no verb of its own: pnpm *appends* a script's arguments, so a verb written there would
+# occupy $1 and push the caller's own into $2, where nothing reads it (#913).
 
 set -euo pipefail
 
@@ -210,7 +214,14 @@ cmd_release() {
   fi
 }
 
-case "${1:-env}" in
+# One verb, and an unrecognised *second* argument is an error rather than something to ignore:
+# silently dropping it is exactly the defect this dispatch was fixed for (#913).
+[ "$#" -le 1 ] || die "one verb at a time: usage: $0 [env|number|show|release]"
+
+# The default is the table, not `env`. Bare invocation is the human-facing one — it is what
+# `pnpm slot` runs — whereas `env` is machine-facing and its only caller, scripts/e2e-db.sh,
+# names it explicitly. So nothing depended on the old default (#913).
+case "${1:-show}" in
 env) cmd_env ;;
 number) resolve_slot ;;
 show) cmd_show ;;
