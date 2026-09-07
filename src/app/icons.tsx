@@ -83,6 +83,7 @@ import {
   Pin,
   PinOff,
   LogOut,
+  Map,
   MapPin,
   Maximize,
   Menu,
@@ -142,6 +143,10 @@ const GLYPHS = {
   issues: Rows3,
   stamps: Stamp,
   inventory: Layers,
+  /** The collection's own division of the philatelic world (#775) — countries and the territories
+   *  under them, the tree an issue is filed into. A folded map, deliberately not the `locations`
+   *  pin: an area is a region of the *catalogue*, not a shelf the paper sits on. */
+  areas: Map,
   locations: MapPin,
   /** Printed album pages (#767) — the binder a collection is mounted in, not a book to read. The
    *  drawing is a sheet with a card on it, which is what an album page is. */

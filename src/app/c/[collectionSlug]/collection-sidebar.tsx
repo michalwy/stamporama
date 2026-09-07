@@ -528,6 +528,20 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
+          {/* Areas (#775) leave Settings for the section they organise. The rule they used to sit
+              under — catalog taxonomy set up once belongs in Settings — put them beside the
+              catalogs and the condition list, but an area is not set up once: it is added to,
+              renamed, re-nested and re-prefixed as the collection grows, and it is what every list
+              on this screen filters by. It is the same line Albums are on below, and the same one
+              that gave Locations its own page. Directly under Inventory, because it is how the
+              list above it is divided; Locations and Albums follow, being where the paper
+              physically sits. */}
+          <NavItem
+            href={`${base}/areas`}
+            icon={<Icon name="areas" />}
+            label="Areas"
+            active={isActive(`${base}/areas`)}
+          />
           <NavItem
             href={`${base}/locations`}
             icon={<Icon name="locations" />}

@@ -710,7 +710,7 @@ narrowest anchor wins, in this order: **issue** first, then the **nearest area**
 You set each one where its scope lives, so you never pick the thing it applies to out of a list:
 
 - **Collection-wide and per-area** — Settings → Conditions &amp; formats → Format multipliers.
-- **One area** — also from that area's **⋮** menu under Areas, which is usually quicker.
+- **One area** — also from that area's **⋮** menu on the **Areas** screen, which is usually quicker.
 - **One issue** — from that issue's **⋮** menu on the Issues list. Per-issue multipliers are not
   listed in Settings: you can have one for every issue and every format, so that list would be
   thousands of lines long. Each issue's own row shows just its own.

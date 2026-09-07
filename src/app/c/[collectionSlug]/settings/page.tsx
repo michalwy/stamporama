@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
-import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
+import { getCatalogTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
@@ -45,10 +45,21 @@ export const metadata = { title: "Settings" };
 
 interface SettingsPageProps {
   params: Promise<{ collectionSlug: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }
 
-export default async function SettingsPage({ params }: SettingsPageProps) {
+export default async function SettingsPage({ params, searchParams }: SettingsPageProps) {
   const { collectionSlug } = await params;
+
+  // Areas left Settings for the Collection section (#775), and `?tab=areas` is an address a
+  // collector has had in front of them for months — every mention of it in the user guide was one,
+  // and the tab strip itself was a bookmark. Without this the query simply falls through to
+  // General, which is the one outcome worth avoiding: it does not look like a move, it looks like
+  // the screen is gone. The mirror of what `/areas` did until now, pointing the other way.
+  const { tab } = await searchParams;
+  if ((Array.isArray(tab) ? tab[0] : tab) === "areas") {
+    redirect(`/c/${collectionSlug}/areas`);
+  }
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
@@ -58,7 +69,6 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
 
   const [
     areas,
-    catalogNames,
     catalogTree,
     conditions,
     formats,
@@ -89,7 +99,6 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     titleLanguages,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
-    getCatalogNames(session.user.id, collection.id),
     getCatalogTree(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
@@ -121,8 +130,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   ]);
 
   return (
-    // The width cap lives on the tabs (#691): most settings are a column of fields and read badly
-    // stretched, but the area tree is a tree and needs the room its nesting takes.
+    // The width cap lives on the tabs (#691), not here: how wide a settings surface may get is the
+    // tab's answer rather than the page's. The tree that made that distinction worth drawing has
+    // since moved out (#775); the placement stands on its own reasoning.
     <div style={{ padding: "2rem" }}>
       <Suspense fallback={null}>
         <SettingsTabs
@@ -151,7 +161,6 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           scanDpi={collection.scanDpi}
           collectionSlug={collectionSlug}
           initialAreas={areas}
-          catalogNames={catalogNames}
           titleLanguages={titleLanguages}
           initialTree={catalogTree}
           initialConditions={conditions}
