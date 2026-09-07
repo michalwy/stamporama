@@ -270,7 +270,7 @@ half a rebase-merge repository replays verbatim onto `main`. The job below cover
 
 **Read it back again at the moment auto-merge is armed**, and not only when the body is written.
 Arming is the last point at which a person is looking: the pull request then merges when GitHub
-decides the four checks are green, so a keyword that survived the body fires with nobody watching and
+decides the five checks are green, so a keyword that survived the body fires with nobody watching and
 the issue closes before step 8 of *The loop* has happened at all. Noticed by the #803 session (#854).
 
 #783's body opened with `Closes #780 (the lead closes it, not this pull request — the reference is
@@ -318,12 +318,81 @@ history** — it passes 129 and fails one, #783 — and its commit pattern over 
 `main` gives 49 hits, every one genuine, and no false positives.
 
 **The user decided on 2026-09-06 that it is a fifth required check**, so that an armed pull request
-cannot be merged rather than merely warned about. The `name:` is `Closing reference check`. **The
-lead adds it to the `main` ruleset only once the job is green on `main`** — a required check that
-does not yet exist there blocks every pull request in the repository. Until that happens the count
-of required checks is still four, and when it changes, four places say so: the protected-`main`
-bullet in `AGENTS.md`, the ruleset list under *A protected `main`, and what it changed*, and two
-`description` fields in `renovate.json`. `git grep -nE 'four (required )?(checks|jobs)'` finds them.
+cannot be merged rather than merely warned about. The `name:` is `Closing reference check`, and
+ruleset `22358128` has required it since 2026-09-07. **The lead added it only once the job was green
+on `main`** — a required check that does not yet exist there never reports, so it sits as `expected`
+for ever and nothing in the repository can merge. The order was: merge the job, watch it report its
+context on a real pull request, and only then put that exact string into the ruleset.
+
+**Then the count had to catch up, and the sweep is the part worth keeping.** The sentence that stood
+here said *four places say so* and offered `git grep -nE 'four (required )?(checks|jobs)'` to find
+them. It was wrong twice, in the two ways this file already records under *Verification, not trust*:
+
+- **It undercounted by eighteen.** The four it named — the protected-`main` bullet in `AGENTS.md`,
+  the ruleset list below, and two `description` fields in `renovate.json` — are the places a person
+  thinks of. The other eighteen are where the claim had spread on its own: an automerge boundary, a
+  never-alone criterion, a step of the merge loop, an aside about what the showcase is not, two
+  comments in `ci.yml`, and a counterfactual in `release-versioning.md` about a release that no
+  longer happens. **And all twenty-two are summaries.** Since #937 the count is *stated* in
+  [`.github/rulesets/main.json`](../../.github/rulesets/main.json) and nowhere else; every sentence
+  in that list describes it. A sweep of the prose is now the second half of the job, and the
+  artifact is the first.
+- **And the expression missed two of its own targets.** This file is hard-wrapped at 100 characters,
+  so `the four required` / `checks are the verification` falls across a line break where no phrase
+  match can see it. It returned a plausible subset and looked like it had worked — #896 and #905 in
+  a third costume.
+
+**So match the fixed word and classify every hit.** `git grep -nw four` over `AGENTS.md`, this file,
+`renovate.json`, `.github/workflows/ci.yml`, `release-versioning.md` and the two files #937 added
+under `.github/rulesets/` returned **48 lines and 50 occurrences** on 2026-09-07: **22 lines
+carrying 24 of those occurrences stated the live count and became five, and 26 lines kept the number
+four.** Report both halves wherever a sweep like this is reported, because a sweep that states its
+own count cannot return a silent zero.
+
+**And draw the boundary at the claim, not at the file — because the authoritative record contains
+the word zero times.** `main.json` states the count as an array of that many objects. No expression
+over the word can see it, and no hardening would have helped: the failure is not the pattern but the
+assumption that a claim is made in words at all. The artifact landed an hour before this change and
+its stale copy would have shipped with it, caught by reading the branch. **That is an argument for
+having exactly one authoritative place, not for sweeping better.** Prose drifts and can at least be
+swept for; an array cannot be swept for at all — which is why the artifact is the record and every
+sentence about the ruleset is a summary of it.
+
+**The same error one level up produced the file list.** It came from the lead's brief, drawn from
+the places that brief had thought of, and two of the three misses sat in a file it named **out of
+scope**: `ci.yml`, carrying one claim about what the ruleset requires and one counting the contexts
+a suppressed workflow would leave `expected` — both about the ruleset rather than about the gate —
+with a third comment there classified as safe by its number while the noun it counted had gone
+wrong. `release-versioning.md` carried the last, in a file nobody had listed because it is about
+releases. A file list is a convenience for running the grep. It is not the scope, and it inherits
+every blind spot of whoever wrote it.
+
+**And a word sweep does not find every wording of the word.** The stale count also survived spelled
+`fourteen`, in `.github/rulesets/README.md` and in this file — invisible to any expression matching
+`four`. It was a pre-sweep estimate that travelled from a brief into the durable record, and it came
+to rest in the one file whose whole thesis is that prose drifts from what it describes. Both copies
+were found by reading, not by sweeping. **Ask what else asserts this, and in what form**, before
+choosing an expression at all.
+
+**And the last one is the worst, because the tool answers honestly.** Checking whether this branch
+had altered the ordering rule above, the lead searched the right file for the right phrase —
+`grep -c 'in this order'` — and got **0**. It wraps as `two acts, in` / `this order` across the same
+100-character break, so it was never present in that form; `grep -cw order` gives 10. **The grep did
+not fail: it ran and exited 1**, which is the truthful report of *no match* and is byte-for-byte the
+truthful report of *not present*. So #932's guard cannot help here — that one separates *did not
+run* from *no matches*, and this is a real no-match that means the opposite of what it looks like.
+What it nearly produced was the conclusion that a session had changed something it had reported
+leaving alone. **A hardened sweep is still a sweep**: the count, the exit status and the fixed word
+are three guards against three different failures, and none of them makes a search a substitute for
+opening the file.
+
+**The 26 are what makes a careless sweep worse than none.** Most are about the **four jobs gated on
+`Detect changes`** — a different four, which did not change, because `Closing reference check`
+carries no `needs:` and runs on every pull request. The rest are roles, sessions, steps, suites and
+dated incidents that were never about required checks at all. Changing any of them would be a
+regression introduced by the fix. **Five of those 26 needed the sentence around the number corrected
+even so**, because a documentation-only pull request no longer skips everything it must wait for:
+it skips four of five, and the fifth can be red.
 
 ## What the lead may answer, and what it must escalate
 
@@ -416,10 +485,10 @@ has two criteria, and the second is the one that gets missed: a dependency waits
 because something written in this tree states a reason a bump could invalidate, **or because its
 failure mode is invisible to every required check** (*Automerge is the one exception* below). That
 second criterion is not about dependencies. Lint, typecheck and build see types, `test:unit` is pure
-logic, `test:integration` is server-side — so nothing in the four checks exercises a React Query
-cache, and nothing in them looks at a screen at all. Green means *the failure modes these four can
-see did not occur*, and **which failure modes they cannot see** is worth asking of any change, not
-only of a bump.
+logic, `test:integration` is server-side, and `Closing reference check` reads what the pull request
+says — so nothing in the five checks exercises a React Query cache, and nothing in them looks at a
+screen at all. Green means *the failure modes these five can see did not occur*, and **which failure
+modes they cannot see** is worth asking of any change, not only of a bump.
 
 **A correction is verified by grepping for the retired claim, not by re-reading the passage you
 fixed.** #880 had stated a local speed-up ratio as a fact about CI, noticed, and shipped the
@@ -462,8 +531,9 @@ Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, t
 - **rebase merge only** — merge and squash commits are disabled on the repository, and `main`
   requires linear history;
 - force-push and deletion are blocked;
-- four checks must pass — `Static checks`, `Unit tests`, `Integration tests`, `Extension checks`
-  (the `name:` values of the jobs in `.github/workflows/ci.yml`) — and they are **strict**
+- five checks must pass — `Static checks`, `Unit tests`, `Integration tests`, `Extension checks` and
+  `Closing reference check`, the fifth added on 2026-09-07 (#790); these are the `name:` values of
+  the jobs in `.github/workflows/ci.yml`, and they are **strict**
   (`strict_required_status_checks_policy: true`), so a branch must be up to date with `main` before
   it can merge at all. That last clause is what makes merges serialise; see *What may run in
   parallel*.
@@ -477,7 +547,7 @@ carries the normalisation contract, how to reproduce the file, and the one rule 
 disagrees with GitHub. **Where this file and that one differ, that one is right** — the bullets above
 are a summary written for a reader, and a summary drifts from the thing it summarises without either
 of them looking wrong. That is not hypothetical: it is what #937 was filed about, after a sweep found
-the same claim asserted as live fact in fourteen places across five files.
+the same claim asserted as live fact on twenty-two lines across five files.
 
 Two consequences for anybody working here. **A change to how `main` is protected is now two acts, in
 this order**: the pull request that edits the artifact, and the ruleset change on GitHub — which is
@@ -487,6 +557,16 @@ current state; editing the artifact to match GitHub makes the two agree by const
 control quietly stops being one. The full reasoning is in that README rather than here, because the
 person who meets a red comparison is looking at `.github/rulesets/`.
 
+**The first exercise of that order went the other way, deliberately, and it is not a precedent.**
+#790 added the fifth required check as `artifact(4) → ruleset(5) → artifact(5)`, because #937's whole
+argument was that the artifact's first commit had to **match** the live ruleset: a control whose
+first green is also its first run cannot be told apart from one incapable of going red (#814). That
+was the bootstrap, and it cost one ambiguous window. **The two directions are not equally
+diagnosable** — artifact-first leaves GitHub *behind* the intent, which only a pending pull request
+can produce, while ruleset-first leaves GitHub *ahead* of it, which is byte-identical to the
+unauthorised-change signature the README tells you to report rather than absorb. From here the order
+above holds, and that window does not recur.
+
 **`git log` will mislead you about this.** Every pull request in this repository's history before
 2026-09-06 came from Renovate; all feature work went straight to `main`. And the `(#769)`-style
 reference in a commit title is an **issue** number, not a pull request — the convention predates
@@ -495,7 +575,7 @@ pull requests here entirely.
 Three consequences:
 
 - **Auto-merge is the normal path.** With the user's go-ahead in, the lead runs
-  `gh pr merge --rebase --auto` and GitHub merges the moment the four checks are green. Without it,
+  `gh pr merge --rebase --auto` and GitHub merges the moment the five checks are green. Without it,
   somebody sits watching CI for several minutes and nobody can tell whether the work has landed or
   whether it was forgotten. The user's decision still gates the merge; only the waiting moves off a
   human. **Arming it is not the same as landing it**: GitHub waits for a branch to *become*
@@ -514,7 +594,7 @@ Three consequences:
 Everything above says a **person** decides and the lead is who asks — step 7 of the loop, and the
 sentence just above that the user's decision still gates the merge. **Renovate is the single
 exception to it.** A dependency pull request inside the boundary below merges itself, with nobody's
-go-ahead, the moment the four required checks are green. The boundary was decided by the user on
+go-ahead, the moment the five required checks are green. The boundary was decided by the user on
 2026-09-06 and is expressed in `renovate.json`; #814 carries the reasoning and the citations.
 
 **What may land without a person:**
@@ -524,7 +604,7 @@ go-ahead, the moment the four required checks are green. The boundary was decide
 - as **one grouped pull request a week** — `weekly dependency batch`, opened early Monday — never as
   a stream of individual merges;
 - by **rebase**, the only method `main` allows;
-- behind the same four required checks as everything else, and no sooner than
+- behind the same five required checks as everything else, and no sooner than
   `minimumReleaseAge: "3 days"` after the release.
 
 **What may not, ever:**
@@ -540,12 +620,12 @@ go-ahead, the moment the four required checks are green. The boundary was decide
   **Two things put a dependency on that list, and the second is the one that gets missed.** The first
   is a reason written *in this tree* — AGENTS.md, a topic file, an ADR — that a bump could invalidate;
   every rule in `renovate.json` names its source. The second is that **its failure mode is invisible
-  to all four required checks**, which is a different question and a sharper one, because automerge
-  trusts exactly those four checks and nothing else. TanStack is the example: lint, typecheck and
-  build see types, `test:unit` is pure logic, `test:integration` is server-side, and nothing in the
-  suite exercises a Query cache or a Table interaction — so a minor that changes refetch or
-  invalidation semantics goes green on all four and reaches the browser. Ask both questions before
-  leaving something off.
+  to all five required checks**, which is a different question and a sharper one, because automerge
+  trusts exactly those five checks and nothing else. TanStack is the example: lint, typecheck and
+  build see types, `test:unit` is pure logic, `test:integration` is server-side, `Closing reference
+  check` reads only the pull request's text, and nothing in the suite exercises a Query cache or a
+  Table interaction — so a minor that changes refetch or invalidation semantics goes green on all
+  five and reaches the browser. Ask both questions before leaving something off.
 - **Anything that is not a dependency update.** No feature, fix or documentation branch automerges,
   and no `task/` branch does — nothing in this repository merges itself but Renovate. For a feature
   or a fix the lead still asks and the user still answers. **A documentation-only pull request no
@@ -561,7 +641,7 @@ by `app/renovate` on 13 August, is what one looks like. **Renovate is the only a
 merge with nothing read at all.**
 
 **There are now two authorised shapes, and they are not the same licence.** A Renovate merge has had
-**nobody** verify it — the four required checks are the whole of the review, which is why the
+**nobody** verify it — the five required checks are the whole of the review, which is why the
 boundary above is drawn so tightly. A documentation-only pull request merged by the lead **has been
 read by a person, and by one who did not write it**; what was dropped is the user's second yes after
 that reading, not the reading. So the second shape has its own signature in the history: only
@@ -572,7 +652,7 @@ assuming it was fine.
 
 The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
 only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
-behind four required checks.
+behind five required checks.
 
 **An arrangement whose whole point is that nobody watches it is one where nobody notices it break.**
 That is not a hypothetical here. Automerge was silently impossible from the moment `main` was
@@ -585,12 +665,20 @@ that makes the other half safe, and neither half may be enabled without the othe
 
 ### A documentation-only pull request skips all four
 
-Since #798, a `Detect changes` job runs first and the four required jobs are gated on its output, so
-a pull request touching only `*.md`, `docs/**` and `.claude/**` reports them as **skipped** and is
-mergeable in seconds. GitHub counts a skipped required check as satisfied, which is why the gate is
-a job-level `if:` and never a workflow-level `paths-ignore:` — a workflow that does not run reports
-no contexts at all and the pull request would wait on four `expected` checks for ever. The reasoning
-lives in full in `.github/workflows/ci.yml`, next to the job.
+Since #798, a `Detect changes` job runs first and four of the five required jobs are gated on its
+output, so a pull request touching only `*.md`, `docs/**` and `.claude/**` reports those four as
+**skipped** and is mergeable in seconds. GitHub counts a skipped required check as satisfied, which
+is why the gate is a job-level `if:` and never a workflow-level `paths-ignore:` — a workflow that
+does not run reports no contexts at all, and the pull request would wait on five `expected` checks
+for ever. The reasoning lives in full in `.github/workflows/ci.yml`, next to the job.
+
+**The fifth is not gated, and it does run.** `Closing reference check` asks what a pull request
+*says* rather than which files it touches, and both incidents that produced that rule were
+documentation-only — so gating it here would switch it off in exactly the case that produced it
+(#790). The heading is therefore exact rather than loose: four are skipped, one runs, and it answers
+in about three seconds, which is why *mergeable in seconds* survives. What does not survive is the
+inference that a documentation-only pull request has nothing at all to wait for. It has one check,
+and that check can be red.
 
 Two things follow for a session. **The list is a whitelist**: anything else — `package.json`,
 `pnpm-lock.yaml`, `prisma/**`, `.github/**`, `scripts/**`, the compose files, `extension/**` other
@@ -600,11 +688,12 @@ the gate removes the waiting, not the reading.
 
 **So the lead merges one without asking the user**, and reports what it merged — the user's other
 decision that afternoon (#906). The authorisation reuses this whitelist exactly, and for the reason
-the whitelist exists: where the four checks report *skipped* there is no CI signal to wait for, so
-the verification **is** the lead's read of the diff, which this file already says in *What this is
-not*. What goes is a question whose answer was never in doubt; anything touching `src/`, `prisma/`,
-`.github/`, `scripts/`, the compose files or dependencies still asks. **It is not automerge** — a
-person still verifies, and that person is the lead.
+the whitelist exists: where the four gated checks report *skipped* and the fifth answers in seconds,
+there is no CI run worth waiting for, so the verification **is** the lead's read of the diff, which
+this file already says in *What this is not*. What goes is a question whose answer was never in
+doubt; anything touching `src/`, `prisma/`, `.github/`, `scripts/`, the compose files or
+dependencies still asks. **It is not automerge** — a person still verifies, and that person is the
+lead.
 
 ### Rebase, then re-verify, in that order
 
@@ -686,9 +775,10 @@ of them gets read without the other.
    which is exactly what had happened when `540712f` went to `main` unread.
 3. **A refused merge is a signal, not a transient.** `gh pr merge` declining with *"add the `--auto`
    flag"* means the requirements are not met **right now**, and for a documentation-only pull
-   request whose four checks are skipped that is very nearly a guarantee that something just
-   changed. Go back to step 2 before retrying; retrying without re-checking is the exact sequence
-   that produced the unread merge.
+   request whose four gated checks are skipped it is nearly always one of two things: the branch
+   has fallen behind, or `Closing reference check` — the one check such a pull request does run —
+   has not reported yet, or is red. Go back to step 2 before retrying; retrying without re-checking
+   is the exact sequence that produced the unread merge.
 
 **Neither failure is a case for more diligence, which is why both are mechanical steps.** The
 verification that missed a third commit was correct when it was performed, and the lead that updated
@@ -881,13 +971,13 @@ has him check **both locales**; this app has no i18n, so that item is omitted ra
 — stated here so the omission reads as a decision.)
 
 **What this is not.** It is not a review gate on every pull request, and his time is not the price
-of merging. For a configuration change or a rule with unit tests behind it, **the four required
-checks are the verification**. For a documentation change they are precisely what does *not* run —
-`Detect changes` reports all four as skipped — and the verification is **the lead's read of the diff
-in step 6** of *The loop*, which is a thing this file already has the lead doing. And it is **not a
-general licence to run the app.** AGENTS.md says not to leave dev servers running, and *No browser
-verification* above says a session starts nothing; **the showcase is the one exception to both, and
-it is the lead's.**
+of merging. For a configuration change or a rule with unit tests behind it, **the five required
+checks are the verification**. For a documentation change four of them are precisely what does *not*
+run — `Detect changes` reports all four as skipped, and only `Closing reference check` does — and
+the verification is **the lead's read of the diff in step 6** of *The loop*, which is a thing this
+file already has the lead doing. And it is **not a general licence to run the app.** AGENTS.md says not
+to leave dev servers running, and *No browser verification* above says a session starts nothing;
+**the showcase is the one exception to both, and it is the lead's.**
 A task session still starts nothing. The lead starts nothing for its own verification either — step
 6 of *The loop* is a check of the change as written, in the repository. The stack goes up to be
 shown to the user, and for nothing else.

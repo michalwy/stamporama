@@ -47,7 +47,7 @@ here so that a later reader does not reintroduce the bump as an oversight:
 - The package is `"private": true` and is never published.
 
 So the bump was ceremony even before `main` was protected. Under a protected `main` it would cost a
-pull request and four CI jobs per release, at several releases a day — and it is what used to make
+pull request and five CI jobs per release, at several releases a day — and it is what used to make
 "a release session changes nothing else" aspirational rather than true.
 
 **The git tag is the version.** If you find yourself wanting a number written down somewhere, the
