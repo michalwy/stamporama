@@ -96,9 +96,11 @@ These hold on every task, whatever you are building. Each is stated in full — 
 
 ## Multi-Step Implementation Plans
 
-When a task spans more than one logical area, write an implementation plan before starting. Store it under `.claude/plans/`. A plan is executed fully within a single session.
+A plan is a **working note for the session that writes it**, and nothing downstream reads it. Write one when a task spans more than one logical area and setting the steps out first would help — that is the session's own call and no longer a requirement (#875). Store it under `.claude/plans/`. A plan is executed fully within a single session.
 
-**A plan is worktree-local and is never committed.** `.claude/` is gitignored (`git ls-files .claude/plans` returns 0), so a task session's plan exists only inside its own worktree and **does not survive the lead removing that worktree** after the merge. Write it anyway — it is what the session works from — but do not treat it as the record of the work: the pull request, the commits and the issue are. Whether that should change is open in #875. → [`docs/agents/collaboration.md`](docs/agents/collaboration.md)
+**It does not persist, and that is now by design rather than by accident.** `.claude/` is gitignored (`git ls-files .claude/plans` returns 0), so the plan lives only in the session's own worktree and is gone when the lead removes that worktree after the merge. Nothing is lost with it, because **the durable record is the pull request body, the closing comment on the issue, and the topic file the task updates** — all three in git, all three read. So do not treat the plan as the record of the work and do not write it for a reader; it is for you, while you are working. → [`docs/agents/collaboration.md`](docs/agents/collaboration.md)
+
+If you write one, keep the shape — it is what makes the note useful to its author:
 
 - Begin with a `## Progress` section containing a checkbox list of numbered steps.
 - Steps are executed in order. Mark each step `[x]` immediately after completing it.

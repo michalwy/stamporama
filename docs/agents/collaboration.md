@@ -19,9 +19,11 @@ suites, commits, and opens the pull request. Nothing is handed to a second agent
 **This is not a new rule; it is the only thing that has ever happened here.** `.claude/plans/` in the
 main checkout holds **261 implementation plans**, and every one of them is a single session's, start
 to finish. Not one hands a step to another agent. **That is a count from the single-checkout era and
-it stopped growing on 2026-09-06**, the day the worktree model started — a task session's plan now
-lives and dies inside its own worktree (*Worktree cleanup*, and #875). Read the 261 as evidence about
-how this project worked for its whole history to that date, not as a running total.
+it stopped growing on 2026-09-06**: plans are no longer asked for, and a session that writes one
+keeps it as a working note in its own worktree (*Worktree cleanup*, #875). **The evidence is
+unaffected by that.** It counts what was actually done across this project's entire history to that
+date, and an argument from what happened does not weaken because the practice that produced it has
+ended — it is a closed record, not a shrinking one.
 
 AGENTS.md used to describe four roles — Architect, Designer, Developer, Tester/Reviewer — powered
 up in sequence for anything crossing a domain, data or authorization boundary. In those 261 plans
@@ -73,15 +75,72 @@ Getting this wrong once cost a session's worth of work, so it is stated plainly.
 - **The prompt must carry the lead's session id**, because a session cannot infer who spawned it.
   Nothing in a fresh session's context says where it came from. The id is a per-round value and
   belongs in the prompt, not in this file.
-- **One real cost: spawning goes through a tile the user clicks.** The user is therefore in the loop
-  at the start of every task session, whether or not they wanted to be. That is the price of the
-  model as it stands, and it is worth knowing before anybody proposes spawning six sessions at once.
+- **Spawning goes through a tile the user clicks — so spawn on foreseeability, not on
+  startability.** The click cannot be removed. Being interrupted *at the moment each session becomes
+  startable* can be, and that is the half worth removing: **plan the queue and spawn it whole**,
+  holding whatever cannot start yet, so he clicks a batch at a time of his own choosing and then
+  walks away. Decided by the user on 2026-09-07 (#897), whose stated aim is to look at the computer
+  as rarely as possible.
 
 **Everything travelling around this loop is written in English** — the prompt, the questions and the
 report alike, whatever language the user and the lead are speaking. AGENTS.md requires English of
 everything that lands in GitHub or the repository; these messages land in neither, but the work they
 produce does, and a report written in one language and a commit message in another is a translation
 step nobody asked for.
+
+### Spawn ahead and hold
+
+**The unit is the batch, and "earlier" is only the means** — a chip spawned an hour early still
+interrupts him an hour early. In one round the lead should be able to spawn the work whose files are
+free **now**, with no hold; the work blocked behind one of those, **held on a checkable
+precondition**, typically *"this commit is in `main`"*; and the work blocked behind something else
+entirely — a release, a decision — held on that.
+
+**The planning is the work; the holds are only how it is expressed.** Spawning when a session *can*
+start means spawning one at a time and paging him each time. Spawning the queue whole means knowing
+the file-level dependencies up front, which is exactly what the lead holds and what no task session
+can see (*What may run in parallel*).
+
+Three sessions on 2026-09-07 were spawned this way and not one of them needed him at the moment it
+became startable: **#868**, held until `main` carried #844, which waited, read itself in, armed a
+monitor and reported *"no action needed from you unless #893 is stuck"*; the **release session**,
+spawned before the work it would release had merged, which prepared everything the procedure allows
+without a tag; and the **incoming lead**, spawned by the outgoing one with the handover as its
+prompt. He clicked three chips at a time of his choosing.
+
+**A hold is not "do nothing", and a held session must be told five things.** Each was learned from
+one of those three, and each is load-bearing:
+
+1. **What it is waiting for, as something checkable** — a commit in `main`, a named pull request
+   merged, a release tagged. Never "wait for the lead", which cannot be verified and invites
+   guessing.
+2. **What to do meanwhile, said explicitly.** Reading itself in is real work and every held session
+   did it; #881 did its entire measurement while held, because measuring changes nothing. For most
+   sessions the answer is *everything that does not write*.
+3. **What it must not do**, listed rather than implied. The incoming lead was told not to merge, not
+   to close, not to spawn, not to check a branch out in the main worktree, and **not to answer task
+   sessions that message it** — two leads answering one question is worse than a slow answer.
+4. **To ask rather than proceed** if it believes the precondition is met before the signal arrives.
+   A session that starts early on a stale premise costs more than one that waits.
+5. **That the state may have changed** between the chip being written and the signal arriving. The
+   signal names what actually landed, and **the lead re-briefs at that point** rather than assuming
+   a prompt written hours earlier still describes the issue.
+
+**The chip's title says that it is held** — *"Hold for the lead's signal"*. He is choosing what to
+click and when, and a title saying so tells him it costs nothing to start it now; one that does not,
+does not. It is a convention, not a nicety.
+
+**The lead spawns its own successor** the same way: the handover as the prompt, and a hold on the
+signal. That removes the one interruption that used to be unavoidable — a handover being something
+he had to notice was due, paste and start himself. The handover's shape is recorded in #897 and has
+now been used twice; it is not restated here.
+
+**It is cheaper, not free, and the old paragraph's candour is worth keeping.** The click is still
+real. A held session still holds a worktree and a slot (#781), so the room is four or five held
+alongside what is running, and spawning ten at once is still not a thing to propose. A chip spawned
+too early can still go stale, which is what point 5 guards. And **none of this moves a decision off
+the user**: he still chooses what is worked on, still answers what is escalated, still gives the
+go-ahead before a merge. What goes is being paged at moments a machine chose.
 
 ## The loop
 
@@ -725,30 +784,40 @@ Two orphaned worktrees from 27 August were found by hand while this model was be
 worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
 in an unrelated session, as a failure with no visible cause.
 
-**A task session's implementation plan dies at layer 1, and the lead is what kills it.** AGENTS.md
-tells a session to write a plan under `.claude/plans/` for multi-area work; `.gitignore` ignores
+**A task session's implementation plan dies at layer 1, and for one day that was a defect.**
+AGENTS.md required a plan under `.claude/plans/` for multi-area work; `.gitignore` ignores
 `.claude/`, so `git ls-files .claude/plans` returns **0** and no plan has ever been committed. The
 harness copies the checkout's plans into each new worktree — a session that writes one holds 262
 where the checkout holds 261 — and that 262nd file is the only copy of it anywhere. Removing the
-worktree removes it. **Five worktrees were removed on 2026-09-06**, and whatever those sessions wrote
-is gone and is not recoverable.
+worktree removes it. **Five worktrees were removed on 2026-09-06** and those plans are gone. Neither
+rule was written knowing about the other, and together they instructed sessions to produce a record
+and the lead to destroy it.
 
-Neither rule was written knowing about the other, and together they **instruct sessions to produce a
-record and the lead to destroy it**. Nothing about that is settled here: **#875 holds the choice**
-— commit the plans under a narrower ignore rule, copy the plan out before removing the worktree,
-drop the requirement, or move the plan into the pull request body — and it is the user's to make.
-What follows already, and is stated at each of the three places the figure appears, is that **the
-261 above is a count frozen on the day the worktree model started**, not a number anyone should
-expect to grow.
+**The user settled it on 2026-09-07 (#875): a plan is no longer required, and what it is now is a
+working note for the session that writes it.** So this step destroys nothing the project asked for,
+and the tension is gone rather than managed. The reason it can go is that the plan was only ever a
+record because nothing else was — the 261 were written in an era with no pull requests at all, every
+commit going straight to `main`. A task session's reasoning now lands in three places that outlive
+its worktree: **the pull request body, the closing comment on the issue, and the topic file it is
+required to update.** All three are in git and all three are read.
+
+**Two rejected options, recorded so they are not reopened as improvements.** *Committing the plans*
+keeps the corpus growing and puts it where the lead already reads, but `.claude/` also holds
+machine-local state, so it needs a narrower ignore rule than the one that exists — and **a plan that
+becomes reviewable content changes how it is written**, toward something performed for a reader
+rather than used by its author. *Moving the plan into the pull request body* fails on something
+simpler: a plan is written **before** the work and a body is written after, so it would become a
+retrospective reconstruction and stop doing the one thing a plan is for.
 
 ## How much experience is behind this
 
 **One day.** Before 2026-09-06 every commit in this repository went straight to `main` and every
 session was the only one running. The single-session rule at the top has those 261 plans behind it —
-all of them written before that date, and the count has not moved since (#875); the lead, the pull
-request and the parallel worktrees have a single afternoon. This file records the current state of
-the practice, not settled practice, and the parts likeliest to be wrong are the ones exercised least:
-more than two sessions at once, and how a design track's issues get spawned as a batch.
+all written before that date, a closed record rather than a growing one (#875), and none the weaker
+for it; the lead, the pull request and the parallel worktrees have a single afternoon. This file
+records the current state of the practice, not settled practice, and the parts likeliest to be wrong
+are the ones exercised least: more than two sessions at once, and how a design track's issues get
+spawned as a batch.
 
 ## Keeping this file honest
 
