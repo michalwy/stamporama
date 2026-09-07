@@ -12,6 +12,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { useInvalidateStamps } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { ReorderModeButton } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
@@ -66,6 +67,7 @@ export function StampVariantsCard({
   maps: ReturnType<typeof useAreaVendorMaps>;
 }) {
   const router = useRouter();
+  const { invalidateList: invalidateStamps } = useInvalidateStamps();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
@@ -97,10 +99,26 @@ export function StampVariantsCard({
     setError(undefined);
   }
 
-  /** A write landed: the page is a server component, so the tree comes back through a refresh. */
+  /**
+   * A write landed. The page is a server component, so the tree comes back through a refresh — and
+   * the Stamps list's cached pages go stale in the same breath, because `buildStampListWhere` puts
+   * no `parentId` restriction on that list: a variant is an ordinary row there, and the collector
+   * who edits one here leaves by **Back to stamps**. A row still reading the way it read before the
+   * edit is the one thing this must not leave behind — the identity-band Edit's own rule (#751),
+   * which this card was missing (#914).
+   *
+   * Both write paths go through here rather than each calling `router.refresh()` for itself. That
+   * is the whole of the defect being fixed: the dialogs and the reorder refreshed separately, and
+   * only one of them was ever taught the second half.
+   */
+  function afterWrite() {
+    router.refresh();
+    void invalidateStamps(collectionId);
+  }
+
   function onSaved() {
     closeDialog();
-    router.refresh();
+    afterWrite();
   }
 
   const move = (from: number, to: number) => {
@@ -121,7 +139,7 @@ export function StampVariantsCard({
         setError(result.message);
         return;
       }
-      router.refresh();
+      afterWrite();
     });
   };
   const drag = useReorderList(reordering && canReorder && !isPending, move, { handleOnly: true });
