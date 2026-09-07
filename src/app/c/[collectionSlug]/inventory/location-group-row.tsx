@@ -14,21 +14,8 @@ import {
   type CopyRowActions,
   type CopySelection,
 } from "./inventory-copy-list";
-import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
+import { CopyGroupShell, GROUP_COUNT_CHIP, useGroupMembers } from "./copy-group-shell";
 import type { InventoryItemFilters } from "./use-inventory-query";
-
-const COUNT_CHIP: React.CSSProperties = {
-  fontSize: "0.875rem",
-  fontWeight: 700,
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-accent)",
-  background: "var(--color-accent-soft)",
-  border: "1px solid var(--color-accent)",
-  borderRadius: "0.375rem",
-  padding: "0.125rem 0.5rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
 
 /** The in-location ref, in the monospace the copy rows already show it in — it is an identifier
  * read off a shelf, not a name. */
@@ -134,7 +121,7 @@ export function LocationGroupRow({
           <Tooltip
             content={`${group.count} cop${group.count === 1 ? "y" : "ies"} filed here, of the ones this list is showing`}
           >
-            <span style={COUNT_CHIP}>×{group.count}</span>
+            <span style={GROUP_COUNT_CHIP}>×{group.count}</span>
           </Tooltip>
           {by === "ref" &&
             (group.locationRef ? (

@@ -1059,6 +1059,12 @@ When you hold several identical copies, the interesting row is not the copy — 
 Pick **Group duplicates** and the list collapses to one row per duplicate, with its count up front
 (`×10`). Expand a row (the **caret**) to see the individual copies underneath.
 
+**What the group is keyed on sits beside the count**: the **condition** always, and the format and
+the certificate when you have split by them. The rest of the row describes the stamp, exactly as an
+ungrouped copy row does. A last line appears only when the group has something extra to say — that
+it is mixed, or that some of its copies are already listed — so a plain stack is one line shorter
+than one that needs a warning.
+
 Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
 never optional: Colnect refuses more than one offer for the same stamp in the same condition and
 expects a quantity offer instead, so a group mixing conditions could not be posted.

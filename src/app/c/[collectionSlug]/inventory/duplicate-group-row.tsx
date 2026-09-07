@@ -28,7 +28,7 @@ import {
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
-import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
+import { CopyGroupShell, GROUP_COUNT_CHIP, useGroupMembers } from "./copy-group-shell";
 import { CopyValue } from "./inventory-item-row";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
@@ -56,20 +56,6 @@ const META_INLINE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-/** How many copies the group holds — the whole point of the row, so it leads it. */
-const COUNT_CHIP: React.CSSProperties = {
-  fontSize: "0.875rem",
-  fontWeight: 700,
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-accent)",
-  background: "var(--color-accent-soft)",
-  border: "1px solid var(--color-accent)",
-  borderRadius: "0.375rem",
-  padding: "0.125rem 0.5rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
 /** A member of the group differs on an axis left at *any*. Warning-tinted rather than plain,
  * because it is the one thing that makes the group not quite interchangeable. */
 const MIXED_CHIP: React.CSSProperties = {
@@ -81,10 +67,16 @@ const MIXED_CHIP: React.CSSProperties = {
 
 /**
  * One duplicate group on the Copies list (#372): a bag of interchangeable copies, collapsed to a
- * single row. Mirrors `InventoryItemRow`'s four-line layout — it describes the same stamp — and
- * adds what only a group has: how many, how many are already listed, and where its members
- * disagree. Expanding renders the members as ordinary copy rows, fetched then and not before: a page
- * of forty groups must not fetch four hundred copies to draw forty collapsed lines.
+ * single row. Follows `InventoryItemRow`'s line order — it describes the same stamp — and adds what
+ * only a group has: how many, how many are already listed, and where its members disagree.
+ * Expanding renders the members as ordinary copy rows, fetched then and not before: a page of forty
+ * groups must not fetch four hundred copies to draw forty collapsed lines.
+ *
+ * It is **three lines in the ordinary case and four when there is something to add** (#869), where
+ * a copy row is always four. The difference is the point: a copy row's last line carries per-copy
+ * facts a group has none of (its number, its disposition, where it is filed), so the group's keying
+ * moved up beside the count and the last line is left to the occasional statements *about* the bag.
+ * Drawn unconditionally it was, on the default axes, a whole line spent on one condition badge.
  *
  * The members carry the list's own selection checkboxes (#373), and the row's own box ticks them all
  * in one click (#398, moved out of the ⋮ menu by #422) — grouping is a way of *reading* the stock, so
@@ -180,14 +172,40 @@ export function DuplicateGroupRow({
       }}
       header={
         <>
-          {/* Line 1: how many, the stamp's name. A stamp with no name prints **nothing** in the
-              name's place (#678, the same fix #535 made on the Issue list): the count chip is what
-              this line is for, the catalog numbers two lines down say which stamp it is, and
-              "(unnamed stamp)" repeated down a grouped list is the same non-fact on every row. */}
+          {/* Line 1: how many, what the group is keyed on, the stamp's name.
+              The **key chips sit beside the count** (#869). All four say the same kind of thing —
+              *what this group is* — and the count chip is what this line was already for; the
+              condition, the format and the certificate had a line of their own at the foot of the
+              row, where with both optional axes off (their default) the whole line carried one
+              small badge. They **lead** the name rather than trailing it: the condition is read
+              down the list as a column, and the name is `flex: 1`, so anything after it would
+              start at a different x on every row.
+              A stamp with no name prints **nothing** in the name's place (#678, the same fix #535
+              made on the Issue list): the catalog numbers two lines down say which stamp it is,
+              and "(unnamed stamp)" repeated down a grouped list is the same non-fact on every
+              row. */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Tooltip content={`${group.count} interchangeable copies in this group`}>
-              <span style={COUNT_CHIP}>×{group.count}</span>
+              <span style={GROUP_COUNT_CHIP}>×{group.count}</span>
             </Tooltip>
+            <ConditionChip
+              collectionId={collectionId}
+              conditionId={group.conditionId}
+              label={group.conditionAbbreviation}
+              tooltip={group.conditionName}
+            />
+            {axes.format && (
+              <Tooltip content={group.formatName ?? "Single (no format recorded)"}>
+                <span style={CHIP}>{group.formatAbbreviation ?? "single"}</span>
+              </Tooltip>
+            )}
+            {axes.certificate && (
+              <CertificateStatusChip
+                collectionId={collectionId}
+                certificateStatusId={group.certificateStatusId}
+                label={group.certificateStatusName ?? "no certificate"}
+              />
+            )}
             {group.stampName && (
               <span
                 style={{
@@ -310,52 +328,40 @@ export function DuplicateGroupRow({
             </span>
           </div>
 
-          {/* Line 4: what the group is keyed on, where it is mixed, and what is already listed */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginTop: "0.6rem",
-              flexWrap: "wrap",
-            }}
-          >
-            <ConditionChip
-              collectionId={collectionId}
-              conditionId={group.conditionId}
-              label={group.conditionAbbreviation}
-              tooltip={group.conditionName}
-            />
-            {axes.format && (
-              <Tooltip content={group.formatName ?? "Single (no format recorded)"}>
-                <span style={CHIP}>{group.formatAbbreviation ?? "single"}</span>
-              </Tooltip>
-            )}
-            {axes.certificate && (
-              <CertificateStatusChip
-                collectionId={collectionId}
-                certificateStatusId={group.certificateStatusId}
-                label={group.certificateStatusName ?? "no certificate"}
-              />
-            )}
-            {group.mixedFormat && (
-              <Tooltip content="These copies are not all the same format. Turn on Split by format to group them apart.">
-                <span style={MIXED_CHIP}>mixed formats</span>
-              </Tooltip>
-            )}
-            {group.mixedCertificate && (
-              <Tooltip content="These copies do not all carry the same certificate. Turn on Split by certificate to group them apart.">
-                <span style={MIXED_CHIP}>mixed certificates</span>
-              </Tooltip>
-            )}
-            {group.listedCount > 0 && (
-              <Tooltip content="Copies of this group already sitting on a listing that has not closed — on any platform.">
-                <span style={{ ...CHIP, color: "var(--color-text-muted)" }}>
-                  {group.listedCount} of {group.count} already listed
-                </span>
-              </Tooltip>
-            )}
-          </div>
+          {/* Line 4: where the group is mixed, and what is already listed. Not the keying — that
+              moved up to line 1 (#869) — but statements *about* the bag, which is a different kind
+              of fact and keeps a line of its own. All three are occasional, so the line is drawn
+              **only when one of them has something to say**: a row that is neither mixed nor listed
+              anywhere ends at line 3. */}
+          {(group.mixedFormat || group.mixedCertificate || group.listedCount > 0) && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                marginTop: "0.6rem",
+                flexWrap: "wrap",
+              }}
+            >
+              {group.mixedFormat && (
+                <Tooltip content="These copies are not all the same format. Turn on Split by format to group them apart.">
+                  <span style={MIXED_CHIP}>mixed formats</span>
+                </Tooltip>
+              )}
+              {group.mixedCertificate && (
+                <Tooltip content="These copies do not all carry the same certificate. Turn on Split by certificate to group them apart.">
+                  <span style={MIXED_CHIP}>mixed certificates</span>
+                </Tooltip>
+              )}
+              {group.listedCount > 0 && (
+                <Tooltip content="Copies of this group already sitting on a listing that has not closed — on any platform.">
+                  <span style={{ ...CHIP, color: "var(--color-text-muted)" }}>
+                    {group.listedCount} of {group.count} already listed
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+          )}
         </>
       }
     >
