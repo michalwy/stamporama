@@ -1882,7 +1882,30 @@ export function InventoryListPanel({
           </ListToolbar>
 
           {/* A platform-exclusion write that failed (#506) has no dialog to report into, so it
-              reports here, directly above the rows it did not change. */}
+              reports here, directly above the rows it did not change.
+
+              **It is in the flow, so putting it up pushes every row down, and that is the accepted
+              behaviour rather than an oversight — the user's call on #864, which settles it as correct as
+              it stands.** Do not
+              reach for a mechanism that compensates for its height. Everything that appears on this
+              screen displaces: the quick-offer bar and the selection bar do it from `ListToolbar`'s
+              `footer` slot, whose own documentation carries the full account of the two
+              compensations that were built and rejected.
+
+              The short version is that the second of them worked by paying for the strip's height
+              out of the scroll position, and `window.scrollBy` clamps at zero — so a list long
+              enough to scroll held still and a shorter one shifted anyway (#884), which left the
+              screen's behaviour depending on how many rows happened to be on it. The user removed
+              it after living with it (#885): **a uniform flaw is easier to work with than an
+              unpredictable one.** An alert is likelier than a selection bar to come up on a short
+              list, so it is the control that mechanism served worst.
+
+              Compensating for this alert alone would also recreate precisely the inconsistency
+              #885 removed — one strip on this screen holding the rows still while its neighbours
+              move them — with the control swapped rather than the problem solved. The shape gets
+              fixed by the **redesign of the selection bar (#849)**, which is where a strip that
+              does not have to be paid for at all belongs; a third compensation is a thing to argue
+              for on that issue, not to write here. */}
           {exclusionError && (
             <div
               role="alert"
