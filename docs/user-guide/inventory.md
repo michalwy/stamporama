@@ -829,16 +829,17 @@ appears under the toolbar saying how many are picked, with **Clear**, [**Bulk
 edit…**](#bulk-editing-the-selection), the [new-offer shortcuts](#the-new-offer-shortcuts) and
 **🏷 Add selected to offer**.
 
-The bar **stays put while you scroll**, like the toolbar above it, and **ticking a checkbox does not
-move the list**: the bar takes its space from the page's scrolling rather than from the rows, so the
-next row you were aiming at is exactly where you left it. Nothing is covered — every row can still
-be read in full, including the first one. What moves instead is what sits *above* the toolbar: at
-the very top of the page the holdings summary slides up by the height of the bar, and once you have
-scrolled past it there is nothing to see move at all.
+The bar **stays put while you scroll**, like the toolbar above it. It takes its space from the list,
+so **the first tick pushes the rows down** by the height of the bar — and then nothing moves again
+until you clear the selection. Nothing is ever covered: every row can still be read in full,
+including the first one.
 
-The one exception is a list short enough to fit on the screen with no scrollbar: there is no
-scrolling for the bar to take its space from, so the rows do shift down by its height. Every row is
-in front of you in that case, so nothing can be lost behind it.
+That one shift is a known annoyance rather than an oversight, and it is the **same on every list**,
+long or short. It was fixed once, in a way that held the rows still by scrolling the page under the
+bar instead — but that could only work on a list long enough to have something to scroll, so a short
+list still moved and a long one did not, and there was no way to tell which you were about to get.
+One predictable jump turned out to be easier to work with than a jump that depends on how many rows
+happen to be on the screen. The proper answer is a rethink of the bar itself, which is still to come.
 
 A copy you [no longer hold](#copies-you-no-longer-hold) gets no checkbox — there is nothing left to
 list, move or re-flag. Everything else can be ticked.
@@ -927,9 +928,9 @@ while you scroll, with two things in it:
 - **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
 
 When copies are ticked as well, this bar sits **above** the selection bar: quick offer mode is the
-mode you are in, the selection is what you are doing inside it. Unlike the selection bar, arming the
-mode does shift the list down once to make room — you asked for it with a click, so nothing is under
-way at that moment.
+mode you are in, the selection is what you are doing inside it. Like the selection bar, arming the
+mode shifts the list down once to make room — you asked for it with a click, so nothing is under way
+at that moment.
 
 From then on, every **Add to new offer** — the entry in a copy's **⋮** menu, its promoted icon on the
 row, and the **New offer** buttons in the selection bar — creates the offer **straight away**, with
