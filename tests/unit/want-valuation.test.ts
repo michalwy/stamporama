@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { Prisma } from "../../src/generated/prisma/client";
+import type { Decimal } from "@prisma/client/runtime/client";
 import {
   wantCatalogRange,
   type WantValuationDictionaries,
@@ -8,6 +8,12 @@ import {
 } from "../../src/lib/want-valuation";
 import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import type { WantAcceptance } from "../../src/lib/want-rules";
+
+// `RawCatalogPrice.price` is a Prisma Decimal; `catalog-price.ts` only ever calls Number() on it,
+// so a plain number stands in fine at runtime. Cast to satisfy the type in tests — the same stand-in
+// `valuation.test.ts` and `variant-price-coverage.test.ts` use, which keeps the unit suite free of
+// the generated client (#861).
+const D = (n: number): Decimal => n as unknown as Decimal;
 
 const CATALOG = "cat-michel";
 const U = "cond-used";
@@ -26,7 +32,7 @@ const price = (
   conditionId: string,
   over: Partial<RawCatalogPrice> = {}
 ): RawCatalogPrice => ({
-  price: new Prisma.Decimal(amount),
+  price: D(Number(amount)),
   currency: "EUR",
   conditionId,
   certificateStatusId: null,

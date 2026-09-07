@@ -1,9 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  parseEcbXml,
-  convertViaEur,
-} from "../../src/lib/exchange-rates";
+import { parseEcbXml, convertViaEur } from "../../src/lib/ecb-rates";
 
 const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01"

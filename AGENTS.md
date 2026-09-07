@@ -116,7 +116,7 @@ The rest of the model — the long-lived lead session, how a task session is spa
 
 - `pnpm lint` — run before finishing any task that touches source files.
 - `pnpm typecheck` — TypeScript verification.
-- `pnpm test:unit` — pure logic only, no Prisma imports.
+- `pnpm test:unit` — pure logic only, no Prisma imports, so it runs on a tree where the client has not been generated. **Checked, not assumed**: `tests/unit/unit-suite-purity.test.ts` walks the suite's import graph and fails on any path that reaches one, naming the chain. Three files had quietly broken this rule, and the failure they produced — `Cannot find module` — reads as a broken checkout rather than a broken test. When a pure helper sits in a module that does touch Prisma, split the pure half into its own module (#861).
 - `pnpm test:integration` — requires real database via `docker-compose.e2e.yml`. Run before committing schema or domain logic changes.
 - Write migration SQL manually. Create directory and `migration.sql` by hand under `prisma/migrations/`. Then `pnpm exec prisma generate`.
 - Never run `prisma migrate dev`, `prisma migrate reset`, or `prisma db push` directly. Exception: `pnpm e2e:db:reset` is safe.
