@@ -59,8 +59,9 @@ field on the screen itself ([Inventory](inventory.md#searching-and-filtering),
 - **Offer** opens the offer's short address (`/o/<collection>/<number>`) — the same link a
   marketplace private note carries, so following a link and jumping are the same journey.
 - **Purchase**, **sale** and **trade** open their own detail screen.
-- **Auction lot** opens the **sale** it belongs to, with that lot highlighted — the same thing
-  clicking the lot on the watchlist does.
+- **Auction lot** opens the **sale** it belongs to, with that lot scrolled to and its card open.
+  It [flashes once](auctions.md#the-lots-screen) as it arrives and leaves nothing behind — the same
+  thing clicking the lot on the watchlist does.
 
 If the collection has no such record, the box says so and keeps what you typed, because a miss is
 usually a typo one character wide.
