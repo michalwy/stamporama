@@ -391,6 +391,17 @@ The #880 session's own words are the part worth keeping: *a correction is not do
 were thinking about is fixed; it is done when the retired claim does not appear anywhere. That is a
 grep, and I did not run it until you pointed at the line* (#854).
 
+**Then count your own hits, because the idiom for this sweep drops them silently.** Wrapping each
+hit in context with a *mandatory* trailing quantifier — `grep -oiE '.{140}claim.{200}'` — matches
+nothing whenever the hit lands within 200 characters of a line end: where every hit does, it exits 1
+and prints nothing, byte-for-byte what a clean tree prints, and where only some do it exits 0 and
+looks like it worked. That is how #910's first sweep lost a stale claim it had already found.
+**Shorter lines make it worse rather than better**, since they create more line ends, and the
+correct bounded form `.{0,200}` is rejected by the `grep` in a session shell here — it routes to
+ugrep, which calls it *"exceeds complexity limits"*; `/usr/bin/grep` accepts it. So run `grep -c` or
+`grep -n` first and check the total against what you classified: **a sweep that reports its own count
+cannot return a silent zero.** Measured rather than reasoned about, twice (#896, #905).
+
 ## A protected `main`, and what it changed
 
 Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, the user included**:
