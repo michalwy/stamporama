@@ -28,7 +28,7 @@ import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
-import { MultiSelectFilter } from "./multi-select-filter";
+import { FilterChip } from "./filter-chip";
 import { filterStampTreeBy, filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
 
 // The rules that decide what survives a narrowing — the checklist filter (#531) and the list
@@ -65,13 +65,36 @@ export function buildStampTree(members: StampNodeData[]): StampTreeNodeData[] {
 }
 
 /**
- * The control that does the narrowing: one tick per checklist of the issue. Rendered **only** when
- * an issue carries more than one — with a single checklist there is nothing to choose between, and
- * the row keeps its plain `12/14` badge.
+ * The control that does the narrowing: one chip per checklist of the issue, each toggled on its own
+ * (#772). Rendered **only** when an issue carries more than one — with a single checklist there is
+ * nothing to choose between, and the row keeps its plain `12/14` badge.
  *
- * Its resting label is the badge's own text (`2 checklists`), which is what makes it a replacement
- * rather than an addition: `MultiSelectFilter` (#425) names one ticked value and counts several,
- * so the control reads as the indicator until it is used.
+ * It was a `MultiSelectFilter` (#425) until #772, and the count is what settled the swap. That
+ * control's whole economy is **counting values rather than listing them**, so its resting label read
+ * `3 checklists` — which is the text `ChecklistsBadge` is already showing a few pixels away on the
+ * same row. The dropdown therefore cost a click to learn anything the row did not already say, on a
+ * control whose options are the *choice itself* rather than a qualifier on one (#846 draws that line
+ * the other way round, and this is the far side of it): an issue carries a handful of checklists —
+ * basic beside specialized, perforated beside imperforate (`catalog-and-stamps.md`, #531) — and
+ * their **names** are what a collector picks by. Chips say the names, which is what the count could
+ * not, and each is one click.
+ *
+ * **No count on a chip.** `FilterChip` offers one and it would be wrong here: a checklist's stamp
+ * count is over the whole issue, while the tree under it may also be narrowed by the list's own
+ * filter (#631), so the number would disagree with the rows it sits above — worse than no count at
+ * all (#843). The per-checklist figures live in `ChecklistsBadge`'s tooltip, where nothing is
+ * narrowing them.
+ *
+ * **Nothing ticked is the absence of a filter**, not an empty set (`filterStampTreeByChecklists`),
+ * so there is no *All* chip: with every chip on screen, unticking the last one is both visible and
+ * the whole act — which is `MultiSelectFilter`'s own reading of clearing, kept. #843's "already
+ * selected is a no-op" is the opposite case and does not reach here: it is about a single-choice
+ * facet list that carries an explicit *All* row to clear with.
+ *
+ * The chips take `toggle`, so each announces `aria-pressed`. The control they replaced was a
+ * checkbox list and said which boxes were ticked; a row of buttons distinguished only by an accent
+ * tint would have said nothing at all to a reader, which is the one thing the swap could have cost
+ * and does not.
  */
 export function ChecklistTreeFilter({
   checklists,
@@ -84,14 +107,30 @@ export function ChecklistTreeFilter({
 }) {
   if (checklists.length <= 1) return null;
   return (
-    <MultiSelectFilter
-      options={checklists.map((c) => ({ id: c.id, label: c.name }))}
-      selected={selected}
-      onChange={onChange}
-      allLabel={`${checklists.length} checklists`}
-      itemNoun="checklists"
-      ariaLabel="Filter the stamps by checklist"
-    />
+    // Wraps rather than overflows: this row sits in a header of its own with nothing beside it, so a
+    // second line costs nothing, and an issue with more checklists than fit is the one case where a
+    // row that cannot wrap would push its last chips out of reach.
+    <div
+      role="group"
+      aria-label="Filter the stamps by checklist"
+      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.375rem" }}
+    >
+      {checklists.map((c) => (
+        <FilterChip
+          key={c.id}
+          label={c.name}
+          active={selected.includes(c.id)}
+          toggle
+          onClick={() =>
+            onChange(
+              selected.includes(c.id)
+                ? selected.filter((id) => id !== c.id)
+                : [...selected, c.id]
+            )
+          }
+        />
+      ))}
+    </div>
   );
 }
 

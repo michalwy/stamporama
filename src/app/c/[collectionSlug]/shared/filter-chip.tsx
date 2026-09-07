@@ -22,6 +22,7 @@ export function FilterChip({
   count,
   alarm,
   active,
+  toggle = false,
   onClick,
 }: {
   label: string;
@@ -31,6 +32,18 @@ export function FilterChip({
   /** Render in the error tint — an alarm the user should not have to click to notice. */
   alarm?: boolean;
   active: boolean;
+  /**
+   * This chip is one of several **independent** toggles rather than one of a set of which exactly
+   * one is chosen (#772, the issue tree's checklist filter) — so it announces `aria-pressed` and a
+   * reader is told which chips are on.
+   *
+   * Off by default, and deliberately not derived from {@link active}: on the status filters this
+   * component was written for (#332, #392) the chips are a **one-of** choice, where a row of
+   * pressed/unpressed toggles would describe the control wrongly. Where the tint is the only state
+   * a sighted collector needs, it is not the only state a reader needs, which is why this exists at
+   * all — the control it replaced on that filter was a checkbox list and announced its ticks.
+   */
+  toggle?: boolean;
   onClick: () => void;
 }) {
   // The active selection keeps the accent treatment; an alarming chip takes the error tint only
@@ -39,6 +52,7 @@ export function FilterChip({
   return (
     <button
       type="button"
+      aria-pressed={toggle ? active : undefined}
       onClick={onClick}
       style={{
         ...FILTER_CONTROL_STYLE,
