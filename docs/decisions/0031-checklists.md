@@ -103,6 +103,17 @@ card and one catalog-value card each.
 
 ### 8. The badge counts; the tree filters
 
+> **Amended by #772: the control is a row of chips, not a `MultiSelectFilter`.** Everything this
+> section decides about *where* the narrowing happens — the expanded tree and the **Stamps** card,
+> local state rather than a URL parameter, nothing at all on a single-checklist issue, and the
+> collapsed row's chip line left alone — is unchanged and was not reopened. What changed is the
+> control's form, and this section's own observation is the argument against it: the resting label
+> `2 checklists` being *exactly the badge's text* meant the dropdown had to be opened before it said
+> anything the row had not already said. An issue carries a handful of checklists and their **names**
+> are what one picks by, so they are now on screen as `FilterChip`s, one click each. `ui-patterns.md`
+> carries the reasoning and the three things that travelled with it (no count on a chip, no *All*
+> chip, and a row that wraps).
+
 The `3 checklists` badge on a collapsed row is an **indicator** and stays one. Narrowing happens
 where the stamps actually are: a `MultiSelectFilter` (#425) above the row's **expanded** stamp tree,
 and in the header of the **Stamps** card on the issue's detail page. Both keep the selection in

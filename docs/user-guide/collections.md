@@ -502,11 +502,11 @@ always says how many wants it will create before it writes anything. See
 
 ### Showing one checklist at a time
 
-When an issue carries **more than one** checklist, expanding its row puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. Tick one or more checklists and the tree narrows to the stamps on them.
+When an issue carries **more than one** checklist, expanding its row puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. Every checklist the issue carries is there **by name, as its own chip**, so you can see what you are choosing between before you choose: click one and the tree narrows to the stamps on it, click a second and it shows the stamps on either.
 
 A stamp that is not on the picked checklists disappears, with one exception: a **parent whose variant did make the cut stays**, dimmed. `309AP` on its own is a number nobody can place, so the `309` it hangs under remains as context — visibly not part of the set, but there to read the numbering off.
 
-Untick everything to get the whole tree back; an empty selection means *no filter*, not *nothing*. The choice is not remembered — it is a way of looking at one issue for a moment, not a setting.
+Click the picked chips off again to get the whole tree back; nothing picked means *no filter*, not *nothing*, which is why there is no **All** chip to hunt for. The choice is not remembered — it is a way of looking at one issue for a moment, not a setting.
 
 The same filter sits in the **stamp picker** — the browser you reach from a purchase order's intake or an auction lot's composition — above each expanded issue's tree. When it empties the tree, the row says so rather than looking like an empty issue.
 
