@@ -142,6 +142,134 @@ jobs:
           echo "code=false" >> "$GITHUB_OUTPUT"
           echo "Documentation only - the application suite is skipped."
 
+  # `Refs #NNN`, never a closing keyword — the convention of #785 turned into a control (#790).
+  #
+  # A closing keyword hands the close to GitHub at merge time, which is the human step that
+  # `docs/agents/collaboration.md` deliberately puts *after* verification. #783 merged with a
+  # closing reference in its body and closed #780 one second later, before anybody had read that
+  # issue's *Done when*; #787 — the pull request that added the rule — armed one twice from its
+  # own body, once while quoting the first mistake in order to explain it. The rule survived
+  # careful attention only sometimes, which is the definition of something that needs a machine.
+  #
+  # **Deliberately not gated on `Detect changes`.** Every other job below asks "does this change
+  # touch the application"; this one asks what the pull request *says*, which is independent of
+  # which files it touches. Both of the incidents above were documentation-only pull requests —
+  # exactly the ones `Detect changes` skips — so gating this on it would switch the check off in
+  # the case that produced it.
+  #
+  # **It checks the pull request, not just the diff**, because a body edited after the last push
+  # changes GitHub's answer without changing a commit. Two sources, and they need different
+  # instruments:
+  #
+  #   - the **body**, read through `closingIssuesReferences` — GitHub's own parse of what it will
+  #     act on at merge time. No regular expression can beat it, and one would be actively worse:
+  #     GitHub ignores a keyword inside a code span, so a body that safely quotes the trap in
+  #     order to warn about it would fail a text search and merge cleanly here.
+  #   - the **commit messages**, matched by pattern, because `closingIssuesReferences` does not
+  #     see them. This repository rebase-merges, so every commit message on the branch lands on
+  #     `main` verbatim and closes whatever it names, whatever the body says.
+  #
+  # The whole check was measured before it was trusted, by running this exact script against every
+  # one of the **130 pull requests** in this repository's history: it passes 129 and fails exactly
+  # one — #783, the pull request that closed #780 by accident. The commit pattern was measured the
+  # same way over all **971 commits** on `main`: 49 hits, every one a genuine `Closes #NNN` from
+  # the era when commits went straight to `main`, and no false positives. The `(#NNN)` suffix a
+  # commit title already uses does not match, and neither does `Refs #NNN`.
+  #
+  # Renovate is safe: it renders `#595` in upstream release notes as `#&#8203;595`, a zero-width
+  # space that stops GitHub parsing it, and its commit messages are a single `chore(deps):` line.
+  # All 80 of its pull requests here pass this check. That matters because a
+  # dependency batch merges itself with nobody watching, so a check that failed one would stop an
+  # automerge silently — the exact failure mode `collaboration.md` warns about for that whole
+  # arrangement.
+  #
+  # **It fails closed.** If the API cannot be reached the check reports red, because green here
+  # means "safe to merge" and an unanswered question is not that. `Detect changes` above fails the
+  # other way for the opposite reason: its safe direction is to run more, not less.
+  #
+  # No checkout and no `contents:` scope — nothing is read from the tree — so the job answers in
+  # seconds and is cheap enough to be a required check.
+  closing-refs:
+    name: Closing reference check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+
+    # Granted here rather than at the top of the workflow, so no other job gains them:
+    # `pull-requests: read` for the pull request and its commits, `issues: read` for the linked
+    # issues behind `closingIssuesReferences`.
+    permissions:
+      issues: read
+      pull-requests: read
+
+    steps:
+      - name: Check whether merging this pull request would close an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # close/closes/closed, fix/fixes/fixed, resolve/resolves/resolved, followed by an issue
+          # in any form GitHub accepts: `#12`, `GH-12`, `owner/repo#12`, or the full issue URL.
+          keywords='\b(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*:?[[:space:]]*(#|GH-|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#|https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/)[0-9]+'
+
+          fail_closed() {
+            echo "::error::$1 — this check cannot tell whether the pull request would close an issue, so it reports red. Re-run it."
+            exit 1
+          }
+
+          if ! body_refs=$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" \
+                --json closingIssuesReferences \
+                --jq '[.closingIssuesReferences[].number] | map("#" + tostring) | join(", ")'); then
+            fail_closed "Could not read the pull request's closing references"
+          fi
+
+          if ! commit_messages=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/commits" \
+                --jq '.[] | .sha[0:8] as $sha | .commit.message | split("\n")[] | "\($sha) \(.)"'); then
+            fail_closed "Could not list the pull request's commits"
+          fi
+
+          commit_hits=$(printf '%s\n' "$commit_messages" | grep -iE "$keywords" || true)
+
+          if [ -z "$body_refs" ] && [ -z "$commit_hits" ]; then
+            echo "No closing reference — merging this pull request closes nothing."
+            exit 0
+          fi
+
+          if [ -n "$body_refs" ]; then
+            echo "The body is armed to close: $body_refs"
+          fi
+          if [ -n "$commit_hits" ]; then
+            echo "Commit messages carrying a closing keyword:"
+            printf '%s\n' "$commit_hits" | sed 's/^/  /'
+          fi
+
+          cat <<'EOF'
+
+          Reference the issue as `Refs #NNN` instead. Merging closes it otherwise, at the merge
+          timestamp, before the lead has verified anything — that is how #780 was closed before
+          anybody had read its "Done when" (docs/agents/collaboration.md, "Refs #NNN, never a
+          closing keyword").
+
+          Prose counts. GitHub matches close/closes/closed, fix/fixes/fixed and
+          resolve/resolves/resolved wherever they land, so an ordinary sentence that happens to
+          put the verb in front of the number arms it just as well as a reference line does — and
+          so does a sentence quoting the mistake in order to warn about it. Rewrite it so the verb
+          and the number are not adjacent: "the lead closes it" and "#780" in one sentence is
+          fine.
+
+          A parenthetical asking GitHub not to does not help; GitHub does not read parentheticals.
+
+          To fix: edit the pull request body, or amend the commit message and force-push, then
+          re-run this check. Read the result back rather than the text —
+          `gh pr view <n> --json closingIssuesReferences` must return `[]`.
+          EOF
+
+          echo "::error::Merging this pull request would close an issue. Reference it as 'Refs #NNN' instead — see this job's log."
+          exit 1
+
   # Lint, typecheck and build run **concurrently inside this one job** (#881), not one after
   # another. The job keeps its name, so `main`'s ruleset is untouched and nothing had to be
   # decided: splitting them into three jobs would have made each its own required context and
