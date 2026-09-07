@@ -803,7 +803,12 @@ normal case rather than the exception.
 mtime is the worst of them, because holding *is* doing nothing. Git proves staleness in one
 direction only — a merged or dropped `task/` branch is finished. **A worktree carrying no `task/`
 branch is the case git is silent about, and is exactly the shape of a held session**; never remove
-one on git evidence alone.
+one on git evidence alone. Three hours after the sweep above, **the incoming lead made the same call
+deliberately** — one worktree, examined on purpose rather than in a loop: clean, on a throwaway
+`claude/` branch, its work already on `main`, therefore rubbish — and reported it as a removal
+candidate while it was still holding. Nothing came of it only because the release ran first. The git
+evidence is insufficient even when you are looking at a single worktree, carefully, having read this
+file.
 
 **What answers it is a lookup, and the list already exists.** Every session the app knows about
 carries the `cwd` it runs in, which for a task session is its worktree path. So before removing
