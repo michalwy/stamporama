@@ -15,7 +15,7 @@
     "@types/chrome": "0.2.8",
     "esbuild": "0.28.2",
     "linkedom": "0.18.13",
-    "tsx": "4.23.12",
+    "tsx": "4.23.13",
     "typescript": "5.9.3"
   }
 }
