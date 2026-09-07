@@ -6,7 +6,7 @@
 # name follow the worktree instead of being written down three times. In the main worktree the
 # slot is 0 and this is exactly what it always was: project `stamporama`, port 5433.
 #
-# Usage: scripts/e2e-db.sh [up|test|reset|down]
+# Usage: scripts/e2e-db.sh [up|test|time|reset|down]
 
 set -euo pipefail
 
@@ -34,13 +34,19 @@ test)
   # intact — which is what it did before, by accident, through a glob that matched nothing.
   pnpm exec tsx --tsconfig tests/integration/tsconfig.json --test 'tests/integration/**/*.test.ts'
   ;;
+time)
+  # The same suite, one process per file, timed (#880). Takes the concurrency to measure at:
+  # `pnpm test:integration:time 4` is what CI's four-core runner does.
+  pnpm exec prisma migrate deploy
+  node scripts/time-integration-tests.mjs "${2:-}"
+  ;;
 reset)
   # The one `prisma migrate reset` this project allows, and only against the throwaway e2e
   # database this script just started.
   pnpm exec prisma migrate reset --force
   ;;
 *)
-  echo "usage: $0 [up|test|reset|down]" >&2
+  echo "usage: $0 [up|test|time [concurrency]|reset|down]" >&2
   exit 2
   ;;
 esac
