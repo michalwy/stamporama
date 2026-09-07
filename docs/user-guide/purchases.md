@@ -157,20 +157,38 @@ A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reo
 populate the lot, so they are removed with it (you are warned how many when confirming). A
 lot's price can only be edited while it is open.
 
-**Catalog value vs. cost.** The whole-order summary at the top of the page, and each lot's
-expanded copies, show the same two-line **catalog value / purchase cost** bar as the
-[inventory holdings summary](inventory.md) — the summed catalog value (in your base currency,
-using each copy's default display condition) next to what was actually paid, so you can compare
-paid-against-catalog at a glance. Both lines call out copies that don't fully count: *unpriced*
-copies (no catalog price for their condition) and *pending* cost (a copy whose lot is still
-open, so its cost-basis is not frozen yet). The order-level bar totals every copy across all
-lots; each lot's bar totals just that lot.
+**What the order cost.** The values bar at the top of the page opens with the **order total** —
+what the whole parcel cost you: every lot, every expense and the shipping, added up. It is stated
+in the order's own transaction currency (what you actually paid, and what a receipt would show)
+and, next to it, in your **base currency** at the rate frozen on the order — the only figure you can
+compare with anything else in the app. When the order is already in your base currency there is one
+figure and no `≈` beside it. When it is in another currency and **no rate has been recorded**, the
+row says so instead of guessing: the total in the order's own currency is still exact, and there is
+simply no base-currency answer to give.
 
-Both bars are **collapsed to their catalog-value line by default**, with a **More** button for the
-rest — the same shape the [Offers](offers.md) summary has. The order's bar and the lot bars
-**remember their own choice separately**: opening the order's detail does not open every lot's, and
-every lot bar on the page shares one setting, because "do I want lot detail today" is the question
-being answered rather than "do I want it for lot 3".
+Open the bar with **More** and the total splits into **Price** and **Shipping**, each with the same
+base-currency equivalent. *Price* covers every priced line of the order, so it includes any
+non-inventory **expenses**, and the row says how many there are when there are some.
+
+Each lot's own bar answers the same question for that lot: its **lot total** is its price plus its
+share of the order's shipping — the pool that gets split across its copies when you close it. The
+shipping row names the whole charge the share came out of, because a lot did not incur postage of
+its own: the order's shipping is spread across all its lines by price.
+
+**Catalog value vs. cost.** Under those rows, the same bar shows the **catalog value / purchase
+cost** figures the [inventory holdings summary](inventory.md) does — the summed catalog value (in
+your base currency, using each copy's default display condition) next to what was actually paid, so
+you can compare paid-against-catalog at a glance. Both call out copies that don't fully count:
+*unpriced* copies (no catalog price for their condition) and *pending* cost (a copy whose lot is
+still open, so its cost-basis is not frozen yet). Note that **Purchase cost** is not the order
+total: it is the part of the order's money that has been frozen onto individual copies so far. The
+order-level bar totals every copy across all lots; each lot's bar totals just that lot.
+
+Both bars are **collapsed to their total line by default**, with a **More** button for the rest —
+the same shape the [Offers](offers.md) summary has. The order's bar and the lot bars **remember
+their own choice separately**: opening the order's detail does not open every lot's, and every lot
+bar on the page shares one setting, because "do I want lot detail today" is the question being
+answered rather than "do I want it for lot 3".
 
 **Spent vs. realized.** Once a copy in view has been **sold** ([Sales](sales.md)), three more rows
 appear on that same bar — under a rule, because the rows above are what these copies are *worth* and

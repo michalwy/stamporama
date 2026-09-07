@@ -24,6 +24,7 @@ import {
   type LotItem,
   type DeliveryState,
 } from "./purchase-allocation";
+import { resolvePurchaseSpend, type PurchaseSpend } from "./purchase-spend";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 
@@ -115,6 +116,11 @@ export interface LotSummary {
   poolTx: string;
   /** poolTx at the frozen FX rate, base currency (2 dp), or null when no rate is known. */
   poolBase: string | null;
+  /** What this lot cost, in both currencies, broken into its price and its share of the order's
+   *  shipping (#852). The same figures `poolTx`/`poolBase` carry, restated for the values bar
+   *  with the breakdown the pool chip has never given: the chip states the sum and its tooltip
+   *  states the formula, neither of them the share itself. */
+  spend: PurchaseSpend;
 }
 
 export interface PurchaseDetail {
@@ -136,6 +142,9 @@ export interface PurchaseDetail {
   expenseCount: number;
   /** lots + expenses + shipping, transaction currency (2 dp). */
   total: string;
+  /** What the whole order cost, in both currencies, broken into its priced lines and its
+   *  shipping (#852) — the one figure the screen held every part of and never added up. */
+  spend: PurchaseSpend;
   /** The auction sale this purchase was settled from (#28), or null for a hand-entered one. The
    * link is worth carrying because the bidding record is where the lots' figures came from, and it
    * survives this purchase being deleted. */
@@ -264,6 +273,18 @@ export async function getPurchaseDetail(
       itemCount: l._count.items,
       poolTx: pool.poolTx.toFixed(2),
       poolBase: canExpressBase ? pool.poolBase.toFixed(2) : null,
+      // The lot's own two halves, straight off the engine (#852): its line price and the share
+      // of the order's shipping the apportionment gave it. Named as a share, with the whole
+      // charge beside it, because the lot did not incur it — ADR-0009 §3.1 spread it by price.
+      spend: resolvePurchaseSpend({
+        scope: "lot",
+        priceTx: pool.price,
+        shippingTx: pool.sharedCost,
+        currency: row.currency,
+        baseCurrency: row.collection.baseCurrency,
+        fxRateToBase,
+        shippingShareOf: costs.shippingCost,
+      }),
     };
   });
 
@@ -272,6 +293,17 @@ export async function getPurchaseDetail(
     new Prisma.Decimal(0)
   );
   const total = row.shippingCost ? linesTotal.add(row.shippingCost) : linesTotal;
+  // The order's own total, from the very numbers the pool split is made of, so what the screen
+  // says the parcel cost and what the copies are costed against cannot disagree (#852).
+  const spend = resolvePurchaseSpend({
+    scope: "order",
+    priceTx: Number(linesTotal),
+    shippingTx: costs.shippingCost,
+    currency: row.currency,
+    baseCurrency: row.collection.baseCurrency,
+    fxRateToBase,
+    lines: { lots: row.lots.length, expenses: row.expenses.length },
+  });
 
   return {
     id: row.id,
@@ -289,6 +321,7 @@ export async function getPurchaseDetail(
     lots,
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
+    spend,
     auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
     trade: row.trade
       ? { id: row.trade.id, tradeNo: row.trade.tradeNo, partnerName: row.trade.partner.name }
