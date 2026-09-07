@@ -492,7 +492,8 @@ interface AuctionLotRowProps {
    */
   showParties?: boolean;
   /**
-   * Whether clicking the row opens the lot's sale, with the lot itself highlighted there (#374).
+   * Whether clicking the row opens the lot's sale, with that lot scrolled to and flashed once
+   * there (#374; the flash replaced a persistent ring and a dismissable strip in #850).
    *
    * On for the flat watchlist, off on the sale's own screen — there the click would land on the
    * page you are already reading, and the row is that card's header, whose caret is the only thing
