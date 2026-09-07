@@ -6,9 +6,9 @@ record.** Where a sentence anywhere in this repository describes how `main` is p
 `description` — that sentence is a summary, and this file is what it summarises.
 
 Before this file existed, the ruleset lived in this repository only as prose, and prose drifts
-silently from the thing it describes. It already had: a sweep found fourteen places asserting the
-required-check count as live fact across five files, and `ci.yml` carried three claims about the
-ruleset of which two went wrong the moment it changed (#937). A reader had no way to tell a
+silently from the thing it describes. It already had: a sweep found the required-check count
+asserted as live fact on twenty-two lines across five files, and `ci.yml` carried three claims about the
+ruleset of which two went wrong the moment it changed (#937, #790). A reader had no way to tell a
 sentence that was still true from one that used to be.
 
 ## The red-is-correct window

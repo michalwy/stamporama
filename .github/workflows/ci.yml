@@ -27,14 +27,16 @@ env:
 
 jobs:
   # One cheap job that always runs and decides whether this change touches anything the
-  # application is built from. The four required jobs below are gated on its output, so a
-  # documentation-only change leaves them skipped and the pull request is mergeable in seconds
-  # rather than the fifteen minutes the full suite costs (#798).
+  # application is built from. Four of the five required jobs below are gated on its output, so a
+  # documentation-only change leaves those four skipped and the pull request is mergeable in
+  # seconds rather than the fifteen minutes the full suite costs (#798). The fifth,
+  # `Closing reference check`, carries no `needs:` and runs on every pull request.
   #
   # **The gate is a job-level `if:`, never `paths-ignore` at the workflow level.** `main` requires
-  # four status checks by name — `Static checks`, `Unit tests`, `Integration tests`,
-  # `Extension checks` (`docs/agents/collaboration.md`) — and a workflow that does not run reports
-  # none of them: the pull request would sit on four `expected` contexts for ever, with nothing
+  # five status checks by name — `Static checks`, `Unit tests`, `Integration tests`,
+  # `Extension checks` and `Closing reference check` (`docs/agents/collaboration.md`) — and a
+  # workflow that does not run reports none of them. Every one of those five lives in this file,
+  # gated or not, so the pull request would sit on five `expected` contexts for ever, with nothing
   # able to merge it short of taking the rule off the repository. A job skipped by `if:` still
   # reports its context, and GitHub counts a skipped required check as satisfied. That difference
   # is the whole design, and it is the one thing here that must not be "simplified" back into a
