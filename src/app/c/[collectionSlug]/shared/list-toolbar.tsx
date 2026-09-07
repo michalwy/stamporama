@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -91,22 +91,41 @@ export interface ListToolbarProps {
   catalogNumber?: string;
   onCatalogSearchChange?: (vendorId: string, number: string) => void;
   children?: React.ReactNode;
-  /** A last row inside the sticky block. Rendered here rather than above the rows so it is pinned
-   * by the same `position: sticky` and can never overlap the toolbar it would otherwise have to sit
-   * below. Putting one up **does** push the rows down, nothing being done to compensate for the
-   * height it adds — which is right for a banner raised by a deliberate click (arming quick offer
-   * mode, #537/#848), where the shift reads as feedback, and wrong for one that appears as a side
-   * effect of working the list. For the latter, see {@link ListToolbarProps.stableFooter}. */
-  footer?: React.ReactNode;
-  /** A last row like {@link ListToolbarProps.footer}, in the block's flow and below it — but one
-   * whose arrival and departure **do not move the list** (#848). For a banner that appears as a
-   * side effect of what the collector is doing to the list rather than from a click aimed at the
-   * banner: the selection bar over the ticked copies (#373), which used to arrive on the first
-   * ticked checkbox, grow the block, and move the row the collector was reaching for next.
+  /** The last rows inside the sticky block — quick offer mode's parameters and the bar over the
+   * ticked selection, in that order, both on the Copies list (#537/#373/#848). Rendered here rather
+   * than above the rows so they are pinned by the same `position: sticky` and can never overlap the
+   * toolbar they would otherwise have to sit below. Pass several as a fragment; the block is a
+   * flex column, so each becomes one of its rows.
    *
-   * It holds still by moving the **viewport** rather than by leaving the flow — see the layout
-   * effect below for how, and for why the overlay this was first built as was the wrong answer. */
-  stableFooter?: React.ReactNode;
+   * **Putting one up pushes the rows down, and that is the accepted behaviour — deliberately, on
+   * every list, however long (#885).** It is not right; it is uniform, which the alternatives were
+   * not. Do not add a second slot that compensates for the height. Two mechanisms have been built
+   * and both were rejected by the user after he had used them:
+   *
+   * 1. **Out of flow — a second slot hanging the bar off the block's bottom edge, drawn over the
+   *    rows** (#848, first attempt). It moved nothing, but it *covered* the row beneath it. The
+   *    argument for accepting that was "a scroll notch brings the row back", and it is false in the
+   *    one place it matters: at the top of the list `scrollTop` is already `0`, there is nothing to
+   *    scroll back, and the first row stayed half-hidden for as long as anything was selected. The
+   *    top of the list is where a person starts ticking.
+   * 2. **In flow, paid for by scrolling the viewport** (#848, second attempt). The block grew by
+   *    `H` and `window.scrollBy` moved the scroll position by `H` in the same layout effect, so the
+   *    rows held still. That works — on a page long enough to scroll. `scrollBy` clamps at zero, so
+   *    a list shorter than the viewport has nothing to pay with and its rows shift anyway (#884).
+   *    **The screen's behaviour then depended on how many rows happened to be on it**: one kind of
+   *    list jumped, the other did not, and the collector could not tell which he was looking at
+   *    until he ticked something.
+   *
+   * (2) was removed for that reason and no other — it was not broken, and a way to make the short
+   * list work was proposed on #884 and left unbuilt. **A uniform flaw is easier to work with than
+   * an unpredictable one**: consistency is a property of the whole screen, and a fix that wins one
+   * case by trading it away is the worse deal. That is the user's judgement, made after living with
+   * both, and it is what this slot now encodes.
+   *
+   * The answer is expected to be a **redesign of the selection bar** (#849) — somewhere it does not
+   * have to be paid for at all — rather than a cleverer compensation. If you are about to write
+   * one, that issue is where the work belongs. */
+  footer?: React.ReactNode;
   /** Drop the sort control entirely. For a view whose ordering is not the list's — the duplicate
    * groups order by how many copies each holds (#372) — where leaving the control up would offer
    * a choice it cannot honour. */
@@ -143,7 +162,6 @@ export function ListToolbar({
   onCatalogSearchChange,
   children,
   footer,
-  stableFooter,
   hideSort = false,
   sortLast = false,
   searchMaxWidth = "20rem",
@@ -188,82 +206,6 @@ export function ListToolbar({
   const showCatalogSearch =
     catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;
 
-  // ── Keeping the list still while `stableFooter` comes and goes (#848) ────────────────────────
-  //
-  // The footer is an ordinary row of the block, so putting it up grows the block and pushes every
-  // row below it down by its height. That is the jump this exists to remove: it lands on the first
-  // ticked checkbox, which is exactly when the collector is going fast, and the row they were about
-  // to tick second is no longer under the pointer.
-  //
-  // The repair is to move the **viewport** by the same amount in the same paint. The document grows
-  // by H at a point above the scroll position and the scroll position grows by H, so the rows do
-  // not move at all — and the scrollable range is now H longer, which is the half the first attempt
-  // got wrong.
-  //
-  // **That first attempt was an overlay**, and it is worth saying why it failed, because it looked
-  // right. Hanging the strip out of the flow moved nothing either, but it *covered* the row beneath
-  // it, and the argument for accepting that — "a scroll notch brings the row back" — is false in
-  // the one place it matters: at the top of the list `scrollTop` is already `0`, so there is nothing
-  // to scroll back, and the first row stayed half-hidden for as long as anything was selected. The
-  // top of the list is where a person starts ticking checkboxes. Growing the scrollable range
-  // instead has no such edge — the row is never covered in the first place, at any scroll position.
-  //
-  // What *does* move is whatever sits **above** the toolbar: the page scrolls, so the summary bar
-  // slides up by H. The height has to go somewhere, and this is the right side of the trade — it is
-  // away from the pointer, and past roughly a toolbar's worth of scrolling there is nothing up
-  // there on screen and the compensation cannot be seen at all.
-  //
-  // Written against `window` deliberately: this app has **no inner scroll container**, which is the
-  // same fact `STICKY_TOOLBAR_STYLE` relies on for `top: 0`. It runs in a layout effect so the DOM
-  // change and the scroll land in one paint — the other way round the list would jump by H and then
-  // jump back, which is worse than the bug.
-  const blockRef = useRef<HTMLDivElement>(null);
-  const stableFooterRef = useRef<HTMLDivElement>(null);
-  /** The block height the footer accounts for: its own box plus the flex row gap above it. */
-  const stableFooterHeight = useRef(0);
-  const hadStableFooter = useRef(false);
-  const measuredOnce = useRef(false);
-  const hasStableFooter = !!stableFooter;
-
-  function measureStableFooter(): number {
-    const strip = stableFooterRef.current;
-    const block = blockRef.current;
-    if (!strip || !block) return stableFooterHeight.current;
-    const gap = parseFloat(getComputedStyle(block).rowGap);
-    return strip.offsetHeight + (Number.isFinite(gap) ? gap : 0);
-  }
-
-  useLayoutEffect(() => {
-    if (stableFooterRef.current) stableFooterHeight.current = measureStableFooter();
-    // The first paint is not a transition: a screen that renders with the footer already up has not
-    // moved anything, and compensating for it would scroll the collector down for nothing.
-    if (!measuredOnce.current) {
-      measuredOnce.current = true;
-      hadStableFooter.current = hasStableFooter;
-      return;
-    }
-    if (hasStableFooter === hadStableFooter.current) return;
-    hadStableFooter.current = hasStableFooter;
-    const delta = hasStableFooter ? stableFooterHeight.current : -stableFooterHeight.current;
-    // `scrollBy` clamps at 0, which is the one case where the compensation cannot be paid in full:
-    // the collector had scrolled up into the space the footer occupies, so removing it genuinely
-    // does lift the rows. That is the footer's own space closing, not a jump.
-    if (delta !== 0) window.scrollBy({ top: delta, behavior: "instant" });
-  });
-
-  // The height the way out is compensated by is the one that was actually on screen. Selection
-  // changes re-render the footer and refresh it anyway; this covers what does not — a window
-  // resize wrapping its buttons onto another line while the selection is simply held.
-  useEffect(() => {
-    const strip = stableFooterRef.current;
-    if (!strip) return;
-    const observer = new ResizeObserver(() => {
-      stableFooterHeight.current = measureStableFooter();
-    });
-    observer.observe(strip);
-    return () => observer.disconnect();
-  }, [hasStableFooter]);
-
   const sortControl = (
     <div
       style={{
@@ -305,7 +247,6 @@ export function ListToolbar({
 
   return (
     <div
-      ref={blockRef}
       style={{
         ...STICKY_TOOLBAR_STYLE,
         display: "flex",
@@ -418,9 +359,10 @@ export function ListToolbar({
         </div>
       )}
 
+      {/* Rows of the block like the ones above, so putting one up pushes the list down. That is
+          the accepted behaviour on every list alike (#885) — read the prop's doc before reaching
+          for a way to hold the rows still, because two have been built and both were rejected. */}
       {footer}
-
-      {stableFooter && <div ref={stableFooterRef}>{stableFooter}</div>}
     </div>
   );
 }

@@ -1114,168 +1114,130 @@ export function InventoryListPanel({
                 </button>
               </>
             }
-            /* The mode's parameters, and the only thing on screen that says a click will now list
-               something without asking (#537). It lives inside the pinned block so that it stays
-               put while the rows scroll under it, and **above** the selection bar (#848): quick
-               offer is the mode you are in, the selection is what you are doing inside it. In the
-               block's flow rather than in the overlay strip, deliberately — it goes up on a click
-               aimed at it, at a moment when nobody is mid-tick, so the one shift it causes is
-               feedback rather than an ambush, and paying for it in flow keeps the strip covering
-               one row instead of three. */
+            /* Both of the list's banners, as rows of the pinned block, so they stay put while the
+               rows scroll under them. Quick offer mode's parameters go **first** (#537/#848) — the
+               only thing on screen saying a click will now list something without asking — because
+               quick offer is the mode you are in and the selection is what you are doing inside
+               it.
+
+               Each pushes the list down when it arrives, and for the selection bar that is a
+               deliberate step back (#885): it had a mechanism that held the rows still, it worked
+               only on a list long enough to scroll, and a screen that jumps or not depending on how
+               many rows are on it is worse to work with than one that always jumps. The reasoning
+               and both rejected mechanisms are on `ListToolbar`'s `footer` prop; the redesign that
+               is expected to settle it properly is #849. */
             footer={
-              quickOffer ? (
-                <QuickOfferBar
-                  platforms={offerPlatforms}
-                  platformId={quickPlatformId}
-                  onPlatformIdChange={setQuickPlatformId}
-                  state={quickState}
-                  onStateChange={setQuickState}
-                  created={quickCreated}
-                  error={quickError}
-                  isPending={isPending}
-                  onExit={() => setQuickOffer(false)}
-                />
-              ) : undefined
-            }
-            /* The selection bar is the one that arrives **while the collector is working the
-               list** — on the first ticked checkbox — so it goes in the block's *stable* slot
-               (#848): an ordinary row of the block whose arrival is paid for by moving the
-               viewport rather than the rows. Ticking one copy does not move the row the next tick
-               is aimed at, and unlike the overlay this started as, it never covers one either. */
-            stableFooter={
-              selectedCopies.length > 0 ? (
-                <div style={LIST_BANNER_STYLE}>
-                  <span
-                    style={{
-                      fontSize: "0.8125rem",
-                      fontWeight: 600,
-                      color: "var(--color-accent)",
-                    }}
-                  >
-                    {selectedCopies.length} cop{selectedCopies.length === 1 ? "y" : "ies"} selected
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      fontSize: "0.8125rem",
-                      color: "var(--color-text-secondary)",
-                      textDecoration: "underline",
-                    }}
-                  >
-                    Clear
-                  </button>
-                  {/* The conflict this selection would create on the platform in scope (#513,
-                      #732): another live offer already lists exactly these stamps in exactly these
-                      conditions, and Colnect refuses a second of that entry. Stated where the
-                      listing actions are, with the shortcut that resolves it — adding to that offer
-                      instead of making a new one. No count of copies: the rule is all-or-nothing on
-                      the whole composition, so it is always the whole selection. A warning beside
-                      the buttons, never a disabled button: the collector may know exactly what they
-                      are doing. */}
-                  {collisionOffer && (
-                    <Tooltip
-                      content={selectionCollisions
-                        .map((c) => `${formatEntityNo(c.offerNo)} ${c.offerLabel}`)
-                        .join(" · ")}
+              <>
+                {quickOffer && (
+                  <QuickOfferBar
+                    platforms={offerPlatforms}
+                    platformId={quickPlatformId}
+                    onPlatformIdChange={setQuickPlatformId}
+                    state={quickState}
+                    onStateChange={setQuickState}
+                    created={quickCreated}
+                    error={quickError}
+                    isPending={isPending}
+                    onExit={() => setQuickOffer(false)}
+                  />
+                )}
+                {selectedCopies.length > 0 ? (
+                  <div style={LIST_BANNER_STYLE}>
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        fontWeight: 600,
+                        color: "var(--color-accent)",
+                      }}
                     >
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.375rem",
-                          fontSize: "0.8125rem",
-                          color: "var(--color-warning)",
-                        }}
-                      >
-                        <Icon name="warning" size="sm" />
-                        This is already offered on {collisionOffer.platformName} in this condition
-                      </span>
-                    </Tooltip>
-                  )}
-                  {collisionOffer && (
-                    <Tooltip
-                      content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of making a second listing of the same thing.`}
+                      {selectedCopies.length} cop{selectedCopies.length === 1 ? "y" : "ies"} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearSelection}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text-secondary)",
+                        textDecoration: "underline",
+                      }}
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDialog({
-                            kind: "addToOffer",
-                            items: listableCopies,
-                            targetOfferId: collisionOffer.offerId,
-                          })
-                        }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          cursor: "pointer",
-                          fontSize: "0.8125rem",
-                          fontWeight: 600,
-                          color: "var(--color-accent)",
-                          textDecoration: "underline",
-                        }}
-                      >
-                        Add to {formatEntityNo(collisionOffer.offerNo)} instead
-                      </button>
-                    </Tooltip>
-                  )}
-                  {/* The bulk actions, in one group pushed to the right of the bar. */}
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
-                  >
-                    {/* Where these copies are kept, what they are kept for (#682) and what they
-                        are (#723). One dialog for all of it, and the only bar action that acts on
-                        the *whole* selection: the listing ones beside it can only speak for the
-                        copies that are for sale and in hand. */}
-                    <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, and restate their condition, certificate or format — all in one pass.">
-                      <button
-                        type="button"
-                        onClick={() => setDialog({ kind: "bulkEdit", items: selectedCopies })}
-                        style={{
-                          ...CONTROL_STYLE,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          color: "var(--color-text-secondary)",
-                          borderColor: "var(--color-border-strong)",
-                          background: "var(--color-bg-elevated)",
-                          padding: "0.375rem 0.75rem",
-                        }}
-                      >
-                        <Icon name="edit" size="sm" /> Bulk edit…
-                      </button>
-                    </Tooltip>
-                    {/* Clearing the worklist in one go (#506) — the reason the flag exists: a
-                        thousand copies deliberately kept off a platform are set aside in one
-                        press. Only offered while a platform is in scope, since the decision names
-                        one; without the filter, the copy form owns the whole set. */}
-                    {scopedPlatform && (
+                      Clear
+                    </button>
+                    {/* The conflict this selection would create on the platform in scope (#513,
+                        #732): another live offer already lists exactly these stamps in exactly these
+                        conditions, and Colnect refuses a second of that entry. Stated where the
+                        listing actions are, with the shortcut that resolves it — adding to that offer
+                        instead of making a new one. No count of copies: the rule is all-or-nothing on
+                        the whole composition, so it is always the whole selection. A warning beside
+                        the buttons, never a disabled button: the collector may know exactly what they
+                        are doing. */}
+                    {collisionOffer && (
                       <Tooltip
-                        content={
-                          selectionExcluded
-                            ? `Bring these copies back into the "not offered on ${scopedPlatform.name}" worklist.`
-                            : `Keep these copies out of the "not offered on ${scopedPlatform.name}" worklist for good. Nothing about the copies themselves changes.`
-                        }
+                        content={selectionCollisions
+                          .map((c) => `${formatEntityNo(c.offerNo)} ${c.offerLabel}`)
+                          .join(" · ")}
+                      >
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.375rem",
+                            fontSize: "0.8125rem",
+                            color: "var(--color-warning)",
+                          }}
+                        >
+                          <Icon name="warning" size="sm" />
+                          This is already offered on {collisionOffer.platformName} in this condition
+                        </span>
+                      </Tooltip>
+                    )}
+                    {collisionOffer && (
+                      <Tooltip
+                        content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of making a second listing of the same thing.`}
                       >
                         <button
                           type="button"
-                          disabled={isPending}
                           onClick={() =>
-                            applyPlatformExclusion(
-                              selectedCopies,
-                              scopedPlatform.id,
-                              !selectionExcluded,
-                              true
-                            )
+                            setDialog({
+                              kind: "addToOffer",
+                              items: listableCopies,
+                              targetOfferId: collisionOffer.offerId,
+                            })
                           }
                           style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            fontSize: "0.8125rem",
+                            fontWeight: 600,
+                            color: "var(--color-accent)",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          Add to {formatEntityNo(collisionOffer.offerNo)} instead
+                        </button>
+                      </Tooltip>
+                    )}
+                    {/* The bulk actions, in one group pushed to the right of the bar. */}
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
+                    >
+                      {/* Where these copies are kept, what they are kept for (#682) and what they
+                          are (#723). One dialog for all of it, and the only bar action that acts on
+                          the *whole* selection: the listing ones beside it can only speak for the
+                          copies that are for sale and in hand. */}
+                      <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, and restate their condition, certificate or format — all in one pass.">
+                        <button
+                          type="button"
+                          onClick={() => setDialog({ kind: "bulkEdit", items: selectedCopies })}
+                          style={{
                             ...CONTROL_STYLE,
-                            cursor: isPending ? "default" : "pointer",
+                            cursor: "pointer",
                             fontWeight: 600,
                             color: "var(--color-text-secondary)",
                             borderColor: "var(--color-border-strong)",
@@ -1283,95 +1245,132 @@ export function InventoryListPanel({
                             padding: "0.375rem 0.75rem",
                           }}
                         >
-                          <Icon name={selectionExcluded ? "check" : "excluded"} size="sm" />{" "}
-                          {selectionExcluded
-                            ? `List on ${scopedPlatform.name} again`
-                            : `Never list on ${scopedPlatform.name}`}
+                          <Icon name="edit" size="sm" /> Bulk edit…
                         </button>
                       </Tooltip>
-                    )}
-                    {/* The listing half of the bar: the picker flow, and beside it the shortcuts
-                        that skip it (#497) — a new offer is the common quick start, so the only
-                        decision left, one set or one each, is made by which button is pressed.
-                        Secondary next to the primary, since they are narrower paths through the
-                        same flow; with a single copy there is no packaging to choose, so the pair
-                        collapses into one ＋ New offer button. All of it acts on the copies that
-                        can actually be listed (#682) — absent rather than disabled when the
-                        selection holds none, a selection of album copies being a perfectly good
-                        target for the actions beside these, and a dead button among live ones
-                        reading as a fault. Where only some qualify, the labels carry the number: a
-                        count that differs from the bar's own is the plainest way to say which
-                        copies are meant. */}
-                    {listableCopies.length > 0 && (
-                      <>
-                        {newOfferShortcuts(listableCopies.length).map(({ packaging, label, hint }) => (
-                          <Tooltip
-                            key={packaging}
-                            content={
-                              (quickOfferActive && quickPlatform
-                                ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
-                                : hint) + partialListingHint
-                            }
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                quickOfferActive
-                                  ? createQuickOffer(listableCopies, packaging === "per-copy")
-                                  : setDialog({
-                                      kind: "addToNewOffer",
-                                      items: listableCopies,
-                                      packaging,
-                                    })
-                              }
-                              style={{
-                                ...CONTROL_STYLE,
-                                cursor: "pointer",
-                                fontWeight: 600,
-                                color: "var(--color-accent)",
-                                borderColor: "var(--color-accent)",
-                                background: "var(--color-bg-elevated)",
-                                padding: "0.375rem 0.75rem",
-                                // Amber while this selection already has a live offer (#660).
-                                ...(collisionOffer ? COLLIDING_OUTLINE : {}),
-                              }}
-                            >
-                              <Icon name="add" size="sm" /> {label}
-                            </button>
-                          </Tooltip>
-                        ))}
+                      {/* Clearing the worklist in one go (#506) — the reason the flag exists: a
+                          thousand copies deliberately kept off a platform are set aside in one
+                          press. Only offered while a platform is in scope, since the decision names
+                          one; without the filter, the copy form owns the whole set. */}
+                      {scopedPlatform && (
                         <Tooltip
                           content={
-                            "Put these copies into an offer — an existing one, or a new one." +
-                            partialListingHint
+                            selectionExcluded
+                              ? `Bring these copies back into the "not offered on ${scopedPlatform.name}" worklist.`
+                              : `Keep these copies out of the "not offered on ${scopedPlatform.name}" worklist for good. Nothing about the copies themselves changes.`
                           }
                         >
                           <button
                             type="button"
-                            onClick={() => setDialog({ kind: "addToOffer", items: listableCopies })}
+                            disabled={isPending}
+                            onClick={() =>
+                              applyPlatformExclusion(
+                                selectedCopies,
+                                scopedPlatform.id,
+                                !selectionExcluded,
+                                true
+                              )
+                            }
                             style={{
                               ...CONTROL_STYLE,
-                              cursor: "pointer",
+                              cursor: isPending ? "default" : "pointer",
                               fontWeight: 600,
-                              color: "#fff",
-                              background: "var(--color-action-primary)",
-                              border: "none",
-                              padding: "0.375rem 0.875rem",
-                              // Amber while this selection already has a live offer (#660).
-                              ...(collisionOffer ? COLLIDING_FILLED : {}),
+                              color: "var(--color-text-secondary)",
+                              borderColor: "var(--color-border-strong)",
+                              background: "var(--color-bg-elevated)",
+                              padding: "0.375rem 0.75rem",
                             }}
                           >
-                            <Icon name="addToOffer" size="sm" />{" "}
-                            {listableCopies.length < selectedCopies.length
-                              ? `Add ${listableCopies.length} to offer`
-                              : "Add selected to offer"}
+                            <Icon name={selectionExcluded ? "check" : "excluded"} size="sm" />{" "}
+                            {selectionExcluded
+                              ? `List on ${scopedPlatform.name} again`
+                              : `Never list on ${scopedPlatform.name}`}
                           </button>
                         </Tooltip>
-                      </>
-                    )}
+                      )}
+                      {/* The listing half of the bar: the picker flow, and beside it the shortcuts
+                          that skip it (#497) — a new offer is the common quick start, so the only
+                          decision left, one set or one each, is made by which button is pressed.
+                          Secondary next to the primary, since they are narrower paths through the
+                          same flow; with a single copy there is no packaging to choose, so the pair
+                          collapses into one ＋ New offer button. All of it acts on the copies that
+                          can actually be listed (#682) — absent rather than disabled when the
+                          selection holds none, a selection of album copies being a perfectly good
+                          target for the actions beside these, and a dead button among live ones
+                          reading as a fault. Where only some qualify, the labels carry the number: a
+                          count that differs from the bar's own is the plainest way to say which
+                          copies are meant. */}
+                      {listableCopies.length > 0 && (
+                        <>
+                          {newOfferShortcuts(listableCopies.length).map(({ packaging, label, hint }) => (
+                            <Tooltip
+                              key={packaging}
+                              content={
+                                (quickOfferActive && quickPlatform
+                                  ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
+                                  : hint) + partialListingHint
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  quickOfferActive
+                                    ? createQuickOffer(listableCopies, packaging === "per-copy")
+                                    : setDialog({
+                                        kind: "addToNewOffer",
+                                        items: listableCopies,
+                                        packaging,
+                                      })
+                                }
+                                style={{
+                                  ...CONTROL_STYLE,
+                                  cursor: "pointer",
+                                  fontWeight: 600,
+                                  color: "var(--color-accent)",
+                                  borderColor: "var(--color-accent)",
+                                  background: "var(--color-bg-elevated)",
+                                  padding: "0.375rem 0.75rem",
+                                  // Amber while this selection already has a live offer (#660).
+                                  ...(collisionOffer ? COLLIDING_OUTLINE : {}),
+                                }}
+                              >
+                                <Icon name="add" size="sm" /> {label}
+                              </button>
+                            </Tooltip>
+                          ))}
+                          <Tooltip
+                            content={
+                              "Put these copies into an offer — an existing one, or a new one." +
+                              partialListingHint
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setDialog({ kind: "addToOffer", items: listableCopies })}
+                              style={{
+                                ...CONTROL_STYLE,
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                color: "#fff",
+                                background: "var(--color-action-primary)",
+                                border: "none",
+                                padding: "0.375rem 0.875rem",
+                                // Amber while this selection already has a live offer (#660).
+                                ...(collisionOffer ? COLLIDING_FILLED : {}),
+                              }}
+                            >
+                              <Icon name="addToOffer" size="sm" />{" "}
+                              {listableCopies.length < selectedCopies.length
+                                ? `Add ${listableCopies.length} to offer`
+                                : "Add selected to offer"}
+                            </button>
+                          </Tooltip>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : undefined
+                ) : null}
+              </>
             }
           >
             <div
