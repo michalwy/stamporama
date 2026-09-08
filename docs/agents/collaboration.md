@@ -548,14 +548,25 @@ the smallest available demonstration of its own subject.
   good faith by a lead that knew the state, all false by the time they were read. **Each had a
   one-command answer** — `gh release list`, the app's session list, `pwd` — and the chip carried the
   answer rather than the command.
-- **The store contradicts itself, and the newer entry is the wrong one.**
+- **The store contradicted itself for a day, and the newer entry was the wrong one.**
   `project_docker_orbstack_path` (2026-09-07) records that `docker` is real here, lives in
   `~/.orbstack/bin` and is merely off a session's PATH, and says in as many words never to conclude
   a tool is missing from `command -v` plus a guess at install locations.
-  `project_no_docker_in_worktrees` (2026-09-08) then concludes exactly that, from four locations not
-  including `~/.orbstack/bin`, and tells every later session that `pnpm test:integration` cannot run
-  in a worktree at all. Both entries are in the store, the index line carries the wrong half, and
-  **four sessions have now met this and two reached the wrong answer from a correct check** (#933).
+  `project_no_docker_in_worktrees` (2026-09-08) then concluded exactly that, from four locations not
+  including `~/.orbstack/bin`, and told every later session that `pnpm test:integration` cannot run
+  in a worktree at all. Both stood in the store at once with the index line carrying the wrong half,
+  and **four sessions met this and two reached the wrong answer from a correct check** (#933). The
+  wrong entry has since been removed and one `docker` entry remains.
+
+  **Its removal is this bullet's strongest evidence rather than its retraction, and the sentence you
+  are reading is the demonstration.** The paragraph above said *both entries are in the store* in
+  the present tense; it merged at 08:48 UTC on 2026-09-08 and was **false within the hour**, caught
+  by
+  the next lead opening the directory (#960). Nothing announced the change: the store records no
+  reversal, no pull request could have contradicted either entry while both stood, and no required
+  check will ever go red over any of it. A section arguing that a claim about this store rots the
+  moment it is written down does not need a better example than having done so itself, forty minutes
+  after being merged, in the one paragraph whose whole subject was that hazard.
 - **An entry that predicted its own obsolescence is still there.** `project_worker_pool_model` ends
   *"Being written into `docs/agents/collaboration.md` by issue #906; once that lands, read the file
   rather than this."* #906 landed — *The pool of generic workers* above is that section — so the

@@ -216,12 +216,11 @@ rules:
       **The store has never been enumerated once, and #947 put that out of scope on purpose** so the
       rule was not written to justify whatever an audit happened to find. What is written catches a
       change *going forward*: the person landing a process change sweeps for what it retired, with a
-      backlog-review backstop. Nothing establishes a baseline over the 39 entries standing today, and
-      a rule that only catches future changes does not make a store correct that was never reconciled
-      — the two contradictory `docker` entries of 2026-09-07/08 are still both in it (#933). A port
-      would have to add the first enumeration, and the card's onboarding half with it: our trigger is
-      the invalidating change, and we have no onboarding path because this project has been the
-      source of ported process rather than a recipient.
+      backlog-review backstop. **Nothing establishes a baseline over the entries standing today**,
+      and a rule that only catches future changes does not make a store correct that was never
+      reconciled. A port would have to add the first enumeration, and the card's onboarding half
+      with it: our trigger is the invalidating change, and we have no onboarding path because this
+      project has been the source of ported process rather than a recipient.
     note: >-
       **The whole-store diff is deliberately not our rule, and this is a departure from the card
       rather than an omission** — argued in the section itself and reported to dev-agent. At 39
@@ -242,6 +241,14 @@ rules:
       **This row alone was re-read against dev-agent `10128ad`**, where the card's substance is
       unchanged from `447b5e6` in the header comment above and the only addition is the footer
       licensing a reader to refute it. Every other row still dates from that audit.
+      **This `gap:` used to name the two contradictory `docker` entries of 2026-09-07/08 as its
+      evidence, and that was the right evidence in the wrong shape.** The wrong entry was removed
+      within the hour this file merged, so the sentence was false before any reader reached it, and
+      the check it invited left that reader deciding whether the file or the store was wrong (#960).
+      **A `gap:` states the shape of what is missing, not a snapshot of what the thing currently
+      holds** — here the missing things are a baseline enumeration and an onboarding path, and
+      neither is affected by which entries happen to stand. The incident is kept where incidents
+      belong, dated, in docs/agents/collaboration.md and docs/agents/backlog-review.md.
 
   R-013:
     status: partial
