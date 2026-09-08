@@ -466,6 +466,50 @@ the prose is missing.
 | ⚪ | queued, or context that could change |
 | 🔵 | standing context that does not move |
 
+**The mark and the id share the first column**, as `🔴 D20`. A row with no id takes an em dash —
+`🟢 —` — which is what most 🟢, ⚪ and 🔵 rows look like, since only things he must answer get
+numbered. Do not add a fourth column for the mark: at a glance the left edge should read as a
+column of colour, and a separate column puts a gap through it.
+
+### What each column actually holds
+
+**`id`** — the mark, then the id where there is one. Nothing else.
+
+**`co`** — one line. **Issue numbers are links**, and identifiers that are typed or copied go in
+code spans: a branch, a commit, a flag, a query parameter, a session title. He acts on these, so
+they are marked as things to act on rather than described.
+
+**`stan`** — a short fixed vocabulary, not a sentence. The whole point of the column is that it can
+be read down rather than across:
+
+| stan | when |
+| --- | --- |
+| `czeka N h` | waiting on him, with the age — see below |
+| `czeka na Ciebie` | waiting on him, asked in this same reply, so no age yet |
+| `w locie` | 🟡 rows: running, sent, or being answered elsewhere |
+| `zrobione` | 🟢 rows, and only once verified |
+| `do kolejki` | ⚪ rows that are ready and waiting for a worker |
+| `do decyzji` | ⚪ rows that are ready and waiting for a judgement, not a worker |
+| `kontekst` | 🔵 rows |
+
+**Row order is by mark, not by age or by id**: every 🔴 first, then 🟡, 🟢, ⚪, 🔵. Within the 🔴
+block, put what he can settle in one word above what needs him to think — a release or a look
+before a design question. He reads from the top and stops when he stops; the order decides what he
+sees.
+
+**One 🔵 row is always the free-worker count**, in bold, and it is the last row in the table.
+
+### A worked example, because prose about a layout is not the layout
+
+| id | co | stan |
+| --- | --- | --- |
+| 🔴 D20 | Release v0.135.0 — 26 commitów, `main` zielone na `b63117f` | czeka 13 h |
+| 🔴 D1 | [#849](https://github.com/michalwy/stamporama/issues/849) — redesign paska zaznaczenia | czeka 39 h |
+| 🟡 — | CI na [#965](https://github.com/michalwy/stamporama/pull/965) | w locie |
+| 🟢 D28 | Pięć worktrees usuniętych, `prune` czysty | zrobione |
+| ⚪ — | Plan trzech sesji z przeglądu backlogu | do kolejki |
+| 🔵 — | **Wolnych workerów: 0** | kontekst |
+
 **Every open item, every time — the table is not a diff.** Restating what he has already seen is
 the cost; being able to answer *"D3: nie"* without going back to find what D3 was is what it buys. A
 table that showed only what is new makes the oldest item the least visible, which is precisely
