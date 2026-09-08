@@ -1,0 +1,102 @@
+name: Ruleset drift
+
+# Does `.github/rulesets/main.json` still describe what GitHub enforces on `main`?
+#
+# **Advisory. Never a required status context**, and both halves of that are deliberate (#946).
+# `.github/rulesets/README.md` carries the reasoning; the short version is the two paragraphs
+# below, because whoever next thinks "required would be stronger" will be right about strength and
+# wrong about what a required check can see.
+#
+# **The schedule is the load-bearing trigger, not a backstop.** The event this artifact exists to
+# catch is a write to the ruleset that no human initiated: GitHub set
+# `require_extra_approval_for_unattributed_changes` when the ruleset was created and nobody chose
+# it — it is `false` here and `true` in a sibling repository, which is the only reason anybody
+# noticed. An unprompted platform write belongs to no branch, no commit and no pull request, so a
+# pull-request-triggered check would meet it the next time somebody happened to open one, which is
+# a human trigger wearing an automation costume. A cron is the only trigger here that fires on an
+# event nobody started.
+#
+# **Required would also turn a correct red into a total merge freeze.** Between a deliberate
+# ruleset change and the pull request that catches the artifact up, this comparison is legitimately
+# red — the ruleset moves by an API call and the artifact by a pull request, and those two acts
+# cannot be simultaneous. As a required context that window would block every unrelated pull
+# request in the repository, and `bypass_actors` is empty, so nobody could escape it, the owner
+# included. The predictable answer to a hard block that is red for a correct reason is to edit the
+# artifact until it matches the platform — which is this artifact defeated from the inside.
+
+on:
+  schedule:
+    # 06:17 UTC, the same minute the sibling projects report on. Off the hour on purpose: GitHub
+    # queues cron runs heavily on the hour and delays them, and nothing here cares about the
+    # minute. **A scheduled workflow is disabled automatically after 60 days without repository
+    # activity** — a state to know about rather than to be surprised by, since this check's entire
+    # delivery mechanism is the mail sent when it fails, and a disabled workflow sends none.
+    - cron: "17 6 * * *"
+  # A fast signal for whoever is editing the artifact, this workflow or the script — and nothing
+  # more. **`paths:` at the workflow level is what `ci.yml` must never carry**, and that file says
+  # so at length: a workflow that does not start reports no contexts at all, so a required context
+  # that never arrives leaves a pull request pending for ever rather than failing in a way somebody
+  # can argue with. It is safe here for exactly one reason — nothing in this file is required — and
+  # it stops being safe the moment somebody makes it so.
+  pull_request:
+    paths:
+      # `main.json` by name, not `.github/rulesets/**`. `merge-settings.json` lives beside it and
+      # this job does not compare it to anything (#945 derived that artifact and deliberately left
+      # comparing it to whoever builds the check), so a green run named *Ruleset drift* on a pull
+      # request editing it would say nothing about the file being edited. The day the check covers
+      # both, this list widens in the same commit.
+      - ".github/rulesets/main.json"
+      - ".github/workflows/ruleset-drift.yml"
+      - "scripts/check-ruleset.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    # Not one of the five contexts `main` requires (`.github/rulesets/main.json`). Renaming it costs
+    # nothing, which is itself a sign it is no part of the gate.
+    name: Ruleset drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      # No `setup-node` and no `pnpm install`: the script has no dependencies, and the runner ships
+      # both Node and `gh`. Installing a toolchain to run one dependency-free file is a minute spent
+      # on nothing, every day.
+      - name: Compare .github/rulesets/main.json against GitHub
+        shell: bash
+        env:
+          # **What this job can verify depends on which token it holds, and it says so out loud.**
+          #
+          # The workflow token *can* fetch the ruleset — it gets a 200 — but GitHub omits fields the
+          # caller may not read, and `bypass_actors` is one of them: measured on this repository on
+          # 2026-09-08, an owner token returns `[]` and the workflow token returns no key at all.
+          # Absent is not empty, and that field is where the difference costs most, since an actor
+          # able to bypass `main` makes every other line in the artifact advisory.
+          #
+          # With RULESET_READ_TOKEN set: the whole gate is compared. Without it: everything except
+          # `bypass_actors`, declared below, named in the output and on the job summary, and claimed
+          # about in neither. dev-agent `rules/R-004` as amended by `decisions/0005` — could-not-see
+          # may exit as success only when declared, never when inferred.
+          #
+          # The token wanted is a fine-grained one with Administration: read on this repository.
+          # **Creating it and setting the secret are the owner's, never a session's or a lead's.**
+          GH_TOKEN: ${{ secrets.RULESET_READ_TOKEN || github.token }}
+          # Evaluated when the workflow is parsed, so the declaration disappears by itself the day
+          # the secret exists and nobody has to remember to remove it. A token that is set but still
+          # cannot read the field is a misconfigured token rather than a deliberate choice, and
+          # fails here rather than being waved through. `bypass_actors` is the only name the script
+          # accepts — the declarable set is an enumerated allowlist, not "whatever the response
+          # happened to omit", because `rules` is a top-level key too.
+          UNVERIFIABLE: ${{ secrets.RULESET_READ_TOKEN == '' && '--allow-unverifiable=bypass_actors' || '' }}
+        run: |
+          set +e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/check-ruleset.mjs $UNVERIFIABLE 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

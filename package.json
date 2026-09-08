@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:static": "scripts/static-checks.sh",
+    "check:ruleset": "node scripts/check-ruleset.mjs",
     "postinstall": "if [ -f prisma/schema.prisma ]; then prisma generate; fi",
     "pretypecheck": "scripts/ensure-prisma-client.sh",
     "typecheck": "next typegen && tsc --noEmit",

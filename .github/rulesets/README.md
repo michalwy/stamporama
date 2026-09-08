@@ -107,6 +107,27 @@ git, but the reader is then debugging two problems, one of which this document c
 `false` is there so a failed derivation does not exit `0` having written nothing; without it the
 cleanup is the last command in the list and supplies the status.
 
+**In practice, run `pnpm check:ruleset --write` instead.** It produces byte-identical output — the
+unit suite pins that against this very file — and it refuses in the one case the pipeline above
+cannot: a token that cannot read `bypass_actors` gets a `200` with the key simply missing, and `jq`
+would happily write an artifact without the most security-relevant field in the gate while looking
+complete. The pipeline stays here because it is the contract in a form a person can read and check
+by eye, not because it is the way to run it.
+
+**The pipeline also selects more narrowly than the script does**, and the script is right.
+`select(.conditions.ref_name.include == ["~DEFAULT_BRANCH"])` filters out a second ruleset added as
+`refs/heads/*` — which would govern `main` without ever naming it — and then finds exactly one
+survivor and reports success. What applies to a branch is the **union** of every ruleset matching
+it, so a second one is drift rather than something to filter away; `pnpm check:ruleset` takes every
+branch ruleset and fails when there is more than one.
+
+**The script does not need the temporary file, because it never opens the artifact until it has the
+bytes to put in it.** Every refusal above exits before the write is reached, and the content is
+serialised before the file is touched — so a failed `--write` leaves `main.json` exactly as it was.
+Pinned by the case in `tests/unit/ruleset-drift.test.ts` that refuses a write and then asserts the
+file is unchanged, because "nothing truncated it" is the kind of property that stays true by
+accident until it does not.
+
 **The normalisation contract**, so that any comparison tool agrees with this file rather than
 merely happening to:
 
@@ -208,12 +229,95 @@ is the case that needed the guard in the first place. Both branches were exercis
 reasoned about: the artifact survived untouched, no temporary file was left, and the status is
 non-zero.
 
-## Not in scope here
+## The drift check
 
-**Nothing in this repository's CI checks either file against GitHub.** Wiring a drift check into
-`ci.yml` is a separate decision with its own cost — it would add a required context, on top of the
-one #790 is already adding — and it was deliberately left out of #937. The comparison tooling
-exists outside this repository. Until that decision is taken, both files are verified by a person
-re-running the pipeline in their own section above. Where a check does eventually compare them, it
-is a check like any other and belongs to whoever builds it — **deriving the artifacts is not the
-same act as comparing them**, and #945 deliberately did only the first.
+`.github/workflows/ruleset-drift.yml` compares **`main.json`** to the live ruleset **daily at
+06:17 UTC**, running `scripts/check-ruleset.mjs` (`pnpm check:ruleset`). It also runs on a pull
+request that touches `main.json`, the workflow or the script, and on `workflow_dispatch` (#946).
+
+**It covers the ruleset and not `merge-settings.json`**, which is derived here but compared to
+nothing — the state #945 left deliberately, having decided that deriving an artifact and comparing
+it are two different acts. So of the two files above, one is checked daily and one is still verified
+by a person re-running its pipeline. Extending the check is a follow-up rather than an oversight,
+and the null guard in that pipeline is already written for it: a scheduled comparison runs under a
+credential that is not the one somebody derived the file with, which is exactly the case that guard
+exists for.
+
+**It is advisory, and it is never a required status context.** The reason is not caution and not
+cost:
+
+- **A required check cannot see the event this exists to catch.** An unprompted platform write
+  belongs to no branch and no pull request, so there is nothing for a pull-request-triggered context
+  to run on, however required it is. It would notice the next time somebody happened to open a pull
+  request — a human trigger wearing an automation costume. The cron is the load-bearing trigger, not
+  a backstop.
+- **Required would convert the red-is-correct window above into a total merge freeze**, blocking
+  every unrelated pull request in the repository, with `bypass_actors` empty and nobody able to
+  escape it — the owner included. The predictable answer to a hard block that is red for a correct
+  reason is to edit this file until it matches the platform, which is this artifact defeated from
+  the inside.
+
+Making it required would itself be a ruleset change, and therefore the user's decision rather than a
+session's.
+
+### What the check could not see, it says
+
+**A check's coverage is a property of the credential it runs under, not of its code**, and the same
+script run by two identities verifies different things. So this one reports **three** outcomes and
+never two: equal, differs, and **could not see**. It never normalises *absent* to *empty* — that
+turns a blind spot into a confident negative.
+
+The blind spot is real and it is in the worst possible field. `GITHUB_TOKEN` fetches the ruleset
+successfully and GitHub simply omits `bypass_actors` from the response: measured on this repository
+on 2026-09-08, an owner token returns `[]`, the workflow token returns no key at all, and every
+other field is identical. That field is the *"no bypass for anyone"* clause this whole gate rests
+on — an actor able to bypass `main` makes every other line in this file advisory.
+
+**So the gap is declared, not inferred.** The workflow passes
+`--allow-unverifiable=bypass_actors` **only while `RULESET_READ_TOKEN` is unset**, and the script
+answers in four states:
+
+| state | behaviour |
+| --- | --- |
+| declared, and absent from the response | excluded, **named on every run**, exit 0 |
+| **undeclared**, and absent | not comparable — **exit 1** |
+| declared, but actually visible | compared normally, and the run says to drop the declaration |
+| `--write`, and absent | **refused**, declaration or not |
+
+Three things make that different from downgrading a failure to a warning. The exclusion is
+**written and reviewed in a diff** rather than decided at runtime by the thing being excused.
+**Anything undeclared still fails**, so a blind spot cannot grow silently — if the platform redacts
+a second field tomorrow, the job goes red. And it **retires itself**: the workflow's declaration is
+evaluated when the file is parsed, so it disappears the day the secret exists.
+
+The declarable set is an **enumerated allowlist of one**. Not a key-prefix match and not "any
+top-level key", because `rules` is a top-level key: `--allow-unverifiable=rules` would exclude every
+required context, linear history and the allowed merge methods in a single word and pass, wearing
+the appearance of a reviewed concession. A field joins the list when a caller has been *observed*
+unable to read it.
+
+**Why a declared gap is allowed to pass at all**, since the instinct is that it should not: a
+scheduled check's entire delivery mechanism is the mail GitHub sends when it fails. A job red every
+day for a known, permanent, one-action-fixes-it gap makes real drift arrive in the same envelope as
+that gap, so a permanently red check does not merely get ignored — it makes red *ambiguous*, which
+kills the primary instrument to protect a secondary one.
+
+**Closing the gap needs a credential and that is the owner's alone**: a fine-grained token with
+`Administration: read` on this repository, stored as the `RULESET_READ_TOKEN` secret. No session and
+no lead creates it. Until it exists the check is genuinely partial and says so on every run, which
+is the acceptable state; silently partial is not.
+
+**This file keeps asserting `bypass_actors: []` while CI declares it unchecked, and that is
+correct rather than a contradiction to tidy away.** The artifact is the reviewed *intent*, written
+by a token that could see the field; the declaration is about *this caller's* reach. Stripping the
+field to make the two agree would lose the intent and make the credential useless the day it
+arrives.
+
+**And the coverage question is answered by running it, not by reading it.** Both times this family
+of failure was found on the estate it was found by running the check under the *other* identity;
+reading the code surfaced neither. So a change to this check is exercised under every credential it
+will run with — the workflow token and an owner token — before it is believed. #946 did that, red
+under both, on a branch that was allowed to die rather than on the one that merged.
+
+The estate reasoning behind all of the above is dev-agent's `rules/R-004` and `rules/R-007`, and
+`decisions/0003` and `decisions/0005`.
