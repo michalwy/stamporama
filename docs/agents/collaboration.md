@@ -202,40 +202,80 @@ user's decision** — #906 marks them as such, and they are refutable:
 
 ### Session titles
 
-**Decided by the user on 2026-09-08.** A session's title is the only signal that travels between the
-app's session list, the user's screen and the worktree sweep, so it is a fixed vocabulary rather
+**Decided by the user on 2026-09-08, and amended by him the same day** — #928 set the vocabulary,
+#975 added the pull request number to it. A session's title is the only signal that travels between
+the app's session list, the user's screen and the worktree sweep, so it is a fixed vocabulary rather
 than a description:
 
 | state | title |
 | --- | --- |
 | Worker spawned, no task yet | `Worker N` |
-| Worker assigned | `#NNN: <the issue's theme>` |
-| Worker finished, and spent | `[DONE] #NNN: <the issue's theme>` |
+| Assigned, no pull request yet | `#NNN: <the issue's theme>` |
+| Pull request opened | `#NNN[#PPP]: <the issue's theme>` |
+| Worker finished, and spent | `[DONE] #NNN[#PPP]: <the issue's theme>` |
 | Release session | `Release: X.Y.Z` |
 | Release cut | `[DONE] Release: X.Y.Z` |
 | The lead, while it is the lead | `===> Leader <===` |
 | A lead that has handed over | `[DONE] Leader YYYY-MM-DD`, the date of the handover |
 
-**The session renames itself on assignment**, because the lead is not there at that moment and the
-worker is. The `[DONE]` prefix goes on when the work is finished — by the session if it is still
-awake, and by the lead otherwise, since the lead is who learns that a pull request merged.
+**`#NNN` is the issue and `#PPP` is the pull request**, which needs saying because #975 records the
+format as `#XYZ[#NNN]`. It is the same format with the placeholders renamed: `#NNN` already means
+*the issue* everywhere else in this file, the worktree sweep below included, and giving it a second
+meaning three lines from its first would read as two conventions rather than one.
 
-**`[DONE]` is the load-bearing half, and it is what the worktree sweep now tests.** Everything else
-in the table is for the user reading his own screen; the prefix is for a machine. It replaces
-*resolve the worktree to its session, then go and establish whether its pull request merged* with a
-string comparison, and it covers the case that test could not see at all — a session that finished
-without ever opening a pull request.
+**So a worker renames itself twice, and the two renames answer different questions.** On assignment
+it takes the issue number, because the lead is not there at that moment and the worker is. On
+opening its pull request it takes the bracket — and until that moment there is no number to put
+there, which is why the second row carries none. The `[DONE]` prefix goes on when the work is
+finished, by the session if it is still awake and by the lead otherwise, since the lead is who
+learns that a pull request merged.
+
+**The bracket is for a person, and it answers the other half of the question the title asks.** The
+issue number says what a session was *for*; the pull request number says what came *out of* it.
+Without it the lead reads its own session list and must still go and ask GitHub which pull request
+belongs to which session — the same shape of lookup `[DONE]` was introduced to remove, surviving in
+the half of the title nobody had touched.
+
+**That the bracket appears at push time rather than at `[DONE]` is the lead's reading rather than
+the user's decision** (#975), and the alternative it was chosen over was brackets on a finished
+session only. That one loses the number for exactly the window in which a run is being watched and a
+branch is being updated — which is the window the number is for. The objection to a second rename is
+that it is one more unenforced step; the answer is that the first rename is unenforced too, so what
+changes is how many such steps there are and not what kind of thing this is.
+
+**The estate arrived at the same format independently, and that is evidence rather than trivia.**
+darkroom is running `[DONE] #89[#92]` and `#90[#94]`; the lead noticed the spelling there, and the
+user asked for it here. No rule is shared between the two projects, and since the cross-project
+process layer was stopped on 2026-09-08 there is nobody left to coordinate one. **It is convergence,
+not a port**, and the distinction is recorded because *Verification, not trust* has the opposite case
+on file: two claims imported from that same sibling project, true there and false here, which reached
+this file and were caught only by reading the diff. Two projects reaching one format from one problem
+is a different kind of argument from one project copying another.
+
+**`[DONE]` is the load-bearing half, and it is what the worktree sweep tests.** Everything else in
+the table is for the user reading his own screen; the prefix is for a machine. It replaces *resolve
+the worktree to its session, then go and establish whether its pull request merged* with a string
+comparison, and it covers the case that test could not see at all — a session that finished without
+ever opening a pull request.
+
+**The bracket must not become a second test, and the reason is worth stating before somebody
+reaches for it.** It looks machine-readable and it is not: it is unenforced, it arrives later than
+the title it is added to, and it is legitimately absent from every session that has not pushed yet.
+A sweep keyed on it would read *pooled* and *working, mid-implementation* as the same thing while
+appearing to have checked something. The sweep needs one prefix and has it.
 
 **One task per worker and no recycling** (*The pool of generic workers*), so `[DONE]` is terminal:
 a spent worker is never renamed back. That is why the word is *spent* rather than *idle*.
 
-**What this convention cannot do, said rather than assumed.** Nothing enforces it. A worker that is
-assigned and does not rename looks pooled; a worker that finishes and does not gain its prefix looks
-busy. **Both errors leave a worktree standing**, which is the safe direction — the sweep never
-removes on a missing marker — but it means the register drifts toward *too many* live-looking
-sessions, never toward too few. The backlog review asks after the missing prefixes for that reason
-(*Keeping this file honest*), and a review finding several is reporting a missing mechanism rather
-than a careless session.
+**What this convention cannot do, said rather than assumed.** Nothing enforces any of the three
+renames. A worker that is assigned and does not rename looks pooled; one that opens a pull request
+and does not re-title looks like one that has not pushed yet; one that finishes and does not gain
+its prefix looks busy. **All three errors leave a worktree standing**, which is the safe direction —
+the sweep never removes on a missing marker — but it means the register drifts toward *too many*
+live-looking sessions, never toward too few. The middle one is the mildest and the only new one:
+it is invisible to the sweep, and it costs exactly the lookup the bracket was added to save. The
+backlog review asks after the missing prefixes for that reason (*Keeping this file honest*), and a
+review finding several is reporting a missing mechanism rather than a careless session.
 
 **The lead renames the outgoing lead**, since a session that has handed over is by definition no
 longer acting. `[DONE] Leader YYYY-MM-DD` carries the handover date, not the date the session
