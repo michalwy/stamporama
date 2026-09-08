@@ -46,9 +46,10 @@ rules:
   R-003:
     status: implemented
     where: >-
-      docs/agents/collaboration.md § "Who moves a branch that has fallen behind", step 2 —
-      `gh pr view <n> --json headRefOid` against the SHA the verification was performed at, with
-      `540712f` as its evidence
+      docs/agents/collaboration.md § "Who moves a branch that has fallen behind", steps 2 and 3 —
+      `gh pr view <n> --json headRefOid` against a SHA the lead recorded when it acted and never one
+      re-fetched from the branch, plus a `git range-diff` of the delta wherever the head has moved,
+      with `540712f` and `721b173` as its evidence
 
   R-004:
     status: implemented
