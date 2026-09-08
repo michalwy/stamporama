@@ -110,21 +110,23 @@ rules:
   R-007:
     status: partial
     where: >-
-      .github/rulesets/main.json, with .github/rulesets/README.md declaring it the record and every
-      prose description of `main`'s protection a summary of it (#937)
+      .github/rulesets/main.json (the branch ruleset, #937) and .github/rulesets/merge-settings.json
+      (the seven merge-gating repository settings from decisions/0004, #945), with
+      .github/rulesets/README.md declaring both the record and every prose description of `main`'s
+      protection or of how a pull request merges a summary of them
     gap: >-
-      Two things, and the first is stated by the artifact's own README. **Nothing in this repository
-      compares the artifact to GitHub** — there is no drift check in ci.yml and none on a schedule;
-      #937 left that decision out deliberately because it would add a required context, so the file
-      is verified by a person re-running the pipeline the README documents. A control nobody runs
+      **Nothing in this repository compares either artifact to GitHub** — no drift check in ci.yml
+      and none on a schedule. #937 left that decision out deliberately because it would add a
+      required context, and #945 derived the second artifact without building one, so both files are
+      verified by a person re-running the pipeline the README documents. A control nobody runs
       cannot report an unprompted platform write, which is the event the card says no human trigger
-      exists for. **Second, the artifact covers the branch ruleset only.** The merge-gating
-      repository settings the card added in `2c1437e` — `allow_squash_merge`, `allow_auto_merge`,
-      `delete_branch_on_merge`, `allow_update_branch` and the rest — are in no artifact here;
-      `delete_branch_on_merge` and `allow_update_branch` survive as prose claims in
-      docs/agents/collaboration.md, each citing a `gh api` call somebody once made, which is exactly
-      the shape the card forbids. Prose also still restates the required check names and their count
-      rather than citing the file.
+      exists for, and it is the whole of what is left of this rule here. **The coverage half is
+      closed**: the settings the card added in `2c1437e` are enumerated in an artifact derived in
+      this repository, and the two prose claims in docs/agents/collaboration.md that used to assert
+      `delete_branch_on_merge` and `allow_update_branch` from a `gh api` call somebody once made now
+      cite it instead. One smaller restatement survives — prose still spells out the required check
+      names and their count in fifteen places rather than citing main.json, which the deferral
+      paragraph covers by declaring the bullets a summary but does not remove.
 
   R-008:
     status: partial

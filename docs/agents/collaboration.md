@@ -540,11 +540,15 @@ Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, t
 
 A direct `git push origin main` was attempted and rejected. This is verified, not assumed.
 
-**The ruleset itself is in the repository, and the list above defers to it.**
-[`.github/rulesets/main.json`](../../.github/rulesets/main.json) is a normalised snapshot of it,
-fetched from the API and committed; [`.github/rulesets/README.md`](../../.github/rulesets/README.md)
-carries the normalisation contract, how to reproduce the file, and the one rule that matters when it
-disagrees with GitHub. **Where this file and that one differ, that one is right** — the bullets above
+**The gate itself is in the repository, and the list above defers to it.**
+[`.github/rulesets/main.json`](../../.github/rulesets/main.json) is a normalised snapshot of the
+ruleset, fetched from the API and committed. The second bullet is not entirely the ruleset's, and
+that is worth knowing rather than glossing: the ruleset narrows the merge methods to `rebase`, but
+*which methods exist at all* is a repository setting, recorded beside it in
+[`.github/rulesets/merge-settings.json`](../../.github/rulesets/merge-settings.json) (#945).
+[`.github/rulesets/README.md`](../../.github/rulesets/README.md) carries the normalisation contract
+for both, how to reproduce each, and the one rule that matters when either disagrees with GitHub.
+**Where this file and those differ, those are right** — the bullets above
 are a summary written for a reader, and a summary drifts from the thing it summarises without either
 of them looking wrong. That is not hypothetical: it is what #937 was filed about, after a sweep found
 the same claim asserted as live fact on twenty-two lines across five files.
@@ -583,8 +587,9 @@ Three consequences:
   armed and stays behind. Arming is also the last moment a person looks at the head, so the checks
   that belong at merge time belong here instead — both in *Who moves a branch that has fallen
   behind*.
-- **A merged branch deletes itself** (`delete_branch_on_merge`). The worktree does not — see
-  *Worktree cleanup* below.
+- **A merged branch deletes itself** — `delete_branch_on_merge`, recorded in
+  [`.github/rulesets/merge-settings.json`](../../.github/rulesets/merge-settings.json) rather than
+  asserted here. The worktree does not — see *Worktree cleanup* below.
 - **A rejected change leaves no trace.** In a linear history it simply drops out and whatever sat
   above it rebases down over the gap, where a merged branch would have to be reverted and leave both
   the change and its undoing in `main` forever.
@@ -733,9 +738,13 @@ whole point.
 
 **Nothing here closes the loop by itself, and that was got wrong twice before anybody checked:**
 
-- **`allow_update_branch` is `false` on this repository** (`gh api repos/michalwy/stamporama`).
-  GitHub's auto-merge waits for a branch to become mergeable and **never makes it so**. Verify that
-  yourself rather than trusting this line — it is a repository setting and a setting can change.
+- **GitHub does not bring a behind branch up to date here** — `allow_update_branch` is off,
+  recorded in
+  [`.github/rulesets/merge-settings.json`](../../.github/rulesets/merge-settings.json) rather than
+  asserted in this line (#945). Auto-merge waits for a branch to become mergeable and **never makes
+  it so**, which is what makes the rest of this section necessary. The bullet used to end *"verify
+  that yourself rather than trusting this line"* — a reader-by-reader habit standing in for a
+  control. The artifact is the control.
 - **Renovate's branches self-update because *Renovate* rebases them** — `automergeStrategy: "rebase"`
   in `renovate.json` — not because GitHub does. That is its bot, and a `task/` branch has none.
 - **So a `task/` branch left armed and alone sits at `BEHIND` for ever.** #837 and #839 did exactly
