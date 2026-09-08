@@ -202,14 +202,46 @@ rules:
       condition under which an absence goes unnoticed.
 
   R-012:
-    status: absent
+    status: partial
+    where:
+      - "docs/agents/collaboration.md § \"Memory is not versioned, and nothing expires it\" — the
+        store, the three shapes an entry takes, the write-side rule, the sweep on the change that
+        invalidates, and the handover clause (#947)"
+      - "AGENTS.md § Working Rules — a fact this repository can carry goes in this repository; a
+        durable statement carries the command rather than the fact it answers; and a session that
+        finds the tree contradicting a memory says so"
+      - "docs/agents/backlog-review.md, and docs/agents/collaboration.md § \"Keeping this file
+        honest\" — the backstop sweep, keyed to the process commits of the review period"
+    gap: >-
+      **The store has never been enumerated once, and #947 put that out of scope on purpose** so the
+      rule was not written to justify whatever an audit happened to find. What is written catches a
+      change *going forward*: the person landing a process change sweeps for what it retired, with a
+      backlog-review backstop. Nothing establishes a baseline over the 39 entries standing today, and
+      a rule that only catches future changes does not make a store correct that was never reconciled
+      — the two contradictory `docker` entries of 2026-09-07/08 are still both in it (#933). A port
+      would have to add the first enumeration, and the card's onboarding half with it: our trigger is
+      the invalidating change, and we have no onboarding path because this project has been the
+      source of ported process rather than a recipient.
     note: >-
-      Agent memory is nowhere in this project's documents. `memory` appears five times across
-      AGENTS.md and the process files and every one is about something else — Turbopack leaking it,
-      or not assuming a release version from it. Nothing says that per-project memory carries process
-      rules, that it has no invalidation path, or that a process change must diff it. This is the
-      estate's largest such store (37 entries), and the delegation of process decisions to dev-agent
-      currently lives in it and in no repository.
+      **The whole-store diff is deliberately not our rule, and this is a departure from the card
+      rather than an omission** — argued in the section itself and reported to dev-agent. At 39
+      entries "enumerate the memory and diff it against the new process" is a task nobody performs on
+      the way to doing something else, and a skipped rule is worse than none because it reads as
+      coverage. The card's own evidence points the same way: ohm-sweet-ohm's four stale entries were
+      found *during* the change that invalidated them, and darkroom's one by enumerating fifteen,
+      which is a store you can enumerate. So the trigger here is the invalidating change, and the
+      card's own sentence about its registry — that the mitigation is not diligence but that every
+      claim about a project should be generated from something that project publishes — is written in
+      as the load-bearing half: a fact this repository can carry does not live only in memory.
+      **What no rule here catches is stated rather than glossed**: an entry falsified by something in
+      no repository at all — a mandate withdrawn, a convention reversed in conversation — leaves
+      nothing to grep, and the section says so and proposes no detector.
+      The process mandate itself is still recorded only in agent memory and in dev-agent's
+      STANDING.md; **#958 is the issue that gives it a home**, and #947 deliberately did not write it
+      into collaboration.md, that being #958's own subject alongside a merge boundary it must correct.
+      **This row alone was re-read against dev-agent `10128ad`**, where the card's substance is
+      unchanged from `447b5e6` in the header comment above and the only addition is the footer
+      licensing a reader to refute it. Every other row still dates from that audit.
 
   R-013:
     status: partial
