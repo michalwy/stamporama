@@ -12,6 +12,46 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# `docker` must be on the PATH this script is run with. That is a requirement rather than something
+# to work around, and the message below exists because the *failure* is what misleads (#933).
+#
+# An empty `command -v docker` is a statement about this shell's PATH and nothing more. A session
+# inherits its PATH from the process that launched it, so it can be running an environment older
+# than the machine's configuration — the binary may be installed, and on the PATH of a shell you
+# open yourself, and still absent here. Four sessions met exactly that: two checked Docker Desktop,
+# colima, podman and the usual directories, found nothing, and reported that Docker was not
+# installed. Every check was correct and the conclusion was false, and what makes that expensive is
+# `pnpm test:integration` — AGENTS.md requires it before a schema or domain-logic change, so a
+# session that believes the runtime is missing does not verify some other way. It stops verifying.
+#
+# So say what is needed and what was actually looked at, and let nothing else be inferred.
+require_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+
+  {
+    echo "e2e-db: \`docker\` is not on PATH, and this script needs it to start the test database."
+    echo
+    echo "That is a fact about *this shell's* PATH, and not yet a fact about this machine. A"
+    echo "session inherits its PATH from whatever launched it, so it can be older than the"
+    echo "machine's configuration. Before concluding Docker is missing, ask a shell of your own:"
+    echo
+    echo "  zsh -ic 'command -v docker'   # or your own interactive shell"
+    echo
+    echo "Answers there and not here — the environment is stale; restart whatever launched this"
+    echo "session. Answers nowhere — Docker really is absent; install it."
+    echo
+    echo "PATH as this script sees it:"
+    printf '%s\n' "$PATH" | tr ':' '\n' | sed 's/^/  /'
+  } >&2
+  exit 1
+}
+
+# Before the slot is resolved, not after: `scripts/dev-slot.sh env` *allocates* a slot, and a run
+# that is about to die for want of `docker` should not take a number with it (#933).
+require_docker
+
 eval "$(scripts/dev-slot.sh env)"
 
 # `docker-compose.e2e.yml` reads STAMPORAMA_SLOT_SUFFIX for its project name and
