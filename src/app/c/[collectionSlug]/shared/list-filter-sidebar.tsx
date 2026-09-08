@@ -15,6 +15,12 @@ interface ListFilterSidebarProps {
   /** Per-area row counts (#843), counted like the year facets but with the area selection left out
    *  — see `@/lib/area-facets`. Omitted on a screen that has no such facet to read. */
   areaFacets?: AreaFacet[];
+  /**
+   * Turn on the area tree's quick-add shortcut (#776) by naming the collection. The four list
+   * screens (issues, stamps, copies, wants) pass it; the copy pickers and the composition
+   * workbenches do not — see `AreaFilterSidebar`.
+   */
+  quickAddCollectionId?: string;
 
   // ── Year filter ──
   /** null represents "no facets loaded yet". */
@@ -44,6 +50,7 @@ export function ListFilterSidebar({
   onNavigateArea,
   areaExtraEntry,
   areaFacets,
+  quickAddCollectionId,
   yearFacets,
   yearsLoading,
   selectedYear,
@@ -57,6 +64,7 @@ export function ListFilterSidebar({
       onNavigate={onNavigateArea}
       extraEntry={areaExtraEntry}
       counts={areaFacets}
+      quickAddCollectionId={quickAddCollectionId}
     />
   );
   const years = (

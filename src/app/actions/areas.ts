@@ -14,6 +14,8 @@ import {
   AREA_TRANSLATION_FIELDS,
 } from "@/lib/areas";
 import { parseTranslationValues } from "@/lib/translations";
+import { getCatalogNames, getCatalogTree, type CatalogNameFlat } from "@/lib/catalog";
+import { getCollectionTranslationContext } from "@/lib/contacts";
 
 export type AreaActionState =
   | { status: "idle" }
@@ -68,6 +70,49 @@ function parseAreaVendors(formData: FormData): AreaVendorInput[] {
       },
     ];
   });
+}
+
+/** The reference data the area form needs beyond the areas themselves: the price books and
+ * numbering vendors it offers, and the languages its title name is translated into. */
+export interface AreaFormOptions {
+  catalogNames: CatalogNameFlat[];
+  catalogVendors: { id: string; name: string; abbreviation: string }[];
+  titleLanguages: string[];
+  defaultLanguage: string;
+}
+
+/**
+ * Read the area form's reference data (#776).
+ *
+ * The areas management page loads all of this on the server and hands it to the panel. The area
+ * filter facet has none of it, and the alternative — threading four more props from every list
+ * page's server component — would pay three queries on every list render for a dialog that is
+ * usually not opened. So the facet's quick-add fetches it when it opens, the way
+ * `add-variant-range-dialog` fetches its subtypes.
+ *
+ * `getCollectionTranslationContext` is the same read the issue and stamp dialogs make for exactly
+ * this reason (#295, #296), and it carries the ownership assert; the two catalog reads scope
+ * themselves to the owner as well.
+ */
+export async function getAreaFormOptionsAction(
+  collectionId: string
+): Promise<AreaFormOptions> {
+  const session = await getSession();
+  const [catalogNames, catalogTree, translations] = await Promise.all([
+    getCatalogNames(session.user.id, collectionId),
+    getCatalogTree(session.user.id, collectionId),
+    getCollectionTranslationContext(session.user.id, collectionId),
+  ]);
+  return {
+    catalogNames,
+    catalogVendors: catalogTree.map((v) => ({
+      id: v.id,
+      name: v.name,
+      abbreviation: v.abbreviation,
+    })),
+    titleLanguages: translations.titleLanguages,
+    defaultLanguage: translations.defaultLanguage,
+  };
 }
 
 export async function createCollectionAreaAction(
