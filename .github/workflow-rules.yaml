@@ -90,16 +90,11 @@ rules:
       assert something D-002 does not say. D-002's own status is "open — not yet examined".
 
   R-006:
-    status: partial
+    status: implemented
     where: >-
       docs/agents/collaboration.md § "No browser verification — a deliberate departure", restated in
-      AGENTS.md § Testing Direction
-    gap: >-
-      The decision, its reason and its deliberateness are all recorded — the section says in as many
-      words that it is a decision and not an oversight and asks that it not be "fixed" back, which is
-      the sentence the card generalises. It carries no **date**. R-006 asks for one so that a reader
-      can tell a current decision from an old one, and neither the section nor the AGENTS.md
-      restatement says when it was taken.
+      AGENTS.md § Testing Direction — the position, its reason, its deliberateness, and since #944 the
+      date it was taken (2026-09-06, collaboration.md's first commit, #780)
     note: >-
       Our *answer* (forbidden) diverges from darkroom's (required) and registry.yaml `D-001` records
       both. That is not this entry's status: R-006 is portable only as a *requirement to decide*, and
