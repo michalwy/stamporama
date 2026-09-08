@@ -433,8 +433,11 @@ them. It was wrong twice, in the two ways this file already records under *Verif
 `renovate.json`, `.github/workflows/ci.yml`, `release-versioning.md` and the two files #937 added
 under `.github/rulesets/` returned **48 lines and 50 occurrences** on 2026-09-07: **22 lines
 carrying 24 of those occurrences stated the live count and became five, and 26 lines kept the number
-four.** Report both halves wherever a sweep like this is reported, because a sweep that states its
-own count cannot return a silent zero.
+four.** Report both halves wherever a sweep like this is reported. That was written here as a
+guarantee — *a sweep that states its own count cannot return a silent zero* — and it is not one:
+a count computed over an instrument's empty output says nothing about whether the instrument ran
+(*Sweeping for a claim*, under *Verification, not trust*, where the guards and their boundary now
+live in one place). Report the count anyway; it is cheap and it has caught things.
 
 **And draw the boundary at the claim, not at the file — because the authoritative record contains
 the word zero times.** `main.json` states the count as an array of that many objects. No expression
@@ -471,7 +474,10 @@ run* from *no matches*, and this is a real no-match that means the opposite of w
 What it nearly produced was the conclusion that a session had changed something it had reported
 leaving alone. **A hardened sweep is still a sweep**: the count, the exit status and the fixed word
 are three guards against three different failures, and none of them makes a search a substitute for
-opening the file.
+opening the file. One step further, because this instance is the one that shows it: **the guards
+protect the instrument; the remaining failure is the question** (#942). Every other instance above
+is a search that could not run properly, which is what those three are aimed at. This one ran, and
+asked for the wrong thing.
 
 **The 26 are what makes a careless sweep worse than none.** Most are about the **four jobs gated on
 `Detect changes`** — a different four, which did not change, because `Closing reference check`
@@ -703,16 +709,104 @@ The #880 session's own words are the part worth keeping: *a correction is not do
 were thinking about is fixed; it is done when the retired claim does not appear anywhere. That is a
 grep, and I did not run it until you pointed at the line* (#854).
 
-**Then count your own hits, because the idiom for this sweep drops them silently.** Wrapping each
-hit in context with a *mandatory* trailing quantifier — `grep -oiE '.{140}claim.{200}'` — matches
-nothing whenever the hit lands within 200 characters of a line end: where every hit does, it exits 1
-and prints nothing, byte-for-byte what a clean tree prints, and where only some do it exits 0 and
-looks like it worked. That is how #910's first sweep lost a stale claim it had already found.
-**Shorter lines make it worse rather than better**, since they create more line ends, and the
-correct bounded form `.{0,200}` is rejected by the `grep` in a session shell here — it routes to
-ugrep, which calls it *"exceeds complexity limits"*; `/usr/bin/grep` accepts it. So run `grep -c` or
-`grep -n` first and check the total against what you classified: **a sweep that reports its own count
-cannot return a silent zero.** Measured rather than reasoned about, twice (#896, #905).
+### Sweeping for a claim
+
+**It runs twice, and the pass nobody writes down is the first one.** Run *after* the edit, the sweep
+is a **check** — did I miss a copy of what I just changed. Run *before* it, the same command is
+**scoping** — what is this claim, and therefore what does the edit have to cover. The rule above
+states only the second, and every word of it reads as after-the-edit; the #975 session ran it first,
+and its boundary question then arrived as *this list is incomplete* rather than *did I miss
+anything*. **Keep both** (#979). They answer different questions, and the after pass is the only one
+that can catch a copy the edit itself created.
+
+**Scoping first is what makes *a file list is not the scope* actionable** rather than a warning you
+can only agree with afterwards: a brief's file list is where the search starts and never where it
+stops. #975's brief named one section and put two files out of scope; the vocabulary it was changing
+was enumerated in three places and the change broke two of them. Found while scoping, that cost a
+round trip with the lead. Found while checking, it would have cost the edit.
+
+**Then the guards — three of them, against three different failures.** Each is cheap, each has
+caught something, and each has since been undercut, which is why this section ends where it does
+rather than on a guarantee.
+
+- **The count.** Wrapping each hit in context with a *mandatory* trailing quantifier —
+  `grep -oiE '.{140}claim.{200}'` — matches nothing whenever a hit lands within 200 characters of a
+  line end: where every hit does, it exits 1 and prints nothing, byte-for-byte what a clean tree
+  prints, and where only some do it exits 0 and looks like it worked. That is how #910's first sweep
+  lost a stale claim it had already found. **Shorter lines make it worse rather than better**, since
+  they create more line ends. So run `grep -c` or `grep -n` first and check the total against what
+  you classified (#896, #905).
+- **The exit status.** `<pattern> || echo clean` fires on the tool's *error* as readily as on a
+  clean result, so an invalid pattern prints the all-clear. For that idiom to be sound, non-zero
+  would have to mean *no match*; it also means unreadable path, unsupported flag and rejected
+  pattern. The bounded form `.{0,200}` is one of those here — the `grep` in a session shell routes
+  to ugrep, which calls it *"exceeds complexity limits"*. **The rejection is at position 100, so
+  `.{0,120}` fails too**: reaching for a smaller bound does not get you past it, and
+  `/usr/bin/grep` accepts either.
+- **The fixed word.** A phrase you half-remember is a phrase you are asserting. This file is
+  hard-wrapped at 100 characters, so `the four required` / `checks are the verification` falls
+  across a line break no phrase match can see. **The session that wrote this section lost a hit to
+  it while checking its own work**: a fixed-string sweep for the retired claim below answered `1`
+  where the truth was `2`, because the second copy wraps mid-sentence. Its positive control was
+  green — the control's own string does not wrap — so only searching the word found the copy.
+
+**The count is not the floor it was stated to be**, and that matters more than any single cause
+because it was this section's own guarantee. *A sweep that reports its own count cannot return a
+silent zero* is **false**: the #810 session ran one invocation per file inside a `while read` loop,
+every invocation failed with the complexity error above, each exited 2, **the pipeline exited 0**,
+and the job was recorded as complete. The count was computed over the empty output rather than over
+the tool's success, so counting results cannot detect an instrument that never produced any. That
+sentence stood in two sections of this file while it was wrong, in two wordings; both are corrected
+here, and the second was found by sweeping before the edit rather than after (#932).
+
+**Two directions the same signature arrives from that are not a grep failing at all.** A pattern
+containing a newline makes `git grep -F` treat it as **two** patterns and OR them — 280 files, a
+result that looks thorough and is a search for two common fragments (#970). **A flood is worse than
+a zero**, because a zero prompts a second look while 280 hits prompt you to narrow the pattern,
+which is the wrong response to a pattern that never matched the phrase. And a selector over a
+**projection** does it with no shell involved: the rulesets list endpoint does not return
+`conditions`, so a `--jq` filter on `.conditions` answers `0`, exit `0`, indistinguishable from a
+repository that genuinely has none — and `jq`'s `?`, which exists to survive missing keys, is what
+converts *this field is not here* into *no match*.
+
+**The shell is half of the rest, and here it is zsh.** Unquoted parameter expansion is word-split in
+bash and **is not** in zsh, so `git grep -n 'x' -- $F` hands git **one** pathspec literally named
+`AGENTS.md docs/agents/collaboration.md`: nothing matches it, nothing is searched, it exits 1.
+`for a in $WRITES` runs its body once over the joined string for the same reason. Both are
+idiomatic, both are **correct in bash**, and neither is visible in review — which is how a snippet
+copied from outside a zsh shell changes meaning on arrival. Use an array, `-- "${FA[@]}"`, or name
+the paths inline.
+
+**So two habits, and deliberately habits rather than a list.** Seven causes is not something anybody
+recalls at the moment they are about to search, and a list of seven that reads as coverage is worse
+than none:
+
+- **Run a positive control.** Search for something you expect to **find** beside the thing you
+  expect to be gone, with the same command shape. A retired-count of 0 next to a live-count of 0
+  says the instrument is broken; 0 next to 2 says the correction landed. It is the one guard that
+  catches the empty pathspec, the flood, the projection and the broken loop alike, because it does
+  not ask *what* went wrong — it asks whether the thing could have found anything at all.
+- **Check that the instrument ran, not only what it returned.** Capture the per-invocation status
+  inside a loop rather than the pipeline's, and read stderr. What caught the `||` case was ugrep
+  printing its diagnostic *above* the session's own "clean" line — a human noticing stray text,
+  which is the kind of catch these rules exist to stop depending on.
+
+**The guards protect the instrument; the remaining failure is the question.** Everything above is a
+way for a search not to run properly, and the count, the exit status and the fixed word are aimed at
+exactly that. What survives all three is a search that runs correctly, over the right files, for the
+wrong thing: `grep -c 'in this order'` exiting 1 on a phrase that wraps, `grep -niw -m2 precedent`
+stopping at two unrelated hits, a claim stated as an array of objects in a file containing the word
+zero times. Each ran, each exited truthfully, and each meant the opposite of what it looked like.
+**Ask what else asserts this, and in what form**, before choosing an expression at all — and a
+hardened sweep is still a sweep, which is not a substitute for opening the file (#942).
+
+**And say what you believe the state is, in a form somebody can contradict.** That is the same rule
+turned on a message rather than on the tree. Acting on a belief that came from a report, a brief or
+another session rather than from the repository, state it: a wrong reading written down and
+addressed to somebody is correctable by the one party who can see it is wrong, and the same reading
+held privately is not. The #975 exchange had the lead and the session a turn apart in opposite
+directions, each briefly certain about a state the other had moved past, and nothing broke because
+both had said what they thought was true (#979).
 
 ## Memory is not versioned, and nothing expires it
 
