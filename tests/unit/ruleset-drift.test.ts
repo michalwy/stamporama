@@ -27,8 +27,11 @@ import { fileURLToPath } from "node:url";
 //
 // **Second, that a declared blind spot does not suppress a real finding.** That is the property
 // dev-agent's `decisions/0005` says the whole design lives or dies on, and it is the one a check
-// can silently lose while staying green — `--allow-unverifiable=bypass_actors` is passed on every
-// scheduled run this repository makes today.
+// can silently lose while staying green. **No scheduled run declares anything today** — the
+// workflow's `--allow-unverifiable=bypass_actors` went with the conditional that produced it once
+// `RULESET_READ_TOKEN` existed (#956) — so these cases are the only place the mechanism is
+// exercised at all, which makes them more load-bearing rather than less: they are what a future
+// declaration would be trusting.
 //
 // Nothing here reaches the network. `gh` is stubbed on `PATH` and the "live" response is built from
 // the committed artifact by adding back the volatile fields and **reversing every key and array

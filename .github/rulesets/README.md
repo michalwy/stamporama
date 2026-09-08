@@ -267,15 +267,17 @@ script run by two identities verifies different things. So this one reports **th
 never two: equal, differs, and **could not see**. It never normalises *absent* to *empty* — that
 turns a blind spot into a confident negative.
 
-The blind spot is real and it is in the worst possible field. `GITHUB_TOKEN` fetches the ruleset
+**The workflow token's blind spot is real and it is in the worst possible field** — which is the
+whole reason this job runs under a token of its own. `GITHUB_TOKEN` fetches the ruleset
 successfully and GitHub simply omits `bypass_actors` from the response: measured on this repository
 on 2026-09-08, an owner token returns `[]`, the workflow token returns no key at all, and every
 other field is identical. That field is the *"no bypass for anyone"* clause this whole gate rests
 on — an actor able to bypass `main` makes every other line in this file advisory.
 
-**So the gap is declared, not inferred.** The workflow passes
-`--allow-unverifiable=bypass_actors` **only while `RULESET_READ_TOKEN` is unset**, and the script
-answers in four states:
+**So a gap is declared, not inferred — and today there is no gap to declare.**
+`RULESET_READ_TOKEN` is set, the run compares the whole gate including `bypass_actors`, and **the
+workflow passes no declaration at all** (#956). The mechanism below stays in the script, unused,
+because the next field the platform is observed to redact will need it. It answers in four states:
 
 | state | behaviour |
 | --- | --- |
@@ -287,8 +289,26 @@ answers in four states:
 Three things make that different from downgrading a failure to a warning. The exclusion is
 **written and reviewed in a diff** rather than decided at runtime by the thing being excused.
 **Anything undeclared still fails**, so a blind spot cannot grow silently — if the platform redacts
-a second field tomorrow, the job goes red. And it **retires itself**: the workflow's declaration is
-evaluated when the file is parsed, so it disappears the day the secret exists.
+a second field tomorrow, the job goes red. And a declaration that has stopped being true **says so
+on the run summary**, not in the log of a green run nobody opens.
+
+**The third property used to be that it retired itself, and that is the one #956 removed.** The
+workflow declared the field as
+`${{ secrets.RULESET_READ_TOKEN == '' && '--allow-unverifiable=bypass_actors' || '' }}`, evaluated
+when the file is parsed, so the declaration disappeared by itself the day the secret arrived. It
+worked, with nobody touching it: `workflow_dispatch` run `34201991671` printed *"Verified all 7
+recorded fields, including bypass_actors."* **The same expression would have brought the
+declaration back the day the secret was deleted** — the check returning to green-and-partial,
+passing, naming its exclusion, byte-for-byte the run it had been producing the day before, for an
+event nobody reads. With the conditional gone that deletion instead leaves `bypass_actors` absent
+and undeclared, which is exit 1. **The removal converts a silent regression into a loud one**;
+it is not tidying, and reinstating the conditional undoes it.
+
+**Deletion is the exposure. Expiry is not, and the two look alike.** An expired
+`RULESET_READ_TOKEN` is still a *set* secret, so the old conditional passed no declaration on its
+account either: the run reached the API call and failed there. Expiry was already loud and needed
+nothing, then and now. This is written down because a reader who conflates the two concludes the
+conditional was guarding expiry — and puts it back.
 
 The declarable set is an **enumerated allowlist of one**. Not a key-prefix match and not "any
 top-level key", because `rules` is a top-level key: `--allow-unverifiable=rules` would exclude every
@@ -302,22 +322,28 @@ day for a known, permanent, one-action-fixes-it gap makes real drift arrive in t
 that gap, so a permanently red check does not merely get ignored — it makes red *ambiguous*, which
 kills the primary instrument to protect a secondary one.
 
-**Closing the gap needs a credential and that is the owner's alone**: a fine-grained token with
+**The credential that closed the gap is the owner's alone**: a fine-grained token with
 `Administration: read` on this repository, stored as the `RULESET_READ_TOKEN` secret. No session and
-no lead creates it. Until it exists the check is genuinely partial and says so on every run, which
-is the acceptable state; silently partial is not.
+no lead creates it — or deletes it. While it was missing the check was genuinely partial and said so
+on every run, which was the acceptable state; silently partial is not. **Deleting the secret now is
+not a return to that acceptable state**: it is a red check, deliberately, because nothing declares
+the field any more.
 
-**This file keeps asserting `bypass_actors: []` while CI declares it unchecked, and that is
-correct rather than a contradiction to tidy away.** The artifact is the reviewed *intent*, written
-by a token that could see the field; the declaration is about *this caller's* reach. Stripping the
-field to make the two agree would lose the intent and make the credential useless the day it
-arrives.
+**While CI was declaring `bypass_actors` unchecked, this file went on asserting
+`bypass_actors: []`, and that was correct rather than a contradiction to tidy away.** The artifact
+is the reviewed *intent*, written by a token that could see the field; a declaration is about *this
+caller's* reach. Stripping the field to make the two agree would have lost the intent and made the
+credential useless the day it arrived — and it did arrive, to an artifact that was already right.
+The reasoning outlives the episode: it is what to do the next time a caller cannot read something
+this file records.
 
 **And the coverage question is answered by running it, not by reading it.** Both times this family
 of failure was found on the estate it was found by running the check under the *other* identity;
 reading the code surfaced neither. So a change to this check is exercised under every credential it
 will run with — the workflow token and an owner token — before it is believed. #946 did that, red
-under both, on a branch that was allowed to die rather than on the one that merged.
+under both, on a branch that was allowed to die rather than on the one that merged. #956 did the
+same for the removal above, and had to: a change justified entirely by *this failure becomes loud*
+is worth nothing until somebody has watched it become loud.
 
 The estate reasoning behind all of the above is dev-agent's `rules/R-004` and `rules/R-007`, and
 `decisions/0003` and `decisions/0005`.
