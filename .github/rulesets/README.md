@@ -81,7 +81,8 @@ Resolution by target, in one pipeline. The id is discovered at runtime and never
 `jq` guard fails loudly rather than picking one if a second default-branch ruleset ever appears.
 
 ```bash
-gh api repos/michalwy/stamporama/rulesets --jq '.[] | select(.target == "branch") | .id' \
+tmp=$(mktemp) \
+&& gh api repos/michalwy/stamporama/rulesets --jq '.[] | select(.target == "branch") | .id' \
 | while read -r id; do gh api "repos/michalwy/stamporama/rulesets/$id"; done \
 | jq -S -s '
     map(select(.conditions.ref_name.include == ["~DEFAULT_BRANCH"]))
@@ -89,11 +90,22 @@ gh api repos/michalwy/stamporama/rulesets --jq '.[] | select(.target == "branch"
     | del(.id, .node_id, .created_at, .updated_at, ._links, .source, .current_user_can_bypass)
     | .rules |= sort_by(.type)
     | (.rules[] | select(.type == "required_status_checks").parameters.required_status_checks) |= sort_by(.context)
-  ' > .github/rulesets/main.json
+  ' > "$tmp" \
+&& mv "$tmp" .github/rulesets/main.json \
+|| { rm -f "$tmp"; false; }
 ```
 
 The two-step fetch is not clumsiness: the list endpoint does not return `conditions` or `rules`, so
 selecting the right ruleset by what it *does* requires fetching each candidate.
+
+**The temp file is load-bearing here for the same reason it is in the other pipeline**, and it is
+worth saying where this one bites. The `jq` guard exists for the case R-007 calls drift: a second
+ruleset appearing that also governs the default branch. A redirection straight at `main.json` opens
+and truncates the target *before* `jq` runs, so the guard firing would empty the artifact — at
+exactly the moment somebody has found drift and least wants the file gone. It is recoverable from
+git, but the reader is then debugging two problems, one of which this document caused. The trailing
+`false` is there so a failed derivation does not exit `0` having written nothing; without it the
+cleanup is the last command in the list and supplies the status.
 
 **The normalisation contract**, so that any comparison tool agrees with this file rather than
 merely happening to:
