@@ -980,8 +980,15 @@ model AlbumTemplate {
 model Album {
   id               String @id @default(cuid())
   collectionId     String
-  // The area whose subtree supplies the entries, and what `{area}` resolves against in the chapter
-  // and footer texts — through the same roll-up a generated listing title uses.
+  // The area whose subtree supplies the entries, and whose primary vendor gives the catalog prefix
+  // a page range is written under — the `PL` of `PL 303-309` (`albumAreaPrefix` in the plan).
+  //
+  // **`{area}` does not resolve against it** (#810). The chapter, checklist and footer texts render
+  // one `TitleTemplateCopy` per stamp (`album-plan.ts` through `title-copy.ts`), so the token
+  // resolves per stamp against that stamp's own primary area — through the same roll-up a
+  // generated listing title uses — and a group whose stamps span two areas prints both, joined.
+  // The prefix above is the deliberate contrast: it is taken from this column precisely because a
+  // footer names the binder rather than the stamps on the sheet.
   collectionAreaId String
   name             String
 
