@@ -113,6 +113,8 @@ If you write one, keep the shape — it is what makes the note useful to its aut
 
 **One session owns one issue end to end** — it decides, migrates, implements, tests and opens the pull request itself. Nothing is handed to a second agent halfway through.
 
+**That is about handoffs, not arithmetic**, and the user settled it on 2026-09-08 (#997): a session may hold **several** issues when they share a file, which is the normal answer to file contention here. Each one keeps its own `Refs #NNN` line, its own verification against its own *Done when*, and its own closing comment — and the cost is that a bundle cannot be undone one issue at a time, since history is linear and force-push is blocked. → [`docs/agents/collaboration.md`](docs/agents/collaboration.md)
+
 The rest of the model — the long-lived lead session, how a task session is spawned and how it reaches the lead, the protected-`main` flow, what runs in parallel, and where findings and new backlog items go — is in [`docs/agents/collaboration.md`](docs/agents/collaboration.md). Read it before spawning a session or opening a pull request.
 
 ## Testing Direction
