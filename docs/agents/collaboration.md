@@ -37,6 +37,59 @@ in both `:root` and `.dark`. Those are not four specialists' tasks; they are one
 six angles. Two agents on the same surface produce two half-designs, and neither has read the
 other's reasoning.
 
+### It is about handoffs, not arithmetic
+
+**A session may hold more than one issue.** Decided by the user on 2026-09-08 (#997), against a
+sentence in this file rather than from it: the lead had been bundling all day — #821+#951+#924 in
+`AGENTS.md`, #932+#942+#979 in one passage, #969+#982+#974+#992 across two files — while the
+heading above said something narrower, and a reader arriving the next morning would have found the
+practice contradicting the file.
+
+**The section's own argument settles which of the two is meant.** Everything above is about
+splitting **one issue** between agents: four role-players powered up in sequence on a single piece
+of work, two of whom produce half a design each. The 261 plans are evidence of that same shape —
+not one of them hands a step to another agent — and none of them is evidence about a *count*. And
+this file already implies the conclusion from the other side: *work that shares a file serialises
+whatever this section says about parallelism*, and choosing what runs at once is choosing which
+files are shared (*What may run in parallel*).
+
+**The condition is a shared file, and never convenience.** Four issues in `collaboration.md` run as
+four sessions only as four sequential merge cycles, each rebasing on the last and each landing on
+prose the previous one moved — which is how two copies of one claim drift apart, and that is
+#982's whole subject. Serialisation is what a bundle buys off. Saving a worker, a chip or a round
+trip is not, and *no free worker* is the reason that most needs refusing, because it is the one
+that is true whenever the pool is empty.
+
+**Three things stay separate, and they are what keep a bundle verifiable** rather than one diff
+answering four criteria nobody can check it against:
+
+- its own **`Refs #NNN`** line;
+- its own **verification against its own *Done when***;
+- its own **closing comment**.
+
+That is exactly what the three bundled sessions of 2026-09-08 did, and it is why none of them
+produced a pull request whose scope could not be read off it.
+
+**The cost, stated rather than glossed: a bundle cannot be undone one issue at a time.** History
+here is linear and force-push is blocked, so four issues in one commit are four things that can only
+be reverted together. Weigh that each time against the serialisation it buys — it is the reason
+*shared file* is a condition and not a preference.
+
+**A finding filed against the lead is the one case the lead should not settle about itself.** #995
+bundled #969 — a finding that the lead had been *writing* the pull requests it is only authorised
+to merge — with three unrelated changes, so an audit of *was that corrected* has to disentangle it
+from the rest. **This is a sentence rather than a rule**, and the reasoning is worth more than the
+verdict: the three separations above already keep the trail, because the closing comment is
+per-issue and is where the correction is recorded. What bundling actually costs such a finding is
+separate revertability — the general cost in the paragraph above, not something peculiar to
+findings. What is peculiar is who decides: the party choosing the bundle is the party the finding is
+against, which is *The lead's licences are to merge, never to write* one level up. **So the brief
+says that a bundled issue is a finding against the lead**, and the worker may refuse the bundle on
+that ground. Stating it costs a clause; deciding it silently is the half that cannot be audited.
+
+**A session holding several issues has a title for it** — `#NNN/#NNN/…: <what they share>`, in
+*Session titles* below. Same gap, two symptoms, settled together (#993).
+
 ## The two kinds of session
 
 **The lead session** is long-lived. It holds the backlog, decides what is worked on next, writes
@@ -48,10 +101,11 @@ What it holds is the state no single task ever sees: forty-odd open issues, the 
 edges between them, which design track an issue belongs to, and what is in flight in another
 worktree right now. None of that is cheaply re-derivable from a file.
 
-**A task session** is short-lived and owns exactly one issue. It works in its own worktree on its
-own branch, asks the lead when it is blocked, commits as it goes, pushes the branch, opens the
-pull request, and **reports back**. It does not merge, does not close issues, and does not file new
-ones.
+**A task session** is short-lived and owns its issue end to end — one issue normally, and
+sometimes a bundle of issues that share a file (*It is about handoffs, not arithmetic*). It works in
+its own worktree on its own branch, asks the lead when it is blocked, commits as it goes, pushes the
+branch, opens the pull request, and **reports back**. It does not merge, does not close issues, and
+does not file new ones.
 
 **The user talks to the lead.** That is much of the point of the split: the user should not have to
 track which of three sessions is asking, or repeat the same decision to each of them. The design
@@ -172,9 +226,13 @@ one of those three, and each is load-bearing:
 1. **What it is waiting for, as something checkable** — a commit in `main`, a named pull request
    merged, a release tagged. Never "wait for the lead", which cannot be verified and invites
    guessing.
-2. **What to do meanwhile, said explicitly.** Reading itself in is real work and every held session
-   did it; #881 did its entire measurement while held, because measuring changes nothing. For most
-   sessions the answer is *everything that does not write*.
+2. **What to do meanwhile, said explicitly — and since 2026-09-08 the answer turns on whether the
+   session has a task.** A session held *with* its issue does everything that does not write:
+   reading itself in is real work, and #881 did its entire measurement while held, because
+   measuring changes nothing. **A pooled worker, which is held with no task at all, reads
+   nothing** — the reversal and its reasons are in *The pool of generic workers*. What this point
+   said without that qualification is quoted there rather than deleted, so that a later reader can
+   tell which of the two instructions is the newer.
 3. **What it must not do**, listed rather than implied. The incoming lead was told not to merge, not
    to close, not to spawn, not to check a branch out in the main worktree, and **not to answer task
    sessions that message it** — two leads answering one question is worse than a slow answer.
@@ -213,9 +271,8 @@ go-ahead before a merge. What goes is being paged at moments a machine chose.
 ### The pool of generic workers
 
 **The lead spawns a pool of generic workers rather than a chip per task.** Twelve on the first round,
-clicked in one batch; they start with no task, read AGENTS.md and this file, and wait. The lead then
-hands each one an issue **by message**. Decided by the user on 2026-09-07 (#906), the same
-afternoon as *Spawn ahead and hold*.
+clicked in one batch; they start with no task and wait. The lead then hands each one an issue **by
+message**. Decided by the user on 2026-09-07 (#906), the same afternoon as *Spawn ahead and hold*.
 
 **The reason is device-bound clicking, and it is the part worth carrying.** A chip is expensive not
 because it is a click but because it can only be clicked **at the computer**, while a question can be
@@ -234,6 +291,59 @@ What was settled with it:
   concurrency**; most of the pool is idle by design.
 - **The lead reports the count of free workers in every status table**, so the user tops up when he
   is at the computer rather than when the lead runs out.
+
+#### A pooled worker reads nothing until it is assigned
+
+**This reverses what this file said until 2026-09-08**, and the reversal is written as one so that
+a later reader is not left with two instructions and no ordering. The sentence above used to read
+*they start with no task, read AGENTS.md and this file, and wait*, and point 2 of *Spawn ahead and
+hold* used to say without qualification that **reading itself in is real work and every held
+session did it**. Both were true of the sessions they were written about. **The user decided on
+2026-09-08 (#998) that a pooled worker reads `AGENTS.md`, this file and the topic files at the
+moment it is assigned** — as the first step of the work, not before it.
+
+**The decisive reason is staleness, and it is removed rather than mitigated.** Workers spawned at
+14:57 on 2026-09-08 read this file as it then stood. **It changed four times that afternoon** —
+#975, #984, #994, #995 — growing from about 1570 lines to over 1900, and what changed included the
+session-title convention, the merge loop, the whole sweep discipline and the boundary on what the
+lead may write. A worker assigned the next morning would carry a stale reading of the very file
+that governs it, honestly acquired, with nothing to tell it so. That is the inherited-chip failure
+exactly (*Memory is not versioned, and nothing expires it*): ninety percent right, so it behaves
+correctly nine times out of ten and the tenth looks like ordinary diligence. The workaround was to
+tell the successor lead to make them re-read; **reading at assignment makes the problem not arise**,
+which is a different kind of answer from remembering to say so each time.
+
+**The worker that wrote this section is the worked example.** It was spawned in that 14:57 batch,
+read the file as it then stood, and was assigned these four issues afterwards — so its brief
+opened by telling it that its copy was stale and to re-read the file from `origin/main` before
+touching anything, which it did, and two of its four issues turned out to be about passages that
+had moved in the interval. **That instruction is the workaround, performed once, by hand and
+correctly.** It is also the last time it should be needed here: a rule landing with a live instance
+of the failure it prevents is worth more than the rule on its own.
+
+**The budget argument is second, and it is a halving rather than a deferral.** The lead's first
+framing — *shifted, not saved* — compared reading at assignment against the **old** model, which
+the paragraph above has just broken. The honest comparison is against the *fixed* old model, read
+at spawn **and** re-read at assignment; against that, reading once saves one full read of
+`AGENTS.md` and a 1900-line process file **per assigned worker**, which on 2026-09-08 is ten. The
+shape argument sits on top of it: twelve simultaneous reads at spawn are a spike inside the
+five-hour window, competing with sessions doing actual work, where one read at assignment is paid
+by the task that needs it.
+
+**The spawn prompt is not empty, and that is what makes this safe rather than merely cheap.** It
+still says: you are a pooled worker, you have no task, **do not read the process files yet**, this
+is what you are waiting for — a message naming one issue, which is checkable where *wait for the
+lead* is not — and this is how to reach the lead: by looking up the session whose title is the
+lead's and whose `cwd` is under this repository (*Session titles*), never by an identity a message
+claims for itself. The wake-up drill below is unaffected and still runs at assignment.
+
+**One consequence is recorded as open rather than decided.** A session that reads on demand is not
+specialised at spawn, so the pool stops being a pool of *workers* and becomes generic capacity: a
+release session, a design session **or the incoming lead** could come out of it by message rather
+than by a tile. That would remove the one remaining interaction that requires him at the machine,
+which is the whole reason the pool exists — a handover currently needs a chip, and a message does
+not. Nobody has tried it, and a lead drawn from a pooled worker is a larger change than a release
+session drawn from one, so it is written here as a possibility and not as a rule.
 
 **A dozen idle worktrees are the worktree sweep's problem, and it already has the answer**: an
 unassigned worker is indistinguishable from a held session by every git signal, so it is removed on
@@ -268,6 +378,7 @@ than a description:
 | --- | --- |
 | Worker spawned, no task yet | `Worker N` |
 | Assigned, no pull request yet | `#NNN: <the issue's theme>` |
+| Assigned several issues at once | `#NNN/#NNN/…: <what they share>` |
 | Pull request opened | `#NNN[#PPP]: <the issue's theme>` |
 | Worker finished, and spent | `[DONE] #NNN[#PPP]: <the issue's theme>` |
 | Release session | `Release: X.Y.Z` |
@@ -308,6 +419,37 @@ not a port**, and the distinction is recorded because *Verification, not trust* 
 on file: two claims imported from that same sibling project, true there and false here, which reached
 this file and were caught only by reading the diff. Two projects reaching one format from one problem
 is a different kind of argument from one project copying another.
+
+**A session holding several issues spells them all, separated by `/`** —
+`#997/#998/#993/#996: collaboration.md` — and the theme becomes what the issues share, which is
+normally the file. Added on 2026-09-08 (#993), when three of that day's sessions had no correct
+title available and each invented one. It is the vocabulary catching up with the decision in *It is
+about handoffs, not arithmetic*: bundling by shared file is legitimate, so the fixed vocabulary
+needs a spelling for it. The bracket behaves as it does everywhere else — `#997/#998[#1001]` once
+the pull request is open, and the `[DONE]` prefix in front of that.
+
+**This row is legibility, not machinery**, and saying which of the two it answers is the thing the
+last two amendments both had to state. `[DONE]` remains the whole test the sweep runs and it is a
+prefix, so any spelling that keeps it in front is safe by construction. What the row buys is the
+user reading his own screen and seeing at a glance that one session is answering four issues rather
+than guessing at a theme that names none of them.
+
+**The separator is `/` because two sessions have now reached for it and the alternatives cost
+something.** `+` is how the lead writes a bundle in prose and reads as arithmetic in a title; `,`
+wants a space after it, which spends the width a fourth number needs. Nothing turns on the choice,
+which is why it is settled by convention rather than argued — but it is settled, so that the next
+session does not spend a turn inventing it.
+
+**One shape is deliberately left with no spelling: a bundle that opens two pull requests.** These
+sessions open one, which is what a shared file makes natural, so the bracket above is the whole
+story in practice. Inventing a spelling now, for a case nobody has met, is how a vocabulary
+acquires a row that cannot be checked against anything.
+
+**And the enumerations grow with the table.** The worktree sweep's list of non-`[DONE]` titles (*A
+held session's worktree is not stale*) and its restatement in `backlog-review.md` both enumerate
+the working shapes, and a shape missing from either falls through to *ask the user* — safe, and
+needlessly noisy. #975 met this exact trap when a working session gained its pull request number,
+and it cost a second commit; both are updated in the same change as this row.
 
 **`[DONE]` is the load-bearing half, and it is what the worktree sweep tests.** Everything else in
 the table is for the user reading his own screen; the prefix is for a machine. It replaces *resolve
@@ -846,7 +988,13 @@ than none:
 - **Check that the instrument ran, not only what it returned.** Capture the per-invocation status
   inside a loop rather than the pipeline's, and read stderr. What caught the `||` case was ugrep
   printing its diagnostic *above* the session's own "clean" line — a human noticing stray text,
-  which is the kind of catch these rules exist to stop depending on.
+  which is the kind of catch these rules exist to stop depending on. **And the way this habit is
+  most often defeated is the pipe you added to tidy its output**: after a pipeline `$?` is the
+  *last* command's status, so a search that failed and a filter that succeeded report success
+  together. The #995 session added exactly the status line this habit asks for, piped the search to
+  `grep -v`, and read `exit=0` off the filter while eight patterns had searched nothing (#996) —
+  the status it checked was the filter's, not the search's. Capture the search's own status before
+  anything is piped to it, or run the search alone and filter afterwards.
 
 **The guards protect the instrument; the remaining failure is the question.** Everything above is a
 way for a search not to run properly, and the count, the exit status and the fixed word are aimed at
@@ -1822,14 +1970,16 @@ anything, resolve the path to its session:
 - **No session** for the path → orphaned; remove it.
 - **Title begins `[DONE]`** → finished; remove it. Since 2026-09-08 this is the whole test, and it
   is a prefix rather than a judgement (*Session titles*).
-- **`Worker N`, `#NNN: …` or `#NNN[#PPP]: …` with no prefix** — pooled and unassigned, or
-  working, whether or not it has opened a pull request → **not stale, whatever its age**; leave it.
+- **`Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`, or any of those carrying `[#PPP]`, with no
+  prefix** — pooled and unassigned, or working, whether or not it has opened a pull request and
+  whether it holds one issue or several → **not stale, whatever its age**; leave it.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
 **The second bullet is the whole test; the third is descriptive.** It enumerates the non-`[DONE]`
 titles only so that *ask the user* stays rare, and it lengthens whenever the vocabulary does — it
-lengthened on 2026-09-08, when a working session gained its pull request number (*Session titles*).
+lengthened twice on 2026-09-08, when a working session gained its pull request number and when a
+session holding several issues gained a spelling at all (*Session titles*).
 A longer list invites being read as the decision procedure, and it is not one: titles are
 unenforced, so the enumeration can always be one shape out of date, and every shape it misses falls
 through to *ask the user* rather than into a removal.
