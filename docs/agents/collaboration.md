@@ -128,7 +128,7 @@ one of those three, and each is load-bearing:
    a prompt written hours earlier still describes the issue.
 
 **The chip's title says what the session is, and since 2026-09-08 it says it in a fixed
-vocabulary** (*Session titles*, below). A pooled worker is `Worker 07`; the moment it is assigned it
+vocabulary** (*Session titles*, below). A pooled worker is `Worker 7`; the moment it is assigned it
 becomes `#812: quick-add an area from the filter facet`. He is choosing what to click and when, and
 a title saying the session is waiting tells him it costs nothing to start it now; one that does not,
 does not.
