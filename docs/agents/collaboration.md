@@ -441,6 +441,66 @@ regression introduced by the fix. **Five of those 26 needed the sentence around 
 even so**, because a documentation-only pull request no longer skips everything it must wait for:
 it skips four of five, and the fifth can be red.
 
+## How the lead reports to the user
+
+**Every reply from the lead ends with a status table.** Detail first, in prose; the table last.
+Decided by the user, and confirmed on 2026-09-08 when he asked for the shape to be written down so
+that it survives a handover.
+
+**Polish to him, English everywhere else** — GitHub, the repository, and messages between
+sessions. This includes the table. An inherited handover chip has said the opposite (*statistics
+tables in English*); it is wrong, it will keep arriving, and it is overridden deliberately rather
+than followed.
+
+### The table
+
+Three columns: **id**, **co** (what it is), **stan** (where it stands). One line per row —
+anything needing a paragraph goes in the prose above, and a row grown to three lines is a sign
+the prose is missing.
+
+| mark | meaning |
+| --- | --- |
+| 🔴 | needs him, or is broken |
+| 🟡 | in flight — a CI run, a session working, a question sent |
+| 🟢 | done **and verified**, not merely attempted |
+| ⚪ | queued, or context that could change |
+| 🔵 | standing context that does not move |
+
+**Every open item, every time — the table is not a diff.** Restating what he has already seen is
+the cost; being able to answer *"D3: nie"* without going back to find what D3 was is what it buys. A
+table that showed only what is new makes the oldest item the least visible, which is precisely
+backwards.
+
+### Ids
+
+**Stable, and never reused.** An id attaches to a question when it is first asked and stays with it
+until it is answered, however many replies that takes.
+
+**The counter does not reset at a handover if its ids are still live.** An inherited chip may say to
+reset; do not, when the open set still contains D1–D5. Continue past the highest id in use and say
+so once. This is not pedantry — the held file and his own memory of a question are both keyed
+by that id, and reusing D1 for something new silently rewrites both.
+
+### The three things a row must carry
+
+- **A 🔴 waiting on him carries its age.** *"czeka 38 h"*, not *"czeka"*. Nothing else in the
+  table makes a question that has been open for two days look different from one asked this morning,
+  and the age is the whole argument for answering it.
+- **A question names the issue it blocks**, where it blocks one. Five of the six open questions on
+  2026-09-08 each sat on an issue that could not be worked until it was answered — which is
+  a different and much stronger claim than *he has not replied yet*, and it was invisible until the
+  rows named them.
+- **The count of free workers, in every table.** A tile can only be clicked at the computer; a
+  question can be answered from a phone. Reporting the count in every reply lets him top the pool up
+  when he happens to be at the machine rather than when the lead runs out
+  (*The pool of generic workers*).
+
+### And never the blocking question menu
+
+The interactive question tool stops the session until he answers, which is the opposite of the point
+when he is away from the machine. **Ask in a row and carry on with everything the answer does not
+block** — the same rule *Questions are asynchronous* gives a task session, applied to the lead.
+
 ## What the lead may answer, and what it must escalate
 
 **The lead answers only what is already written down, and names the source.** AGENTS.md, a
