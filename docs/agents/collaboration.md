@@ -297,8 +297,8 @@ started, because what a later reader wants from that row is when this project ch
 7. The lead **collects the user's go-ahead**. Where the change is one a person looks at, that
    go-ahead is the user having **looked at the branch running** — a second act, not the same one,
    because it cannot be done from a diff, and the lead raises the stack for it (*No browser
-   verification* below). **A documentation-only pull request is the exception and needs no
-   go-ahead** — *A documentation-only pull request skips all four*.
+   verification* below). **A pull request inside the `Detect changes` safe list is the exception
+   and needs no go-ahead** — *A pull request no CI job can speak to skips all four*.
 8. The lead **re-reads the head it is about to merge**, merges the pull request and closes the
    issue (*Who moves a branch that has fallen behind*).
 
@@ -381,8 +381,8 @@ see them.
 
 **It is deliberately not gated on `Detect changes`.** Every other job asks whether a change touches
 the application; this one asks what the pull request *says*, which is independent of which files it
-touches. Both incidents that produced this rule were documentation-only pull requests — exactly the
-ones that gate skips — so gating it there would switch it off in the case that produced it.
+touches. Both incidents that produced this rule were documentation-only pull requests — squarely
+inside what that gate skips — so gating it there would switch it off in the case that produced it.
 
 **It fails closed.** If the API cannot be reached it reports red, because green here means *safe to
 merge*. `Detect changes` fails the other way for the opposite reason: its safe direction is to run
@@ -976,10 +976,13 @@ go-ahead, the moment the five required checks are green. The boundary was decide
   five and reaches the browser. Ask both questions before leaving something off.
 - **Anything that is not a dependency update.** No feature, fix or documentation branch automerges,
   and no `task/` branch does — nothing in this repository merges itself but Renovate. For a feature
-  or a fix the lead still asks and the user still answers. **A documentation-only pull request no
-  longer needs the question**, and that is a second licence rather than a second automerge: see
-  *A documentation-only pull request skips all four*, and the paragraph below for how to tell them
-  apart.
+  or a fix the lead still asks and the user still answers. **A pull request inside the
+  `Detect changes` safe list no longer needs the question** — documentation, and since 2026-09-08
+  `renovate.json` with it — and that is a second licence rather than a second automerge: see
+  *A pull request no CI job can speak to skips all four*, and the paragraph below for how to tell
+  them apart. Note where that puts this very boundary: **`renovate.json` is where the automerge
+  rules live, so a change to them is now the lead's to merge**, which the user decided knowingly
+  (#970).
 
 **How to tell an authorised exception from a broken process**, which is the reason this is written
 down at all: somebody reading `main`'s history later will find merges nobody approved, and needs to
@@ -990,18 +993,28 @@ merge with nothing read at all.**
 
 **There are now three authorised shapes, and they are not the same licence.** A Renovate merge has
 had **nobody** verify it — the five required checks are the whole of the review, which is why the
-boundary above is drawn so tightly. A documentation-only pull request merged by the lead **has been
-read by a person, and by one who did not write it**; what was dropped is the user's second yes after
-that reading, not the reading. **Process work in `.github/`, `scripts/` and `package.json`, merged
-by the lead, is the third** — the same licence as the second, extended to paths that run the whole
-suite rather than skipping four fifths of it (*Process work the lead may merge*, below).
+boundary above is drawn so tightly. A pull request inside the `Detect changes` safe list, merged by
+the lead, **has been read by a person, and by one who did not write it**; what was dropped is the
+user's second yes after that reading, not the reading. **Process work in `.github/`, `scripts/` and
+`package.json`, merged by the lead, is the third** — the same licence as the second, extended to
+paths that run the whole suite rather than skipping four fifths of it (*Process work the lead may
+merge*, below).
 
 Each has its own signature in the history, and they are worth telling apart: Renovate's is opened by
 `app/renovate` and merged with no human in the timeline at all; the second touches only `*.md`,
-`docs/**` and `.claude/**` and reports four checks skipped; the third touches process paths, runs
-everything, and is merged by the lead with a green run behind it. Anything outside those three
-shapes that reached `main` without somebody having said yes is the process failing, not an exception
-being exercised — report it as a finding rather than assuming it was fine.
+`docs/**`, `.claude/**` and `renovate.json`, and reports four checks skipped; the third touches
+process paths, runs everything, and is merged by the lead with a green run behind it. Anything
+outside those three shapes that reached `main` without somebody having said yes is the process
+failing, not an exception being exercised — report it as a finding rather than assuming it was fine.
+
+**The second shape's membership widened on 2026-09-08, and the sentence above had to widen with
+it** — which is worth naming because it is the failure this file already warns about, arriving in
+the place it warned about. Named for its files rather than for its rule, the second shape read as
+*documentation only*, and a `renovate.json` pull request merged by the lead — authorised, and the
+right thing to do — matched none of the three. **A stale authorisation list manufactures a finding
+against somebody doing the right thing.** So this sentence, its twin in *Keeping this file honest*,
+and the same list in `backlog-review.md` are three copies of one claim: whoever moves the safe list
+again moves all three.
 
 The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
 only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
@@ -1016,22 +1029,33 @@ Dashboard. So **every backlog review sweeps the open Renovate pull requests** an
 the stale ones (`backlog-review.md`). That sweep is not decoration on the automerge; it is the half
 that makes the other half safe, and neither half may be enabled without the other.
 
-### A documentation-only pull request skips all four
+### A pull request no CI job can speak to skips all four
 
 Since #798, a `Detect changes` job runs first and four of the five required jobs are gated on its
-output, so a pull request touching only `*.md`, `docs/**` and `.claude/**` reports those four as
-**skipped** and is mergeable in seconds. GitHub counts a skipped required check as satisfied, which
-is why the gate is a job-level `if:` and never a workflow-level `paths-ignore:` — a workflow that
-does not run reports no contexts at all, and the pull request would wait on five `expected` checks
-for ever. The reasoning lives in full in `.github/workflows/ci.yml`, next to the job.
+output, so a pull request touching only `*.md`, `docs/**`, `.claude/**` and `renovate.json` reports
+those four as **skipped** and is mergeable in seconds. GitHub counts a skipped required check as
+satisfied, which is why the gate is a job-level `if:` and never a workflow-level `paths-ignore:` —
+a workflow that does not run reports no contexts at all, and the pull request would wait on five
+`expected` checks for ever. The reasoning lives in full in `.github/workflows/ci.yml`, next to the
+job.
+
+**The heading no longer says *documentation*, and that is the change of 2026-09-08 (#970).** The
+list was named for what its first three entries happened to be; what it actually holds is **paths
+no job in this workflow can say anything about**. `renovate.json` is the fourth and it is not
+documentation: **nothing in this repository reads it** — zero hits across `src/`, `scripts/` and
+`extension/` — because it is consumed by Renovate's service on GitHub, so the four gated jobs never
+had anything to report about a change to it. It is a single filename rather than a glob: `*.json`
+would sweep in `package.json` and `tsconfig.json`, which is the opposite of what was decided. The
+measurement behind it is small and cuts the same way either direction — `renovate.json` had been
+touched five times in the project's history, four of them with no application file in the diff.
 
 **The fifth is not gated, and it does run.** `Closing reference check` asks what a pull request
 *says* rather than which files it touches, and both incidents that produced that rule were
 documentation-only — so gating it here would switch it off in exactly the case that produced it
 (#790). The heading is therefore exact rather than loose: four are skipped, one runs, and it answers
 in about three seconds, which is why *mergeable in seconds* survives. What does not survive is the
-inference that a documentation-only pull request has nothing at all to wait for. It has one check,
-and that check can be red.
+inference that such a pull request has nothing at all to wait for. It has one check, and that check
+can be red.
 
 Two things follow for a session. **The list is a whitelist**: anything else — `package.json`,
 `pnpm-lock.yaml`, `prisma/**`, `.github/**`, `scripts/**`, the compose files, `extension/**` other
@@ -1044,19 +1068,33 @@ decision that afternoon (#906). The authorisation reuses this whitelist exactly,
 the whitelist exists: where the four gated checks report *skipped* and the fifth answers in seconds,
 there is no CI run worth waiting for, so the verification **is** the lead's read of the diff, which
 this file already says in *What this is not*. What goes is a question whose answer was never in
-doubt; anything touching `src/`, `prisma/`, the compose files or dependencies still asks — and
-`.github/`, `scripts/` and `package.json` moved out of that list on 2026-09-08, which the next
-section records. **It is not automerge** — a person still verifies, and that person is the lead.
+doubt; anything touching `src/`, `prisma/` or the compose files still asks, as does a change to a
+dependency itself — and `.github/`, `scripts/` and `package.json` moved out of that list on
+2026-09-08, which the next section records. **It is not automerge** — a person still verifies, and
+that person is the lead.
+
+**Adding a path here grants that merge licence too, and for `renovate.json` the user took both
+knowingly.** Membership does two jobs — which checks run, and what the lead may merge on its own
+read — and the second is invisible from `ci.yml`, which is why it is written beside the `case` there
+as well as here. So a `renovate.json` change is now the lead's to merge without the user's
+go-ahead, **and that includes changes to the automerge boundary and to the never-alone list** that
+*Automerge is the one exception* describes. Both consequences were put to him on 2026-09-08 and he
+took both, in these words: *keep one list, add `renovate.json` there; I do not see a need to review
+Renovate changes* (#970). **It is a priced decision, not an oversight** — a later reader finding a
+merge licence over Renovate configuration should not "fix" it back, and the lead's own reading, that
+the coupling argued for leaving the file outside the list, was refuted by the user and is recorded
+in that issue. What the argument turns on is a judgement only he can make, so anybody proposing to
+split the list in two (option A there) is reopening his decision, not correcting a defect.
 
 ### Process work the lead may merge
 
 **Since 2026-09-08 the lead may also merge process work in `.github/`, `scripts/` and
 `package.json` on its own verification.** Decided by the user, in the lead's own channel, answering
-a question that named those three paths. It is the documentation-only licence of the section above
-extended to process paths, and the reasoning is the same: a person who did not write the change
-reads it, and what is dropped is the user's second yes after that reading.
+a question that named those three paths. It is the safe-list licence of the section above extended
+to process paths, and the reasoning is the same: a person who did not write the change reads it, and
+what is dropped is the user's second yes after that reading.
 
-**What it is not.** These paths are **outside** the documentation whitelist, so `Detect changes`
+**What it is not.** These paths are **outside** the `Detect changes` safe list, so `Detect changes`
 gates nothing away and the full suite runs. The verification is therefore *the lead's read of the
 diff **and** a green run*, never the read alone — a stricter bar than the second shape, not a
 looser one. And it does not reach product: `src/`, `prisma/`, the compose files and dependencies
@@ -1172,8 +1210,8 @@ of them gets read without the other.
    has reported is not necessarily finished**; it may still be acting on a message from the lead,
    which is exactly what had happened when `540712f` went to `main` unread.
 3. **A refused merge is a signal, not a transient.** `gh pr merge` declining with *"add the `--auto`
-   flag"* means the requirements are not met **right now**, and for a documentation-only pull
-   request whose four gated checks are skipped it is nearly always one of two things: the branch
+   flag"* means the requirements are not met **right now**, and for a pull request inside the
+   safe list, whose four gated checks are skipped, it is nearly always one of two things: the branch
    has fallen behind, or `Closing reference check` — the one check such a pull request does run —
    has not reported yet, or is red. Go back to step 2 before retrying; retrying without re-checking
    is the exact sequence that produced the unread merge.
@@ -1566,13 +1604,17 @@ Every backlog review asks whether the model above still describes what actually 
 - Did a task session stall waiting on the lead, and for how long?
 - Did the lead answer something that was not written down anywhere?
 - Did anything reach `main` without the user's explicit go-ahead? **Three answers are authorised
-  and no more**: a Renovate automerge inside the boundary above, a documentation-only pull request
-  the lead read and merged (#906), and process work in `.github/`, `scripts/` or `package.json`
-  merged by the lead (2026-09-08, *Process work the lead may merge*). Check that each really was
-  inside its own boundary — they are three different boundaries, and the third is the one this
-  question named as a failure until #958. **A stale authorisation list does not merely fail to
-  help: it manufactures a finding against somebody doing the right thing**, which is the most
-  expensive way for a sentence here to go out of date.
+  and no more**: a Renovate automerge inside the boundary above, a pull request inside the
+  `Detect changes` safe list — `*.md`, `docs/**`, `.claude/**` and, since 2026-09-08,
+  `renovate.json` (#970) — that the lead read and merged (#906), and process work in `.github/`,
+  `scripts/` or `package.json` merged by the lead (2026-09-08, *Process work the lead may merge*).
+  Check that each really was inside its own boundary — they are three different boundaries, the
+  third is the one this question named as a failure until #958, and the **second has since changed
+  membership** rather than staying put (2026-09-08, #970). **A stale authorisation list does not
+  merely fail to help: it manufactures a finding against somebody doing the right thing**, which is
+  the most expensive way for a sentence here to go out of date. That is why the safe list is spelled
+  out above rather than referred to, and why moving it means moving this line, its twin in
+  *Automerge is the one exception*, and the same list in `backlog-review.md` together.
 - Is automerge still working at all? Its whole failure mode is silence, so the answer comes from
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
