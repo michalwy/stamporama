@@ -852,6 +852,13 @@ has a whole section on exercising work in a browser afterwards. That is right fo
 wrong for this one. **It is a decision, not an oversight; do not "fix" it back.** If a change really
 does need a browser, ask the user first.
 
+**The position was taken on 2026-09-06, in this file's first commit (#780)**, and it replaced a
+permissive predecessor rather than writing down what was already happening: until that day AGENTS.md
+told a session that *had* started a dev server for verification to stop it before finishing, which is
+a tidying rule and not a prohibition. That is what the date is for — it lets a reader tell a decision
+that was taken from practice that merely accumulated, and date the reason above when weighing whether
+it still holds.
+
 ### If nobody could see it, the user looks before the merge
 
 The rule above says no session can verify a visual change. It did not say who does, or when, and in
