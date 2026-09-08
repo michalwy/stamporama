@@ -127,13 +127,19 @@ one of those three, and each is load-bearing:
    signal names what actually landed, and **the lead re-briefs at that point** rather than assuming
    a prompt written hours earlier still describes the issue.
 
-**The chip's title says that it is waiting — in whatever words.** *"Hold for the lead's signal"* is
-the usual phrasing and *"Pool worker 07 — awaiting assignment"* discharges it just as well. He is
-choosing what to click and when, and a title saying so tells him it costs nothing to start it now;
-one that does not, does not. **The convention is what a title says, not which phrase it uses**, and
-it is load-bearing twice over: since *A held session's worktree is not stale* the same marker also
-tells a sweep to leave the worktree alone, and a rule matched against one phrase would strand every
-session that worded it differently.
+**The chip's title says what the session is, and since 2026-09-08 it says it in a fixed
+vocabulary** (*Session titles*, below). A pooled worker is `Worker 07`; the moment it is assigned it
+becomes `#812: quick-add an area from the filter facet`. He is choosing what to click and when, and
+a title saying the session is waiting tells him it costs nothing to start it now; one that does not,
+does not.
+
+**Until that date the rule was deliberately looser — *what a title says, not which phrase it uses*
+— and the reason it was written that way is still true.** A rule matched against one phrase
+strands every session that worded it differently, and *awaiting assignment* discharged it as well as
+*hold for the lead's signal* did. What changed is not that the argument failed but that the user
+set the vocabulary, which buys back the checkability a free-form convention cannot have. Both
+readings fail safe in the same direction, so nothing that was written under the old one is stranded
+by the new one.
 
 **The lead spawns its own successor** the same way: the handover as the prompt, and a hold on the
 signal. That removes the one interruption that used to be unavoidable — a handover being something
@@ -193,6 +199,47 @@ user's decision** — #906 marks them as such, and they are refutable:
   change to it is needed and none should be made. **Do not run `pnpm slot` from that worktree
   afterwards** — printing the table allocates, and hands the number straight back (#922, open and
   undecided).
+
+### Session titles
+
+**Decided by the user on 2026-09-08.** A session's title is the only signal that travels between the
+app's session list, the user's screen and the worktree sweep, so it is a fixed vocabulary rather
+than a description:
+
+| state | title |
+| --- | --- |
+| Worker spawned, no task yet | `Worker N` |
+| Worker assigned | `#NNN: <the issue's theme>` |
+| Worker finished, and spent | `[DONE] #NNN: <the issue's theme>` |
+| Release session | `Release: X.Y.Z` |
+| Release cut | `[DONE] Release: X.Y.Z` |
+| The lead, while it is the lead | `===> Leader <===` |
+| A lead that has handed over | `[DONE] Leader YYYY-MM-DD`, the date of the handover |
+
+**The session renames itself on assignment**, because the lead is not there at that moment and the
+worker is. The `[DONE]` prefix goes on when the work is finished — by the session if it is still
+awake, and by the lead otherwise, since the lead is who learns that a pull request merged.
+
+**`[DONE]` is the load-bearing half, and it is what the worktree sweep now tests.** Everything else
+in the table is for the user reading his own screen; the prefix is for a machine. It replaces
+*resolve the worktree to its session, then go and establish whether its pull request merged* with a
+string comparison, and it covers the case that test could not see at all — a session that finished
+without ever opening a pull request.
+
+**One task per worker and no recycling** (*The pool of generic workers*), so `[DONE]` is terminal:
+a spent worker is never renamed back. That is why the word is *spent* rather than *idle*.
+
+**What this convention cannot do, said rather than assumed.** Nothing enforces it. A worker that is
+assigned and does not rename looks pooled; a worker that finishes and does not gain its prefix looks
+busy. **Both errors leave a worktree standing**, which is the safe direction — the sweep never
+removes on a missing marker — but it means the register drifts toward *too many* live-looking
+sessions, never toward too few. The backlog review asks after the missing prefixes for that reason
+(*Keeping this file honest*), and a review finding several is reporting a missing mechanism rather
+than a careless session.
+
+**The lead renames the outgoing lead**, since a session that has handed over is by definition no
+longer acting. `[DONE] Leader YYYY-MM-DD` carries the handover date, not the date the session
+started, because what a later reader wants from that row is when this project changed hands.
 
 ## The loop
 
@@ -1308,12 +1355,17 @@ carries the `cwd` it runs in, which for a task session is its worktree path. So 
 anything, resolve the path to its session:
 
 - **No session** for the path → orphaned; remove it.
-- **Holding, or pooled and unassigned** — the title says so in whatever words, *"Hold for the
-  lead's signal"* or *"awaiting assignment"*, which *Spawn ahead and hold* already requires →
-  **not stale, whatever its age**; leave it.
-- **Finished** — its pull request merged, or its work dropped → remove it.
+- **Title begins `[DONE]`** → finished; remove it. Since 2026-09-08 this is the whole test, and it
+  is a prefix rather than a judgement (*Session titles*).
+- **`Worker N`, or `#NNN: …` with no prefix** — pooled and unassigned, or working → **not
+  stale, whatever its age**; leave it.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
+
+**The prefix is doing the work the old test could not.** *Finished* used to mean *its pull request
+merged, or its work dropped* — a fact about GitHub the sweep had to go and establish for every
+worktree, and which is silent about a session that finished without opening one. `[DONE]` is
+put there by whoever knows, at the moment they know.
 
 **The lead keeps no list of its own, and deliberately not.** A list the lead kept would die with the
 lead; this one is the app's, is keyed by the worktree path, and outlives both the worktree and the
@@ -1382,17 +1434,19 @@ Every backlog review asks whether the model above still describes what actually 
   the backstop for that being forgotten, the way the worktree sweep is the backstop for layer 1 of
   *Worktree cleanup*. It deliberately does not ask whether anybody remembered to sweep — that is a
   question answerable only by remembering, which is this section's own failure mode.
-- Did every **waiting** session's title say that it was waiting? A lookup in the app's session list
-  — machine-local, and no part of the repository — and it asks what a title *says*, not which words
-  it uses: *awaiting assignment* discharges it as well as *hold for the lead's signal* does.
-  **The marker's job changed underneath it**, which is the answer worth having. Until 2026-09-07 it
-  had one purpose, telling the user that a chip costs nothing to start now, and on that reading
-  #868 — waiting only for `main` to carry #844 — needed none, because nothing about it was expensive
-  to click. *A held session's worktree is not stale* gave it a second job that afternoon, and a
-  title written earlier cannot discharge a job that did not yet exist: #868 and the incoming lead
-  were both waiting, and neither says so. It **fails safe** — an unmarked session that is not
-  finished is handed to the user rather than removed — which is why this is a question and not an
-  incident.
+- Does every session's title match the vocabulary in *Session titles*, and in particular **did every
+  finished session get its `[DONE]`**? A lookup in the app's session list — machine-local, and no
+  part of the repository. **The marker's job has changed twice underneath it**, which is the answer
+  worth having. Until 2026-09-07 it had one purpose, telling the user that a chip costs nothing to
+  start now, and on that reading #868 — waiting only for `main` to carry #844 — needed none.
+  *A held session's worktree is not stale* gave it a second job that afternoon, and a title earlier
+  cannot discharge a job that did not yet exist: #868 and the incoming lead were both waiting, and
+  neither said so. 2026-09-08 gave it a third, and this time the missing half is the **end** of a
+  session rather than the start: a finished worker that never gained its prefix is indistinguishable
+  from one still working. It still **fails safe** — an unmarked session is left alone or handed to
+  the user, never removed — which is why this is a question and not an incident. **A sweep that
+  finds several missing prefixes is not reporting sloppiness; it is reporting that renaming on
+  finishing has no mechanism behind it**, which is worth saying plainly rather than fixing quietly.
 - Did a held session **start writing before the thing it waited for had landed**? A commit's author
   date survives the rebase merge, so `main` records when work was actually written; compare it
   against the `mergedAt` of the pull request the session was held on. #868 waited correctly by
