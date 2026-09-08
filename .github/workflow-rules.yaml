@@ -51,21 +51,24 @@ rules:
       `540712f` as its evidence
 
   R-004:
-    status: partial
+    status: implemented
     where: >-
-      docs/agents/collaboration.md § "Verification, not trust" — "a check that cannot see the failure
-      is not a check", and the sweep idiom's silent zero at the end of the same section
-    gap: >-
-      The principle is written twice here in this project's own words and with its own evidence: that
-      green means only *the failure modes these five checks can see did not occur*, so which ones they
-      cannot see is worth asking of any change (#814); and that a sweep must report its own count,
-      because the `grep -oiE` idiom exits 1 and prints nothing where every hit lands near a line end —
-      byte-for-byte what a clean tree prints (#896, #905). Both are the silent-zero family. What is
-      missing is the card's own subject: that **a check's coverage is a property of the credential it
-      runs under**, that a field it could not read is a third outcome rather than a pass, and that
-      "absent" must never be normalised to "empty". Nothing here says a check should be exercised
-      under every identity it will run with. This project also has no ruleset drift check at all
-      (see R-007), which is the comparison the card is about.
+      .github/rulesets/README.md § "What the check could not see, it says" — the three outcomes, the
+      declaration table, the enumerated allowlist and the exercise-under-every-credential clause;
+      implemented in scripts/check-ruleset.mjs and pinned by tests/unit/ruleset-drift.test.ts (#946).
+      docs/agents/collaboration.md § "Verification, not trust" carries the same family in this
+      project's older words — green means only *the failure modes these five checks can see did not
+      occur* (#814), and a sweep must report its own count because the `grep -oiE` idiom exits 1 and
+      prints nothing where every hit lands near a line end (#896, #905)
+    note: >-
+      The card's subject is now stated in this project's own words rather than only its neighbours':
+      that a check's coverage is a property of the credential it runs under, that a field it could
+      not read is a third outcome and not a pass, that "absent" is never normalised to "empty", and
+      that a change is exercised under every identity it will run with. **It is written where the
+      check is**, scoped to the ruleset comparison — which is also the card's own `holds-when`. A
+      second comparison against a caller-varying API, elsewhere in this repository, would not find
+      the rule by looking at AGENTS.md or the process files; if one is ever built, this entry is
+      where that shows up.
 
   R-005:
     status: partial
@@ -113,20 +116,24 @@ rules:
       .github/rulesets/main.json (the branch ruleset, #937) and .github/rulesets/merge-settings.json
       (the seven merge-gating repository settings from decisions/0004, #945), with
       .github/rulesets/README.md declaring both the record and every prose description of `main`'s
-      protection or of how a pull request merges a summary of them
+      protection or of how a pull request merges a summary of them; the ruleset half is enforced by
+      .github/workflows/ruleset-drift.yml, scheduled and advisory (#946)
     gap: >-
-      **Nothing in this repository compares either artifact to GitHub** — no drift check in ci.yml
-      and none on a schedule. #937 left that decision out deliberately because it would add a
-      required context, and #945 derived the second artifact without building one, so both files are
-      verified by a person re-running the pipeline the README documents. A control nobody runs
-      cannot report an unprompted platform write, which is the event the card says no human trigger
-      exists for, and it is the whole of what is left of this rule here. **The coverage half is
-      closed**: the settings the card added in `2c1437e` are enumerated in an artifact derived in
-      this repository, and the two prose claims in docs/agents/collaboration.md that used to assert
-      `delete_branch_on_merge` and `allow_update_branch` from a `gh api` call somebody once made now
-      cite it instead. One smaller restatement survives — prose still spells out the required check
-      names and their count in fifteen places rather than citing main.json, which the deferral
-      paragraph covers by declaring the bullets a summary but does not remove.
+      **The comparison now exists for one of the two artifacts.** #946 wired
+      `scripts/check-ruleset.mjs` to a daily 06:17 UTC run against the live ruleset — advisory and
+      never a required context, for the two reasons `decisions/0003` gives, the decisive one being
+      that an unprompted platform write produces no pull request for a required context to run on.
+      It declares the one field `GITHUB_TOKEN` cannot read rather than inferring it (see R-004), and
+      it was exercised red under both credential states before it was believed.
+      **`merge-settings.json` is compared to nothing**, which is the state #945 left deliberately on
+      the ground that deriving an artifact and comparing it are different acts; extending the check
+      to it is a follow-up and the null guard in its pipeline was written for exactly that caller.
+      **The coverage half is closed**: the settings the card added in `2c1437e` are enumerated in an
+      artifact derived in this repository, and the two prose claims in docs/agents/collaboration.md
+      that used to assert `delete_branch_on_merge` and `allow_update_branch` from a `gh api` call
+      somebody once made now cite it instead. One smaller restatement survives — prose still spells
+      out the required check names and their count in fifteen places rather than citing main.json,
+      which the deferral paragraph covers by declaring the bullets a summary but does not remove.
 
   R-008:
     status: partial
