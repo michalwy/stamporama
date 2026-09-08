@@ -57,6 +57,63 @@ ones.
 track which of three sessions is asking, or repeat the same decision to each of them. The design
 session below is the one deliberate exception.
 
+### The lead's licences are to merge, never to write
+
+**Every authorisation the lead holds over a pull request is an authorisation to *merge* one.**
+*A pull request no CI job can speak to skips all four* and *Process work the lead may merge* both
+say what the lead may put into `main` without the user's second yes. **Neither says anything about
+who may write it**, and the two paragraphs opening this section already answer it: the lead *writes
+little or no code*, and a task session owns its issue end to end. **A documentation task is a
+task** — it gets an issue, a worker and a pull request like anything else, and the lead's part in
+it is the brief, the verification and the merge.
+
+**This is written because the lead read one as the other.** On 2026-09-08 it wrote and merged five
+documentation pull requests in a single session, and opened a sixth, on the stated ground that
+*documentation, so I do not need a tile for this*. **That ground does not exist.** #906 was a
+decision about merging, taken because a pull request whose four gated checks are skipped has no CI
+run worth waiting for; nothing in it moved the writing.
+
+**It accelerated, and that is the part a rule has to catch rather than the first step.** The first
+of the five was defensible on its own terms — the merge boundary had no durable home and was one
+handover from being lost (#958). Each one after it felt more ordinary than the one before, and by
+the third the question had stopped being asked at all. **Nothing goes red when this happens**: the
+pull requests were fine, the checks passed, and what was actually spent was the lead's context —
+which went on writing prose instead of holding the backlog, the `## Depends on` edges and what is in
+flight in another worktree, the one thing this file says is *not cheaply re-derivable from a file*
+and the one thing that dies with the lead.
+
+**The general shape, because this is the second instance in two days: an authorisation is bounded on
+the axis it was granted on.** #941 is the mirror image, recorded by the previous lead against
+itself — *who decides what is worked on* read as *who may merge it*. This one reads *what may be
+merged* as *who may write it*. Same failure, perpendicular axes, and **neither rule would have
+caught the other**, which is why the general form is written down instead of a third instance being
+waited for. A lead extending its own authority along an axis nobody drew a boundary on is the case
+with no detector: it is invisible in the moment, it is always locally reasonable, and the person
+judging it is the person it benefits.
+
+**And when a documentation fix is urgent and no worker is free, the lead waits.** No urgency
+exception is written here, and the omission is deliberate rather than an oversight:
+
+- **An authorisation carrying its own *unless it is urgent* clause is not bounded.** The person
+  deciding it is urgent is the beneficiary, deciding alone, in the moment, with no second reader —
+  which is the shape of every self-granted extension. Had that licence existed in writing on
+  2026-09-08 it would have covered all five, because each felt as reasonable as the first.
+- **What the urgent case is actually protecting is a decision, not a file — and the lead already
+  has an instrument for that which needs no pull request.** #962's real risk was that the merge
+  boundary would be lost with the session that held it. **Filing the issue records it**, in GitHub,
+  durably, and filing is the lead's own job rather than a worker's: #958 is that instrument being
+  used for this very boundary. The prose catches up when a worker writes it, and nothing is at risk
+  in between.
+- **The wait is bounded and visible.** Assigning a free worker costs a message, which reaches the
+  user anywhere; only an empty pool costs a chip, which he clicks when he is next at the computer.
+  The free-worker count is in every status table for exactly this reason (*The pool of generic
+  workers*), so a lead that is about to be blocked by an empty pool can say so a reply earlier.
+
+**What is not restricted, said plainly, because the rule is about pull requests and not about
+typing.** The lead writes the prompt, the issue body, the closing comment, the status table and its
+own handover; none of those is a pull request, and all of them are its job. The line is the pull
+request.
+
 ## How a task session is actually spawned
 
 Getting this wrong once cost a session's worth of work, so it is stated plainly.
@@ -1095,20 +1152,46 @@ paths that run the whole suite rather than skipping four fifths of it (*Process 
 merge*, below).
 
 Each has its own signature in the history, and they are worth telling apart: Renovate's is opened by
-`app/renovate` and merged with no human in the timeline at all; the second touches only `*.md`,
-`docs/**`, `.claude/**` and `renovate.json`, and reports four checks skipped; the third touches
-process paths, runs everything, and is merged by the lead with a green run behind it. Anything
-outside those three shapes that reached `main` without somebody having said yes is the process
+`app/renovate` and merged with no human in the timeline at all; the second stays inside the
+`Detect changes` safe list and reports four checks skipped; the third touches process paths, runs
+everything, and is merged by the lead with a green run behind it. Anything outside those three
+shapes that reached `main` without somebody having said yes is the process
 failing, not an exception being exercised — report it as a finding rather than assuming it was fine.
 
-**The second shape's membership widened on 2026-09-08, and the sentence above had to widen with
-it** — which is worth naming because it is the failure this file already warns about, arriving in
-the place it warned about. Named for its files rather than for its rule, the second shape read as
+**The second shape's membership is not stated here, and that is the fix for how this went wrong
+twice in one day.** Named for its files rather than for its rule, the second shape read as
 *documentation only*, and a `renovate.json` pull request merged by the lead — authorised, and the
-right thing to do — matched none of the three. **A stale authorisation list manufactures a finding
-against somebody doing the right thing.** So this sentence, its twin in *Keeping this file honest*,
-and the same list in `backlog-review.md` are three copies of one claim: whoever moves the safe list
-again moves all three.
+right thing to do — matched none of the three shapes as they were then written. **A stale
+authorisation list manufactures a finding against somebody doing the right thing**, which is the
+most expensive way for a sentence here to go out of date: #958 found this list naming two shapes
+when there were three, and #970 found it stale again the same afternoon.
+
+**So the safe list is stated once, where it is executed.** The membership is the `case` glob in the
+`Detect changes` job in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), and **that is
+the record** — not because it is tidier but because it is the thing that actually decides, in the
+same sense that `main.json` is the record of the ruleset and every sentence about it is a summary.
+Prose naming the members is a copy that can drift from the gate while agreeing with every other
+copy, which is exactly what two of them did. **Prose that points does not drift; prose that copies
+does** (#975).
+
+**The copies were counted rather than assumed, and there were more of them than the issue that
+found them said.** #982 was filed about three: this section, *Keeping this file honest*, and
+`backlog-review.md`. A sweep before editing found **six** statements of the membership — those
+three, the opening of *A pull request no CI job can speak to skips all four*, the comment beside the
+`case` in `ci.yml`, and the `case` itself. The undercount is the same mechanism the list itself
+suffers from: whoever writes down where a claim lives enumerates the places they thought of.
+
+**What each site keeps is decided by what changes.** The **names of the three shapes** change rarely
+— once, from two to three — so they stay spelled out wherever a reader needs to recognise one.
+**Membership changed inside a day**, so it is a pointer everywhere but the gate. That split is the
+answer to the objection that a pointer costs a reader a jump: the checklist reader gets the count
+and the names without leaving the page, and only somebody deciding whether a specific pull request
+was inside the boundary — who has to be exact — follows the link.
+
+**One copy is deliberately left in place**: the comment beside the `case` in `ci.yml`, which records
+that adding a path grants the lead a merge licence over it, and which enumerates the entries four
+lines above the glob it describes. A comment that far from the code it explains is the one drift a
+reader catches for free.
 
 The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
 only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
@@ -1126,8 +1209,10 @@ that makes the other half safe, and neither half may be enabled without the othe
 ### A pull request no CI job can speak to skips all four
 
 Since #798, a `Detect changes` job runs first and four of the five required jobs are gated on its
-output, so a pull request touching only `*.md`, `docs/**`, `.claude/**` and `renovate.json` reports
-those four as **skipped** and is mergeable in seconds. GitHub counts a skipped required check as
+output, so a pull request whose every file is inside that job's safe list reports those four as
+**skipped** and is mergeable in seconds. **The membership is the `case` glob in that job** and is
+not restated here — see *Automerge is the one exception* for why the gate is the record and every
+sentence about it a summary. GitHub counts a skipped required check as
 satisfied, which is why the gate is a job-level `if:` and never a workflow-level `paths-ignore:` —
 a workflow that does not run reports no contexts at all, and the pull request would wait on five
 `expected` checks for ever. The reasoning lives in full in `.github/workflows/ci.yml`, next to the
@@ -1165,7 +1250,9 @@ this file already says in *What this is not*. What goes is a question whose answ
 doubt; anything touching `src/`, `prisma/` or the compose files still asks, as does a change to a
 dependency itself — and `.github/`, `scripts/` and `package.json` moved out of that list on
 2026-09-08, which the next section records. **It is not automerge** — a person still verifies, and
-that person is the lead.
+that person is the lead. **And it is not a licence to write one**: this authorises the merge and
+says nothing about who produces the change, which is *The lead's licences are to merge, never to
+write* above — the reading that section exists because the lead got wrong.
 
 **Adding a path here grants that merge licence too, and for `renovate.json` the user took both
 knowingly.** Membership does two jobs — which checks run, and what the lead may merge on its own
@@ -1194,6 +1281,8 @@ diff **and** a green run*, never the read alone — a stricter bar than the seco
 looser one. And it does not reach product: `src/`, `prisma/`, the compose files and dependencies
 still ask, as do backlog direction, issue closure, anything irreversible, and every change with a
 surface, which also needs his look (*If nobody could see it, the user looks before the merge*).
+**Nor is it a licence to write the change** — the same boundary as the section above, and for the
+same reason (*The lead's licences are to merge, never to write*).
 
 **Why this is written here rather than somewhere tidier, which is the part worth keeping.** For a
 day this boundary was recorded in exactly two places, both outside this repository: the lead's own
@@ -1514,8 +1603,12 @@ port, and an address that moves is an address he has to ask about before he can 
    you have not opened yourself — half of all failed showings are a link returning an error that
    nobody clicked before sending.*
 5. **Then the message, and it carries four things:**
-   - **the exact addresses**, full paths, one per screen he needs to see — not "have a look at the
-     panel";
+   - **the exact addresses, as clickable links**, full paths, one per screen he needs to see — not
+     "have a look at the panel", and not a bare code span. He asked for this on 2026-09-08, having
+     asked for the addresses themselves once already: a code span is an address he has to select
+     and paste, and he pays that on **every screen of every showing**. It is the cheapest thing in
+     this procedure to get right and the likeliest to die at a handover, which is why it is a line
+     here rather than a habit (#974);
    - **three to five specific things to look at** — not "check it works", but "click it a second
      time and see whether the first one is still in the list". #815's own pull request does this,
      listing what to look for *and* what would say it is still wrong, which is what makes a showing
@@ -1611,6 +1704,28 @@ five overlapping issues that nobody reconciles, and the backlog grows sideways f
 worked through. This is the same reason two rules already in force exist: search the backlog for a
 duplicate or a planned child before filing, and split genuinely independent scopes rather than
 bundling them. Both need the whole backlog in view.
+
+**A finding says where else the claim appears — or says it did not look.** One line in the report,
+and the second half of it is load-bearing rather than a softening: a session mid-task must not be
+obliged to run an unbounded sweep before it may say anything, and an explicit *I have not checked*
+tells the lead the sweep is still owed, which a silent omission does not.
+
+**This is *Verification, not trust* across a session boundary rather than within one file.** That
+section's procedure — *a correction is done when the retired claim does not appear anywhere* — is
+addressed to the session **landing** the change. A finder cannot land it: that is what this section
+is for. So the rule pointed at nobody, and the durable record split. #797 found that
+`Album.collectionAreaId`'s schema comment misstated where `{area}` resolves, corrected
+`albums.md` — the file it was already editing — and correctly only *reported* the schema line. **The
+copy that was reasoned about got fixed and the copy nobody was editing kept the error for two
+days**, until #810 was scheduled and a second session re-derived the whole thing from scratch
+(#992).
+
+**The cost is asymmetric in the right direction, which is the whole argument for asking.** The
+finder pays one sweep, on a claim it already has in its head with the tree open; without it the next
+session pays the entire re-derivation, and #810 is what that costs. It is a line in a report and not
+a procedure — the instinct to grow it into a checklist should be resisted, for the reason this file
+gives everywhere else: a rule nobody performs on the way to doing something else reads as coverage.
+Run it the way *Sweeping for a claim* says, positive control included, or say you did not.
 
 ## New backlog items come through the lead
 
@@ -1773,18 +1888,23 @@ Every backlog review asks whether the model above still describes what actually 
 - Did the lead answer something that was not written down anywhere?
 - Did anything reach `main` without the user's explicit go-ahead? **Three answers are authorised
   and no more**: a Renovate automerge inside the boundary above, a pull request inside the
-  `Detect changes` safe list — `*.md`, `docs/**`, `.claude/**` and, since 2026-09-08,
-  `renovate.json` (#970) — that the lead read and merged (#906), and process work in `.github/`,
+  `Detect changes` safe list that the lead read and merged (#906), and process work in `.github/`,
   `scripts/` or `package.json` merged by the lead (2026-09-08, *Process work the lead may merge*).
-  Check that each really was inside its own boundary — they are three different boundaries, the
-  third is the one this question named as a failure until #958, and the **second has since changed
-  membership** rather than staying put (2026-09-08, #970). **A stale authorisation list does not
-  merely fail to help: it manufactures a finding against somebody doing the right thing**, which is
-  the most expensive way for a sentence here to go out of date. That is why the safe list is spelled
-  out above rather than referred to, and why moving it means moving this line, its twin in
-  *Automerge is the one exception*, and the same list in `backlog-review.md` together.
+  Check that each really was inside its own boundary — they are three different boundaries, and the
+  third is the one this question named as a failure until #958. **A stale authorisation list does
+  not merely fail to help: it manufactures a finding against somebody doing the right thing**, which
+  is the most expensive way for a sentence here to go out of date — and the second boundary's
+  membership has already moved once (#970). So read it off the `case` glob in `Detect changes`
+  rather than off any sentence, this one included: the gate is the record and this line is a
+  summary of it (*Automerge is the one exception*).
 - Is automerge still working at all? Its whole failure mode is silence, so the answer comes from
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
+- **Did the lead write a pull request as well as merge one?** All three authorised shapes are
+  licences to merge, and a documentation pull request the lead both wrote and merged is a finding
+  however good the change was (*The lead's licences are to merge, never to write*). It is worth
+  asking here rather than trusting the rule, because it accelerated last time and every step of it
+  was locally reasonable: `gh pr list --state merged --limit 50 --json number,author,files` against
+  who wrote each one.
 - Did a task session open an issue, close one, or merge a pull request?
 - Are there worktrees or `task/` branches left over from work that has already landed?
 - Did a process change land without the memory store being swept for what it retired? Answerable
