@@ -523,6 +523,146 @@ ugrep, which calls it *"exceeds complexity limits"*; `/usr/bin/grep` accepts it.
 `grep -n` first and check the total against what you classified: **a sweep that reports its own count
 cannot return a silent zero.** Measured rather than reasoned about, twice (#896, #905).
 
+## Memory is not versioned, and nothing expires it
+
+Every session here, lead and task alike, starts by reading a store of durable notes that is **not in
+this repository**: `~/.claude/projects/-Users-michalwy-stamporama/memory/`, machine-local, one file
+per fact, with an index loaded into every session's context before it has read a line of code.
+**39 entries as this is written**, and that figure is one to re-run rather than trust —
+`ls ~/.claude/projects/-Users-michalwy-stamporama/memory/` answers it, for the reason this whole
+section is about. No pull request can contradict the store, no required check can go red over it,
+and no session reading it can tell an entry that is still true from one that stopped being true last
+week. It is the only store of process this project has that is **unreviewable by
+construction**.
+
+This is `dev-agent`'s **R-012**, and our #941 audit scored it `absent` — zero hits across
+`AGENTS.md`, `CLAUDE.md`, `README.md` and all three process files, which is what #947 was filed to
+correct. The card counted 37 entries on 2026-09-07 and there are 39 two days later; that drift is
+the smallest available demonstration of its own subject.
+
+**The evidence is ours and none of it is a week old.**
+
+- **The lead handover chip went stale within hours.** The incoming lead of 2026-09-07 was told a
+  release had been cut when it had not, that the pool had free workers when it had one, and that the
+  lead works from the main checkout when the tile had put it in a worktree. Three claims, written in
+  good faith by a lead that knew the state, all false by the time they were read. **Each had a
+  one-command answer** — `gh release list`, the app's session list, `pwd` — and the chip carried the
+  answer rather than the command.
+- **The store contradicts itself, and the newer entry is the wrong one.**
+  `project_docker_orbstack_path` (2026-09-07) records that `docker` is real here, lives in
+  `~/.orbstack/bin` and is merely off a session's PATH, and says in as many words never to conclude
+  a tool is missing from `command -v` plus a guess at install locations.
+  `project_no_docker_in_worktrees` (2026-09-08) then concludes exactly that, from four locations not
+  including `~/.orbstack/bin`, and tells every later session that `pnpm test:integration` cannot run
+  in a worktree at all. Both entries are in the store, the index line carries the wrong half, and
+  **four sessions have now met this and two reached the wrong answer from a correct check** (#933).
+- **An entry that predicted its own obsolescence is still there.** `project_worker_pool_model` ends
+  *"Being written into `docs/agents/collaboration.md` by issue #906; once that lands, read the file
+  rather than this."* #906 landed — *The pool of generic workers* above is that section — so the
+  entry is now a second copy of it, kept harmless only by a sentence its author thought to write.
+  Nothing else in the store does that, and nothing at all removed it.
+- **The process mandate lives in memory and in no repository.** The user delegated process decisions
+  for this project to `dev-agent` on 2026-09-07, and the merge boundary that moved with it on
+  2026-09-08 is recorded in a memory entry and nowhere in git. That is **one handover from being
+  lost, or worse, from surviving after it has been withdrawn.** #958 is where it gets a home; this
+  section is why it needs one.
+
+**Three shapes, and only one of them has an invalidation path.** Sorting an entry is a decision taken
+when it is written, and it is what makes the rules below cheap rather than a standing audit:
+
+- **A working preference** — Polish in every reply, no browser verification, never `git add -A`,
+  split independent scopes. Only the user falsifies one; no repository check ever will, and diffing
+  these against the tree is pure waste.
+- **A machine-local fact** — OrbStack's path, `~/Downloads` blocked by TCC, which ports a slot binds.
+  Falsified by the machine rather than by this repository, and checked by running the command it
+  describes at the moment you rely on it, which costs a second.
+- **A claim about this project** — a design track's shape, the pool model, the merge boundary, a
+  migration rule. **This is the only class the repository can contradict, and it is the class that
+  rots**, because the repository moves and the entry cannot.
+
+**So the write-side rule, and it is the half that shrinks the problem rather than policing it: a fact
+this repository can carry goes in this repository, and the memory entry keeps a pointer rather than a
+copy.** AGENTS.md already says where project knowledge goes — the matching `docs/agents/` topic file
+— and this is the same rule seen from the other side. A pointer costs one line, survives the thing it
+points at being rewritten, and turns a claim nothing can check into one a reader checks by opening
+the file. `project_worker_pool_model` above is what a copy looks like after the file catches up.
+
+**And a durable statement carries the command, not the fact the command answers.** That is the whole
+lesson of the handover chip: a release version, a count of free workers, which checkout a session is
+in, which issues are open — all of these have a one-line answer that is correct whenever it is run,
+and writing the answer down converts something always current into something true once. It applies to
+a memory entry and to a handover prompt identically, and it is the only one of these rules that costs
+nothing at all to follow.
+
+**A fact that lands in memory because there is nowhere else for it is a finding, not a filing.** It
+means a document is missing, and the entry is a placeholder standing where that document should be.
+The mandate is the worked example and it is why #947 and #958 are written with each other in view:
+one says a fact of that shape does not belong in memory alone, the other gives this particular fact
+its home.
+
+**Then the read side, and its trigger is the change that invalidates — not a calendar.** Whoever
+lands a process change sweeps the store for what that change retires, **in the same commit's
+session**. This is not new discipline: it is the rule *Verification, not trust* already states — *a
+correction is done when the retired claim does not appear anywhere* — with its scope corrected.
+`git grep` stops at the worktree, and the store is outside it, so the sweep is
+`grep -rn '<retired claim>' ~/.claude/projects/-Users-michalwy-stamporama/memory/`, counted before it
+is classified, for the reason that section gives. The person landing the change is the one reader who
+knows what it retires, which is why the trigger is there and not somewhere tidier.
+
+**A superseded entry is rewritten to say what the rule is now *and* that it changed and when** —
+never quietly replaced. An entry stating only the new thing cannot tell a later session that a
+reversal happened, and a reversal is exactly what an inherited handover prompt will go on asserting
+for as long as it is inherited. `feedback_polish_to_him_always` is the local worked example: it
+records that the handover chip says statistics tables are in English, that this is wrong or has been
+superseded, and that it will keep arriving and must therefore be overridden deliberately rather than
+followed. An entry that had merely said *"Polish"* would lose that argument every time the chip was
+read.
+
+**Any session that meets a memory entry the tree contradicts reports it to the lead** (*Findings go
+to the lead, not into new issues*). This costs nothing, because that session is already reading both
+halves and is the only reader who ever holds them at once — which is also why it is worth stating at
+all. It does not edit the store: the store is this project's own, and a session editing it is the
+same overreach as a session closing an issue. It does not stop to investigate either; it says what
+the entry claims, what the tree says, and carries on.
+
+**At a handover the artifact to reconcile is the chip, not the store.** The outgoing lead writes no
+state into it that a command answers, and the incoming lead treats every state claim that remains as
+a claim to check before acting on it. R-012 asks that the handover prompt be enumerated alongside the
+memory entries and here it is the sharper half of the two: it is the single artifact through which
+every future lead inherits its understanding of this project, and it is the one nobody edits. **It
+goes stale one clause at a time**, which is why it will not announce itself — a prompt that is
+ninety percent right produces correct behaviour nine times out of ten, and the tenth looks like
+ordinary diligence.
+
+**And a backstop at backlog review, for the same reason the worktree sweep is one.** The write-side
+sweep is the half that gets forgotten, so every review asks which process changes landed since the
+last one — `git log --since=<last review> --name-only -- AGENTS.md docs/agents/
+.github/workflow-rules.yaml .github/rulesets/` — and greps the store for each retired claim. It is
+mechanical, it produces a count, and it deliberately does **not** ask whether anybody remembered to
+sweep, because a question answerable only by remembering is this file's own failure mode wearing a
+checklist (*Keeping this file honest*).
+
+**The whole-store diff is deliberately not the rule, and that is a departure from how R-012 states
+it.** The card asks that a process change *enumerate the project's agent memory and diff it against
+the new process*. At thirty-nine entries that is a task nobody performs on the way to doing something
+else, and **a rule that is skipped is worse than no rule, because it reads as coverage** — which is
+this file's argument against the never-alone list's second criterion and against a sweep that reports
+no count. The card's own evidence points the same way: ohm-sweet-ohm's four stale entries were found
+*during* the change that invalidated them, and darkroom's one was found by enumerating fifteen, which
+is a store you can enumerate. And the card answers itself, about its own registry, in the sentence
+that matters most here — *the mitigation is not diligence, it is that every claim about a project
+should be generated from something that project publishes*. That is the write-side rule above,
+generalised. **A first enumeration of these thirty-nine has still never been run**, and #947 put it
+out of scope on purpose, so that the rule was not written to justify whatever an audit happened to
+find.
+
+**What none of this catches, said rather than glossed.** An entry falsified by something that is in
+no repository at all — a mandate withdrawn, a convention reversed in conversation — is invisible to
+every sweep above, because the invalidating event leaves nothing to grep. darkroom found one of those
+only by enumerating its whole store the day the mandate arrived. There is no detector for that class
+here and none is proposed; the one thing that helps is the write-side rule shrinking the store toward
+facts only the user can invalidate, so that the class with no detector is also the class that is left.
+
 ## A protected `main`, and what it changed
 
 Since 2026-09-06 `main` is protected by a ruleset with **no bypass for anyone, the user included**:
@@ -1172,6 +1312,14 @@ Every backlog review asks whether the model above still describes what actually 
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
 - Are there worktrees or `task/` branches left over from work that has already landed?
+- Did a process change land without the memory store being swept for what it retired? Answerable
+  rather than remembered: `git log --since=<the last review> --name-only -- AGENTS.md docs/agents/
+  .github/workflow-rules.yaml .github/rulesets/` lists the candidates, and each one is a grep of
+  `~/.claude/projects/-Users-michalwy-stamporama/memory/` for the claim it replaced. **The sweep
+  belongs to whoever landed the change** (*Memory is not versioned, and nothing expires it*); this is
+  the backstop for that being forgotten, the way the worktree sweep is the backstop for layer 1 of
+  *Worktree cleanup*. It deliberately does not ask whether anybody remembered to sweep — that is a
+  question answerable only by remembering, which is this section's own failure mode.
 - Did every **waiting** session's title say that it was waiting? A lookup in the app's session list
   — machine-local, and no part of the repository — and it asks what a title *says*, not which words
   it uses: *awaiting assignment* discharges it as well as *hold for the lead's signal* does.
