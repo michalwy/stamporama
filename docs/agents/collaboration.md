@@ -560,7 +560,8 @@ the smallest available demonstration of its own subject.
   *"Being written into `docs/agents/collaboration.md` by issue #906; once that lands, read the file
   rather than this."* #906 landed — *The pool of generic workers* above is that section — so the
   entry is now a second copy of it, kept harmless only by a sentence its author thought to write.
-  Nothing else in the store does that, and nothing at all removed it.
+  It is the only entry that names where its own replacement would land, and nothing removed it
+  when the replacement arrived.
 - **The process mandate lives in memory and in no repository.** The user delegated process decisions
   for this project to `dev-agent` on 2026-09-07, and the merge boundary that moved with it on
   2026-09-08 is recorded in a memory entry and nowhere in git. That is **one handover from being
