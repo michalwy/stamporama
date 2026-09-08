@@ -78,25 +78,39 @@ jobs:
           # Absent is not empty, and that field is where the difference costs most, since an actor
           # able to bypass `main` makes every other line in the artifact advisory.
           #
-          # With RULESET_READ_TOKEN set: the whole gate is compared. Without it: everything except
-          # `bypass_actors`, declared below, named in the output and on the job summary, and claimed
-          # about in neither. dev-agent `rules/R-004` as amended by `decisions/0005` — could-not-see
-          # may exit as success only when declared, never when inferred.
+          # **`RULESET_READ_TOKEN` exists, so the whole gate is compared and nothing is declared
+          # unverifiable.** The `--allow-unverifiable=bypass_actors` this job passed while the
+          # secret was unset is gone, and so is the conditional that produced it (#956). **The
+          # conditional was the exposure.** It was written to retire itself the day the secret
+          # arrived, and it would equally have *returned* the day the secret was deleted — putting
+          # the check back to green-and-partial, passing, naming its exclusion, looking exactly as
+          # it did before, for an event nobody would have read. With no conditional that same
+          # deletion leaves `bypass_actors` absent and undeclared, which is exit 1. **The removal
+          # converts a silent regression into a loud one**; it is not tidying, and reinstating the
+          # conditional would undo it. `.github/rulesets/README.md` keeps the declaration mechanism
+          # documented, because a future blind spot may need it.
+          #
+          # The rule the removal applies is the one the declaration applied before it — dev-agent
+          # `rules/R-004` as amended by `decisions/0005`: **could-not-see may exit as success only
+          # when declared, never when inferred.** Nothing is declared here now, so nothing that
+          # cannot be seen exits as success.
+          #
+          # **An expired token is not a deleted secret**, and only one of the two was ever the
+          # concern: an expired token passes no declaration either way and fails on the API call,
+          # which is already loud.
+          #
+          # The fallback to `github.token` stays for the sake of that failure. Without it a deleted
+          # secret leaves `gh` unauthenticated and the job dies on whatever error that produces;
+          # with it the run reaches the comparison and fails with the message that names the field,
+          # says why absent is not empty, and gives the one action that fixes it.
           #
           # The token wanted is a fine-grained one with Administration: read on this repository.
           # **Creating it and setting the secret are the owner's, never a session's or a lead's.**
           GH_TOKEN: ${{ secrets.RULESET_READ_TOKEN || github.token }}
-          # Evaluated when the workflow is parsed, so the declaration disappears by itself the day
-          # the secret exists and nobody has to remember to remove it. A token that is set but still
-          # cannot read the field is a misconfigured token rather than a deliberate choice, and
-          # fails here rather than being waved through. `bypass_actors` is the only name the script
-          # accepts — the declarable set is an enumerated allowlist, not "whatever the response
-          # happened to omit", because `rules` is a top-level key too.
-          UNVERIFIABLE: ${{ secrets.RULESET_READ_TOKEN == '' && '--allow-unverifiable=bypass_actors' || '' }}
         run: |
           set +e
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          node scripts/check-ruleset.mjs $UNVERIFIABLE 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/check-ruleset.mjs 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

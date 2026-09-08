@@ -69,6 +69,14 @@ rules:
       second comparison against a caller-varying API, elsewhere in this repository, would not find
       the rule by looking at AGENTS.md or the process files; if one is ever built, this entry is
       where that shows up.
+      **No declaration is currently in force, and the mechanism is still the card's** (#956):
+      `RULESET_READ_TOKEN` exists, the run compares `bypass_actors` and excuses nothing, and the
+      three outcomes, the table and the enumerated allowlist stay documented and implemented for the
+      next field the platform is observed to redact. What went is the workflow conditional that
+      passed the declaration only while the secret was unset — it retired itself when the secret
+      arrived and would have *restored* itself if the secret were deleted, returning the check to
+      green-and-partial for an event nobody reads. Absent and undeclared is now exit 1, which is
+      this card's own answer rather than a departure from it.
 
   R-005:
     status: partial
@@ -123,8 +131,11 @@ rules:
       `scripts/check-ruleset.mjs` to a daily 06:17 UTC run against the live ruleset — advisory and
       never a required context, for the two reasons `decisions/0003` gives, the decisive one being
       that an unprompted platform write produces no pull request for a required context to run on.
-      It declares the one field `GITHUB_TOKEN` cannot read rather than inferring it (see R-004), and
-      it was exercised red under both credential states before it was believed.
+      It declared the one field `GITHUB_TOKEN` cannot read rather than inferring it (see R-004), and
+      was exercised red under both credential states before it was believed. **Since #956 it declares
+      nothing**: the `RULESET_READ_TOKEN` secret exists, every recorded field including
+      `bypass_actors` is compared, and deleting that secret fails the check instead of quietly
+      returning it to green-and-partial.
       **`merge-settings.json` is compared to nothing**, which is the state #945 left deliberately on
       the ground that deriving an artifact and comparing it are different acts; extending the check
       to it is a follow-up and the null guard in its pipeline was written for exactly that caller.
