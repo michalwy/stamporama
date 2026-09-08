@@ -106,6 +106,12 @@ pnpm test:unit
 pnpm test:integration   # starts its own throwaway Postgres via docker-compose.e2e.yml
 ```
 
+`pnpm test:integration` needs `docker` on your `PATH`. If it is not there the script says so and
+stops, and prints the `PATH` it was given — because *absent from this shell's PATH* and *not
+installed* are different things, and a shell inherits its `PATH` from whatever started it, which
+can be older than your current configuration. Check in a shell you opened yourself before
+concluding Docker is missing (#933).
+
 The Prisma client under `src/generated/prisma/` is generated rather than committed, and nothing in
 git creates it: without it `pnpm typecheck` fails in hundreds of places that are perfectly correct,
 which reads as a broken tree rather than a missing step. `pnpm typecheck`, `pnpm test:unit` and
