@@ -1154,7 +1154,9 @@ most branches that stayed open for more than an hour.
 ### Who moves a branch that has fallen behind
 
 **The session stops rebasing once it has pushed and reported; the lead updates the branch from
-there**, with `gh pr update-branch --rebase`, and reads the CI run that follows.
+there**, with `gh pr update-branch --rebase`, and reads the CI run that follows. **That boundary is
+a state and not a one-way door**: a re-brief hands the branch back, and the subsection below is that
+half of it.
 
 Both halves are separate claims and both are needed. **The session stops** because a further
 re-verify costs a full local suite run and buys nothing CI is not about to run anyway: the discipline
@@ -1162,6 +1164,43 @@ above is for a branch **still being worked on**, and nothing had ever said where
 updates** because otherwise the branch never merges at all, and because the lead is the one who then
 reads the run — an `update-branch` costs one CI run and no local suite run, and that asymmetry is the
 whole point.
+
+#### A re-brief hands the branch back, and it is a state rather than an event
+
+**The sentence above states the handover as something that happens once, and it does not.** A
+session that has been re-briefed is working again, and the branch is its own again — nothing in the
+event wording says so, and on 2026-09-08 both parties followed the file and collided over the same
+commit (#933 / PR #980, filed as #984).
+
+So read it as a state. **The branch is the lead's only while nobody is briefing the session**: the
+session's from the brief until it reports, the lead's from the report until the next brief, and it
+alternates as often as that happens. A report is not a door that shuts.
+
+**Who announces the handback depends on where the brief came from, and both directions are needed.**
+
+- **The lead re-briefs.** No announcement is required, because sending the message *is* the
+  handback; what is required is that the lead then act on its own knowledge. Having messaged a
+  session, do not run `update-branch`, do not arm auto-merge and do not merge until it reports
+  again. **Knowing and not acting are different things, and it is the second that failed here** —
+  which is why this is written as a prohibition rather than left to follow from the lead being
+  informed.
+- **Anyone else re-briefs.** Then only the session knows. The user reaching a session directly is
+  not exotic here: *If nobody could see it, the user looks before the merge* has his comments
+  during a showcase turning into fixes on the branch, and a design session talks to him by
+  definition. None of that is visible to the lead, so **a session re-briefed by anyone but the lead
+  tells the lead it is working again, before it starts.** One line. An announcement somebody must
+  remember is the weaker instrument, which is why it is asked for only in the case where nothing
+  else can supply it.
+
+**It failed safe by one flag, and that is why a flag is named in a file that mostly states
+principles.** The lead's `gh pr update-branch --rebase` rewrote the commit the session was amending;
+the session's `--force-with-lease` refused with *stale info*, and it recovered by fetching and
+rebasing its amended work itself. **A bare `--force` would have discarded the lead's rebase with
+neither party noticing.** So: **force-push with `--force-with-lease`, never bare `--force`.** The
+lease is what converts this collision from silent loss into a refusal somebody has to read — the
+same reason this file spells `gh pr view <n> --json closingIssuesReferences` rather than saying
+*check the references*. A guard that is one word long, against a failure mode no required check can
+see, is worth its line.
 
 **Nothing here closes the loop by itself, and that was got wrong twice before anybody checked:**
 
@@ -1194,7 +1233,8 @@ them. Every one of the four re-runs caught nothing (#854).
 **Draining a queue of verified branches is one branch at a time, and the head is re-read at the
 moment of merging.** Both halves are the lead's merge loop and both failed on 2026-09-07 (#905);
 they are written here together, under the verb they are about, because split across two sections one
-of them gets read without the other.
+of them gets read without the other. **The re-read half then failed a second time, on 2026-09-08, in
+a way that went green** — which is why it is now three steps rather than one (#984).
 
 1. **Update one branch. Not two.** `gh pr update-branch --rebase`, wait for green, merge — and only
    then touch the next. The intuition to update several at once is that their CI runs would overlap;
@@ -1202,26 +1242,60 @@ of them gets read without the other.
    second**, which then needs another update and another run. Draining N verified branches costs
    N−1 update cycles: that is the floor, not a target to beat, and parallelising the updates does
    not lower it — it only spends the waste earlier.
-2. **Re-read the head immediately before merging.** `gh pr view <n> --json headRefOid`, against the
-   SHA the verification was performed at. Verification is a snapshot and merging is a later act, and
-   nothing else here says to re-take the snapshot at the moment of the act: this section's opening
-   covers the **base** moving (#854), and *Verification, not trust* covers what is **already on the
-   branch** (#891). This is the third case — the branch itself growing in between. **A session that
-   has reported is not necessarily finished**; it may still be acting on a message from the lead,
-   which is exactly what had happened when `540712f` went to `main` unread.
-3. **A refused merge is a signal, not a transient.** `gh pr merge` declining with *"add the `--auto`
+2. **Re-read the head immediately before merging** — `gh pr view <n> --json headRefOid` —
+   **against a SHA you wrote down when you acted, never one you have just fetched.** Verification is
+   a snapshot and merging is a later act, and nothing else here says to re-take the snapshot at the
+   moment of the act: this section's opening covers the **base** moving (#854), and *Verification,
+   not trust* covers what is **already on the branch** (#891). This is the third case — the branch
+   itself growing in between. **A session that has reported is not necessarily finished**; it may
+   still be acting on a brief from the lead or from the user, which is exactly what had happened
+   when `540712f` went to `main` unread, and again in #984.
+
+   **The value to compare against is the lead's own record of its last act on that branch** — the
+   SHA the diff was read at, or the SHA its `update-branch` produced, whichever came later. Both are
+   the lead's. **Neither is the session's, which is why the report is the wrong place to carry
+   this**: step 1 moves the head as a matter of course, so a SHA quoted in a report is stale by
+   construction in precisely the case the check exists for, and asking a session to supply half of
+   the lead's control would make the control worse rather than better.
+
+   **Re-fetching the value is the failure, and it is indistinguishable from the check working.** On
+   2026-09-08 the lead re-read the head and compared it against a SHA it had itself pulled from the
+   same, already-moved branch minutes earlier. They matched, the check went green, and the
+   implementation the user had **not** chosen merged. A branch compared against itself agrees every
+   time (#984).
+
+3. **Where the head is not the SHA you recorded, read the delta — not the branch again.**
+   `git range-diff <recorded>...<head>` on a freshly fetched branch answers *what moved under me* in
+   one command, and it is the right instrument because it survives a rebase: after your own
+   `update-branch` it reports the base moving and the patches unchanged, and after a rewrite it
+   reports the content. `git diff <recorded> <head>` will do where nothing was rebased.
+
+   **This is not a re-verification and must not be allowed to grow into one.** The suites are CI's
+   job and gate the merge anyway; what no check can answer is whether what sits on the branch is
+   still the change that was verified and chosen, and that is a question about the delta rather than
+   about the branch. **A rule costing a full re-verification is a rule that gets skipped, and a
+   skipped rule reads as coverage** — this file's own argument against the never-alone list's second
+   criterion, turned on itself.
+
+   `9cb5c06` verified, `13135ec` from the lead's own `update-branch`, `721b173` from the session's
+   rewrite. One `range-diff` across the last pair shows the chosen implementation being taken out,
+   in a few lines. The identifiers said nothing, and there were three of them (#984).
+
+4. **A refused merge is a signal, not a transient.** `gh pr merge` declining with *"add the `--auto`
    flag"* means the requirements are not met **right now**, and for a pull request inside the
    safe list, whose four gated checks are skipped, it is nearly always one of two things: the branch
    has fallen behind, or `Closing reference check` — the one check such a pull request does run —
-   has not reported yet, or is red. Go back to step 2 before retrying; retrying without re-checking
-   is the exact sequence that produced the unread merge.
+   has not reported yet, or is red. Go back to steps 2 and 3 before retrying; retrying without
+   re-checking is the exact sequence that produced the unread merge.
 
-**Neither failure is a case for more diligence, which is why both are mechanical steps.** The
-verification that missed a third commit was correct when it was performed, and the lead that updated
-two branches at once knew quite well that merges serialise. **And the one-at-a-time rule is a
-repeat**: the same correction had been made to an earlier lead, about a drain loop pushing four
-branches per cycle when only one could merge. It was known, said once to somebody who is no longer
-in the conversation, and nowhere in the repository — which is the whole case for writing it here.
+**None of the three failures is a case for more diligence, which is why all three are mechanical
+steps.** The verification that missed a third commit was correct when it was performed; the lead
+that updated two branches at once knew quite well that merges serialise; and the lead that compared
+a branch to itself was running the very command this section prescribes. **And the one-at-a-time
+rule is a repeat**: the same correction had been made to an earlier lead, about a drain loop pushing
+four branches per cycle when only one could merge. It was known, said once to somebody who is no
+longer in the conversation, and nowhere in the repository — which is the whole case for writing it
+here.
 
 ## Branches
 
