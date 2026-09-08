@@ -28,8 +28,8 @@ env:
 jobs:
   # One cheap job that always runs and decides whether this change touches anything the
   # application is built from. Four of the five required jobs below are gated on its output, so a
-  # documentation-only change leaves those four skipped and the pull request is mergeable in
-  # seconds rather than the fifteen minutes the full suite costs (#798). The fifth,
+  # change that stays inside the safe list leaves those four skipped and the pull request is
+  # mergeable in seconds rather than the fifteen minutes the full suite costs (#798). The fifth,
   # `Closing reference check`, carries no `needs:` and runs on every pull request.
   #
   # **The gate is a job-level `if:`, never `paths-ignore` at the workflow level.** `main` requires
@@ -127,22 +127,40 @@ jobs:
           echo "Changed files:"
           printf '%s\n' "$files" | sed 's/^/  /'
 
-          # The question is "is this change documentation only", not "does it contain
-          # documentation": one application file anywhere in the diff runs everything. The
-          # patterns are shell `case` globs, where `*` crosses a `/` — so `docs/*` covers
-          # `docs/agents/albums.md` and `*.md` covers `extension/README.md`.
+          # **What this list means, and it is not "documentation".** A path belongs here when no
+          # job in this workflow can say anything about a change to it. `*.md`, `docs/*` and
+          # `.claude/*` qualify because nothing builds from them; `renovate.json` qualifies
+          # because nothing in this repository reads it at all — it is consumed by Renovate's
+          # service on GitHub, so the four gated jobs never had anything to report about it
+          # (#970, decided by the user on 2026-09-08). The question is whether the whole diff
+          # stays inside the list, not whether part of it does: one file outside runs everything.
+          #
+          # **Membership is load-bearing twice, and the second one is invisible from here.**
+          # Besides deciding which jobs run, this list is exactly what authorises the lead to
+          # merge a pull request without the user's go-ahead (#906, and
+          # `docs/agents/collaboration.md`, *A pull request no CI job can speak to skips all
+          # four*). Adding a path therefore grants a merge licence over it. For `renovate.json`
+          # that consequence was put to the user and **accepted deliberately** — it covers the
+          # automerge boundary and the never-alone list — so it is a decision, not an oversight;
+          # do not "correct" it back. Anything added here in future carries the same second cost,
+          # and it must be weighed before the first one.
+          #
+          # The patterns are shell `case` globs, where `*` crosses a `/` — so `docs/*` covers
+          # `docs/agents/albums.md` and `*.md` covers `extension/README.md`. `renovate.json` is a
+          # single filename on purpose: `*.json` would sweep in `package.json` and
+          # `tsconfig.json`, which is the opposite of what was decided.
           while IFS= read -r file; do
             [ -n "$file" ] || continue
             case "$file" in
-              *.md|docs/*|.claude/*) continue ;;
+              *.md|docs/*|.claude/*|renovate.json) continue ;;
             esac
-            everything "$file is not documentation - running the full suite."
+            everything "$file is outside the safe list - running the full suite."
           done <<EOF
           $files
           EOF
 
           echo "code=false" >> "$GITHUB_OUTPUT"
-          echo "Documentation only - the application suite is skipped."
+          echo "Nothing here that a CI job can speak to - the application suite is skipped."
 
   # `Refs #NNN`, never a closing keyword — the convention of #785 turned into a control (#790).
   #
@@ -156,8 +174,8 @@ jobs:
   # **Deliberately not gated on `Detect changes`.** Every other job below asks "does this change
   # touch the application"; this one asks what the pull request *says*, which is independent of
   # which files it touches. Both of the incidents above were documentation-only pull requests —
-  # exactly the ones `Detect changes` skips — so gating this on it would switch the check off in
-  # the case that produced it.
+  # squarely inside what `Detect changes` gates away — so gating this on it would switch the
+  # check off in the case that produced it.
   #
   # **It checks the pull request, not just the diff**, because a body edited after the last push
   # changes GitHub's answer without changing a commit. Two sources, and they need different
