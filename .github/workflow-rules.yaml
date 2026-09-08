@@ -210,3 +210,29 @@ rules:
       rules, that it has no invalidation path, or that a process change must diff it. This is the
       estate's largest such store (37 entries), and the delegation of process decisions to dev-agent
       currently lives in it and in no repository.
+
+  R-013:
+    status: partial
+    where:
+      - ".github/rulesets/README.md § \"And the coverage question is answered by running it, not by
+        reading it\", and § \"The red-is-correct window\" — a control whose first green is also its
+        first run cannot be distinguished from one incapable of going red, which is why main.json was
+        committed against a four-check ruleset on purpose"
+      - "docs/agents/collaboration.md § \"Verification, not trust\" — *\"did the assertions pass\" is
+        not the check, \"would this have failed if the code were wrong\" is*, the control that passed
+        by the blanket rule's exclusion list rather than by the mechanism it claimed to test (#814),
+        and the rule that a deliberate breakage goes on a throwaway branch (#891)"
+      - "scripts/check-ruleset.mjs — sourceTypeDiagnosis(), whose two branches are planted each way
+        in tests/unit/ruleset-drift.test.ts rather than read (#956)"
+    gap: >-
+      **Two branches of this control have never met the platform, and this entry is where that is
+      said rather than absorbed.** The scheduled trigger has never fired: `.github/workflows/
+      ruleset-drift.yml` was added on 2026-09-08 and every run of it so far came from
+      `pull_request` or `workflow_dispatch`, which is the card's own third instance — a cron that
+      fails by not existing produces no run at all, so its symptom is silence and nothing goes red.
+      No absence detector exists here either, and the card records that shape as open rather than
+      required. And the `source_type` diagnostic's **incident** branch cannot be reached against
+      this repository at all: `michalwy/stamporama` is owned by a `User` account, so no organisation
+      ruleset can exist over it; its only exercise is a fixture. Both are stated in the code and in
+      the pull request that added them, which is what the rule asks for — but stating an unexercised
+      branch is not exercising it, and `implemented` would read as though it were.

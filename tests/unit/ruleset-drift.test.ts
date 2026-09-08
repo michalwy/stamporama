@@ -223,6 +223,42 @@ describe("the ruleset drift check", () => {
     assert.match(output, /cannot exclude rules/);
   });
 
+  // **Both directions, planted rather than trusted** (dev-agent `rules/R-013`). The upstream
+  // implementation of this message was correct to read and wrong in one direction: fed an artifact
+  // claiming `Organization` against a live gate that is `Repository`, it announced that the gate
+  // was now inherited — the one direction in which nothing is inherited and the record is merely
+  // stale. Its first execution would have been the emergency it was written for.
+  //
+  // **The incident branch cannot be reached against the real repository, and is recorded as
+  // unexercised rather than as working.** `michalwy/stamporama` is owned by a `User` account, so no
+  // organisation ruleset can exist over it; the fixture below is the only exercise that branch has
+  // ever had, and no live run will take it.
+  describe("when source_type differs", () => {
+    it("says the artifact is stale when the live gate is still Repository-level", () => {
+      const artifact = committed.replace('"source_type": "Repository"', '"source_type": "Organization"');
+      assert.notEqual(artifact, committed);
+      const { status, output } = run(workspace(liveResponse(), artifact));
+      assert.equal(status, 1, output);
+      assert.match(output, /LIVE gate is still Repository-level \(michalwy\/stamporama\)/);
+      assert.match(output, /Nothing is inherited/);
+      // The direction with no incident in it must not raise one. Matched on the instruction
+      // rather than on the word, which this branch also uses — to deny it.
+      assert.doesNotMatch(output, /Treat this as an incident/);
+    });
+
+    it("calls a live organisation gate an incident, and names where it is administered", () => {
+      const live = liveResponse((ruleset) => {
+        ruleset.source_type = "Organization";
+        ruleset.source = "some-org";
+      });
+      const { status, output } = run(workspace(live));
+      assert.equal(status, 1, output);
+      assert.match(output, /now Organization-level, defined on: some-org/);
+      assert.match(output, /Treat this as an incident/);
+      assert.doesNotMatch(output, /Nothing is inherited/);
+    });
+  });
+
   it("reports a second branch ruleset as drift rather than going quiet", () => {
     const { status, output } = run(
       workspace(liveResponse(), committed, [

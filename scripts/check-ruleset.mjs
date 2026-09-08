@@ -45,7 +45,9 @@ const SNAPSHOT = path.join(process.cwd(), ".github", "rulesets", "main.json");
  * what the README's `del(.id, .node_id, ...)` does. `id`, `node_id`, `created_at` and `updated_at`
  * change when nothing about the protection has; `_links` is a rendering of `id`; `source` is the
  * repository's own name, while `source_type` is kept because "defined on this repository rather
- * than inherited from an organisation" is part of what is being asserted.
+ * than inherited from an organisation" is part of what is being asserted. **That pair is not the
+ * symmetry it looks like, and `source` is stripped from the comparison only to be printed from the
+ * failure message** — `sourceTypeDiagnosis()` below carries the argument.
  *
  * `current_user_can_bypass` is the one that has to go: it answers *may the caller bypass this*, so
  * it is a property of the token and not of the ruleset. Kept, this check would pass for the owner
@@ -126,6 +128,57 @@ function canonical(ruleset) {
  * (dev-agent `decisions/0005`).
  */
 const REDACTABLE_FIELDS = ["bypass_actors"];
+
+/**
+ * **`source` is stripped from the comparison and printed here instead, and that is the whole of
+ * why this function exists.** The pair looks symmetrical and is not (dev-agent, settled
+ * 2026-09-08):
+ *
+ * `source_type` is a **policy fact**. `Organization` over `main` is not a field changing value —
+ * it is the artifact no longer describing a ruleset this repository controls, which is a premise
+ * change and should be the loudest thing this check can say. So it is compared.
+ *
+ * `source` is the repository's **own name**, so comparing it would fire the check on a repository
+ * *rename* — a false positive on the one instrument whose credibility is its entire value. But
+ * once `source_type` moves, *which* organisation administers the gate is the security-relevant
+ * half. A diagnostic in the compared set costs a false positive on every rename; a diagnostic in
+ * the failure message costs nothing and is there at the moment the alarm fires. So it is stripped
+ * from `VOLATILE_FIELDS` above and reported from here.
+ *
+ * **The branch is chosen by what is live, never by what the artifact claims**, and that is the
+ * correction rather than the design. The upstream implementation of this message was fed an
+ * artifact claiming `Organization` against a live gate that is `Repository` — the direction in
+ * which *nothing* is inherited and the record is merely stale — and told its reader the gate was
+ * now inherited from somewhere it could not see change. It would have sent somebody hunting an
+ * incident that does not exist, on the first run of a message written for an emergency, and
+ * **reading the code would not have shown it: it reads correctly** (`rules/R-013`).
+ *
+ * **One of the two branches below cannot be exercised against this repository, and is recorded as
+ * unexercised rather than assumed working.** `michalwy/stamporama` is owned by a **`User`**
+ * account (`gh api repos/michalwy/stamporama --jq .owner.type`), so no organisation ruleset can
+ * exist over it and no real run will ever take the incident branch. Its only exercise is the
+ * fixture in `tests/unit/ruleset-drift.test.ts`, which is what R-013 asks for — say which branch
+ * has never met the platform, and do not report the control as verified where it has not.
+ */
+function sourceTypeDiagnosis(liveRuleset) {
+  const liveType = liveRuleset?.source_type ?? "(absent)";
+  const liveSource = liveRuleset?.source ?? "(not returned)";
+
+  if (liveType === "Repository") {
+    return (
+      `source_type differs, and the LIVE gate is still Repository-level (${liveSource}).\n` +
+      `  Nothing is inherited: the ruleset above is this repository's own. It is the artifact\n` +
+      `  that is stale, not the platform — there is no incident in this direction.\n`
+    );
+  }
+
+  return (
+    `source_type differs, and the LIVE gate is now ${liveType}-level, defined on: ${liveSource}\n` +
+    `  This repository no longer controls its own merge gate: the rules above and the bypass list\n` +
+    `  are administered where it cannot see them change, by people it cannot enumerate from here.\n` +
+    `  Treat this as an incident, not as drift — do not run --write.\n`
+  );
+}
 
 const TOKEN_ADVICE =
   "    Locally: `gh auth login` as a user who administers the repository.\n" +
@@ -349,7 +402,8 @@ function annotate(level, title, message) {
 const write = process.argv.includes("--write");
 const declared = declaredUnverifiable(process.argv);
 const repo = repository();
-const live = canonical(fetchLiveRuleset(repo));
+const liveRuleset = fetchLiveRuleset(repo);
+const live = canonical(liveRuleset);
 
 if (write) {
   // A snapshot written by a token that cannot see everything is an incomplete artifact that looks
@@ -435,6 +489,11 @@ if (drift.length > 0) {
   console.error(`Ruleset check failed: .github/rulesets/main.json does not match ${repo}.\n`);
   for (const { at, file, github } of drift) {
     console.error(`  - ${at}\n      file:   ${show(file)}\n      GitHub: ${show(github)}\n`);
+  }
+  // `source_type` is the one field whose difference is not a difference of degree, so it gets a
+  // sentence of its own rather than a line in the list above.
+  if (drift.some(({ at }) => at === "source_type")) {
+    console.error(sourceTypeDiagnosis(liveRuleset));
   }
   if (unseen.length > 0) {
     console.error(`Not checked, by declaration: ${unseen.join(", ")}.\n`);
