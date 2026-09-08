@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useCallback, useSyncExternalStore } from "react";
+import { useMemo, useCallback, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import { rollUpAreaCounts, type AreaFacet } from "@/lib/area-facets";
 import { getDescendantIds, flattenAreaTree, hasChildAreas } from "./area-helpers";
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 import { Tooltip } from "./tooltip";
 import { SubtreeScopeToggle, useSubtreeScope } from "./subtree-scope";
+import { QuickAddAreaDialog } from "./quick-add-area-dialog";
 import { Icon } from "@/app/icons";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
@@ -74,6 +76,19 @@ interface AreaFilterSidebarProps {
    * one).
    */
   counts?: AreaFacet[];
+  /**
+   * Turn on the **quick-add** shortcut (#776): a `＋` in the panel header that opens the same
+   * create-area dialog the areas management screen uses, with the selected area pre-filled as the
+   * parent. Pass the collection the areas belong to; omit it and the panel is read-only, which is
+   * what the copy pickers do — creating taxonomy is not part of picking copies, and the dialog
+   * would stack a form on top of the picker's own.
+   *
+   * The refresh after a successful create is owned here rather than by the caller. `areas` reaches
+   * every one of these screens as a server-component prop, so the new area appears on a
+   * `router.refresh()` and on nothing else — and a shortcut that each screen had to remember to
+   * refresh is the arrangement that produced #918.
+   */
+  quickAddCollectionId?: string;
 }
 
 export function AreaFilterSidebar({
@@ -82,7 +97,10 @@ export function AreaFilterSidebar({
   onNavigate,
   extraEntry,
   counts,
+  quickAddCollectionId,
 }: AreaFilterSidebarProps) {
+  const router = useRouter();
+  const [addingArea, setAddingArea] = useState(false);
   const flatTree = useMemo(() => flattenAreaTree(areas), [areas]);
 
   const parentIds = useMemo(() => {
@@ -166,12 +184,44 @@ export function AreaFilterSidebar({
   );
 
   return (
-    <CollapsibleFilterPanel
-      title="Filter by area"
-      collapsedLabel="Areas"
-      storageKey="stamporama:area-filter-panel-collapsed"
-      expandedWidth="22rem"
-    >
+    <>
+      <CollapsibleFilterPanel
+        title="Filter by area"
+        collapsedLabel="Areas"
+        storageKey="stamporama:area-filter-panel-collapsed"
+        expandedWidth="22rem"
+        headerAction={
+          quickAddCollectionId ? (
+            <Tooltip
+              content={
+                filterAreaId
+                  ? "Add an area under the selected one"
+                  : "Add a top-level area"
+              }
+              placement="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                onClick={() => setAddingArea(true)}
+                aria-label="Add area"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.75rem",
+                  padding: "0 0.25rem",
+                }}
+              >
+                <Icon name="add" size="sm" />
+              </button>
+            </Tooltip>
+          ) : undefined
+        }
+      >
         <button
           type="button"
           onClick={() => onNavigate(null)}
@@ -432,6 +482,26 @@ export function AreaFilterSidebar({
             </button>
           );
         })}
-    </CollapsibleFilterPanel>
+      </CollapsibleFilterPanel>
+
+      {/* The new area's parent is whatever the tree is filtered to, matching the management
+          screen's per-row *Add sub-area*; with nothing selected it is a top-level area. The
+          selection is deliberately left alone afterwards — a brand-new area holds nothing, so
+          jumping the filter onto it would empty the list the collector is working in. */}
+      {addingArea && quickAddCollectionId && (
+        <QuickAddAreaDialog
+          collectionId={quickAddCollectionId}
+          areas={areas}
+          defaultParentId={filterAreaId ?? undefined}
+          onClose={() => setAddingArea(false)}
+          onCreated={() => {
+            setAddingArea(false);
+            // `areas` is a server-component prop on every screen that renders this panel, so this
+            // is what puts the new area in the tree — see `quickAddCollectionId`.
+            router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }

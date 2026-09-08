@@ -281,6 +281,7 @@ export function WantsListPanel({
         filterAreaId={filterAreaId}
         onNavigateArea={(areaId) => writeStore({ areaId, year })}
         areaFacets={areaFacets}
+        quickAddCollectionId={collectionId}
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year}

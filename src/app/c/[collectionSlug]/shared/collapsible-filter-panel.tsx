@@ -80,6 +80,13 @@ interface CollapsibleFilterPanelProps {
   expandedWidth: string;
   /** Draw the divider on the left edge (for panels that follow another column). */
   borderLeft?: boolean;
+  /**
+   * A control drawn in the header, to the left of the collapse toggle — the area tree's
+   * *Add area* shortcut (#776). It lives in the sticky header rather than under the tree so it
+   * stays reachable however far the tree scrolls, and it is hidden with the panel: a collapsed
+   * strip is 2.25rem wide and has room for one button, which is the one that gets the panel back.
+   */
+  headerAction?: React.ReactNode;
   /** Scrollable panel body (the list of options). */
   children: React.ReactNode;
 }
@@ -97,6 +104,7 @@ export function CollapsibleFilterPanel({
   storageKey,
   expandedWidth,
   borderLeft,
+  headerAction,
   children,
 }: CollapsibleFilterPanelProps) {
   const { loaded, collapsed, toggle } = useCollapsed(storageKey);
@@ -194,23 +202,26 @@ export function CollapsibleFilterPanel({
           }}
         >
           <span style={LABEL_STYLE}>{title}</span>
-          <Tooltip content={`Hide ${title}`} placement="bottom" align="end">
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={`Hide ${title}`}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--color-text-muted)",
-                fontSize: "0.75rem",
-                padding: "0 0.25rem",
-              }}
-            >
-              <Icon name="hidePanel" size="sm" />
-            </button>
-          </Tooltip>
+          <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            {headerAction}
+            <Tooltip content={`Hide ${title}`} placement="bottom" align="end">
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label={`Hide ${title}`}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.75rem",
+                  padding: "0 0.25rem",
+                }}
+              >
+                <Icon name="hidePanel" size="sm" />
+              </button>
+            </Tooltip>
+          </span>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>{children}</div>

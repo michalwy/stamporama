@@ -167,7 +167,9 @@ narrows with it. A single figure means only one accepted combination is priced. 
 lowest-variant estimate, or a format derived from the single by a multiplier. Hover for how
 many of the accepted combinations carry a price at all; nothing shows when none do.
 
-Down the left is the same rail every other list screen carries: the **area tree** and the
+Down the left is the same rail every other list screen carries: the **area tree** — **＋** in
+its header adds an area without leaving the screen, under whichever area is selected
+([Collections](collections.md#filtering-the-issues-stamps-and-copies-lists)) — and the
 **year facets**. Your area and year selection is shared across Stamps, Issues, Inventory
 and this screen, so opening the want list lands you on the scope you were last working in.
 The year is the stamp's own issue year, and the counts say how many wants each year would

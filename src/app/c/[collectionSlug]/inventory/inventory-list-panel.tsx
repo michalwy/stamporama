@@ -1118,6 +1118,7 @@ export function InventoryListPanel({
           filterAreaId={filterAreaId}
           onNavigateArea={handleNavigateFilter}
           areaFacets={areaFacets}
+          quickAddCollectionId={collectionId}
           yearFacets={yearFacets}
           yearsLoading={yearsLoading}
           selectedYear={year || null}
