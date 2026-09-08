@@ -68,6 +68,35 @@ Stripped, because none of it is intent: `id`, `node_id`, `created_at`, `updated_
 `source` (the repository's own name), and `current_user_can_bypass` (which varies by *who is
 asking*, so it would never compare equal twice).
 
+**`source_type` is compared and `source` is not, and they are not the symmetry they look like**
+(settled across the estate on 2026-09-08). `source_type` is a **policy fact**: `Organization` over
+`main` is not a field changing value, it is the artifact no longer describing a ruleset this
+repository controls, and that premise change should be the loudest thing the check can say.
+`source` is the repository's **own name**, so comparing it would fire the check on a **rename** —
+not a policy event at all, and a false positive on the one instrument whose credibility is its
+entire value.
+
+**So `source` moves from the input to the output**: `scripts/check-ruleset.mjs` prints the live
+`source` whenever `source_type` differs. A diagnostic in the compared set costs a false positive on
+every rename; a diagnostic in the failure message costs nothing and is there at the moment the
+alarm fires. The message **branches on what is live, never on what the artifact claims**, and says
+which way the gate moved:
+
+| live `source_type` | what the message says |
+| --- | --- |
+| `Repository` | the gate is still this repository's own — **nothing is inherited, the artifact is stale**, and there is no incident in this direction |
+| anything else | the gate is administered on the named `source`, where this repository cannot see it change — **an incident, not drift**; do not run `--write` |
+
+**That second sentence is why the first exists.** The upstream implementation of this message had
+one direction and used it for both: fed an artifact claiming `Organization` against a live gate
+that is `Repository`, it announced that the gate was now inherited — and would have sent somebody
+hunting an incident that does not exist, on the first execution of a message written for an
+emergency. Reading the code would not have shown it; it reads correctly. Both directions are now
+planted as fixtures in `tests/unit/ruleset-drift.test.ts` (dev-agent `rules/R-013`). **The incident
+branch cannot be reached against this repository** — `michalwy/stamporama` is owned by a `User`
+account, so no organisation ruleset can exist over it — and that is recorded as **unexercised**
+rather than assumed working, here, in the script and in `.github/workflow-rules.yaml`.
+
 **`id` is stripped on purpose, and this is the one worth arguing about.** The ruleset's numeric id
 is a fact about which object GitHub happens to be holding, not about what is intended. If the
 ruleset were ever deleted and recreated with identical rules, a stored id would go stale for a
