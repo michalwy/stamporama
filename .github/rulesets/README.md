@@ -127,6 +127,17 @@ tmp=$(mktemp) \
 The two-step fetch is not clumsiness: the list endpoint does not return `conditions` or `rules`, so
 selecting the right ruleset by what it *does* requires fetching each candidate.
 
+**The `length != 1` guard is the other half of that, and the two halves fail together** (#932).
+Fold the fetches into one call on the list endpoint and the selector has nothing to match — no
+`conditions` come back at all — so `map(select(...))` yields `[]` for a repository whose gate is
+intact, which is byte-for-byte what it yields for one that has no ruleset at all. As written the
+guard converts that into `error("expected exactly one default-branch ruleset, found 0")` and the
+trailing `false` carries it out as a non-zero exit. **Shorten the pipeline and drop the guard with
+it — the tempting simplification, since with one fetch the guard looks redundant — and it writes
+the empty selection and exits `0`.** *Nothing matched* and *nothing is there* have to be told apart
+by something, and here that is the guard rather than the fetch; `docs/agents/collaboration.md`
+§ *Verification, not trust* collects the rest of this family.
+
 **The temp file is load-bearing here for the same reason it is in the other pipeline**, and it is
 worth saying where this one bites. The `jq` guard exists for the case R-007 calls drift: a second
 ruleset appearing that also governs the default branch. A redirection straight at `main.json` opens
@@ -157,8 +168,23 @@ Pinned by the case in `tests/unit/ruleset-drift.test.ts` that refuses a write an
 file is unchanged, because "nothing truncated it" is the kind of property that stays true by
 accident until it does not.
 
-**The normalisation contract**, so that any comparison tool agrees with this file rather than
-merely happening to:
+**The normalisation contract, and which instrument enforces which half of it.** The recipe is one
+recipe, but two different things depend on it and they depend on different properties — so it is
+set out as two lists rather than four equal rules (#940).
+
+**What the comparison depends on**, and the whole of what it depends on:
+
+- **Which fields are stripped** — the seven above, argued one at a time.
+  `scripts/check-ruleset.mjs` parses both sides and compares the structures, so this is the only
+  part of the contract it can see.
+- **Nothing else.** `differences()` pairs array elements by identity rather than by position, so key
+  order, indentation, the trailing newline, and whether `rules[]` is sorted at all are invisible to
+  it. A formatting slip on this side would not fail the daily check.
+
+**What is ours, and is enforced somewhere else entirely** — by
+`tests/unit/ruleset-drift.test.ts`, under the required `Unit tests` context. It runs on any pull
+request that touches `main.json`, which is not a `*.md` path and so is outside the safe list
+`Detect changes` skips the suite for — unlike this README, which is inside it:
 
 - **Object keys sorted** at every level (`jq -S`), so the file does not churn when GitHub changes
   the order it serialises fields in.
@@ -166,8 +192,34 @@ merely happening to:
   order is semantic, so sorting costs nothing and makes a diff mean something.
 - **2-space indent, one trailing newline** — `jq`'s defaults, so the pipeline above needs no
   formatting flags.
-- Re-running the pipeline over an unchanged ruleset must produce a **byte-identical** file. That is
-  the property to check first if a comparison disagrees for reasons that look like formatting.
+- Re-deriving over an unchanged ruleset produces a **byte-identical** file.
+
+**The byte-exact round-trip is worth having whether or not a comparison reads it, which is why the
+answer here is two lists rather than a shorter first one.** It is what `--write` rests on: a
+`--write` that churned formatting would rewrite the artifact on a ruleset nobody changed, and every
+reader afterwards is looking at churn instead of at a decision. And it is what makes this contract
+**checkable at all**: a second implementation of it was believed because it produced byte-identical
+output (#938), and `scripts/check-ruleset.mjs` is a third, pinned byte-for-byte against this file by
+that unit test (#946). A contract that is *complete* and one that is merely *followed by whoever
+wrote it* look identical until somebody re-implements it — and no structural comparison can tell
+them apart, because everything a structural comparison would use to tell them apart it has already
+parsed away.
+
+**So a formatting difference is never evidence that this artifact is stale relative to GitHub.**
+That inference is the one this file most needs a reader not to make, because its next step is the
+failure everything here exists to prevent: bytes differ → the artifact must be wrong → edit it until
+it matches the API. If the bytes differ, the drift check is unaffected and the fault is in the
+derivation; the unit suite is what goes red, and it names the divergence. **The repair is
+`pnpm check:ruleset --write` after a deliberate ruleset change, and never a hand edit toward
+whatever the API happened to return.**
+
+**A neighbouring project's normaliser may strip a superset of these seven, and that is not a
+disagreement to reconcile.** The one this contract was first written against strips eight,
+`source_type` among them, which this artifact deliberately records (#940, and the argument for
+keeping it is above). It produces no false drift, because a normaliser strips from both sides before
+comparing — our extra key goes with it. The reverse would matter: a tool comparing a field this
+artifact does not record. **What governs here is this contract**, and the tool that reads it is
+`scripts/check-ruleset.mjs`.
 
 ## The repository settings: what is recorded, and why so few
 
@@ -213,6 +265,11 @@ now one a diff can show.
 
 The same normalisation contract as the ruleset — keys sorted, 2-space indent, one trailing newline,
 byte-identical on a re-run over unchanged state.
+
+**Here the byte-exact re-run is not one property among several: it is the whole check.** Nothing
+compares this file to anything (*The drift check*, below), so the half the ruleset gets from
+`scripts/check-ruleset.mjs` does not exist for `merge-settings.json` at all — a person re-deriving
+it and finding no diff is the only instrument it has, and that instrument reads bytes.
 
 ```bash
 tmp=$(mktemp) \
