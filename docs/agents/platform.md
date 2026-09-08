@@ -26,7 +26,9 @@ Stack, collection scoping, routing, database and migrations, RSC boundaries, dep
 
 - SPA-like collection interaction: Next.js App Router as route/auth shell, client-side queries/mutations for rich screens.
 
-- TanStack Query for data fetching, TanStack Table for list views.
+- TanStack Query for data fetching. **TanStack Table is not used** — it is in no dependency and no
+  source file imports it; list views are built from the shared list-screen components over plain
+  markup (`ui-patterns.md`).
 
 - Cursor-backed infinite scrolling for large lists via shared primitives.
 
