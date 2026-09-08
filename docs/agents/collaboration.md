@@ -1501,10 +1501,17 @@ anything, resolve the path to its session:
 - **No session** for the path → orphaned; remove it.
 - **Title begins `[DONE]`** → finished; remove it. Since 2026-09-08 this is the whole test, and it
   is a prefix rather than a judgement (*Session titles*).
-- **`Worker N`, or `#NNN: …` with no prefix** — pooled and unassigned, or working → **not
-  stale, whatever its age**; leave it.
+- **`Worker N`, `#NNN: …` or `#NNN[#PPP]: …` with no prefix** — pooled and unassigned, or
+  working, whether or not it has opened a pull request → **not stale, whatever its age**; leave it.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
+
+**The second bullet is the whole test; the third is descriptive.** It enumerates the non-`[DONE]`
+titles only so that *ask the user* stays rare, and it lengthens whenever the vocabulary does — it
+lengthened on 2026-09-08, when a working session gained its pull request number (*Session titles*).
+A longer list invites being read as the decision procedure, and it is not one: titles are
+unenforced, so the enumeration can always be one shape out of date, and every shape it misses falls
+through to *ask the user* rather than into a removal.
 
 **The prefix is doing the work the old test could not.** *Finished* used to mean *its pull request
 merged, or its work dropped* — a fact about GitHub the sweep had to go and establish for every
