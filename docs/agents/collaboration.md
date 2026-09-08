@@ -797,15 +797,20 @@ be able to tell which kind they are looking at. An authorised one is a pull requ
 by `app/renovate` on 13 August, is what one looks like. **Renovate is the only actor permitted to
 merge with nothing read at all.**
 
-**There are now two authorised shapes, and they are not the same licence.** A Renovate merge has had
-**nobody** verify it — the five required checks are the whole of the review, which is why the
+**There are now three authorised shapes, and they are not the same licence.** A Renovate merge has
+had **nobody** verify it — the five required checks are the whole of the review, which is why the
 boundary above is drawn so tightly. A documentation-only pull request merged by the lead **has been
 read by a person, and by one who did not write it**; what was dropped is the user's second yes after
-that reading, not the reading. So the second shape has its own signature in the history: only
-`*.md`, `docs/**` and `.claude/**` touched, opened by a task session, merged by the lead rather than
-by `app/renovate`. Anything outside those two shapes that reached `main` without somebody having said
-yes is the process failing, not an exception being exercised — report it as a finding rather than
-assuming it was fine.
+that reading, not the reading. **Process work in `.github/`, `scripts/` and `package.json`, merged
+by the lead, is the third** — the same licence as the second, extended to paths that run the whole
+suite rather than skipping four fifths of it (*Process work the lead may merge*, below).
+
+Each has its own signature in the history, and they are worth telling apart: Renovate's is opened by
+`app/renovate` and merged with no human in the timeline at all; the second touches only `*.md`,
+`docs/**` and `.claude/**` and reports four checks skipped; the third touches process paths, runs
+everything, and is merged by the lead with a green run behind it. Anything outside those three
+shapes that reached `main` without somebody having said yes is the process failing, not an exception
+being exercised — report it as a finding rather than assuming it was fine.
 
 The trade was taken with its cost stated: a weekly batch that breaks `main` **cannot be bisected,
 only reverted whole**. That is accepted because the batch is patch and minor, outside the list, and
@@ -848,9 +853,50 @@ decision that afternoon (#906). The authorisation reuses this whitelist exactly,
 the whitelist exists: where the four gated checks report *skipped* and the fifth answers in seconds,
 there is no CI run worth waiting for, so the verification **is** the lead's read of the diff, which
 this file already says in *What this is not*. What goes is a question whose answer was never in
-doubt; anything touching `src/`, `prisma/`, `.github/`, `scripts/`, the compose files or
-dependencies still asks. **It is not automerge** — a person still verifies, and that person is the
-lead.
+doubt; anything touching `src/`, `prisma/`, the compose files or dependencies still asks — and
+`.github/`, `scripts/` and `package.json` moved out of that list on 2026-09-08, which the next
+section records. **It is not automerge** — a person still verifies, and that person is the lead.
+
+### Process work the lead may merge
+
+**Since 2026-09-08 the lead may also merge process work in `.github/`, `scripts/` and
+`package.json` on its own verification.** Decided by the user, in the lead's own channel, answering
+a question that named those three paths. It is the documentation-only licence of the section above
+extended to process paths, and the reasoning is the same: a person who did not write the change
+reads it, and what is dropped is the user's second yes after that reading.
+
+**What it is not.** These paths are **outside** the documentation whitelist, so `Detect changes`
+gates nothing away and the full suite runs. The verification is therefore *the lead's read of the
+diff **and** a green run*, never the read alone — a stricter bar than the second shape, not a
+looser one. And it does not reach product: `src/`, `prisma/`, the compose files and dependencies
+still ask, as do backlog direction, issue closure, anything irreversible, and every change with a
+surface, which also needs his look (*If nobody could see it, the user looks before the merge*).
+
+**Why this is written here rather than somewhere tidier, which is the part worth keeping.** For a
+day this boundary was recorded in exactly two places, both outside this repository: the lead's own
+agent memory, and the standing-authorisations file of a cross-project session that held process
+authority for this project between 2026-09-07 and 2026-09-08. When an incoming lead checked the
+second of those, **the boundary was not in it**: that session had never heard it from the user, and
+said so plainly. The rule was live, acted on, and recorded by nobody with the authority
+to record it. That layer was stopped the same day, which turned its file into history; had the
+boundary still lived only there, it would have been lost with it, or worse, survived after being
+withdrawn.
+
+**So: a peer relaying the user's approval is not the user's approval**, and the instrument that
+caught this was reading the file rather than believing the message. That check cost one command and
+it was applied against a claim that would have *expanded* the lead's own authority, which is the
+only direction in which anybody reliably forgets to run it. This is *Memory is not versioned, and
+nothing expires it* arriving in governance rather than in practice, and it is why that section's
+write-side rule — **a fact this repository can carry goes in this repository** — is stated there
+as the load-bearing half rather than as advice.
+
+**One judgement is deliberately left open, and it is the lead's reading rather than the user's
+decision.** Three answers in two days about where this line runs suggests a path list may be the
+wrong shape: the real distinction is *process versus product*, and paths are a proxy that fails at
+its edges — `scripts/check-ruleset.mjs` is process, `scripts/e2e-db.sh` is arguably not. A rule
+phrased on the distinction, with paths as examples, might survive better. Against that, a path list
+is checkable without judgement, which is exactly why #906 chose one. Nobody has weighed the trade;
+do not enforce either reading as settled.
 
 ### Rebase, then re-verify, in that order
 
@@ -1316,10 +1362,14 @@ Every backlog review asks whether the model above still describes what actually 
 
 - Did a task session stall waiting on the lead, and for how long?
 - Did the lead answer something that was not written down anywhere?
-- Did anything reach `main` without the user's explicit go-ahead? **Two answers are authorised and
-  no more**: a Renovate automerge inside the boundary above, and a documentation-only pull request
-  the lead read and merged (#906). Check that each really was inside its own boundary — they are
-  different boundaries.
+- Did anything reach `main` without the user's explicit go-ahead? **Three answers are authorised
+  and no more**: a Renovate automerge inside the boundary above, a documentation-only pull request
+  the lead read and merged (#906), and process work in `.github/`, `scripts/` or `package.json`
+  merged by the lead (2026-09-08, *Process work the lead may merge*). Check that each really was
+  inside its own boundary — they are three different boundaries, and the third is the one this
+  question named as a failure until #958. **A stale authorisation list does not merely fail to
+  help: it manufactures a finding against somebody doing the right thing**, which is the most
+  expensive way for a sentence here to go out of date.
 - Is automerge still working at all? Its whole failure mode is silence, so the answer comes from
   the Renovate sweep in `backlog-review.md`, not from the absence of complaints.
 - Did a task session open an issue, close one, or merge a pull request?
