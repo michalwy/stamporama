@@ -57,7 +57,7 @@
       "automerge": false
     },
     {
-      "description": "NEVER ALONE — TanStack Query and Table, bumped together. AGENTS.md makes both invariants: TanStack Query for data fetching, TanStack Table for list views, through the shared list-screen primitives. The reason this one is never-alone is not a version written down anywhere — it is that its failure mode is invisible to every required check we have. Lint, typecheck and build see types; test:unit is pure logic; test:integration is server-side; Closing reference check reads only the pull request's text. Nothing in the suite exercises a Query cache or a Table interaction, so a minor that changes refetch or invalidation semantics goes green on all five checks and reaches the browser.",
+      "description": "NEVER ALONE — TanStack Query. AGENTS.md makes it an invariant: TanStack Query for data fetching, through the shared list-screen primitives. TanStack Table is kept in matchDepNames deliberately even though nothing depends on it today (#821, ADR-0001 chose it and it was never installed) — the rule costs nothing while the package is absent and is already correct if it is ever added. The reason this one is never-alone is not a version written down anywhere — it is that its failure mode is invisible to every required check we have. Lint, typecheck and build see types; test:unit is pure logic; test:integration is server-side; Closing reference check reads only the pull request's text. Nothing in the suite exercises a Query cache, so a minor that changes refetch or invalidation semantics goes green on all five checks and reaches the browser.",
       "groupName": "TanStack",
       "matchDepNames": ["@tanstack/react-query", "@tanstack/react-table"],
       "schedule": [],
