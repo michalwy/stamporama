@@ -1113,6 +1113,13 @@ copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Ad
 - **Issue** only — no lot cards; every copy in the order grouped by issue **across all lots**.
 - **neither** — a single **flat list** of every copy in the order, with no lot boundaries.
 
+**Arriving from a copy switches the view to Lot.** A copy's
+[**Go to purchase**](inventory.md#going-to-a-copys-purchase) names the lot it is in, and only the
+by-lot view has lot cards to show you — so if you had the order grouped some other way, opening it
+that way puts **Lot** on for you. It is on **for that visit only**: your remembered choice is
+untouched, pressing *Lot* off leaves it off, and opening the order from the Purchases list gives
+you the view you left.
+
 **Showing only what still needs something.** A **Still needs** control on the same row has up to
 three chips — **N to sort**, **⚠ N unpriced**, **N no photos** — counting the whole order. Press one
 to show only those copies, press it again to show everything. A chip with nothing behind it is not
@@ -1149,7 +1156,8 @@ collapsed** — an order is read as the lots in it, and a lot's copies are a sec
 one with its **caret**, or the toolbar's **Expand all** (which becomes **Collapse all** once they
 all are). Two open by themselves — a lot you add while the screen is open, and the lot you arrived
 at from a copy's [**Go to purchase**](inventory.md#going-to-a-copys-purchase) (the card that
-flashed). Either can be closed by hand afterwards. **Lot management** (add stamps,
+flashed — and the view switches to **Lot** so that there is a card to open). Either can be closed
+by hand afterwards. **Lot management** (add stamps,
 edit price, close/reopen, delete) lives only in a **by-lot** view. Sorting is not lot management,
 so **Store** and **Move to location** work in every view — the issue-only and flat views are for
 sweeping through copies and sorting them, and that is exactly what those two acts are for.

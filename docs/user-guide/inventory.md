@@ -322,11 +322,20 @@ A copy bought through a [purchase order](purchases.md) carries a **Go to purchas
 **⋮** menu, naming the order (supplier and date) underneath. It opens that purchase and takes you
 straight to the **lot the copy is in**: the lot's card opens and scrolls into view, and **flashes
 once** as it arrives — a tint and a brief outline — then reads like every other card on the screen.
-There is nothing to close and nothing left behind: the flash says how you got here, which stops
-being useful the moment you have got here. The address bar drops the lot from it too, so reloading
-the page gives you the order and no flash. (If your system is set to reduce motion, there is no
-flash: the scroll and the opened card are the arrival.) A copy you added by hand has no purchase
-behind it, so the entry is simply not there.
+If you had that order's copies grouped some other way, the order screen puts its **Group by** back
+on **Lot** for the visit, since that is the only view with a lot card to point at; your remembered
+choice is left alone (*Grouping the copies view*, in the
+[purchase order guide](purchases.md)). There is nothing to close and
+nothing left behind: the flash says how you got here, which stops being useful the moment you have
+got here. The address bar drops the lot from it too, so reloading the page gives you the order and
+no flash. (If your system is set to reduce motion, there is no flash: the scroll and the opened
+card are the arrival.) A copy you added by hand has no purchase behind it, so the entry is simply
+not there.
+
+**A link to a lot the order no longer holds does nothing, and says so by leaving `?lot=` in the
+address bar.** That happens if the lot was deleted, or the copy was moved out of it, after the link
+was made. Nothing flashes and nothing opens — there is no card to point at — and the parameter is
+left where you can see it rather than being quietly tidied away.
 
 If a copy *should* have a purchase behind it but doesn't — you entered it before recording the
 receipt — you can

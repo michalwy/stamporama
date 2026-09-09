@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -113,6 +114,7 @@ import {
   usePersistentToggle,
   usePersistentString,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { arrivalLotId, byLotWithArrival } from "./lot-arrival";
 import {
   usePurchaseCollapsedGroups,
   usePurchaseDispositionFilter,
@@ -317,9 +319,17 @@ export function PurchaseDetailPanel({
   // acknowledge their own click. The auction sale was given the same treatment first (#850).
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  // Only a lot **this order holds** is an arrival (#911). A param naming anything else has nothing
+  // to point at, so it resolves to null — and everything below, the consumption included, is
+  // conditional on that. See `lot-arrival.ts` for why a param that pointed at nothing stays in the
+  // address bar rather than being tidied away over a screen that did not react.
+  const requestedLotId = searchParams.get("lot");
+  const lotIds = useMemo(() => purchase.lots.map((l) => l.id), [purchase.lots]);
   // Read once, on the render the screen opens on: the param is about to be taken out of the URL,
   // and both the flash and the card's own seeded expansion must outlive that.
-  const [arrivedLotId, setArrivedLotId] = useState<string | null>(() => searchParams.get("lot"));
+  const [arrivedLotId, setArrivedLotId] = useState<string | null>(() =>
+    arrivalLotId(requestedLotId, lotIds)
+  );
   // Take the param out of the address bar as soon as it has been read. A reload is then an
   // ordinary order screen — the provenance is spent, and re-flashing it minutes later would be
   // telling the collector something that stopped being true the moment they arrived. That one
@@ -327,12 +337,14 @@ export function PurchaseDetailPanel({
   // not a step anyone walks back through; and `scroll: false`, or the navigation would jump the
   // window to the top against the card scrolling itself into view.
   useEffect(() => {
-    if (!searchParams.get("lot")) return;
+    // Read back through the same rule the latch used: the param is consumed **because** it was
+    // answered, and a `?lot=` naming no lot of this order is answered by nothing.
+    if (!arrivalLotId(searchParams.get("lot"), lotIds)) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("lot");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [searchParams, pathname, router]);
+  }, [searchParams, lotIds, pathname, router]);
   // And release the mark once the flash is over, so a card that remounts later — the grouping
   // toggled, a filter changed — does not replay an arrival from ten minutes ago. No load gate is
   // needed here, unlike the auction sale's: the order and its lots arrive as props from the server
@@ -358,8 +370,32 @@ export function PurchaseDetailPanel({
 
   // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
   // a flat list of every copy in the order. Persisted per collection; default groups by both.
-  const [byLot, setByLot] = usePersistentToggle(`${LS_GROUP_BY_LOT}:${collectionId}`, true);
+  const [storedByLot, setStoredByLot] = usePersistentToggle(
+    `${LS_GROUP_BY_LOT}:${collectionId}`,
+    true
+  );
   const [byIssue, setByIssue] = usePersistentToggle(`${LS_GROUP_BY_ISSUE}:${collectionId}`, true);
+
+  // **An arrival switches the view to Group by lot** (#911). Only that view draws lot cards, so
+  // everything the arrival treatment does — open the card, scroll to it, flash it — needs it; and
+  // a link that behaves differently depending on how the collector last left the screen is the
+  // defect, not the symptom (#885).
+  //
+  // Held as its own flag rather than read off `arrivedLotId`, which goes null a couple of seconds
+  // in: the flash ending must not snap the view back out from under the collector.
+  //
+  // It is **transient and never written to the preference** (#382 persists that deliberately). It
+  // ends when the collector touches *Group by* themselves, which is why the setter below clears it
+  // — the chip they press is the choice they meant, and it is that choice that gets remembered.
+  const [arrivalHoldsView, setArrivalHoldsView] = useState<boolean>(() => arrivedLotId !== null);
+  const byLot = byLotWithArrival(storedByLot, arrivalHoldsView);
+  const setByLot = useCallback(
+    (next: boolean) => {
+      setArrivalHoldsView(false);
+      setStoredByLot(next);
+    },
+    [setStoredByLot]
+  );
 
   // Sort order for the copies shown inside each lot (and inside the flat / by-issue copy
   // views) (#157). "added" preserves creation order (the historic default); the other keys
