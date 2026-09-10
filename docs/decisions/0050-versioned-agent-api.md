@@ -54,11 +54,22 @@ wrong — never useful. `GET /api/v1/items` is enough.
 This removes a whole class of agent mistake and one value the agent would otherwise have to obtain
 from somewhere.
 
-**The consequence is that `/api/v1` is token-only.** `resolveAgentApiCaller`, the sibling this
-issue adds beside `resolveCollectionOwner`, does not accept a Better Auth session — a session covers
-every collection its user owns, so a session caller would have no way to say which collection it
-meant, and the id would have to come back into the path. A browser that wants this surface mints a
-token like any other agent. The screen routes are untouched and go on accepting both.
+**The consequence the issue body does not state is that `/api/v1` cannot call
+`resolveCollectionOwner` at all**, and it is the same reasoning one step on rather than a second
+decision. That function is handed a collection and asks whether the credential covers it, which is
+what a screen route wants because it knows its collection from the URL; with no id in the path there
+is nothing to hand it. So this issue adds a **sibling**, `resolveAgentApiCaller`, running the
+comparison the other way round — and **every issue in this track inherits it**: #707 hangs scope
+enforcement on it, and #708 through #712 reach their collection through it and through nothing else.
+
+Adding it beside `resolveCollectionOwner` rather than widening that function is deliberate: the
+screen routes depend on the existing shape, they are untouched, and they go on accepting a session
+or a token as they always have.
+
+**It is also what makes `/api/v1` token-only.** `resolveAgentApiCaller` does not accept a Better
+Auth session — a session covers every collection its user owns, so a session caller would have no
+way to say which collection it meant, and the id would have to come back into the path. A browser
+that wants this surface mints a token like any other agent.
 
 ### 3. One operation registry, two wrappers
 
