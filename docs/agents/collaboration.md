@@ -1309,6 +1309,25 @@ This is not distrust dressed up as procedure — it is the standard whether or n
 anything, because a verification performed only when something feels wrong is a hunch with a ritual
 attached, and the reports worth checking are exactly the ones that read as confident.
 
+**And a verification is worth exactly what its reference value is worth, so name where that value
+came from and check that it is not the thing under test** (#1011). A branch compared against a SHA
+just fetched from that same branch agrees every time; a handover file compared against the numbers
+it was written from agrees every time; a cache compared against nothing at all agrees every time.
+**None of these is the sweep-instrument family** (*Sweeping for a claim*), where the guards exist
+because the search never ran: each of these executed, exited truthfully, and answered a question
+about a copy. The trigger is *at the moment you rely on the value*, not a fresh check at a fixed
+interval.
+
+**Three instances, sharing nothing at the surface, which is why the general form is stated here
+rather than beside any one of them.** A `git` SHA re-fetched from the already-moved branch, which
+merged the implementation the user had not chosen (*Who moves a branch that has fallen behind*,
+step 2). `dev-agent/held/stamporama.yaml`, handed over seventy minutes after `main`'s SHA, the
+commit count since the tag and the open-issue count were written into it — all three moved in
+between, and the file's own `notes:` block warns against carrying a number forward. And the session
+list's `prState`, read all day as the answer to *what is open* and never once compared against
+GitHub (*A held session's worktree is not stale*). **Whoever meets the fourth will not recognise it
+from the SHA story**, which is the whole argument for one level up.
+
 Two things here reward reading the diff specifically:
 
 - **A migration is never edited once written** (AGENTS.md, `platform.md`) — including one written
@@ -2206,7 +2225,9 @@ a way that went green** — which is why it is now three steps rather than one (
    2026-09-08 the lead re-read the head and compared it against a SHA it had itself pulled from the
    same, already-moved branch minutes earlier. They matched, the check went green, and the
    implementation the user had **not** chosen merged. A branch compared against itself agrees every
-   time (#984).
+   time (#984). **This is one instance of a general shape stated at the head of *Verification, not
+   trust*** — name the source of the reference value, and check that it is not the thing under
+   test. It is pointed at rather than restated here, because a claim in two places drifts (#982).
 
 3. **Where the head is not the SHA you recorded, read the delta — not the branch again.**
    `git range-diff <recorded>...<head>` on a freshly fetched branch answers *what moved under me* in
