@@ -37,6 +37,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import {
   FILTER_MENU_HEADING_STYLE,
   FilterFooterToggle,
@@ -214,16 +215,6 @@ const REMEMBERED_FILTER_KEYS = [
 const SORT_OPTIONS: SortOption[] = [
   { value: "created", label: "Date added" },
 ];
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 /**
  * The fixed widths this bar's dropdowns are drawn in (#868).
@@ -1175,7 +1166,7 @@ export function InventoryListPanel({
                         setQuickOffer(true);
                       }}
                       style={{
-                        ...CONTROL_STYLE,
+                        ...FILTER_CONTROL_STYLE,
                         cursor: "pointer",
                         flexShrink: 0,
                         // Weight and border width are held constant across the two states: this is
@@ -1200,7 +1191,7 @@ export function InventoryListPanel({
                   <Link
                     href={`/c/${collectionSlug}/inventory/scans`}
                     style={{
-                      ...CONTROL_STYLE,
+                      ...FILTER_CONTROL_STYLE,
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "0.375rem",
@@ -1218,7 +1209,7 @@ export function InventoryListPanel({
                   type="button"
                   onClick={() => setDialog({ kind: "add" })}
                   style={{
-                    ...CONTROL_STYLE,
+                    ...FILTER_CONTROL_STYLE,
                     cursor: "pointer",
                     fontWeight: 600,
                     color: "#fff",
@@ -1395,7 +1386,7 @@ export function InventoryListPanel({
                           type="button"
                           onClick={() => setDialog({ kind: "bulkEdit", items: selectedInView })}
                           style={{
-                            ...CONTROL_STYLE,
+                            ...FILTER_CONTROL_STYLE,
                             cursor: "pointer",
                             fontWeight: 600,
                             color: "var(--color-text-secondary)",
@@ -1431,7 +1422,7 @@ export function InventoryListPanel({
                               )
                             }
                             style={{
-                              ...CONTROL_STYLE,
+                              ...FILTER_CONTROL_STYLE,
                               cursor: isPending ? "default" : "pointer",
                               fontWeight: 600,
                               color: "var(--color-text-secondary)",
@@ -1482,7 +1473,7 @@ export function InventoryListPanel({
                                       })
                                 }
                                 style={{
-                                  ...CONTROL_STYLE,
+                                  ...FILTER_CONTROL_STYLE,
                                   cursor: "pointer",
                                   fontWeight: 600,
                                   color: "var(--color-accent)",
@@ -1507,7 +1498,7 @@ export function InventoryListPanel({
                               type="button"
                               onClick={() => setDialog({ kind: "addToOffer", items: listableCopies })}
                               style={{
-                                ...CONTROL_STYLE,
+                                ...FILTER_CONTROL_STYLE,
                                 cursor: "pointer",
                                 fontWeight: 600,
                                 color: "#fff",
@@ -1585,7 +1576,7 @@ export function InventoryListPanel({
                        button one group along, and for the same reason: a label that thickens on
                        click re-lays the row out under the cursor. */
                     style={{
-                      ...CONTROL_STYLE,
+                      ...FILTER_CONTROL_STYLE,
                       ...(notOfferedPlatformId || excludedPlatformId
                         ? {
                             color: "var(--color-accent)",
@@ -1910,7 +1901,7 @@ export function InventoryListPanel({
                   aria-hidden={!hasResettableFilters}
                   tabIndex={hasResettableFilters ? undefined : -1}
                   style={{
-                    ...CONTROL_STYLE,
+                    ...FILTER_CONTROL_STYLE,
                     border: "none",
                     background: "none",
                     cursor: "pointer",

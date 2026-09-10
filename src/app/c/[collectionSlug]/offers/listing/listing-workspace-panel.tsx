@@ -15,6 +15,7 @@ import {
 } from "@/lib/listing-groups";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
@@ -54,18 +55,8 @@ import { Icon } from "@/app/icons";
 // one unpaginated read: a `ready` batch is bounded by how many listings a person is about to type in,
 // and instant facets matter more here than a page boundary would.
 
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
-
 const BULK_BTN: React.CSSProperties = {
-  ...CONTROL_STYLE,
+  ...FILTER_CONTROL_STYLE,
   display: "inline-flex",
   alignItems: "center",
   gap: "0.25rem",
@@ -457,7 +448,7 @@ export function ListingWorkspacePanel({
             setExpandedId(undefined);
             updateParams({ platform: e.target.value });
           }}
-          style={{ ...CONTROL_STYLE, cursor: "pointer" }}
+          style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
         >
           <option value="">Pick a platform…</option>
           {platforms.map((p) => (
@@ -466,7 +457,7 @@ export function ListingWorkspacePanel({
             </option>
           ))}
         </select>
-        <span style={{ ...CONTROL_STYLE, border: "none", background: "none", color: "var(--color-text-muted)" }}>
+        <span style={{ ...FILTER_CONTROL_STYLE, border: "none", background: "none", color: "var(--color-text-muted)" }}>
           {platformId
             ? isLoading
               ? "Loading…"

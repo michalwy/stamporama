@@ -9,22 +9,13 @@ import { ContactFormDialog } from "./contact-form-dialog";
 import { ContactRow } from "./contact-row";
 import { CONTACT_ROLES } from "./contact-roles";
 import { useToast } from "@/app/toast-provider";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 
 type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "edit"; contact: ContactListItem }
   | { kind: "delete"; contact: ContactListItem };
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 interface ContactsListPanelProps {
   collectionId: string;
@@ -100,7 +91,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
           value={query}
           onChange={(e) => updateParams({ q: e.target.value })}
           placeholder="Search by name…"
-          style={{ ...CONTROL_STYLE, width: "14rem" }}
+          style={{ ...FILTER_CONTROL_STYLE, width: "14rem" }}
         />
 
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -112,7 +103,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
                 type="button"
                 onClick={() => updateParams({ role: active ? "" : key })}
                 style={{
-                  ...CONTROL_STYLE,
+                  ...FILTER_CONTROL_STYLE,
                   cursor: "pointer",
                   fontWeight: active ? 600 : 400,
                   color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -130,7 +121,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
           type="button"
           onClick={() => setDialog({ kind: "add" })}
           style={{
-            ...CONTROL_STYLE,
+            ...FILTER_CONTROL_STYLE,
             cursor: "pointer",
             fontWeight: 600,
             color: "#fff",
