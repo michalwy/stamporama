@@ -1110,7 +1110,9 @@ written around it.
 ## Verification, not trust
 
 **The lead checks the repository, not the report**: `git log`, the diff, the migration SQL, the
-issue's own *Done when*, and CI. A report is evidence of what a session believes it did.
+issue's own *Done when*, and CI. A report is evidence of what a session believes it did — **its
+account of what it itself ran included** (*A fact is true of a state, and a statement about it
+carries the state it was measured in*, below).
 
 This is not distrust dressed up as procedure — it is the standard whether or not the check finds
 anything, because a verification performed only when something feels wrong is a hunch with a ritual
@@ -1307,6 +1309,17 @@ than none:
   says the instrument is broken; 0 next to 2 says the correction landed. It is the one guard that
   catches the empty pathspec, the flood, the projection and the broken loop alike, because it does
   not ask *what* went wrong — it asks whether the thing could have found anything at all.
+
+  **A crude expression is the same instrument, and the ordering is the whole of it: run the crude
+  one first, then account for its count.** A precise expression run first can return **exit 1 and
+  no output** — a truthful no-match over a pattern that could never have matched — which is
+  byte-identical to what a clean tree prints, and a clean-looking zero gives you no reason to write
+  a second expression at all. The #1079 session's precise sweep did exactly that on 2026-09-10 and
+  was saved only because a cruder one had run a minute earlier and returned 7 hits, which is a
+  number to be surprised by (#1098). **So it is not two searches**: it is a crude search whose count
+  the precise one then has to explain. *Run both expressions* is the wrong statement of it — read as
+  redundancy it gets adopted in whichever order comes to hand, and in the other order it is not a
+  control at all.
 - **Check that the instrument ran, not only what it returned.** Capture the per-invocation status
   inside a loop rather than the pipeline's, and read stderr. What caught the `||` case was ugrep
   printing its diagnostic *above* the session's own "clean" line — a human noticing stray text,
@@ -1334,6 +1347,62 @@ addressed to somebody is correctable by the one party who can see it is wrong, a
 held privately is not. The #975 exchange had the lead and the session a turn apart in opposite
 directions, each briefly certain about a state the other had moved past, and nothing broke because
 both had said what they thought was true (#979).
+
+### A fact is true of a state, and a statement about it carries the state it was measured in
+
+**Everything above protects the instrument. Nothing above protects the referent** — *which tree*,
+*which moment*, *which session state* a true sentence was true of. A fact correctly established
+about one state and then carried into an assertion about another produces a claim that is wrong
+while every guard this file prescribes is green, because not one of them is aimed at that. It is
+#942's *the remaining failure is the question* moved off searches and onto states, which is why it
+sits beside the section rather than inside it: a fourth guard on the sweep would be aimed at the
+instrument again.
+
+**Two instances on 2026-09-10, one by a worker and one by the lead, and the pairing is the finding**
+(#1098) — separately they read as two unrelated slips.
+
+- **A pre-edit count quoted as the state of `main`.** The #1075 session ran the scoping pass exactly
+  as prescribed: `git grep -cF 'break in half'` returned one hit, in the file the change was about
+  to delete, with a positive control green beside it. **All three guards were green and the
+  instrument was sound.** That count then travelled into a report as *"`main` right now … carries no
+  written statement of it"*. The same expression against `origin/main` returns two — **and one of
+  them had been put there by the session's own merged pull request**, a fact its own earlier report
+  had named. The after pass would have caught it. What did not exist is anything saying that a
+  scoping count is a measurement of a *tree*, so quoting it later quotes a tree that no longer
+  exists.
+- **A verification quoted across a re-brief.** The lead messaged the session adding scope at 16:53,
+  armed auto-merge on #1096 at 16:55:29, and it merged at 16:56:19. Its *this branch is verified and
+  ready* was true of the state **before its own message**, and a re-brief is precisely what changes
+  that state (*A re-brief hands the branch back*). **That prohibition list named the act, in as many
+  words, and was complete.** Nothing was lost; what landed was a change whose own added scope said
+  it was incomplete, and #1097 was needed to finish it.
+
+**Neither mechanism was defective, which is the half a later reader will otherwise take away.** The
+sweep guards worked; the prohibition list was complete. **So this lengthens neither of them** — and
+the obvious response to the second instance, one more entry on that list, is the thing the instance
+is evidence against. #984 was *knowing and not acting*; #1030 was *the list did not name the act
+performed*, and the fix was to name it. Here the list named it and it did not help, so the remaining
+gap is not another entry.
+
+**The nearest thing already written is one instance earlier.** *Merging a pull request is not the
+event that ends a session* separates **a fact about GitHub** from **a fact about the session**; this
+is that distinction with the halves left general. *Memory is not versioned, and nothing expires it*
+reaches the same place from the other side — **a durable statement carries the command, not the fact
+the command answers** is this rule with its scope narrowed to a memory entry.
+
+**And a report is evidence of what a session believes it did — including its account of what it
+itself ran.** That opening sentence of *Verification, not trust* is written about the **work**, and
+the most direct range there is turns out to be a session's own transcript. On 2026-09-10 a session
+reported *3 reminders, 3 `Write`, 8 `Edit`*, recounted against that transcript unprompted, and the
+true figures were **1 reminder, 2 `Write`, 14 `Edit`** — which changed the conclusion. The wrong
+figures had already been published by the lead, **in a retraction whose own subject was unverified
+figures travelling too far.** A session's memory of its own turn is a measurement of a state like
+any other, and it feels too immediate to need checking, which is the whole reason it is named here.
+
+**The corollary is narrow, cheap, and exercisable by anybody: where a message asserts something a
+command answers, run the command.** Both instances above were caught that way and neither cost more
+than a second. It is stated once, in *A prompt carries its reasons, not only its instructions*,
+together with the boundary that keeps it narrow.
 
 ## Memory is not versioned, and nothing expires it
 
