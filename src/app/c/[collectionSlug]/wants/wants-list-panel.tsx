@@ -12,6 +12,7 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
@@ -47,16 +48,6 @@ const STATUS_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: "closed", label: "Closed" },
   { key: "all", label: "All" },
 ];
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 /**
  * The want list (#532; ADR-0032) — what the collection is looking for.
@@ -313,7 +304,7 @@ export function WantsListPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by catalog no., name, issue or note…"
-          style={{ ...CONTROL_STYLE, width: "18rem" }}
+          style={{ ...FILTER_CONTROL_STYLE, width: "18rem" }}
         />
 
         <div style={{ display: "flex", gap: "0.375rem" }}>
@@ -325,7 +316,7 @@ export function WantsListPanel({
                 type="button"
                 onClick={() => setStatus(key)}
                 style={{
-                  ...CONTROL_STYLE,
+                  ...FILTER_CONTROL_STYLE,
                   cursor: "pointer",
                   fontWeight: active ? 600 : 400,
                   color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -346,7 +337,7 @@ export function WantsListPanel({
           onClick={() => setGroupByIssue(!groupByIssue)}
           aria-pressed={groupByIssue}
           style={{
-            ...CONTROL_STYLE,
+            ...FILTER_CONTROL_STYLE,
             cursor: "pointer",
             fontWeight: groupByIssue ? 600 : 400,
             color: groupByIssue ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -383,7 +374,7 @@ export function WantsListPanel({
           type="button"
           onClick={() => setDialog({ kind: "add" })}
           style={{
-            ...CONTROL_STYLE,
+            ...FILTER_CONTROL_STYLE,
             cursor: "pointer",
             fontWeight: 600,
             color: "#fff",

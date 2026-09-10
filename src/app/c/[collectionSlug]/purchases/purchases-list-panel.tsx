@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import type { PurchaseListItem, PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
 import {
   usePurchasesInfinite,
@@ -32,16 +33,6 @@ const SORT_OPTIONS: { value: PurchaseSortBy; label: string }[] = [
   { value: "purchasedAt", label: "Purchase date" },
   { value: "createdAt", label: "Date added" },
 ];
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 interface PurchasesListPanelProps {
   collectionId: string;
@@ -142,7 +133,7 @@ export function PurchasesListPanel({
                 type="button"
                 onClick={() => updateParams({ status: active ? "" : value })}
                 style={{
-                  ...CONTROL_STYLE,
+                  ...FILTER_CONTROL_STYLE,
                   cursor: "pointer",
                   fontWeight: active ? 600 : 400,
                   color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -163,7 +154,7 @@ export function PurchasesListPanel({
           <select
             value={sortBy}
             onChange={(e) => updateParams({ sortBy: e.target.value })}
-            style={CONTROL_STYLE}
+            style={FILTER_CONTROL_STYLE}
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -176,7 +167,7 @@ export function PurchasesListPanel({
               type="button"
               onClick={() => updateParams({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
               aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-              style={{ ...CONTROL_STYLE, cursor: "pointer", padding: "0.375rem 0.5rem" }}
+              style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer", padding: "0.375rem 0.5rem" }}
             >
               {sortDir === "asc" ? "↑" : "↓"}
             </button>
@@ -187,7 +178,7 @@ export function PurchasesListPanel({
           type="button"
           onClick={() => setDialog({ kind: "add" })}
           style={{
-            ...CONTROL_STYLE,
+            ...FILTER_CONTROL_STYLE,
             cursor: "pointer",
             fontWeight: 600,
             color: "#fff",
