@@ -905,8 +905,25 @@ An offer that already lists **some** of your picked copies still works: those co
 the row says so (*"3 of 10 already listed here, and left out"*). Only an offer that already lists
 **every** one of them is disabled.
 
-The selection survives scrolling further down the list. Changing a filter clears it — what was picked
-is no longer on screen.
+The selection survives scrolling further down the list, and it survives a **filter change** too.
+
+**A filter is a way of looking, so it never unticks anything — and nothing you do from the bar ever
+reaches a copy you cannot see.** Narrow the list and the copies you had picked that are no longer
+showing stay picked: the bar says so — *2 of 5 ticked copies in view* — and tells you the other
+three are still ticked and come back when you release the filter. Everything on the bar acts on the
+two in view, so a bulk edit or an offer can never touch a copy you are not looking at. Widen the
+list again and all five are back.
+
+So the number moving when you press a filter is the filter, not a lost selection. If the filter
+hides **all** of them the bar stays up saying *0 of 5*, with nothing on it but **Clear** — it is the
+only place those five are still visible. **Clear** is the other way round: it is you saying you are
+done with the selection, so it unticks all five, hidden ones included, and its hint says so.
+
+Two different things narrow this bar and they are said separately. *In view* is the bar's own
+count — what is on screen. *For sale and in hand* is what the **listing** buttons ask on top of it,
+and their hints name that count where it differs (*"Applies to the 3 of the 4 copies in view that
+are for sale and in hand"*). A group you have folded shut still counts: its header is on screen with
+its own tick box, and folding a row is a way of reading the list, not a way of filtering it.
 
 ### Conflicts in the selection bar
 

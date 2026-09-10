@@ -5,6 +5,7 @@ import { outlierCopyIds, type CopyGroupAxes } from "@/lib/copy-groups";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { SELECT_STRIP, type CopySelection } from "./inventory-copy-list";
 import { useInventoryItemsInfinite, type InventoryItemFilters } from "./use-inventory-query";
+import { useReportRowsInView } from "./use-rows-in-view";
 import { Icon } from "@/app/icons";
 
 /**
@@ -195,6 +196,15 @@ export function useGroupMembers({
     isLoading: membersLoading,
   } = useInventoryItemsInfinite(collectionId, memberFilters, fetchMembers);
   const members = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+  // **What this group is putting on the screen** (#1021), so the bar can count and act on the
+  // ticked rows in view. Reported from here rather than from the member list below it, and so
+  // reported by a **folded** group too: the header is on screen either way, drawing the tri-state
+  // box that reports these very ticks (#422), and a bar refusing to count what that box reports
+  // would be two controls answering one question and disagreeing. `useRowsInView` carries the rest
+  // of the reasoning. The query is `enabled: false` while the row is shut, which keeps the cached
+  // members rather than dropping them — nothing here has to re-fetch to keep reporting.
+  const memberIds = useMemo(() => members.map((m) => m.id), [members]);
+  useReportRowsInView(selection.onRowsInView, memberIds);
 
   // Copies differing from the group's *most common* value on an axis left at *any* (#372). They keep
   // their marking on the member rows and stay out of quick select-all — a group's odd one out would

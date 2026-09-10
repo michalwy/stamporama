@@ -64,6 +64,8 @@ import {
   type InventoryYearFacetFilters,
   type InventoryAreaFacetFilters,
 } from "./use-inventory-query";
+import { useRowsInView } from "./use-rows-in-view";
+import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { useGroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
@@ -766,56 +768,101 @@ export function InventoryListPanel({
   );
   const groupExpansion = useGroupExpansion(groupKeys, groupMode);
 
-  // Multi-select (#373). Restricted to copies that can actually be listed — for sale and in hand,
-  // the offer composition picker's own eligibility. The selection is keyed on the filter set and
-  // reset when it changes (adjusted during render, never a `setState` in an effect): a selection
-  // surviving a filter change would act on copies no longer on screen.
-  //
-  // It holds the **copies themselves**, not their ids: grouping (#398) ticks copies loaded by a
-  // group's own member query, and there is no flat page here to resolve those ids against.
+  /*
+   * Multi-select (#373).
+   *
+   * **A filter change no longer throws the selection away** (#1021). Until then the selection was
+   * keyed on the filter set and reset during render, and the reason was written down beside it:
+   *
+   * > *"The selection is keyed on the filter set and reset when it changes (adjusted during render,
+   * > never a `setState` in an effect): a selection surviving a filter change would act on copies
+   * > no longer on screen."*
+   *
+   * **That reasoning is superseded rather than overruled, and the distinction is the whole of this
+   * change (2026-09-10).** Its fear was precise and it was right at the time — a surviving
+   * selection *would* have acted on copies no longer on screen. Under the rule the user chose that
+   * day it cannot: the bar counts and acts on the ticked rows **in view**, so the hazard the reset
+   * existed to prevent is gone, and what the reset was still costing was the whole selection every
+   * time a chip was pressed. The rule and what it rejects are in
+   * [`ui-patterns.md`](../../../../../docs/agents/ui-patterns.md); it is the same rule the
+   * card-scans strip took in #1020. **A later reader finding a selection that survives a filter
+   * change is meant to find this paragraph** — the hazard was known, and it is handled by the
+   * narrowing below and not by ignoring it.
+   *
+   * It holds the **copies themselves**, not their ids: grouping (#398) ticks copies loaded by a
+   * group's own member query, and there is no flat page here to resolve those ids against.
+   */
   const filterSignature = JSON.stringify(filters);
-  const [selection, setSelection] = useState<{ sig: string; items: Map<string, ItemListItem> }>({
-    sig: filterSignature,
-    items: new Map(),
-  });
-  if (selection.sig !== filterSignature) {
-    setSelection({ sig: filterSignature, items: new Map() });
-  }
-  const selectedIds = useMemo(() => new Set(selection.items.keys()), [selection]);
-  const selectedCopies = useMemo(() => [...selection.items.values()], [selection]);
+  const [selection, setSelection] = useState<Map<string, ItemListItem>>(() => new Map());
+  const selectedIds = useMemo(() => new Set(selection.keys()), [selection]);
+  /** Every ticked copy, filter or no filter — what the bar counts *from*, and never what an action
+   * is handed. */
+  const selectedCopies = useMemo(() => [...selection.values()], [selection]);
   const toggleSelected = useCallback((item: ItemListItem) => {
     setSelection((prev) => {
-      const items = new Map(prev.items);
+      const items = new Map(prev);
       if (items.has(item.id)) items.delete(item.id);
       else items.set(item.id, item);
-      return { sig: prev.sig, items };
+      return items;
     });
   }, []);
   const setManySelected = useCallback((batch: ItemListItem[], selected: boolean) => {
     setSelection((prev) => {
-      const items = new Map(prev.items);
+      const items = new Map(prev);
       for (const item of batch) {
         if (selected) items.set(item.id, item);
         else items.delete(item.id);
       }
-      return { sig: prev.sig, items };
+      return items;
     });
   }, []);
-  const clearSelection = useCallback(
-    () => setSelection((prev) => ({ sig: prev.sig, items: new Map() })),
-    []
+  /** Clearing is the collector's own act and clears **everything**, rows the filter is hiding
+   * included — unticking only what is on screen would empty the bar and leave ticks standing that
+   * nothing on screen could then reach. The bar's hint says so while any are hidden. */
+  const clearSelection = useCallback(() => setSelection(new Map()), []);
+
+  /**
+   * The ticked copies **in view** — what the bar counts, labels and acts on (#1021).
+   *
+   * *In view* cannot be a predicate here the way it is on the scans strip: these filters are
+   * resolved server-side, so nothing on the client can ask whether a copy ticked ten minutes ago
+   * still matches a search or an area subtree. What the screen can say is which rows it holds, and
+   * that is the same answer from the other end — the flat pages it has loaded, plus the members
+   * each group row has fetched. `use-rows-in-view.ts` carries what that includes, what it
+   * deliberately does not (a fold is not a filter), and the one thing it cannot see.
+   */
+  const { inView: reportedRows, register: registerRowsInView } = useRowsInView(filterSignature);
+  const copiesInView = useMemo(
+    // The flat list needs no reporter — its pages are right here. In a grouped mode the flat query
+    // is disabled and this is empty, so the two halves never double-count.
+    () => rowsInView([allCopies.map((c) => c.id), [...reportedRows]]),
+    [allCopies, reportedRows]
   );
+  const selectedInView = useMemo(
+    () => selectionInView(selectedCopies, copiesInView),
+    [selectedCopies, copiesInView]
+  );
+  /** Ticked, and hidden by the filter. The figure the bar's second line is about. */
+  const hiddenSelectedCount = selectedCopies.length - selectedInView.length;
+
   // The part of the selection an **offer** can be made of — for sale, in hand, still held (the
   // composition picker's own eligibility, #164/#188/#394). Since #682 the checkbox no longer asks
   // that question, so the listing actions ask it here instead: they act on this subset and are not
   // offered at all when it is empty. Narrowing beats disabling, because the same selection is a
   // perfectly good target for the location and disposition actions beside them.
-  const listableCopies = useMemo(() => selectedCopies.filter(isListableCopy), [selectedCopies]);
-  /** Said on the listing buttons themselves, never in the bar's count: the bar counts what is
-   * ticked, and only those buttons act on part of it. Empty while the whole selection qualifies. */
+  //
+  // **Over the copies in view, so the two narrowings compose rather than compete** (#1021): a copy
+  // has to be on screen *and* qualify. They are different questions and the labels say so
+  // separately — *in view* is what the bar's headline carries, *qualifies* is what these buttons
+  // carry — because blurring them into one number would leave the collector unable to tell which
+  // of the two took a copy out.
+  const listableCopies = useMemo(() => selectedInView.filter(isListableCopy), [selectedInView]);
+  /** Said on the listing buttons themselves, never in the bar's count: the bar counts what is in
+   * view, and only those buttons ask the second question. Empty while everything in view
+   * qualifies. */
   const partialListingHint =
-    listableCopies.length < selectedCopies.length
-      ? ` Applies to the ${listableCopies.length} of ${selectedCopies.length} selected copies that are for sale and in hand.`
+    listableCopies.length < selectedInView.length
+      ? ` Applies to the ${listableCopies.length} of the ${selectedInView.length} copies in view that are for sale and in hand.`
       : "";
 
   // Setting a copy aside from a platform, or bringing it back (#506). No dialog on either path: it
@@ -935,8 +982,8 @@ export function InventoryListPanel({
   // is still to set the rest aside, and the excluded ones absorb it as a no-op.
   const selectionExcluded =
     !!scopedPlatform &&
-    selectedCopies.length > 0 &&
-    selectedCopies.every((c) => c.excludedPlatformIds.includes(scopedPlatform.id));
+    selectedInView.length > 0 &&
+    selectedInView.every((c) => c.excludedPlatformIds.includes(scopedPlatform.id));
 
   /**
    * Ask the want list what a copy that has just **arrived** could satisfy, and put the review up if
@@ -1004,8 +1051,12 @@ export function InventoryListPanel({
       onToggle: toggleSelected,
       onSetMany: setManySelected,
       isEligible: (item: ItemListItem) => item.disposedAt == null,
+      // What a group is putting on screen (#1021), so the bar can count and act on the ticked rows
+      // in view. Rides on the selection because that is the prop already reaching all three
+      // grouped branches; the flat list needs none.
+      onRowsInView: registerRowsInView,
     }),
-    [selectedIds, toggleSelected, setManySelected]
+    [selectedIds, toggleSelected, setManySelected, registerRowsInView]
   );
 
   // The row `⋮` menu (#125), built once and given to **every** branch below — the flat list and all
@@ -1270,6 +1321,11 @@ export function InventoryListPanel({
                     onExit={() => setQuickOffer(false)}
                   />
                 )}
+                {/* **The bar counts and acts on the ticked copies in view** (#1021), and it is up
+                    while *anything* is ticked rather than while anything is in view — with all of
+                    them hidden it reads `0 of 5`, which is the only place those five are visible
+                    and the only way left to clear them. A bar that vanished would leave a selection
+                    nothing on screen could reach, reappearing later with nothing to explain it. */}
                 {selectedCopies.length > 0 ? (
                   <div style={LIST_BANNER_STYLE}>
                     <span
@@ -1279,23 +1335,49 @@ export function InventoryListPanel({
                         color: "var(--color-accent)",
                       }}
                     >
-                      {selectedCopies.length} cop{selectedCopies.length === 1 ? "y" : "ies"} selected
+                      {hiddenSelectedCount > 0
+                        ? `${selectedInView.length} of ${selectedCopies.length} ticked copies in view`
+                        : `${selectedCopies.length} cop${selectedCopies.length === 1 ? "y" : "ies"} selected`}
                     </span>
-                    <button
-                      type="button"
-                      onClick={clearSelection}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        cursor: "pointer",
-                        fontSize: "0.8125rem",
-                        color: "var(--color-text-secondary)",
-                        textDecoration: "underline",
-                      }}
+                    {/* What became of the rest, in the two terms that stop the number reading as a
+                        lost selection — still ticked, and back when the filter is released. Drawn
+                        only while any are hidden, so a resting bar reads exactly as it always
+                        did. */}
+                    {hiddenSelectedCount > 0 && (
+                      <span
+                        style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
+                      >
+                        {hiddenSelectedCount === 1
+                          ? "The other one is still ticked and comes back when the filter is released."
+                          : `The other ${hiddenSelectedCount} are still ticked and come back when the filter is released.`}
+                      </span>
+                    )}
+                    {/* Clearing is the collector's own act and reaches the hidden rows too, so the
+                        hint says so while there are any. Empty content draws no bubble, which is
+                        what keeps this one code path rather than two. */}
+                    <Tooltip
+                      content={
+                        hiddenSelectedCount > 0
+                          ? `Untick all ${selectedCopies.length}, including the ${hiddenSelectedCount} the filter is hiding`
+                          : ""
+                      }
                     >
-                      Clear
-                    </button>
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          fontSize: "0.8125rem",
+                          color: "var(--color-text-secondary)",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </Tooltip>
                     {/* The conflict this selection would create on the platform in scope (#513,
                         #732): another live offer already lists exactly these stamps in exactly these
                         conditions, and Colnect refuses a second of that entry. Stated where the
@@ -1352,7 +1434,12 @@ export function InventoryListPanel({
                         </button>
                       </Tooltip>
                     )}
-                    {/* The bulk actions, in one group pushed to the right of the bar. */}
+                    {/* The bulk actions, in one group pushed to the right of the bar — and every
+                        one of them acts on the copies **in view**, which is why the whole group is
+                        absent when none of the ticked copies are. There is nothing here that could
+                        honestly be offered over a selection the collector cannot see, and a row of
+                        buttons acting on nothing is worse than no row (#1021). */}
+                    {selectedInView.length > 0 && (
                     <div
                       style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                     >
@@ -1363,7 +1450,7 @@ export function InventoryListPanel({
                       <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, and restate their condition, certificate or format — all in one pass.">
                         <button
                           type="button"
-                          onClick={() => setDialog({ kind: "bulkEdit", items: selectedCopies })}
+                          onClick={() => setDialog({ kind: "bulkEdit", items: selectedInView })}
                           style={{
                             ...CONTROL_STYLE,
                             cursor: "pointer",
@@ -1394,7 +1481,7 @@ export function InventoryListPanel({
                             disabled={isPending}
                             onClick={() =>
                               applyPlatformExclusion(
-                                selectedCopies,
+                                selectedInView,
                                 scopedPlatform.id,
                                 !selectionExcluded,
                                 true
@@ -1489,7 +1576,7 @@ export function InventoryListPanel({
                               }}
                             >
                               <Icon name="addToOffer" size="sm" />{" "}
-                              {listableCopies.length < selectedCopies.length
+                              {listableCopies.length < selectedInView.length
                                 ? `Add ${listableCopies.length} to offer`
                                 : "Add selected to offer"}
                             </button>
@@ -1497,6 +1584,7 @@ export function InventoryListPanel({
                         </>
                       )}
                     </div>
+                    )}
                   </div>
                 ) : null}
               </>

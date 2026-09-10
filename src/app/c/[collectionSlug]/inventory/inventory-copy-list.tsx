@@ -7,6 +7,7 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { InventoryItemRow } from "./inventory-item-row";
+import type { RowsInView } from "./use-rows-in-view";
 
 const EMPTY_LOCATIONS: LocationData[] = [];
 
@@ -122,6 +123,16 @@ export interface CopySelection {
   /** Tick or untick a whole batch at once — a duplicate group's quick select-all (#398). */
   onSetMany: (items: ItemListItem[], selected: boolean) => void;
   isEligible: (item: ItemListItem) => boolean;
+  /**
+   * Report the rows a **group** is holding, so the bar can count and act on the ticked rows *in
+   * view* (#1021, `use-rows-in-view.ts`).
+   *
+   * It rides here rather than on `InventoryCopyList` because this is the prop that already reaches
+   * every grouped branch and nothing else — the read-only inventory popup passes no `selection` at
+   * all, and has no bar to be right about. The flat list needs no reporter: the panel holds its
+   * pages itself.
+   */
+  onRowsInView: RowsInView["register"];
 }
 
 /**
