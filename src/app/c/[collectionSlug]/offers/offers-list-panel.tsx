@@ -10,6 +10,8 @@ import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolb
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { rowsInView, selectionInView } from "@/lib/rows-in-view";
+import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
 import type { OfferListItem } from "@/lib/offers";
 import { type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
@@ -295,58 +297,106 @@ export function OffersListPanel({
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   /* ── Bulk selection ────────────────────────────────────────────────────────────────────────────
-   * The copies list's rule (#373), applied to offers: the selection is keyed on the filter set and
-   * dropped when it changes (adjusted during render, never a `setState` in an effect), because a
-   * selection surviving a filter change would act on offers no longer on screen — and here that
-   * means withdrawing or deleting listings nobody is looking at.
+   * **A filter change no longer throws the selection away** (#1031). Until then the selection was
+   * keyed on the filter set and reset during render, and the reason was written down beside it:
+   *
+   * > *"The copies list's rule (#373), applied to offers: the selection is keyed on the filter set
+   * > and dropped when it changes (adjusted during render, never a `setState` in an effect),
+   * > because a selection surviving a filter change would act on offers no longer on screen."*
+   *
+   * **That reasoning is superseded rather than overruled, and it cited a rule the copies list had
+   * already stopped having** — #1021 removed exactly that reset there on 2026-09-10, on the user's
+   * decision. Its fear was precise and it was right at the time: a surviving selection *would* have
+   * withdrawn or deleted listings nobody was looking at. Under the rule the user chose it cannot —
+   * the bar counts and acts on the ticked rows **in view** — so the hazard the reset existed to
+   * prevent is gone, and what the reset was still costing was the whole selection every time a chip
+   * was pressed or a character was typed into the search box. The rule and what it rejects are in
+   * [`ui-patterns.md`](../../../../../docs/agents/ui-patterns.md). **A later reader finding a
+   * selection that survives a filter change is meant to find this paragraph**: the hazard was
+   * known, and it is handled by the narrowing below rather than by ignoring it.
    *
    * It holds the **offers themselves**, not their ids: a bulk run reports its refusals per offer,
-   * and the row it names has to be identifiable after the list has been invalidated and refetched.
+   * and the row it names has to be identifiable after the list has been invalidated and refetched
+   * — and now also after the filter has moved it off screen.
    *
    * *Select all* covers the **loaded** rows and says so. The list is cursor-paginated, so "all" over
    * the whole filtered set would be a promise about offers that have not been fetched — a click that
    * deletes three hundred listings, most of which were never on screen.
    */
   const filterSignature = JSON.stringify(filters);
-  const [selection, setSelection] = useState<{ sig: string; offers: Map<string, OfferListItem> }>({
-    sig: filterSignature,
-    offers: new Map(),
-  });
-  // What the last bulk run could not do. Cleared whenever a new selection question is asked.
+  const [selection, setSelection] = useState<Map<string, OfferListItem>>(() => new Map());
+  /** Every ticked offer, filter or no filter — what the bar counts *from*, and never what an
+   * action is handed. */
+  const selectedOffers = useMemo(() => [...selection.values()], [selection]);
+
+  /**
+   * The ticked offers **in view** — what the bar counts, labels and acts on (#1031).
+   *
+   * *In view* cannot be a predicate here the way it is on the card-scans strip: these filters are
+   * resolved server-side (a search, a platform, a state chip), so nothing on the client can ask
+   * whether an offer ticked ten minutes ago still matches. What the screen can say is which rows it
+   * holds, and that is the same answer from the other end — a row is in view exactly when the
+   * current filter set produced it.
+   *
+   * This list is flat and cursor-paginated, so it has **one reporter and its pages are right
+   * here**: `rows` is the whole of what the screen holds. That is why it reuses `rows-in-view.ts`
+   * — the arithmetic and the invariant that the narrowing never writes to the selection — and not
+   * the Copies list's `use-rows-in-view.ts` register beside it, which exists to collect the members
+   * a *group* row fetched through its own query (#398). There are no group rows here.
+   *
+   * The one thing it cannot see is the same one stated there: an offer matching the filter but
+   * sitting in a page nobody has scrolled to is ticked, uncounted and out of reach until it loads.
+   */
+  const offersInView = useMemo(() => rowsInView([rows.map((r) => r.id)]), [rows]);
+  const selectedInView = useMemo(
+    () => selectionInView(selectedOffers, offersInView),
+    [selectedOffers, offersInView]
+  );
+  /** Ticked, and hidden by the filter. The figure the bar's second line is about. */
+  const hiddenSelectedCount = selectedOffers.length - selectedInView.length;
+
+  // What the last bulk run could not do. Cleared whenever a new selection question is asked — and
+  // on a filter change, which the selection itself now survives: the strip is a report of a run
+  // against a list that is no longer on screen, while the ticks are the collector's own.
   const [bulkSkips, setBulkSkips] = useState<BulkSkip[]>([]);
-  if (selection.sig !== filterSignature) {
-    setSelection({ sig: filterSignature, offers: new Map() });
-    setBulkSkips([]);
+  const [skipsSig, setSkipsSig] = useState(filterSignature);
+  if (skipsSig !== filterSignature) {
+    setSkipsSig(filterSignature);
+    if (bulkSkips.length > 0) setBulkSkips([]);
   }
-  const selectedOffers = useMemo(() => [...selection.offers.values()], [selection]);
+
   const toggleSelected = useCallback((offer: OfferListItem) => {
     setSelection((prev) => {
-      const offers = new Map(prev.offers);
+      const offers = new Map(prev);
       if (offers.has(offer.id)) offers.delete(offer.id);
       else offers.set(offer.id, offer);
-      return { sig: prev.sig, offers };
+      return offers;
     });
   }, []);
+  /** Clearing is the collector's own act and clears **everything**, rows the filter is hiding
+   * included — unticking only what is on screen would empty the bar and leave ticks standing that
+   * nothing on screen could then reach. The bar's hint says so while any are hidden. */
   const clearSelection = useCallback(() => {
-    setSelection((prev) => ({ sig: prev.sig, offers: new Map() }));
+    setSelection(new Map());
     setBulkSkips([]);
   }, []);
-  const allLoadedSelected = rows.length > 0 && rows.every((r) => selection.offers.has(r.id));
+  const allLoadedSelected = rows.length > 0 && rows.every((r) => selection.has(r.id));
+  // Ticks or unticks exactly the loaded rows and leaves the hidden ticks alone (`offer-selection.ts`
+  // carries why replacing the whole map is wrong in both directions).
   const toggleAllLoaded = useCallback(() => {
     setBulkSkips([]);
-    setSelection((prev) => ({
-      sig: prev.sig,
-      offers: rows.every((r) => prev.offers.has(r.id))
-        ? new Map()
-        : new Map(rows.map((r) => [r.id, r] as const)),
-    }));
+    setSelection((prev) => toggleRowsInView(prev, rows));
   }, [rows]);
 
-  /** Withdraw or delete the whole selection. One path for both, because the two differ only in the
-   * verb and the action they call: the refusal handling, the toast and what stays ticked afterwards
-   * are the same question either way. */
+  /** Withdraw or delete the ticked offers **in view**. One path for both, because the two differ
+   * only in the verb and the action they call: the refusal handling, the toast and what stays
+   * ticked afterwards are the same question either way.
+   *
+   * The batch is `selectedInView` and not the whole selection (#1031): a bulk run must not take
+   * down a listing the collector cannot see. Ticks the filter is hiding are simply not in it, and
+   * are still ticked when the filter is released. */
   function runBulk(kind: "withdraw" | "delete") {
-    const batch = selectedOffers;
+    const batch = selectedInView;
     const noById = new Map(batch.map((o) => [o.id, o.offerNo] as const));
     setActionError(undefined);
     startTransition(async () => {
@@ -375,12 +425,16 @@ export function OffersListPanel({
       setActionError(undefined);
       // Exactly the refused offers stay ticked — they are what is left to deal with, and the ones
       // that went through are gone or closed. A selection left whole after the fact is an invitation
-      // to run it a second time.
-      const refused = new Set(result.skipped.map((s) => s.offerId));
-      setSelection((prev) => ({
-        sig: prev.sig,
-        offers: new Map([...prev.offers].filter(([id]) => refused.has(id))),
-      }));
+      // to run it a second time. A tick the filter was hiding stays too: it was never in the batch,
+      // so the run settled nothing about it (`offer-selection.ts`).
+      const refused = result.skipped.map((s) => s.offerId);
+      setSelection((prev) =>
+        keptAfterBulkRun(
+          prev,
+          batch.map((o) => o.id),
+          refused
+        )
+      );
       const n = result.succeeded.length;
       toast({
         message:
@@ -743,7 +797,13 @@ export function OffersListPanel({
             {/* The selection bar (bulk withdraw / delete). Always drawn while there are rows, not
                 only once something is ticked: the select-all box lives in it, aligned with the
                 rows' own gutter, and a bar that appears only after the first tick would leave the
-                whole feature undiscoverable. The actions appear with the selection. */}
+                whole feature undiscoverable. The actions appear with the selection.
+
+                **It counts and acts on the ticked offers in view** (#1031), and it stays up while
+                *anything* is ticked rather than while anything is in view — which this bar gets for
+                free, being drawn whenever the list has rows at all. With every ticked offer hidden
+                it reads `0 of 5` and keeps only *Clear*, which is the one place those five are
+                visible and the one control that can still reach them. */}
             <div
               style={{
                 display: "flex",
@@ -768,9 +828,13 @@ export function OffersListPanel({
                   type="checkbox"
                   checked={allLoadedSelected}
                   // A partial selection is neither on nor off, and a box reading "off" over a list
-                  // with twelve rows ticked is the one thing it must not say.
+                  // with twelve rows ticked is the one thing it must not say. It asks the question
+                  // **of the rows in view**, which is the set it acts on: over a filter hiding every
+                  // ticked offer it reads plainly "off", because none of the rows under it is
+                  // ticked. Asking it of the whole selection would report *partial* over a list
+                  // whose every row is unticked — a box describing rows nobody is looking at.
                   ref={(el) => {
-                    if (el) el.indeterminate = selectedOffers.length > 0 && !allLoadedSelected;
+                    if (el) el.indeterminate = selectedInView.length > 0 && !allLoadedSelected;
                   }}
                   onChange={toggleAllLoaded}
                   aria-label="Select all loaded offers"
@@ -786,46 +850,81 @@ export function OffersListPanel({
                       color: "var(--color-accent)",
                     }}
                   >
-                    {selectedOffers.length} offer{selectedOffers.length === 1 ? "" : "s"} selected
+                    {hiddenSelectedCount > 0
+                      ? `${selectedInView.length} of ${selectedOffers.length} ticked offers in view`
+                      : `${selectedOffers.length} offer${selectedOffers.length === 1 ? "" : "s"} selected`}
                   </span>
-                  <button type="button" onClick={clearSelection} style={LINK_BTN}>
-                    Clear
-                  </button>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      marginLeft: "auto",
-                    }}
+                  {/* What became of the rest, in the two terms that stop the number reading as a
+                      lost selection — still ticked, and back when the filter is released. Drawn
+                      only while any are hidden, so a resting bar reads exactly as it always did. */}
+                  {hiddenSelectedCount > 0 && (
+                    <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                      {hiddenSelectedCount === 1
+                        ? "The other one is still ticked and comes back when the filter is released."
+                        : `The other ${hiddenSelectedCount} are still ticked and come back when the filter is released.`}
+                    </span>
+                  )}
+                  {/* Clearing is the collector's own act and reaches the hidden rows too, so the
+                      hint says so while there are any. Empty content draws no bubble, which is what
+                      keeps this one code path rather than two. */}
+                  <Tooltip
+                    content={
+                      hiddenSelectedCount > 0
+                        ? `Untick all ${selectedOffers.length}, including the ${hiddenSelectedCount} the filter is hiding`
+                        : ""
+                    }
                   >
-                    <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionError(undefined);
-                          setDialog({ kind: "bulkWithdraw" });
-                        }}
-                        disabled={isPending}
-                        style={BULK_BTN}
-                      >
-                        <Icon name="withdraw" size="sm" /> Withdraw
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Permanently remove these offers and their sets. The copies stay in your inventory.">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionError(undefined);
-                          setDialog({ kind: "bulkDelete" });
-                        }}
-                        disabled={isPending}
-                        style={{ ...BULK_BTN, color: "var(--color-error)" }}
-                      >
-                        <Icon name="delete" size="sm" /> Delete
-                      </button>
-                    </Tooltip>
-                  </div>
+                    <button type="button" onClick={clearSelection} style={LINK_BTN}>
+                      Clear
+                    </button>
+                  </Tooltip>
+                  {/* Both actions act on the offers **in view**, which is why the pair is absent
+                      when none of the ticked ones are. There is nothing that could honestly be
+                      offered over listings the collector cannot see, and a dead button beside a
+                      live *Clear* reads as a fault (#1031). Where the headline carries two figures
+                      the buttons name the one they will act on, which a two-number headline can no
+                      longer do on its own. */}
+                  {selectedInView.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        marginLeft: "auto",
+                      }}
+                    >
+                      <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionError(undefined);
+                            setDialog({ kind: "bulkWithdraw" });
+                          }}
+                          disabled={isPending}
+                          style={BULK_BTN}
+                        >
+                          <Icon name="withdraw" size="sm" />{" "}
+                          {hiddenSelectedCount > 0
+                            ? `Withdraw ${selectedInView.length}`
+                            : "Withdraw"}
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Permanently remove these offers and their sets. The copies stay in your inventory.">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionError(undefined);
+                            setDialog({ kind: "bulkDelete" });
+                          }}
+                          disabled={isPending}
+                          style={{ ...BULK_BTN, color: "var(--color-error)" }}
+                        >
+                          <Icon name="delete" size="sm" />{" "}
+                          {hiddenSelectedCount > 0 ? `Delete ${selectedInView.length}` : "Delete"}
+                        </button>
+                      </Tooltip>
+                    </div>
+                  )}
                 </>
               ) : (
                 <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
@@ -874,7 +973,7 @@ export function OffersListPanel({
                 onSetInActiveBidding={setOfferBidding}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
                 selection={{
-                  selected: selection.offers.has(offer.id),
+                  selected: selection.has(offer.id),
                   onToggle: toggleSelected,
                 }}
               />
@@ -1010,13 +1109,15 @@ export function OffersListPanel({
 
       {/* Bulk withdraw / delete confirmation. Same words as the single-row dialogs above — the act
           is the same one, asked of a selection — with the count named in the title so what is about
-          to happen is not a matter of remembering what was ticked. */}
+          to happen is not a matter of remembering what was ticked. It is the **in view** count,
+          which is what the run takes (#1031): a title naming the ticks the filter is hiding would
+          promise something the run then does not do. */}
       {(dialog.kind === "bulkWithdraw" || dialog.kind === "bulkDelete") && (
         <ConfirmDialog
           title={
             dialog.kind === "bulkWithdraw"
-              ? `Withdraw ${selectedOffers.length} offer${selectedOffers.length === 1 ? "" : "s"}`
-              : `Delete ${selectedOffers.length} offer${selectedOffers.length === 1 ? "" : "s"}`
+              ? `Withdraw ${selectedInView.length} offer${selectedInView.length === 1 ? "" : "s"}`
+              : `Delete ${selectedInView.length} offer${selectedInView.length === 1 ? "" : "s"}`
           }
           message={
             dialog.kind === "bulkWithdraw"

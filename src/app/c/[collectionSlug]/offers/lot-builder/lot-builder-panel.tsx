@@ -42,8 +42,9 @@ import { LotProposalView } from "./lot-proposal-view";
 // which series went in whole, which one was refused and by what, how far each target is from its
 // range, how many candidates carry no catalogue value at all. That is a panel of counters beside a
 // list, not a hint on a bar. (The copies list could not have carried it either: its selection is a
-// `Map` of loaded rows reset on every filter change, while the list itself streams pages, so an
-// answer of a hundred ids has nowhere to land.)
+// `Map` of loaded rows while the list itself streams pages, so an answer of a hundred ids has
+// nowhere to land. This used to say "reset on every filter change" as well — #1021 removed that
+// reset, and the half that is left is the half the argument rests on.)
 //
 // **Everything is in the URL** — criteria, seed, pinned, rejected — and nothing else is stored
 // anywhere. That is the navigation-state invariant, and here it is also the whole architecture: the
