@@ -471,9 +471,10 @@ user's decision** — #906 marks them as such, and they are refutable:
 
 ### Session titles
 
-**Decided by the user on 2026-09-08 and amended by him twice since** — #928 set the vocabulary, #975
-added the pull request number to it, and #1042 replaced the `[DONE]` prefix with a state icon on
-2026-09-10. A session's title is the only signal that travels between the app's session list, the
+**Decided by the user on 2026-09-08 and amended by him three times since** — #928 set the
+vocabulary, #975 added the pull request number to it, #1042 replaced the `[DONE]` prefix with a
+state icon on 2026-09-10, and #1048 gave the design session an icon and a row of its own the same
+day. A session's title is the only signal that travels between the app's session list, the
 user's screen and the worktree sweep, so it is a fixed vocabulary rather than a description:
 
 | state | title |
@@ -485,21 +486,46 @@ user's screen and the worktree sweep, so it is a fixed vocabulary rather than a 
 | Worker finished, and spent | `✅ #NNN[#PPP]: <the issue's theme>` |
 | Release session | `🔨 Release: X.Y.Z` |
 | Release cut | `✅ Release: X.Y.Z` |
+| Design session, running | `🎨 <what is being designed>` |
+| Design session, finished | `✅ 🎨 <what is being designed>[#PPP]` |
 | The lead, while it is the lead | `👑 ===> Leader <===` |
 | A lead that has handed over | `✅ Leader YYYY-MM-DD`, the date of the handover |
 
-**Nine rows take four icons, because the icon encodes the *state* and not the kind of work.** `⏳` is
-waiting, `🔨` is working, `✅` is finished, `👑` is the lead. A release session that is working is
-working, and the subject after the icon says what it is working on — which is why there is no
-release icon, no design-session icon and none for a bundle. That is what keeps the set closed and
-memorable, and being closed is the property everything below leans on.
+**Eleven rows take five icons: a phase for a session that has phases, and a role of its own for a
+session that does not.** `⏳` is waiting, `🔨` is working, `✅` is finished; `👑` is the lead and `🎨`
+is design. A worker waits, works and finishes, and so does a release session — which is why the
+subject after the icon carries *what* it is working on and there is no release icon and none for a
+bundle. **The lead and the design session have no phases in that sense at all**: one runs until it
+hands over, the other until the design is settled.
+
+**That is a correction of what #1042 landed on 2026-09-10, not an exception to it** (#1048, decided
+by the user the same day). That sentence read: *"Nine rows take four icons, because the icon encodes
+the **state** and not the kind of work"*, and said in as many words that this is why there is *no
+release icon, no design-session icon and none for a bundle*. **It was already not true of `👑`** —
+the lead is a role rather than a stage of work, and it had an icon from the start — so the principle
+was never *state and not kind*. Both wordings are kept here, dated, because the older one will keep
+arriving in an inherited prompt and a bare replacement cannot say which is newer. **The set is now
+five and is still closed**: a sixth needs the same argument — a role with no phases — and not a
+preference.
 
 **Pick codepoints that need no variation selector, and check any substitute the same way before
 adopting it.** A title typed `⚙️` is `U+2699 U+FE0F` and one typed `⚙` is `U+2699`: different
 strings, comparing unequal, so an emoji requiring VS16 turns the sweep's one string comparison into
-a normalisation problem. The four here are clean — `⏳` U+23F3, `🔨` U+1F528, `✅` U+2705, `👑`
-U+1F451, none carrying FE0F. **This is the row of the decision with machinery behind it**, so it is
-checked rather than remembered.
+a normalisation problem. The five here are clean — `⏳` U+23F3, `🔨` U+1F528, `✅` U+2705, `👑`
+U+1F451, `🎨` U+1F3A8, none carrying FE0F. **This is the row of the decision with machinery behind
+it**, so it is checked rather than remembered. **The rule earned its keep on its first use**: `✏️`,
+`🖌️` and `🗺️` were the obvious candidates for design and all three carry `U+FE0F`, which
+disqualified them on that ground alone; `📐` U+1F4D0, `💭` U+1F4AD, `🧭` U+1F9ED and `🧩` U+1F9E9 are
+clean and would each have served.
+
+**A design session's title leads with `🎨` while it runs and with `✅` when it is finished**, and
+that ordering is the whole of why the sweep is untouched: the done icon stays the prefix and the
+role icon stays with the subject, so a finished design session still says what it was. A bare
+`✅ badanie autentyczności[#1008]` would lose that, and the issue number that carries identity for a
+worker does not exist here — which is the reason design needed a row at all. **Its bracket takes the
+pull request that carried the ADR**, not an issue number: a design track produces several issues and
+none of them is its number. `Design[#1008]` in the live register had already done this by instinct,
+and #1042 left it deliberately open.
 
 **`===> Leader <===` survives, with the icon in front of it.** The proposal was to shorten it to
 `👑 Leader`; the user kept the arrows on 2026-09-10, and they are shouty on purpose. The way a
@@ -595,8 +621,9 @@ acquires a row that cannot be checked against anything.
 **And the enumerations shrink with the table — a simplification, and not a new guarantee.** The
 worktree sweep's list of non-done titles (*A held session's worktree is not stale*) and its
 restatement in `backlog-review.md` used to enumerate the working title *shapes*, and each lengthened
-twice on 2026-09-08 as the vocabulary grew (#975, #993). With one icon per state they name two
-icons instead, and a new title shape no longer lengthens either. **The failure direction is
+twice on 2026-09-08 as the vocabulary grew (#975, #993). With one icon per state they name the
+working icons instead — `⏳`, `🔨` and, since #1048, `🎨` — and a new title *shape* no longer
+lengthens either, though a new *icon* still does. **The failure direction is
 unchanged**: a title with no icon in front falls through to *ask the user*, exactly as one with no
 `[DONE]` did, and the list is still descriptive rather than a decision procedure — this file already
 argues that a longer one invites being read as one. **So this does not make the sweep safer than it
@@ -2078,6 +2105,10 @@ it would consume exactly the context the lead exists to hold.
 conversation cannot be run through a proxy — the valuable part is the follow-up question neither
 side knew to ask.
 
+**It is titled `🎨 <what is being designed>`** — no issue number, because its whole output is the
+issues that do not exist yet — and `✅ 🎨 <…>[#PPP]` when it is finished, the bracket carrying the
+pull request that landed the ADR (*Session titles*, #1048).
+
 Its output is an **ADR** under `docs/decisions/`, a topic file update, and a **proposed set of
 issues** whose bodies carry a `## Decisions (from design discussion, YYYY-MM-DD)` section recording
 what was settled and, just as usefully, what was deliberately left out. This is already the
@@ -2158,10 +2189,12 @@ anything, resolve the path to its session:
   leading marker rather than a judgement (*Session titles*). **`[DONE]` counts here too, for as long
   as the changeover lasts** (*The changeover from `[DONE]`*): it was the spelling until 2026-09-10,
   sessions carrying it were live when the icons landed, and no new title can acquire it.
-- **Title begins `⏳` or `🔨`** — pooled and unassigned, or working, whether or not it has opened a
-  pull request and whether it holds one issue or several → **not stale, whatever its age**; leave
-  it. So is a title still spelled the old way — `Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`, or any of
-  those carrying `[#PPP]` with no marker in front — for the same window and the same reason.
+- **Title begins `⏳`, `🔨` or `🎨`** — pooled and unassigned, working, or designing, whether or not
+  it has opened a pull request and whether it holds one issue or several → **not stale, whatever its
+  age**; leave it. So is a title still spelled the old way — `Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`,
+  or any of those carrying `[#PPP]` with no marker in front — for the same window and the same
+  reason. **`🎨` joined on 2026-09-10** (#1048) and is the one working icon that is *not* a phase: a
+  running design session leads with it, and a finished one leads with `✅` like everything else.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
@@ -2170,12 +2203,22 @@ the main checkout rather than a worktree, so it is not a candidate the sweep res
 enumeration left `===> Leader <===` out for the same reason. If a `👑` title ever does resolve to a
 worktree path, that is the last bullet's case and not a removal.
 
+**`🎨` is named rather than left out, and the two roles differ on exactly this point.** A design
+session does resolve to a worktree — and would resolve to one every time if design ever came out of
+the pool by message, which *A pooled worker reads nothing until it is assigned* records as an open
+possibility. Left out, a running design session would fall through to *ask the user*: safe, and
+precisely the noise the third bullet exists to prevent.
+
 **The second bullet is the whole test; the third is descriptive.** It names the not-finished icons
 only so that *ask the user* stays rare. It used to enumerate title *shapes* instead and lengthened
 whenever the vocabulary did — twice on 2026-09-08, when a working session gained its pull request
 number and when a session holding several issues gained a spelling at all — and since #1042 a new
-shape no longer touches it, because every working shape leads with the same two icons
-(*Session titles*). **That is a shorter list and not a stronger one.** A longer one invites being
+*shape* no longer touches it, because every working shape leads with one of the working icons
+(*Session titles*). **A new icon still does**, which is what #1048 spent the same afternoon: `🎨` had
+to be added here, in `backlog-review.md` and in the table, three places for one row. **That is the
+honest price of the icons and it is lower than the one it replaced** — a shape amendment used to
+cost the same three edits and arrived twice in one day, where an icon amendment has arrived once in
+three. **That is a shorter list and not a stronger one.** A longer one invites being
 read as the decision procedure, and this is not one either: titles are unenforced, so a session
 whose icon is missing or unknown falls through to *ask the user* rather than into a removal —
 exactly where a missing `[DONE]` fell.
