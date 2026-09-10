@@ -17,8 +17,10 @@ import type { Operation } from "../../src/lib/agent-api/types";
 // is a column on a real hashed row, so the claim *a `read` token is refused on a writing operation*
 // is only worth anything when the token was actually minted and read back through the database. The
 // decision itself is pure and is exercised over both directions in
-// `tests/unit/agent-api-scope.test.ts`; the operations are fixtures because #706 ships none, and
-// adding one to make the test real would breach its *Out of scope*.
+// `tests/unit/agent-api-scope.test.ts`; the operations here are fixtures because **nothing on
+// `main` writes** — #706 shipped no operation at all and #708's one declares `writes: false` — and
+// adding a writing one to make the test real would breach its issue's *Out of scope*. #711 and #712
+// are where that stops being true.
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({

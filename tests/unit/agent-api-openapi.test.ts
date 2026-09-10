@@ -16,9 +16,13 @@ import type { Operation } from "../../src/lib/agent-api/types";
 // back to the declaration it came from. The route composes that same function over the real
 // `OPERATIONS` array, so adding an entry there is the only edit.
 //
-// It is also why the generator is pure and carries no `server-only`. Once #710 lands, the registry
-// itself reaches Prisma through its handlers and this suite could not import it —
-// `unit-suite-purity.test.ts` walks the import graph and would name the chain.
+// It is also why the generator is pure and carries no `server-only`. **That constraint is live as
+// of #708**, not pending as this comment used to say of #710: the registry now imports an operation
+// module that carries `server-only` and reads Prisma, so this suite could not import it —
+// `unit-suite-purity.test.ts` walks the import graph and would name the chain. Everything asserted
+// below is built from fixture operations for exactly that reason, and `build([])` stays the right
+// way to ask what an empty document looks like: it is a question about the generator, not a claim
+// about what `main`'s registry holds.
 
 const handler = async () => ({ ok: true });
 

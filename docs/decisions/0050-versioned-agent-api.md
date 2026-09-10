@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted, foundation implemented in #706. The operations it carries come later: #710 (collection
-reads), #711 (offers, short of publishing), #712 (wants, checklists and trades, short of sending),
-plus the two gaps filed against the track afterwards — #1036 (auction reads) and #1037 (resolving
-foreign catalog-number strings). Token scopes are #707, the collection vocabulary is #708, and the
-MCP wrapper over this same registry is #709.
+Accepted, foundation implemented in #706, token scopes in #707, and the collection vocabulary in
+#708 — which put the registry's first operation in it. The rest come later: #710 (collection reads),
+#711 (offers, short of publishing), #712 (wants, checklists and trades, short of sending), plus the
+two gaps filed against the track afterwards — #1036 (auction reads) and #1037 (resolving foreign
+catalog-number strings). The MCP wrapper over this same registry is #709.
 
 It rests on #253 (`AssistantToken`) and on `src/lib/route-auth.ts`, and it adds **no table and no
 migration**.
@@ -154,16 +154,18 @@ already holds a token.
   imports the types and helpers beside it and never the registry. A registry importing handlers that
   import the registry back is the `src/lib` cycle that typechecks, passes every test, and then throws
   `Cannot access 'X' before initialization` at module-init in the real app (#658, `platform.md`).
-- **Nothing in `tests/unit/` may import `registry.ts`.** Once it carries handlers it reaches Prisma.
-  What is worth unit-testing is the machinery, and all of it is reachable without that file; a real
-  operation is exercised end to end by the integration suite.
+- **Nothing in `tests/unit/` may import `registry.ts`.** It carries handlers, so it reaches Prisma —
+  live since #708, rather than pending as this bullet first read. What is worth unit-testing is the
+  machinery, and all of it is reachable without that file; a real operation is exercised end to end
+  by the integration suite.
 - **A malformed registry entry fails loudly rather than producing a wrong document.**
   `validateOperations` runs from `buildOpenApiDocument`, so it cannot be skipped: duplicate names,
   duplicate method-and-path bindings, a `{param}` with nothing declaring it, a body parameter on
   `GET`, and a list operation redeclaring the shared window parameters are all refused.
-- **This issue ships no operation, so the published document has an empty `paths` object.** That is
-  valid OpenAPI 3.1 and it is the honest state of the surface: #710 is where the first operation
-  lands.
+- **This issue ships no operation, so the published document has an empty `paths` object.** That was
+  valid OpenAPI 3.1 and the honest state of the surface when #706 landed. **It is no longer the
+  state**: #708 added `get_collection_vocabulary`, so the first operation arrived before #710. The
+  consequence is left as written, dated to this ADR's own issue, with the correction beside it.
 - **No schema change and no migration.** #707 owns the one this track needs.
 
 ## Alternatives considered

@@ -5,7 +5,8 @@ behind it, and the conventions every operation obeys. Read this before adding an
 [ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists at all.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
-#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later).
+#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707 and
+#708 have landed; the registry carries one operation and the rest of the track adds to it.
 
 ## It is beside the screen API, never over it
 
@@ -72,19 +73,24 @@ src/lib/agent-api/
   path-template.ts  "{name}" matching for the dispatcher
   photo-url.ts      the one spelling of a photo link
   scope.ts          whether a token's scope covers an operation (#707)
+  vocabulary.ts     the response shape and the name-or-id resolver (#708)
   openapi.ts        buildOpenApiDocument + validateOperations
-  registry.ts       the operations array and the path lookup       ← the only server-side module
+  registry.ts       the operations array and the path lookup
+  operations/
+    vocabulary.ts   the vocabulary read and its registry entry (#708)   ← server-side
 ```
 
-**Everything but `registry.ts` is pure and carries no `server-only`.** That is load-bearing twice
-over:
+**Everything but `registry.ts` and `operations/` is pure and carries no `server-only`.** That is
+load-bearing twice over:
 
 - **`pnpm test:unit` forbids Prisma anywhere in its import graph**, and
   `tests/unit/unit-suite-purity.test.ts` walks the graph and names the chain when something breaks
   it. The machinery worth testing — the parsers, the list window, the path matcher, the document
   generator — is reachable from a test only because none of it reaches the registry.
-  **So nothing in `tests/unit/` may import `registry.ts`**: once #710 lands it carries handlers, and
-  a handler reaches Prisma. A real operation is exercised end to end by the integration suite.
+  **So nothing in `tests/unit/` may import `registry.ts`**: it carries handlers, and a handler
+  reaches Prisma. A real operation is exercised end to end by the integration suite. **That went
+  from pending to live with #708** rather than with #710, which is what this line used to
+  anticipate — `registry.ts` imports `operations/vocabulary.ts`, which carries `server-only`.
 - **The import direction is one-way.** The registry imports operation modules; an operation module
   imports the types and the helpers beside it and **never** the registry. A registry importing
   handlers that import the registry back is exactly the `src/lib` cycle that typechecks, passes every
@@ -182,8 +188,10 @@ collector can tell one row of the Settings list from another; what a token may d
 only `scope`. Do not grow a check on it.
 
 **The criterion is demonstrated against fixtures on purpose.** #707's *Done when* says a `read`
-token is refused on any writing operation and accepted on every reading one — and the registry is
-empty until #710, so there is nothing writing on `main` to refuse it on.
+token is refused on any writing operation and accepted on every reading one — and **nothing on
+`main` writes**, so there is nothing to refuse it on. That premise used to be *the registry is empty
+until #710*; #708 filled the registry and the conclusion is untouched, because its one operation
+declares `writes: false`. #711 and #712 are where a real refusal first becomes possible.
 `tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations, and
 `tests/integration/agent-api-auth.test.ts` does the same over a real hashed token row, which is
 where a scope actually comes from. **Adding a domain operation to make the test real would breach
@@ -201,6 +209,101 @@ scope rather than arrive at the widest one by omission. Registration (#252) stat
 **Per-area scopes (`offers:write`, `trades:write`, …) are out of scope and a second token model is
 not wanted.** One model, one Settings screen: `read` / `read_write` widens into per-area scopes later
 without either. If a real need appears, that is the shape to reach for.
+
+## The collection's vocabulary, and names instead of cuids
+
+**This is the thing most likely to decide whether the surface works in practice** (#708), and it is
+an issue rather than a footnote in each operation for that reason. Almost everything an agent wants
+to say about a stamp is a per-collection, user-configurable value — a condition, a format, an area,
+a location — and every one of them is cuid-keyed. An agent will never guess a cuid.
+
+**One call, held for the session.** `GET /api/v1/vocabulary` (`get_collection_vocabulary`) returns
+the whole configurable vocabulary in one object. The agent fetches it once at the start of a session
+and keeps it, which is why **the shape matters more than the endpoint does**: every field is paid for
+in the agent's context on every later turn, not once on the wire.
+
+**Names are accepted wherever a name is unambiguous.** An operation taking a condition takes `"MNH"`
+as readily as its id. `resolveVocabularyValue` in the pure `agent-api/vocabulary.ts` is the one
+spelling of that rule, and it has exactly three branches:
+
+- an **id** is taken as an id;
+- a **name, abbreviation or label** that matches exactly one row resolves, case- and
+  whitespace-insensitively — the abbreviation matters as much as the name, because an agent reading a
+  listing meets `MNH` far more often than `Mint Never Hinged`;
+- an **ambiguous** name is refused and the id is required. Nothing stops a collector naming two areas
+  `Poland`, and guessing would file a copy under the wrong one silently — the one failure here that
+  is both invisible and expensive.
+
+**The two refusals hand back different lists, and that is the point rather than an inconsistency.**
+`unknownVocabularyValue` returns the accepted **names**, so the agent can pick. `ambiguousVocabularyValue`
+returns the matching **ids**, because handing the names back would hand the ambiguity back with them
+and the agent would retry the same string for ever. Both are in the shared `errors.ts` for the reason
+#706 gives about `accepted`: one convention, not eight spellings. The name list is capped at
+`MAX_ACCEPTED_VALUES` (40) and past it the sentence points at this operation — an area list runs to
+hundreds of rows and an error an agent may hit repeatedly must not paste all of them.
+
+### The nine it names are not nine of the same thing
+
+**#708's *Done when* cannot be satisfied against the tree, and a later reader should know that rather
+than re-derive it.** It says *one call returns every vocabulary an operation in #710, #711 or #712 can
+take as input* — and none of those exists, so what the endpoint ships was derived from those three
+issue bodies. The derivation is in the pull request that landed this; **if a vocabulary turns out to
+be missing when one of them is built, adding a key is not a break** — `/api/v1` only ever grows.
+
+The issue names *conditions, formats, subtypes, certificate statuses, areas, catalogs and vendors,
+locations, currencies*. Measured against the schema they fall into four kinds, and the response is
+shaped per kind rather than flattened into one:
+
+| kind | which | shape |
+| --- | --- | --- |
+| flat, per-collection, cuid | conditions, formats, certificate statuses, subtypes, catalog vendors | `{id, name, abbreviation?, label?}` |
+| **trees** | areas, locations | the same, plus `parentId` and `assignable` |
+| hangs off a vendor | catalogs | the same, plus `vendorId` and `currency` |
+| **not this kind of thing at all** | currencies | not returned — see below |
+
+**The trees are returned flat, carrying `parentId`.** An agent that wants the tree rebuilds it in
+three lines, and nesting would repeat every parent's fields down every branch — which is exactly what
+the context-window constraint forbids. So *one call* survived intact; what did not is *one flat shape
+for all nine*.
+
+**Currencies are deliberately absent, and #708's own premise is the argument.** That premise is *all
+of them are cuid-keyed, and an agent will never guess a cuid* — true of the eight above and false of
+`"EUR"`. Currencies are a module-level constant in `src/lib/currencies.ts`: app-wide, not
+per-collection, not configurable, and already known to any model. **And no operation in the three
+takes one as input**: an offer's currency is inherited and locked from `Contact.platformCurrency`
+(#196), so drafting an offer names a *platform*, never a currency. What the agent actually needs is
+the denomination of a figure it reads, and that is the `baseCurrency` scalar on the response.
+
+**Catalog editions are absent for the same kind of reason** — an edition is a year on a book, and
+nothing in #710, #711 or #712 takes one.
+
+**Platforms are absent and are the open question**, recorded here rather than decided: #708 does not
+name them, but #711's *draft an offer* needs one, and a platform (`Contact` with `platform: true`) is
+cuid-keyed and per-collection — exactly the shape this endpoint exists for. It was left out because
+#711's verbs are explicitly provisional and adding a vocabulary on a reading of an unbuilt issue is
+guessing. **Whoever builds #711 should expect to add the key.**
+
+**Writing to the vocabulary is out of scope for the whole surface.** An agent works within the
+collector's configured terms; changing them is a settings decision and stays in the UI. There is no
+operation for it, which is the same *absence, not a flag* the section below is about.
+
+### `label`, and what it is for
+
+Vocabulary comes back **in the collection's own terms**: `name` is the canonical value the collector
+configured and is what an agent sends back. `label` is what the collection actually *displays* for
+that row where it differs — the `defaultLanguage` translation where one exists, falling back for an
+area to its `titleName`, which is genuinely a different string (internal `Second Republic` against
+public `Poland`, #210).
+
+**It is omitted when absent or identical to `name`**, which is the common case by a wide margin. A
+`label` echoing every `name` would double every vocabulary to say nothing, and this response is held
+for a whole session.
+
+**One reading of #708 here was left to its author.** The issue says *the translated label beside the
+canonical name where one exists*, and the obvious implementation would be dead code: the `name`
+columns **are** the default-language value, and the schema says the default language is excluded from
+the per-language inputs, so a translation row *for* `defaultLanguage` should not exist. What is
+implemented is the reading that is correct either way and costs nothing when there is nothing.
 
 ## What is deliberately absent
 
@@ -230,5 +333,10 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document validates and it is currently empty.** #706 ships no domain operation, so `paths` is
-`{}` — valid OpenAPI 3.1, and the honest state of the surface until #710.
+**The document carries one operation.** It was empty on #706, which shipped none, and #708 added
+`get_collection_vocabulary` — so `paths` is no longer `{}`. That earlier sentence is quoted rather
+than deleted because it stood in four files and will go on arriving in anything copied from them:
+*#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the
+surface until #710.* What is unchanged is that `build([])` is still the right way to ask what an
+empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
+asks it of a fixture list rather than of the registry.

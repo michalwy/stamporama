@@ -8,8 +8,9 @@
 //
 // The third is the one worth the machinery. An agent told `"unknown condition"` guesses again; an
 // agent handed the collection's actual condition names corrects itself in one turn. #708 extends the
-// same field to the collection's configurable vocabularies, which is why it lives in this shared
-// helper rather than being reinvented in each handler.
+// same field to the collection's configurable vocabularies — `unknownVocabularyValue` and
+// `ambiguousVocabularyValue` below — which is why it lives in this shared helper rather than being
+// reinvented in each handler.
 //
 // Pure: no Prisma, no `next/server`, no `server-only`. The route turns an `ApiError` into a
 // response; nothing here knows what a response is.
@@ -104,6 +105,58 @@ export function errorResponseBody(error: unknown): { status: number; body: ApiEr
 /** A parameter was missing, malformed, or outside its declared vocabulary. */
 export function invalidRequest(message: string, accepted?: readonly string[]): ApiError {
   return new ApiError("invalid_request", message, accepted);
+}
+
+/**
+ * A value was sent for a vocabulary parameter and no row in this collection answers to it (#708).
+ *
+ * **This is the case the `accepted` field was built for**, and it is why the convention lives in
+ * this shared helper rather than in each handler: an agent told only `"unknown condition"` guesses
+ * again and fails the same way, and an agent handed the collection's actual condition names corrects
+ * itself in one turn. Every operation taking a vocabulary value throws this one, so the sentence
+ * cannot come to have eight spellings.
+ *
+ * The sentence names the vocabulary rather than only the parameter, because an agent that sent an
+ * area name to a `condition` parameter has made a different mistake from one that misspelled a
+ * condition, and the two are told apart by reading which vocabulary was being matched against.
+ */
+export function unknownVocabularyValue(
+  value: string,
+  vocabulary: string,
+  parameter: string,
+  accepted: readonly string[]
+): ApiError {
+  return new ApiError(
+    "invalid_request",
+    accepted.length === 0
+      ? `"${value}" is not a ${vocabulary} in this collection, and this collection has no ${vocabulary} configured at all. Ask the collector to add one in Settings.`
+      : `"${value}" is not a ${vocabulary} in this collection. Send one of the accepted names, or the id from \`get_collection_vocabulary\`, as "${parameter}".`,
+    accepted
+  );
+}
+
+/**
+ * A vocabulary name matched more than one row, so the id is required (#708).
+ *
+ * **`accepted` carries the matching ids and deliberately not their names.** Nothing stops a
+ * collector naming two areas `Poland`, and handing the names back would hand the ambiguity back with
+ * them — the agent would retry the same string for ever. The ids are the only thing that
+ * distinguishes the candidates, so they are what the refusal is worth sending.
+ *
+ * Guessing instead is the alternative worth naming: it would file a copy under the wrong area
+ * silently, which on this surface is the one failure that is both invisible and expensive.
+ */
+export function ambiguousVocabularyValue(
+  value: string,
+  vocabulary: string,
+  parameter: string,
+  ids: readonly string[]
+): ApiError {
+  return new ApiError(
+    "invalid_request",
+    `"${value}" matches ${ids.length} ${vocabulary} entries in this collection, so the name is not enough. Send one of these ids as "${parameter}"; \`get_collection_vocabulary\` says which is which.`,
+    ids
+  );
 }
 
 /** No operation is bound to this path. */
