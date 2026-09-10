@@ -6,6 +6,7 @@ import { readOfferUploadSet } from "./offer-photo-generation";
 import { resolveDelcampeListingProfileForOffer } from "./delcampe-listing-profile";
 import { delcampeAuctionGaps } from "./delcampe-listing-profile-rules";
 import { normalizeListingType } from "./offer-rules";
+import { offerNumberLabel } from "./offer-set-rules";
 import {
   DELCAMPE_UPLOAD_CSV_NAME,
   type DelcampeUploadRow,
@@ -217,7 +218,7 @@ export async function buildDelcampeUploadBundle(
       refusals.push({
         offerId: offer.id,
         offerNo: offer.offerNo,
-        label: offer.name?.trim() || `Offer ${offer.offerNo}`,
+        label: offerNumberLabel(offer.name, offer.offerNo),
         reasons,
       });
       continue;

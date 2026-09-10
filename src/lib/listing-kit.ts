@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
+import { offerDisplayLabel } from "./offer-set-rules";
 import { loadColnectConditionMap } from "./colnect";
 import { soldItemIds } from "./sales";
 import { colnectGradeFor } from "./colnect-conditions";
@@ -365,8 +366,11 @@ export async function getOfferListingKit(
   // Off what is still listed, for the reason above — falling back to the whole offer where nothing
   // is left, so a sold offer's kit is still called something.
   const titleSets = liveSets.length > 0 ? liveSets : offer.sets;
-  const title =
-    offer.name ?? labeller.offer(titleSets.map((s) => ({ title: s.title, items: s.items })));
+  const title = offerDisplayLabel(
+    offer.name,
+    titleSets.map((s) => ({ title: s.title, items: s.items })),
+    labeller
+  );
   const photos = await uploadPhotos(ownerId, collectionId, offerId);
 
   return {

@@ -1687,9 +1687,13 @@ claim.
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp
 could sell twice on the same marketplace. When you add a copy that another active offer on that
-platform already lists, Stamporama shows a **heads-up**. It is only a warning: you can proceed,
-but normally you would remove it from the other offer first. (Listing the same copy on *different*
-platforms is exactly the point and is never flagged.)
+platform already lists, Stamporama shows a **heads-up** naming that offer. It is only a warning:
+you can proceed, but normally you would remove it from the other offer first. (Listing the same copy
+on *different* platforms is exactly the point and is never flagged.)
+
+The offer is named by its **title** where it has one, and by the label derived from its contents
+where it does not — the same name it goes by on the offers list and everywhere else, so the listing
+the warning points at is the listing you recognise.
 
 There is a second, wider rule some marketplaces enforce: Colnect allows only **one offer per stamp
 per condition**, whichever copy it is. Adding copies to an offer from the Inventory screen checks

@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { addOfferSet, createOffer, setOfferState } from "../../src/lib/offers";
+import { addOfferSet, createOffer, patchOffer, setOfferState } from "../../src/lib/offers";
 import {
   addSaleLines,
   createSale,
@@ -356,5 +356,36 @@ describe("choosing which set left on a sale line (#697)", () => {
       (s) => s.id === saleId
     );
     assert.equal(after?.pendingSetChoiceCount, 0);
+  });
+  // What the picker calls the offer (#1024). It named it by its contents alone until then, so a
+  // collector who had titled the listing was asked to choose a set inside an offer bearing a name
+  // he had seen nowhere else. Both directions are checked: the title when there is one, and the
+  // derived label when there is not — a fallback verified in only one direction is half a check.
+  it("names the offer by its stored title, and by its contents while it has none", async () => {
+    const { offerId, setIds } = await quantityOffer(2);
+    const saleId = await sale();
+    await addSaleLines(userId, saleId, [
+      {
+        offerId,
+        offerSetId: setIds[0],
+        price: "5.00",
+        itemIds: (await setItemIds(setIds[0])).map((r) => r.itemId),
+      },
+    ]);
+    const lineId = (await lineOf(saleId)).id;
+
+    // Untitled: the derived label, which for these single-copy sets names the stamp.
+    const derived = (await listSaleLineSetOptions(userId, lineId))!.offerLabel;
+    assert.equal(derived, "2× (Stamp S)");
+
+    await patchOffer(userId, offerId, { name: "Poland definitives — dealer lot" });
+    assert.equal(
+      (await listSaleLineSetOptions(userId, lineId))!.offerLabel,
+      "Poland definitives — dealer lot"
+    );
+
+    // Blank clears the title back to null (`OfferPatch.name`), and the label falls back again.
+    await patchOffer(userId, offerId, { name: null });
+    assert.equal((await listSaleLineSetOptions(userId, lineId))!.offerLabel, derived);
   });
 });

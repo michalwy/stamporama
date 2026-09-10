@@ -41,6 +41,7 @@ import {
   type LabelSetItemRow,
   type OfferLabeller,
 } from "./offer-labels";
+import { offerDisplayLabel } from "./offer-set-rules";
 import {
   headerChangeIsDrift,
   isListedState,
@@ -957,8 +958,14 @@ export type OfferActionReason = "sold-elsewhere" | "bidding-conflict" | "platfor
  * how many of its copies this reason accounts for. */
 export interface OfferNeedingAction {
   offerId: string;
-  /** The stored listing title (#209), or the derived label while it has none — the same fallback
-   * every offer surface makes. */
+  /** The stored listing title (#209), or the derived label while it has none — `offerDisplayLabel`,
+   * the same fallback every offer surface that prints **one** string for an offer makes.
+   *
+   * That sentence was false when it was first written here: four surfaces spelled this expression
+   * out by hand and three more named an offer by its contents alone. #1024 made it true — the rule
+   * is spelled once, in `offer-set-rules.ts`, and the surfaces that name an offer differently say
+   * there why. A surface with room for two lines hands `name` and `label` over separately instead
+   * and composes them itself (#1023); that is not this fallback being skipped. */
   label: string;
   platformName: string;
   /** Copies affected **by this reason**, not the row's whole dead count. */
@@ -1022,7 +1029,7 @@ export async function offersNeedingAction(
   const byId = new Map(
     offers.map((o) => [
       o.id,
-      { label: o.name ?? labeller?.offer(o.sets) ?? "Untitled listing", platformName: o.platform.name },
+      { label: offerDisplayLabel(o.name, o.sets, labeller), platformName: o.platform.name },
     ])
   );
 
@@ -1107,7 +1114,7 @@ export async function offersWithChangedListing(
     total,
     offers: rows.map((row) => ({
       offerId: row.id,
-      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      label: offerDisplayLabel(row.name, row.sets, labeller),
       platformName: row.platform.name,
       // Non-null by the `where`.
       changedAt: row.listingContentChangedAt!,
@@ -1221,7 +1228,7 @@ export async function offersWithObservedBidding(
     total,
     offers: rows.map((row) => ({
       offerId: row.id,
-      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      label: offerDisplayLabel(row.name, row.sets, labeller),
       platformName: row.platform.name,
       bidderCount: row.bidderCount ?? 0,
       price: row.price.toFixed(2),
@@ -1364,7 +1371,7 @@ export async function offersWithPlatformSale(
         ? [
             {
               offerId,
-              label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+              label: offerDisplayLabel(row.name, row.sets, labeller),
               platformName: row.platform.name,
               ...sale,
             },
@@ -1430,7 +1437,7 @@ export async function offersWithEndedAuction(
     total,
     offers: rows.map((row) => ({
       offerId: row.id,
-      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      label: offerDisplayLabel(row.name, row.sets, labeller),
       platformName: row.platform.name,
       price: row.price.toFixed(2),
       currency: row.currency,
@@ -1444,6 +1451,12 @@ export async function offersWithEndedAuction(
 
 export interface OfferCollision {
   offerId: string;
+  /** What to call the offer the warning is about: the stored listing title, else the label derived
+   * from its sets (`offerDisplayLabel`). One string, because the warning is a sentence naming the
+   * listings inline rather than a row with two lines to give them — so it makes the fallback rather
+   * than handing both fields over. It read the derived label alone until #1024, which is how the
+   * selection bar's *Add to #NNNN instead* could name a listing by its title while this warning
+   * named the same listing by its contents. */
   offerLabel: string;
   platformName: string;
   /** How many of the candidate copies this active offer also lists. */
@@ -1476,6 +1489,9 @@ export async function findOfferCollisions(
     },
     select: {
       id: true,
+      // The stored listing title (#1024) — one scalar on a row this read already loads, so the
+      // warning names a listing the way every other offer surface names it.
+      name: true,
       platform: { select: { name: true } },
       sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
     },
@@ -1489,7 +1505,7 @@ export async function findOfferCollisions(
     if (shared > 0) {
       collisions.push({
         offerId: offer.id,
-        offerLabel: labeller.offer(offer.sets),
+        offerLabel: offerDisplayLabel(offer.name, offer.sets, labeller),
         platformName: offer.platform.name,
         sharedCount: shared,
       });
@@ -1618,7 +1634,7 @@ export async function findStampConditionCollisions(
     .map((r) => ({
       offerId: r.id,
       offerNo: r.offerNo,
-      offerLabel: r.name ?? labeller?.offer(r.sets) ?? "Untitled listing",
+      offerLabel: offerDisplayLabel(r.name, r.sets, labeller),
       platformId: r.platformId,
       platformName: r.platform.name,
       state: (isOfferState(r.state) ? r.state : "active") as OfferState,
@@ -1756,6 +1772,9 @@ function toListItem(
   return {
     id: row.id,
     offerNo: row.offerNo,
+    // Both names, deliberately, and **not** `offerDisplayLabel` (#1024): an `OfferListItem` row has
+    // two lines to give them, so the title leads and the derived label sits beneath it, and the
+    // composition is `offer-row.tsx`'s. Flattening here would drop the one the reader did not get.
     name: row.name,
     label: labeller.offer(row.sets),
     platformId: row.platformId,
@@ -2433,7 +2452,7 @@ export async function findOffersForListings(
       platformOfferId,
       offerId: offer.id,
       offerNo: offer.offerNo,
-      title: offer.name ?? labeller?.offer(offer.sets) ?? "Untitled listing",
+      title: offerDisplayLabel(offer.name, offer.sets, labeller),
       state: offer.state as OfferState,
       path: `/c/${encodeURIComponent(collection.slug)}/offers/${offer.id}`,
       matchedBy,
@@ -2955,6 +2974,10 @@ export async function listReadyOffersForListing(
   );
   const items: ListingWorkspaceOffer[] = rows.map((row) => ({
     id: row.id,
+    // Both names rather than `offerDisplayLabel` (#1024) — `listing-offer-card.tsx` composes
+    // `name ?? label` for the card's heading and prints the title again, on its own, in the
+    // **Title** field the platform's cap is counted against. One flattened string could not do
+    // both: the card would stop being able to say *no title yet*.
     name: row.name,
     label: labeller.offer(row.sets),
     price: row.price.toFixed(2),
@@ -3942,6 +3965,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   return {
     id: offer.id,
     collectionId: offer.collectionId,
+    // Both names rather than `offerDisplayLabel` (#1024). The offer's own screen is the one place
+    // the title is **edited**, so it needs the raw field — `InlineText` writes back to it and the
+    // ↻ regenerate control turns on whether it is null — while the heading composes `name ?? label`
+    // for the reader. Flattening would make the editor unable to tell an empty title from a
+    // derived one.
     name: offer.name,
     label: labeller.offer(offer.sets),
     description: offer.description,

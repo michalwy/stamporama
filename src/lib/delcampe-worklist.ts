@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
 import { DELCAMPE_PLATFORM_MODULE } from "./platform-modules";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
+import { offerNumberLabel } from "./offer-set-rules";
 import { delcampeItemUrl, type DelcampeMatchProblem } from "./delcampe-import-rules";
 
 // What the last active-items import left to do (#611) — the read behind *On Delcampe*.
@@ -80,10 +81,6 @@ export interface DelcampeWorklist {
   unmatched: DelcampeUnmatchedListing[];
 }
 
-function label(name: string | null, offerNo: number): string {
-  return name?.trim() || `Offer #${offerNo}`;
-}
-
 function problemOf(value: string | null): DelcampeMatchProblem | null {
   return value === "no-reference" ||
     value === "unknown-offer" ||
@@ -156,7 +153,7 @@ export async function getDelcampeWorklist(
       offer: {
         id: listing.offer!.id,
         offerNo: listing.offer!.offerNo,
-        label: label(listing.offer!.name, listing.offer!.offerNo),
+        label: offerNumberLabel(listing.offer!.name, listing.offer!.offerNo),
         state: listing.offer!.state,
         price: listing.offer!.price.toFixed(2),
         currency: listing.offer!.currency,

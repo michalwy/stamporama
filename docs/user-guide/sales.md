@@ -253,9 +253,11 @@ not *this one*. They are the same thing at the same price — that is why they a
 **which copy actually goes is your choice**, made at the packing table. Pick a piece up, find a thin
 on it, and send the next one instead.
 
-Any sold unit's **⋮** menu carries **Choose set**. It lists the sets of that unit's own offer that
-are still available and marks the one the line names today with **On this line now** — including
-when there is only one, since what you came to see is which set this line is standing on.
+Any sold unit's **⋮** menu carries **Choose set**. It names the offer by its **title** where it has
+one, and by the label derived from its contents where it does not — the same name it goes by on the
+offers list. It lists the sets of that unit's own offer that are still available and marks the one
+the line names today with **On this line now** — including when there is only one, since what you
+came to see is which set this line is standing on.
 
 Each set is shown **with its copies opened out**, as full inventory rows with their scans, catalog
 number, condition and location. That is the point of the dialog: choosing between interchangeable
