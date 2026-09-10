@@ -2591,7 +2591,9 @@ Three layers, and the middle one is what makes forgetting the first harmless:
 
 1. **A merged branch deletes itself** on GitHub. **The worktree goes when its session is finished,
    which the title says and the merge does not** — the done icon `✅`, the test below — along with
-   the local branch, and the remote branch too if the work was dropped rather than merged.
+   the local `task/` branch, and the remote branch too if the work was dropped rather than merged.
+   **The throwaway `claude/` branch the spawn handed out goes as well**, and until 2026-09-10
+   no rule here named it at all (*The throwaway `claude/` branch goes too*, #1095).
 2. Per-worktree slots are reclaimed when the worktree goes (#781).
 3. **Every backlog review sweeps**: `git worktree list`, `git worktree prune`, and remove what is
    stale (`backlog-review.md`) — where *stale* is the test below, not a judgement.
@@ -2628,6 +2630,63 @@ are three behaviours of one session layer and this is a fourth, but the mechanis
 rewritten, a field going stale, and here an object re-created. **And do not make the sweep consult
 the app for liveness.** Its whole value is one string comparison against a title, and a reachability
 probe rebuilds the per-worktree GitHub lookup the done marker was introduced to replace.
+
+### The throwaway `claude/` branch goes too
+
+**Every spawn hands out a branch that nothing ever names again.** The worktree arrives on
+`claude/<name>` and the first thing the drill does is cut `task/<issue>-<slug>` from `origin/main`
+(*How a task session is actually spawned*), so the `claude/` branch is dead from that moment: the
+commits, the pull request and the merge are all the `task/` branch's. **Every cleanup rule here was
+written with that branch in view and none of them named the other one** — layer 1 removes the
+worktree *along with the local branch*, `backlog-review.md` says the same, and both meant `task/`,
+which is the branch that carries commits, merges and has a pull request pointing at it. So no rule
+had ever removed a `claude/` branch, while one is created on **every** spawn whether the worker is
+ever assigned or not. With the pool spawned ten at a time and most of it idle by design (*The pool
+of generic workers*), most of them belong to workers that did nothing at all.
+
+**Forty-six had accumulated by 2026-09-10 and were removed by hand** (#1095). Two numbers from that
+run are worth carrying and the rest is not. **None of the forty-six carried a commit that was not on
+`main`** — checked with `git cherry origin/main <branch>` per branch rather than asserted — so the
+whole cost was legibility: `git branch` unreadable, and a real leftover `task/` branch hard to see
+among fifty lines of noise. **And the count moved while it was being taken**: a tally made minutes
+earlier said eight branches were held and the run found seven, because a session had cut its `task/`
+branch in between. **So re-derive rather than quote, this paragraph included.** Immediately after
+that sweep `git branch --list 'claude/*'` gave **10**, of which **9** were held by a live worktree
+and one was not — the session writing this, whose own worktree had moved to `task/1095-…` an hour
+before and whose spawn branch was therefore already rubbish while the session was very much alive.
+
+**So the guard is the checkout and never the age**, which is *A held session's worktree is not
+stale* transposed from the worktree to the branch. `git worktree list --porcelain` prints a
+`branch refs/heads/…` line for every checked-out branch, and that is the whole test: an unheld
+`claude/` branch is removable **whatever its age, and whether or not its session is alive** — the
+measurement above is that case observed on the session taking it. The held set is
+`git worktree list --porcelain | sed -n 's|^branch refs/heads/||p'`, the whole set is
+`git branch --list 'claude/*' --format='%(refname:short)'`, and the candidates are the second
+minus the first — `comm -23` over both, sorted. Each candidate is deleted only once
+`git cherry origin/main <branch>` prints no `+`. **Both checks belong inside the loop rather than
+once up front**, because sessions start and cut branches while the sweep runs, which is exactly what
+the eight-against-seven discrepancy was.
+
+**Local only.** Nothing pushes a `claude/` branch — `git ls-remote --heads origin
+'refs/heads/claude/*'` answered zero refs on both occasions it was asked — so no rule here reaches a
+remote branch, and one should not be written to.
+
+**And this is not a defect in the worktree sweep, which is the half a later reader will otherwise
+take away.** That sweep enumerates `git worktree list` and resolves each path to a session, so a
+branch that no worktree holds appears in nothing it looks at: it was never something the sweep could
+have found and failed to act on. What was missing is a rule about a **different object**, and that
+is this project's recurring shape one more time — **whoever enumerated what to clean up
+enumerated the things they had thought of.** Do not correct the sweep's title test on the
+strength of this.
+
+**One machine-local obstacle is recorded here because nothing else can carry it.** `git branch -D`
+was refused to a lead running in a worktree, and **a lead runs in a worktree by construction** (*A
+held session's worktree is not stale*, on `👑`) — so the session that owns this sweep is structurally
+the one session that cannot perform this part of it. Three permission rules cleared it:
+`Bash(git branch -D:*)`, `Bash(git worktree remove:*)` and `Bash(git worktree prune:*)` in
+`.claude/settings.local.json`, which is gitignored and therefore a fact this repository cannot hold.
+It is written beside the rule it blocks rather than left in a store nothing can contradict, which is
+what *Memory is not versioned, and nothing expires it* asks of a fact of that shape.
 
 ### A held session's worktree is not stale
 
