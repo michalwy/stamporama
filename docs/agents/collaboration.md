@@ -2215,10 +2215,12 @@ whenever the vocabulary did — twice on 2026-09-08, when a working session gain
 number and when a session holding several issues gained a spelling at all — and since #1042 a new
 *shape* no longer touches it, because every working shape leads with one of the working icons
 (*Session titles*). **A new icon still does**, which is what #1048 spent the same afternoon: `🎨` had
-to be added here, in `backlog-review.md` and in the table, three places for one row. **That is the
-honest price of the icons and it is lower than the one it replaced** — a shape amendment used to
-cost the same three edits and arrived twice in one day, where an icon amendment has arrived once in
-three. **That is a shorter list and not a stronger one.** A longer one invites being
+to be added here, in `backlog-review.md` and in the table, three places for one row. **The price per
+amendment is unchanged — three edits either way — and what is bought is that most amendments stop
+being amendments**: a new *shape* now costs nothing, where two of them cost three edits each on
+2026-09-08 (#975, #993). **Whether icons are also amended less often is not yet knowable**: the set
+is one day old and has been amended once already, so do not read the claim as a rate.
+**That is a shorter list and not a stronger one.** A longer one invites being
 read as the decision procedure, and this is not one either: titles are unenforced, so a session
 whose icon is missing or unknown falls through to *ask the user* rather than into a removal —
 exactly where a missing `[DONE]` fell.
