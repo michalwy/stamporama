@@ -76,6 +76,11 @@ a whole sellable piece:
   buyer took. A set is indivisible — a series never breaks apart, so selecting it retires all of
   its copies together.
 
+Your ticks survive the search box and the **Type** facet, so you can find one listing, tick it,
+search for the next and add them together. When some of what you have ticked is off screen the
+button says so — **Add 7 sets (3 hidden by these filters)** — and with everything on screen it
+stays a plain **Add 7 sets**.
+
 Tick every set that sold and set each one's **sale price** in the sale currency (the offer's
 asking price pre-fills, since the offer and the sale share the platform's currency). The price is
 just a starting point — **override it** whenever the set actually sold for a different amount (say

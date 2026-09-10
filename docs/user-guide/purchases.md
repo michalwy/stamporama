@@ -1237,7 +1237,11 @@ before recording the receipt, or you filed one under the wrong order. Use the lo
 **Attach existing copies…**.
 
 The dialog is the same picker used elsewhere: areas and years down the left, a searchable list
-of copies on the right, tick the ones you want. Attaching changes the copy's **purchase link and
+of copies on the right, tick the ones you want. **Your ticks survive the search, the area tree and
+the year facets**, so you can gather copies from several searches and attach them in one go; when
+some of what you have ticked is off screen the button says so — **Attach 7 copies (3 hidden by
+these filters)** — and with everything on screen it stays a plain **Attach 7 copies**. Attaching
+changes the copy's **purchase link and
 nothing else** — its condition, storage, delivery status, dispositions, photos and
 [internal number](inventory.md#internal-copy-number) all stay exactly as they were. A copy
 already in hand does **not** go back to *Ordered* because you recorded its cost late.

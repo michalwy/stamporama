@@ -12,6 +12,7 @@ import {
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
@@ -173,6 +174,13 @@ export function TradeCopyPickerDialog({
   }
 
   const selectedIds = useMemo(() => [...selected], [selected]);
+
+  // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
+  // Here that is four axes rather than three — the area rail, "Any held copy" and the for-trade
+  // list it opens on are all resolved server-side, the year facet and the search client-side — so
+  // what is subtracted is the rows on screen rather than any one of them.
+  const hiddenTicks = countHiddenTicks(selected, new Set(allVisibleIds));
+  const hiddenNote = hiddenTicksSuffix(hiddenTicks);
 
   function submit() {
     setError(undefined);
@@ -342,8 +350,8 @@ export function TradeCopyPickerDialog({
             {isPending
               ? "Adding…"
               : selectedIds.length > 1
-                ? `Add ${selectedIds.length} copies`
-                : "Add copy"}
+                ? `Add ${selectedIds.length} copies${hiddenNote}`
+                : `Add copy${hiddenNote}`}
           </DialogPrimaryButton>
         </div>
       </DialogFooter>

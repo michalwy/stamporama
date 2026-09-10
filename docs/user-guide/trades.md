@@ -152,6 +152,11 @@ uses, with a checkbox on every row. It opens on the copies you have marked **for
 that is where you file what you are willing to part with; tick **Any held copy** to widen it to
 everything you hold, for the piece a partner asks for by name.
 
+**Your ticks survive the search, the area tree, the year facets and the Any held copy switch** —
+gather copies from several searches and add them in one go. When some of what you have ticked is
+off screen the button says so: **Add 7 copies (3 hidden by these filters)**. With everything on
+screen it stays a plain **Add 7 copies**.
+
 Copies that are **not** offerable never appear: one that is sold, no longer held, not yet arrived,
 or already promised to another live trade. If something becomes unavailable between opening the
 picker and pressing the button — someone else's tab, a sale recorded in between — the ones that went

@@ -14,6 +14,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
@@ -176,6 +177,12 @@ export function AttachCopiesDialog({
   }
 
   const selectedIds = useMemo(() => [...selected], [selected]);
+
+  // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
+  // The area rail is resolved server-side and the year facet and search client-side, so what is
+  // subtracted is the rows on screen rather than any one of the three.
+  const hiddenTicks = countHiddenTicks(selected, new Set(allVisibleIds));
+  const hiddenNote = hiddenTicksSuffix(hiddenTicks);
 
   // The selected copies that would be taken off another purchase. Named rather than counted: the
   // question a collector needs answered before agreeing is *which* order loses them.
@@ -383,8 +390,8 @@ export function AttachCopiesDialog({
             {isPending
               ? "Attaching…"
               : selectedIds.length > 1
-                ? `Attach ${selectedIds.length} copies`
-                : "Attach copy"}
+                ? `Attach ${selectedIds.length} copies${hiddenNote}`
+                : `Attach copy${hiddenNote}`}
           </DialogPrimaryButton>
         </div>
       </DialogFooter>
