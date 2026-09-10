@@ -1708,6 +1708,16 @@ a tidying rule and not a prohibition. That is what the date is for — it lets a
 that was taken from practice that merely accumulated, and date the reason above when weighing whether
 it still holds.
 
+**The tooling itself says the opposite, and it is overridden deliberately rather than followed.**
+After an ordinary `Write` a session is told that no preview server is running and to call
+`preview_start`; it arrives unprompted, at every session in every project, and **it is emitted by
+the harness rather than configured here** — `.claude/settings.json`,
+`.claude/settings.local.json` and both files under `~/.claude` configure no hooks at all, and
+nothing under `~/.claude` names it — so unlike a wrong sentence in a file there is nothing here to
+correct and no hook to hunt for. Noticed on 2026-09-10 (#1040): the #1022 session ignored it
+**because it had read this section**, which is the whole of the guard — one that had not would have
+started a dev server and left it running, which AGENTS.md separately forbids.
+
 ### If nobody could see it, the user looks before the merge
 
 The rule above says no session can verify a visual change. It did not say who does, or when, and in
