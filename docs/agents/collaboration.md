@@ -1840,11 +1840,11 @@ go-ahead, the moment the five required checks are green. The boundary was decide
 
 - **Every `major`, of every dependency, without exception.** The last rule in `renovate.json` says so
   whatever matched before it, and it is last for exactly that reason.
-- **Anything on the never-alone list**: the Next.js/React framework group (`eslint` included),
-  TanStack, Prisma, the bundled Postgres image, `pdf-lib`, `lucide-react`, `marked`/`dompurify`,
-  `sharp`, `better-auth`, `node`/`pnpm`, `@google-cloud/storage`. These are grouped and
-  **unscheduled**, so they reach the user promptly instead of waiting for the Monday window, and they
-  wait for a person however small the bump.
+- **Anything on the never-alone list**: the Next.js/React framework group (`eslint` and
+  `typescript` included), TanStack, Prisma, the bundled Postgres image, `pdf-lib`, `lucide-react`,
+  `marked`/`dompurify`, `sharp`, `better-auth`, `node`/`pnpm`, `@google-cloud/storage`. These are
+  grouped and **unscheduled**, so they reach the user promptly instead of waiting for the Monday
+  window, and they wait for a person however small the bump.
 
   **Two things put a dependency on that list, and the second is the one that gets missed.** The first
   is a reason written *in this tree* — AGENTS.md, a topic file, an ADR — that a bump could invalidate;
