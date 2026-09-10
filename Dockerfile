@@ -11,8 +11,10 @@ RUN apk add --no-cache font-dejavu fontconfig
 ENV FONTCONFIG_PATH=/etc/fonts
 
 # Install dependencies only
-# pnpm-workspace.yaml carries onlyBuiltDependencies/allowBuilds; without it pnpm 11
-# aborts install with ERR_PNPM_IGNORED_BUILDS for prisma/esbuild/sharp/etc.
+# pnpm-workspace.yaml carries allowBuilds; without it pnpm aborts install with
+# ERR_PNPM_IGNORED_BUILDS for prisma/esbuild/sharp/etc. It used to name
+# onlyBuiltDependencies too, which pnpm 11 replaced with allowBuilds and has
+# silently ignored ever since — dead config that read as load-bearing (#1050).
 FROM base AS deps
 WORKDIR /app
 # Only these three files, deliberately: the layer is cached on the dependency set alone, so a
