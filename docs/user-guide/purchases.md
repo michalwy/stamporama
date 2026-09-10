@@ -1255,7 +1255,9 @@ Two rules follow from cost-basis being frozen when a lot closes:
 
 A copy that belongs to **another open purchase** *is* offered, but never moved quietly: the
 dialog names the order it would be taken off and asks you to confirm the move before the
-**Attach** button becomes available.
+**Attach** button becomes available. This counts **everything you have ticked**, not only what is
+on screen — so a copy you ticked before moving the area tree is still named in the warning, and the
+confirmation is still offered for it.
 
 ### The delivery lifecycle: ordered → to sort → delivered
 

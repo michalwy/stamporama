@@ -15,6 +15,7 @@ import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
+import { summarizeRelink, type TickedCopy } from "@/lib/attach-relink";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
@@ -73,7 +74,11 @@ function useAttachableCopies(collectionId: string, lotId: string, areaIds: strin
  *
  * A copy that already belongs to **another** purchase is offered but never moved silently — the
  * footer names the orders being left and the move has to be confirmed, because reassigning a copy
- * changes what two purchases each say they bought. Copies frozen into a *closed* lot are not in
+ * changes what two purchases each say they bought. That warning is read off the **selection** and
+ * not off the fetched page (#1079, `@/lib/attach-relink`): the area rail is server-side, so a copy
+ * ticked under one area is absent from `copies` once the rail moves, and a warning derived from
+ * `copies` went silent for exactly the collector the hidden-ticks label had just invited to tick
+ * across areas. Copies frozen into a *closed* lot are not in
  * the list at all: their cost basis has already been split (ADR-0009 §3), so that lot has to be
  * reopened first, and the server refuses them on the same grounds.
  */
@@ -109,7 +114,12 @@ export function AttachCopiesDialog({
   );
 
   const [search, setSearch] = usePersistedSearch(`${collectionId}:attach-copies`);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The selection carries what the re-link warning needs rather than re-deriving it from the
+  // current fetch (#1079): the area rail is resolved server-side, so a copy ticked under one area
+  // is not in `copies` at all once the rail moves, and a warning read off `copies` went silent for
+  // exactly the collector who had ticked across areas. A tick is recorded at the moment it is
+  // made, which is the moment the collector can see the order it is coming off.
+  const [selected, setSelected] = useState<Map<string, TickedCopy>>(new Map());
   const [confirmRelink, setConfirmRelink] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
@@ -154,11 +164,11 @@ export function AttachCopiesDialog({
     });
   }, [copies, year, search, vendorMapFor]);
 
-  function toggle(id: string) {
+  function toggle(item: ItemListItem) {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const next = new Map(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.set(item.id, { relinkFrom: item.purchase?.label ?? null });
       return next;
     });
   }
@@ -167,34 +177,29 @@ export function AttachCopiesDialog({
   const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id));
   function toggleAll(on: boolean) {
     setSelected((prev) => {
-      const next = new Set(prev);
-      for (const id of allVisibleIds) {
-        if (on) next.add(id);
-        else next.delete(id);
+      const next = new Map(prev);
+      for (const c of visibleCopies) {
+        if (on) next.set(c.id, { relinkFrom: c.purchase?.label ?? null });
+        else next.delete(c.id);
       }
       return next;
     });
   }
 
-  const selectedIds = useMemo(() => [...selected], [selected]);
+  const selectedIds = useMemo(() => [...selected.keys()], [selected]);
 
   // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
   // The area rail is resolved server-side and the year facet and search client-side, so what is
   // subtracted is the rows on screen rather than any one of the three.
-  const hiddenTicks = countHiddenTicks(selected, new Set(allVisibleIds));
+  const hiddenTicks = countHiddenTicks(selected.keys(), new Set(allVisibleIds));
   const hiddenNote = hiddenTicksSuffix(hiddenTicks);
 
-  // The selected copies that would be taken off another purchase. Named rather than counted: the
-  // question a collector needs answered before agreeing is *which* order loses them.
-  const relinked = useMemo(
-    () => copies.filter((c) => selected.has(c.id) && c.purchase),
-    [copies, selected]
-  );
-  const relinkedOrders = useMemo(
-    () => [...new Set(relinked.map((c) => c.purchase!.label))],
-    [relinked]
-  );
-  const needsConfirm = relinked.length > 0;
+  // The selected copies that would be taken off another purchase — read off the **selection**, so a
+  // tick made under an area the rail has since left is still counted and its order still named
+  // (#1079). Named rather than counted: the question a collector needs answered before agreeing is
+  // *which* order loses them, so the count and the names come out of one pass and cannot drift.
+  const relinked = useMemo(() => summarizeRelink(selected), [selected]);
+  const needsConfirm = relinked.count > 0;
 
   function submit() {
     setError(undefined);
@@ -318,7 +323,7 @@ export function AttachCopiesDialog({
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggle(item.id)}
+                        onChange={() => toggle(item)}
                         aria-label="Select this copy"
                         style={{ cursor: "pointer" }}
                       />
@@ -366,11 +371,11 @@ export function AttachCopiesDialog({
               style={{ marginTop: "0.15rem", cursor: "pointer" }}
             />
             <span>
-              <Icon name="warning" size="sm" /> {relinked.length}{" "}
-              {relinked.length === 1 ? "copy belongs" : "copies belong"} to another purchase (
-              {relinkedOrders.join(", ")}). Attaching{" "}
-              {relinked.length === 1 ? "it" : "them"} here moves{" "}
-              {relinked.length === 1 ? "it" : "them"} off that order. Confirm the move.
+              <Icon name="warning" size="sm" /> {relinked.count}{" "}
+              {relinked.count === 1 ? "copy belongs" : "copies belong"} to another purchase (
+              {relinked.orders.join(", ")}). Attaching{" "}
+              {relinked.count === 1 ? "it" : "them"} here moves{" "}
+              {relinked.count === 1 ? "it" : "them"} off that order. Confirm the move.
             </span>
           </label>
         </div>
