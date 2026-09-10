@@ -2853,6 +2853,36 @@ anything, resolve the path to its session:
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
+**The list's `prState` and `prNumber` are a cache; GitHub is the record** (#1010). They go stale
+and never announce it. On 2026-09-08 six sessions were shown `OPEN` whose pull requests had all
+merged, with a dozen older rows wrong the same way; on 2026-09-10 the field showed seven `OPEN` of
+which **six were `MERGED`** — re-measured against `gh pr view` for this paragraph rather than
+quoted, because taking somebody else's count for a claim about a stale count is the failure the
+paragraph is about. `prNumber` drifts too, which is the half nobody had an instance of: one session
+titled `✅ #1075[#1097]` carries `prNumber: 1096`, so the field and the title name different pull
+requests. **`gh pr list --state open`, or `gh pr view <n> --json state`, is what answers what is
+open.** No claim is made here about *why* the cache is stale — it is the app's, machine-local, and
+outside this repository.
+
+**And this is not scoped to the lead.** The obvious reader of that field is a lead checking what is
+in flight, and nothing in this file sends anyone there or warns them off; but a **task session**
+reached for it unprompted while composing a report and produced a finding that was well reasoned at
+every step and entirely false — that #1072 was open with no live session behind it, when it had
+merged hours earlier. **The instrument under a correct inference lied.** The lead read the same
+stale `OPEN` in the same hour and escaped only because a separate `gh pr list` in the same batch
+happened to disagree, **which is two commands disagreeing rather than a check**.
+
+**The `✅` test is untouched, and that is the convention being vindicated rather than a near miss.**
+The sweep keys on a **title** — a field a person writes and the app only stores — and reads no
+computed field at all, so a stale `prState` cannot reach it. That is not why the title test was
+chosen: it replaced *go and establish whether its pull request merged*, a GitHub lookup per
+worktree that was also silent about a session which finished without opening a pull request. **It
+held against a failure it was not designed for**, which is worth more as an argument for the
+convention than as a note about the cache. The general form is one this file already has in two
+other costumes: **a field describing GitHub is a cache and GitHub is the record**, the same relation
+`main.json` has to the ruleset and the `case` glob to the safe list — *prose that points does not
+drift; prose that copies does*, applied to a data field.
+
 **Removing a worktree rewrites its session's `cwd` to the repository root, and the sweep is
 unaffected** (#1089) — which is worth saying in that order, because the fear it raises is a defect in
 the sweep. **The sweep runs path → session**: it enumerates `git worktree list` and looks each path
