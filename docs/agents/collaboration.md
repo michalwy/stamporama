@@ -1982,8 +1982,9 @@ detail — do not restate it in this file:
 ## No browser verification — a deliberate departure
 
 **A session does not start a dev server and does not drive a browser unless the user explicitly asks
-for it.** It verifies with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and `pnpm test:integration`,
-and says in its report what it ran.
+for it.** It verifies with whichever of `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and
+`pnpm test:integration` **could see the change** — the question below — and says in its report which
+of them ran **and which did not, and why**.
 
 **The user tests the application themselves, through Docker Compose.** That is where the app is
 actually exercised here, and a session's dev server is a second, differently-configured copy that
@@ -2010,6 +2011,78 @@ nothing under `~/.claude` names it — so unlike a wrong sentence in a file ther
 correct and no hook to hunt for. Noticed on 2026-09-10 (#1040): the #1022 session ignored it
 **because it had read this section**, which is the whole of the guard — one that had not would have
 started a dev server and left it running, which AGENTS.md separately forbids.
+
+### A suite that could not see the change is not run
+
+**The suites are not a list to work through; the question is whether each one could see what
+changed.** `AGENTS.md`'s *Testing Direction* is the record of that rule and this section is the
+reasoning behind it — the same split the wake-up drill has (*A pooled worker reads nothing until it
+is assigned*), and for the same reason: what a session acts on belongs in the file it has already
+read, and the argument belongs where there is room for it.
+
+**Raised by the user on 2026-09-10** — *"Po co worker edytujący tylko docsy uruchamia
+linter, typecheck i testy? Przecież nie ma szans, żeby coś się zmieniło edytując tylko
+dokumentację."* — and **the repository already agreed with him**. It was the lead's briefs
+asking for the suites, not the file: `pnpm lint` has said *touches source files* since it was
+written, and that one qualifier reached neither `typecheck` nor `test:unit` nor the flat list of
+four suites in the paragraph above, which is the sentence a session actually reads (#1086).
+
+**Measured rather than reasoned about**, because *could it see this* is a question about
+configuration and never about intent:
+
+| script | what decides what it reads | sees a `.md` change? |
+| --- | --- | --- |
+| `pnpm lint` | `eslint.config.mjs` — no `.md` in any `files:`, and no markdown plugin | no |
+| `pnpm typecheck` | `tsconfig.json`, whose `include` is `**/*.ts` and `**/*.tsx` | no |
+| `pnpm test:unit` | what its 175 test files actually open | no |
+
+Four of those 175 mention a documentation path — `ruleset-drift`, `unit-suite-purity`,
+`album-divergence`, `dev-slot-cli` — and all six mentions are **comments citing a document**, not
+code reading one. Checked line by line rather than inferred from the file list, and the `lint` row
+is the tool's own answer rather than a reading of its config: `pnpm exec eslint AGENTS.md` reports
+*File ignored because no matching configuration was supplied*.
+
+**CI has been saying this all along.** A pull request whose every file is inside the
+`Detect changes` safe list reports those four required checks as **skipped**, so a documentation
+branch that runs the suites locally is running exactly what CI has already established has nothing
+to say (*A pull request no CI job can speak to skips all four*).
+
+**Do not turn this into a path list, and the near cases are why.** The unit suite reads well outside
+`src/`: `tests/unit/ruleset-drift.test.ts` reads `.github/rulesets/main.json` and
+`scripts/check-ruleset.mjs`, `tests/unit/dev-slot-cli.test.ts` reads `package.json` and
+`scripts/dev-slot.sh`, and `tests/unit/unit-suite-purity.test.ts` and
+`tests/unit/stamp-form-dialog-invalidation.test.ts` walk `tests/` and `src/` off disk. A list drawn
+around *documentation versus source* is wrong about every one of those **today**, before anybody
+adds the documentation-reading test everyone imagines as the future failure — and maintaining it
+would fall to whoever adds one, the least likely person to think of it. The question needs no
+maintenance at all, because it is answered against the configuration each time it is asked.
+
+**And it is not the `Detect changes` safe list either, which is the tempting shortcut.** That list
+answers *which CI jobs run, and what the lead may merge on its own read*; this question answers
+*what a session runs locally*. They agree today on `*.md` and `docs/*`, and they are still different
+instruments — reading one off the other would quietly import a merge licence into a testing rule
+(*Adding a path here grants that merge licence too*).
+
+**A documentation branch is not an unverified branch, and this must not be allowed to become that.**
+`Closing reference check` is gated on nothing, runs on every pull request, and **can be red on a
+documentation branch** — both incidents that produced it were documentation-only (*The check that
+enforces it*). And the verification that actually applies to prose is the one this file already
+prescribes: the sweep, run before the edit as well as after (*Sweeping for a claim*). What is
+dropped is three suites that cannot see the change; nothing that could have found something.
+
+**The report says which suites ran *and which did not, and why*.** *"lint, typecheck and test:unit
+not run — documentation only"* is a sentence the lead can disagree with; silence is
+indistinguishable from having forgotten, which is #1066's subject one layer out. That is the same
+answer this file reaches for the drill — read whether the thing succeeded rather than perform it —
+turned on a suite that was deliberately not run.
+
+**What this buys is small in minutes and larger in what it stops teaching.** A full `pnpm test:unit`
+is the whole suite — 2,952 tests when #1086 was filed — and `pnpm typecheck` runs `next typegen`
+first, so it is several minutes per documentation task on a queue that is one worker at a time.
+**The real cost was the ritual.** A verification step that cannot fail teaches that verification is
+something you perform rather than something that answers a question, which is *a check that cannot
+see the failure is not a check* (*Verification, not trust*), asked of a session's own suites rather
+than of a dependency bump.
 
 ### If nobody could see it, the user looks before the merge
 
