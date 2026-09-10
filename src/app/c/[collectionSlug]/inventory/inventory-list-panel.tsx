@@ -1336,7 +1336,12 @@ export function InventoryListPanel({
                       }}
                     >
                       {hiddenSelectedCount > 0
-                        ? `${selectedInView.length} of ${selectedCopies.length} ticked copies in view`
+                        ? // The noun follows the **total**, not the number in view: `0 of 1 ticked
+                          // copies` is the reachable case, and it reads as a template rather than
+                          // as a sentence.
+                          `${selectedInView.length} of ${selectedCopies.length} ticked cop${
+                            selectedCopies.length === 1 ? "y" : "ies"
+                          } in view`
                         : `${selectedCopies.length} cop${selectedCopies.length === 1 ? "y" : "ies"} selected`}
                     </span>
                     {/* What became of the rest, in the two terms that stop the number reading as a
