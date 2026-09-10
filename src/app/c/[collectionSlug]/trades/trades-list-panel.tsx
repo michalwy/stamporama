@@ -49,10 +49,15 @@ interface TradesListPanelProps {
  * Filtered and paged **on the server**, like purchases and unlike the want list: a trade holds tens
  * of lines each and the list is meant to survive years of them.
  *
- * The status filter and the search live in the URL, which is what makes the quick jump work — `t 7`
- * lands here with `?search=#7`, and the same box a collector types a partner's name into is the one
- * that number arrives in. Which of the two a query is, is decided server-side so the box and the
- * jump cannot come to disagree.
+ * The status filter and the search live in the URL. One box carries **two meanings** — `#7` is the
+ * trade number, anything else is the partner's name — and which of the two a query is, is decided
+ * **server-side**, in the route handler, so the box and the list cannot come to disagree.
+ *
+ * **The `t 7` quick jump is not what that is for, and this docblock said it was until #1092.** It
+ * landed here with `?search=#7` only while a trade had nothing of its own to land on; since #557
+ * `t` resolves to `/c/<slug>/trades/<id>` (`quick-jump-server.ts`), the trade's own screen, and the
+ * row is a real link to the same place. A copy and an issue are the two whose jump still arrives on
+ * a filtered list.
  */
 export function TradesListPanel({
   collectionId,
