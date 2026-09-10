@@ -88,6 +88,19 @@ describe("the collection vocabulary operation", () => {
     await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 },
     });
+    // **The discriminating row**, and it exists because the obvious test did not discriminate.
+    // A condition translated into a language that is *not* this collection's, and into no other:
+    // with the filter its `label` is absent, and without the filter its `label` becomes
+    // "Gefalzt". Asserting on `MNH` instead could not see the difference — it carries a `pl` row
+    // as well, which Prisma happened to return first, so dropping the filter left the answer
+    // unchanged and the test green. Only a row with exactly one, wrong-language translation
+    // separates *the filter works* from *the ordering was lucky*.
+    const mh = await prisma.stampCondition.create({
+      data: { collectionId, name: "Mint Hinged", abbreviation: "MH", sortOrder: 2 },
+    });
+    await prisma.stampConditionTranslation.create({
+      data: { stampConditionId: mh.id, language: "de", name: "Gefalzt" },
+    });
     // The other collection's rows must not appear anywhere in the answer.
     await prisma.stampCondition.create({
       data: {
@@ -166,7 +179,7 @@ describe("the collection vocabulary operation", () => {
 
   it("returns every vocabulary in one call", async () => {
     const vocabulary = await readCollectionVocabulary(context);
-    assert.equal(vocabulary.conditions.length, 2);
+    assert.equal(vocabulary.conditions.length, 3);
     assert.equal(vocabulary.formats.length, 1);
     assert.equal(vocabulary.certificateStatuses.length, 1);
     assert.equal(vocabulary.subtypes.length, 2);
@@ -209,12 +222,22 @@ describe("the collection vocabulary operation", () => {
   });
 
   it("reads the label from the collection's default language and no other", async () => {
-    // The German row exists and must not win: `defaultLanguage` is what decides, and a response
-    // carrying every language would be the context cost this endpoint's whole shape guards against.
-    const mnh = (await readCollectionVocabulary(context)).conditions.find(
-      (row) => row.abbreviation === "MNH"
+    // **This is the control that had to be rewritten to be one.** The first version asserted that
+    // `MNH` — which carries both a `pl` and a `de` translation — does not come back as "Postfrisch",
+    // and it passed with the language filter deliberately removed: Prisma returned the `pl` row
+    // first and the answer was unchanged. A check that cannot see the failure is not a check.
+    //
+    // `MH` is translated into German and nothing else, so with the filter there is no label at all
+    // and without it the label is "Gefalzt". No row ordering can rescue that.
+    const conditions = (await readCollectionVocabulary(context)).conditions;
+    const mh = conditions.find((row) => row.abbreviation === "MH");
+    assert.ok(mh);
+    assert.ok(
+      !("label" in mh),
+      "a translation in a language this collection does not use must not become its label"
     );
-    assert.notEqual(mnh?.label, "Postfrisch");
+    // And the positive half beside it, so a filter that matched *nothing* would not pass either.
+    assert.equal(conditions.find((row) => row.abbreviation === "MNH")?.label, "Czysty bez podlepki");
   });
 
   it("omits the label entirely where there is nothing to say", async () => {
