@@ -1131,6 +1131,110 @@ The interactive question tool stops the session until he answers, which is the o
 when he is away from the machine. **Ask in a row and carry on with everything the answer does not
 block** — the same rule *Questions are asynchronous* gives a task session, applied to the lead.
 
+## The lead reads its own context before each launch
+
+**Decided by the user on 2026-09-10 and confirmed by him the same day as a standing rule** (#1083).
+The lead reads its own context occupancy **once, immediately before launching each new task** — not
+on a timer — and acts on two thresholds that are his rather than the lead's.
+
+**The command, because a durable statement carries the command and not the number** (*Memory is not
+versioned, and nothing expires it*). The session's own transcript carries a `usage` block on every
+assistant message, and the occupancy is the sum on the **last** one, kept on one line here so that a
+fixed-string search can find it:
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. It lags by one turn — it is
+the last *completed* message — which at ten-point thresholds does not matter.
+
+**Find the file by the glob and derive nothing**: `~/.claude/projects/*/<sessionId>.jsonl`, with the
+`sessionId` taken from the last segment of the scratchpad path the session prompt states. **A
+worktree can be recycled mid-session and the transcript moves with it** (*Worktree cleanup*), so a
+path derived once and kept is wrong from that moment, without warning; the glob survives a recycle
+and needs no rule about how a project directory key is spelled. Select entries by the presence of
+the `usage` key rather than by type, and **keep a sidechain filter and treat it as untested** — no
+lead measured so far has used the Agent tool, so none had any, and a lead that spawns subagents
+would.
+
+**Whether the last block is the right one is checkable rather than hoped for**: the series should be
+strictly monotonic. That is the guard worth running once when adopting this, not every time.
+
+**The thresholds are the user's**, not the lead's, and a later reader should not tune them as an
+implementation detail: 60, 70 and 80 are yellow, orange and red. **There are two triggers, and which
+one applies depends on whether there is a release to cut.** His wording is quoted rather than
+paraphrased, because a paraphrase loses the exception and leaves 75 reading as an unconditional
+second hold: *"Tak, chyba że akurat nie ma sensu wydawania wersji, wtedy sam handover na 80%."*
+
+| at the pre-launch check | if a release is warranted | if it is not |
+| --- | --- | --- |
+| **75%** | **cut the release, then hand over** | nothing; carry on |
+| **80%** | — | **hand over** |
+
+- **80% is a hold, and a hold is not a decision.** Over 80% at the check the lead does not assign:
+  it says so and waits for him. He may want the handover, may want the task started anyway, may want
+  the queue paused, and it is his call. **It is where a handover *begins*, not where it must be
+  finished** — composing one costs context itself, which is why the lead's own first proposal of 90%
+  was wrong and he set it lower.
+- **75% is not a second hold.** It fires only when there is a release to cut, and what it buys is
+  that the release happens *before* the handover rather than landing on a lead that has just read
+  itself in. Below a warranted release it is silent, and a lead that passes it with nothing to ship
+  simply continues to 80.
+- **Whether a release is warranted is not a new judgement and must not become one.** It is the
+  question `backlog-review.md` and `release-versioning.md` already answer — a coherent batch of
+  shippable commits since the last tag — and where the answer is unclear, `release-versioning.md`
+  step 2 already says to ask the user. Do not write a context-specific test for it into this rule.
+- **The lead does not cut the release itself.** A release session is spawned fresh every time
+  (*Release sessions*), so at 75% the lead's act is to brief one, and the handover follows the tag.
+- **The arithmetic around the thresholds is the lead's**, and it is worth naming as such: the
+  outgoing lead of 2026-09-10 handed over at **70.6%**, a cycle short of 75, because a work cycle
+  begun there would have straddled the threshold and forced a choice between handing over a branch
+  in flight and overrunning. It said plainly that this was a judgement rather than a threshold
+  firing, which is the right shape — the thresholds are his and the reasoning around them is the
+  lead's.
+
+**Why at the launch point rather than on a timer.** The lead's first attempt was a background
+monitor polling every three minutes, and the user rejected it. **His stated reason and the better
+reason are different, so both are worth recording.** His: it costs tokens and context — partly true
+and worth stating precisely, since the polling is a subprocess reading a file and costs no context
+at all, while only an emitted event does. **The better reason is placement.** A timer reports at an
+arbitrary moment, quite possibly mid-task, when the only moment the number changes a decision is
+immediately before committing the next one — where the lead is already taking a turn and the check
+is one command. **The general shape is not about context at all**: prefer a check at the decision
+point to a watch on a clock, whenever the decision is a discrete act somebody performs anyway. **And
+a context watch is self-defeating in a way most watches are not** — every notification it sends
+consumes the thing it is measuring.
+
+**About 13 points is what makes any threshold non-arbitrary.** A lead's first turn — reading
+`AGENTS.md`, this file in full, and verifying the inherited state — cost **12.72 pp in a single
+turn**, three times any other turn in that session. **So an incoming lead starts roughly a seventh
+of the way through its window before it has done anything at all**, and that, rather than the cost
+of composing the handover, is the argument for a threshold in the seventies rather than at 90.
+
+**The window is 1,000,000 tokens, it is the user's figure, and it rests on two calibration points
+taken hours apart by two leads**: 561,595 tokens against his *56%*, and 238,695 against his *24%*.
+**The two are 2.4× apart in magnitude, which is what makes the pair worth more than twice one
+point** — a constant offset between the two counters would show as a drift between the implied
+windows, and it does not. **Nothing finer than 1M can be claimed from them**, because his display is
+rounded to a whole percent, which is ±5,000 tokens: a two-point fit lands inside that noise, and its
+number is an artefact of the rounding rather than a measurement. **A third point costs one line in a
+reply** and should record both readings in the same exchange — the second pair was some turns apart,
+by which time the lead's own reading had drifted 0.27 pp.
+
+**Compaction, usage overage and sidechains are unobserved**, in those words. Zero decreases in the
+series means no summarisation occurred in either session measured; two behaviours are plausible and
+neither is tested — compaction that shrinks the context leaves the last block correct, and
+compaction that resets the cache could collapse `cache_read_input_tokens` while the real context did
+not. **Write neither in as though it were described.** An unobserved behaviour recorded as an
+observed one is the failure this file keeps recording.
+
+**One check, at one point, and this does not become a rule to check context at other times.** A rule
+to *monitor* context is the timer again with extra steps. **The expensive acts are reads rather than
+cycles** — reading this file in full is roughly a 4 pp act, and the 12.72 pp turn above is the same
+shape — so *measure before a large read* is a real candidate, and it stays a candidate with **one
+instance** rather than being written in here as though it had more evidence than it has.
+
+**The occupancy earns a status-table row while it is above the yellow threshold and not before**
+(*How the lead reports to the user*). The table already carries the free-worker count for the same
+kind of reason — it is context he can act on — and a number reported before it means anything is a
+row he learns to skip.
+
 ## What the lead may answer, and what it must escalate
 
 **The lead answers only what is already written down, and names the source.** AGENTS.md, a
