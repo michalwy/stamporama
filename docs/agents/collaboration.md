@@ -243,10 +243,11 @@ one of those three, and each is load-bearing:
    a prompt written hours earlier still describes the issue.
 
 **The chip's title says what the session is, and since 2026-09-08 it says it in a fixed
-vocabulary** (*Session titles*, below). A pooled worker is `Worker 7`; the moment it is assigned it
-becomes `#812: quick-add an area from the filter facet`. He is choosing what to click and when, and
-a title saying the session is waiting tells him it costs nothing to start it now; one that does not,
-does not.
+vocabulary** (*Session titles*, below). A pooled worker is `⏳ Worker 7`; the moment it is assigned
+it becomes `🔨 #812: quick-add an area from the filter facet`. He is choosing what to click and
+when, and a title saying the session is waiting tells him it costs nothing to start it now; one that
+does not, does not. **Since 2026-09-10 the waiting is the leading `⏳`**, which is what that
+sentence had been asking the wording of the title to carry (#1042).
 
 **Until that date the rule was deliberately looser — *what a title says, not which phrase it uses*
 — and the reason it was written that way is still true.** A rule matched against one phrase
@@ -369,22 +370,65 @@ user's decision** — #906 marks them as such, and they are refutable:
 
 ### Session titles
 
-**Decided by the user on 2026-09-08, and amended by him the same day** — #928 set the vocabulary,
-#975 added the pull request number to it. A session's title is the only signal that travels between
-the app's session list, the user's screen and the worktree sweep, so it is a fixed vocabulary rather
-than a description:
+**Decided by the user on 2026-09-08 and amended by him twice since** — #928 set the vocabulary, #975
+added the pull request number to it, and #1042 replaced the `[DONE]` prefix with a state icon on
+2026-09-10. A session's title is the only signal that travels between the app's session list, the
+user's screen and the worktree sweep, so it is a fixed vocabulary rather than a description:
 
 | state | title |
 | --- | --- |
-| Worker spawned, no task yet | `Worker N` |
-| Assigned, no pull request yet | `#NNN: <the issue's theme>` |
-| Assigned several issues at once | `#NNN/#NNN/…: <what they share>` |
-| Pull request opened | `#NNN[#PPP]: <the issue's theme>` |
-| Worker finished, and spent | `[DONE] #NNN[#PPP]: <the issue's theme>` |
-| Release session | `Release: X.Y.Z` |
-| Release cut | `[DONE] Release: X.Y.Z` |
-| The lead, while it is the lead | `===> Leader <===` |
-| A lead that has handed over | `[DONE] Leader YYYY-MM-DD`, the date of the handover |
+| Worker spawned, no task yet | `⏳ Worker N` |
+| Assigned, no pull request yet | `🔨 #NNN: <the issue's theme>` |
+| Assigned several issues at once | `🔨 #NNN/#NNN/…: <what they share>` |
+| Pull request opened | `🔨 #NNN[#PPP]: <the issue's theme>` |
+| Worker finished, and spent | `✅ #NNN[#PPP]: <the issue's theme>` |
+| Release session | `🔨 Release: X.Y.Z` |
+| Release cut | `✅ Release: X.Y.Z` |
+| The lead, while it is the lead | `👑 ===> Leader <===` |
+| A lead that has handed over | `✅ Leader YYYY-MM-DD`, the date of the handover |
+
+**Nine rows take four icons, because the icon encodes the *state* and not the kind of work.** `⏳` is
+waiting, `🔨` is working, `✅` is finished, `👑` is the lead. A release session that is working is
+working, and the subject after the icon says what it is working on — which is why there is no
+release icon, no design-session icon and none for a bundle. That is what keeps the set closed and
+memorable, and being closed is the property everything below leans on.
+
+**Pick codepoints that need no variation selector, and check any substitute the same way before
+adopting it.** A title typed `⚙️` is `U+2699 U+FE0F` and one typed `⚙` is `U+2699`: different
+strings, comparing unequal, so an emoji requiring VS16 turns the sweep's one string comparison into
+a normalisation problem. The four here are clean — `⏳` U+23F3, `🔨` U+1F528, `✅` U+2705, `👑`
+U+1F451, none carrying FE0F. **This is the row of the decision with machinery behind it**, so it is
+checked rather than remembered.
+
+**`===> Leader <===` survives, with the icon in front of it.** The proposal was to shorten it to
+`👑 Leader`; the user kept the arrows on 2026-09-10, and they are shouty on purpose. The way a
+session reaches the lead is *find the session whose title is the lead's and whose `cwd` is under
+this repository* (*A pooled worker reads nothing until it is assigned*), never an identity a message
+claims for itself — and a lookup against a bare word can miss the session or half-match something
+else. The icon goes in front; nothing else about that title changes.
+
+**A lead that has handed over takes `✅` like any other finished session.** That row is machinery
+rather than legibility: to the worktree sweep a handed-over lead **is** a finished session, and it
+is removed on the same comparison as a spent worker.
+
+#### The changeover from `[DONE]`
+
+**Sessions titled `[DONE] …` exist at the moment this lands, so the sweep accepts both spellings
+during the changeover**: a title beginning `✅` **or** `[DONE]` is finished. Two string comparisons
+instead of one costs nothing, and what it buys is that no live session has to be renamed before the
+file does — a lead reading a mixed register is never sent to *ask the user* about a session that
+plainly finished.
+
+**It ends when the register is clean, which is checkable rather than dated.** The table above no
+longer contains `[DONE]`, so no new title can acquire it: the set carrying it closed on 2026-09-10
+and only shrinks. The backlog review already asks whether every session's title matches this table
+(*Keeping this file honest*), and the first review finding none of them carrying the bracket is when
+the second comparison can go. **Whoever drops it edits this section and both sweeps together** —
+the same enumeration lives in three places, which is what *And the enumerations shrink with the
+table* is about below.
+
+**Renaming the live ones is the lead's**, and machine-local: the session list belongs to the app and
+not to this repository. Nothing here asks a session to rename another one.
 
 **`#NNN` is the issue and `#PPP` is the pull request**, which needs saying because #975 records the
 format as `#XYZ[#NNN]`. It is the same format with the placeholders renamed: `#NNN` already means
@@ -392,20 +436,20 @@ format as `#XYZ[#NNN]`. It is the same format with the placeholders renamed: `#N
 meaning three lines from its first would read as two conventions rather than one.
 
 **So a worker renames itself twice, and the two renames answer different questions.** On assignment
-it takes the issue number, because the lead is not there at that moment and the worker is. On
-opening its pull request it takes the bracket — and until that moment there is no number to put
-there, which is why the second row carries none. The `[DONE]` prefix goes on when the work is
+it takes the issue number and swaps `⏳` for `🔨`, because the lead is not there at that moment and
+the worker is. On opening its pull request it takes the bracket — and until that moment there is no
+number to put there, which is why the second row carries none. `✅` goes on when the work is
 finished, by the session if it is still awake and by the lead otherwise, since the lead is who
 learns that a pull request merged.
 
 **The bracket is for a person, and it answers the other half of the question the title asks.** The
 issue number says what a session was *for*; the pull request number says what came *out of* it.
 Without it the lead reads its own session list and must still go and ask GitHub which pull request
-belongs to which session — the same shape of lookup `[DONE]` was introduced to remove, surviving in
-the half of the title nobody had touched.
+belongs to which session — the same shape of lookup the done marker was introduced to remove,
+surviving in the half of the title nobody had touched.
 
-**That the bracket appears at push time rather than at `[DONE]` is the lead's reading rather than
-the user's decision** (#975), and the alternative it was chosen over was brackets on a finished
+**That the bracket appears at push time rather than at the done icon is the lead's reading rather
+than the user's decision** (#975), and the alternative it was chosen over was brackets on a finished
 session only. That one loses the number for exactly the window in which a run is being watched and a
 branch is being updated — which is the window the number is for. The objection to a second rename is
 that it is one more unenforced step; the answer is that the first rename is unenforced too, so what
@@ -418,21 +462,23 @@ process layer was stopped on 2026-09-08 there is nobody left to coordinate one. 
 not a port**, and the distinction is recorded because *Verification, not trust* has the opposite case
 on file: two claims imported from that same sibling project, true there and false here, which reached
 this file and were caught only by reading the diff. Two projects reaching one format from one problem
-is a different kind of argument from one project copying another.
+is a different kind of argument from one project copying another. **What converged is the bracket**,
+and darkroom still spells the finished marker `[DONE]` — that is their register and not a stale copy
+of this one, so do not sweep it into an icon from here.
 
 **A session holding several issues spells them all, separated by `/`** —
-`#997/#998/#993/#996: collaboration.md` — and the theme becomes what the issues share, which is
+`🔨 #997/#998/#993/#996: collaboration.md` — and the theme becomes what the issues share, which is
 normally the file. Added on 2026-09-08 (#993), when three of that day's sessions had no correct
 title available and each invented one. It is the vocabulary catching up with the decision in *It is
 about handoffs, not arithmetic*: bundling by shared file is legitimate, so the fixed vocabulary
-needs a spelling for it. The bracket behaves as it does everywhere else — `#997/#998[#1001]` once
-the pull request is open, and the `[DONE]` prefix in front of that.
+needs a spelling for it. The bracket behaves as it does everywhere else — `🔨 #997/#998[#1001]` once
+the pull request is open, and `✅` in front once it is finished.
 
 **This row is legibility, not machinery**, and saying which of the two it answers is the thing the
-last two amendments both had to state. `[DONE]` remains the whole test the sweep runs and it is a
-prefix, so any spelling that keeps it in front is safe by construction. What the row buys is the
-user reading his own screen and seeing at a glance that one session is answering four issues rather
-than guessing at a theme that names none of them.
+last three amendments have each had to state. The done icon remains the whole test the sweep runs
+and it is a prefix, so any spelling that keeps it in front is safe by construction. What the row
+buys is the user reading his own screen and seeing at a glance that one session is answering four
+issues rather than guessing at a theme that names none of them.
 
 **The separator is `/` because two sessions have now reached for it and the alternatives cost
 something.** `+` is how the lead writes a bundle in prose and reads as arithmetic in a title; `,`
@@ -445,17 +491,22 @@ sessions open one, which is what a shared file makes natural, so the bracket abo
 story in practice. Inventing a spelling now, for a case nobody has met, is how a vocabulary
 acquires a row that cannot be checked against anything.
 
-**And the enumerations grow with the table.** The worktree sweep's list of non-`[DONE]` titles (*A
-held session's worktree is not stale*) and its restatement in `backlog-review.md` both enumerate
-the working shapes, and a shape missing from either falls through to *ask the user* — safe, and
-needlessly noisy. #975 met this exact trap when a working session gained its pull request number,
-and it cost a second commit; both are updated in the same change as this row.
+**And the enumerations shrink with the table — a simplification, and not a new guarantee.** The
+worktree sweep's list of non-done titles (*A held session's worktree is not stale*) and its
+restatement in `backlog-review.md` used to enumerate the working title *shapes*, and each lengthened
+twice on 2026-09-08 as the vocabulary grew (#975, #993). With one icon per state they name two
+icons instead, and a new title shape no longer lengthens either. **The failure direction is
+unchanged**: a title with no icon in front falls through to *ask the user*, exactly as one with no
+`[DONE]` did, and the list is still descriptive rather than a decision procedure — this file already
+argues that a longer one invites being read as one. **So this does not make the sweep safer than it
+was.** It makes it shorter, and it removes an amendment that has already been forgotten once.
 
-**`[DONE]` is the load-bearing half, and it is what the worktree sweep tests.** Everything else in
-the table is for the user reading his own screen; the prefix is for a machine. It replaces *resolve
-the worktree to its session, then go and establish whether its pull request merged* with a string
-comparison, and it covers the case that test could not see at all — a session that finished without
-ever opening a pull request.
+**The done icon is the load-bearing half, and it is what the worktree sweep tests.** Everything else
+in the table is for the user reading his own screen; the leading icon is for a machine. It replaces
+*resolve the worktree to its session, then go and establish whether its pull request merged* with a
+string comparison, and it covers the case that test could not see at all — a session that finished
+without ever opening a pull request. **`✅` serves that identically to `[DONE]`**, on the one
+condition the variation-selector rule above states.
 
 **The bracket must not become a second test, and the reason is worth stating before somebody
 reaches for it.** It looks machine-readable and it is not: it is unenforced, it arrives later than
@@ -463,22 +514,23 @@ the title it is added to, and it is legitimately absent from every session that 
 A sweep keyed on it would read *pooled* and *working, mid-implementation* as the same thing while
 appearing to have checked something. The sweep needs one prefix and has it.
 
-**One task per worker and no recycling** (*The pool of generic workers*), so `[DONE]` is terminal:
-a spent worker is never renamed back. That is why the word is *spent* rather than *idle*.
+**One task per worker and no recycling** (*The pool of generic workers*), so `✅` is terminal: a
+spent worker is never renamed back to `🔨`. That is why the word is *spent* rather than *idle*.
 
 **What this convention cannot do, said rather than assumed.** Nothing enforces any of the three
-renames. A worker that is assigned and does not rename looks pooled; one that opens a pull request
-and does not re-title looks like one that has not pushed yet; one that finishes and does not gain
-its prefix looks busy. **All three errors leave a worktree standing**, which is the safe direction —
-the sweep never removes on a missing marker — but it means the register drifts toward *too many*
-live-looking sessions, never toward too few. The middle one is the mildest and the only new one:
-it is invisible to the sweep, and it costs exactly the lookup the bracket was added to save. The
-backlog review asks after the missing prefixes for that reason (*Keeping this file honest*), and a
-review finding several is reporting a missing mechanism rather than a careless session.
+renames. A worker that is assigned and does not rename still reads `⏳ Worker N`; one that opens a
+pull request and does not re-title looks like one that has not pushed yet; one that finishes and
+does not gain its `✅` still reads as working. **All three errors leave a worktree standing**, which
+is the safe direction — the sweep never removes on a missing marker — but it means the register
+drifts toward *too many* live-looking sessions, never toward too few. The middle one is the mildest
+and the only new one: it is invisible to the sweep, and it costs exactly the lookup the bracket was
+added to save. The backlog review asks after the missing icons for that reason (*Keeping this file
+honest*), and a review finding several is reporting a missing mechanism rather than a careless
+session.
 
 **The lead renames the outgoing lead**, since a session that has handed over is by definition no
-longer acting. `[DONE] Leader YYYY-MM-DD` carries the handover date, not the date the session
-started, because what a later reader wants from that row is when this project changed hands.
+longer acting. `✅ Leader YYYY-MM-DD` carries the handover date, not the date the session started,
+because what a later reader wants from that row is when this project changed hands.
 
 ## The loop
 
@@ -1946,8 +1998,8 @@ and never prepares one (`backlog-review.md`), and the lead is normally the sessi
 Three layers, and the middle one is what makes forgetting the first harmless:
 
 1. **A merged branch deletes itself** on GitHub. **The worktree goes when its session is finished,
-   which the title says and the merge does not** — `[DONE]`, the test below — along with the local
-   branch, and the remote branch too if the work was dropped rather than merged.
+   which the title says and the merge does not** — the done icon `✅`, the test below — along with
+   the local branch, and the remote branch too if the work was dropped rather than merged.
 2. Per-worktree slots are reclaimed when the worktree goes (#781).
 3. **Every backlog review sweeps**: `git worktree list`, `git worktree prune`, and remove what is
    stale (`backlog-review.md`) — where *stale* is the test below, not a judgement.
@@ -1987,26 +2039,37 @@ carries the `cwd` it runs in, which for a task session is its worktree path. So 
 anything, resolve the path to its session:
 
 - **No session** for the path → orphaned; remove it.
-- **Title begins `[DONE]`** → finished; remove it. Since 2026-09-08 this is the whole test, and it
-  is a prefix rather than a judgement (*Session titles*).
-- **`Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`, or any of those carrying `[#PPP]`, with no
-  prefix** — pooled and unassigned, or working, whether or not it has opened a pull request and
-  whether it holds one issue or several → **not stale, whatever its age**; leave it.
+- **Title begins `✅`** → finished; remove it. Since 2026-09-08 this is the whole test, and it is a
+  leading marker rather than a judgement (*Session titles*). **`[DONE]` counts here too, for as long
+  as the changeover lasts** (*The changeover from `[DONE]`*): it was the spelling until 2026-09-10,
+  sessions carrying it were live when the icons landed, and no new title can acquire it.
+- **Title begins `⏳` or `🔨`** — pooled and unassigned, or working, whether or not it has opened a
+  pull request and whether it holds one issue or several → **not stale, whatever its age**; leave
+  it. So is a title still spelled the old way — `Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`, or any of
+  those carrying `[#PPP]` with no marker in front — for the same window and the same reason.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
-**The second bullet is the whole test; the third is descriptive.** It enumerates the non-`[DONE]`
-titles only so that *ask the user* stays rare, and it lengthens whenever the vocabulary does — it
-lengthened twice on 2026-09-08, when a working session gained its pull request number and when a
-session holding several issues gained a spelling at all (*Session titles*).
-A longer list invites being read as the decision procedure, and it is not one: titles are
-unenforced, so the enumeration can always be one shape out of date, and every shape it misses falls
-through to *ask the user* rather than into a removal.
+**`👑` is absent from that list on purpose, and its absence changes nothing.** The lead's `cwd` is
+the main checkout rather than a worktree, so it is not a candidate the sweep resolves; the old
+enumeration left `===> Leader <===` out for the same reason. If a `👑` title ever does resolve to a
+worktree path, that is the last bullet's case and not a removal.
 
-**The prefix is doing the work the old test could not.** *Finished* used to mean *its pull request
+**The second bullet is the whole test; the third is descriptive.** It names the not-finished icons
+only so that *ask the user* stays rare. It used to enumerate title *shapes* instead and lengthened
+whenever the vocabulary did — twice on 2026-09-08, when a working session gained its pull request
+number and when a session holding several issues gained a spelling at all — and since #1042 a new
+shape no longer touches it, because every working shape leads with the same two icons
+(*Session titles*). **That is a shorter list and not a stronger one.** A longer one invites being
+read as the decision procedure, and this is not one either: titles are unenforced, so a session
+whose icon is missing or unknown falls through to *ask the user* rather than into a removal —
+exactly where a missing `[DONE]` fell.
+
+**The marker is doing the work the old test could not.** *Finished* used to mean *its pull request
 merged, or its work dropped* — a fact about GitHub the sweep had to go and establish for every
-worktree, and which is silent about a session that finished without opening one. `[DONE]` is
-put there by whoever knows, at the moment they know.
+worktree, and which is silent about a session that finished without opening one. The icon is put
+there by whoever knows, at the moment they know. **It stays one string comparison**, which is why
+*Session titles* requires a codepoint that carries no variation selector.
 
 #### Merging a pull request is not the event that ends a session
 
@@ -2014,7 +2077,7 @@ put there by whoever knows, at the moment they know.
 lead merged #1030 and then removed the worktree of the session that had produced it, along with its
 local branch. **That session was working**: the lead had re-briefed it eleven minutes earlier and it
 was mid-commit on the follow-up it had been asked for. Its title was
-`#1020/#1021[#1030]: selection vs filter` — **no `[DONE]` prefix**, which the test above says means
+`#1020/#1021[#1030]: selection vs filter` — **no finished marker**, which the test above says means
 *working; leave it*. Nothing in layer 1 pointed at that test, and the merge is what it read as the
 licence.
 
@@ -2127,7 +2190,7 @@ Every backlog review asks whether the model above still describes what actually 
   *Worktree cleanup*. It deliberately does not ask whether anybody remembered to sweep — that is a
   question answerable only by remembering, which is this section's own failure mode.
 - Does every session's title match the vocabulary in *Session titles*, and in particular **did every
-  finished session get its `[DONE]`**? A lookup in the app's session list — machine-local, and no
+  finished session get its `✅`**? A lookup in the app's session list — machine-local, and no
   part of the repository. **The marker's job has changed twice underneath it**, which is the answer
   worth having. Until 2026-09-07 it had one purpose, telling the user that a chip costs nothing to
   start now, and on that reading #868 — waiting only for `main` to carry #844 — needed none.
