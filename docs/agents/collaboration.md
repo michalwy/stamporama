@@ -447,7 +447,7 @@ watchlist in one line.
 **And it costs nothing, which is why it is an ordering and not a discipline.** The drill was already
 unconditional and already first; what moves is the *reading*, to after its first two commands rather
 than beside them. The cut is instantaneous and is the whole of what the reading depends on —
-`pnpm install` and `pnpm exec prisma generate` are the slow half and may run while the reading
+`pnpm install` and `pnpm prisma:generate` are the slow half and may run while the reading
 happens.
 
 **The decisive reason is staleness, and it is removed rather than mitigated.** Workers spawned at
