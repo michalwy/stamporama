@@ -730,8 +730,9 @@ acquires a row that cannot be checked against anything.
 worktree sweep's list of non-done titles (*A held session's worktree is not stale*) and its
 restatement in `backlog-review.md` used to enumerate the working title *shapes*, and each lengthened
 twice on 2026-09-08 as the vocabulary grew (#975, #993). With one icon per state they name the
-working icons instead — `⏳`, `🔨` and, since #1048, `🎨` — and a new title *shape* no longer
-lengthens either, though a new *icon* still does. **The failure direction is
+not-finished icons instead — `⏳`, `🔨`, and since 2026-09-10 `🎨` (#1048) and `👑` (#1063) — and a
+new title *shape* no longer lengthens either, though a new *icon* still does. **The failure
+direction is
 unchanged**: a title with no icon in front falls through to *ask the user*, exactly as one with no
 `[DONE]` did, and the list is still descriptive rather than a decision procedure — this file already
 argues that a longer one invites being read as one. **So this does not make the sweep safer than it
@@ -2408,22 +2409,24 @@ anything, resolve the path to its session:
   leading marker rather than a judgement (*Session titles*). **`[DONE]` counts here too, for as long
   as the changeover lasts** (*The changeover from `[DONE]`*): it was the spelling until 2026-09-10,
   sessions carrying it were live when the icons landed, and no new title can acquire it.
-- **Title begins `⏳`, `🔨` or `🎨`** — pooled and unassigned, working, or designing, whether or not
-  it has opened a pull request and whether it holds one issue or several → **not stale, whatever its
-  age**; leave it. So is a title still spelled the old way — `Worker N`, `#NNN: …`, `#NNN/#NNN/…: …`,
-  or any of those carrying `[#PPP]` with no marker in front — for the same window and the same
-  reason. **`🎨` joined on 2026-09-10** (#1048) and is the one working icon that is *not* a phase: a
-  running design session leads with it, and a finished one leads with `✅` like everything else.
+- **Title begins `⏳`, `🔨`, `🎨` or `👑`** — pooled and unassigned, working, designing, or leading,
+  whether or not it has opened a pull request and whether it holds one issue or several → **not
+  stale, whatever its age**; leave it. So is a title still spelled the old way — `Worker N`,
+  `#NNN: …`, `#NNN/#NNN/…: …`, or any of those carrying `[#PPP]` with no marker in front — for the
+  same window and the same reason. **`🎨` joined on 2026-09-10** (#1048) and is the one working icon
+  that is *not* a phase: a running design session leads with it, and a finished one leads with `✅`
+  like everything else. **`👑` joined the same day** (#1063) and is the other: **a lead is never
+  stale while it is the lead**, and the paragraph below is why it took until then to be named.
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
-**`👑` is absent from that list on purpose, and the reason this paragraph used to give was false.**
-It read *the lead's `cwd` is the main checkout rather than a worktree, so it is not a candidate the
-sweep resolves* — quoted rather than deleted, since it will go on arriving in an inherited handover
-chip. **A lead does carry a worktree.** One drawn from the pool by message keeps the worker's, and
-one spawned by a tile is given a fresh one like every other session (*How a task session is actually
-spawned*), so the sweep resolves a `👑` title to a worktree path as a matter of course and
-`git worktree list` shows it.
+**`👑` was absent from that list until 2026-09-10, and the reason this paragraph gave for it was
+false.** It read *the lead's `cwd` is the main checkout rather than a worktree, so it is not a
+candidate the sweep resolves* — quoted rather than deleted, since it will go on arriving in an
+inherited handover chip. **A lead does carry a worktree.** One drawn from the pool by message keeps
+the worker's, and one spawned by a tile is given a fresh one like every other session (*How a task
+session is actually spawned*), so the sweep resolves a `👑` title to a worktree path as a matter of
+course and `git worktree list` shows it.
 
 **It was already false when it was written, and this file was already carrying the refutation.** The
 sentence landed at `51faddc` on 2026-09-10 (#1042), and the lead that briefed the session writing it
@@ -2433,27 +2436,41 @@ has recorded since 2026-09-07 that a chip claimed *the lead works from the main 
 tile had put it in a worktree*, listed there as one of three claims that were false by the time they
 were read. **Two sections of one file, one asserting what the other files under evidence.**
 
-**Nothing was ever at risk, and the clause doing the work is the last one.** A `👑` title resolving
-to a worktree path falls through to *ask the user* — the fourth bullet — rather than into a removal,
-which is the direction the whole sweep is built to fail in. **What a false justification costs is
-the reader.** *It can never come up* is wrong on the first `git worktree list`, and a justification
-that fails on the first check invites the next reader to write off the paragraph around it, the
-fallthrough clause included. That is why this was worth correcting when nothing was broken.
+**Nothing was ever at risk, and while the premise stood the clause doing the work was the last
+one.** A `👑` title resolving to a worktree path fell through to *ask the user* — the fourth
+bullet — rather than into a removal, which is the direction the whole sweep is built to fail in.
+**What a false justification costs is the reader.** *It can never come up* is wrong on the first
+`git worktree list`, and a justification that fails on the first check invites the next reader to
+write off the paragraph around it, the fallthrough clause included. That is why this was worth
+correcting when nothing was broken.
 
-**So `👑` stays out of the enumeration, for the reason that actually holds: a lead is never stale
-while it is the lead.** Its title carries no `✅`, which is the whole of the second bullet's test, so
-nothing about it needs a bullet of its own. **The `🎨` paragraph below argues the other way and it
-was weighed** (#1048): naming an icon is what keeps *ask the user* rare, and on that argument `👑`
-would belong in the third bullet too. It is left out deliberately, because the only session that
-ever meets a `👑` row in this sweep is the lead running the sweep, which can answer *ask the user*
-about its own worktree without asking anybody — which is not the noise the third bullet exists to
-prevent.
+**So `👑` is now named in the third bullet, for the reason that actually holds: a lead is never
+stale while it is the lead.** Its title carries no `✅`, which is the whole of the second bullet's
+test, so it was never at risk of removal; what naming it buys is the third bullet's own job, which
+is keeping *ask the user* rare. **The `🎨` argument settles it and it is the same argument** (#1048):
+now that a `👑` title resolves to a worktree path every time, leaving it out means the sweep falls
+through on it at **every** review, and the one session that ever meets that row is the lead running
+the sweep — asking the user about its own worktree. **The `👑` row is legibility, not machinery.**
+`✅` remains the whole test, and this changes nothing a sweep decides; a `👑` title was safe under
+the fourth bullet and is safe under the third.
 
-**`🎨` is named rather than left out, and the two roles differ on exactly this point.** A design
-session does resolve to a worktree — and would resolve to one every time if design ever came out of
-the pool by message, which *A pooled worker reads nothing until it is assigned* records as an open
-possibility. Left out, a running design session would fall through to *ask the user*: safe, and
-precisely the noise the third bullet exists to prevent.
+**The change of mind is recorded rather than smoothed over, because it is the shape this section is
+about.** The branch that corrected the premise (#1063) first kept `👑` out and wrote down that the
+`🎨` argument had been weighed and rejected; the lead read that, accepted the argument, and
+re-briefed the session. **What made it visible was writing the rejected argument down instead of
+just acting on it** — an unrecorded weighing cannot be contradicted by the next reader, which is
+*say what you believe the state is, in a form somebody can contradict* applied to a judgement rather
+than to a state.
+
+**`🎨` was named for the same reason, and it is the precedent `👑` was decided on.** A design session
+does resolve to a worktree — and would resolve to one every time if design ever came out of the pool
+by message, which *A pooled worker reads nothing until it is assigned* records as a consequence that
+has since been exercised for the lead. Left out, a running design session would fall through to
+*ask the user*: safe, and precisely the noise the third bullet exists to prevent. **The two roles
+were once said to differ on this point and they do not.** That sentence was written while the lead
+was believed to run in the main checkout; once that premise went, the design session and the lead
+were the same case — a role rather than a phase, resolving to a worktree, never stale while it is
+running — and both are named.
 
 **The second bullet is the whole test; the third is descriptive.** It names the not-finished icons
 only so that *ask the user* stays rare. It used to enumerate title *shapes* instead and lengthened
@@ -2464,8 +2481,12 @@ number and when a session holding several issues gained a spelling at all — an
 to be added here, in `backlog-review.md` and in the table, three places for one row. **The price per
 amendment is unchanged — three edits either way — and what is bought is that most amendments stop
 being amendments**: a new *shape* now costs nothing, where two of them cost three edits each on
-2026-09-08 (#975, #993). **Whether icons are also amended less often is not yet knowable**: the set
-is one day old and has been amended once already, so do not read the claim as a rate.
+2026-09-08 (#975, #993). **Adding an icon the table already carries costs two rather than three**,
+which #1063 measured the same day: `👑` was in *Session titles* from the start and only the two
+enumerations moved. So *three places* is the price of a new **icon**, and *two* the price of naming
+an existing one somewhere it was missing. **Whether icons are amended less often than shapes were is
+not yet knowable**: the set is one day old and these enumerations have been amended twice in it, so
+do not read the claim as a rate.
 **That is a shorter list and not a stronger one.** A longer one invites being
 read as the decision procedure, and this is not one either: titles are unenforced, so a session
 whose icon is missing or unknown falls through to *ask the user* rather than into a removal —
