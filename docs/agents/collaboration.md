@@ -60,6 +60,15 @@ prose the previous one moved — which is how two copies of one claim drift apar
 trip is not, and *no free worker* is the reason that most needs refusing, because it is the one
 that is true whenever the pool is empty.
 
+**Since 2026-09-10 the shared-file condition is doing more work, not less, and the reason narrows**
+(#1059). With one worker at a time, *every* split serialises — four issues are four sequential
+cycles whatever files they touch — so *serialisation* on its own would now argue for bundling
+everything, which is plainly wrong. What a bundle actually buys is the half that is still peculiar
+to a shared file: **not waiting, but each cycle rebasing onto prose the previous one moved.** That
+is #982's failure and it does not arise between issues in different files, however long the queue.
+And the refusal above is now the ordinary state rather than the busy one — with one track, *no free
+worker* is true most of the time.
+
 **Three things stay separate, and they are what keep a bundle verifiable** rather than one diff
 answering four criteria nobody can check it against:
 
@@ -263,8 +272,11 @@ he had to notice was due, paste and start himself. The handover's shape is recor
 now been used twice; it is not restated here.
 
 **It is cheaper, not free, and the old paragraph's candour is worth keeping.** The click is still
-real. A held session still holds a worktree and a slot (#781), so the room is four or five held
-alongside what is running, and spawning ten at once is still not a thing to propose. A chip spawned
+real. A held session still holds a worktree and a slot (#781). **What used to follow — *the room is
+four or five held alongside what is running, and spawning ten at once is still not a thing to
+propose* — is superseded** (2026-09-10, #1059, with #998 behind it): a pooled worker now reads
+nothing at spawn, one task runs at a time, and ten held alongside one working is the intended state.
+The worktree and the slot are what remain real. A chip spawned
 too early can still go stale, which is what point 5 guards. And **none of this moves a decision off
 the user**: he still chooses what is worked on, still answers what is escalated, still gives the
 go-ahead before a merge. What goes is being paged at moments a machine chose.
@@ -288,10 +300,32 @@ What was settled with it:
 - **One task per worker, and no recycling.** A worker on its fifth task carries four tasks of context
   and reads the fifth through them, which is the objection this file already makes to a long-lived
   release session. The pool is consumed one worker per task and topped up when convenient.
-- **Two or three sessions working at once**, four or five for small tasks. **The pool size is not the
-  concurrency**; most of the pool is idle by design.
+- **One worker at a time. One task in flight.** **Decided by the user on 2026-09-10 (#1059)**, and it
+  **supersedes** what #906 settled on 2026-09-07, which this bullet used to state as: *"Two or three
+  sessions working at once, four or five for small tasks."* **The old figure is quoted rather than
+  replaced**, for the reason this section gives about an inherited prompt — it will keep arriving, in
+  handovers and in habit, and a bare replacement cannot tell a later reader which of the two is the
+  newer (`feedback_polish_to_him_always` is the local shape to copy). **A second track runs only on
+  the user's explicit request**, and *What may run in parallel* is what governs it when he asks.
+- **The pool size is still not the concurrency, and now less than ever.** A pooled worker reads
+  nothing at spawn (#998), so **ten idle alongside one working is the intended state** rather than a
+  sign of over-provisioning. What each still costs is a worktree and a slot (#781), and a sweep that
+  can tell it from an abandoned one (*A held session's worktree is not stale*).
 - **The lead reports the count of free workers in every status table**, so the user tops up when he
   is at the computer rather than when the lead runs out.
+
+**Two costs the user took knowingly, stated here and not restated elsewhere.** Neither is an
+argument against the rule; they are what it buys serialisation with.
+
+- **Throughput is bounded by wall clock.** A queue of eight ready issues is eight sequential cycles,
+  each with its own CI run. Nothing overlaps, so *when* is now additive rather than a judgement about
+  contention.
+- **An unanswered question blocks more than it used to.** With three tracks a question could sit
+  while other work moved; with one, whatever is asked of the user is in front of everything. That
+  sharpens two rules already here rather than adding a third: *ask, and then carry on with everything
+  the question does not block* (*Questions are asynchronous*) is now most of what a blocked session
+  has left, and the age on a 🔴 row (*The three things a row must carry*) is measuring the whole
+  pipeline rather than one lane of it.
 
 #### A pooled worker reads nothing until it is assigned
 
@@ -1764,9 +1798,19 @@ the same issue the session owns.
 
 ## What may run in parallel
 
-Sessions run in parallel, each in its own worktree. **Merges serialise, and that is the trade**: the
-second branch ready rebases onto the first and re-runs its checks. At two or three parallel branches
-that costs one extra CI run, which is cheap next to the alternative.
+**One worker at a time is the default since 2026-09-10, and this section is not on hold.** It is what
+governs a **second track**, which the user may ask for at any moment — and the answer has to be
+available then, rather than worked out under time pressure with two sessions about to write the same
+file. So the lead goes on holding what this section holds while one thing runs: which work shares a
+file, that merges serialise under strict required checks, that one session at a time may touch a
+migration, that choosing what runs at once is choosing which files are shared. **The concurrency
+default changed; the concurrency reasoning did not** (#1059). **And the queue is still sequenced by
+file contention even while nothing contends**, because that ordering is what makes a second track
+safe the moment there is one — worked out in advance or not at all.
+
+Where sessions do run in parallel, each is in its own worktree. **Merges serialise, and that is the
+trade**: the second branch ready rebases onto the first and re-runs its checks. At two or three
+parallel branches that costs one extra CI run, which is cheap next to the alternative.
 
 **That estimate assumes nothing else is landing, and a busy day is not that.** On 2026-09-06 four
 Renovate pull requests and three task branches were in flight together and something landed every few
@@ -2088,8 +2132,10 @@ uncommitted work, and AGENTS.md notes that an unpushed commit does not survive i
 The rule could not have caught it. Layer 1 reaches a worktree whose branch has **merged**; a held
 session has no branch, no pull request, and has sat untouched for exactly as long as the hold has
 lasted — which is the shape of an abandoned one. #897 made *spawn ahead and hold* the default the
-day before, and the room is four or five held at once, so worktrees that look abandoned are now the
-normal case rather than the exception.
+day before, and the pool holds as many at once as the lead cares to spawn (*The pool of generic
+workers* carries the number, so that this does not become a second copy of it), so worktrees that
+look abandoned are now the normal case rather than the exception — more so since 2026-09-10, with one
+of them working and the rest idle by design.
 
 **Git cannot tell the two apart, and that was checked rather than assumed:** branch, commit,
 `git status`, mtime, the `.git` file and the contents of `.claude/` are identical for both, and
