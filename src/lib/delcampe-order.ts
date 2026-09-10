@@ -5,6 +5,7 @@ import { getModulePlatform } from "./module-platform";
 import { resolvePurchaseContact } from "./contacts";
 import { addSaleLines, createSale, deleteSale, listSellableOffers } from "./sales";
 import { offerNoFromPersonalReference } from "./delcampe-import-rules";
+import { offerNumberLabel } from "./offer-set-rules";
 import { parseSaleDate } from "./sale-rules";
 import { saleImportSummary, type ImportedSaleSummary } from "./order-import-summary";
 import {
@@ -344,7 +345,7 @@ async function matchOrderItems(
       offer: {
         id: offer.id,
         offerNo: offer.offerNo,
-        label: offer.name ?? `Offer #${offer.offerNo}`,
+        label: offerNumberLabel(offer.name, offer.offerNo),
       },
       matchedBy: hit ? "item-id" : "reference",
       sets: (setsByOffer.get(offer.id) ?? []).map((set) => ({

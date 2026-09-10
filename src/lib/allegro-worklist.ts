@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
 import { OPEN_OFFER_STATES } from "./offer-rules";
+import { offerNumberLabel } from "./offer-set-rules";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
   claimCovers,
@@ -176,8 +177,9 @@ function toWorklistOffer(offer: OfferRow): WorklistOffer {
     name: offer.name,
     // The derived set label (#379) is deliberately not built here: it needs the offer's whole
     // composition and the area tree, which is a page of reads for a line that already names the
-    // listing in the marketplace's own words. The offer number is the honest fallback.
-    label: offer.name ?? `Offer #${offer.offerNo}`,
+    // listing in the marketplace's own words. The offer number is the honest fallback, and since
+    // #1024 it is spelled once, in `offerNumberLabel`, for the six sites that make this choice.
+    label: offerNumberLabel(offer.name, offer.offerNo),
     state: offer.state,
     price: offer.price.toString(),
     currency: offer.currency,

@@ -6,6 +6,7 @@ import { getAllegroAccessToken } from "./allegro-connection";
 import { getAllegroOrder, type AllegroOrder as AllegroApiOrder } from "./allegro-api";
 import { allegroOrderPageUrl } from "./allegro-oauth";
 import { getShippingMethods } from "./shipping-methods";
+import { offerNumberLabel } from "./offer-set-rules";
 import { listSellableOffers, createSale, addSaleLines, setSaleStatus } from "./sales";
 import type { AllegroPaymentStatus } from "./allegro-sync-rules";
 import { matchShippingMethod, type ShippingPrefill } from "./allegro-sale-rules";
@@ -251,7 +252,7 @@ export async function getAllegroOrderSalePrefill(
     const offer = {
       id: line.offer.id,
       offerNo: line.offer.offerNo,
-      label: line.offer.name ?? `Offer #${line.offer.offerNo}`,
+      label: offerNumberLabel(line.offer.name, line.offer.offerNo),
     };
     if (recordedOfferIds.has(line.offer.id)) {
       return { ...base, offer, sets: [], skipped: "recorded" as const };

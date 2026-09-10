@@ -4,6 +4,9 @@ import {
   checkSetNonEmpty,
   deriveOfferLabel,
   deriveSetLabel,
+  offerDisplayLabel,
+  offerNumberLabel,
+  UNTITLED_OFFER_LABEL,
   type SetLabelCopy,
 } from "../../src/lib/offer-set-rules";
 
@@ -79,5 +82,67 @@ describe("checkSetNonEmpty", () => {
   it("rejects an empty set and accepts a filled one", () => {
     assert.match(checkSetNonEmpty(0) ?? "", /at least one copy/);
     assert.equal(checkSetNonEmpty(1), null);
+  });
+});
+
+// The two spellings #1024 made single. Both are pure, so they are checked here rather than through
+// a surface — what an integration test can add is that a *given* surface calls the right one, and
+// `tests/integration/offer-label-fallback.test.ts` does that.
+describe("offerDisplayLabel (#1024)", () => {
+  /** A stand-in labeller: the real one needs the collection's area tree. */
+  const labeller = { offer: (sets: readonly string[]) => sets.join(" + ") };
+
+  it("prefers the offer's stored title", () => {
+    assert.equal(offerDisplayLabel("Poland 1938", ["Mi 1"], labeller), "Poland 1938");
+  });
+
+  it("falls back to the label derived from the sets", () => {
+    assert.equal(offerDisplayLabel(null, ["Mi 1", "Mi 2"], labeller), "Mi 1 + Mi 2");
+  });
+
+  it("names an untitled offer on a page that built no labeller", () => {
+    assert.equal(offerDisplayLabel(null, ["Mi 1"], null), UNTITLED_OFFER_LABEL);
+  });
+
+  it("treats a blank title as no title", () => {
+    // `OfferPatch.name` clears blank back to null, so this should not arrive from an edit — but a
+    // generated title (#210) is rendered from a template, and an empty render must not leave an
+    // offer printing nothing at all.
+    assert.equal(offerDisplayLabel("   ", ["Mi 1"], labeller), "Mi 1");
+    assert.equal(offerDisplayLabel("", ["Mi 1"], null), UNTITLED_OFFER_LABEL);
+  });
+
+  it("trims a title that is not blank", () => {
+    assert.equal(offerDisplayLabel("  Poland 1938 ", ["Mi 1"], labeller), "Poland 1938");
+  });
+
+  // The derived label costs the collection's area tree, so the callers build a labeller only when
+  // some row of the page lacks a title. Deriving eagerly would undo that, which is why this takes
+  // the sets rather than an already-derived string.
+  it("does not derive a label for an offer that has a title", () => {
+    let derived = 0;
+    const counting = {
+      offer: (sets: readonly string[]) => {
+        derived += 1;
+        return sets.join(" + ");
+      },
+    };
+    offerDisplayLabel("Poland 1938", ["Mi 1"], counting);
+    assert.equal(derived, 0);
+    offerDisplayLabel(null, ["Mi 1"], counting);
+    assert.equal(derived, 1);
+  });
+});
+
+describe("offerNumberLabel (#1024)", () => {
+  it("prefers the stored title", () => {
+    assert.equal(offerNumberLabel("Poland 1938", 42), "Poland 1938");
+  });
+
+  it("falls back to the offer's own number, with the hash every surface prints", () => {
+    // The Delcampe export spelled this `Offer 42` and every other site `Offer #42`, which is the
+    // drift this helper exists to end.
+    assert.equal(offerNumberLabel(null, 42), "Offer #42");
+    assert.equal(offerNumberLabel("  ", 42), "Offer #42");
   });
 });

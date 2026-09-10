@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
+import { offerDisplayLabel } from "./offer-set-rules";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
@@ -185,6 +186,13 @@ export interface SellableOffer {
   offerId: string;
   platformId: string;
   platformName: string;
+  /** The label derived from the offer's sets, with **no title fallback** — the one naming site
+   * #1024 swept and deliberately left alone, because #1026 owns this surface and is going to give
+   * it the two-field treatment #1023 gave the Add-to-offer picker: `name` beside `label`, the title
+   * leading the row and the search matching both. Flattening it to `offerDisplayLabel` here would
+   * be half of that change, and the wrong half — the sale-line dialog would gain the title and lose
+   * the ability to find a titled listing by its contents. Left derived until #1026, not overlooked.
+   */
   offerLabel: string;
   /** Asking price + currency, used to pre-fill line prices when the sale is in that currency. */
   price: string;
@@ -884,6 +892,11 @@ export interface SaleLineSetChoice {
   lineId: string;
   /** The offer the line sold through — the whole choice is inside it. */
   offerId: string;
+  /** What to call that offer: the stored listing title, else the label derived from its sets
+   * (`offerDisplayLabel`, #1024). One string, because the picker names the offer in a sentence
+   * above the sets rather than in a row of its own. It read the derived label alone until #1024, so
+   * a collector who had titled the listing was asked to pick a set inside an offer named by its
+   * contents — a name that appears nowhere else he had seen it. */
   offerLabel: string;
   /** The set the line names today, always present among `sets` so confirming it is one click. */
   currentSetId: string;
@@ -934,6 +947,8 @@ export async function listSaleLineSetOptions(
       offer: {
         select: {
           id: true,
+          // The stored listing title (#1024) — one scalar on a row this read already loads.
+          name: true,
           sets: {
             orderBy: OFFER_SETS_ORDER_BY,
             select: {
@@ -991,7 +1006,7 @@ export async function listSaleLineSetOptions(
   return {
     lineId,
     offerId: line.offerId,
-    offerLabel: labeller.offer(line.offer.sets),
+    offerLabel: offerDisplayLabel(line.offer.name, line.offer.sets, labeller),
     currentSetId: line.offerSetId,
     setChoicePending: line.setChoicePending,
     sets,

@@ -5,6 +5,7 @@ import { getModulePlatform } from "./module-platform";
 import { resolvePurchaseContact } from "./contacts";
 import { addSaleLines, createSale, deleteSale, listSellableOffers } from "./sales";
 import { getShippingMethods } from "./shipping-methods";
+import { offerNumberLabel } from "./offer-set-rules";
 import { matchShippingMethod } from "./allegro-sale-rules";
 import { parseSaleDate } from "./sale-rules";
 import { saleImportSummary, type ImportedSaleSummary } from "./order-import-summary";
@@ -330,7 +331,7 @@ async function matchOrderItems(
       offer: {
         id: offer.id,
         offerNo: offer.offerNo,
-        label: offer.name ?? `Offer #${offer.offerNo}`,
+        label: offerNumberLabel(offer.name, offer.offerNo),
       },
       sets: (setsByOffer.get(offer.id) ?? []).map((set) => ({
         offerSetId: set.offerSetId,

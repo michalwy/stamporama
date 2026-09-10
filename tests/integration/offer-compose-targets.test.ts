@@ -5,10 +5,12 @@ import { createItem } from "../../src/lib/items";
 import {
   addOfferSet,
   createOffer,
+  findOfferCollisions,
   findStampConditionCollisions,
   listComposeTargetSetCopies,
   listComposeTargets,
   patchOffer,
+  setOfferState,
 } from "../../src/lib/offers";
 import { catalogKeyMatches } from "../../src/lib/catalog-number";
 
@@ -260,5 +262,53 @@ describe("Add-to-offer picker targets (#867)", () => {
     })());
     assert.deepEqual(offer.containsItemIds, [listed]);
     assert.deepEqual(set.containsItemIds, [listed]);
+  });
+  // What the *same copy, twice on one platform* warning calls the offer it names (#167/#1024).
+  //
+  // It is the sharper half of the defect #1024 was filed about: this warning and the selection
+  // bar's **Add to #NNNN instead** are two sentences about the same listing, and until #1024 one
+  // made the `name ?? derived` fallback and the other named the offer by its contents alone. The
+  // check runs both directions, because a fallback verified only where it falls back is half a
+  // check — and it uses its own offer rather than the shared fixture, which is `preparing` and
+  // therefore invisible to a warning that only ever reports **active** listings.
+  it("names a colliding offer by its stored title, and by its contents while it has none", async () => {
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Collision Stamp" } });
+    const copyId = (
+      await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true })
+    ).id;
+    const liveOfferId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "4.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    await addOfferSet(userId, liveOfferId, [copyId]);
+    await setOfferState(userId, liveOfferId, "ready");
+    await setOfferState(userId, liveOfferId, "active");
+
+    const of = async () => {
+      const hits = await findOfferCollisions(userId, collectionId, [copyId], platformId);
+      const hit = hits.find((c) => c.offerId === liveOfferId);
+      assert.ok(hit, "the active offer listing this copy is reported");
+      assert.equal(hit.sharedCount, 1);
+      return hit.offerLabel;
+    };
+
+    // Untitled: the label derived from the offer's sets — a stamp with no catalog number reads by
+    // its name, which is what makes the two labels distinguishable in this test at all.
+    const derived = await of();
+    assert.equal(derived, "Collision Stamp");
+
+    await patchOffer(userId, liveOfferId, { name: "Duplicates box — Poland" });
+    assert.equal(
+      await of(),
+      "Duplicates box — Poland",
+      "the warning names the listing the way every other offer surface names it"
+    );
+
+    await patchOffer(userId, liveOfferId, { name: null });
+    assert.equal(await of(), derived, "and falls back again once the title is cleared");
   });
 });
