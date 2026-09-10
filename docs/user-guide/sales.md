@@ -88,6 +88,14 @@ you gave the buyer a discount). The override belongs to **this sale only**; the 
 price is never changed. **Add** records them all at once. You can come back and add more sets later,
 or **Remove** one from its row menu.
 
+Every ticked set needs a price, so if you clear one and then search it away — or fold up the offer
+it sits in — **Add** goes dead over a row you can no longer see. The dialog says which: a warning at
+the foot of it reads **2 picked sets have no price**, and pressing it clears the search and any
+other filter that was hiding them and shows exactly those sets, opening the offers they sit in. The
+**Without a price** entry under **Selected** does the same thing and stays lit while the list is
+narrowed that way, so you can see the picker is showing a slice and click it again to come back.
+Both disappear the moment the last price is filled in.
+
 Already added a unit at the wrong price? On the **Sold units** list, click a unit's price to **edit
 it in place** — the existing figure is selected as the editor opens, so typing replaces it outright
 (Enter or click away saves, Escape reverts) — again, only the sale record changes, and
