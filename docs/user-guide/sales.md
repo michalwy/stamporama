@@ -64,9 +64,12 @@ Every amount field accepts either a comma or a period as the decimal separator �
 ### Step 2 — add the sold sets
 
 On the detail screen, **Add sold sets** opens a browse-and-pick dialog listing every
-[set](offers.md) still sellable on the sale's platform, grouped by offer. **Search** by offer,
-set, catalog number, or the **location ref** of a copy inside a set. Each set is a whole sellable
-piece:
+[set](offers.md) still sellable on the sale's platform, grouped by offer. Each offer is listed by
+its **title** — the one you typed, or the one the app generated — with the label derived from its
+sets underneath, so you recognise a listing either by what you called it or by what is in it. An
+offer with no title shows that derived label on its own. **Search** matches the **title**, the
+derived label, a set, a catalog number, or the **location ref** of a copy inside a set. Each set is
+a whole sellable piece:
 
 - A single-set offer is **one row** — ticking it sells the whole thing.
 - A multi-set (quantity) offer is a **collapsible row**; expand it to tick the specific sets the

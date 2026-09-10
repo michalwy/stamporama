@@ -107,6 +107,11 @@ interface SetRow {
 /** A picker group = one offer, holding its sellable sets. */
 interface Group {
   offerId: string;
+  /** The listing's stored title (#209), or null while it has none — the row's **primary** label,
+   * spelled `name ?? label` as every other offer surface spells it (#1026). */
+  name: string | null;
+  /** The label derived from the offer's sets: the row's first line while there is no title, and
+   * its second line once there is one. Never concatenated onto the title. */
   label: string;
   offerPrice: string;
   offerCurrency: string;
@@ -129,6 +134,7 @@ function buildGroups(offers: SellableOffer[], saleCurrency: string): Group[] {
   return offers
     .map((offer) => ({
       offerId: offer.offerId,
+      name: offer.offerName,
       label: offer.offerLabel,
       offerPrice: offer.price,
       offerCurrency: offer.currency,
@@ -247,13 +253,17 @@ export function AddSaleLineDialog({
   const raw = search.trim();
   const q = raw.toLowerCase();
 
-  // Text filter: a group survives if its label matches (keep all its sets) or any set matches
-  // (keep just the matching ones). Each surviving group carries its visible sets.
+  // Text filter: a group survives if its title / derived label matches (keep all its sets) or any
+  // set matches (keep just the matching ones). Each surviving group carries its visible sets.
+  //
+  // The title joins the same comparison rather than getting a pass of its own (#1026, following
+  // #1023): both lines of the row are searched, so whichever of the two the collector remembers
+  // finds the listing.
   const byText = useMemo(() => {
     if (!q) return groups.map((g) => ({ group: g, sets: g.sets }));
     const out: { group: Group; sets: SetRow[] }[] = [];
     for (const g of groups) {
-      if (g.label.toLowerCase().includes(q)) {
+      if (g.name?.toLowerCase().includes(q) || g.label.toLowerCase().includes(q)) {
         out.push({ group: g, sets: g.sets });
         continue;
       }
@@ -358,7 +368,7 @@ export function AddSaleLineDialog({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by offer, set, catalog number, or location ref…"
+              placeholder="Filter by title, contents, set, catalog number, or location ref…"
               style={SEARCH_STYLE}
               aria-label="Filter sets"
               autoFocus
@@ -522,9 +532,19 @@ function QuantityGroup({
           <Icon name="expand" size="sm" />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* The listing's own title leads, spelled `name ?? label` as every other offer surface
+              spells it (#209/#1026); the label derived from its sets sits beneath, so a collector
+              who knows the listing by what is in it still recognises the row. Two lines rather than
+              one joined string: each truncates on its own, and the search aims at both. A listing
+              with no title prints the derived label alone — never the same string twice. */}
           <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {group.label}
+            {group.name ?? group.label}
           </div>
+          {group.name && (
+            <div style={{ fontSize: "0.75rem", color: MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "0.125rem" }}>
+              {group.label}
+            </div>
+          )}
           <div style={{ fontSize: "0.75rem", color: MUTED, marginTop: "0.3rem" }}>
             {group.sets.length} set{group.sets.length === 1 ? "" : "s"}
             {!stale && selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
