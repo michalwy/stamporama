@@ -53,7 +53,8 @@ import { AuctionLotRow } from "./auction-lot-row";
 import { AuctionLotFormDialog } from "./auction-lot-form-dialog";
 import { useToast } from "@/app/toast-provider";
 import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
-import { CONTROL_STYLE, FilterChip, SIGNALS } from "./auction-controls";
+import { SIGNALS } from "./auction-controls";
+import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 
 /**
  * The two fixed widths the toolbar's dropdowns are given (#868): a trigger sized to its own label
@@ -464,7 +465,13 @@ export function AuctionLotsPanel({
             }}
           />
           {/* What to do about a lot, before what became of it: on a live watchlist the derived
-              states are the working set, while the recorded outcomes are how it is filed. */}
+              states are the working set, while the recorded outcomes are how it is filed.
+
+              **No `toggle` here, deliberately** (#1075): these five write one `signal` param and
+              at most one is ever lit, so they are a one-of choice and `aria-pressed` on each would
+              describe them as five independent switches. The two booleans further along the bar do
+              take it. That split is the whole of this issue, and a bulk swap is how it gets got
+              wrong. */}
           {SIGNALS.map(({ value, label, hint }) => {
             const active = signal === value;
             return (
@@ -601,6 +608,11 @@ export function AuctionLotsPanel({
               label="Not described"
               count={counts ? counts.undescribed : undefined}
               active={!!undescribed}
+              // Independent of everything else on this bar — it can be on with any signal, any
+              // seller, any platform — so a reader is told which chips are on (#1075). The signal
+              // chips above deliberately take none: they are a one-of set, and pressed/unpressed
+              // would describe that control wrongly.
+              toggle
               onClick={() => {
                 const next = undescribed ? "" : "1";
                 rememberUndescribed(next);
@@ -616,6 +628,9 @@ export function AuctionLotsPanel({
               label="Duplicate"
               count={counts ? counts.duplicate : undefined}
               active={!!duplicate}
+              // The other independent boolean on the filter half, and on with *Not described* is a
+              // combination the collector can actually be in (#1075).
+              toggle
               onClick={() => {
                 const next = duplicate ? "" : "1";
                 rememberDuplicate(next);
@@ -642,7 +657,7 @@ export function AuctionLotsPanel({
               rememberSeller(e.target.value);
               updateParams({ seller: e.target.value });
             }}
-            style={{ ...CONTROL_STYLE, cursor: "pointer" }}
+            style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
           >
             <option value="">
               {counts ? `All sellers (${counts.allSellers})` : "All sellers"}
@@ -660,7 +675,7 @@ export function AuctionLotsPanel({
               rememberPlatform(e.target.value);
               updateParams({ platform: e.target.value });
             }}
-            style={{ ...CONTROL_STYLE, cursor: "pointer" }}
+            style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
           >
             <option value="">
               {counts ? `All platforms (${counts.allPlatforms})` : "All platforms"}
@@ -686,13 +701,16 @@ export function AuctionLotsPanel({
           <FilterChip
             label="Group by sale"
             active={groupBySale}
+            // The clearest toggle on the bar: it is not one of anything, it is a view switch with
+            // two states, and *on* is the whole of what it says (#1075).
+            toggle
             onClick={() => setGroupBySale(!groupBySale)}
           />
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}
             style={{
-              ...CONTROL_STYLE,
+              ...FILTER_CONTROL_STYLE,
               cursor: "pointer",
               fontWeight: 600,
               color: "#fff",
@@ -765,7 +783,7 @@ export function AuctionLotsPanel({
               type="button"
               onClick={resetFilters}
               style={{
-                ...CONTROL_STYLE,
+                ...FILTER_CONTROL_STYLE,
                 marginLeft: "auto",
                 border: "none",
                 background: "none",

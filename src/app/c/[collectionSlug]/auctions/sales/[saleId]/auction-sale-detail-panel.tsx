@@ -24,7 +24,8 @@ import {
 } from "@/lib/auction-rules";
 import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
-import { CONTROL_STYLE, FilterChip, SIGNALS } from "../../auction-controls";
+import { SIGNALS } from "../../auction-controls";
+import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { formatBase, formatDay } from "../../auction-format";
 import { Icon } from "@/app/icons";
 
@@ -209,7 +210,7 @@ export function AuctionSaleDetailPanel({
   // The finishing action takes the emphasis once it is the thing to do; until then adding lots is.
   const settlementIsPrimary = (canSettle || canClose) && !settleBlocked;
   const PRIMARY_BUTTON: React.CSSProperties = {
-    ...CONTROL_STYLE,
+    ...FILTER_CONTROL_STYLE,
     fontWeight: 600,
     color: "#fff",
     background: "var(--color-action-primary)",
@@ -266,7 +267,7 @@ export function AuctionSaleDetailPanel({
           type="button"
           onClick={() => setDialog({ kind: "editSale" })}
           disabled={sale.purchaseId !== null}
-          style={{ ...CONTROL_STYLE, cursor: sale.purchaseId ? "not-allowed" : "pointer", fontWeight: 600 }}
+          style={{ ...FILTER_CONTROL_STYLE, cursor: sale.purchaseId ? "not-allowed" : "pointer", fontWeight: 600 }}
         >
           Edit sale
         </button>
@@ -276,7 +277,7 @@ export function AuctionSaleDetailPanel({
           onClick={() => setDialog({ kind: "addLot" })}
           disabled={sale.purchaseId !== null}
           style={{
-            ...(settlementIsPrimary ? CONTROL_STYLE : PRIMARY_BUTTON),
+            ...(settlementIsPrimary ? FILTER_CONTROL_STYLE : PRIMARY_BUTTON),
             cursor: sale.purchaseId ? "not-allowed" : "pointer",
             fontWeight: 600,
           }}
@@ -305,7 +306,7 @@ export function AuctionSaleDetailPanel({
               onClick={() => setDialog({ kind: "settle" })}
               disabled={!!settleBlocked}
               style={{
-                ...(settlementIsPrimary ? PRIMARY_BUTTON : CONTROL_STYLE),
+                ...(settlementIsPrimary ? PRIMARY_BUTTON : FILTER_CONTROL_STYLE),
                 cursor: settleBlocked ? "not-allowed" : "pointer",
                 fontWeight: 600,
               }}
@@ -326,7 +327,7 @@ export function AuctionSaleDetailPanel({
               onClick={() => setDialog({ kind: "close" })}
               disabled={!!settleBlocked}
               style={{
-                ...(settlementIsPrimary ? PRIMARY_BUTTON : CONTROL_STYLE),
+                ...(settlementIsPrimary ? PRIMARY_BUTTON : FILTER_CONTROL_STYLE),
                 cursor: settleBlocked ? "not-allowed" : "pointer",
                 fontWeight: 600,
               }}
@@ -455,7 +456,12 @@ export function AuctionSaleDetailPanel({
         <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", alignItems: "center" }}>
           {/* What to do about a lot, then what became of it — the flat list's two groups, asked of
               one parcel. Only what this parcel actually holds is offered: a chip that can only ever
-              show nothing is noise on a screen about one seller. */}
+              show nothing is noise on a screen about one seller.
+
+              **Two axes, and neither takes `toggle`** (#1075). `signal` and `outcome` are separate
+              questions, but each is one-of within itself — one value apiece, at most one chip lit
+              in each group — so `aria-pressed` would describe either group wrongly. Nothing on this
+              screen is an independent boolean, which is why the whole of it is left as it is. */}
           {SIGNALS.filter(({ value }) => signalCounts[value] > 0).map(({ value, label, hint }) => {
             const active = signal === value;
             return (
