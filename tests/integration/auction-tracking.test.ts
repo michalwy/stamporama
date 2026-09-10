@@ -345,10 +345,45 @@ describe("auction tracking (#351/#352)", () => {
     assert.equal(counts.sellers[sellerId], 2);
     assert.equal(counts.platforms[platformId], 2);
     assert.equal(counts.total, 2);
+    assert.equal(counts.unfiltered, 2, "nothing narrowing: the two counts agree");
 
     // A seller with no lots narrows to nothing rather than falling back to everything.
     const narrowed = await listAuctionLots(userId, collectionId, { sellerId: otherSellerId });
     assert.equal(narrowed.items.length, 0);
+  });
+
+  /**
+   * The denominator the band above the rows reports against (#1018) — *"8 of 143"*. Every filter on
+   * this list is remembered now, so the band is what stops a list narrowed by yesterday's choice
+   * from being narrowed silently, and a denominator that moved with the filters would say nothing:
+   * `8 of 8` is what a broken one looks like, and it looks exactly like a list nobody has narrowed.
+   */
+  it("counts the whole watchlist as the baseline a narrowed list is reported against", async () => {
+    const whole = await auctionLotFilterCounts(userId, collectionId, {});
+    assert.equal(whole.unfiltered, 2);
+
+    // Narrowing to a seller with nothing on the watchlist moves `total` and leaves the baseline
+    // alone — which is the only shape in which the fraction says how much is being hidden.
+    const empty = await auctionLotFilterCounts(userId, collectionId, { sellerId: otherSellerId });
+    assert.equal(empty.total, 0);
+    assert.equal(empty.unfiltered, 2, "the baseline ignores what is selected");
+
+    // Every narrowing behaves the same way, including the four that only started being remembered
+    // with this change — a stored `ended` window is the case the band exists for.
+    for (const filters of [
+      { closing: "ended" as const },
+      { undescribed: true },
+      { search: "nothing here matches this" },
+      { outcome: "won" as const },
+    ]) {
+      const counts = await auctionLotFilterCounts(userId, collectionId, filters);
+      assert.equal(
+        counts.unfiltered,
+        2,
+        `${JSON.stringify(filters)} moved the baseline it is meant to be reported against`
+      );
+      assert.ok(counts.total <= counts.unfiltered, "a narrowed list cannot show more than the whole");
+    }
   });
 
   // The watchlist is what is still to be decided (#504). Its own sale, so closing a lot here does
@@ -424,6 +459,15 @@ describe("auction tracking (#351/#352)", () => {
       })).total,
       2
     );
+
+    // `includeClosed` **widens** the list, so the band's baseline has to widen with it (#1018).
+    // Held fixed, a collection of three open lots and one closed one showing all four would read
+    // "4 of 3", which is the fraction saying the arithmetic is broken rather than saying anything
+    // about the filters. Both here count the whole collection, not just this seller's sale.
+    const openOnly = await auctionLotFilterCounts(userId, collectionId, {});
+    const withClosed = await auctionLotFilterCounts(userId, collectionId, { includeClosed: true });
+    assert.equal(withClosed.unfiltered, openOnly.unfiltered + 1);
+    assert.ok(withClosed.total <= withClosed.unfiltered);
 
     await prisma.auctionLot.deleteMany({ where: { auctionSaleId: saleId } });
     await prisma.auctionSale.delete({ where: { id: saleId } });

@@ -59,3 +59,65 @@ export function lotParams(filters: AuctionLotFilters): URLSearchParams {
   }
   return params;
 }
+
+/**
+ * One filter that is **narrowing** the list, as the band above the rows reports it (#1018): the
+ * field it came from, and the value it is set to.
+ *
+ * The wording is deliberately not here. Every one of these has a control on the toolbar already,
+ * and the band has to name it in *that control's own words* or it points at nothing — so the panel
+ * maps each key onto the label it draws the chip with, and the band and the chip cannot say
+ * different things about one filter. What lives here is the harder half: **which** filters narrow.
+ */
+export interface LotNarrowing {
+  key: keyof AuctionLotFilters;
+  /** The raw value, for the panel to look a label up by. `"1"` for the two boolean chips. */
+  value: string;
+}
+
+/**
+ * Which filters narrow the list, keyed the way {@link LOT_PARAM} is and for the same reason: it is
+ * typed over **every** key of `AuctionLotFilters`, so a filter added later fails to compile until
+ * somebody has decided whether it narrows.
+ *
+ * That guard is the whole point rather than tidiness. The failure this band exists to prevent is a
+ * list narrowed by something nobody can see, and the cheapest way to reintroduce it is to add an
+ * eleventh filter and forget to mention it — at which point the band would go on saying "three
+ * filters" over a list narrowed by four, which is worse than no band at all.
+ *
+ * `null` means *this one does not narrow*, and there is exactly one: `includeClosed` **widens** the
+ * list (#504), so a band announcing it would tell the collector that lots are being hidden at the
+ * moment more of them are being shown. It is still cleared by *Clear filters*, on the Copies list's
+ * rule (#733) — a reset puts the screen back to its default, widening switches included — which is
+ * a different question from what is narrowing it now.
+ */
+const LOT_NARROWS: {
+  [K in keyof Required<AuctionLotFilters>]-?:
+    | null
+    | ((value: NonNullable<AuctionLotFilters[K]>) => string | null);
+} = {
+  outcome: (value) => value,
+  includeClosed: null,
+  closing: (value) => value,
+  signal: (value) => value,
+  undescribed: () => "1",
+  duplicate: () => "1",
+  // A blank-but-present search narrows nothing, and the box routinely holds one mid-edit.
+  search: (value) => (value.trim() ? value : null),
+  sellerId: (value) => value,
+  platformId: (value) => value,
+};
+
+/** Every filter currently narrowing the list, in the order the toolbar reads. */
+export function lotNarrowings(filters: AuctionLotFilters): LotNarrowing[] {
+  const out: LotNarrowing[] = [];
+  for (const key of Object.keys(LOT_NARROWS) as (keyof AuctionLotFilters)[]) {
+    const describe = LOT_NARROWS[key];
+    if (!describe) continue;
+    const value = filters[key];
+    if (value === undefined || value === false || value === "") continue;
+    const described = (describe as (value: unknown) => string | null)(value);
+    if (described !== null) out.push({ key, value: described });
+  }
+  return out;
+}

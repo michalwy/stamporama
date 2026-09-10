@@ -273,9 +273,10 @@ A lot whose moment has gone by is **greyed out entirely**, row and all. There is
 — the bidding happened without you — and an alarm on it would compete every day with the lots that
 can still be won. They are not lost, though: the **Ended** filter on the toolbar is how you go and
 find them to record what happened, alongside **Closing today** and **This week** for the other end
-of the same question. Unlike the status and party filters, the closing window is not remembered
-between visits — coming back tomorrow to a list silently narrowed to old lots would hide everything
-that is actually running.
+of the same question. The window is remembered between visits like every other filter here — so if
+you leave **Ended** on, the list opens on ended lots tomorrow. It will say so: a line under the
+toolbar names every filter in force and clears them all in one press. See
+[what is remembered](#what-is-remembered).
 
 Both ends of that question are also reported by [Action items](action-items.md), the bell at the top
 of the sidebar: lots closing within the day, and ended lots still waiting for their outcome to be
@@ -446,8 +447,9 @@ The second row is **what became of it** — the outcome, worked out from the fig
   first: a watchlist is what is still to be decided, and everything else is filed. This toggle brings
   the finished lots back — won, lost, watched and cancelled together — which is what you want when
   you are searching for a lot and cannot remember how it ended. Picking an outcome chip already asks
-  for closed lots, so the toggle has no say while one is on. Unlike the closing windows it is
-  remembered per collection: it is the shape the list should still have tomorrow.
+  for closed lots, so the toggle has no say while one is on. It is remembered per collection, as
+  every filter here is — and it is the one that is never named in the narrowed-list line under the
+  toolbar, because it shows you more lots rather than fewer.
 Then, on its own, the one that asks what is **missing from the record** rather than anything about
 the bidding:
 
@@ -473,12 +475,31 @@ Finally:
   filter rather than a walk through parcels.
 - **Group by sale** turns the flat list into sections, off by default.
 
-Your choices — including what is in the search box and the **Show closed** toggle — are remembered
-per collection and are also in
-the address bar, so a filtered view can be bookmarked or shared. The ones that ask a question of
-*today's* list — the closing windows, the
-first row, **Not described** and **Duplicate** — live in the address bar only: they are jobs you go and do, and
-coming back tomorrow to a list still narrowed to them would hide everything actually running.
+### What is remembered
+
+**Every filter on this list is remembered per collection**, and every one of them is also in the
+address bar, so a filtered view can still be bookmarked or shared — and a link you follow always
+wins over what was remembered, so an address that names a filter means exactly what it says. The
+search box and the **Show closed** toggle are remembered too, and so are the four that used to be
+forgotten on purpose: the **closing windows**, the first row of chips, **Not described** and
+**Duplicate**.
+
+Those four were left out because they are jobs you go and do rather than the shape the list should
+keep having, and coming back tomorrow to a list still narrowed to them hides everything actually
+running. That cost is real and it has not gone away — what has changed is that the list now **tells
+you**, rather than staying quiet and forgetting your choice for you.
+
+Whenever anything is narrowing the list, a line appears under the toolbar:
+
+> Showing **8** of 143 lots — Ended · Not described · Köhler   **Clear filters**
+
+It says how much is being hidden, names each filter in the words of the control that set it — so you
+can find the chip and switch that one off — and **Clear filters** puts the whole watchlist back in
+one press. It clears the search box and **Show closed** along with the chips; **Group by sale** is
+left as it is, because that is how the rows are arranged rather than which lots are in them.
+
+**Show closed** is never named in that line. It shows you *more* lots rather than fewer, so there is
+nothing being hidden for it to warn you about.
 
 ## Sales — paying for a parcel
 

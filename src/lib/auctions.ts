@@ -1083,8 +1083,19 @@ export interface AuctionLotFilterCounts {
   undescribed: number;
   /** Lots holding a stamp another lot being won also holds (#369), under everything else selected. */
   duplicate: number;
-  /** Total under the selected outcome + seller + platform — what "All" would show. */
+  /** Rows the list is actually showing — **every** filter applied, the derived ones included. */
   total: number;
+  /**
+   * Rows the list would show with nothing narrowing it (#1018) — the denominator the band above the
+   * rows reports `total` against, so *"8 of 143"* says how much is being hidden rather than merely
+   * that something is.
+   *
+   * The two switches that are not narrowings are still applied to it: `includeClosed`, which
+   * **widens** the list (#504), and `saleId`, which is the screen rather than a filter. Leaving
+   * either out would make the fraction lie in the one direction that reads as a bug — with closed
+   * lots shown, `total` would routinely exceed a baseline that hid them.
+   */
+  unfiltered: number;
 }
 
 /**
@@ -1125,6 +1136,7 @@ export async function auctionLotFilterCounts(
     undescribed,
     duplicateCount,
     total,
+    unfiltered,
   ] = await Promise.all([
     // One count per outcome rather than a `groupBy`: the outcome is derived, so there is no column
     // to group on — each is its own predicate over the money ({@link outcomeWhere}). Five cheap
@@ -1184,6 +1196,15 @@ export async function auctionLotFilterCounts(
           await resolveDerivedIds(collectionId, filters)
         ),
       }))(),
+    // The baseline the band reports `total` against (#1018) — the list with every *narrowing*
+    // dropped and only the two things that are not narrowings kept. It is the one count here that
+    // ignores what is selected rather than ignoring its own dimension.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, {
+        includeClosed: filters.includeClosed,
+        saleId: filters.saleId,
+      }),
+    }),
   ]);
 
   // Absent rather than zero, matching what `groupBy` used to hand back — the chips read a missing
@@ -1204,6 +1225,7 @@ export async function auctionLotFilterCounts(
     undescribed,
     duplicate: duplicateCount,
     total,
+    unfiltered,
   };
 }
 

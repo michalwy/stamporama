@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   lotParams,
+  lotNarrowings,
   type AuctionLotFilters,
 } from "../../src/app/c/[collectionSlug]/auctions/lot-params";
 
@@ -59,5 +60,62 @@ describe("auction lot params", () => {
       ""
     );
     assert.equal(lotParams({ sellerId: "" }).toString(), "");
+  });
+});
+
+/**
+ * Which filters the band above the rows announces (#1018).
+ *
+ * The regression these guard is the one that would put the screen back where it started: every
+ * filter is remembered now, so a list can arrive already narrowed by a decision made yesterday, and
+ * the band is the only thing that says so. A filter the band does not know about is a narrowing
+ * nobody can see — which is exactly the defect the change was made to avoid, reintroduced by
+ * addition rather than by edit.
+ *
+ * `every` is typed `Required<…>` for the same reason `lotParams` is tested that way: a tenth filter
+ * fails to compile in `LOT_NARROWS` until somebody has decided whether it narrows.
+ */
+describe("auction lot narrowings", () => {
+  const every: Required<AuctionLotFilters> = {
+    outcome: "won",
+    includeClosed: true,
+    closing: "ended",
+    signal: "outbid",
+    undescribed: true,
+    duplicate: true,
+    search: "köhler",
+    sellerId: "seller-1",
+    platformId: "platform-1",
+  };
+
+  it("announces every filter that narrows the list", () => {
+    const keys = lotNarrowings(every).map((n) => n.key);
+    for (const key of Object.keys(every) as (keyof AuctionLotFilters)[]) {
+      if (key === "includeClosed") continue;
+      assert.ok(keys.includes(key), `${key} narrows the list and the band never says so`);
+    }
+  });
+
+  it("says nothing about the one switch that widens the list", () => {
+    // `includeClosed` shows *more* lots (#504). Announcing it would tell the collector that
+    // something is being hidden at the moment more of it is being shown.
+    assert.deepEqual(lotNarrowings({ includeClosed: true }), []);
+  });
+
+  it("says nothing about a list nobody has narrowed", () => {
+    assert.deepEqual(lotNarrowings({}), []);
+  });
+
+  it("carries the value, so the band can name it in the control's own words", () => {
+    assert.deepEqual(lotNarrowings({ closing: "ended" }), [{ key: "closing", value: "ended" }]);
+    assert.deepEqual(lotNarrowings({ undescribed: true }), [{ key: "undescribed", value: "1" }]);
+    assert.deepEqual(lotNarrowings({ sellerId: "s-1" }), [{ key: "sellerId", value: "s-1" }]);
+  });
+
+  it("does not count a search box holding only whitespace", () => {
+    // The box is edited in place and passes through blank on the way to empty; the list is not
+    // narrowed by it, so a band saying it is would be wrong for as long as the pause lasted.
+    assert.deepEqual(lotNarrowings({ search: "   " }), []);
+    assert.deepEqual(lotNarrowings({ search: "köhler" }), [{ key: "search", value: "köhler" }]);
   });
 });
