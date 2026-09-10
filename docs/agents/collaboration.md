@@ -2895,12 +2895,19 @@ the first, the title is what a person wrote, and `gh pr list --head <branch>` is
 them.
 
 **And this is not scoped to the lead.** The obvious reader of that field is a lead checking what is
-in flight, and nothing in this file sends anyone there or warns them off; but a **task session**
-reached for it unprompted while composing a report and produced a finding that was well reasoned at
-every step and entirely false — that #1072 was open with no live session behind it, when it had
-merged hours earlier. **The instrument under a correct inference lied.** The lead read the same
-stale `OPEN` in the same hour and escaped only because a separate `gh pr list` in the same batch
-happened to disagree, **which is two commands disagreeing rather than a check**.
+in flight, and nothing in this file sends anyone there or warns them off. **A task session reached
+for it too**, which is recorded on #1010 by the lead that received the report rather than observed
+here: the #1067 session reported, as an out-of-scope finding, that #1072 was still open with no
+live session behind it — reasoning from its `✅ #1068[#1072]` title that nothing but the lead would
+move it. **#1072 had merged at 13:37Z, hours before.** Every step of that reasoning was sound and
+the instrument under it lied, which is a more expensive failure than a lead being briefly confused.
+
+**That row was still wrong when this paragraph was written, and that half is checked here rather
+than taken from the report**: at 21:25Z the same evening the list showed #1072 `OPEN` and
+`gh pr view` answered `MERGED` — the same row, eight hours on. **The lead had read that stale
+`OPEN` in the same hour as the worker and escaped only because a separate `gh pr list` in the same
+batch happened to disagree with it. Two commands disagreeing is not a check**; had it not been
+verifying something else at that moment, it would have carried the belief the worker did.
 
 **The `✅` test is untouched, and that is the convention being vindicated rather than a near miss.**
 The sweep keys on a **title** — a field a person writes and the app only stores — and reads no
