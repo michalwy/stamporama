@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
-import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
+import {
+  ListSearchBox,
+  useDebouncedSearch,
+} from "@/app/c/[collectionSlug]/shared/list-search-box";
 import type { SaleListItem } from "@/lib/sales";
 import {
   useSalesInfinite,
@@ -19,7 +21,6 @@ import { SALE_STATUS_ORDER, SALE_STATUS_META } from "./sale-status";
 import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
-import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 
 type DialogState =
@@ -45,7 +46,6 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const { data: platforms = [] } = useSalePlatforms(collectionId);
 
   const platformId = searchParams.get("platform") || undefined;
-  const search = searchParams.get("search") || undefined;
 
   // Fulfillment-status filter (#392), remembered per collection (#325): the URL stays authoritative
   // when it names one, so a link is still shareable, and a fresh navigation falls back to the last
@@ -63,6 +63,24 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     : (storedStatus ?? "");
   const statuses = useMemo(() => statusParam.split(",").filter(isSaleStatus), [statusParam]);
 
+  // The search is remembered too (#1055), by the same rule and in the same spelling as the auction
+  // sales list' (`auction-sale-search`, #496): the URL wins where it names one, the stored value
+  // fills in otherwise, and every change writes both.
+  //
+  // **This list is a worklist, which is the whole of why.** #1028's rule tracks a search where the
+  // list is one and leaves it alone where the list is a catalogue, and #496's argument for the
+  // auction settlement list transfers here without amendment: *what do I still owe for* — or here,
+  // *what have I still to pack and send* — is the question one comes back to, not one asked once.
+  // The Copies list is the contrast and keeps its search untracked (#693): there a phrase is a
+  // lookup one finishes. Decided by the user on 2026-09-10; it classifies this list under the rule
+  // and does not touch the rule.
+  //
+  // What makes remembering it honest is a property of the control rather than a promise: the box
+  // draws the restored phrase, with its clear ✕ beside it, before the collector has done anything —
+  // see `useDebouncedSearch`, which follows the value in force rather than only seeding from it.
+  const [storedSearch, rememberSearch] = usePersistedCollectionValue("sales-search", collectionId);
+  const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+
   // "Only the sales still waiting on which set went" (#697). A filter of its own rather than a chip
   // among the statuses: it is not a place in the fulfilment lifecycle but a decision outstanding
   // *inside* a sale, and a sale can be waiting on it in any status. URL-only and **not** remembered
@@ -71,7 +89,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const setChoicePending = searchParams.get("setChoice") === "1";
 
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, statuses, search, setChoicePending }),
+    () => ({ platformId, statuses, search: search || undefined, setChoicePending }),
     [platformId, statuses, search, setChoicePending]
   );
 
@@ -97,22 +115,15 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     [router, collectionSlug, searchParams]
   );
 
-  // Debounced search box (#193): mirrors the shared ListToolbar — settle the local input, then
-  // push it to the URL, skipping the initial mount so an empty box doesn't clear the param.
-  const [localSearch, setLocalSearch] = useState(search ?? "");
-  const debouncedSearch = useDebouncedValue(localSearch);
-  const updateParamsRef = useRef(updateParams);
-  useEffect(() => {
-    updateParamsRef.current = updateParams;
+  // Debounced search box (#193), now the shared one (#1055): settle the local input, then write it
+  // to the URL and to the remembered value together. This screen carried its own copy of the box
+  // and of the debounce — the copy `list-search-box.tsx` was extracted *from* (#484) and the one
+  // caller never migrated onto it — and a fourth spelling of "remember a search" is exactly what
+  // the extraction exists to prevent.
+  const [localSearch, setLocalSearch] = useDebouncedSearch(search, (value) => {
+    rememberSearch(value);
+    updateParams({ search: value });
   });
-  const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    updateParamsRef.current({ search: debouncedSearch });
-  }, [debouncedSearch]);
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useSalesInfinite(
     collectionId,
@@ -131,44 +142,15 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: "0 1 20rem", minWidth: "12rem" }}>
-          <input
-            type="text"
-            placeholder="Search buyer, platform, item…"
-            aria-label="Search sales"
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            style={{ ...SEARCH_INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
-          />
-          {localSearch && (
-            <Tooltip
-              content="Clear search"
-              style={{
-                position: "absolute",
-                right: "0.375rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setLocalSearch("")}
-                aria-label="Clear search"
-                tabIndex={-1}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.75rem",
-                  padding: "0 0.25rem",
-                }}
-              >
-                <Icon name="close" size="sm" />
-              </button>
-            </Tooltip>
-          )}
-        </div>
+        {/* Find one sale by who bought it, where, or what was in it (#193). The box keeps its own
+            20rem basis, which is what it had before it became the shared control. */}
+        <ListSearchBox
+          value={localSearch}
+          onChange={setLocalSearch}
+          placeholder="Search buyer, platform, item…"
+          label="Search sales"
+          width="20rem"
+        />
         <select
           aria-label="Filter by platform"
           value={platformId ?? ""}

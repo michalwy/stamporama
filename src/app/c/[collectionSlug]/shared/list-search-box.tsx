@@ -20,6 +20,22 @@ import { Icon } from "@/app/icons";
  *
  * The callback is held in a ref, so a `commit` rebuilt on every render (as one closing over
  * `useSearchParams` is) does not re-fire the effect and re-push the same value.
+ *
+ * **`initial` is followed after the first render, not only at it (#1055).** `useState(initial)`
+ * alone was enough while the value in force came from the URL, which is there on the very first
+ * render; it is not enough for a **remembered** one. A per-collection preference is read through
+ * `useSyncExternalStore` with a null server snapshot, so the first render after a reload sees no
+ * stored value whether or not one exists (#844, `ui-patterns.md`) — the panel adopts it one render
+ * later, narrows the list by it, and a box that had frozen `""` would go on showing an empty field
+ * beside a narrowed list. That is precisely the outcome #1028's rule forbids — *a next visit
+ * narrowed to a phrase nobody remembers typing* — and the rule leans on this hook to rule it out,
+ * so the hook has to actually do it.
+ *
+ * The resync is the one `ListToolbar` already carries for its own box, guard included: `pushedRef`
+ * holds the last value this box sent upwards, which is what tells an **echo** of our own push apart
+ * from a change made elsewhere. Comparing against `localSearch` instead would pull half-typed text
+ * back out from under somebody, because `initial` lags the input by the whole debounce while they
+ * are typing.
  */
 export function useDebouncedSearch(
   initial: string,
@@ -33,14 +49,25 @@ export function useDebouncedSearch(
     commitRef.current = commit;
   });
 
+  const pushedRef = useRef(initial);
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
+    // Nothing to say when the settled value is already the one in force — which is what the resync
+    // below leaves behind once its own debounce catches up.
+    if (debounced === pushedRef.current) return;
+    pushedRef.current = debounced;
     commitRef.current(debounced);
   }, [debounced]);
+
+  useEffect(() => {
+    if (initial === pushedRef.current) return;
+    pushedRef.current = initial;
+    setValue(initial);
+  }, [initial]);
 
   return [value, setValue];
 }

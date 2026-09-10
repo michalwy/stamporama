@@ -413,6 +413,12 @@ The chips you picked are **remembered** for this collection and re-applied the n
 the screen; a status named in the URL wins over them, so a link you share always shows what you
 meant it to.
 
+**What you searched for is remembered the same way.** Sales is a list you work through rather than
+one you look things up in — *what have I still to pack and send* is a question you come back to —
+so the phrase you left in the box is there again when you next open the screen, in the box, with
+its **✕** beside it, ready to be cleared in one click. As with the chips, a search named in the URL
+wins over the remembered one, and clearing the box clears the memory of it.
+
 ## Related
 
 - [Offers](offers.md) — the listings (and their sets) a sale is recorded against.
