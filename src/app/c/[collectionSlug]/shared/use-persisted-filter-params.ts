@@ -19,9 +19,16 @@ import { usePersistedCollectionValue } from "./use-persisted-collection-value";
  * so a fallback that was not written at the same moment would read the stored value straight back
  * and re-apply the filter the collector just switched off.
  *
- * What a screen tracks is its own call. A free-text search box is deliberately *not* a filter of
- * this kind — it is a lookup one finishes, and greeting the next visit with a list narrowed to a
- * phrase nobody remembers typing is the failure this hook must not cause.
+ * What a screen tracks is its own call, **the search box included** — it is not excluded by kind
+ * (#1028). Where the list is a catalogue one looks things up in, a search is a lookup one finishes
+ * and is left out, which is the Copies list's own call and the reason no caller of this hook tracks
+ * one today; where the list is a worklist one comes back to, the search is the standing question and
+ * is remembered — the offers list (#465) and both auction lists (#484/#496/#1018) do it, through
+ * `usePersistedCollectionValue` rather than through here, only because their filter sets are small
+ * enough not to want a set. What must stay untrue either way is a next visit narrowed to a phrase
+ * nobody remembers typing, and a search box is the one control that answers that on its own: it
+ * draws the restored phrase in the box, with its clear affordance beside it, before anything is
+ * done. See `ui-patterns.md` for the rule and `auctions.md` for the screen that leans hardest on it.
  *
  * SSR-safe through the hook it wraps: the pre-hydration snapshot is empty, so the server renders
  * the URL's own filters and the stored ones arrive with hydration.
