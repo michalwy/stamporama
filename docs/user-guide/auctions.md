@@ -474,7 +474,11 @@ Finally:
   number (`12` or `#12`), and the sale, seller or platform it belongs to. It composes with every
   chip beside it, so a search inside *Can still bid* stays inside it.
 - **Seller** and **platform** selects, so "everything I have running on Allegro right now" is one
-  filter rather than a walk through parcels.
+  filter rather than a walk through parcels. Every option carries a count, and — like the chips —
+  each says how many lots *choosing it* would show rather than how many are on screen now. So
+  **All sellers** counts the list with the seller filter dropped and everything else left standing:
+  with Köhler selected and three of their lots showing, it reads the whole watchlist, which is what
+  you get back by picking it.
 - **Group by sale** turns the flat list into sections, off by default.
 
 ### What is remembered
