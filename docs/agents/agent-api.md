@@ -48,7 +48,19 @@ as the tool description. It is not a changelog line.
 token, and the document says so to the agent. An operation that writes and declares `false` is a
 security defect with no test that can see it.
 
-## The module layout, and why it is not stylistic
+## The module layout is the Prisma-free split, and the whole track follows it
+
+**This is the rule, not a description of how #706 happened to arrange its files.** The layer is cut
+in exactly one place — **what may reach Prisma** — and every issue in this track sits on one side of
+that cut or the other. The vocabulary, the parsers, the list and cursor helpers, the error helpers
+and the document generator are **pure**; the registry array, which reaches handlers, is the only
+server-side module. **Add to the pure side by default, and put something on the server side only
+because it genuinely needs the database.** #708's name-or-id resolver, #709's registry-to-tool
+generation and every operation's parameter declarations all belong on the pure side; only the
+handler behind an operation does not.
+
+Two things fall out of it, and both are why it is a rule rather than a preference — they are stated
+under the tree below.
 
 ```
 src/lib/agent-api/
@@ -117,6 +129,15 @@ ignored receives a plausible answer to a question it did not ask.
 verifies the `Authorization: Bearer stmpa_…` header and derives the collection **from** the token —
 an Assistant token is pinned to exactly one collection (#253), so an id in the path could only ever
 be right or wrong, never useful.
+
+**That sibling is a consequence of the no-id rule rather than a decision of its own, and #706's own
+issue body does not state it.** `resolveCollectionOwner` is handed a collection and asks whether the
+credential covers it, which is what a screen route wants because it knows its collection from the
+URL. **With no id in the path there is nothing to hand it**, so the same reasoning one step on
+produces a function that runs the comparison the other way round. **Every issue in this track
+inherits it** — #707 hangs scope enforcement on it, and #708 through #712 reach their collection
+through it and through nothing else. An operation never takes a `collectionId` parameter; it reads
+`context.collectionId`.
 
 **A Better Auth session is not accepted here, and that is what makes the decision sound**: a session
 covers every collection its user owns, so a session caller would have no way to say which collection
