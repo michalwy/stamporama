@@ -6,26 +6,104 @@ image.
 
 ## The procedure
 
-1. **Run `gh release list` fresh.** Never assume the last released version from memory or from local
-   git tags — another session can tag a new version mid-session.
+1. **Run `gh release list` fresh.** Never assume the last released version from memory or from
+   local git tags — another session can tag a new version mid-session.
 2. **Review what has been merged since the previous released tag**, then decide patch vs minor:
    `feat:` commits → minor, `fix:`/`chore:`/`docs:` only → patch. Never bump the major version
    unless the user explicitly asks for one. If a release does not seem warranted, ask the user for
    confirmation before deciding either way.
-3. **Read `main`'s own CI run for the commit you are about to tag, and wait for it to be green.**
-   There is always a run to read now: since dc4577f, runs on `main` and on release tags are never
-   cancelled by a later push. Before that fix, 7 of the last 40 runs had been cancelled and *every
-   one of them was on `main`* — including the very commit v0.129.0 was tagged from. A tag placed on
-   a commit whose run was cancelled is a release nobody has checked.
+3. **Read `main`'s own CI run for the commit you are about to tag — its colour *and* its job
+   conclusions.** The run must have completed and be green. There is always one to read: since
+   dc4577f, runs on `main` and on release tags are never cancelled by a later push. Before that fix,
+   7 of the last 40 runs had been cancelled and *every one of them was on `main`* — including the
+   very commit v0.129.0 was tagged from. **A tag placed on a commit whose run was cancelled is a
+   release nobody has checked**, and that hazard has not gone away.
+
+   ```bash
+   gh run list --branch main --commit <sha> --workflow ci.yml --json databaseId,conclusion
+   gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
+   ```
+
+   **Green is not the whole answer, and since #798 it is frequently not an answer at all.** When
+   `Static checks`, `Unit tests`, `Integration tests` and `Extension checks` all report
+   **`skipped`**, `Detect changes` found the whole diff inside its safe list and this run exercised
+   nothing. (`Closing reference check` is skipped on every push to `main` — it runs only on a pull
+   request — so it is never part of this answer either way.) That is the ordinary case here rather
+   than a curiosity: this project ships a great deal of process prose, so the head of `main` at
+   release time is often a documentation commit. **v0.136.0 was tagged from one**, on a green run in
+   which nothing ran, and this step was discharged by it.
+
+   **A skipped run does not stop the release; it moves the check to step 5.** What this step is,
+   once the suites are skipped, is the cheap early exit — it stops you tagging on top of a `main`
+   that is already red, which is cheaper than tagging and yanking — and the guarantee comes from the
+   tag's own run below.
+
+   Throughout, you are reading a run's **job conclusions** and never classifying commits. The safe
+   list is the `case` glob in the `Detect changes` job in
+   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and that glob is the record; nothing
+   here asks you to decide which commits were "code-bearing".
 4. **Tag the merged commit on `main`** and push the tag.
-5. **Create the GitHub Release** (`gh release create vX.Y.Z --title vX.Y.Z`). Always write a proper,
-   human-readable description instead of relying on bare `--generate-notes` output: group the
-   changes into sections (Highlights / Fixes / Other), summarize each change in plain English with
-   its issue reference, and keep the auto-generated "Full Changelog" compare link at the end.
-6. **Move the `latest` tag to the same commit and force-push it:**
+5. **Wait for the tag's own run and read it. This is the run that checks the release.** Pushing
+   the tag starts a run on the tagged commit, and **a tag build is never gated on
+   `Detect changes`** — the first `case` in that job matches `refs/tags/*` and runs everything,
+   whatever the diff. So this one run exercises the exact tree being released, all four suites, and
+   the image and the extension are published on top of them. The tag run is the one whose
+   `headBranch` is the tag:
+
+   ```bash
+   gh run list --branch vX.Y.Z --json databaseId,status,conclusion
+   gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
+   ```
+
+   **It runs after the tag exists, so it cannot gate the tag — it gates everything after it**, which
+   is steps 6 and 7 and is the whole of what anybody consumes. A tag carrying no Release and no
+   `latest` is not reachable: `docker-compose.prod.yml` and `scripts/install.sh` pull
+   `${TAG:-latest}`. And `Build image`, `Publish container image` and
+   `Publish extension (Chrome Web Store)` all `needs:` the four suites, so a red run publishes
+   **nothing at all** — the tag is inert by construction rather than by anybody's diligence. If it
+   is red, **do not create the Release and do not move `latest`**: delete the tag
+   (`git push origin :refs/tags/vX.Y.Z` — the only ruleset in this repository targets the branch
+   `main`, so tags are deletable), fix through the ordinary pull request flow, and cut again from
+   the new head.
+
+   **The waiting is not new; reading the result is.** Where the head is a documentation commit, step
+   3 used to answer in seconds and this waits out the full suite — but the image a release publishes
+   has always come out of this run, so a release was never actually finished before it. What changes
+   is that somebody reads it before the Release and `latest` assert that it passed.
+6. **Create the GitHub Release** (`gh release create vX.Y.Z --title vX.Y.Z`). Always write a
+   proper, human-readable description instead of relying on bare `--generate-notes` output: group
+   the changes into sections (Highlights / Fixes / Other), summarize each change in plain English
+   with its issue reference, and keep the auto-generated "Full Changelog" compare link at the end.
+7. **Move the `latest` tag to the same commit and force-push it:**
    `git tag -f latest vX.Y.Z && git push origin latest --force`.
 
+**Why the tag run and not the last `main` run that did exercise the suites.** That run is green
+about a *different tree* — the one underneath the commits whose run skipped — so reading it as
+covering the release is the substitution step 3 already made, moved one commit further back. It also
+needs a walk back through `main`'s runs of no fixed length, and it can never say anything about the
+head itself. The tag run is green about the exact commit being released, and it is the run whose
+failure actually withholds the image.
+
 **No commit, no branch, no pull request** — the whole procedure is tags and a Release.
+
+## The wake-up drill is not this session's
+
+AGENTS.md opens an assignment with the wake-up drill — `git fetch origin main`, cut
+`task/<issue>-<slug>` from `origin/main`, `pnpm install`, then `pnpm prisma:generate` — and says
+*unconditionally*. **That word is about a session with an issue, and a release session has none**:
+the drill's second step cuts a branch named after one. Only the fetch survives, and it survives on
+its own merit rather than by inheritance — you need `main`'s actual head to know what you are
+tagging, which is the discipline step 1 already states about the version.
+
+**`pnpm install` and `pnpm prisma:generate` are the two steps that word was written for, and neither
+can mislead a release session.** #862 is about a Prisma client that is stale rather than missing,
+which compiles and whose tests pass against a schema the branch no longer declares — a failure that
+needs a local build or a local suite to happen in. **A release session runs neither.** Every check
+it reads is a run on GitHub against a fresh checkout: `main`'s at step 3 and the tag's at step 5.
+There is nothing local here for a stale client to be stale against.
+
+This is stated in this file rather than in AGENTS.md because `collaboration.md` gives this file the
+release procedure end to end.
 
 ## There is no version bump commit
 
