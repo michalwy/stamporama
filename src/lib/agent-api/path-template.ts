@@ -1,9 +1,11 @@
 // Matching a request's path segments against an operation's path template (#706).
 //
-// Kept apart from the registry so that a unit test can hold it: the registry will import handlers
-// once #710 lands, and a handler reaches Prisma, which `pnpm test:unit` forbids anywhere in its
-// import graph (`tests/unit/unit-suite-purity.test.ts` walks it and names the chain). The matcher is
-// the half worth testing and it has no reason to know what an operation is.
+// Kept apart from the registry so that a unit test can hold it: the registry imports handlers, and a
+// handler reaches Prisma, which `pnpm test:unit` forbids anywhere in its import graph
+// (`tests/unit/unit-suite-purity.test.ts` walks it and names the chain). The matcher is the half
+// worth testing and it has no reason to know what an operation is. **That became live with #708**
+// rather than with #710 as this comment used to anticipate — `registry.ts` now imports
+// `operations/vocabulary.ts`, which carries `server-only` and reads Prisma.
 
 import { invalidRequest } from "./errors";
 

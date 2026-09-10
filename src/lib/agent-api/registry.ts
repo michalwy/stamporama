@@ -1,9 +1,10 @@
 // The operation registry (#706) — the single list every wrapper reads.
 //
-// **It is empty, and that is this issue's scope.** #706 builds the foundation and ships no domain
-// operation of its own: #710 adds the collection reads, #711 the offer verbs, #712 wants and trades,
-// and each one adds an entry here and nowhere else. The OpenAPI document at
-// `/api/v1/openapi.json` and #709's MCP tool list are both generated from this array.
+// **It carries one operation, and that is #708's.** #706 built the foundation and shipped none;
+// #708 adds `get_collection_vocabulary`, which is the operation every later one leans on — it is
+// what lets an agent send `"MNH"` instead of a cuid. #710 adds the collection reads, #711 the offer
+// verbs, #712 wants and trades, and each one adds an entry here and nowhere else. The OpenAPI
+// document at `/api/v1/openapi.json` and #709's MCP tool list are both generated from this array.
 //
 // **The import direction is one-way and it matters.** This module imports the operation modules; an
 // operation module imports the types and the helpers beside it, never this file. A registry that
@@ -17,11 +18,12 @@
 // `path-template.ts`, `params.ts`, `list.ts` — and every one of those is reachable without this
 // file. The integration suite is where a real operation gets exercised end to end.
 
+import { getCollectionVocabularyOperation } from "./operations/vocabulary";
 import { matchPathTemplate, parsePathTemplate } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
 
-export const OPERATIONS: readonly Operation[] = [];
+export const OPERATIONS: readonly Operation[] = [getCollectionVocabularyOperation];
 
 interface Bound {
   readonly operation: Operation;

@@ -6,9 +6,12 @@
 // itself needs neither Prisma nor a request, so it belongs where a unit test can hold it
 // (`agent-api.md`, *The module layout is the Prisma-free split*).
 //
-// **The registry is empty until #710**, so nothing on `main` writes yet and the refusal is
-// exercised against a fixture operation rather than against a domain one. That is deliberate:
-// adding an operation in order to make a test real would breach #706's own *Out of scope*.
+// **Nothing on `main` writes yet**, so the refusal is exercised against a fixture operation rather
+// than against a domain one. That is deliberate: adding an operation in order to make a test real
+// would breach the *Out of scope* of whichever issue did it. The registry stopped being empty with
+// #708, whose one operation declares `writes: false` — so the premise this comment used to give
+// ("the registry is empty until #710") has gone while its conclusion is untouched. #711 and #712
+// are where the first writing operation lands and where this stops being a fixture claim.
 //
 // Pure: no Prisma, no `next/server`, no `server-only`.
 
