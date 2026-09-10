@@ -58,13 +58,16 @@ image.
    **It runs after the tag exists, so it cannot gate the tag — it gates everything after it**, which
    is steps 6 and 7 and is the whole of what anybody consumes. A tag carrying no Release and no
    `latest` is not reachable: `docker-compose.prod.yml` and `scripts/install.sh` pull
-   `${TAG:-latest}`. And `Build image`, `Publish container image` and
-   `Publish extension (Chrome Web Store)` all `needs:` the four suites, so a red run publishes
-   **nothing at all** — the tag is inert by construction rather than by anybody's diligence. If it
-   is red, **do not create the Release and do not move `latest`**: delete the tag
-   (`git push origin :refs/tags/vX.Y.Z` — the only ruleset in this repository targets the branch
-   `main`, so tags are deletable), fix through the ordinary pull request flow, and cut again from
-   the new head.
+   `${TAG:-latest}`. And **nothing a release publishes survives a red suite** — the publish jobs
+   wait on the four suites, `Publish container image` transitively, through `Build image` — so a red
+   run publishes **nothing at all** and the tag is inert by construction rather than by anybody's
+   diligence. The edges are the `needs:` lists in
+   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and that is the record; this
+   sentence summarises them, as does the one in
+   [`docs/architecture/overview.md`](../architecture/overview.md). If it is red, **do not create the
+   Release and do not move `latest`**: delete the tag (`git push origin :refs/tags/vX.Y.Z` — the
+   only ruleset in this repository targets the branch `main`, so tags are deletable), fix through
+   the ordinary pull request flow, and cut again from the new head.
 
    **The waiting is not new; reading the result is.** Where the head is a documentation commit, step
    3 used to answer in seconds and this waits out the full suite — but the image a release publishes
