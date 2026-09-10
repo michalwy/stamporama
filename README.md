@@ -74,7 +74,16 @@ again.
 
 ## Development
 
-Prerequisites: Docker, Node.js 22+, pnpm. Self-hosting against an external database requires **PostgreSQL 15+** (the bundled containers use Postgres 18).
+Prerequisites: Docker, Node.js 24+, pnpm. Self-hosting against an external database requires **PostgreSQL 15+** (the bundled containers use Postgres 18).
+
+Node 24 rather than 22 because of how you get pnpm, not because of the application: pnpm 12 runs on
+Node 18 and up, but the `packageManager` pin in `package.json` is honoured by **corepack**, and
+corepack could not launch pnpm 12 until 0.35. The whole Node 22 line ships corepack 0.34.x. If you
+reach pnpm some other way — a standalone install, `pnpm/action-setup`, your own shim — Node 22 is
+still fine. What corepack 0.34 does on a pnpm 12 pin is worth recognising, because it does not
+mention versions at all: `Cannot find module '…/corepack/v1/pnpm/12.3.4/bin/pnpm.cjs'`, which reads
+as a corrupt download. pnpm 12 renamed that entry point to `bin/pnpm.mjs` and corepack 0.34 knows
+only the old name (#1050).
 
 > **Upgrading a local stack created before Postgres 18?** The dev `db_data` volume holds a
 > Postgres 16 cluster that Postgres 18 cannot read, and the 18+ images moved the data directory
