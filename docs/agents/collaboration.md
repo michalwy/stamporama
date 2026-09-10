@@ -2126,7 +2126,8 @@ alternates as often as that happens. A report is not a door that shuts.
   a session **has done** and says nothing about what the lead is **about to do**. The practical
   ordering is one clause: **finish asking, then sweep.** Not *check before sweeping*, which is
   answerable only by remembering and is this file's own failure mode (*Keeping this file honest*).
-  And the removal is not even terminal, which is the other half of it — *Worktree cleanup*.
+  And a removal is not reliably terminal either, which is the other half of it — one swept
+  worktree came back under a new name and one did not, and *Worktree cleanup* carries both.
 - **Anyone else re-briefs.** Then only the session knows. The user reaching a session directly is
   not exotic here: *If nobody could see it, the user looks before the merge* has his comments
   during a showcase turning into fixes on the branch, and a design session talks to him by
@@ -2688,14 +2689,38 @@ Two orphaned worktrees from 27 August were found by hand while this model was be
 worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
 in an unrelated session, as a failure with no visible cause.
 
-**Layer 1 reads as one act with one outcome, and for a session the app can still reach it is not
-one.** Removing such a worktree is **not terminal**: the next message delivered to that session
-makes the harness create a fresh worktree for it, **under a new name, on the same branch** — so the
-branch is checked out again and `git branch -D` refuses. Measured rather than inferred, on
-2026-09-10 (#1094). A correctly `✅`-titled outgoing lead's worktree `vigorous-keller-01e96d` was
-removed and `git worktree prune` ran clean; the incoming lead then sent that session a question, and
-it came back as `musing-hugle-b7cfec`, still on `claude/vigorous-keller-01e96d`, with its transcript
-moved across intact (3.8 MB before, 4.9 MB after, the old path gone) and its `sessionId` unchanged.
+**Layer 1 reads as one act with one outcome, and for a session the app can still reach it may not
+be one.** Two removals on 2026-09-10 were followed by a message to the swept session and **went
+differently**, with one instance each and nothing to tell them apart (#1094, #1124):
+
+- **The worktree came back.** A correctly `✅`-titled outgoing lead's worktree
+  `vigorous-keller-01e96d` was removed and `git worktree prune` ran clean; the incoming lead then
+  sent that session a question, and the harness created a fresh worktree **under a new name, on the
+  same branch** — `musing-hugle-b7cfec`, still on `claude/vigorous-keller-01e96d`, transcript moved
+  across intact (3.8 MB before, 4.9 MB after, the old path gone), `sessionId` unchanged. The branch
+  was checked out again and `git branch -D` refused.
+- **The worktree did not come back.** The same afternoon, the same sequence, and the #1095/#1104
+  session returned with **no worktree at all**: its `cwd` rewritten to the repository root, its
+  `branch` still recorded as the `claude/` branch it was spawned on, and its environment stating
+  that the working directory is no longer a worktree. **That is #1089's behaviour** — the `cwd`
+  fallback — arriving where #1094's was expected.
+
+**Until 2026-09-10 this passage stated the first outcome as *the* behaviour**, in the words
+*removal is not terminal*; that is quoted rather than deleted, because it was measured rather than
+guessed and will keep arriving in anything copied from it. **What it invited was prediction**, and
+prediction is what two observations in opposite directions do not support. **No mechanism is
+written here and none should be inferred**: whether the session was still running when the removal
+happened, whether it had an open pull request, how long elapsed before the message, whether the
+branch was still checked out, whether `git worktree prune` ran in between — all untested, all
+plausible, and a guess written as a finding is what this project keeps filing issues about.
+
+**What is corrected is the confidence and not the advice — and the reason the advice survives is
+that it holds under both outcomes.** *Finish asking, then sweep* is right either way: if the
+worktree returns, the lead is left with an impossible branch deletion and a worktree it has
+reported as swept; if it does not, a session the lead is still talking to has had its working
+directory changed underneath it mid-conversation. **That makes the ordering more load-bearing than
+it was while it rested on the re-creation, not less** — a rule justified by one outcome is a rule a
+reader can talk themselves out of when they expect the other.
 
 **The sweep's test was right and answered rightly; the order was wrong.** `✅` meant the session had
 finished, and it had. What invalidated the removal was the lead's **own next act** — re-briefing a
@@ -2706,14 +2731,20 @@ rather than of what the session has done. That is the incident below one notch m
 title said *working* and the lead read a merge as the licence; here the title accurately said
 *finished*.
 
-**Nothing was lost, and the cost is the belief rather than the bytes**: one impossible branch
-deletion, and a lead reporting a worktree swept when it was about to exist again.
+**Nothing was lost in either case, and the cost is the belief rather than the bytes**: one
+impossible branch deletion, and a lead reporting a worktree swept when it was about to exist again.
+Both sessions had merged work and nothing uncommitted, which is why these are findings rather than
+incidents. **A session mid-edit would have lost uncommitted work under one of the two outcomes and
+not the other, and nothing here can currently say which** — which is the sharpest reason not to
+predict either.
 
 **No claim is made about why the harness does this, and none should be.** It is the app's behaviour,
 machine-local, outside this repository and beyond anything here to change — the same footing as the
-preview reminder (#1040), the stale `prState` cache (#1010) and the rewritten `cwd` (#1089). Those
-are three behaviours of one session layer and this is a fourth, but the mechanisms differ: a field
-rewritten, a field going stale, and here an object re-created. **And do not make the sweep consult
+preview reminder, whose trigger is unsettled (#1040, #1073), the stale `prState` cache (#1010) and
+the rewritten `cwd` (#1089). Those are three behaviours of one session layer and this is a fourth,
+but the mechanisms differ: a field rewritten, a field going stale, and here an object re-created —
+or, once, not re-created at all, which is why this one is recorded as two observations rather than
+as a behaviour. **And do not make the sweep consult
 the app for liveness.** Its whole value is one string comparison against a title, and a reachability
 probe rebuilds the per-worktree GitHub lookup the done marker was introduced to replace.
 
