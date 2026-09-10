@@ -1978,16 +1978,31 @@ Both ask for confirmation first, naming how many offers are about to be affected
 
 **Select all means the rows loaded so far.** The list loads more offers as you scroll, so the box
 takes what is on screen and says how many that is — it never reaches offers you have not seen. Scroll
-further and tick again to take those too.
+further and tick again to take those too. It leaves alone anything you ticked that a filter is
+currently hiding, in both directions: ticking the box does not drop those, and unticking it does not
+clear them.
 
-**The selection is dropped whenever you change a filter**, including the search box: a selection made
-under one filter and acted on under another would take down listings you were no longer looking at.
+The selection survives scrolling further down the list, and it survives a **filter change** too,
+including the search box.
+
+**A filter is a way of looking, so it never unticks anything — and nothing you do from the bar ever
+reaches a listing you cannot see.** Narrow the list and the offers you had ticked that are no longer
+showing stay ticked: the bar says so — *2 of 5 ticked offers in view* — and tells you the other three
+are still ticked and come back when you release the filter. **Withdraw** and **Delete** act on the
+two in view and name that number, and the confirmation names it too, so a bulk run can never take
+down a listing you are not looking at. Widen the list again and all five are back.
+
+So the number moving when you press a chip is the filter, not a lost selection. If the filter hides
+**all** of them the bar stays up saying *0 of 5*, with nothing on it but **Clear** — it is the only
+place those five are still visible. **Clear** is the other way round: it is you saying you are done
+with the selection, so it unticks all five, hidden ones included, and its hint says so.
 
 **Every row is selectable, and what an action cannot do it says.** The two actions disagree about
 what they can touch — a closed listing has nothing to withdraw, while an offer with a sold set can be
 withdrawn but never deleted — so nothing is greyed out in advance. A run does what it can and lists
 what it could not, one line per offer with the reason, under the bar. Those offers **stay ticked**,
-so what is left to deal with is still selected; everything that went through is cleared.
+so what is left to deal with is still selected; everything that went through is cleared. Anything a
+filter was hiding stays ticked too — the run never touched it.
 
 ## Filtering
 
