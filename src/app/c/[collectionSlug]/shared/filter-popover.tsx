@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Tooltip } from "./tooltip";
 
 /** Above a list screen's chrome, below a dialog opened over one — the rank `RowActionsMenu` uses,
  *  named here too so the portaled menus of this app stack alike. */
@@ -188,4 +189,68 @@ export function filterTriggerStyle({
     // A long value must not stretch the control past the box it was given; the caret stays put.
     overflow: "hidden",
   };
+}
+
+/**
+ * One on/off switch in a filter dropdown's {@link FILTER_MENU_HEADING_STYLE heading}ed footer — a
+ * control that **qualifies** the choice above it rather than being one of the choices (#868).
+ *
+ * A checkbox rather than the accent-outlined chip these are usually drawn as out on the bar: in here
+ * it sits under a list of options and reads as one more thing that is on or off, which is what it
+ * is. Drawn **disabled rather than hidden** where it has no say, with the heading over it naming
+ * when it applies — "present but meaningless" is the failure a panel of always-drawn sub-controls
+ * invites, and a disabled switch still shows its stored state, so one left on last week reads as
+ * waiting rather than as silently applied. Disabled-and-labelled is also what buys the
+ * discoverability the whole shape is for: a collector who has never used the qualified option learns
+ * from the panel that it has settings.
+ *
+ * Two callers, one control: the Copies list's *Split by …* switches (#868) and the auction lots
+ * list's *Show closed* (#1070), which is the same relationship — a boolean that relaxes the
+ * single-select above it, and which sat beside the group it modified with nothing saying so.
+ */
+export function FilterFooterToggle({
+  label,
+  hint,
+  disabledHint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  /** Appended to {@link hint} while the switch has no say, saying when it would. A disabled control
+   * gets no hover of its own, so this rides on the same wrapper rather than on the input. */
+  disabledHint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <Tooltip content={disabled && disabledHint ? `${hint} ${disabledHint}` : hint}>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.55rem",
+          width: "100%",
+          padding: "0.4rem 0.55rem",
+          borderRadius: "0.3rem",
+          fontSize: "0.8125rem",
+          fontWeight: 500,
+          whiteSpace: "nowrap",
+          color: disabled ? "var(--color-text-muted)" : "var(--color-text-primary)",
+          cursor: disabled ? "default" : "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          style={{ cursor: disabled ? "default" : "pointer" }}
+        />
+        {label}
+      </label>
+    </Tooltip>
+  );
 }

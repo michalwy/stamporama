@@ -23,7 +23,20 @@ import {
   isAuctionLotOutcome,
   type AuctionLotOutcome,
 } from "@/lib/auction-rules";
+import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
+import {
+  FILTER_MENU_HEADING_STYLE,
+  FilterFooterToggle,
+} from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { lotNarrowings, type LotNarrowing } from "./lot-params";
+import {
+  CLOSING_ANY_LABEL,
+  CLOSING_WINDOWS,
+  OUTCOME_ANY_LABEL,
+  describeLotClosingFilter,
+  describeLotOutcomeFilter,
+  withCount,
+} from "./lot-filter-labels";
 import {
   useAuctionLotCounts,
   useAuctionLotExposure,
@@ -42,13 +55,18 @@ import { useToast } from "@/app/toast-provider";
 import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
 import { CONTROL_STYLE, FilterChip, SIGNALS } from "./auction-controls";
 
-/** The closing windows offered on the toolbar. *Ended* is the one that earns its keep: those lots
- * are muted in the list on purpose, so this is how you go and find them. */
-const CLOSING_WINDOWS: { value: AuctionClosingWindow; label: string }[] = [
-  { value: "today", label: "Closing today" },
-  { value: "week", label: "This week" },
-  { value: "ended", label: "Ended" },
-];
+/**
+ * The two fixed widths the toolbar's dropdowns are given (#868): a trigger sized to its own label
+ * changes width on a pick, and everything to its right moves. Each holds its longest possible
+ * reading — `Outcome: any + closed` and `Closing: This week` — with room to spare, so the label is
+ * never the half that gets ellipsised away.
+ */
+const FILTER_WIDTH = { outcome: "12rem", closing: "10.5rem" } as const;
+
+/** What a `Tooltip` around a fixed-width bar control needs to keep that width: it renders an
+ *  `inline-flex` span, and **that span** is the row's flex child rather than the control inside it,
+ *  so without this the width holds only until the row runs out of room. */
+const NO_SHRINK: React.CSSProperties = { flexShrink: 0 };
 
 type DialogState =
   | { kind: "none" }
@@ -320,7 +338,10 @@ export function AuctionLotsPanel({
       case "outcome":
         return AUCTION_LOT_OUTCOME_LABEL[value as AuctionLotOutcome] ?? value;
       case "closing":
-        return CLOSING_WINDOWS.find((w) => w.value === value)?.label ?? value;
+        // `bandLabel`, not `label`: in the dropdown the option sits under a trigger already saying
+        // *Closing*, while here it is one name in a run of filters with nothing to say which
+        // dimension it came from — so *Closing today* rather than a bare *Today* (#1070).
+        return CLOSING_WINDOWS.find((w) => w.value === value)?.bandLabel ?? value;
       case "signal":
         return SIGNALS.find((s) => s.value === value)?.label ?? value;
       case "undescribed":
@@ -469,31 +490,98 @@ export function AuctionLotsPanel({
               margin: "0 0.25rem",
             }}
           />
-          {AUCTION_LOT_OUTCOMES.map((value) => {
-            const active = outcome === value;
-            return (
-              <FilterChip
-                key={value}
-                label={AUCTION_LOT_OUTCOME_LABEL[value]}
-                count={counts ? (counts.outcomes[value] ?? 0) : undefined}
-                active={active}
-                onClick={() => {
-                  const next = active ? "" : value;
-                  rememberOutcome(next);
-                  updateParams({ outcome: next });
-                }}
-              />
-            );
-          })}
-          {/* The escape hatch for the hide-by-default rule (#504), beside the chips it relaxes: the
-              outcome chips are single-select, so without it there is no way back to a list holding
-              both halves at once — searching for a lot you cannot remember the fate of, above all.
-              Ignored while an outcome chip is on, which is already a request for closed lots. */}
-          <Tooltip content="Include lots that are done — won, lost, observed or cancelled">
-            <FilterChip
-              label="Show closed"
-              active={includeClosed}
-              onClick={() => setIncludeClosed(!includeClosed)}
+          {/* **Two single-select groups, two dropdowns** (#1070, the shape the user ratified on
+              #1019). Five outcome chips plus *Show closed*, and three closing chips, of which at
+              most one was ever lit: a group of N chips picking one value *is* a dropdown, and this
+              one was already written that way in the code — in the dividers and in the single-select
+              semantics — before anybody drew it that way.
+
+              **Folding these two increases discoverability rather than reducing it**, which is the
+              opposite of the usual trade and is why this is not tidying. #1019 exists because the
+              user missed the *Ended* chip while asking for the filter it already provides; in a
+              four-option control labelled *Closing* it cannot be missed. The signals above stayed
+              chips for the mirror-image reason — their counts are the reason to look at the screen
+              at all, and a count behind a click is a count nobody reads.
+
+              Counts ride on the options, spelled exactly as `All sellers (3)` beside them (#1029),
+              and each *any* row is a facet row like every other control here: its own dimension
+              dropped, the rest kept. Neither can be summed from the options under it, which is why
+              the endpoint counts both — see `allOutcomes` / `allClosing` in `auctions.ts`. */}
+          <Tooltip
+            style={NO_SHRINK}
+            content="How the bidding went, worked out from the figures rather than recorded. Lots that are done are out of the list unless you ask for them."
+          >
+            <SingleSelectFilter
+              ariaLabel="Filter by outcome"
+              width={FILTER_WIDTH.outcome}
+              value={outcome ?? ""}
+              onChange={(next) => {
+                rememberOutcome(next);
+                updateParams({ outcome: next });
+              }}
+              triggerLabel={describeLotOutcomeFilter(outcome, includeClosed)}
+              /* `includeClosed` **widens** the list, so the band under the toolbar never names it
+                 (#1018) — which is exactly why the control has to. It was a chip that lit; folded
+                 in here, the accent and the trigger's own `+ closed` are what is left to say it is
+                 doing something at rest. */
+              active={outcome !== undefined || includeClosed}
+              options={[
+                { id: "", label: withCount(OUTCOME_ANY_LABEL, counts?.allOutcomes) },
+                ...AUCTION_LOT_OUTCOMES.map((value) => ({
+                  id: value,
+                  label: withCount(
+                    AUCTION_LOT_OUTCOME_LABEL[value],
+                    counts ? (counts.outcomes[value] ?? 0) : undefined
+                  ),
+                })),
+              ]}
+              footer={
+                <>
+                  {/* The escape hatch for the hide-by-default rule (#504), now **inside** the
+                      control it relaxes rather than beside it. It exists solely to let this
+                      single-select hold both halves at once — searching for a lot you cannot
+                      remember the fate of, above all — and out on the bar there was nothing saying
+                      which group it belonged to. `ui-patterns.md` draws that line: a control that
+                      *qualifies* a choice goes inside the control it qualifies (#846/#868).
+
+                      Disabled rather than hidden while an outcome is picked, under a heading naming
+                      when it applies — the Copies list's splits, and the same reasoning: picking an
+                      outcome is already a request for closed lots, so the switch has no say, and
+                      until now it was silently ignored with nothing on screen admitting it. */}
+                  <span style={FILTER_MENU_HEADING_STYLE}>When no outcome is picked</span>
+                  <FilterFooterToggle
+                    label="Show closed"
+                    hint="Include lots that are done — won, lost, observed or cancelled."
+                    disabledHint="Picking an outcome already asks for closed lots."
+                    checked={includeClosed}
+                    onChange={setIncludeClosed}
+                    disabled={outcome !== undefined}
+                  />
+                </>
+              }
+            />
+          </Tooltip>
+          <Tooltip
+            style={NO_SHRINK}
+            content="When the lot closes. Ended lots are muted in the list on purpose — this is how you go and find them to record what happened."
+          >
+            <SingleSelectFilter
+              ariaLabel="Filter by closing time"
+              width={FILTER_WIDTH.closing}
+              value={closing ?? ""}
+              onChange={(next) => {
+                rememberClosing(next);
+                updateParams({ closing: next });
+              }}
+              triggerLabel={describeLotClosingFilter(closing)}
+              active={closing !== undefined}
+              options={[
+                { id: "", label: withCount(CLOSING_ANY_LABEL, counts?.allClosing) },
+                ...CLOSING_WINDOWS.map(({ value, label }) => ({
+                  id: value,
+                  label: withCount(label, counts ? counts.closing[value] : undefined),
+                })),
+              ]}
             />
           </Tooltip>
           <span
@@ -504,33 +592,10 @@ export function AuctionLotsPanel({
               margin: "0 0.25rem",
             }}
           />
-          {CLOSING_WINDOWS.map(({ value, label }) => {
-            const active = closing === value;
-            return (
-              <FilterChip
-                key={value}
-                label={label}
-                count={counts ? counts.closing[value] : undefined}
-                active={active}
-                onClick={() => {
-                  const next = active ? "" : value;
-                  rememberClosing(next);
-                  updateParams({ closing: next });
-                }}
-              />
-            );
-          })}
-          <span
-            style={{
-              width: "1px",
-              height: "1.25rem",
-              background: "var(--color-border)",
-              margin: "0 0.25rem",
-            }}
-          />
-          {/* Its own segment, after the three that ask about the bidding: this one asks what is
+          {/* Its own segment, after the controls that ask about the bidding: this one asks what is
               missing from the record, and it is the only chip here that a cancelled lot can never
-              answer to. */}
+              answer to. It stays a chip because it is a **boolean**, not one of a set — there is no
+              single-select group here to fold (#1070). */}
           <Tooltip content="Lots with nothing recorded as being in them — no catalogue value to bid against, and nothing to file if you win. Cancelled lots are left out.">
             <FilterChip
               label="Not described"
@@ -606,25 +671,23 @@ export function AuctionLotsPanel({
               </option>
             ))}
           </select>
-          <span
-            style={{
-              width: "1px",
-              height: "1.25rem",
-              background: "var(--color-border)",
-              margin: "0 0.25rem",
-            }}
-          />
-          <FilterChip
-            label="Group by sale"
-            active={groupBySale}
-            onClick={() => setGroupBySale(!groupBySale)}
-          />
         </div>
 
         <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {actionError && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
           )}
+          {/* **Not a filter, so not on the filter half** (#1070 move 1) — the one move in that
+              change that is a defect fix rather than a choice, and #1019 named it: of the sixteen
+              chips on this bar, one was not a filter at all. Grouping decides how the rows are
+              read, never which rows the list holds, which is the same line *Clear filters* draws
+              around it (#1018) and the same one the Copies list draws around its own grouping. It
+              sits with the actions because that is what it is: something you do to the view. */}
+          <FilterChip
+            label="Group by sale"
+            active={groupBySale}
+            onClick={() => setGroupBySale(!groupBySale)}
+          />
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}
@@ -651,10 +714,17 @@ export function AuctionLotsPanel({
 
             **A lit chip is not enough here, and this thread is the proof.** The offers list answers
             a filter arrived at by a link with a chip lit *because* it is on (#481) — sound there,
-            because the collector clicked the link a second ago. This bar carries sixteen chips, two
-            selects and a search box, and the issue behind this change started with the user not
-            finding the *Ended* chip at all. A control he could not find while looking for it is not
-            a control that will announce itself while he is not.
+            because the collector clicked the link a second ago. When this band was written the bar
+            carried sixteen chips, two selects and a search box, and the issue behind it started
+            with the user not finding the *Ended* chip at all. A control he could not find while
+            looking for it is not a control that will announce itself while he is not.
+
+            **#1070 folded that bar to seven chips and four dropdowns and the band is still right.**
+            A dropdown announces itself far better than a chip — its trigger reads `Closing: Ended`
+            whether or not anybody opens it, which is the half of this argument the chips could not
+            meet — but announcing *itself* is not the band's job. The band says how much is hidden
+            and names every filter at once, and neither of those is something four controls can do
+            by each being legible on its own.
 
             So it is a band, in its own row, and it says three things a chip cannot: that the list
             is narrowed at all, **how much is hidden** (`8 of 143` — the denominator is the list

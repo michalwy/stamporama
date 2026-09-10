@@ -37,6 +37,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
+import { FilterFooterToggle } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -280,58 +281,6 @@ const GROUPING_FOOTER_HEADING_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
 };
-
-/** One of the axes that join the duplicate key (#372/#421/#424), inside the grouping panel (#868).
- *  A checkbox rather than the accent-outlined button it used to be on the bar: in here it sits
- *  under a list of options and reads as one more thing that is on or off, which is what it is. */
-function GroupSplitToggle({
-  label,
-  hint,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  disabled: boolean;
-}) {
-  return (
-    <Tooltip
-      content={
-        disabled
-          ? `${hint} Applies only while the list is grouped by duplicates.`
-          : hint
-      }
-    >
-      <label
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.55rem",
-          width: "100%",
-          padding: "0.4rem 0.55rem",
-          borderRadius: "0.3rem",
-          fontSize: "0.8125rem",
-          fontWeight: 500,
-          whiteSpace: "nowrap",
-          color: disabled ? "var(--color-text-muted)" : "var(--color-text-primary)",
-          cursor: disabled ? "default" : "pointer",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
-          style={{ cursor: disabled ? "default" : "pointer" }}
-        />
-        {label}
-      </label>
-    </Tooltip>
-  );
-}
 
 /**
  * The listing buttons while the selection **collides** with a live offer (#660).
@@ -1914,18 +1863,20 @@ export function InventoryListPanel({
                       <>
                         <span style={GROUPING_FOOTER_HEADING_STYLE}>When grouping duplicates</span>
                         {formats.length > 0 && (
-                          <GroupSplitToggle
+                          <FilterFooterToggle
                             label="Split by format"
                             hint="Treat a pair, block or strip as a different item from a single, instead of grouping them together."
+                            disabledHint="Applies only while the list is grouped by duplicates."
                             checked={groupByFormat}
                             onChange={setGroupByFormat}
                             disabled={!groupDuplicates}
                           />
                         )}
                         {certificateStatuses.length > 0 && (
-                          <GroupSplitToggle
+                          <FilterFooterToggle
                             label="Split by certificate"
                             hint="Treat a certified copy as a different item from an uncertified one, instead of grouping them together."
+                            disabledHint="Applies only while the list is grouped by duplicates."
                             checked={groupByCertificate}
                             onChange={setGroupByCertificate}
                             disabled={!groupDuplicates}
