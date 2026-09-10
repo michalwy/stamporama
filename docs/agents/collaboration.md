@@ -303,6 +303,56 @@ session did it**. Both were true of the sessions they were written about. **The 
 2026-09-08 (#998) that a pooled worker reads `AGENTS.md`, this file and the topic files at the
 moment it is assigned** — as the first step of the work, not before it.
 
+**Which copy — and the branch cut answers it, not a rule per file.** Reading at assignment leaves
+a worker in a worktree cut when the **pool** was clicked, which may be hours old, so reading this
+file off that worktree hands it the file as it stood at spawn: **the staleness this section
+exists to remove, reproduced honestly, with nothing to say so** (#1060). So **the wake-up drill's
+first two commands run before any reading** — `git fetch origin main`, then cut
+`task/<issue>-<slug>` from `origin/main`. After the cut the worktree **is** `origin/main`, so
+`AGENTS.md`, this file and every topic file are current by construction. Anything read *before* the
+cut is read with `git show origin/main:<path>` — `AGENTS.md` included, since `CLAUDE.md` tells
+every session to read it *before starting any task*, and an assignment is a task starting.
+
+**A session that cuts no branch has no such moment, and `git show` is the whole of its answer.** A
+release session has no issue and no branch (`release-versioning.md`, *The wake-up drill is not this
+session's*), so the fetch is the only step of the drill it runs and its worktree never becomes
+`origin/main`. It reads its own procedure file the explicit way. That file took 102 added lines on
+2026-09-10 — the largest single move of any process file that day — so this is the case with the
+most to lose, not the tidy corner it looks like.
+
+**Every process file gets this, and the reflex to exempt some of them fails on its own terms.** The
+tempting alternative is to name the fast-moving files and `git show` only those. Measured on
+2026-09-10 over `origin/main`, by author date, from 2026-09-06 — the day this model started — the
+list a person would write is wrong both ways:
+
+| file | commits since 2026-09-06 | busiest day |
+| --- | --- | --- |
+| `docs/agents/collaboration.md` | 43 | 17 on 2026-09-08 |
+| `docs/agents/ui-patterns.md` | 21 | 10 on 2026-09-07 |
+| `AGENTS.md` | 18 | 6 on 2026-09-07 |
+| `docs/agents/backlog-review.md` | 16 | 7 on 2026-09-08 |
+| `docs/agents/inventory-lists.md` | 14 | 7 on 2026-09-07 |
+| `docs/agents/platform.md` | 13 | 7 on 2026-09-07 |
+
+`AGENTS.md` is not the rarely-changed file it is assumed to be — eighteen commits in five days,
+three of them in the two hours before this paragraph was written. *A topic file is read only by the
+session touching that area* is true and does not help: that session is the one about to act on it,
+`ui-patterns.md` out-moved `AGENTS.md` over the same window, and on 2026-09-10 `offers.md` took four
+commits to this file's three.
+
+**The session writing this is the worked example, and it did not go the way the reasoning above
+predicts.** Its worktree was cut at `51faddc` and it was assigned two and a half hours later. In
+between, `origin/main` took four commits, **two of them under `docs/agents/`** — `ui-patterns.md`,
+and 102 added lines of `release-versioning.md`. Neither was `collaboration.md`. **The file everyone
+watches was the one that had not moved**, which is the argument for an ordering rather than a
+watchlist in one line.
+
+**And it costs nothing, which is why it is an ordering and not a discipline.** The drill was already
+unconditional and already first; what moves is the *reading*, to after its first two commands rather
+than beside them. The cut is instantaneous and is the whole of what the reading depends on —
+`pnpm install` and `pnpm exec prisma generate` are the slow half and may run while the reading
+happens.
+
 **The decisive reason is staleness, and it is removed rather than mitigated.** Workers spawned at
 14:57 on 2026-09-08 read this file as it then stood. **It changed four times that afternoon** —
 #975, #984, #994, #995 — growing from about 1570 lines to over 1900, and what changed included the
@@ -322,6 +372,13 @@ had moved in the interval. **That instruction is the workaround, performed once,
 correctly.** It is also the last time it should be needed here: a rule landing with a live instance
 of the failure it prevents is worth more than the rule on its own.
 
+**That last sentence was wrong, and it took two days to fail.** On 2026-09-10 a lead wrote the same
+by-hand instruction into a brief again, because the routine read this section prescribes had never
+been given a source and the workaround was the only place `origin/main` appeared here at all. The
+paragraph stays as the dated account it is; the instruction is up in *Which copy*, where a worker
+at assignment will meet it — which is #1060's point, and the reason it was filed rather than this
+paragraph being edited into a rule.
+
 **The budget argument is second, and it is a halving rather than a deferral.** The lead's first
 framing — *shifted, not saved* — compared reading at assignment against the **old** model, which
 the paragraph above has just broken. The honest comparison is against the *fixed* old model, read
@@ -336,7 +393,13 @@ still says: you are a pooled worker, you have no task, **do not read the process
 is what you are waiting for — a message naming one issue, which is checkable where *wait for the
 lead* is not — and this is how to reach the lead: by looking up the session whose title is the
 lead's and whose `cwd` is under this repository (*Session titles*), never by an identity a message
-claims for itself. The wake-up drill below is unaffected and still runs at assignment.
+claims for itself.
+
+**And the assignment message says where to read from, because that is where a lead looks when it is
+writing one.** It names the issue, and it says: run the drill's `git fetch origin main` and the
+branch cut **first**, then read `AGENTS.md`, this file and the topic file — the worktree is as old
+as the pool until the cut, and current the moment after it. That is one clause in a brief, and it is
+the half a lead composing a prompt from habit will otherwise leave out (#1060).
 
 **One consequence is recorded as open rather than decided.** A session that reads on demand is not
 specialised at spawn, so the pool stops being a pool of *workers* and becomes generic capacity: a
@@ -354,12 +417,16 @@ the session lookup and never on age (*A held session's worktree is not stale*).
 user's decision** — #906 marks them as such, and they are refutable:
 
 - **The wake-up drill, unconditionally, on every assignment**: `git fetch origin main`, cut the
-  `task/` branch from `origin/main`, `pnpm install`, `pnpm prisma:generate`. The last step looks
+  `task/` branch from `origin/main`, `pnpm install`, `pnpm prisma:generate`. **The first two come
+  before the reading**, and the reason is above — until the cut every process file in the worktree
+  is as old as the pool, and after it none of them is (#1060). The last step looks
   redundant and is not. A pooled worktree may be hours old by the time it is assigned, and if `main`
   has taken a migration since, `pnpm install` reports *"Already up to date"*, skips the postinstall,
   and leaves a Prisma client that is **stale rather than missing** — which compiles, and whose tests
   pass against a schema the branch no longer declares (#862). A stale client looks exactly like a
-  sound one, and regenerating costs seconds.
+  sound one, and regenerating costs seconds. **Two steps of one drill answer two different
+  staleness problems** — the cut answers the prose, the regenerate the schema — and both are
+  invisible when they go wrong.
 - **A worker that used the integration suite releases its slot before it finishes**:
   `pnpm e2e:db:down && pnpm slot release`. A slot is allocated **lazily**, on first use of that
   suite, so releasing it holds demand at the number of sessions actually running rather than the size
@@ -537,7 +604,9 @@ because what a later reader wants from that row is when this project changed han
 1. A backlog review produces an order (`backlog-review.md`).
 2. The lead spawns a task session with a **self-contained prompt**: the issue, the branch name, what
    is out of scope, which files a parallel session is holding, the decisions the user has already
-   made, and **how to reach the lead**.
+   made, **how to reach the lead**, and — for a worker from the pool — that the drill's fetch and
+   branch cut come **before** it reads the process files (*A pooled worker reads nothing until it
+   is assigned*).
 3. The session works, and asks the lead whenever it is blocked.
 4. The session commits on its branch, rebases onto `main`, re-runs the checks, pushes, and opens a
    pull request.
