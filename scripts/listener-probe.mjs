@@ -34,9 +34,18 @@
  * the Dockerfile's `node:24` satisfies.
  *
  * Environment:
- *   PROBE_CTORS  comma-separated constructor names to watch (default `PassThrough`)
- *   PROBE_AT     capture the adding stacks once a count reaches this (default 11)
- *   PROBE_OUT    file to append dumps to (default `/tmp/listener-probe.txt`)
+ *   PROBE_CTORS         comma-separated constructor names to watch (default `PassThrough`)
+ *   PROBE_AT            capture the adding stacks once a count reaches this (default 11)
+ *   PROBE_OUT           file to append dumps to (default `/tmp/listener-probe.txt`)
+ *   PROBE_INTERVAL_MIN  also dump every N minutes, unset or 0 meaning never (default never)
+ *
+ * `PROBE_INTERVAL_MIN` exists for the case this was written for: a container somebody else is
+ * running. Signalling a process inside one means finding the right pid first — `pnpm start` runs
+ * the server as a **child**, so the pid the shell reports is the wrong one — and that is the step
+ * most likely to go wrong when the person diagnosing is not the person at the keyboard. With an
+ * interval set, the whole procedure is *set two variables, restart, come back later, read the
+ * log*. Every dump also goes to stdout, so `docker logs` has it without any file to fetch. The
+ * timer is `unref`'d: it can never be the reason a process fails to exit.
  *
  * `PROBE_CTORS` matches the constructor name **exactly**, and so does Node's own warning: it
  * renders the emitter with `inspect(target, { depth: -1 })`, so a subclass prints under its own
@@ -55,6 +64,7 @@ import fs from "node:fs";
 const WATCH = (process.env.PROBE_CTORS || "PassThrough").split(",");
 const AT = Number(process.env.PROBE_AT || 11);
 const OUT = process.env.PROBE_OUT || "/tmp/listener-probe.txt";
+const INTERVAL_MIN = Number(process.env.PROBE_INTERVAL_MIN || 0);
 
 /** emitter -> { id, stacks: { [event]: string[] } }; weak so tracking never retains a stream. */
 const tracked = new WeakMap();
@@ -141,3 +151,16 @@ function dump(reason) {
 
 process.on("SIGUSR2", () => dump("SIGUSR2"));
 process.on("exit", () => dump("exit"));
+
+// Say so on the way up. Without this a probe that failed to load and one that saw nothing worth
+// reporting look identical in a log, which is the distinction the whole exercise turns on.
+process.stdout.write(
+  `[listener-probe] active: watching ${WATCH.join(", ")}, stacks at >=${AT}` +
+    (INTERVAL_MIN > 0 ? `, dumping every ${INTERVAL_MIN} min` : ", dump on SIGUSR2 or exit") +
+    "\n",
+);
+
+if (INTERVAL_MIN > 0) {
+  // unref: a diagnostic must never be the thing that keeps a process alive.
+  setInterval(() => dump(`every ${INTERVAL_MIN} min`), INTERVAL_MIN * 60_000).unref();
+}
