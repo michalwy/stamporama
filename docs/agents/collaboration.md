@@ -498,13 +498,30 @@ branch cut **first**, then read `AGENTS.md`, this file and the topic file — th
 as the pool until the cut, and current the moment after it. That is one clause in a brief, and it is
 the half a lead composing a prompt from habit will otherwise leave out (#1060).
 
-**One consequence is recorded as open rather than decided.** A session that reads on demand is not
-specialised at spawn, so the pool stops being a pool of *workers* and becomes generic capacity: a
-release session, a design session **or the incoming lead** could come out of it by message rather
-than by a tile. That would remove the one remaining interaction that requires him at the machine,
-which is the whole reason the pool exists — a handover currently needs a chip, and a message does
-not. Nobody has tried it, and a lead drawn from a pooled worker is a larger change than a release
-session drawn from one, so it is written here as a possibility and not as a rule.
+**One consequence was recorded as open, and it has since been exercised.** A session that reads on
+demand is not specialised at spawn, so the pool stops being a pool of *workers* and becomes generic
+capacity: a release session, a design session **or the incoming lead** can come out of it by message
+rather than by a tile. That removes the one remaining interaction that requires him at the machine,
+which is the whole reason the pool exists — a handover otherwise needs a chip, and a message does
+not.
+
+**Two leads did it on 2026-09-10**: the morning's and the midday's, the second of which filed #1063
+about a consequence of it. The sentence that stood here until then said *nobody has tried it, and a
+lead drawn from a pooled worker is a larger change than a release session drawn from one* — quoted
+rather than deleted, because a superseded claim goes on arriving in an inherited prompt and a bare
+replacement cannot tell a later reader which of the two is newer. A **release session** on the same
+day is reported to have come from the pool as well; the app's session list cannot confirm that one,
+because its worktree has since been removed and the `cwd` it records now points at the repository
+root rather than at the worktree the session ran in.
+
+**This stays a description of what has happened and does not become a rule about how a lead is
+started.** A tile carrying the handover as its prompt is still what *Spawn ahead and hold*
+describes, and neither route is the required one. **And the list shows something narrower than the
+reports do, which is worth keeping apart**: it shows the last three leads all running under
+`.claude/worktrees/`, and that is a property of being **spawned at all** rather than of coming from
+the pool — the 2026-09-08 lead, which predates any of this, was in one too. That a lead came out of
+the pool *by message* is what those two sessions say of themselves, and nothing in the list
+distinguishes it from a tile.
 
 **A dozen idle worktrees are the worktree sweep's problem, and it already has the answer**: an
 unassigned worker is indistinguishable from a held session by every git signal, so it is removed on
@@ -2372,10 +2389,37 @@ anything, resolve the path to its session:
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
-**`👑` is absent from that list on purpose, and its absence changes nothing.** The lead's `cwd` is
-the main checkout rather than a worktree, so it is not a candidate the sweep resolves; the old
-enumeration left `===> Leader <===` out for the same reason. If a `👑` title ever does resolve to a
-worktree path, that is the last bullet's case and not a removal.
+**`👑` is absent from that list on purpose, and the reason this paragraph used to give was false.**
+It read *the lead's `cwd` is the main checkout rather than a worktree, so it is not a candidate the
+sweep resolves* — quoted rather than deleted, since it will go on arriving in an inherited handover
+chip. **A lead does carry a worktree.** One drawn from the pool by message keeps the worker's, and
+one spawned by a tile is given a fresh one like every other session (*How a task session is actually
+spawned*), so the sweep resolves a `👑` title to a worktree path as a matter of course and
+`git worktree list` shows it.
+
+**It was already false when it was written, and this file was already carrying the refutation.** The
+sentence landed at `51faddc` on 2026-09-10 (#1042), and the lead that briefed the session writing it
+was running in `.claude/worktrees/infallible-maxwell-ada806` — as were the lead before it and the
+lead after. Meanwhile the handover-chip bullet of *Memory is not versioned, and nothing expires it*
+has recorded since 2026-09-07 that a chip claimed *the lead works from the main checkout when the
+tile had put it in a worktree*, listed there as one of three claims that were false by the time they
+were read. **Two sections of one file, one asserting what the other files under evidence.**
+
+**Nothing was ever at risk, and the clause doing the work is the last one.** A `👑` title resolving
+to a worktree path falls through to *ask the user* — the fourth bullet — rather than into a removal,
+which is the direction the whole sweep is built to fail in. **What a false justification costs is
+the reader.** *It can never come up* is wrong on the first `git worktree list`, and a justification
+that fails on the first check invites the next reader to write off the paragraph around it, the
+fallthrough clause included. That is why this was worth correcting when nothing was broken.
+
+**So `👑` stays out of the enumeration, for the reason that actually holds: a lead is never stale
+while it is the lead.** Its title carries no `✅`, which is the whole of the second bullet's test, so
+nothing about it needs a bullet of its own. **The `🎨` paragraph below argues the other way and it
+was weighed** (#1048): naming an icon is what keeps *ask the user* rare, and on that argument `👑`
+would belong in the third bullet too. It is left out deliberately, because the only session that
+ever meets a `👑` row in this sweep is the lead running the sweep, which can answer *ask the user*
+about its own worktree without asking anybody — which is not the noise the third bullet exists to
+prevent.
 
 **`🎨` is named rather than left out, and the two roles differ on exactly this point.** A design
 session does resolve to a worktree — and would resolve to one every time if design ever came out of
