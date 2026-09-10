@@ -1511,10 +1511,18 @@ alternates as often as that happens. A report is not a door that shuts.
 
 - **The lead re-briefs.** No announcement is required, because sending the message *is* the
   handback; what is required is that the lead then act on its own knowledge. Having messaged a
-  session, do not run `update-branch`, do not arm auto-merge and do not merge until it reports
-  again. **Knowing and not acting are different things, and it is the second that failed here** —
-  which is why this is written as a prohibition rather than left to follow from the lead being
-  informed.
+  session, do not run `update-branch`, do not arm auto-merge, do not merge, **and do not remove its
+  worktree**, until it reports again. **Knowing and not acting are different things, and it is the
+  second that failed here** — which is why this is written as a prohibition rather than left to
+  follow from the lead being informed.
+
+  **The last of those was not on this list until 2026-09-10, and its absence is the whole of a
+  second incident.** The list stopped the lead re-merging and said nothing about the act it went on
+  to perform — removing the worktree of a session it had re-briefed eleven minutes earlier, on the
+  strength of the merge that had just happened. A prohibition list is read as complete by whoever is
+  consulting it, which is why the act that is missing from one is more expensive than the act that
+  is merely unwritten (*Merging a pull request is not the event that ends a session*, under
+  *Worktree cleanup*).
 - **Anyone else re-briefs.** Then only the session knows. The user reaching a session directly is
   not exotic here: *If nobody could see it, the user looks before the merge* has his comments
   during a showcase turning into fixes on the branch, and a design session talks to him by
@@ -1927,8 +1935,9 @@ and never prepares one (`backlog-review.md`), and the lead is normally the sessi
 
 Three layers, and the middle one is what makes forgetting the first harmless:
 
-1. **A merged branch deletes itself** on GitHub, and **the lead removes the worktree** — along with
-   the local branch, and the remote branch too if the work was dropped rather than merged.
+1. **A merged branch deletes itself** on GitHub. **The worktree goes when its session is finished,
+   which the title says and the merge does not** — `[DONE]`, the test below — along with the local
+   branch, and the remote branch too if the work was dropped rather than merged.
 2. Per-worktree slots are reclaimed when the worktree goes (#781).
 3. **Every backlog review sweeps**: `git worktree list`, `git worktree prune`, and remove what is
    stale (`backlog-review.md`) — where *stale* is the test below, not a judgement.
@@ -1945,7 +1954,7 @@ Nothing was lost — the branch survived, `git worktree add` restored it, and a 
 nothing into the repository — which is luck about which session it was. A session mid-edit loses its
 uncommitted work, and AGENTS.md notes that an unpushed commit does not survive its worktree going.
 
-The rule could not have caught it. Layer 1 removes the worktree of a **merged branch**; a held
+The rule could not have caught it. Layer 1 reaches a worktree whose branch has **merged**; a held
 session has no branch, no pull request, and has sat untouched for exactly as long as the hold has
 lasted — which is the shape of an abandoned one. #897 made *spawn ahead and hold* the default the
 day before, and the room is four or five held at once, so worktrees that look abandoned are now the
@@ -1988,6 +1997,48 @@ through to *ask the user* rather than into a removal.
 merged, or its work dropped* — a fact about GitHub the sweep had to go and establish for every
 worktree, and which is silent about a session that finished without opening one. `[DONE]` is
 put there by whoever knows, at the moment they know.
+
+#### Merging a pull request is not the event that ends a session
+
+**A test is only as good as the places that send you to it, and on 2026-09-10 layer 1 did not.** The
+lead merged #1030 and then removed the worktree of the session that had produced it, along with its
+local branch. **That session was working**: the lead had re-briefed it eleven minutes earlier and it
+was mid-commit on the follow-up it had been asked for. Its title was
+`#1020/#1021[#1030]: selection vs filter` — **no `[DONE]` prefix**, which the test above says means
+*working; leave it*. Nothing in layer 1 pointed at that test, and the merge is what it read as the
+licence.
+
+**This is the mirror of the incident this section opens with.** There, layer 1 could not have caught
+the removal, because a held session has no merged branch for it to point at. Here it had one and
+pointed straight at it: *a merged branch deletes itself, and the lead removes the worktree*, stated
+as one event following the other, with nothing in it sending the reader down to the string
+comparison that actually decides it. Same sweep, same section, opposite halves of one missing
+sentence — which is why layer 1 now defers to the title rather than to the merge.
+
+**The general shape is the part worth the words: merging a pull request is a fact about GitHub; a
+session finishing is a fact about the session.** The first is public, timestamped and visible to
+anybody; the second is known only to the session and to the lead's own briefing history, and after a
+re-brief the two are not close at all. This is #984's *knowing and not acting* one step further
+along — there the lead knew a session had been re-briefed and acted anyway; here the prohibition
+list it was working from **did not name the act it performed**. That list names it now (*A re-brief
+hands the branch back*).
+
+**Nothing was lost, and a rule whose evidence is *nothing went wrong* teaches nothing — so what
+saved it is named instead of the outcome.** Two things did, and neither is a property of the sweep.
+The session's `--force-with-lease` refused its own push against the lead's rebase rather than
+silently overwriting it, which is the flag *A re-brief hands the branch back* names for this exact
+collision; and the session
+had put a ref on its commits before anything could collect them, so they survive as #1032, one of
+them fixing a defect in shipped code. Both are accidents of what that particular session happened to
+have done by that minute. **A session mid-edit with uncommitted work would have lost it**, which is
+the case this whole section was written about, and AGENTS.md says as much about an unpushed commit.
+
+**What this is not is an instruction to check before cleaning up.** A rule answerable only by
+remembering is this file's own failure mode wearing a checklist (*Keeping this file honest*), and
+there was nothing wrong with the test: it is one string comparison, it was correct throughout, and
+it would have answered in a second. What was missing is that nothing **at the point where the
+mistake is made** sent anybody to it. Two places do now — layer 1, and the prohibition list in
+*A re-brief hands the branch back* — and both are pointers rather than a new procedure.
 
 **The lead keeps no list of its own, and deliberately not.** A list the lead kept would die with the
 lead; this one is the app's, is keyed by the worktree path, and outlives both the worktree and the
