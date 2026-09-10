@@ -130,10 +130,24 @@ jobs:
           # **What this list means, and it is not "documentation".** A path belongs here when no
           # job in this workflow can say anything about a change to it. `*.md`, `docs/*` and
           # `.claude/*` qualify because nothing builds from them; `renovate.json` qualifies
-          # because nothing in this repository reads it at all — it is consumed by Renovate's
-          # service on GitHub, so the four gated jobs never had anything to report about it
-          # (#970, decided by the user on 2026-09-08). The question is whether the whole diff
-          # stays inside the list, not whether part of it does: one file outside runs everything.
+          # because it is consumed by Renovate's service on GitHub rather than by anything the
+          # four gated jobs build, typecheck or exercise, so none of them has a finding to report
+          # about a change to it (#970, decided by the user on 2026-09-08). **The membership is
+          # untouched by what follows and is not being reopened** — the conclusion is the same
+          # one, on a premise that had to be corrected.
+          #
+          # **This comment used to ground that on `nothing in this repository reads it at all`,
+          # and since 2026-09-10 that is false.** `tests/unit/renovate-never-alone.test.ts` reads
+          # it, to check that its two never-alone lists correspond (#1116). The stronger sentence
+          # is quoted rather than deleted because it was true when it was written and will go on
+          # arriving in anything copied from it. **It changes nothing here**, and the test itself
+          # is why: being inside this list is exactly what makes `Unit tests` skip on a
+          # `renovate.json`-only pull request, so that test is a backstop rather than a gate and
+          # its own comment says so. A job that cannot run on the change has no finding to report
+          # about it.
+          #
+          # The question is whether the whole diff stays inside the list, not whether part of it
+          # does: one file outside runs everything.
           #
           # **Membership is load-bearing twice, and the second one is invisible from here.**
           # Besides deciding which jobs run, this list is exactly what authorises the lead to

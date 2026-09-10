@@ -22,6 +22,12 @@ import { fileURLToPath } from "node:url";
 // week earlier. Read this file's green as *no drift is in the tree as of the last run that could
 // see it*, never as *drift cannot reach `main`*.
 //
+// **This file's own pull request is the demonstration, and it can only be the wrong half of it.**
+// It runs the full suite — `tests/` is outside the safe list, so nothing is skipped and these
+// assertions are checked before it merges. That is the one thing it cannot show about its own
+// subject: a pull request editing `renovate.json` gets the opposite treatment, and the green run
+// standing behind this test is evidence of the case it does *not* cover.
+//
 // **The membership is not restated here, deliberately.** The safe list's record is the `case` glob
 // in the `Detect changes` job (`collaboration.md`, *Automerge is the one exception*), and prose that
 // copies it drifts from it. **Taking `renovate.json` out of that list to make this suite run on it
