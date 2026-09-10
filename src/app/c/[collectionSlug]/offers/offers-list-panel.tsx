@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
-import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
+import {
+  ListSearchBox,
+  useDebouncedSearch,
+} from "@/app/c/[collectionSlug]/shared/list-search-box";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
@@ -260,28 +263,24 @@ export function OffersListPanel({
     [router, collectionSlug, searchParams]
   );
 
-  // Debounced search box (#465), mirroring the sales list's (#193): settle the local input, then
-  // push it to the URL and the remembered value together, skipping the initial mount so an empty
-  // box never clears what was remembered before it is typed in.
-  const [localSearch, setLocalSearch] = useState(search);
-  const debouncedSearch = useDebouncedValue(localSearch);
-  const updateParamsRef = useRef(updateParams);
-  useEffect(() => {
-    updateParamsRef.current = updateParams;
+  // Debounced search box (#465), now the shared one (#1091): settle the local input, then write it
+  // to the URL and to the remembered value together. This screen kept its own copy of the box and
+  // of the debounce — the copy `list-search-box.tsx` was extracted *from* (#484), and the last
+  // tracked panel not to have moved onto it once #1055 took the sales list there.
+  //
+  // The migration is the fix rather than a tidy-up. `useState(search)` seeded the box once and
+  // never looked again, which is enough only while the value in force comes from the URL: that is
+  // there on the very first render, and a **remembered** one is not. `usePersistedCollectionValue`
+  // reads through `useSyncExternalStore` with a null server snapshot (#844, `ui-patterns.md`), so
+  // the first render after a reload sees no stored search whether or not one exists and the panel
+  // adopts it a render later — leaving an empty field beside a narrowed list, which is exactly the
+  // outcome #1028's rule forbids. `useDebouncedSearch` **follows** the value in force, with the
+  // `pushedRef` guard that tells an echo of this box's own push apart from a change made
+  // elsewhere.
+  const [localSearch, setLocalSearch] = useDebouncedSearch(search, (value) => {
+    rememberSearch(value);
+    updateParams({ search: value });
   });
-  const rememberSearchRef = useRef(rememberSearch);
-  useEffect(() => {
-    rememberSearchRef.current = rememberSearch;
-  });
-  const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    rememberSearchRef.current(debouncedSearch);
-    updateParamsRef.current({ search: debouncedSearch });
-  }, [debouncedSearch]);
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useOffersInfinite(
     collectionId,
@@ -536,44 +535,12 @@ export function OffersListPanel({
               number, a catalog number or filing ref of a copy in it, or the marketplace link a sale
               notification carried. Server-side — the list is cursor-paginated, so it cannot be a
               client facet. */}
-          <div style={{ position: "relative", flex: "0 1 18rem", minWidth: "11rem" }}>
-            <input
-              type="text"
-              placeholder="Search title, #no, link, catalog no, ref…"
-              aria-label="Search offers"
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              style={{ ...SEARCH_INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
-            />
-            {localSearch && (
-              <Tooltip
-                content="Clear search"
-                style={{
-                  position: "absolute",
-                  right: "0.375rem",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setLocalSearch("")}
-                  aria-label="Clear search"
-                  tabIndex={-1}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.75rem",
-                    padding: "0 0.25rem",
-                  }}
-                >
-                  <Icon name="close" size="sm" />
-                </button>
-              </Tooltip>
-            )}
-          </div>
+          <ListSearchBox
+            value={localSearch}
+            onChange={setLocalSearch}
+            placeholder="Search title, #no, link, catalog no, ref…"
+            label="Search offers"
+          />
           <select
             aria-label="Filter by platform"
             value={platformId ?? ""}

@@ -2047,7 +2047,10 @@ shown.
 
 The search **combines** with the platform, state and show-closed filters rather than replacing them,
 and the counts and the summary bar describe the searched set like they do any other filter. It is
-remembered per collection with the rest of them.
+remembered per collection with the rest of them — and the phrase you left in the box is **there
+again** when you next open the screen, in the box, with its **✕** beside it, ready to be cleared in
+one click. It used to narrow the list while the box sat empty, which read as a list that had broken
+rather than one that had remembered.
 
 Your selection is **remembered per collection**, so coming back to the offer list picks up where you
 left it rather than at "all offers". A link that names a filter still wins over the remembered one,
