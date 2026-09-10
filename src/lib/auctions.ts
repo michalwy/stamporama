@@ -1101,6 +1101,27 @@ export interface AuctionLotFilterCounts {
   /** The same for the platform select's **All platforms** option — the sum of {@link platforms}. */
   allPlatforms: number;
   /**
+   * Lots the outcome dropdown's **Any outcome** row would show (#1070): every other filter applied
+   * and the outcome dimension dropped — the same facet rule {@link allSellers} follows, and drawn
+   * on the same kind of row now that the five outcome chips are five options under an *any*.
+   *
+   * **Counted rather than summed**, unlike the two party rows, and the difference is `includeClosed`
+   * (#504). Each option beside it pins an explicit outcome, which wins over the hide-closed default,
+   * so the five together always describe the whole watchlist — while *Any outcome* describes open
+   * lots alone until *Show closed* is on. Summing would make the row read the mixed total over a
+   * list holding open lots only, which is the exact failure #1029 fixed one control along.
+   */
+  allOutcomes: number;
+  /**
+   * Lots the closing dropdown's **Any time** row would show (#1070): every other filter applied and
+   * the closing dimension dropped.
+   *
+   * Summing is not available here at all: the three windows overlap by construction (`today` ⊂
+   * `week`, see {@link closing}), so their total counts the lots closing today twice and is not a
+   * number about anything.
+   */
+  allClosing: number;
+  /**
    * Rows the list would show with nothing narrowing it (#1018) — the denominator the band above the
    * rows reports `total` against, so *"8 of 143"* says how much is being hidden rather than merely
    * that something is.
@@ -1152,6 +1173,8 @@ export async function auctionLotFilterCounts(
     duplicateCount,
     total,
     unfiltered,
+    allOutcomes,
+    allClosing,
   ] = await Promise.all([
     // One count per outcome rather than a `groupBy`: the outcome is derived, so there is no column
     // to group on — each is its own predicate over the money ({@link outcomeWhere}). Five cheap
@@ -1220,6 +1243,16 @@ export async function auctionLotFilterCounts(
         saleId: filters.saleId,
       }),
     }),
+    // The two *any* rows of the dropdowns the outcome and closing chips became (#1070) — each its
+    // own dimension dropped and everything else kept, which is the rule every facet on this
+    // endpoint already follows. Neither can be summed from the options under it: `includeClosed`
+    // separates the outcome row from its five options, and the three windows overlap.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, { ...rest, sellerId, platformId, closing }),
+    }),
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, { ...rest, outcome, sellerId, platformId }),
+    }),
   ]);
 
   // Absent rather than zero, matching what `groupBy` used to hand back — the chips read a missing
@@ -1245,6 +1278,8 @@ export async function auctionLotFilterCounts(
     total,
     allSellers: sumCounts(sellers),
     allPlatforms: sumCounts(platforms),
+    allOutcomes,
+    allClosing,
     unfiltered,
   };
 }

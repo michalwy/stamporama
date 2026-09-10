@@ -273,10 +273,11 @@ further out.
 
 A lot whose moment has gone by is **greyed out entirely**, row and all. There is nothing to react to
 — the bidding happened without you — and an alarm on it would compete every day with the lots that
-can still be won. They are not lost, though: the **Ended** filter on the toolbar is how you go and
-find them to record what happened, alongside **Closing today** and **This week** for the other end
-of the same question. The window is remembered between visits like every other filter here — so if
-you leave **Ended** on, the list opens on ended lots tomorrow. It will say so: a line under the
+can still be won. They are not lost, though: the toolbar's **Closing** dropdown is how you go and
+find them to record what happened — *Ended* for those, *Today* and *This week* for the other end of
+the same question. The window is remembered between visits like every other filter here — so if you
+leave it on *Ended*, the list opens on ended lots tomorrow, and the control says `Closing: Ended`
+before you touch anything. It will say so: a line under the
 toolbar names every filter in force and clears them all in one press. See
 [what is remembered](#what-is-remembered).
 
@@ -331,7 +332,7 @@ from that against **your bid**, the maximum you placed at the platform:
 | --- | --- |
 | it went for **less** than your maximum | **Won** |
 | it went for **more** than your maximum | **Lost** |
-| you never bid on it at all | **Watched** |
+| you never bid on it at all | **Observed** |
 | the listing was withdrawn or ended unsold | **Cancelled** |
 
 The dialog says which of these it will be as you type, so you see the conclusion before you commit
@@ -343,7 +344,7 @@ separately could only ever disagree with them.
 **Lots you never bid on.** Adding a lot purely to record what it fetched is a normal thing to do
 here — it is how you build a price base for valuing your own material, and it costs nothing beyond
 the composition you were going to enter anyway. Such a lot has no bid of yours on it, so closing it
-files it as **Watched**: a real price on a real date, and nothing you owe anything on. It is not a
+files it as **Observed**: a real price on a real date, and nothing you owe anything on. It is not a
 loss, and the list never calls it one.
 
 **About the figure it opens with.** It is the last bid you recorded on the lot — what the price had
@@ -379,9 +380,9 @@ and it is replaced by the same comparison against the price you confirmed.
 Closed lots stay on the list and stay filterable, but they are **out of the way by default**: the
 lots screen opens on what is still open, because that is the watchlist. They are the archive the
 market data comes out of, and an archive that grows for ever should not be the first thing between
-you and tonight's closing times. Pick an outcome chip — *Won*, *Lost*, *Watched*, *Cancelled* — or
-turn on **Show closed** to have them all back at once. See
-[Filtering and grouping](#filtering-and-grouping).
+you and tonight's closing times. Pick an outcome from the toolbar's **Outcome** dropdown — *Won*,
+*Lost*, *Observed*, *Cancelled* — or turn on **Show closed**, the switch under those options, to have
+them all back at once. See [Filtering and grouping](#filtering-and-grouping).
 
 Won lots stay on the list too, and count into what the parcel will cost — a won lot is priced at
 what you actually paid rather than at the last bid anyone saw, so the sale's total stops being an
@@ -441,17 +442,27 @@ out from its figures rather than recorded by you:
 These only ever describe a lot still being watched: once you record an outcome there is nothing left
 to decide, and the status says it plainly.
 
-The second row is **what became of it** — the outcome, worked out from the figures:
+Then two dropdowns. Each one used to be a row of chips of which only one could be lit at a time, so
+each is now a single control that says what it is set to without being opened:
 
-- **Outcome** chips — *Open*, *Won*, *Lost*, *Watched*, *Cancelled*, each with a count. Open lots
-  read soonest-closing first; a finished outcome reads most-recent first.
-- **Show closed** — with no outcome chip on, the list holds **open lots only**, soonest-closing
-  first: a watchlist is what is still to be decided, and everything else is filed. This toggle brings
-  the finished lots back — won, lost, watched and cancelled together — which is what you want when
-  you are searching for a lot and cannot remember how it ended. Picking an outcome chip already asks
-  for closed lots, so the toggle has no say while one is on. It is remembered per collection, as
-  every filter here is — and it is the one that is never named in the narrowed-list line under the
-  toolbar, because it shows you more lots rather than fewer.
+- **Outcome** — *Any outcome*, *Open*, *Won*, *Lost*, *Observed*, *Cancelled*, each with a count.
+  What became of the lot, worked out from the figures rather than recorded by you. Open lots read
+  soonest-closing first; a finished outcome reads most-recent first. Closed for the trigger to read
+  `Outcome: Won`, or `Outcome: any` when you have not picked one.
+- **Show closed** lives **inside** that dropdown, under the options — because that is all it does:
+  with no outcome picked, the list holds **open lots only**, soonest-closing first, and this switch
+  is what brings the finished ones back, won, lost, observed and cancelled together. That is what you
+  want when you are searching for a lot and cannot remember how it ended. Picking an outcome already
+  asks for closed lots, so the switch has no say while one is on and is drawn greyed out saying so.
+  While it is on and no outcome is picked, the closed control reads `Outcome: any + closed` — it is
+  the one filter that is never named in the narrowed-list line under the toolbar, because it shows
+  you *more* lots rather than fewer, so the control itself is where you see it.
+- **Closing** — *Any time*, *Today*, *This week*, *Ended*, each with a count. **Ended** is the one
+  to know about: those lots are muted in the list on purpose, and this is how you go and find them to
+  record what happened.
+
+Both remember what you left them on, like everything else here.
+
 Then, on its own, the one that asks what is **missing from the record** rather than anything about
 the bidding:
 
@@ -479,16 +490,18 @@ Finally:
   **All sellers** counts the list with the seller filter dropped and everything else left standing:
   with Köhler selected and three of their lots showing, it reads the whole watchlist, which is what
   you get back by picking it.
-- **Group by sale** turns the flat list into sections, off by default.
+**Group by sale** sits on the right, beside **Add lot**, rather than among the filters: it turns the
+flat list into sections, off by default, and it changes how the rows are arranged rather than which
+lots are in them.
 
 ### What is remembered
 
 **Every filter on this list is remembered per collection**, and every one of them is also in the
 address bar, so a filtered view can still be bookmarked or shared — and a link you follow always
 wins over what was remembered, so an address that names a filter means exactly what it says. The
-search box and the **Show closed** toggle are remembered too, and so are the four that used to be
-forgotten on purpose: the **closing windows**, the first row of chips, **Not described** and
-**Duplicate**.
+search box and the **Show closed** switch are remembered too, and so are the four that used to be
+forgotten on purpose: the **closing window**, the row of chips at the head of the bar, **Not
+described** and **Duplicate**.
 
 Those four were left out because they are jobs you go and do rather than the shape the list should
 keep having, and coming back tomorrow to a list still narrowed to them hides everything actually
@@ -500,9 +513,9 @@ Whenever anything is narrowing the list, a line appears under the toolbar:
 > Showing **8** of 143 lots — Ended · Not described · Köhler   **Clear filters**
 
 It says how much is being hidden, names each filter in the words of the control that set it — so you
-can find the chip and switch that one off — and **Clear filters** puts the whole watchlist back in
-one press. It clears the search box and **Show closed** along with the chips; **Group by sale** is
-left as it is, because that is how the rows are arranged rather than which lots are in them.
+can find the control and switch that one off — and **Clear filters** puts the whole watchlist back in
+one press. It clears the search box and **Show closed** along with everything else; **Group by sale**
+is left as it is, because that is how the rows are arranged rather than which lots are in them.
 
 **Show closed** is never named in that line. It shows you *more* lots rather than fewer, so there is
 nothing being hidden for it to warn you about.

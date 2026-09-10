@@ -386,6 +386,93 @@ describe("auction tracking (#351/#352)", () => {
     }
   });
 
+  /**
+   * The *any* rows of the two dropdowns the outcome and closing chips became (#1070).
+   *
+   * Each is a facet row like every other control here — its own dimension dropped, the rest kept
+   * (#1029) — and the reason both are **counted** rather than summed from the options beneath them
+   * is exactly what this test pins. `sumCounts` works for the two party rows because those options
+   * partition the list; neither of these does.
+   */
+  it("counts each dropdown's *any* row with its own dimension dropped, and not by summing", async () => {
+    const anySellerId = (
+      await prisma.contact.create({ data: { collectionId, name: "Any-row house" } })
+    ).id;
+    const saleId = await createAuctionSale(userId, collectionId, {
+      sellerId: anySellerId,
+      platformId,
+      name: "Any-row sale",
+      url: null,
+      endsAt: null,
+      currency: "EUR",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    const lot = (lotNo: string) =>
+      createAuctionLot(userId, collectionId, {
+        auctionSaleId: saleId,
+        lotNo,
+        url: null,
+        title: `Lot ${lotNo}`,
+        // Inside the hour, so this lot is counted by **both** the `today` and the `week` window.
+        endsAt: hourFromNow(),
+        startingPrice: null,
+        currentBid: "10.00",
+        myBid: "50.00",
+        maxBid: "50.00",
+        notes: null,
+      });
+    await lot("201");
+    const wonLotId = await lot("202");
+    await recordAuctionLotTransition(userId, wonLotId, {
+      status: "closed",
+      finalPrice: "30.00",
+      wonTie: null,
+    });
+
+    const counts = (filters: Parameters<typeof auctionLotFilterCounts>[2]) =>
+      auctionLotFilterCounts(userId, collectionId, { ...filters, sellerId: anySellerId });
+
+    // **Outcome.** Each of the five options pins an explicit outcome, which wins over the
+    // hide-closed default (#504) — so together they describe the mixed list while *Any outcome*
+    // describes the open lots alone. Summing them would print the mixed total over a list holding
+    // one lot, which is the failure #1029 fixed one control along.
+    const openOnly = await counts({});
+    assert.equal(openOnly.allOutcomes, 1, "*Any outcome* obeys the hide-closed default");
+    assert.equal(openOnly.outcomes.pending, 1);
+    assert.equal(openOnly.outcomes.won, 1);
+    assert.notEqual(
+      openOnly.allOutcomes,
+      (openOnly.outcomes.pending ?? 0) + (openOnly.outcomes.won ?? 0),
+      "summing the options is exactly what this row must not do"
+    );
+
+    // *Show closed* is what the row moves with, and it is the switch drawn inside this very
+    // control — so opening the panel and ticking it makes the number above it change.
+    assert.equal((await counts({ includeClosed: true })).allOutcomes, 2);
+
+    // …and it drops its own dimension, like every other facet: picking an outcome does not change
+    // what choosing *Any outcome* would show.
+    assert.equal((await counts({ outcome: "won" })).allOutcomes, openOnly.allOutcomes);
+
+    // **Closing.** The three windows overlap by construction — this lot closes within the hour, so
+    // `today` and `week` both hold it — which is why their total is not a number about anything.
+    assert.equal(openOnly.closing.today, 1);
+    assert.equal(openOnly.closing.week, 1);
+    assert.equal(openOnly.allClosing, 1, "*Any time* is the list with the window dropped");
+    assert.notEqual(
+      openOnly.allClosing,
+      openOnly.closing.today + openOnly.closing.week + openOnly.closing.ended,
+      "the windows overlap, so summing double-counts"
+    );
+    assert.equal((await counts({ closing: "ended" })).allClosing, openOnly.allClosing);
+
+    await prisma.auctionLot.deleteMany({ where: { auctionSaleId: saleId } });
+    await prisma.auctionSale.delete({ where: { id: saleId } });
+    await prisma.contact.delete({ where: { id: anySellerId } });
+  });
+
   // The watchlist is what is still to be decided (#504). Its own sale, so closing a lot here does
   // not move the figures the tests above and below assert on.
   it("keeps closed lots out of the list until they are asked for", async () => {
