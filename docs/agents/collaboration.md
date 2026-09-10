@@ -171,6 +171,9 @@ exception is written here, and the omission is deliberate rather than an oversig
   user anywhere; only an empty pool costs a chip, which he clicks when he is next at the computer.
   The free-worker count is in every status table for exactly this reason (*The pool of generic
   workers*), so a lead that is about to be blocked by an empty pool can say so a reply earlier.
+  **Since 2026-09-10 it does not wait to be noticed**: below five free workers it raises ten chips
+  of its own accord (#1078). That shores this argument up rather than changing it — the click is
+  still his, and what moved is who watches the count.
 
 **What is not restricted, said plainly, because the rule is about pull requests and not about
 typing.** The lead writes the prompt, the issue body, the closing comment, the status table and its
@@ -299,7 +302,8 @@ What was settled with it:
 
 - **One task per worker, and no recycling.** A worker on its fifth task carries four tasks of context
   and reads the fifth through them, which is the objection this file already makes to a long-lived
-  release session. The pool is consumed one worker per task and topped up when convenient.
+  release session. The pool is consumed one worker per task, and topped up on the threshold in the
+  last bullet below rather than when somebody happens to think of it.
 - **One worker at a time. One task in flight.** **Decided by the user on 2026-09-10 (#1059)**, and it
   **supersedes** what #906 settled on 2026-09-07, which this bullet used to state as: *"Two or three
   sessions working at once, four or five for small tasks."* **The old figure is quoted rather than
@@ -327,8 +331,24 @@ What was settled with it:
   nothing at spawn (#998), so **ten idle alongside one working is the intended state** rather than a
   sign of over-provisioning. What each still costs is a worktree and a slot (#781), and a sweep that
   can tell it from an abandoned one (*A held session's worktree is not stale*).
-- **The lead reports the count of free workers in every status table**, so the user tops up when he
-  is at the computer rather than when the lead runs out.
+- **The lead tops the pool up on a threshold; the user clicks the chips.** **Decided by the user on
+  2026-09-10 (#1078)**: when the count of free workers drops **below five**, the lead raises chips
+  for **ten** more without being asked. **This supersedes what #906 settled on 2026-09-07**, which
+  this bullet used to state as: *"The lead reports the count of free workers in every status table,
+  so the user tops up when he is at the computer rather than when the lead runs out."* **The old
+  sentence is quoted rather than replaced**, for the same reason the bullet above quotes its own
+  predecessor — it will keep arriving in handovers and in habit, and a bare replacement cannot tell
+  a later reader which of the two is the newer. **What moved is who watches the count, and nothing
+  else**: the tile cannot be removed, so **the lead raises the chips and he clicks them** — a rule
+  reading as though the lead spawns workers would be wrong about the mechanism. **Below five and ten
+  are his numbers** rather than the lead's, and not an implementation detail for a later reader to
+  tune. **The threshold is a buffer against a batch and not against one task**: with one worker at a
+  time the pool drains slowly, but it drains in steps of one with no warning, and a top-up raised at
+  zero arrives when it is already too late — an empty pool being the one thing that blocks the lead
+  in a way only a trip to the computer clears (*The lead's licences are to merge, never to write*).
+- **The lead still reports the count of free workers in every status table.** That half survives the
+  reversal above rather than being replaced by it: however the top-up is triggered, the count is
+  what tells him what the queue can absorb.
 
 **A branch waiting on a showcase still holds its files, and that is the hazard the amendment
 creates.** It will rebase, so a second branch editing the same file turns a wait into a conflict
@@ -1005,9 +1025,12 @@ by that id, and reusing D1 for something new silently rewrites both.
   a different and much stronger claim than *he has not replied yet*, and it was invisible until the
   rows named them.
 - **The count of free workers, in every table.** A tile can only be clicked at the computer; a
-  question can be answered from a phone. Reporting the count in every reply lets him top the pool up
-  when he happens to be at the machine rather than when the lead runs out
-  (*The pool of generic workers*).
+  question can be answered from a phone. **Since 2026-09-10 the lead raises the chips itself once
+  the count drops below five** (#1078), so what the count buys him here is knowing what the queue
+  can absorb — and that a chip he is asked to click is one the lead has already decided is needed.
+  This line used to give the reporting a different reason — that it *"lets him top the pool up when
+  he happens to be at the machine rather than when the lead runs out"* — and that is the half the
+  threshold replaced (*The pool of generic workers*). The requirement itself is unchanged.
 
 ### And never the blocking question menu
 
