@@ -16,6 +16,7 @@ import {
   sortSortableCopies,
 } from "@/app/c/[collectionSlug]/shared/copy-sort";
 import { useHydrated, usePersistentString, usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { issueLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotRow } from "../../auction-lot-row";
 import { BaseAmount } from "../../auction-base-amount";
@@ -370,10 +371,12 @@ function LotCard({
 
   // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
   // default: the card's own header is sticky, so a card scrolled to the top edge would sit under
-  // the toolbar it just scrolled past.
+  // the toolbar it just scrolled past. Through `shared/motion.ts`, which decides gliding or
+  // instant from `prefers-reduced-motion` — under that preference the flash is suppressed too, and
+  // a page smooth-scrolling itself would have been the one piece of motion left (#1022).
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (arrived) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (arrived) scrollIntoView(cardRef.current, { block: "center" });
   }, [arrived]);
 
   return (

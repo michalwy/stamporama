@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { resolveTradeFeedbackAction } from "@/app/actions/trades";
 import type { TradeFeedbackItem, TradeFeedbackRead } from "@/lib/trade-feedback";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
@@ -136,7 +137,9 @@ export function TradeSignalsSummary({
                 const el = target
                   ? document.querySelector(tradeAttentionSelector(target))
                   : null;
-                if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+                // Through `shared/motion.ts`, so a collector who asked for less motion is put on
+                // the row rather than flown to it (#1022).
+                scrollIntoView(el, { block: "center" });
                 setMissed(!el);
               }}
             >

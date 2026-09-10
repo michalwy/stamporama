@@ -328,8 +328,10 @@ choice is left alone (*Grouping the copies view*, in the
 [purchase order guide](purchases.md)). There is nothing to close and
 nothing left behind: the flash says how you got here, which stops being useful the moment you have
 got here. The address bar drops the lot from it too, so reloading the page gives you the order and
-no flash. (If your system is set to reduce motion, there is no flash: the scroll and the opened
-card are the arrival.) A copy you added by hand has no purchase behind it, so the entry is simply
+no flash. (If your system is set to reduce motion there is no flash, and the page jumps straight to
+the card instead of gliding to it — the card being open, and the view having gone back to **Lot**,
+are the whole of the arrival. See [Reduced motion](appearance.md#reduced-motion).) A copy you added
+by hand has no purchase behind it, so the entry is simply
 not there.
 
 **A link to a lot the order no longer holds does nothing, and says so by leaving `?lot=` in the

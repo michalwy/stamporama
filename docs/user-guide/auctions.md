@@ -206,7 +206,9 @@ The card **flashes once** as it arrives — a tint and a brief outline — and t
 other card on the screen. There is nothing to close and nothing left behind: the flash says how you
 got here, which stops being useful the moment you have got here. The address bar drops the lot from
 it too, so reloading the page gives you the parcel and no flash. (If your system is set to reduce
-motion, there is no flash: the scroll and the opened card are the arrival.) Clicking any of the
+motion there is no flash, and the page jumps straight to the card instead of gliding to it — the
+card being open, where it was not before, is the whole of the arrival. See
+[Reduced motion](appearance.md#reduced-motion).) Clicking any of the
 row's own controls does what that control does
 instead — the figures stay editable in place, the chips and the ⋮ menu
 keep their own behaviour — and selecting text on the row does not navigate. Hold ⌘ or Ctrl to open

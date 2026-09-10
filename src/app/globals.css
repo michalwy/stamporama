@@ -237,9 +237,13 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
    whole point of the issue. Two animations cannot be composed by putting both classes on one
    element (the second `animation` declaration replaces the first), hence one keyframes doing both.
 
-   It holds before it fades: the card smooth-scrolls itself into view at the same moment, and a
-   flash that has finished by the time the scroll settles was never shown. Suppressed under
-   reduced-motion, as #158's is — there the scroll and the card opening are the arrival. */
+   It holds before it fades: the card scrolls itself into view at the same moment, and a flash that
+   has finished by the time the scroll settles was never shown. Suppressed under reduced-motion, as
+   #158's is — there the scroll and the card opening are the arrival, and **the scroll is instant**
+   (#1022): the card's own `scrollIntoView` goes through `shared/motion.ts`, which reads this same
+   preference, because a suppression here that left the page gliding would have removed the flash
+   and kept the motion. Nothing static replaces the flash, deliberately — the reasoning and its
+   date are in `docs/agents/ui-patterns.md`. */
 @keyframes arrival-flash {
   0%,
   45% {
