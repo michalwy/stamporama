@@ -2331,14 +2331,46 @@ that was taken from practice that merely accumulated, and date the reason above 
 it still holds.
 
 **The tooling itself says the opposite, and it is overridden deliberately rather than followed.**
-After an ordinary `Write` a session is told that no preview server is running and to call
-`preview_start`; it arrives unprompted, at every session in every project, and **it is emitted by
-the harness rather than configured here** — `.claude/settings.json`,
-`.claude/settings.local.json` and both files under `~/.claude` configure no hooks at all, and
-nothing under `~/.claude` names it — so unlike a wrong sentence in a file there is nothing here to
-correct and no hook to hunt for. Noticed on 2026-09-10 (#1040): the #1022 session ignored it
-**because it had read this section**, which is the whole of the guard — one that had not would have
-started a dev server and left it running, which AGENTS.md separately forbids.
+A session is told that no preview server is running and to call `preview_start`; it arrives
+unprompted, in this project and in others, and **it is emitted by the harness rather than
+configured here** — `.claude/settings.json`, `.claude/settings.local.json` and both files under
+`~/.claude` configure no hooks at all, and nothing under `~/.claude` names it — so unlike a wrong
+sentence in a file there is nothing here to correct and no hook to hunt for. Noticed on 2026-09-10
+(#1040): the #1022 session ignored it **because it had read this section**, which is the whole of
+the guard — one that had not would have started a dev server and left it running, which AGENTS.md
+separately forbids.
+
+**What triggers it is not settled, and no mechanism is written here** (#1073). The sentence above
+opened *after an ordinary `Write`* until 2026-09-10 — quoted rather than deleted, because it was
+#1040's founding premise and will go on arriving in anything copied from it. Five readings were
+asserted from ordinary session reports that day and every one was retracted the same day: keyed to
+`Write`; then to any file-editing tool; then once per session; then once per turn on the first
+file-writing call; then a conjunction over tool, path, file type and ordinal, published as
+**settled** and refuted within the hour. **Three of the retractions were the lead's own**, and the
+last rested on a two-by-two whose every cell held one observation — **a table with no empty cells
+is not a table with confirmed cells**, and the shape of the grid did the persuading.
+
+**So a session reports the cell, never a firing count**: which **tool**, whether the **path** was
+inside or outside this repository, the **file type**, and **which call it was within its turn**.
+Each of the four is decisive where a count is not — the third went unrecorded for three sessions,
+and the fourth is what separates the readings that are still live. **A count is not merely
+uninformative but actively misleading**, in two directions at once: under any once-per-turn reading
+a per-session tally measures how often the lead re-briefed that session, and a tally aggregated
+across sessions is partly a tally of tool choice.
+
+**A documentation-only session's null is not evidence about the trigger, and must not be recorded
+as one.** Three consecutive nulls were recorded as data before anybody noticed those sessions were
+`.md`-only **and that their own positive controls were `.md` too** — so nothing in them could have
+fired, and the controls looked broken from inside. No single session could see that. The same holds
+for one that writes only through Bash, which is most of them here, since this project's sessions
+run under an instruction to prefer Bash where Bash will do: such a session returns a truthful null
+every time and it discriminates nothing.
+
+**Do not tell sessions to prefer one editing tool in order to feed the measurement**, and do not
+spend a session characterising the trigger. The first instruments the work to serve the instrument;
+the second buys an answer the operational rule has never depended on. **Nothing above changes what
+to do about the reminder** — harness-emitted, configured nowhere here, overridden deliberately.
+What is unresolved is when it arrives, and it is recorded as unresolved.
 
 ### A suite that could not see the change is not run
 
