@@ -791,8 +791,11 @@ your [offers](offers.md):
 
 - A **state** panel on the left filters by **Preparing / Active / Paused** (with counts) — the
   offers you're still composing come first.
-- The search box matches by offer, platform, set, **catalog number**, or the **location ref** of
-  a copy inside a set.
+- Each offer is listed by its **title** — the one you typed, or the one the app generated — with
+  the label derived from its sets underneath, so you recognise a listing either by what you called
+  it or by what is in it. An offer with no title shows that derived label on its own.
+- The search box matches the **title**, the derived label, the platform, a set, a
+  **catalog number**, or the **location ref** of a copy inside a set.
 - Each offer expands to its existing sets; **Show contents** reveals the exact copies a set holds.
 
 Choose where the copy lands: **＋ New set** on an offer (a fresh single-item set), or an

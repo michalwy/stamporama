@@ -290,13 +290,20 @@ export function AddToOfferDialog({
   const raw = search.trim();
   const q = raw.toLowerCase();
 
-  // Text filter: an offer survives if its label / platform matches (keep all its sets) or any set
-  // matches (keep just those). Each surviving offer carries its visible sets.
+  // Text filter: an offer survives if its title / derived label / platform matches (keep all its
+  // sets) or any set matches (keep just those). Each surviving offer carries its visible sets.
+  //
+  // The title joins the same comparison rather than getting a pass of its own (#1023): both lines
+  // of the row are searched, so whichever of the two the collector remembers finds the listing.
   const byText = useMemo(() => {
     if (!q) return offers.map((o) => ({ offer: o, sets: o.sets }));
     const out: { offer: ComposeTargetOffer; sets: ComposeTargetSet[] }[] = [];
     for (const o of offers) {
-      if (o.label.toLowerCase().includes(q) || o.platformName.toLowerCase().includes(q)) {
+      if (
+        o.name?.toLowerCase().includes(q) ||
+        o.label.toLowerCase().includes(q) ||
+        o.platformName.toLowerCase().includes(q)
+      ) {
         out.push({ offer: o, sets: o.sets });
         continue;
       }
@@ -500,7 +507,7 @@ export function AddToOfferDialog({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by offer, platform, set, catalog number, or location ref…"
+              placeholder="Filter by title, contents, platform, set, catalog number, or location ref…"
               style={SEARCH_STYLE}
               aria-label="Filter offers"
               autoFocus
@@ -800,9 +807,19 @@ function OfferGroup({
         )}
 
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* The listing's own title leads, spelled `name ?? label` as every other offer surface
+              spells it (#209/#1023); the label derived from its sets sits beneath, so a collector
+              who knows the listing by what is in it still recognises the row. Two lines rather than
+              one joined string: each truncates on its own, and the search aims at both. A listing
+              with no title prints the derived label alone — never the same string twice. */}
           <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {offer.label}
+            {offer.name ?? offer.label}
           </div>
+          {offer.name && (
+            <div style={{ fontSize: "0.75rem", color: MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "0.125rem" }}>
+              {offer.label}
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
             <Tooltip content="Platform">
               <span style={CHIP}>{offer.platformName}</span>
