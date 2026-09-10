@@ -2677,6 +2677,14 @@ anything, resolve the path to its session:
 - Anything else, or no clear match → **ask the user**. He can see the tiles; the lead cannot infer
   them.
 
+**Removing a worktree rewrites its session's `cwd` to the repository root, and the sweep is
+unaffected** (#1089) — which is worth saying in that order, because the fear it raises is a defect in
+the sweep. **The sweep runs path → session**: it enumerates `git worktree list` and looks each path
+up, so a worktree that has been removed is not in the enumeration and its rewritten row is never
+consulted. What is lost is a **finished session's origin**, and with it any later question of the
+form *where did that session run* — a `cwd` of `/Users/michalwy/stamporama` beside a `claude/` branch
+reads like a session that ran in the main checkout, and nothing marks it as a fallback.
+
 **`👑` was absent from that list until 2026-09-10, and the reason this paragraph gave for it was
 false.** It read *the lead's `cwd` is the main checkout rather than a worktree, so it is not a
 candidate the sweep resolves* — quoted rather than deleted, since it will go on arriving in an
@@ -2799,8 +2807,11 @@ mistake is made** sent anybody to it. Two places do now — layer 1, and the pro
 
 **The lead keeps no list of its own, and deliberately not.** A list the lead kept would die with the
 lead; this one is the app's, is keyed by the worktree path, and outlives both the worktree and the
-lead — the release session above is still in it, still titled *hold*, with a `cwd` that no longer
-exists. An incoming lead reads the same list on its first sweep, with nothing handed over.
+lead — the release session above is still in it, still titled *hold*, long after its worktree went.
+**It outlives the worktree less completely than that sentence suggests**, and the argument is
+unaffected: the row survives, which is the point being made, but the removal silently rewrites its
+`cwd` to the repository root, so a finished session's origin does not survive with it (#1089). An
+incoming lead reads the same list on its first sweep, with nothing handed over.
 
 **A task session's implementation plan dies at layer 1, and for one day that was a defect.**
 AGENTS.md required a plan under `.claude/plans/` for multi-area work; `.gitignore` ignores
