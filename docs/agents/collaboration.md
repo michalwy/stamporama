@@ -823,6 +823,53 @@ chosen and why, what a specified test case is meant to separate, what a rule is 
 And it says which parts are the **lead's reading** rather than the user's decision — that is the
 sentence a session can answer, and #793 and #814 are both answers to it.
 
+**The evidence is eleven instances across two leads rather than five under one, and that is the
+claim worth having** (#1064). The five above are all 2026-09-07, under one lead. The outgoing lead
+of 2026-09-10 reported **six more in that single day, correct every time**, one of them overturning
+an issue the lead had itself written, on dated evidence the lead had not gone looking for. **Five of
+those six are a count from that lead's own report and are deliberately not enumerated here**: a
+report is evidence of what a session believes it did (*Verification, not trust*), and writing out
+six identifiers nobody has since checked would assert more than the record carries. The sixth is on
+file and is worth the space.
+
+**#1075 is that instance, and it is the first evidence that labelling the halves does anything.**
+Its brief separated *the user's decision — nothing, he has not ruled on this*, *the finding
+session's, verified before filing*, and *mine — only that this runs now*. The session then **refuted
+a piece of the issue body** — a per-chip list made stale by #1070 — and **accepted a lead ground it
+had not had**, `ui-shell.md` stating the same rule for the Areas row, saying explicitly which of its
+own arguments that replaced. Neither move is available against an unattributed instruction.
+
+**So the requirement stays on content and gains no form, and that is a decision rather than an
+omission.** Two leads converged independently on the same shape — a *why* paragraph, then a clause
+naming which half is the lead's reading — and convergence is the kind of argument *Session titles*
+accepts about the `[#PPP]` bracket. **The objection is the stronger one here and is recorded rather
+than waved past**: *Findings go to the lead* argues that a line in a report must not be grown into a
+checklist, because **a rule nobody performs on the way to doing something else reads as coverage**.
+A brief template is exactly that risk. A lead filling in a *this half is my reading* heading has
+discharged the form and not the thing, and a session reading a pro-forma invitation to refute
+answers it pro-forma.
+
+**What is written down instead is the half no heading could have carried: the lead labels its own
+weaker ground too.** On #1075 the lead had argued *desktop-only, no breakpoints, so a narrow window
+is unsupported*, and said in writing that this was the weaker of its two grounds; the worker's
+counter — that `AGENTS.md` denies the app **responsive breakpoints** rather than promising a wide
+window — then landed against a ground the lead had already conceded, instead of against the
+stronger-sounding version of the same decision. **A brief that labels its halves invites that; what
+makes it work is the lead doing it to its own reasoning**, and there is no heading to fill in to
+that effect, which is why it is written as the thing rather than as a shape.
+
+**And the corollary, in its narrow form: where a message asserts something a command answers, run
+the command.** That is *a durable statement carries the command, not the fact the command answers*
+(*Memory is not versioned, and nothing expires it*) applied to a **live message** rather than to a
+memory entry. Twice on #1075 the answer changed because somebody did it — the lead checked the
+worker's grep count, and the worker then checked the lead's correction rather than taking it — and
+each took one command; both are the instances paired in *A fact is true of a state, and a statement
+about it carries the state it was measured in*. **State it narrowly and do not let it be read as the
+wide version.** It was cheap only because the claim was checkable in one command against a tree both
+parties had. **A worker second-guessing a lead's *judgement* is a different act with a different
+cost, and these instances are not evidence for it.** The narrow one costs a second and needs no
+authority to exercise; the wide one is a change to the model.
+
 ### `Refs #NNN`, never a closing keyword
 
 A pull request references its issue as **`Refs #NNN`** — never `Closes`, `Fixes`, `Resolves` or any
