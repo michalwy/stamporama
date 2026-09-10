@@ -150,7 +150,9 @@ export interface ListToolbarProps {
    * control that narrows the list belongs among the ones beside it. */
   actions?: React.ReactNode;
   /** Cap on the search box's width. Shortened where the row is carrying a dozen other controls and
-   * the search is a lookup one finishes rather than a way of working (#846). */
+   * *that screen's* search is a lookup one finishes rather than a way of working — the Copies list
+   * is where it is shortened, and whether a search is a lookup or a standing question is a question
+   * about the list, not about search boxes (#846; `ui-patterns.md`, #1028). */
   searchMaxWidth?: string;
 }
 
