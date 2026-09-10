@@ -251,12 +251,13 @@ issue bodies. The derivation is in the pull request that landed this; **if a voc
 be missing when one of them is built, adding a key is not a break** — `/api/v1` only ever grows.
 
 The issue names *conditions, formats, subtypes, certificate statuses, areas, catalogs and vendors,
-locations, currencies*. Measured against the schema they fall into four kinds, and the response is
+locations, currencies*. Measured against the schema they fall into several kinds, and the response is
 shaped per kind rather than flattened into one:
 
 | kind | which | shape |
 | --- | --- | --- |
 | flat, per-collection, cuid | conditions, formats, certificate statuses, subtypes, catalog vendors | `{id, name, abbreviation?, label?}` |
+| flat, plus one locked fact | platforms | the same, plus the `currency` an offer there is locked to |
 | **trees** | areas, locations | the same, plus `parentId` and `assignable` |
 | hangs off a vendor | catalogs | the same, plus `vendorId` and `currency` |
 | **not this kind of thing at all** | currencies | not returned — see below |
@@ -277,11 +278,27 @@ the denomination of a figure it reads, and that is the `baseCurrency` scalar on 
 **Catalog editions are absent for the same kind of reason** — an edition is a year on a book, and
 nothing in #710, #711 or #712 takes one.
 
-**Platforms are absent and are the open question**, recorded here rather than decided: #708 does not
-name them, but #711's *draft an offer* needs one, and a platform (`Contact` with `platform: true`) is
-cuid-keyed and per-collection — exactly the shape this endpoint exists for. It was left out because
-#711's verbs are explicitly provisional and adding a vocabulary on a reading of an unbuilt issue is
-guessing. **Whoever builds #711 should expect to add the key.**
+**Platforms are included, and they are the one vocabulary derived from #711's body rather than from
+#708's list of nine** — marked as such in the type, so whoever implements #711 can contradict it.
+#708's Context names nine and platforms is not among them; **the binding statement is the *Done
+when***, and #711's *draft an offer* cannot be called without naming a platform, because an offer's
+currency is inherited and locked from `Contact.platformCurrency` (#196). That is the same test that
+admitted areas, conditions, locations, formats, certificate statuses and catalog vendors, and the
+same test that kept currencies out — so applying it to six and refusing it for a seventh was the
+inconsistency, not the inclusion.
+
+**It is the reason there is no currency vocabulary rather than an exception to it.** Where an agent
+might have thought it was choosing a currency, it is choosing a platform.
+
+**A platform is a `Contact` with `platform: true`, projected to `{id, name, currency}`, and the
+projection is load-bearing.** That table is shared with buyers, sellers, exchange partners and
+auction houses, and carries `email`, `phone`, `fullName` and `notes`. **Three guards, and the mapper is the one that
+holds** — measured rather than assumed: the `where` decides whose rows, the `select` which columns
+leave the database, and the mapper what reaches the agent. Dropping the filter *and* adding `email`
+to the `select` still leaked nothing, because the mapper names its fields instead of spreading the
+row. The other two are depth behind it, so do not replace the mapper with a spread. The role flags are independent and
+combinable (ADR-0007 §4), so a contact that is a platform *and* a seller is returned — `platform` is
+the whole test — and its personal columns still are not.
 
 **Writing to the vocabulary is out of scope for the whole surface.** An agent works within the
 collector's configured terms; changing them is a settings decision and stays in the UI. There is no

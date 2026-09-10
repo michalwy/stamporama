@@ -4,6 +4,7 @@ import { notFound } from "../errors";
 import type {
   CatalogVocabularyEntry,
   CollectionVocabulary,
+  PlatformVocabularyEntry,
   SubtypeVocabularyEntry,
   TreeVocabularyEntry,
   VocabularyEntry,
@@ -95,8 +96,17 @@ export async function readCollectionVocabulary(
   }
   const language = collection.defaultLanguage;
 
-  const [conditions, formats, certificateStatuses, subtypes, areas, locations, vendors, catalogs] =
-    await Promise.all([
+  const [
+    conditions,
+    formats,
+    certificateStatuses,
+    subtypes,
+    areas,
+    locations,
+    vendors,
+    catalogs,
+    platforms,
+  ] = await Promise.all([
       prisma.stampCondition.findMany({
         where: { collectionId },
         orderBy: { sortOrder: "asc" },
@@ -165,6 +175,23 @@ export async function readCollectionVocabulary(
         orderBy: [{ vendor: { name: "asc" } }, { name: "asc" }],
         select: { id: true, name: true, vendorId: true, currency: true },
       }),
+      // **`platform: true` is the whole of the filter and it is load-bearing.** `Contact` is one
+      // table for buyers, sellers, exchange partners, auction houses and platforms, and it carries
+      // `email`, `phone`, `fullName` and `notes`. A query without this flag would hand an agent a
+      // trading partner's personal details to hold for a whole session.
+      //
+      // **Three guards, and they answer different questions — measured rather than assumed.** This
+      // `where` decides *whose rows*; the `select` decides *which columns leave the database*; the
+      // mapper below decides *what reaches the agent*, naming each field rather than spreading the
+      // row. **Only the last of those actually protects the response**: dropping this filter and
+      // adding `email` to the `select` together still leaked nothing, because the mapper copies
+      // neither. So the mapper is the guard and these two are depth behind it — do not "simplify"
+      // it into a spread.
+      prisma.contact.findMany({
+        where: { collectionId, platform: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, platformCurrency: true },
+      }),
     ]);
 
   return {
@@ -208,6 +235,10 @@ export async function readCollectionVocabulary(
       vendorId: row.vendorId,
       currency: row.currency,
     })),
+    platforms: platforms.map((row): PlatformVocabularyEntry => ({
+      ...entry(row.id, row.name, null, undefined),
+      currency: row.platformCurrency,
+    })),
   };
 }
 
@@ -231,13 +262,13 @@ export const getCollectionVocabularyOperation: Operation = {
   method: "GET",
   path: "/vocabulary",
   description:
-    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors and catalogs — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
+    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs and platforms — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
   writes: false,
   parameters: [],
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };
