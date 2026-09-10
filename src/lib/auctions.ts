@@ -1086,6 +1086,21 @@ export interface AuctionLotFilterCounts {
   /** Rows the list is actually showing — **every** filter applied, the derived ones included. */
   total: number;
   /**
+   * Lots the seller select's **All sellers** option would show (#1029): every other filter applied
+   * and the seller dimension dropped, exactly as the per-seller options beside it are counted. It
+   * **is** the sum of {@link sellers}, and has to stay so — an *All* row disagreeing with the
+   * options under it is the failure `ui-patterns.md` refuses everywhere else, and #843's rule that
+   * a facet promises what clicking it delivers covers the *All* row too.
+   *
+   * Neither of the two counts it sits next to answers this. {@link total} is the list *with* the
+   * seller applied, which is what it read until this issue — `All sellers (3)` beside a list of 3
+   * that would grow to 143 on being chosen. {@link unfiltered} drops every narrowing rather than
+   * this one, so it would over-count by the outcome, search and closing filters still in force.
+   */
+  allSellers: number;
+  /** The same for the platform select's **All platforms** option — the sum of {@link platforms}. */
+  allPlatforms: number;
+  /**
    * Rows the list would show with nothing narrowing it (#1018) — the denominator the band above the
    * rows reports `total` against, so *"8 of 143"* says how much is being hidden rather than merely
    * that something is.
@@ -1214,10 +1229,13 @@ export async function auctionLotFilterCounts(
     if (byOutcome[i] > 0) outcomes[o] = byOutcome[i];
   });
 
+  const sellers = foldByParty(bySeller, "sellerId");
+  const platforms = foldByParty(byPlatform, "platformId");
+
   return {
     outcomes,
-    sellers: foldByParty(bySeller, "sellerId"),
-    platforms: foldByParty(byPlatform, "platformId"),
+    sellers,
+    platforms,
     closing: { ended: closingCounts[0], today: closingCounts[1], week: closingCounts[2] },
     signals: Object.fromEntries(
       LOT_SIGNALS.map((s) => [s, signalIds[s].length])
@@ -1225,8 +1243,17 @@ export async function auctionLotFilterCounts(
     undescribed,
     duplicate: duplicateCount,
     total,
+    allSellers: sumCounts(sellers),
+    allPlatforms: sumCounts(platforms),
     unfiltered,
   };
+}
+
+/** Totals a party fold, which is what its select's *All* row promises — see {@link
+ * AuctionLotFilterCounts.allSellers}. Summing the fold rather than counting again is not an
+ * economy: it is what makes the row agree with the options drawn beneath it by construction. */
+function sumCounts(counts: Record<string, number>): number {
+  return Object.values(counts).reduce((sum, n) => sum + n, 0);
 }
 
 /** Lot counts grouped by sale, carrying the sale's two parties — the raw material for the seller

@@ -566,6 +566,10 @@ export function AuctionLotsPanel({
               margin: "0 0.25rem",
             }}
           />
+          {/* Both *All* rows are facet rows like every other control here: their own dimension
+              dropped and the rest kept, so each is the sum of the options under it (#1029).
+              `counts.total` is the list as it stands — the number these read until then, which
+              said `All sellers (3)` over a choice that would have shown the whole watchlist. */}
           <select
             aria-label="Filter by seller"
             value={sellerId ?? ""}
@@ -575,7 +579,9 @@ export function AuctionLotsPanel({
             }}
             style={{ ...CONTROL_STYLE, cursor: "pointer" }}
           >
-            <option value="">{counts ? `All sellers (${counts.total})` : "All sellers"}</option>
+            <option value="">
+              {counts ? `All sellers (${counts.allSellers})` : "All sellers"}
+            </option>
             {(parties?.sellers ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {counts ? `${s.name} (${counts.sellers[s.id] ?? 0})` : s.name}
@@ -591,7 +597,9 @@ export function AuctionLotsPanel({
             }}
             style={{ ...CONTROL_STYLE, cursor: "pointer" }}
           >
-            <option value="">{counts ? `All platforms (${counts.total})` : "All platforms"}</option>
+            <option value="">
+              {counts ? `All platforms (${counts.allPlatforms})` : "All platforms"}
+            </option>
             {(parties?.platforms ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {counts ? `${p.name} (${counts.platforms[p.id] ?? 0})` : p.name}
