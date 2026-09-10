@@ -1161,6 +1161,34 @@ a finding of that shape is **whether `main` moved underneath it**, asked before 
 the content. The mirror-image error is just as available and the lead made it in the same exchange:
 telling a session its *branch* was behind when only its working tree was.
 
+**And the lead is the session least able to *notice* a breakage that arrives with `main`.** That is
+a different failure from the paragraph above rather than another instance of it. There a worker read
+a file cut before a fix and got a **wrong answer, which it could check**; here the lead's checkout
+is the one that has **not taken the merge**, so it gets a **correct answer about the wrong tree**,
+and every command it runs to verify confirms it. **The session that meets such a breakage first is
+always a worker**, because a worker cuts from `origin/main` at its assignment and the lead does
+not — which inverts the usual direction of a report, since the lead's instinct on being told
+*`pnpm` is broken* is to run `pnpm`.
+
+**It has one instance, and it is written as an incident for that reason.** On 2026-09-10 `f79ac55`
+moved the `packageManager` pin to pnpm 12; the machine's corepack 0.34 cannot launch it, so **every
+`pnpm` invocation in any checkout of `main` died** and every worker assigned after that commit was
+blocked at its wake-up drill. The lead's own worktree predated `f79ac55`, so `package.json` there
+still declared pnpm 11 and `pnpm --version` answered `11.25.0`, exit 0. The lead had run it. It was
+fine. The mechanism is `platform.md`'s, under the corepack bullet, and is not restated here — what
+belongs in this file is which session can see it. Note the same shape one layer out: `platform.md`
+records that CI installs pnpm itself and never goes through corepack, **so neither CI nor the image
+could see this either**. A tree that has not moved and a runner that never took the path are the
+same blind spot wearing two costumes.
+
+**So the consequence is on the receiving end, and it is the only mechanical thing here: a worker's
+report that a command is broken is not checked by running that command in the lead's worktree.**
+Reproduce the claim in a tree cut from `origin/main`, or trust the worker. **The tempting rule — the
+lead should periodically pull — is deliberately not written**, because it is answerable only by
+remembering, which this file names as its own failure mode (*Keeping this file honest*). And a
+single case is a thin foundation for a rule, which is why this states a shape and an incident rather
+than an obligation; a second instance is what would earn one.
+
 **"Did the assertions pass" is not the check. "Would this have failed if the code were wrong" is.**
 #814's first ordering control passed for the wrong reason — the never-alone rule was placed first and
 Prisma came out protected, but by the blanket rule's own exclusion list rather than by ordering, so
