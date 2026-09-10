@@ -5,10 +5,12 @@ import {
   isSelectableTile,
   pruneSelection,
   selectedInOrder,
+  selectedInView,
   toggleBatch,
   toggleTile,
   type SelectableTile,
 } from "../../src/lib/scan-tile-selection";
+import { tilesInView } from "../../src/lib/scan-tile-filter";
 
 /** A tile as the selection sees one: an id and whether it is still waiting. */
 const tile = (id: string, state = "unidentified"): SelectableTile => ({ id, state });
@@ -139,6 +141,80 @@ describe("scan tile selection (#596)", () => {
     it("keeps a selection that is still entirely on screen", () => {
       const selected = new Set(["t1", "t2"]);
       assert.deepEqual(ids(pruneSelection(selected, [tile("t1"), tile("t2")])), ["t1", "t2"]);
+    });
+  });
+
+  /**
+   * **The bar counts and acts on the ticked tiles in view; the hidden ones stay ticked** (#1020).
+   *
+   * The card below is the one that separates the three readings, and every assertion is written so
+   * that the two wrong ones give a *different answer* rather than a differently-worded one: two
+   * waiting pieces and two parked ones, all four ticked, under the *waiting* chip. Acting on the
+   * whole selection (what the bar did) gives four; unticking what the chip hides (what #853
+   * forbids) leaves two ticked; the rule gives two to act on and four still ticked.
+   */
+  describe("the bar under a chip (#1020)", () => {
+    const card = [
+      tile("w1"),
+      tile("p1", "parked"),
+      tile("w2"),
+      tile("p2", "parked"),
+      tile("c1", "consumed"),
+    ];
+    const all = new Set(["w1", "w2", "p1", "p2"]);
+
+    it("acts on the ticked tiles the chip is showing, and on no others", () => {
+      assert.deepEqual(
+        selectedInView(all, card, "waiting").map((t) => t.id),
+        ["w1", "w2"]
+      );
+      assert.deepEqual(
+        selectedInView(all, card, "parked").map((t) => t.id),
+        ["p1", "p2"]
+      );
+      // With no chip pressed the two figures are the same one, which is why the resting bar reads
+      // as it always did.
+      assert.deepEqual(
+        selectedInView(all, card, "all").map((t) => t.id),
+        ["w1", "p1", "w2", "p2"]
+      );
+    });
+
+    it("leaves the hidden tiles ticked, so releasing the chip brings them back", () => {
+      // The selection itself is untouched by the narrowing — this is the same set going in and
+      // coming out, which is #853's sentence stated as an assertion.
+      assert.deepEqual(
+        selectedInOrder(all, card).map((t) => t.id),
+        ["w1", "p1", "w2", "p2"]
+      );
+      assert.equal(selectedInView(all, card, "waiting").length, 2);
+      assert.equal(selectedInView(all, card, "all").length, 4);
+    });
+
+    it("keeps the tiles in card order rather than in the order they were ticked", () => {
+      // The order the copies are numbered in is the order on the desk, and narrowing must not
+      // disturb it.
+      assert.deepEqual(
+        selectedInView(new Set(["p2", "w1"]), card, "all").map((t) => t.id),
+        ["w1", "p2"]
+      );
+    });
+
+    it("is empty over the pull list, whatever is ticked", () => {
+      // Every tile the discards chip shows has reached an end, so nothing in view can be
+      // identified and the bar has nothing to be about (#853).
+      assert.deepEqual(selectedInView(all, card, "discarded"), []);
+    });
+
+    it("never narrows the pruning — a chip must not delete a selection", () => {
+      // The one place this change can go quietly wrong. Pruning is about tiles that no longer
+      // *exist*, so it is computed over the whole card: under the *waiting* chip the two parked
+      // ids survive, and a prune over the filtered set would have dropped them — #853's failure
+      // arriving by another route.
+      assert.deepEqual(ids(pruneSelection(all, card)), ["p1", "p2", "w1", "w2"]);
+      assert.deepEqual(ids(pruneSelection(all, tilesInView(card, "waiting"))), ["w1", "w2"]);
+      // And it still drops what actually went: a tile identified away is gone from both.
+      assert.deepEqual(ids(pruneSelection(all, [tile("w1"), tile("p1", "consumed")])), ["w1"]);
     });
   });
 

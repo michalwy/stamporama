@@ -35,6 +35,13 @@
  * narrowed first. `tilesInView` in `scan-tile-filter.ts` states that rule in general; here it is
  * the difference between a box that says *partial* over a strip whose every square is ticked and
  * one that can be read.
+ *
+ * **Since #1020 the bar reads the same way, and the selection is deliberately three sets rather
+ * than one.** What is *ticked* (`selectedInOrder`) outlives every chip; what is *in view*
+ * (`selectedInView`) is what the bar counts and what an action is handed; and what still *exists*
+ * (`pruneSelection`) is the only one of the three computed over the whole card. Keeping them apart
+ * is the whole of the rule — collapse the second into the third and a chip silently deletes a
+ * selection, which is exactly what #853 was written to prevent.
  */
 
 import { tilesInView, type TileFilter } from "./scan-tile-filter";
@@ -130,10 +137,40 @@ export function pruneSelection(
 }
 
 /** The ticked tiles, in the order the strip draws them — which is the order of the card on the
- *  desk, and therefore the order the created copies are numbered in. */
+ *  desk, and therefore the order the created copies are numbered in.
+ *
+ *  **This is every ticked tile, including ones the chip is hiding.** It is what the bar counts
+ *  *from* — the `3` in *1 of 3 ticked tiles in view* — and never what an action is handed; that is
+ *  `selectedInView` below. */
 export function selectedInOrder<T extends SelectableTile>(
   selected: ReadonlySet<string>,
   tiles: readonly T[]
 ): T[] {
   return tiles.filter((t) => selected.has(t.id) && isSelectableTile(t));
+}
+
+/**
+ * The ticked tiles the chip is **showing** — what the bar acts on (#1020).
+ *
+ * *A filter is a way of looking, so it never unticks anything — and a bulk action never reaches a
+ * row the collector cannot see.* The two rules this reconciles were written pointing in opposite
+ * directions: #853 said a chip must not throw a selection away, #863 said a control over
+ * "everything here" means everything the filter is showing. Counting the visible ones satisfies
+ * both — nothing is unticked, and no identification reaches a square nobody looked at.
+ *
+ * **Its cost is that the number moves when a chip is pressed**, with nothing deselected, which is
+ * why this is a *second* function rather than a narrowing of `selectedInOrder`: the bar has to be
+ * able to say both figures, or the collector reads the drop as a lost selection.
+ *
+ * **And it is not `pruneSelection`.** Pruning is about tiles that no longer *exist* and must stay
+ * over the whole card; this is about tiles that are merely not *shown*. Narrowing the prune to the
+ * filtered set would delete a selection because a chip was pressed, which is #853's failure
+ * arriving by another route — the one place this change can go quietly wrong.
+ */
+export function selectedInView<T extends SelectableTile>(
+  selected: ReadonlySet<string>,
+  tiles: readonly T[],
+  filter: TileFilter
+): T[] {
+  return selectedInOrder(selected, tilesInView(tiles, filter));
 }
