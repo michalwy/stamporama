@@ -307,12 +307,38 @@ What was settled with it:
   handovers and in habit, and a bare replacement cannot tell a later reader which of the two is the
   newer (`feedback_polish_to_him_always` is the local shape to copy). **A second track runs only on
   the user's explicit request**, and *What may run in parallel* is what governs it when he asks.
+- **In flight means *actively working*, and a session waiting for a showcase is not.** **Decided by
+  the user on 2026-09-10 (#1081)**, amending the bullet above within hours of it landing. The bullet
+  had been read conservatively — a branch pushed, verified and waiting on him to look still counted
+  as in flight, so the queue stopped whenever he stepped away — and **that reading is now wrong**.
+  When a session finishes its main work and enters showcase-waiting, **the lead starts the next
+  task**. **A correction coming out of his look queues behind whatever is then running** rather than
+  pre-empting it, unless he says to run it in parallel. **His own wording governs the cases nobody
+  has enumerated**, which is why it is quoted rather than paraphrased: *"gdy worker kończy główną
+  część i przechodzi w tryb czekania na pokaz, możesz startować następne zadanie… robisz wszystko
+  jednym torem, ale tak żebym ja nie blokował pracy"* — one track, arranged so that he never blocks
+  the work. **The reason is the rule's own purpose rather than a detail of it**: one track exists to
+  stop two sessions writing the same file, and a session awaiting a showcase is writing nothing.
+  Counting it as in flight bought nothing and spent the whole queue on his availability, which
+  inverts what the pool and *Spawn ahead and hold* were built for. **The figure did not change** —
+  one session working, still. This is one track that stops counting a session as working when it
+  has stopped working.
 - **The pool size is still not the concurrency, and now less than ever.** A pooled worker reads
   nothing at spawn (#998), so **ten idle alongside one working is the intended state** rather than a
   sign of over-provisioning. What each still costs is a worktree and a slot (#781), and a sweep that
   can tell it from an abandoned one (*A held session's worktree is not stale*).
 - **The lead reports the count of free workers in every status table**, so the user tops up when he
   is at the computer rather than when the lead runs out.
+
+**A branch waiting on a showcase still holds its files, and that is the hazard the amendment
+creates.** It will rebase, so a second branch editing the same file turns a wait into a conflict
+somebody resolves by hand — which is why the next task started while one waits is chosen against
+the waiting branch's **diff** and not merely for being next in the queue. **It went the right way on
+its first day**: with #1077 waiting on the user and holding `AGENTS.md` and `ui-patterns.md`, the
+next issue in the queue needed exactly those two files, and the lead read the waiting branch's diff
+before assigning rather than after. **So file contention is exercised more under this rule, not
+less** — *What may run in parallel* turning out to be needed on the single track, one step earlier
+than #1059 expected it to be needed at all.
 
 **Two costs the user took knowingly, stated here and not restated elsewhere.** Neither is an
 argument against the rule; they are what it buys serialisation with.
@@ -1851,6 +1877,13 @@ migration, that choosing what runs at once is choosing which files are shared. *
 default changed; the concurrency reasoning did not** (#1059). **And the queue is still sequenced by
 file contention even while nothing contends**, because that ordering is what makes a second track
 safe the moment there is one — worked out in advance or not at all.
+
+**And since 2026-09-10 it is not only a second track this governs** (#1081). A session waiting for a
+showcase no longer counts as in flight, so the lead starts the next task while a verified branch
+sits waiting — and **that branch still holds its files**. Two branches open on the single track is
+now the ordinary case rather than the exception, so this section is what the lead reads before
+choosing the next task, not only before answering a request for a second one
+(*The pool of generic workers*).
 
 Where sessions do run in parallel, each is in its own worktree. **Merges serialise, and that is the
 trade**: the second branch ready rebases onto the first and re-runs its checks. At two or three
