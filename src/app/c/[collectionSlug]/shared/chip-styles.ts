@@ -85,6 +85,42 @@ export const ROW_CHIP: React.CSSProperties = {
 };
 
 /**
+ * The **group-count chip** — how many things a grouped row holds, which is the whole point of a
+ * grouped row, so it leads line 1 of every one of them and what the group *is* sits beside it.
+ *
+ * That rule came out of #869, where the Copies list's three headers — the duplicate groups (#372),
+ * the filing groups (#421) and the issue groups (#424) — had drifted into three shapes. It is not a
+ * rule anybody can hold while the chip itself is copied per file, which is why it was given one
+ * declaration then, in `inventory/copy-group-shell.tsx`.
+ *
+ * **It lives here rather than there since #1109, and the move is the decision rather than the
+ * import.** The Wants list's issue groups (`wants/want-issue-group-row.tsx`) had a byte-identical
+ * private copy, and the two ways out are not equivalent: importing it from `inventory/` would have
+ * reached across into one feature module's implementation for a style, which is a different act
+ * from importing a shared primitive — `ui-patterns.md` calls `FILTER_CONTROL_STYLE` *the box every
+ * toolbar select shares*, and what made that a home is that it is shared rather than that it is
+ * exported. A style two features draw needs an address neither of them owns.
+ *
+ * **The two chips draw different content and that is not an objection to sharing the box** — the
+ * Copies list says `×5` and the Wants list a `3/7` fraction. They lead the same line in the same
+ * position on the same kind of row, answering *how much does this group hold*, and a collector
+ * meets both on two screens of one app. `SET_COMPLETENESS_CHIP` below is the settled precedent for
+ * exactly that: two surfaces counting different copies out of one box, on #671's reasoning.
+ */
+export const GROUP_COUNT_CHIP: React.CSSProperties = {
+  fontSize: "0.875rem",
+  fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
+  color: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+  border: "1px solid var(--color-accent)",
+  borderRadius: "0.375rem",
+  padding: "0.125rem 0.5rem",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+/**
  * The **set-completeness chip** — *how much of this set is held* — and the state it takes when the
  * answer is "all of it".
  *

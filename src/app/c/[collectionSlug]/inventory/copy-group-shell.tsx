@@ -9,28 +9,6 @@ import { useReportRowsInView } from "./use-rows-in-view";
 import { Icon } from "@/app/icons";
 
 /**
- * How many copies the group holds — the whole point of a grouped row, so it leads every one of
- * them: the duplicate groups (#372), the filing groups (#421) and the issue groups (#424).
- *
- * It lives here rather than three times over because #869 is what happens when it does not. The
- * three headers had drifted into three shapes, and the fix was to give them one rule — the count
- * chip leads line 1 and what the group *is* sits beside it — which is not a rule anybody can hold
- * while the chip itself is copied per file.
- */
-export const GROUP_COUNT_CHIP: React.CSSProperties = {
-  fontSize: "0.875rem",
-  fontWeight: 700,
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-accent)",
-  background: "var(--color-accent-soft)",
-  border: "1px solid var(--color-accent)",
-  borderRadius: "0.375rem",
-  padding: "0.125rem 0.5rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
-/**
  * What every grouped row of the Copies list is made of — the duplicate groups (#372) and the filing
  * groups (#421) alike: a select-all box, an expand arrow, the row's own lines, and the members
  * underneath. It lives here because #422's two fixes are about *the group row*, not about one kind

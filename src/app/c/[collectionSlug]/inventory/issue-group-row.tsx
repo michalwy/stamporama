@@ -9,6 +9,7 @@ import type {
 import { NO_ISSUE } from "@/lib/issue-groups";
 import { Icon } from "@/app/icons";
 import {
+  GROUP_COUNT_CHIP,
   SET_COMPLETENESS_CHIP,
   SET_COMPLETENESS_CHIP_COMPLETE,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -18,7 +19,7 @@ import {
   type CopyRowActions,
   type CopySelection,
 } from "./inventory-copy-list";
-import { CopyGroupShell, GROUP_COUNT_CHIP, useGroupMembers } from "./copy-group-shell";
+import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
 const MUTED: React.CSSProperties = {
