@@ -73,14 +73,19 @@ inside every default.
 
 ## Docker Image
 
-The `Dockerfile` uses four stages:
+The `Dockerfile` uses five stages:
 
 | Stage | Base | Purpose |
 |---|---|---|
-| `base` | node:22-alpine | corepack + pnpm |
+| `base` | the `node:*-alpine` tag on `Dockerfile`'s first line | corepack + pnpm |
 | `deps` | base | install dependencies only |
+| `dev` | base | no install; `pnpm` runs at container start via `docker-compose.dev.yml` |
 | `builder` | base | generate Prisma client + build Next.js |
-| `runner` | node:22-alpine | runtime image with full `node_modules` |
+| `runner` | base | runtime image with full `node_modules` |
+
+Only `base` names an image; every other stage derives from it, `runner` included. The tag itself is
+deliberately not repeated here — a second copy of it is what let this table go on saying
+`node:22-alpine` through the move to Node 24 (#1058).
 
 The runner stage ships the full `node_modules` (not Next.js standalone output), so `pnpm start` works without re-installing. `pnpm-workspace.yaml` is copied to the runner as a safety net for the build-scripts allowlist.
 
@@ -630,7 +635,7 @@ The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull requ
 
 - **static-checks** — lint, typecheck, build (generates Prisma client first)
 - **unit** — unit tests (generates Prisma client first)
-- **integration** — spins up a PostgreSQL 16 service container, applies migrations via `prisma migrate deploy`, then runs `tests/integration/`
+- **integration** — spins up a PostgreSQL service container on the image `ci.yml` pins, applies migrations via `prisma migrate deploy`, then runs `tests/integration/`
 
 The **publish-image** job triggers only on `v*` tags and requires all three jobs to pass. It pushes a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/michalwy/stamporama`.
 
