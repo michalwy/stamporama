@@ -631,13 +631,20 @@ Delivery is a **manual upload** — there is no Delcampe API (#154 is an open sc
 
 ## CI
 
-The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of it. Where the two disagree, the workflow is right.
 
-- **static-checks** — lint, typecheck, build (generates Prisma client first)
-- **unit** — unit tests (generates Prisma client first)
-- **integration** — spins up a PostgreSQL service container on the image `ci.yml` pins, applies migrations via `prisma migrate deploy`, then runs `tests/integration/`
+**Not every job runs on every event.** `Detect changes` runs first and on everything, and decides whether the change touches anything the application is built from; the four application suites are gated on its output, so a change staying inside its safe list leaves all four skipped. That safe list is the `case` glob inside that job and is the record of its own membership — see `docs/agents/collaboration.md`, *A pull request no CI job can speak to skips all four*, for why it is not restated anywhere. `Closing reference check` is gated on nothing and runs on every pull request. The publishing jobs run on `v*` tags only.
 
-The **publish-image** job triggers only on `v*` tags and requires all three jobs to pass. It pushes a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/michalwy/stamporama`.
+The four application suites, each gated on `Detect changes`:
+
+- **Static checks** — lint, typecheck and build, run concurrently inside the one job by `scripts/static-checks.sh` (generates the Prisma client first)
+- **Unit tests** — `pnpm test:unit` (generates the Prisma client first)
+- **Integration tests** — spins up a PostgreSQL service container on the image `ci.yml` pins, applies migrations via `prisma migrate deploy`, then runs `tests/integration/`
+- **Extension checks** — the `extension/` workspace's own typecheck, tests and build; it is excluded from the app's lint and typecheck, so this job is where it is checked at all
+
+Which of these `main` requires as a status check is deliberately not stated here: [`.github/rulesets/main.json`](../../.github/rulesets/main.json) is that record, and `docs/agents/collaboration.md` carries the reasoning around it.
+
+On a `v*` tag, **Build image** builds `linux/amd64` and `linux/arm64` on their own native runners and pushes each by digest, **Publish container image** merges those digests into one multi-arch manifest tagged on `ghcr.io/michalwy/stamporama`, and **Publish extension (Chrome Web Store)** submits the packaged extension when the `CWS_PUBLISH_ENABLED` repository variable is set. Nothing publishes over a red suite: `Build image` and `Publish extension` each `needs:` all four suites above, and `Publish container image` `needs:` `Build image`.
 
 ## Authentication
 
