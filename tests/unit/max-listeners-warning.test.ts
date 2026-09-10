@@ -105,6 +105,34 @@ describe("MaxListenersExceededWarning is not a measurement", () => {
     assert.match(subclass[0], /\[PassThroughShim\]/);
   });
 
+  it("stays silent below the threshold, so an absent warning is a ceiling and not a zero", async () => {
+    // The production log of #1123 — two lines, error and close, nothing about `end` — was read as
+    // "there are no `end` listeners". It is not what silence means. This is that exact shape: the
+    // stream carries eight `end` listeners and Node says nothing about them, because eight is under
+    // the limit. So the log establishes error >= 11, close >= 11, and end <= 10.
+    //
+    // The consequence is the whole reason this case exists: what the event names in a log exclude is
+    // the *repeated* adder, not every function that ever touched the stream. Eleven applications of
+    // anything that also registers `end` would have carried an `end` line up with them; one
+    // application would not.
+    const stream = new PassThrough();
+
+    const warnings = await warningsDuring(() => {
+      for (let i = 0; i < 12; i++) {
+        stream.on("error", () => {});
+        stream.on("close", () => {});
+      }
+      for (let i = 0; i < 8; i++) stream.on("end", () => {});
+    });
+
+    assert.equal(stream.listenerCount("end"), 8, "the listeners the log is silent about are real");
+    assert.equal(warnings.length, 2);
+    assert.ok(
+      warnings.every((w) => !w.includes("end listeners")),
+      "eight `end` listeners produce no warning at all — silence is a ceiling, not a zero",
+    );
+  });
+
   it("counts against the default limit, so the threshold is 11 unless something raises it", () => {
     // Pinned because every count quoted in #1123 and in `platform.md` assumes this default. A
     // Node that shipped a different one would make all of them wrong without anything else moving.
