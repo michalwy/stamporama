@@ -82,9 +82,11 @@ export function checkSetNonEmpty(copyCount: number): string | null {
 // they drifted in the first place.
 //
 // **A surface that hands back both fields uses neither.** `OfferListItem`, `OfferDetail`,
-// `ListingWorkspaceOffer` and `ComposeTargetOffer` carry `name` and `label` separately so the reader
-// composes: the title leads and the derived label sits beneath it (#1023). That is a different and
-// better thing than flattening, not a site that forgot to call one of these.
+// `ListingWorkspaceOffer`, `ComposeTargetOffer` and `SellableOffer` carry `name` and `label`
+// separately so the reader composes: the title leads and the derived label sits beneath it
+// (#1023, and #1026 for the last of them — the one site #1024 left derived on purpose, because
+// flattening it would have cost the sale-line dialog's search the contents it matches on). That is
+// a different and better thing than flattening, not a site that forgot to call one of these.
 
 /** What every one-string offer surface calls an offer with no title of its own. */
 export const UNTITLED_OFFER_LABEL = "Untitled listing";

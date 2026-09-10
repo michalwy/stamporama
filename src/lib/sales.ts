@@ -186,13 +186,19 @@ export interface SellableOffer {
   offerId: string;
   platformId: string;
   platformName: string;
-  /** The label derived from the offer's sets, with **no title fallback** — the one naming site
-   * #1024 swept and deliberately left alone, because #1026 owns this surface and is going to give
-   * it the two-field treatment #1023 gave the Add-to-offer picker: `name` beside `label`, the title
-   * leading the row and the search matching both. Flattening it to `offerDisplayLabel` here would
-   * be half of that change, and the wrong half — the sale-line dialog would gain the title and lose
-   * the ability to find a titled listing by its contents. Left derived until #1026, not overlooked.
-   */
+  /** The stored listing title (#209), or null while the offer has none. The row's **primary**
+   * label in the sale-line dialog, spelled `offerName ?? offerLabel` exactly as `offer-row.tsx` and
+   * every other offer surface spells that fallback (#1026). Spelled `offerName` rather than a bare
+   * `name` only because the sibling it pairs with is `offerLabel` and `platformName` already sits
+   * beside both; the shape is `ComposeTargetOffer`'s (#1023) and nothing about it is new. */
+  offerName: string | null;
+  /** The label derived from the offer's sets. The primary label while `offerName` is null, and the
+   * **secondary** line beneath it once there is one — a collector who recognises a listing by what
+   * is in it still can. Kept as its own field rather than flattened to `offerDisplayLabel`: #1024
+   * swept every naming site and left this one alone on purpose, because flattening would have been
+   * half of #1026 and the wrong half — the dialog would have gained the title and **lost** the
+   * ability to find a titled listing by its contents, since its search runs on this field. Two
+   * fields answer both: the title leads the row, this sits under it, and the box matches each. */
   offerLabel: string;
   /** Asking price + currency, used to pre-fill line prices when the sale is in that currency. */
   price: string;
@@ -210,6 +216,9 @@ const OFFER_SETS_ORDER_BY: Prisma.OfferSetOrderByWithRelationInput[] = [
 
 const SELLABLE_OFFER_SELECT = {
   id: true,
+  // The stored listing title (#1026). One scalar on a row this read already loads: no join, no
+  // enrichment pass, and nothing else here widens.
+  name: true,
   platformId: true,
   price: true,
   currency: true,
@@ -276,6 +285,7 @@ export async function listSellableOffers(
       offerId: r.id,
       platformId: r.platformId,
       platformName: r.platform.name,
+      offerName: r.name,
       offerLabel: labeller.offer(r.sets),
       price: Number(r.price).toFixed(2),
       currency: r.currency,
