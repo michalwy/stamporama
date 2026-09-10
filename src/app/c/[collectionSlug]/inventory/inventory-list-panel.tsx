@@ -37,7 +37,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
-import { FilterFooterToggle } from "@/app/c/[collectionSlug]/shared/filter-popover";
+import {
+  FILTER_MENU_HEADING_STYLE,
+  FilterFooterToggle,
+} from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -267,20 +270,6 @@ const NO_SHRINK: React.CSSProperties = { flexShrink: 0 };
 function FilterSlot({ width, children }: { width: string; children: React.ReactNode }) {
   return <div style={{ width, flexShrink: 0 }}>{children}</div>;
 }
-
-/** The heading over the grouping panel's split switches (#868), saying **when** they apply. It is
- *  what keeps a pair of controls that are disabled four times out of five from reading as
- *  decoration: they are not settings of grouping, they are settings of one grouping, and a reader
- *  who has never used that grouping learns here that it has them. */
-const GROUPING_FOOTER_HEADING_STYLE: React.CSSProperties = {
-  padding: "0.4rem 0.55rem 0.15rem",
-  fontSize: "0.6875rem",
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  color: "var(--color-text-muted)",
-  whiteSpace: "nowrap",
-};
 
 /**
  * The listing buttons while the selection **collides** with a live offer (#660).
@@ -1861,7 +1850,12 @@ export function InventoryListPanel({
                   footer={
                     (formats.length > 0 || certificateStatuses.length > 0) && (
                       <>
-                        <span style={GROUPING_FOOTER_HEADING_STYLE}>When grouping duplicates</span>
+                        {/* The heading saying **when** the split switches apply (#868). It is what
+                            keeps a pair of controls that are disabled four times out of five from
+                            reading as decoration: they are not settings of grouping, they are
+                            settings of one grouping, and a reader who has never used that grouping
+                            learns here that it has them. */}
+                        <span style={FILTER_MENU_HEADING_STYLE}>When grouping duplicates</span>
                         {formats.length > 0 && (
                           <FilterFooterToggle
                             label="Split by format"
