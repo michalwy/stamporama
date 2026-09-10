@@ -27,8 +27,11 @@ import {
   CertificateStatusChip,
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
-import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
-import { CopyGroupShell, GROUP_COUNT_CHIP, useGroupMembers } from "./copy-group-shell";
+import {
+  GROUP_COUNT_CHIP,
+  ROW_CHIP,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import { CopyValue } from "./inventory-item-row";
 import type { InventoryItemFilters } from "./use-inventory-query";
 

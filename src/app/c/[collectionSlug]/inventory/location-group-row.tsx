@@ -8,13 +8,14 @@ import {
   NO_LOCATION_REF,
   type LocationGroupBy,
 } from "@/lib/location-groups";
+import { GROUP_COUNT_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   InventoryCopyList,
   type CopyRowActions,
   type CopySelection,
 } from "./inventory-copy-list";
-import { CopyGroupShell, GROUP_COUNT_CHIP, useGroupMembers } from "./copy-group-shell";
+import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
 /** The in-location ref, in the monospace the copy rows already show it in — it is an identifier

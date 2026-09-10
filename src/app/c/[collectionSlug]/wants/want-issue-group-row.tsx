@@ -5,23 +5,11 @@ import type { AreaCatalogEntry } from "@/lib/areas";
 import { NO_ISSUE } from "@/lib/issue-groups";
 import type { WantIssueGroupRow as WantIssueGroupRowData, WantListItem } from "@/lib/wants";
 import { CopyGroupShell } from "@/app/c/[collectionSlug]/inventory/copy-group-shell";
+import { GROUP_COUNT_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { WantRow, type WantDictionaries } from "./want-row";
 import { useWantsInfinite, type WantListFilters } from "./use-wants-query";
-
-const COUNT_CHIP: React.CSSProperties = {
-  fontSize: "0.875rem",
-  fontWeight: 700,
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-accent)",
-  background: "var(--color-accent-soft)",
-  border: "1px solid var(--color-accent)",
-  borderRadius: "0.375rem",
-  padding: "0.125rem 0.5rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
 
 const MUTED: React.CSSProperties = {
   fontSize: "0.8125rem",
@@ -111,7 +99,7 @@ export function WantIssueGroupRow({
           <Tooltip
             content={`${group.openCount} of ${group.totalCount} want${group.totalCount === 1 ? "" : "s"} recorded for this issue ${group.openCount === 1 ? "is" : "are"} still open. Closed wants stay in the total, which is what makes the fraction mean the same thing whichever side of the Open / Closed toggle you read it from.`}
           >
-            <span style={COUNT_CHIP}>
+            <span style={GROUP_COUNT_CHIP}>
               {group.openCount}/{group.totalCount}
             </span>
           </Tooltip>
