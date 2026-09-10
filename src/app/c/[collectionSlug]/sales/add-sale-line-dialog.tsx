@@ -16,6 +16,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
+import { setsMissingPrice, missingPriceLabel } from "@/lib/picker-missing-price";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -91,6 +92,34 @@ const STALE_CHIP: React.CSSProperties = {
   color: "var(--color-error)",
   background: "var(--color-error-soft, var(--color-bg-page))",
   border: "1px solid var(--color-error-border, var(--color-border))",
+};
+
+/**
+ * The footer control naming the picked sets with no price (#1080).
+ *
+ * Drawn as a **bordered button** rather than as tinted text, because the whole of the decision is
+ * that this is a control and not a label: a sentence in the footer reads as an explanation, and the
+ * collector has to be able to tell at a glance that pressing it does something.
+ *
+ * It sits at the footer's left edge — `DialogFooter` is `justify-content: flex-end`, and a warning
+ * crowded against Cancel reads as a third action rather than as the reason the primary is dead. The
+ * `marginRight: auto` doing that is on the **`Tooltip`'s** style and not here: the tooltip renders
+ * an `inline-flex` span, and *that* span is the footer's flex child rather than the button inside
+ * it (`ui-patterns.md`).
+ */
+const MISSING_PRICE_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.375rem",
+  minHeight: "2.25rem",
+  padding: "0.375rem 0.75rem",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  color: "var(--color-warning)",
+  background: "var(--color-warning-soft)",
+  border: "1px solid var(--color-warning-border, var(--color-border))",
 };
 
 /** A group's "type" facet: an offer with one set (a single) vs several sets (a quantity). */
@@ -176,13 +205,6 @@ function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
   return false;
 }
 
-function priceValid(p: string): boolean {
-  const t = p.trim();
-  if (!t) return false;
-  const n = Number(t);
-  return Number.isFinite(n) && n >= 0;
-}
-
 export interface AddSaleLineDialogProps {
   collectionId: string;
   /** The sale's platform — the picker only shows offers on it (a sale is single-platform). */
@@ -223,6 +245,9 @@ export function AddSaleLineDialog({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [detailsOpen, setDetailsOpen] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Record<string, Picked>>({});
+  /** The *without a price* narrowing (#1080). Read through `showOnlyMissing` below, never directly:
+   *  the flag is what the collector asked for and that derivation is what is actually in force. */
+  const [onlyMissingPrice, setOnlyMissingPrice] = useState(false);
   const { data: offers = [], isLoading } = useSellableOffers(collectionId, platformId, true);
   const { data: copies = [] } = useSellableCopies(collectionId, platformId, true);
 
@@ -274,18 +299,69 @@ export function AddSaleLineDialog({
     return out;
   }, [groups, raw, q, ctx]);
 
+  const pickedList = useMemo(() => Object.values(picked), [picked]);
+
+  // Which ticks cannot be submitted, over the **whole** selection rather than over what is on
+  // screen — that is the point of it (#1080). One predicate, shared with `canAdd` below, so the
+  // control naming them and the button refusing over them cannot disagree about which sets they
+  // are.
+  const missingIds = useMemo(() => new Set(setsMissingPrice(pickedList)), [pickedList]);
+
+  /**
+   * The narrowing that is actually in force, and it **releases itself** when there is nothing left
+   * to narrow to.
+   *
+   * Derived rather than an effect writing the flag back: filling in the last missing price while
+   * the narrowing is on would otherwise leave `visible` empty under a *No sets match these filters*
+   * hint, with the facet row that turned it on already gone from the panel. Read this way the
+   * facet row and the narrowing disappear in the same render, which is the honest end state — the
+   * reason for it is gone.
+   */
+  const showOnlyMissing = onlyMissingPrice && missingIds.size > 0;
+
+  // The *without a price* narrowing sits between the search and the type facet, so the type counts
+  // are taken under it: a facet promising `Single 12` over two visible rows is a count that
+  // disagrees with the rows beneath it, which this project holds is worse than no count (#843).
+  const byMissing = useMemo(() => {
+    if (!showOnlyMissing) return byText;
+    const out: { group: Group; sets: SetRow[] }[] = [];
+    for (const { group, sets } of byText) {
+      const matching = sets.filter((s) => missingIds.has(s.offerSetId));
+      if (matching.length > 0) out.push({ group, sets: matching });
+    }
+    return out;
+  }, [byText, showOnlyMissing, missingIds]);
+
   const typeCounts = useMemo(
     () => ({
-      single: byText.filter((g) => g.group.type === "single").length,
-      quantity: byText.filter((g) => g.group.type === "quantity").length,
+      single: byMissing.filter((g) => g.group.type === "single").length,
+      quantity: byMissing.filter((g) => g.group.type === "quantity").length,
     }),
-    [byText]
+    [byMissing]
   );
 
   const visible = useMemo(
-    () => byText.filter((g) => !type || g.group.type === type),
-    [byText, type]
+    () => byMissing.filter((g) => !type || g.group.type === type),
+    [byMissing, type]
   );
+
+  /**
+   * What the control in the footer and the facet row in the panel both do (#1080).
+   *
+   * **It clears whatever is hiding them and then narrows to exactly them** — the collector pressed
+   * it, the filters visibly change, and the facet row it turns on says the list is narrowed and is
+   * how to get back out. That is the whole of why this is not option (b): the rows on screen are
+   * the same ones surfacing-regardless-of-the-search would have produced, and what differs is that
+   * the collector asked for them rather than the list quietly disobeying its own filter.
+   *
+   * Both entry points run it, so the facet row's count always delivers what it promises — pressing
+   * a row reading `2` under a search hiding both would otherwise narrow to nothing.
+   */
+  function revealMissingPrices() {
+    setSearch("");
+    setType(null);
+    setOnlyMissingPrice(true);
+  }
 
   function toggleSet(s: SetRow, offerPrice: string) {
     setPicked((prev) => {
@@ -300,8 +376,7 @@ export function AddSaleLineDialog({
     setPicked((prev) => ({ ...prev, [offerSetId]: { ...prev[offerSetId], price } }));
   }
 
-  const pickedList = Object.values(picked);
-  const canAdd = !isPending && pickedList.length > 0 && pickedList.every((p) => priceValid(p.price));
+  const canAdd = !isPending && pickedList.length > 0 && missingIds.size === 0;
 
   // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
   // What is subtracted is what the **search and the type facet** produced. A **fold is not a
@@ -350,7 +425,7 @@ export function AddSaleLineDialog({
           }}
         >
           <p style={{ ...FACET_LABEL, marginTop: 0 }}>Type</p>
-          <FacetRow label="All offers" active={type === null} onClick={() => setType(null)} count={byText.length} />
+          <FacetRow label="All offers" active={type === null} onClick={() => setType(null)} count={byMissing.length} />
           <FacetRow label="Single" active={type === "single"} onClick={() => setType(type === "single" ? null : "single")} count={typeCounts.single} />
           <FacetRow label="Quantity" active={type === "quantity"} onClick={() => setType(type === "quantity" ? null : "quantity")} count={typeCounts.quantity} />
 
@@ -360,6 +435,18 @@ export function AddSaleLineDialog({
               <div style={{ padding: "0.375rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
                 {pickedList.length} set{pickedList.length === 1 ? "" : "s"}
               </div>
+              {/* The narrowing's own control, so it is a filter the collector can see is on and can
+                  release — which is what separates this from surfacing the rows behind the search's
+                  back (#1080). It is drawn only while there is something to narrow to, and it
+                  disappears in the same render as the last missing price is filled in. */}
+              {missingIds.size > 0 && (
+                <FacetRow
+                  label="Without a price"
+                  active={showOnlyMissing}
+                  count={missingIds.size}
+                  onClick={() => (showOnlyMissing ? setOnlyMissingPrice(false) : revealMissingPrices())}
+                />
+              )}
             </>
           )}
         </div>
@@ -420,7 +507,12 @@ export function AddSaleLineDialog({
                     />
                   );
                 }
-                const open = q ? true : (expanded[group.offerId] ?? false);
+                // A narrowing that picks out individual sets opens the groups holding them, or the
+                // rows it selected are behind a fold and it has surfaced nothing. The search has
+                // done this since the dialog was written; the *without a price* narrowing is the
+                // same rule and needs no wording of its own — which is why one control answers a
+                // collapsed group and a search alike (#1080).
+                const open = q || showOnlyMissing ? true : (expanded[group.offerId] ?? false);
                 const selectedCount = group.sets.filter((s) => picked[s.offerSetId]).length;
                 return (
                   <QuantityGroup
@@ -451,6 +543,22 @@ export function AddSaleLineDialog({
 
       <DialogFooter>
         {error && <ErrorBubble>{error}</ErrorBubble>}
+        {/* Why the submit is dead, as a **control** rather than a label (#1080). A disabled button
+            gets no click and no hover, so the count cannot ride on the button itself — and a bare
+            count is the half of option (a) the issue objects to, leaving the collector with a
+            number and no route to the rows. Pressing this clears whatever is hiding them and
+            narrows to exactly them. */}
+        {missingIds.size > 0 && (
+          <Tooltip
+            content="Show them — clears the search and any other filter hiding them."
+            style={{ marginRight: "auto" }}
+            align="start"
+          >
+            <button type="button" onClick={revealMissingPrices} style={MISSING_PRICE_BTN}>
+              <Icon name="warning" size="sm" /> {missingPriceLabel(missingIds.size)}
+            </button>
+          </Tooltip>
+        )}
         <DialogSecondaryButton onClick={onClose}>Cancel</DialogSecondaryButton>
         <DialogPrimaryButton type="button" onClick={confirm} disabled={!canAdd}>
           {isPending
