@@ -218,6 +218,32 @@ describe("resolving a list of values", () => {
   });
 });
 
+describe("a platform, which resolves like any other vocabulary", () => {
+  // The resolver does not know which vocabulary it was handed — a condition, an area and a platform
+  // are the same problem once you are matching a name — so this is a check that the widened entry
+  // types did not need a second code path, rather than a second resolver.
+  const PLATFORMS: readonly VocabularyEntry[] = [
+    { id: "plat_allegro", name: "Allegro" },
+    { id: "plat_delcampe", name: "Delcampe" },
+  ];
+  const platformContext = { vocabulary: "platform", parameter: "platform" } as const;
+
+  it("resolves by name", () => {
+    assert.equal(resolveVocabularyValue("delcampe", PLATFORMS, platformContext), "plat_delcampe");
+  });
+
+  it("refuses an unknown one with the collection's actual platforms", () => {
+    try {
+      resolveVocabularyValue("eBay", PLATFORMS, platformContext);
+      assert.fail("a platform this collection does not have must be refused");
+    } catch (error) {
+      assert.ok(isApiError(error));
+      assert.deepEqual(error.accepted, ["Allegro", "Delcampe"]);
+      assert.match(error.message, /platform/);
+    }
+  });
+});
+
 describe("the accepted-name list", () => {
   it("puts the abbreviation beside the name where they differ", () => {
     assert.ok(acceptedNames(CONDITIONS).includes("Mint Never Hinged (MNH)"));

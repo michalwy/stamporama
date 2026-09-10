@@ -63,6 +63,27 @@ export interface SubtypeVocabularyEntry extends VocabularyEntry {
   readonly isDefault: boolean;
 }
 
+/**
+ * A marketplace an offer can be drafted against (#196).
+ *
+ * **A `Contact` with `platform: true`, projected down to three fields, and the projection is the
+ * point.** That model is shared with buyers, sellers and exchange partners, so it carries `email`,
+ * `phone`, `fullName` and `notes` — a trading partner's personal details, which an agent has no
+ * business holding for a session. None of them is here, and only rows flagged `platform` are
+ * returned at all.
+ */
+export interface PlatformVocabularyEntry extends VocabularyEntry {
+  /**
+   * The currency every offer and sale routed here is locked to (#196), or `null` where the collector
+   * has not set one yet — which is domain-enforced rather than a database constraint, and is
+   * something an agent should know **before** drafting rather than after being refused.
+   *
+   * This is also why there is no currency vocabulary: an offer never takes a currency, it takes a
+   * platform, and the currency follows from this field.
+   */
+  readonly currency: string | null;
+}
+
 /** A catalog book, flat, with its vendor as an id rather than as a nested object. */
 export interface CatalogVocabularyEntry extends VocabularyEntry {
   /** The vendor whose book this is — join against `catalogVendors` in the same response. */
@@ -76,18 +97,20 @@ export interface CatalogVocabularyEntry extends VocabularyEntry {
  *
  * **One call, one object, and per-vocabulary shapes.** #708 decided *one call*, and that is intact;
  * what it could not decide in advance is that the nine things it names are not the same kind of
- * thing. Six are flat lists, **areas and locations are trees**, and catalog books hang off vendors.
+ * thing. Most are flat lists, **areas and locations are trees**, and catalog books hang off vendors.
  * The trees come back as **flat arrays carrying `parentId`** rather than nested — an agent that
  * wants the tree builds it in three lines, and nesting would repeat every parent's fields down
  * every branch, which is precisely what the context-window constraint forbids.
  *
  * **Currencies are deliberately not here, and the reason is that they are not this kind of thing.**
  * #708's Context justifies the whole endpoint with *all of them are cuid-keyed, and an agent will
- * never guess a cuid* — which is true of the eight below and false of `"EUR"`. Currencies are a
+ * never guess a cuid* — which is true of every vocabulary below and false of `"EUR"`. Currencies are a
  * module-level constant in `src/lib/currencies.ts`, app-wide, not per-collection, not configurable
  * and already known to any model. What the agent actually needs is the **denomination** a figure it
  * reads back is stated in, and that is {@link baseCurrency}: one scalar rather than twenty-five
- * codes it would carry for a whole session and never send.
+ * codes it would carry for a whole session and never send. Where an agent might have thought it was
+ * *choosing* a currency — drafting an offer — it is choosing a {@link platforms} entry, and the
+ * currency is locked from that (#196).
  */
 export interface CollectionVocabulary {
   /**
@@ -109,6 +132,16 @@ export interface CollectionVocabulary {
   readonly locations: readonly TreeVocabularyEntry[];
   readonly catalogVendors: readonly VocabularyEntry[];
   readonly catalogs: readonly CatalogVocabularyEntry[];
+  /**
+   * **Derived from #711's body rather than from #708's list of nine**, and marked as such so that
+   * whoever implements #711 can contradict it. #708's Context names nine vocabularies and platforms
+   * is not among them — but the binding statement is its *Done when*, *one call returns every
+   * vocabulary an operation in #710, #711 or #712 can take as input*, and #711's *draft an offer*
+   * cannot be called without naming a platform. That is the same test that admitted areas,
+   * conditions, locations, formats, certificate statuses and catalog vendors, and the same test
+   * that kept currencies out.
+   */
+  readonly platforms: readonly PlatformVocabularyEntry[];
 }
 
 /** How a vocabulary is named in an error sentence — the agent reads these, so they are English. */
@@ -120,7 +153,8 @@ export type VocabularyName =
   | "area"
   | "location"
   | "catalog vendor"
-  | "catalog";
+  | "catalog"
+  | "platform";
 
 /** Trim and case-fold, so that `"mnh"`, `" MNH "` and `"MNH"` are one value. */
 function fold(value: string): string {
