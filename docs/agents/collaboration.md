@@ -1951,12 +1951,26 @@ job.
 **The heading no longer says *documentation*, and that is the change of 2026-09-08 (#970).** The
 list was named for what its first three entries happened to be; what it actually holds is **paths
 no job in this workflow can say anything about**. `renovate.json` is the fourth and it is not
-documentation: **nothing in this repository reads it** — zero hits across `src/`, `scripts/` and
-`extension/` — because it is consumed by Renovate's service on GitHub, so the four gated jobs never
-had anything to report about a change to it. It is a single filename rather than a glob: `*.json`
+documentation: it is consumed by Renovate's service on GitHub rather than by anything the four
+gated jobs build, typecheck or exercise, so **no job that runs on a `renovate.json`-only pull
+request has a finding to report about it**. It is a single filename rather than a glob: `*.json`
 would sweep in `package.json` and `tsconfig.json`, which is the opposite of what was decided. The
 measurement behind it is small and cuts the same way either direction — `renovate.json` had been
 touched five times in the project's history, four of them with no application file in the diff.
+
+**That sentence used to be grounded on something stronger, and #1116 falsified it on 2026-09-10.**
+It read *"**nothing in this repository reads it** — zero hits across `src/`, `scripts/` and
+`extension/` — because it is consumed by Renovate's service on GitHub, so the four gated jobs never
+had anything to report about a change to it"*, and it is quoted rather than deleted because it was
+true when it was written and will go on arriving in anything copied from it.
+`tests/unit/renovate-never-alone.test.ts` now reads the file, to check that its two never-alone
+lists correspond. **The conclusion is untouched and so is the membership — this is the same
+decision on a corrected premise, not a case for revisiting #970.** The test is why: being inside
+this list is exactly what makes `Unit tests` skip on a `renovate.json`-only pull request, so it is
+a **backstop rather than a gate** and its own comment says so at length. **What the correction
+retires is the word *reads* standing in for the claim that was actually doing the work** — which
+was never about reading at all, but about whether a job that **runs** on such a change has anything
+to say. `ci.yml`'s copy of it was corrected in the same commit.
 
 **The fifth is not gated, and it does run.** `Closing reference check` asks what a pull request
 *says* rather than which files it touches, and both incidents that produced that rule were
