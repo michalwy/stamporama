@@ -17,7 +17,7 @@ import {
 import { useAuctionSales, useInvalidateAuctions, type AuctionSaleView } from "../use-auctions-query";
 import { AuctionSaleFormDialog } from "../auction-sale-form-dialog";
 import { AuctionSaleRow } from "./auction-sale-row";
-import { CONTROL_STYLE, FilterChip } from "../auction-controls";
+import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 
 type DialogState =
   | { kind: "none" }
@@ -145,7 +145,11 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
               it happened to run out of width and dropped *Closed* alone onto a second line, reading
               as a control of its own rather than the third of three. Grouped and `nowrap`, so they
               either sit on the row or move off it whole — and `flexShrink: 0`, so the shrinking is
-              done by the search box, which has a floor of its own to stop at. */}
+              done by the search box, which has a floor of its own to stop at.
+
+              **One axis is also why they take no `toggle`** (#1075): one `status` param, at most
+              one lit, so `aria-pressed` on each would announce three switches where there is one
+              choice. */}
           <span
             style={{
               display: "inline-flex",
@@ -177,7 +181,7 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
             type="button"
             onClick={() => setDialog({ kind: "add" })}
             style={{
-              ...CONTROL_STYLE,
+              ...FILTER_CONTROL_STYLE,
               cursor: "pointer",
               fontWeight: 600,
               color: "#fff",

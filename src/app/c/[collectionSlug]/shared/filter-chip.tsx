@@ -16,6 +16,11 @@ export const FILTER_CONTROL_STYLE: React.CSSProperties = {
  * A single toggle chip in a list toolbar (#332) — the offers list's status filter and the sales
  * list's (#392) are one control, so they are one component: a second copy would drift the moment
  * either grew a state.
+ *
+ * It did drift, and that is why this docblock says so: the auction screens carried their own copy
+ * from #351 until #1075, and by then the two had diverged in both directions — the shared one had
+ * grown `alarm` and `toggle`, the auctions one #558's non-breaking rule below, and neither knew
+ * about the other. The copy is gone; this is the only `FilterChip`.
  */
 export function FilterChip({
   label,
@@ -60,6 +65,14 @@ export function FilterChip({
         display: "inline-flex",
         alignItems: "center",
         gap: "0.375rem",
+        // A chip is one word for one filter: it may leave the row, but it must not break in half
+        // (#558). Its label is what it is, so there is nothing to gain by letting a squeezed
+        // toolbar reflow it into two lines of a control two lines tall. Carried here from the
+        // auction copy this component absorbed (#1075) — the rule is about chips rather than about
+        // that screen, and the toolbars already on this component have labels long enough to break
+        // (`Sold, not recorded`, `Changed since listed`, `No catalog value`).
+        whiteSpace: "nowrap",
+        flexShrink: 0,
         fontWeight: active || alarm ? 600 : 400,
         color: tint ? `var(--color-${tint})` : "var(--color-text-secondary)",
         borderColor: tint ? `var(--color-${tint})` : "var(--color-border-strong)",
