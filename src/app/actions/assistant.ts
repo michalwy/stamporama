@@ -5,6 +5,12 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createAssistantToken, revokeAssistantToken } from "@/lib/api-tokens";
 import { createAssistantRegistrationCode } from "@/lib/assistant-registration";
+import {
+  isAssistantTokenKind,
+  isAssistantTokenScope,
+  ASSISTANT_TOKEN_KINDS,
+  ASSISTANT_TOKEN_SCOPES,
+} from "@/lib/assistant-token-scope";
 
 // Server actions behind Settings → Assistant (#252, part of #155): the one-click registration the
 // extension consumes, plus the manual token generate/revoke it coexists with (a token is still
@@ -52,14 +58,42 @@ export type AssistantTokenCreateState =
   | { status: "success"; token: string }
   | { status: "error"; message: string };
 
+/**
+ * Mint a token by hand, with the scope and the client kind the form chose (#707).
+ *
+ * Both are **rejected** rather than defaulted when the value is not one this build knows: the two
+ * pickers offer exactly these values, so anything else is a form that was tampered with or a stale
+ * page, and quietly widening either one is how a token ends up with more reach than the collector
+ * chose. That is the opposite call from the one the stored-row readers make, and for the opposite
+ * reason — a stored row that predates the column has to go on working, and a form field has no such
+ * claim on us.
+ */
 export async function createAssistantTokenAction(
   collectionId: string,
   formData: FormData
 ): Promise<AssistantTokenCreateState> {
   const session = await getSession();
   const label = ((formData.get("label") as string | null) ?? "").trim();
+  const scope = formData.get("scope");
+  const kind = formData.get("kind");
+  if (!isAssistantTokenScope(scope)) {
+    return {
+      status: "error",
+      message: `Choose what the token may do: ${ASSISTANT_TOKEN_SCOPES.join(" or ")}.`,
+    };
+  }
+  if (!isAssistantTokenKind(kind)) {
+    return {
+      status: "error",
+      message: `Choose what the token is for: ${ASSISTANT_TOKEN_KINDS.join(" or ")}.`,
+    };
+  }
   try {
-    const { token } = await createAssistantToken(session.user.id, collectionId, label || null);
+    const { token } = await createAssistantToken(session.user.id, collectionId, {
+      label: label || null,
+      scope,
+      kind,
+    });
     return { status: "success", token };
   } catch {
     return { status: "error", message: "Failed to generate token. Please try again." };

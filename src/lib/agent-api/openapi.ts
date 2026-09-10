@@ -218,6 +218,8 @@ export function buildOpenApiDocument(
         "",
         `Lists return at most ${MAX_LIST_LIMIT} rows (${DEFAULT_LIST_LIMIT} by default) and always state the full \`total\`, so a trimmed answer is visible as one.`,
         "",
+        "A token carries a scope. An operation marked `x-stamporama-writes` needs a `read_write` token; a `read` token is refused on one with `403 forbidden`, and the refusal names the scope that would have worked. Nothing here can widen a token — the collector mints one in Settings → Assistant.",
+        "",
         `Running build: ${options.appVersion}.`,
       ].join("\n"),
     },

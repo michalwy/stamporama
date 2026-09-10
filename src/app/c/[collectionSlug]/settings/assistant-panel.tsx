@@ -16,7 +16,17 @@ import {
   type AssistantActionState,
 } from "@/app/actions/assistant";
 import type { AssistantTokenData } from "@/lib/api-tokens";
+import {
+  ASSISTANT_TOKEN_KINDS,
+  ASSISTANT_TOKEN_KIND_LABELS,
+  ASSISTANT_TOKEN_SCOPES,
+  ASSISTANT_TOKEN_SCOPE_LABELS,
+  WIDEST_ASSISTANT_TOKEN_SCOPE,
+  type AssistantTokenKind,
+  type AssistantTokenScope,
+} from "@/lib/assistant-token-scope";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Icon } from "@/app/icons";
 
@@ -30,6 +40,13 @@ import { Icon } from "@/app/icons";
 //    `apiBaseUrl` is necessarily correct — which is also what tells a dev server apart from the
 //    Raspberry Pi without anyone having to remember which is which.
 // 2. **A token by hand** — for a script, curl, or a browser without the extension.
+//
+// Since #707 a token also says **how far it reaches** (`read` / `read_write`) and **what it is
+// for** (`extension` / `agent`), both chosen when it is minted by hand and both shown on its row.
+// The vocabulary comes from the pure `assistant-token-scope.ts` rather than from `api-tokens.ts`,
+// which carries `server-only` and cannot be imported from a client component at all. Registering
+// the extension mints `extension` + `read_write` without asking, because that is what the extension
+// has always had and the exchange has nobody to ask.
 //
 // The extension reports the outcome back by setting `data-registration-state` /
 // `-message` on the payload element; a MutationObserver turns that into the status shown here.
@@ -69,6 +86,52 @@ const primaryButtonStyle: React.CSSProperties = {
   fontSize: "0.875rem",
   fontWeight: 500,
   cursor: "pointer",
+};
+
+const SELECT_STYLE: React.CSSProperties = { ...INPUT_STYLE, cursor: "pointer" };
+
+/**
+ * The small chip on a token's row. Two of them, and they answer different questions: the scope is
+ * what the token may do and the kind is what it was minted for, so the scope is the one that is
+ * coloured — `read_write` in warning tones because it is the one that can change something.
+ */
+function tokenChipStyle(tone: "neutral" | "warning" | "info"): React.CSSProperties {
+  const palette = {
+    neutral: ["--color-bg-muted", "--color-border", "--color-text-secondary"],
+    warning: ["--color-warning-soft", "--color-warning-border", "--color-warning"],
+    info: ["--color-info-soft", "--color-info-border", "--color-info"],
+  }[tone];
+  return {
+    display: "inline-block",
+    padding: "0.1rem 0.45rem",
+    borderRadius: "0.3rem",
+    fontSize: "0.6875rem",
+    fontWeight: 600,
+    lineHeight: 1.5,
+    whiteSpace: "nowrap",
+    background: `var(${palette[0]})`,
+    border: `1px solid var(${palette[1]})`,
+    color: `var(${palette[2]})`,
+  };
+}
+
+/**
+ * What the by-hand dialog offers first. A token minted here is nearly always for something that
+ * cannot register itself — a script, or an agent — and the extension has its own one-click path
+ * above, so `agent` is the honest default for this dialog rather than a preference.
+ */
+const DEFAULT_TOKEN_KIND: AssistantTokenKind = "agent";
+
+/** What each scope actually permits, in one sentence, on hover. */
+const SCOPE_HINTS: Record<AssistantTokenScope, string> = {
+  read: "May read this collection through the agent API. Anything that would change something is refused.",
+  read_write: "May read and change this collection, and write to Colnect through the extension.",
+};
+
+/** What each client kind is, in one sentence, on hover. It is a label and never a permission. */
+const KIND_HINTS: Record<AssistantTokenKind, string> = {
+  extension: "Minted for the Stamporama Assistant browser extension.",
+  agent: "Minted for an AI agent or a script calling /api/v1.",
 };
 
 const helpTextStyle: React.CSSProperties = {
@@ -373,11 +436,23 @@ export function AssistantPanel({
               >
                 <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
                   {token.label || <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>Unlabelled token</span>}
-                  <span style={{ display: "block", fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 400, marginTop: "0.15rem" }}>
-                    {/* ISO date slice (UTC) — locale/timezone formatting mismatches between SSR and
-                        the client and breaks hydration near midnight. */}
-                    Created {token.createdAt.slice(0, 10)}
-                    {token.lastUsedAt ? ` · last used ${token.lastUsedAt.slice(0, 10)}` : " · never used"}
+                  <span style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 400, marginTop: "0.3rem" }}>
+                    <Tooltip content={KIND_HINTS[token.kind]}>
+                      <span style={tokenChipStyle("neutral")}>
+                        {ASSISTANT_TOKEN_KIND_LABELS[token.kind]}
+                      </span>
+                    </Tooltip>
+                    <Tooltip content={SCOPE_HINTS[token.scope]}>
+                      <span style={tokenChipStyle(token.scope === "read_write" ? "warning" : "info")}>
+                        {ASSISTANT_TOKEN_SCOPE_LABELS[token.scope]}
+                      </span>
+                    </Tooltip>
+                    <span>
+                      {/* ISO date slice (UTC) — locale/timezone formatting mismatches between SSR
+                          and the client and breaks hydration near midnight. */}
+                      Created {token.createdAt.slice(0, 10)}
+                      {token.lastUsedAt ? ` · last used ${token.lastUsedAt.slice(0, 10)}` : " · never used"}
+                    </span>
                   </span>
                 </span>
                 <RowActionsMenu
@@ -416,8 +491,52 @@ export function AssistantPanel({
                   style={INPUT_STYLE}
                 />
                 <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
-                  A name to recognise this token later. The token grants write access to this
-                  collection&rsquo;s Colnect matcher — treat it like a password.
+                  A name to recognise this token later. Treat the token itself like a password.
+                </p>
+              </div>
+
+              <div style={{ marginTop: "1.25rem" }}>
+                <LabelWithError htmlFor="f-token-kind">What is it for?</LabelWithError>
+                <select
+                  id="f-token-kind"
+                  name="kind"
+                  defaultValue={DEFAULT_TOKEN_KIND}
+                  disabled={isPending}
+                  style={SELECT_STYLE}
+                >
+                  {ASSISTANT_TOKEN_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {ASSISTANT_TOKEN_KIND_LABELS[kind]}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
+                  A label, so you can tell one line of this list from another. It does not change
+                  what the token may do &mdash; that is the next question. The extension normally
+                  connects itself with <em>Connect Stamporama Assistant</em> above.
+                </p>
+              </div>
+
+              <div style={{ marginTop: "1.25rem" }}>
+                <LabelWithError htmlFor="f-token-scope">What may it do?</LabelWithError>
+                <select
+                  id="f-token-scope"
+                  name="scope"
+                  defaultValue={WIDEST_ASSISTANT_TOKEN_SCOPE}
+                  disabled={isPending}
+                  style={SELECT_STYLE}
+                >
+                  {ASSISTANT_TOKEN_SCOPES.map((scope) => (
+                    <option key={scope} value={scope}>
+                      {ASSISTANT_TOKEN_SCOPE_LABELS[scope]}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
+                  <strong>Read only</strong> is the one to hand to something you are still trying
+                  out: it can look at this collection and nothing more, and anything that would
+                  change something is refused. <strong>Read and write</strong> is what the extension
+                  needs, and what a token had before this choice existed.
                 </p>
               </div>
             </DialogBody>

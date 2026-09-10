@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { auth } from "./auth";
 import { verifyAssistantToken } from "./api-tokens";
+import { assertOperationScope, type ScopedOperation } from "./agent-api/scope";
+import type { AssistantTokenScope } from "./assistant-token-scope";
 
 // Shared authorization for collection API routes that both a signed-in user (Better Auth session)
 // and the Stamporama Assistant extension (bearer token, #253) may call. The extension runs
@@ -32,10 +34,12 @@ export async function resolveCollectionOwner(
   return verified.ownerId;
 }
 
-/** Who a `/api/v1` call is acting as, and on which collection. */
+/** Who a `/api/v1` call is acting as, on which collection, and how far its token reaches. */
 export interface AgentApiCaller {
   readonly ownerId: string;
   readonly collectionId: string;
+  /** `read` or `read_write` (#707). Checked by `assertAgentApiScope`, never by a handler. */
+  readonly scope: AssistantTokenScope;
 }
 
 /**
@@ -62,5 +66,31 @@ export async function resolveAgentApiCaller(request: NextRequest): Promise<Agent
 
   const verified = await verifyAssistantToken(match[1]);
   if (!verified) return null;
-  return { ownerId: verified.ownerId, collectionId: verified.collectionId };
+  return {
+    ownerId: verified.ownerId,
+    collectionId: verified.collectionId,
+    scope: verified.scope,
+  };
+}
+
+/**
+ * Refuse a caller whose token does not reach far enough for the operation it picked (#707).
+ *
+ * **This is where the two halves meet, and it is here rather than in a handler on purpose.** The
+ * scope is the token's — `resolveAgentApiCaller` above derives it from the credential, the same way
+ * it derives the collection — and `writes` is the operation's, declared once in the registry. A
+ * handler checking its own scope would be the authorization living in the caller, which is the
+ * thing this file exists to prevent; and an operation that writes and forgets to check would be a
+ * security defect with no test that could see it.
+ *
+ * The dispatcher calls this after it has resolved the operation and before it parses a parameter.
+ * Ordering both ways round: a `read` token is already authenticated, so nothing is leaked by
+ * telling it the operation exists — and there is no reason to hand it parameter feedback for a call
+ * it may not make.
+ *
+ * The decision and the sentence are in `agent-api/scope.ts`, on the pure side, so a unit test can
+ * hold them; this function is the enforcement point and nothing else.
+ */
+export function assertAgentApiScope(caller: AgentApiCaller, operation: ScopedOperation): void {
+  assertOperationScope(caller.scope, operation);
 }

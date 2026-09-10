@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken, revokeAssistantToken } from "../../src/lib/api-tokens";
-import { resolveAgentApiCaller } from "../../src/lib/route-auth";
+import { assertAgentApiScope, resolveAgentApiCaller } from "../../src/lib/route-auth";
+import { isApiError } from "../../src/lib/agent-api/errors";
+import type { Operation } from "../../src/lib/agent-api/types";
 
 // `/api/v1` carries **no collection id in any path** (#706, ADR-0050), and this is the function that
 // makes that safe: the collection is derived from the token rather than supplied by the caller.
@@ -11,7 +13,12 @@ import { resolveAgentApiCaller } from "../../src/lib/route-auth";
 // It is worth an integration test rather than a unit one for the reason `api-tokens.test.ts` is —
 // the whole claim is about a real row in a real database, hashed and looked up — and it is worth a
 // test at all because it is the only thing standing between an agent token and a collection.
-// #707 builds scope enforcement on top of it.
+// #707 builds scope enforcement on top of it, and that half is here for the same reason: the scope
+// is a column on a real hashed row, so the claim *a `read` token is refused on a writing operation*
+// is only worth anything when the token was actually minted and read back through the database. The
+// decision itself is pure and is exercised over both directions in
+// `tests/unit/agent-api-scope.test.ts`; the operations are fixtures because #706 ships none, and
+// adding one to make the test real would breach its *Out of scope*.
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -25,6 +32,10 @@ async function createTestUser(suffix: string) {
     },
   });
 }
+
+/** Stand-ins for the operations #710 will add. `writes` is the only field the check reads. */
+const READING: Pick<Operation, "name" | "writes"> = { name: "find_unlisted_copies", writes: false };
+const WRITING: Pick<Operation, "name" | "writes"> = { name: "set_offer_price", writes: true };
 
 /** A request carrying whatever `Authorization` header the case is about, and nothing else. */
 function request(authorization?: string): NextRequest {
@@ -66,7 +77,11 @@ describe("agent API caller resolution", () => {
   });
 
   it("derives the collection from the token, so no path has to carry one", async () => {
-    const { token } = await createAssistantToken(userId, collectionId, "agent");
+    const { token } = await createAssistantToken(userId, collectionId, {
+      label: "agent",
+      scope: "read",
+      kind: "agent",
+    });
     const caller = await resolveAgentApiCaller(request(`Bearer ${token}`));
     assert.ok(caller);
     assert.equal(caller.collectionId, collectionId);
@@ -76,8 +91,16 @@ describe("agent API caller resolution", () => {
   it("gives each token its own collection, and never the other one", async () => {
     // The point of removing the id from the path: two tokens of one owner still answer differently,
     // and neither can be pointed at the other's collection because there is nothing to point with.
-    const mine = await createAssistantToken(userId, collectionId, "mine");
-    const theirs = await createAssistantToken(userId, otherCollectionId, "theirs");
+    const mine = await createAssistantToken(userId, collectionId, {
+      label: "mine",
+      scope: "read_write",
+      kind: "agent",
+    });
+    const theirs = await createAssistantToken(userId, otherCollectionId, {
+      label: "theirs",
+      scope: "read_write",
+      kind: "agent",
+    });
     const a = await resolveAgentApiCaller(request(`Bearer ${mine.token}`));
     const b = await resolveAgentApiCaller(request(`Bearer ${theirs.token}`));
     assert.equal(a?.collectionId, collectionId);
@@ -96,14 +119,77 @@ describe("agent API caller resolution", () => {
   });
 
   it("takes the scheme case-insensitively, as HTTP requires", async () => {
-    const { token } = await createAssistantToken(userId, collectionId, "case");
+    const { token } = await createAssistantToken(userId, collectionId, {
+      label: "case",
+      scope: "read_write",
+      kind: "extension",
+    });
     assert.ok(await resolveAgentApiCaller(request(`bearer ${token}`)));
   });
 
   it("refuses a revoked token", async () => {
-    const { token, record } = await createAssistantToken(userId, collectionId, "revoked");
+    const { token, record } = await createAssistantToken(userId, collectionId, {
+      label: "revoked",
+      scope: "read_write",
+      kind: "agent",
+    });
     assert.ok(await resolveAgentApiCaller(request(`Bearer ${token}`)));
     await revokeAssistantToken(userId, collectionId, record.id);
     assert.equal(await resolveAgentApiCaller(request(`Bearer ${token}`)), null);
+  });
+
+  it("carries the token's own scope through to the caller (#707)", async () => {
+    const read = await createAssistantToken(userId, collectionId, {
+      label: "read",
+      scope: "read",
+      kind: "agent",
+    });
+    const write = await createAssistantToken(userId, collectionId, {
+      label: "write",
+      scope: "read_write",
+      kind: "extension",
+    });
+    assert.equal((await resolveAgentApiCaller(request(`Bearer ${read.token}`)))?.scope, "read");
+    assert.equal(
+      (await resolveAgentApiCaller(request(`Bearer ${write.token}`)))?.scope,
+      "read_write"
+    );
+  });
+
+  it("refuses a read token on a writing operation, and accepts it on a reading one", async () => {
+    const { token } = await createAssistantToken(userId, collectionId, {
+      label: "read-only agent",
+      scope: "read",
+      kind: "agent",
+    });
+    const caller = await resolveAgentApiCaller(request(`Bearer ${token}`));
+    assert.ok(caller);
+
+    // The reading half first: a `read` token is an ordinary caller everywhere it is allowed, and a
+    // scope check that refused everything would pass the other assertion for the wrong reason.
+    assert.doesNotThrow(() => assertAgentApiScope(caller, READING));
+
+    let thrown: unknown;
+    try {
+      assertAgentApiScope(caller, WRITING);
+    } catch (error) {
+      thrown = error;
+    }
+    assert.ok(isApiError(thrown), "the refusal is an ApiError the dispatcher renders");
+    assert.equal(thrown.code, "forbidden");
+    assert.equal(thrown.status, 403);
+    assert.match(thrown.message, /read_write/);
+  });
+
+  it("lets a read_write token through on both", async () => {
+    const { token } = await createAssistantToken(userId, collectionId, {
+      label: "full agent",
+      scope: "read_write",
+      kind: "agent",
+    });
+    const caller = await resolveAgentApiCaller(request(`Bearer ${token}`));
+    assert.ok(caller);
+    assert.doesNotThrow(() => assertAgentApiScope(caller, READING));
+    assert.doesNotThrow(() => assertAgentApiScope(caller, WRITING));
   });
 });

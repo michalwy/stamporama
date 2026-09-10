@@ -48,7 +48,14 @@ describe("assistant registration codes", () => {
     assert.equal(redeemed.collectionName, "Registered");
 
     const verified = await verifyAssistantToken(redeemed.token);
-    assert.deepEqual(verified, { collectionId, ownerId: userId });
+    // Registration is the extension connecting itself, so the token it mints is what the extension
+    // has always had (#707): narrowing it here would break the Colnect writes it exists to enable.
+    assert.deepEqual(verified, {
+      collectionId,
+      ownerId: userId,
+      scope: "read_write",
+      kind: "extension",
+    });
   });
 
   it("a redeemed token is listed and revocable like any other", async () => {

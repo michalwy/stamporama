@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveAgentApiCaller } from "@/lib/route-auth";
+import { assertAgentApiScope, resolveAgentApiCaller } from "@/lib/route-auth";
 import { errorResponseBody, invalidRequest, methodNotAllowed, unauthorized, unknownOperation } from "@/lib/agent-api/errors";
 import { parseParameters } from "@/lib/agent-api/params";
 import { allowedMethods, matchPath, pickMethod } from "@/lib/agent-api/registry";
@@ -70,6 +70,12 @@ async function handle(
     }
 
     const { operation, pathValues } = picked;
+
+    // #707: a `read` token is refused here, on the operation's own `writes` declaration. After the
+    // lookup, because the answer depends on which operation was picked; before the parsing, because
+    // there is no point validating parameters for a call that is not going to be made.
+    assertAgentApiScope(caller, operation);
+
     const specs =
       operation.result.kind === "list"
         ? [...operation.parameters, ...LIST_PARAMETERS]

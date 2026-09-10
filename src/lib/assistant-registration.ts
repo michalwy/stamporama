@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "./db";
 import { createAssistantToken } from "./api-tokens";
+import { LEGACY_ASSISTANT_TOKEN_KIND, WIDEST_ASSISTANT_TOKEN_SCOPE } from "./assistant-token-scope";
 
 // One-time registration codes for the Stamporama Assistant extension (#252, part of #155).
 //
@@ -95,11 +96,14 @@ export async function redeemAssistantRegistrationCode(
   });
   if (claimed.count !== 1) return null;
 
-  const { token } = await createAssistantToken(
-    row.collection.ownerId,
-    row.collection.id,
-    REGISTERED_TOKEN_LABEL
-  );
+  // An extension token with the full reach the extension has always had (#707). Registration is
+  // the extension connecting itself, so there is nobody to ask and nothing to choose: narrowing it
+  // here would break the Colnect writes this exchange exists to enable.
+  const { token } = await createAssistantToken(row.collection.ownerId, row.collection.id, {
+    label: REGISTERED_TOKEN_LABEL,
+    scope: WIDEST_ASSISTANT_TOKEN_SCOPE,
+    kind: LEGACY_ASSISTANT_TOKEN_KIND,
+  });
 
   return {
     token,

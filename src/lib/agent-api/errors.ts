@@ -121,6 +121,16 @@ export function unauthorized(message: string): ApiError {
   return new ApiError("unauthorized", message);
 }
 
+/**
+ * The credential is valid but not allowed to do this — a `read` token on a writing operation
+ * (#707). `accepted` carries the scopes that would have worked, which is the same argument the
+ * rejected-vocabulary case makes: an agent told only *no* retries blind, and an agent told which
+ * scope it would need can say so to the collector in one sentence.
+ */
+export function forbidden(message: string, accepted?: readonly string[]): ApiError {
+  return new ApiError("forbidden", message, accepted);
+}
+
 /** The operation ran and the thing it was asked about is not in this collection. */
 export function notFound(message: string): ApiError {
   return new ApiError("not_found", message);

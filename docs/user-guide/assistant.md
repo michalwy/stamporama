@@ -46,6 +46,36 @@ shows the active one in a coloured badge, so it is always clear where a match wi
 
 You can revoke a connection at any time from the same **Settings → Assistant** screen.
 
+## Tokens, and what each one may do
+
+Every connection is a **token**, and **Settings → Assistant** lists them all — the ones the Assistant
+created for itself when you connected it, and any you made by hand. Revoking one cuts off whatever
+is using it, immediately.
+
+Each row carries two chips, and they answer different questions. Hover either for a sentence.
+
+**What it is for** — *Extension* or *Agent*. This is a label, so you can tell one line of the list
+from another; it does not change what the token may do.
+
+**What it may do** — *Read only* or *Read and write*.
+
+- **Read and write** is the full thing: it can look at this collection, change it, and write to
+  Colnect through the Assistant. Connecting the Assistant makes one of these, because that is what
+  the Assistant needs in order to do its work — nothing about connecting has changed.
+- **Read only** can look at this collection and nothing more. Anything that would change something
+  is refused, and the refusal says which kind of token would have been needed. It cannot widen
+  itself: you are the only one who can hand out a token that writes.
+
+**Read only is the one to hand to an AI agent you are still trying out**, or to anything you want to
+show your collection to without letting it touch anything.
+
+To make a token by hand — for a script, an agent, or a browser without the Assistant — choose
+**Generate token by hand** and pick both. The token is shown **only once**: copy it then, and if you
+lose it, revoke it and make another.
+
+Every token that existed before this choice arrived is an **Extension** token that can **read and
+write** — which is exactly what it could do before, so nothing you already have stopped working.
+
 ## Matching from an offer
 
 The Assistant is usually started from a Colnect page you are already on. It also works the other way
