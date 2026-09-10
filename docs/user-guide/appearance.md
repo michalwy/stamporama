@@ -32,3 +32,23 @@ that would be the same news twice. Rows added to a list you are looking at flash
 
 Things that went **wrong** are not reported this way. A form that could not be saved says so inside
 the form, next to the field that caused it, and stays there until you deal with it.
+
+## Reduced motion
+
+If your operating system is set to **reduce motion**, Stamporama takes the animation out rather
+than slowing it down.
+
+- Rows and cards that would flash as they arrive simply appear, with no tint and no outline.
+- A confirmation note appears without sliding in from the edge. It is still shown — it is the
+  message, not the movement.
+- When the app takes you somewhere — a lot you clicked through to, the first line that needs
+  attention on a trade — the page **jumps** to it rather than gliding.
+
+There is nothing to configure here: Stamporama reads the setting your system already has, and
+follows it as soon as you change it.
+
+**One consequence is worth stating, because it is a choice and not an omission.** With the flash
+gone, nothing else is put in its place — no ring, no marker to dismiss. What tells you that you
+have arrived is the page having moved and the card being open, and on a purchase order also the
+copies view having gone back to **Lot**. On an auction sale there is no equivalent, so the arrival
+there is quieter still.

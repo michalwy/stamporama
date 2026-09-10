@@ -136,6 +136,7 @@ import {
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
+import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { Icon } from "@/app/icons";
 import {
@@ -2288,10 +2289,12 @@ function LotCard({
 
   // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
   // default: this card's own header is sticky, so a card scrolled to the top edge would sit under
-  // the toolbar it just scrolled past.
+  // the toolbar it just scrolled past. Through `shared/motion.ts`, which decides gliding or instant
+  // from `prefers-reduced-motion` — under that preference the flash is suppressed too, and a page
+  // smooth-scrolling itself would have been the one piece of motion left (#1022).
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (arrivedNow) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (arrivedNow) scrollIntoView(cardRef.current, { block: "center" });
   }, [arrivedNow]);
 
   const copy = useCopyEditing({
