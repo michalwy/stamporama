@@ -4258,6 +4258,15 @@ export interface ComposeTargetOffer {
   offerId: string;
   platformId: string;
   platformName: string;
+  /** The stored listing title (#209), or null while the offer has none. The row's **primary**
+   * label, spelled `name ?? label` exactly as the offers list and every other offer surface spells
+   * it (#1023) — the picker used to read the derived label alone, so a listing could not be found
+   * by the title the collector had written on it, while the search box promised *by offer*. */
+  name: string | null;
+  /** Label derived from the offer's sets. The primary label while `name` is null, and the
+   * **secondary** line beneath it once there is one — a collector who recognises a listing by its
+   * contents rather than by its title still can. Kept as its own field rather than concatenated
+   * onto the title: one joined string truncates worse and gives the search nothing to aim at. */
   label: string;
   price: string;
   currency: string;
@@ -4285,15 +4294,20 @@ const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, act
  * What the picker draws of an offer, and nothing else (#867).
  *
  * `OFFER_SELECT` served this read until the picker's opening cost was measured: the picker prints a
- * label, a platform, a price and a state, so the auction pair, the drift and listing dates, the
- * bidder count and the per-set `saleLines` probe were all read and thrown away. What it adds is the
- * two fields the set's own search keys need — the copy's location ref and its stamp's issue *name*
- * — neither of which belongs in the shared select, since no other reader of a set searches it.
+ * title, a derived label, a platform, a price and a state, so the auction pair, the drift and
+ * listing dates, the bidder count and the per-set `saleLines` probe were all read and thrown away.
+ * What it adds is the two fields the set's own search keys need — the copy's location ref and its
+ * stamp's issue *name* — neither of which belongs in the shared select, since no other reader of a
+ * set searches it.
  *
  * A superset of `STAMP_LABEL_SELECT`, because the labeller names these sets.
  */
 const COMPOSE_TARGET_SELECT = {
   id: true,
+  // The stored listing title (#1023). A scalar on a row this read already loads: no join, no
+  // enrichment pass, and nothing else here widens — #867 narrowed this select for the picker's
+  // opening time and that measurement still stands.
+  name: true,
   platformId: true,
   price: true,
   currency: true,
@@ -4398,6 +4412,7 @@ export async function listComposeTargets(
         offerId: r.id,
         platformId: r.platformId,
         platformName: r.platform.name,
+        name: r.name,
         label: labeller.offer(r.sets),
         price: r.price.toFixed(2),
         currency: r.currency,

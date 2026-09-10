@@ -8,6 +8,7 @@ import {
   findStampConditionCollisions,
   listComposeTargetSetCopies,
   listComposeTargets,
+  patchOffer,
 } from "../../src/lib/offers";
 import { catalogKeyMatches } from "../../src/lib/catalog-number";
 
@@ -203,6 +204,31 @@ describe("Add-to-offer picker targets (#867)", () => {
   it("reads a set outside the collection as absent rather than as somebody else's copies", async () => {
     assert.equal(await listComposeTargetSetCopies(userId, collectionId, foreignSetId), null);
     assert.equal(await listComposeTargetSetCopies(userId, collectionId, "no-such-set"), null);
+  });
+
+  // The row's two labels (#1023). The picker used to read the derived label alone, so a listing
+  // could not be found by the title the collector had written on it — while the search box's
+  // placeholder promised *by offer*. Both halves are checked here because they are one behaviour:
+  // the field the row prints and the field the box matches are the same field.
+  it("carries the offer's stored title beside the derived label, and null while it has none", async () => {
+    const stored = await prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { name: true },
+    });
+    const { offer } = await theSet();
+    assert.equal(offer.name, stored.name, "the picker reports the title the offer actually holds");
+    // The derived label keeps its own field whatever the title says: it is the row's second line
+    // once there is a title, and its first line while there is not. Never concatenated into one.
+    assert.equal(offer.label, offer.sets[0].label, "one set reads as that set's label");
+
+    await patchOffer(userId, offerId, { name: "Poland definitives — dealer lot" });
+    const titled = (await theSet()).offer;
+    assert.equal(titled.name, "Poland definitives — dealer lot");
+    assert.equal(titled.label, offer.label, "the derived label is untouched by the title");
+
+    // Blank clears it back to null and the row falls back to the derived label alone (#209).
+    await patchOffer(userId, offerId, { name: null });
+    assert.equal((await theSet()).offer.name, null);
   });
 
   it("still reports the stamp × condition collision, from the source the chip reads (#513/#732)", async () => {
