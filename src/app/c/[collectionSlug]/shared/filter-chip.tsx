@@ -65,12 +65,12 @@ export function FilterChip({
         display: "inline-flex",
         alignItems: "center",
         gap: "0.375rem",
-        // A chip is one word for one filter: it may leave the row, but it must not break in half
-        // (#558). Its label is what it is, so there is nothing to gain by letting a squeezed
-        // toolbar reflow it into two lines of a control two lines tall. Carried here from the
-        // auction copy this component absorbed (#1075) — the rule is about chips rather than about
-        // that screen, and the toolbars already on this component have labels long enough to break
-        // (`Sold, not recorded`, `Changed since listed`, `No catalog value`).
+        // A chip is a single token: it may leave the row, but it must not break in half (#558).
+        // Carried here from the auction copy this component absorbed (#1075) — the rule is about
+        // chips rather than about that screen, and `ui-shell.md` states the same one in these same
+        // two properties for the Areas row (#675/#775). The reasoning is in `ui-patterns.md`, under
+        // the shared filter controls; what matters here is that both are inert while a row fits, so
+        // they cost the toolbars already on this component nothing.
         whiteSpace: "nowrap",
         flexShrink: 0,
         fontWeight: active || alarm ? 600 : 400,
