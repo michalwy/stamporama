@@ -6,7 +6,10 @@ import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
-import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import {
+  LIST_BANNER_STYLE,
+  STICKY_TOOLBAR_STYLE,
+} from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
@@ -18,7 +21,9 @@ import {
   AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_OUTCOME_LABEL,
   isAuctionLotOutcome,
+  type AuctionLotOutcome,
 } from "@/lib/auction-rules";
+import { lotNarrowings, type LotNarrowing } from "./lot-params";
 import {
   useAuctionLotCounts,
   useAuctionLotExposure,
@@ -99,6 +104,10 @@ export function AuctionLotsPanel({
 
   // Remembered filter selections, per collection, with the URL winning whenever it carries one —
   // the offers list's rule (#325), so a shared link still means exactly what it says.
+  //
+  // **Every filter on this list is remembered** — the user's decision of 2026-09-10 (#1018). Four
+  // of them were deliberately URL-only until then, and the arguments for that are kept below,
+  // marked superseded, rather than deleted: they were weighed and overridden, not overlooked.
   const [storedOutcome, rememberOutcome] = usePersistedCollectionValue("auction-outcome", collectionId);
   const [storedSeller, rememberSeller] = usePersistedCollectionValue("auction-seller", collectionId);
   const [storedPlatform, rememberPlatform] = usePersistedCollectionValue(
@@ -106,6 +115,19 @@ export function AuctionLotsPanel({
     collectionId
   );
   const [storedSearch, rememberSearch] = usePersistedCollectionValue("auction-search", collectionId);
+  const [storedClosing, rememberClosing] = usePersistedCollectionValue(
+    "auction-closing",
+    collectionId
+  );
+  const [storedSignal, rememberSignal] = usePersistedCollectionValue("auction-signal", collectionId);
+  const [storedUndescribed, rememberUndescribed] = usePersistedCollectionValue(
+    "auction-undescribed",
+    collectionId
+  );
+  const [storedDuplicate, rememberDuplicate] = usePersistedCollectionValue(
+    "auction-duplicate",
+    collectionId
+  );
 
   const outcomeRaw = searchParams.has("outcome")
     ? (searchParams.get("outcome") ?? "")
@@ -127,26 +149,44 @@ export function AuctionLotsPanel({
         : "")) ||
     undefined;
 
-  // Closing-time window. Deliberately **not** remembered between visits, unlike the other filters:
-  // "ended" is a job you go and do, and coming back tomorrow to a list silently narrowed to old
-  // lots would hide everything that is actually running.
-  const closingRaw = searchParams.get("closing") ?? "";
+  // Closing-time window.
+  //
+  // **Superseded 2026-09-10 (#1018) — the reasoning is kept, not deleted.** This filter used to be
+  // URL-only, on the argument that *"'ended' is a job you go and do, and coming back tomorrow to a
+  // list silently narrowed to old lots would hide everything that is actually running."* That
+  // hazard is real and does not go away; what changed is that the user weighed it against using
+  // this screen every day and decided the list should come back as he left it. The narrowing is
+  // answered by being **said out loud** instead — the band under the toolbar names every filter in
+  // force and clears them in one press — rather than by refusing to remember it. **Do not "fix"
+  // this back on the strength of the argument above: it has already been made and rejected.**
+  const closingRaw = searchParams.has("closing")
+    ? (searchParams.get("closing") ?? "")
+    : (storedClosing ?? "");
   const closing = CLOSING_WINDOWS.some((w) => w.value === closingRaw)
     ? (closingRaw as AuctionClosingWindow)
     : undefined;
 
-  // Derived-state filter. Like the closing window it lives in the URL only — these are questions
-  // asked of today's list ("what can I still bid on?"), not a view to come back to.
-  const signalRaw = searchParams.get("signal") ?? "";
+  // Derived-state filter. **Superseded 2026-09-10 (#1018)**, same as the window above: it was
+  // URL-only because *"these are questions asked of today's list ('what can I still bid on?'), not
+  // a view to come back to."*
+  const signalRaw = searchParams.has("signal")
+    ? (searchParams.get("signal") ?? "")
+    : (storedSignal ?? "");
   const signal = SIGNALS.some((s) => s.value === signalRaw) ? (signalRaw as LotSignal) : undefined;
 
-  // "What still needs describing?" (#442) — the same kind of question, so the same URL-only rule:
-  // it is a batch of work to sit down to, not the shape the list should keep having tomorrow.
-  const undescribed = searchParams.get("undescribed") === "1" || undefined;
+  // "What still needs describing?" (#442). **Superseded 2026-09-10 (#1018)**: it was URL-only
+  // because *"it is a batch of work to sit down to, not the shape the list should keep having
+  // tomorrow."*
+  const undescribed =
+    (searchParams.has("undescribed") ? searchParams.get("undescribed") : storedUndescribed) === "1" ||
+    undefined;
 
-  // "Am I about to buy the same stamp twice?" (#369) — URL-only for the same reason, and the door
-  // the notification centre's duplicate group opens.
-  const duplicate = searchParams.get("duplicate") === "1" || undefined;
+  // "Am I about to buy the same stamp twice?" (#369). **Superseded 2026-09-10 (#1018)**: it was
+  // URL-only for the same reason as the three above, and it is still the door the notification
+  // centre's duplicate group opens — which is why the URL keeps winning over what is stored.
+  const duplicate =
+    (searchParams.has("duplicate") ? searchParams.get("duplicate") : storedDuplicate) === "1" ||
+    undefined;
 
   // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
@@ -159,8 +199,12 @@ export function AuctionLotsPanel({
   // Lots that are done — won, lost, observed, cancelled — are out of the list unless asked for
   // (#504), the rule the offers list hides its sold and withdrawn listings by (#245). A watchlist is
   // what is still to be decided; everything else is filed, and it accumulates for ever. Remembered
-  // per collection rather than URL-only, because unlike the closing window it is the *shape* the
-  // list should still have tomorrow.
+  // per collection — as every filter on this list now is (#1018); it used to be the one contrasted
+  // against the URL-only closing window, and that contrast has gone.
+  //
+  // It is the one switch that **widens** rather than narrows, which is why the band below never
+  // announces it and why `lotNarrowings` returns nothing for it. *Clear filters* does turn it off,
+  // on the Copies list's rule (#733): a reset puts the screen back to its default.
   const [includeClosed, setIncludeClosed] = usePersistedFlag(
     `stamporama:auctions:includeClosed:${collectionId}`
   );
@@ -263,15 +307,88 @@ export function AuctionLotsPanel({
     });
   }
 
-  const hasActiveFilters =
-    !!outcome ||
-    !!closing ||
-    !!signal ||
-    !!undescribed ||
-    !!duplicate ||
-    !!search ||
-    !!sellerId ||
-    !!platformId;
+  // What is narrowing the list right now, decided by the pure rule in `lot-params.ts` so that a
+  // filter added later cannot slip past the band without somebody having said whether it narrows.
+  const narrowings = useMemo(() => lotNarrowings(filters), [filters]);
+  const hasActiveFilters = narrowings.length > 0;
+
+  /** How the band names one filter — in the words of the control that set it, so the collector can
+   * find the thing to switch off. The seller and platform selects name a contact, so those two are
+   * looked up in the parties already loaded and fall back to the bare word. */
+  function narrowingLabel({ key, value }: LotNarrowing): string {
+    switch (key) {
+      case "outcome":
+        return AUCTION_LOT_OUTCOME_LABEL[value as AuctionLotOutcome] ?? value;
+      case "closing":
+        return CLOSING_WINDOWS.find((w) => w.value === value)?.label ?? value;
+      case "signal":
+        return SIGNALS.find((s) => s.value === value)?.label ?? value;
+      case "undescribed":
+        return "Not described";
+      case "duplicate":
+        return "Duplicate";
+      case "search":
+        return `Search “${value}”`;
+      case "sellerId":
+        return parties?.sellers.find((s) => s.id === value)?.name ?? "Seller";
+      case "platformId":
+        return parties?.platforms.find((p) => p.id === value)?.name ?? "Platform";
+      default:
+        return value;
+    }
+  }
+
+  /**
+   * Back to the whole watchlist in one press (#1018) — the Copies list's *Reset filters* (#733),
+   * and the same three obligations.
+   *
+   * **Every remembered value is cleared in the same breath as the URL**, which is #693's trap and
+   * is not optional here: this screen reads `searchParams.has(key) ? url : stored`, so a parameter
+   * deleted from the address without its stored twin being cleared falls straight back to the
+   * remembered value and re-applies the filter that was just switched off. Now that all ten are
+   * remembered, that is true of every one of them rather than of four.
+   *
+   * `includeClosed` goes back to its default even though it **widens** the list: a reset restores
+   * the screen, and the Copies list resets its two *Include* switches for the same reason.
+   * `groupBySale` is left alone — a grouping is how the rows are read, not what the list holds,
+   * which is the line the Copies list draws around its own grouping.
+   */
+  const resetFilters = useCallback(() => {
+    rememberOutcome("");
+    rememberSeller("");
+    rememberPlatform("");
+    rememberSearch("");
+    rememberClosing("");
+    rememberSignal("");
+    rememberUndescribed("");
+    rememberDuplicate("");
+    setIncludeClosed(false);
+    // The box holds its own debounced copy, so the input has to be told as well or it goes on
+    // showing a phrase that is no longer narrowing anything.
+    setLocalSearch("");
+    updateParams({
+      outcome: "",
+      seller: "",
+      platform: "",
+      search: "",
+      closing: "",
+      signal: "",
+      undescribed: "",
+      duplicate: "",
+    });
+  }, [
+    rememberOutcome,
+    rememberSeller,
+    rememberPlatform,
+    rememberSearch,
+    rememberClosing,
+    rememberSignal,
+    rememberUndescribed,
+    rememberDuplicate,
+    setIncludeClosed,
+    setLocalSearch,
+    updateParams,
+  ]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -286,11 +403,19 @@ export function AuctionLotsPanel({
         style={{
           ...STICKY_TOOLBAR_STYLE,
           display: "flex",
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: "0.5rem",
+          padding: "0.5rem 0",
+          background: "var(--color-bg-page)",
+        }}
+      >
+      <div
+        style={{
+          display: "flex",
           alignItems: "center",
           gap: "0.75rem",
           flexWrap: "wrap",
-          padding: "0.5rem 0",
-          background: "var(--color-bg-page)",
         }}
       >
         {/* The filter half **grows into the row** (#558). Without `flex: 1 1 auto` it sat at its
@@ -327,7 +452,11 @@ export function AuctionLotsPanel({
                   label={label}
                   count={counts ? counts.signals[value] : undefined}
                   active={active}
-                  onClick={() => updateParams({ signal: active ? "" : value })}
+                  onClick={() => {
+                    const next = active ? "" : value;
+                    rememberSignal(next);
+                    updateParams({ signal: next });
+                  }}
                 />
               </Tooltip>
             );
@@ -383,7 +512,11 @@ export function AuctionLotsPanel({
                 label={label}
                 count={counts ? counts.closing[value] : undefined}
                 active={active}
-                onClick={() => updateParams({ closing: active ? "" : value })}
+                onClick={() => {
+                  const next = active ? "" : value;
+                  rememberClosing(next);
+                  updateParams({ closing: next });
+                }}
               />
             );
           })}
@@ -403,7 +536,11 @@ export function AuctionLotsPanel({
               label="Not described"
               count={counts ? counts.undescribed : undefined}
               active={!!undescribed}
-              onClick={() => updateParams({ undescribed: undescribed ? "" : "1" })}
+              onClick={() => {
+                const next = undescribed ? "" : "1";
+                rememberUndescribed(next);
+                updateParams({ undescribed: next });
+              }}
             />
           </Tooltip>
           {/* Beside it because it asks the same kind of question — what is wrong with the record
@@ -414,7 +551,11 @@ export function AuctionLotsPanel({
               label="Duplicate"
               count={counts ? counts.duplicate : undefined}
               active={!!duplicate}
-              onClick={() => updateParams({ duplicate: duplicate ? "" : "1" })}
+              onClick={() => {
+                const next = duplicate ? "" : "1";
+                rememberDuplicate(next);
+                updateParams({ duplicate: next });
+              }}
             />
           </Tooltip>
           <span
@@ -492,6 +633,74 @@ export function AuctionLotsPanel({
             Add lot
           </button>
         </div>
+      </div>
+
+        {/* **A narrowed list says so** (#1018), and this is the half that makes remembering the
+            other four filters honest. Every one of them is now restored on arrival, so the list a
+            collector opens tomorrow can be narrowed by a decision made yesterday — a persisted
+            `Ended` hides every live lot — and that is behaviour depending on state nobody can see
+            before they act, which is what #885 was reverted for and #911 fixed one screen over.
+
+            **A lit chip is not enough here, and this thread is the proof.** The offers list answers
+            a filter arrived at by a link with a chip lit *because* it is on (#481) — sound there,
+            because the collector clicked the link a second ago. This bar carries sixteen chips, two
+            selects and a search box, and the issue behind this change started with the user not
+            finding the *Ended* chip at all. A control he could not find while looking for it is not
+            a control that will announce itself while he is not.
+
+            So it is a band, in its own row, and it says three things a chip cannot: that the list
+            is narrowed at all, **how much is hidden** (`8 of 143` — the denominator is the list
+            with nothing narrowing it, `unfiltered`), and which filters are doing it, named in the
+            words of the controls above so each one can be found and switched off.
+
+            **Inside the sticky block rather than between it and the rows** (#848): a banner
+            describing the list has to stay on screen while the list scrolls under it, or it is gone
+            exactly when the collector is deep in rows wondering where everything went. It is in the
+            flow and so it pushes the rows down, which is #885's accepted behaviour on every list
+            here — do not reach for a mechanism that compensates for its height.
+
+            **Drawn only while something is narrowing**, which reads like the arrangement #733
+            removed from the Copies bar and is not the same thing. That objection is about a control
+            appearing *within* the filter row — the first tick grows the row and reflows it under
+            the pointer. This is a whole row arriving beside it; it reflows nothing, and its own
+            absence is the honest statement that nothing is narrowing the list. Keeping it always
+            drawn would mean a permanent strip saying "no filters", which is noise on the one screen
+            already carrying too many controls (#1019).
+
+            **The clear lives here rather than on the filter row**, and that is deliberate: the row
+            above is already the densest in the app, an open design question of its own (#1019), and
+            a control that only matters while the band is up belongs in the band. */}
+        {hasActiveFilters && (
+          <div style={LIST_BANNER_STYLE}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+              {counts ? (
+                <>
+                  Showing <strong>{counts.total}</strong> of {counts.unfiltered} lot
+                  {counts.unfiltered === 1 ? "" : "s"} —{" "}
+                </>
+              ) : (
+                <>This list is narrowed — </>
+              )}
+              {narrowings.map(narrowingLabel).join(" · ")}
+            </span>
+            <button
+              type="button"
+              onClick={resetFilters}
+              style={{
+                ...CONTROL_STYLE,
+                marginLeft: "auto",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                color: "var(--color-accent)",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </div>
 
       <div
