@@ -92,6 +92,7 @@ These hold on every task, whatever you are building. Each is stated in full — 
 - Row-level actions go in a single `⋮` `RowActionsMenu`, not a cluster of per-row buttons. → `ui-patterns.md`
 - Use semantic color tokens from `src/app/globals.css`; a new token needs values in **both** `:root` and `.dark`. → `ui-patterns.md`
 - Use the shared list-screen components (loading, empty, filters, table, endless scroll) and the shared filter controls (`FilterChip`, `MultiSelectFilter`, `FILTER_CONTROL_STYLE`). → `ui-patterns.md`
+- A **filter never unticks anything, and a bulk action never reaches a row the collector cannot see**: the bar counts and acts on the ticked rows **in view**, hidden ticks survive the filter, and **pruning a selection is never narrowed to the filtered set**. → `ui-patterns.md`
 - A thumbnail **fits, never crops** — `objectFit` comes from `THUMB_OBJECT_FIT`. → `ui-patterns.md`
 - Prefer in-place editing (`InlineText`) where inline edits are practical. → `ui-patterns.md`
 - A **detail page reads; it does not become a second editor**. → `inventory-lists.md`

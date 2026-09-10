@@ -602,6 +602,13 @@ check** it is the other way round. It reads as full when every square on the str
 ticked — not when tiles the chip is hiding are ticked too — so what it says and what it does are
 both about the card as it is in front of you.
 
+**And so is the bar.** Pressing a chip never unticks anything, and nothing you do from the bar ever
+reaches a square you cannot see. While a chip is hiding some of what you ticked, the bar says so —
+*1 of 3 ticked tiles in view* — and tells you what became of the rest: they are still ticked and
+come back the moment you release the chip. So the number moving is the chip, not a lost selection,
+and **Work through 1 tile** means the one on screen. With a chip hiding *all* of what you ticked the bar stays up saying *0 of 3*, with nothing to press but **Clear** — it is the only place those three are still visible. **Clear** is the other way round: it is you
+saying you are done with the selection, so it unticks all three, and its hint says so.
+
 Ticking changes nothing about clicking: the rest of the square still opens the tile's dialog, and a
 tile you have already dealt with has no box, having reached its end.
 

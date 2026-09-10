@@ -44,6 +44,7 @@ import {
   isSelectableTile,
   pruneSelection,
   selectedInOrder,
+  selectedInView,
   toggleBatch,
   toggleTile,
   type TileBoxState,
@@ -366,7 +367,18 @@ export function ScansCard({
   const allTiles = batches.flatMap((b) => b.tiles);
   const live = pruneSelection(selected, allTiles);
   if (live.size !== selected.size) setSelected(live);
-  const selectedTiles = selectedInOrder(live, allTiles);
+  /** Every ticked tile, chip or no chip — the figure the bar counts *from*, and nothing else. */
+  const tickedTiles = selectedInOrder(live, allTiles);
+  /**
+   * The ticked tiles the chip is **showing** — what the bar counts, labels and acts on (#1020).
+   *
+   * *A filter is a way of looking, so it never unticks anything — and a bulk action never reaches a
+   * row the collector cannot see.* The pair above is the whole of it: `tickedTiles` survives every
+   * chip, `selectedTiles` is what an identification is handed, and `pruneSelection` above stays
+   * over `allTiles` because it answers a different question — *does this tile still exist*, not
+   * *is it on screen*.
+   */
+  const selectedTiles = selectedInView(live, allTiles, filter);
   // A selection worked through to nothing takes its dialog with it — and, more importantly, closes
   // the door behind it: a flag left standing would make the *next* tick open the dialog on its own.
   if (selectionOpen && selectedTiles.length === 0) setSelectionOpen(false);
@@ -810,10 +822,23 @@ export function ScansCard({
       {/* Never over the pull list (#853): every tile it shows has already reached an end and can
           take no identification, so a bar offering to identify a selection would be about squares
           that are not on screen. The selection itself is left alone — release the chip and it is
-          still ticked, exactly where it was. */}
-      {selectedTiles.length > 0 && !reachesFinishedBatches(filter) && (
+          still ticked, exactly where it was.
+
+          Since #1020 that guard is doubly true rather than newly redundant, and it is kept for the
+          half `selectedTiles` does not state: the count below is already narrowed to the tiles the
+          chip is showing, and under the discards chip no tile in view can be identified at all, so
+          it comes out empty on its own. What the condition still says is *why* — a bar over the
+          pull list would be a bar over squares that reached an end, which is a fact about that chip
+          rather than an arithmetic accident. */}
+      {/* It is up while **anything** is ticked rather than while anything is in view: with every
+          ticked square hidden it reads `0 of 3`, which is the only place those three are visible
+          and the only way left to untick them. A bar that vanished would leave a selection nothing
+          on screen could reach, coming back later with nothing to explain it (#1021 settled the
+          same question one list over). */}
+      {tickedTiles.length > 0 && !reachesFinishedBatches(filter) && (
         <TileSelectionBar
           count={selectedTiles.length}
+          tickedCount={tickedTiles.length}
           busy={uploading || pending || detecting}
           onOpen={() => setSelectionOpen(true)}
           onClear={() => setSelected(new Set())}
@@ -1984,18 +2009,40 @@ function TickBox({
  * the card would be a bar the collector has to scroll back up to every time, having lost sight of
  * both the count and the button that acts on it. It pins to the top of the viewport, like every
  * other header on this screen, and travels no further than the card it belongs to.
+ *
+ * **It counts what the chip is showing, and says so in as many words while that is fewer than what
+ * is ticked** (#1020). This is the wording the whole change turns on, and it is the accepted cost
+ * of the rule rather than a detail of it: pressing a chip moves the number without anything being
+ * deselected, so *3 tiles selected* becomes *1 of 3 ticked tiles in view*, and a collector who does
+ * not already hold the distinction between *ticked* and *in view* would otherwise read the drop as
+ * the app having lost his selection. Three things carry it. The headline names **both** figures, so
+ * the 3 he built is still on screen. A second line says what became of the other two in the only
+ * terms that matter — they are still ticked, and the chip is what is hiding them. And the button
+ * names the number it will actually act on, which is the half a bare *Work through* would leave him
+ * to infer from a headline that now has two numbers in it.
+ *
+ * **Clear clears the whole selection, hidden squares included**, and its hint says so while any are
+ * hidden. The alternative — unticking only what is on screen — empties the bar and leaves ticks
+ * standing that no control on screen can then reach, which is a worse thing to do to a collector
+ * than a wide clear he was warned about. The rule's second half is about an **identification**
+ * reaching a square nobody looked at; clearing writes nothing to a tile.
  */
 function TileSelectionBar({
   count,
+  tickedCount,
   busy,
   onOpen,
   onClear,
 }: {
+  /** Ticked **and on screen** — what the button acts on. */
   count: number;
+  /** Ticked in the whole card, chip or no chip. Equal to `count` while nothing is hidden. */
+  tickedCount: number;
   busy: boolean;
   onOpen: () => void;
   onClear: () => void;
 }) {
+  const hidden = tickedCount - count;
   const { barRef, stuck } = useStuck();
   return (
     <div
@@ -2020,20 +2067,48 @@ function TileSelectionBar({
       }}
     >
       <strong>
-        {count} {count === 1 ? "tile" : "tiles"} selected
+        {hidden > 0
+          ? `${count} of ${tickedCount} ticked tiles in view`
+          : `${count} ${count === 1 ? "tile" : "tiles"} selected`}
       </strong>
       <span style={{ color: "var(--color-text-secondary)" }}>
-        {/* What can be done with them, in the order the collector will want it: identifying them
-            together is what ticking is for, and the other two are why they are named here at all. */}
-        Identify them as one stamp, set them aside to check, or discard them — together.
+        {[
+          // What can be done with them, in the order the collector will want it: identifying them
+          // together is what ticking is for, and the other two are why they are named here at all.
+          // Omitted with nothing in view, where there is no pass on offer to describe.
+          count > 0
+            ? "Identify them as one stamp, set them aside to check, or discard them — together."
+            : null,
+          // And where the chip is hiding some, what became of them — in the two terms that stop the
+          // number reading as a loss: still ticked, and back when the chip goes.
+          hidden === 0
+            ? null
+            : hidden === 1
+              ? "The other one is still ticked and comes back when the chip is released."
+              : `The other ${hidden} are still ticked and come back when the chip is released.`,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       </span>
       <span style={{ flex: 1 }} />
-      <SmallButton onClick={onClear} disabled={busy}>
-        Clear
-      </SmallButton>
-      <SmallButton onClick={onOpen} disabled={busy}>
-        <Icon name="scan" size="sm" /> Work through {count} {count === 1 ? "tile" : "tiles"}
-      </SmallButton>
+      <Tooltip
+        content={
+          hidden > 0
+            ? `Untick all ${tickedCount}, including the ${hidden} the chip is hiding`
+            : ""
+        }
+      >
+        <SmallButton onClick={onClear} disabled={busy}>
+          Clear
+        </SmallButton>
+      </Tooltip>
+      {/* Absent rather than disabled at nothing-in-view: there is no pass to offer over squares
+          the chip is hiding, and a dead button beside a live *Clear* reads as a fault. */}
+      {count > 0 && (
+        <SmallButton onClick={onOpen} disabled={busy}>
+          <Icon name="scan" size="sm" /> Work through {count} {count === 1 ? "tile" : "tiles"}
+        </SmallButton>
+      )}
     </div>
   );
 }
