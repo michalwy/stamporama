@@ -524,6 +524,34 @@ user's decision** — #906 marks them as such, and they are refutable:
   sound one, and regenerating costs seconds. **Two steps of one drill answer two different
   staleness problems** — the cut answers the prose, the regenerate the schema — and both are
   invisible when they go wrong.
+
+  **And each step is run alone, with its own exit status read: do not chain the drill into a
+  pipe** (#1066). *Sweeping for a claim* already states the mechanism — after a pipeline `$?` is
+  the *last* command's status — and the drill is the sharpest instance of it rather than another
+  example. A sweep that searched nothing returns a wrong answer somebody may still catch by
+  reading; a skipped `pnpm install` leaves a worktree that builds, lints and tests, against the
+  pool's dependencies rather than the branch's, and there is nothing to read because the whole point
+  of the pipe was that a working drill has no output worth reading. **The 2026-09-10 instance was
+  found by a session against itself**, with this file open in front of it: `git checkout … &&
+  pnpm install && pnpm exec prisma generate 2>&1 | tail -3` reported exit 0 while **both `pnpm`
+  calls had failed**.
+
+  **This is #862's argument one layer out, which is why it is written here and not filed under shell
+  quoting.** The bullet above justifies regenerating unconditionally because a stale client is
+  *indistinguishable* from a sound one; a drill that did not run is indistinguishable from one that
+  did, and the same answer follows — read the thing rather than perform it. Running it
+  unconditionally and not reading whether it succeeded discharges the ceremony and not the reason.
+
+  **The stated form is *do not pipe*, deliberately, because the obvious guard is itself a second
+  instance of the trap.** `cmd | tail -20; echo ${PIPESTATUS[0]}` is a bash idiom and **prints
+  nothing in zsh** — that array is bash's, zsh's is lowercase `pipestatus` and is 1-indexed — so
+  the guard renders as `exit=` with a blank after it, which reads at a glance like a zero. A lead ran
+  exactly that line all afternoon on 2026-09-10 without noticing, including on the commands
+  verifying that the machine's `pnpm` breakage was fixed; nothing went wrong only because the output
+  beside it happened to be unambiguous. It is *Sweeping for a claim*'s zsh sentence again, on the
+  one idiom this rule most invites. Running the command alone needs no array, no index convention
+  and no knowledge of which shell the session got — and it is the conclusion that section already
+  reaches for sweeps.
 - **A worker that used the integration suite releases its slot before it finishes**:
   `pnpm e2e:db:down && pnpm slot release`. A slot is allocated **lazily**, on first use of that
   suite, so releasing it holds demand at the number of sessions actually running rather than the size

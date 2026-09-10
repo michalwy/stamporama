@@ -102,6 +102,13 @@ needs a local build or a local suite to happen in. **A release session runs neit
 it reads is a run on GitHub against a fresh checkout: `main`'s at step 3 and the tag's at step 5.
 There is nothing local here for a stale client to be stale against.
 
+**The drill's *read each step's own exit status* clause does not reach this session either, and the
+reason is structural rather than a judgement that it does not matter** (#1066). That clause is about
+a `&&` chain ending in a pipe reporting the pipe's status; a release session runs the fetch and
+nothing else, so it has one command, nothing to chain it to, and a status that is its own. Run it
+alone anyway — you need `main`'s actual head to know what you are tagging, which is step 1's
+discipline — and the failure shape the clause names cannot arise here.
+
 This is stated in this file rather than in AGENTS.md because `collaboration.md` gives this file the
 release procedure end to end.
 
