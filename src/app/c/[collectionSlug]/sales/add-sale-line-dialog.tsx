@@ -15,6 +15,7 @@ import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -302,6 +303,17 @@ export function AddSaleLineDialog({
   const pickedList = Object.values(picked);
   const canAdd = !isPending && pickedList.length > 0 && pickedList.every((p) => priceValid(p.price));
 
+  // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
+  // What is subtracted is what the **search and the type facet** produced. A **fold is not a
+  // filter**: a collapsed quantity offer's sets are in view, because its group row is on screen
+  // carrying its own `N selected` and a label disagreeing with that would be two controls on one
+  // screen answering one question.
+  const setsInView = useMemo(
+    () => new Set(visible.flatMap((g) => g.sets.map((s) => s.offerSetId))),
+    [visible]
+  );
+  const hiddenNote = hiddenTicksSuffix(countHiddenTicks(Object.keys(picked), setsInView));
+
   function confirm() {
     if (!canAdd) return;
     onSubmit(
@@ -444,7 +456,7 @@ export function AddSaleLineDialog({
           {isPending
             ? "Adding…"
             : pickedList.length > 0
-              ? `Add ${pickedList.length} set${pickedList.length === 1 ? "" : "s"}`
+              ? `Add ${pickedList.length} set${pickedList.length === 1 ? "" : "s"}${hiddenNote}`
               : "Add sold sets"}
         </DialogPrimaryButton>
       </DialogFooter>

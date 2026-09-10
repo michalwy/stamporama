@@ -119,7 +119,11 @@ gap in your data, not a set worth nothing — and the hover says how many of you
 2. On the detail screen, use **Add set** to pick copies from your inventory. The picker's filter
    box matches a copy by stamp name, issue name, **catalog number**, or its **location ref** — so
    with a piece in hand you can type the shelf reference it is filed under (e.g. `A234`) and add
-   exactly that copy. When you pick more than one copy you choose how they go in:
+   exactly that copy. **Your ticks survive the filter box, the area tree and the year facets** —
+   search *Poland*, tick four, search *1950*, tick three, and all seven go in. The button says so
+   when some of them are off screen: **Add as 7 sets (3 hidden by these filters)**. With everything
+   ticked on screen it stays a plain **Add as 7 sets**. When you pick more than one copy you choose
+   how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
    - **One set holding all of them** — a series sold together.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.

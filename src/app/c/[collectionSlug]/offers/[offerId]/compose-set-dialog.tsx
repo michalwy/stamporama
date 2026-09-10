@@ -12,6 +12,7 @@ import {
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
@@ -164,6 +165,13 @@ export function ComposeSetDialog({
   }
 
   const selectedIds = useMemo(() => [...selected], [selected]);
+
+  // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
+  // The area rail is resolved server-side and the year facet and search client-side, so what is
+  // subtracted is the rows on screen rather than any one of the three.
+  const hiddenTicks = countHiddenTicks(selected, new Set(allVisibleIds));
+  const hiddenNote = hiddenTicksSuffix(hiddenTicks);
+
   const { data: collisions = [] } = useOfferCollisions(
     collectionId,
     selectedIds,
@@ -443,15 +451,15 @@ export function ComposeSetDialog({
           {multi ? (
             <>
               <DialogSecondaryButton onClick={() => submit(false)} disabled={isPending}>
-                {isPending ? "Adding…" : `Add as one set`}
+                {isPending ? "Adding…" : `Add as one set${hiddenNote}`}
               </DialogSecondaryButton>
               <DialogPrimaryButton type="button" onClick={() => submit(true)} disabled={isPending}>
-                {isPending ? "Adding…" : `Add as ${selectedIds.length} sets`}
+                {isPending ? "Adding…" : `Add as ${selectedIds.length} sets${hiddenNote}`}
               </DialogPrimaryButton>
             </>
           ) : (
             <DialogPrimaryButton type="button" onClick={() => submit(false)} disabled={isPending || selectedIds.length === 0}>
-              {isPending ? "Adding…" : "Add copy"}
+              {isPending ? "Adding…" : `Add copy${hiddenNote}`}
             </DialogPrimaryButton>
           )}
         </div>
