@@ -48,9 +48,14 @@ export function countHiddenTicks(
  * What a submit button adds to its own label, and **nothing at all when nothing is hidden**.
  *
  * *Add 7 (3 hidden by these filters)* is the whole point when it is true; *Add 7 (0 hidden)* is
- * noise on every ordinary use, and ordinary use is most uses (#1046, the user's own addition to
- * the decision). So the empty string is the answer for zero rather than a parenthetical saying so,
- * and a caller appends it unconditionally instead of branching.
+ * noise on every ordinary use, and ordinary use is most uses. So the empty string is the answer
+ * for zero rather than a parenthetical saying so, and a caller appends it unconditionally instead
+ * of branching.
+ *
+ * **This half is the lead's addition rather than the user's** (#1046). He chose answer 3 — keep the
+ * whole selection, say how many are hidden — and was never asked about the zero case. Saying so
+ * matters because it is what tells a later reader which authority they are overruling if they come
+ * to change it, and *the lead* is the answer that stays true across a handover.
  */
 export function hiddenTicksSuffix(hidden: number): string {
   return hidden > 0 ? ` (${hidden} hidden by these filters)` : "";

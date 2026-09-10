@@ -42,7 +42,8 @@ describe("a picker's hidden ticks (#1046)", () => {
   });
 
   it("says nothing at all when nothing is hidden", () => {
-    // The user's own addition to the decision: `Add 7 (0 hidden)` is noise on every ordinary use.
+    // `Add 7 (0 hidden)` is noise on every ordinary use. This half is the **lead's** addition
+    // rather than the user's: he chose answer 3 and was never asked about the zero case.
     assert.equal(hiddenTicksSuffix(0), "");
   });
 
