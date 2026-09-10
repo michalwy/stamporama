@@ -19,6 +19,7 @@
         "!@types/react-dom",
         "!eslint-config-next",
         "!eslint",
+        "!typescript",
         "!@tanstack/react-query",
         "!@tanstack/react-table",
         "!prisma",
@@ -42,7 +43,7 @@
     },
 
     {
-      "description": "NEVER ALONE — framework. AGENTS.md: Turbopack leaks memory, dev is pinned to --webpack, and Turbopack must be re-tested after every Next.js upgrade (#161). eslint belongs here because #47 proved it cannot move without eslint-config-next: split across two groups it sat red for eight weeks with TypeError: Cannot read properties of undefined (reading 'Cjs'). No schedule — these reach the user promptly rather than waiting for the Monday window. The empty schedule is redundant while the exclusion list above is complete, and is here so that 'unscheduled' stays true by construction if the two lists ever drift.",
+      "description": "NEVER ALONE — framework. AGENTS.md: Turbopack leaks memory, dev is pinned to --webpack, and Turbopack must be re-tested after every Next.js upgrade (#161). eslint belongs here because #47 proved it cannot move without eslint-config-next: split across two groups it sat red for eight weeks with TypeError: Cannot read properties of undefined (reading 'Cjs'). typescript belongs here for the same relation to the same package, established by a different incident: typescript-eslint arrives transitively as eslint-config-next -> typescript-eslint, it declares peerDependencies.typescript as \">=4.8.4 <6.1.0\", and it reads ts.Extension.Cjs at module load, before any eslint.config.mjs is consulted — so a minor to TypeScript 6.1 already puts the parser outside its declared peer range and no config change avoids it (#1051, platform.md). The error string is #47's and the cause is not: that one was a config/plugin split, this one is a version gap between typescript-eslint and the compiler — do not merge the two incidents on the strength of the message. No schedule — these reach the user promptly rather than waiting for the Monday window. The empty schedule is redundant while the exclusion list above is complete, and is here so that 'unscheduled' stays true by construction if the two lists ever drift.",
       "groupName": "Next.js / React framework",
       "matchDepNames": [
         "next",
@@ -51,7 +52,8 @@
         "@types/react",
         "@types/react-dom",
         "eslint-config-next",
-        "eslint"
+        "eslint",
+        "typescript"
       ],
       "schedule": [],
       "automerge": false
