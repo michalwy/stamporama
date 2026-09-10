@@ -347,6 +347,23 @@ first two commands run before any reading** — `git fetch origin main`, then cu
 cut is read with `git show origin/main:<path>` — `AGENTS.md` included, since `CLAUDE.md` tells
 every session to read it *before starting any task*, and an assignment is a task starting.
 
+**And `AGENTS.md`'s wake-up-drill bullet is the record of that ordering; this section is the
+reasoning behind it and `CLAUDE.md` is a pointer to it** (#1068). Three files now assert one
+ordering, and this project's answer to three copies is to name the one that decides —
+`.github/rulesets/main.json` for the ruleset, the `Detect changes` `case` glob for the safe list.
+**`AGENTS.md` is the right one here, and the reason is not that the drill happens to be stated
+there**: a rule about what to do *before you read* cannot have its record in the file that is read
+third. A worker meets this section only after `CLAUDE.md` and `AGENTS.md`, which is after the
+moment the rule governs.
+
+**The precedent transfers only halfway, and a reader who takes it whole will believe they have a
+guarantee they do not have.** `main.json` and the `case` glob are records because they **are** the
+mechanism — they cannot drift from what they describe, which is the whole reason this file reaches
+for them. Nothing here executes: the mechanism is a session's behaviour, and all three copies are
+prose. So naming a record buys **which copy wins when they disagree** and buys **nothing against
+drift**. What still guards the drift is what guards it everywhere else in this file — the sweep,
+run before the edit as well as after (*Sweeping for a claim*).
+
 **A session that cuts no branch has no such moment, and `git show` is the whole of its answer.** A
 release session has no issue and no branch (`release-versioning.md`, *The wake-up drill is not this
 session's*), so the fetch is the only step of the drill it runs and its worktree never becomes
