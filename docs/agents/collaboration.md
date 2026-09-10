@@ -2879,11 +2879,20 @@ and never announce it. On 2026-09-08 six sessions were shown `OPEN` whose pull r
 merged, with a dozen older rows wrong the same way; on 2026-09-10 the field showed seven `OPEN` of
 which **six were `MERGED`** — re-measured against `gh pr view` for this paragraph rather than
 quoted, because taking somebody else's count for a claim about a stale count is the failure the
-paragraph is about. `prNumber` drifts too, which is the half nobody had an instance of: one session
-titled `✅ #1075[#1097]` carries `prNumber: 1096`, so the field and the title name different pull
-requests. **`gh pr list --state open`, or `gh pr view <n> --json state`, is what answers what is
-open.** No claim is made here about *why* the cache is stale — it is the app's, machine-local, and
-outside this repository.
+paragraph is about. **`gh pr list --state open`, or `gh pr view <n> --json state`, is what answers
+what is open.** No claim is made here about *why* the cache is stale — it is the app's,
+machine-local, and outside this repository.
+
+**`prNumber` fails differently, and the difference is worth more than a second stale row.** The
+session titled `✅ #1075[#1097]` carries `prNumber: 1096`. Both were checked rather than assumed:
+**#1096 and #1097 are both `MERGED`, both off `task/1075-auctions-shared-filterchip`**, seven
+minutes apart. So neither value is wrong and nothing here has gone stale — **one session on one
+branch produced two pull requests, and the field holds one number**. The cache is answering a
+question that has no single answer, and it kept the earlier one while the title kept the later.
+**That survives however promptly the field is refreshed**, which a stale row does not: freshness is
+not the defect. **So do not read a `prNumber` as *the* pull request of a session** — it is at best
+the first, the title is what a person wrote, and `gh pr list --head <branch>` is what enumerates
+them.
 
 **And this is not scoped to the lead.** The obvious reader of that field is a lead checking what is
 in flight, and nothing in this file sends anyone there or warns them off; but a **task session**
