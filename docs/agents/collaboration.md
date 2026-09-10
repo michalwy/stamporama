@@ -1914,6 +1914,14 @@ alternates as often as that happens. A report is not a door that shuts.
   consulting it, which is why the act that is missing from one is more expensive than the act that
   is merely unwritten (*Merging a pull request is not the event that ends a session*, under
   *Worktree cleanup*).
+
+  **And its mirror, added 2026-09-10 (#1094): do not remove the worktree of a session you are about
+  to message.** Everything above is about what follows a re-brief; this is the same act one moment
+  earlier, and no test in the sweep can reach it — a `✅` title is an accurate statement about what
+  a session **has done** and says nothing about what the lead is **about to do**. The practical
+  ordering is one clause: **finish asking, then sweep.** Not *check before sweeping*, which is
+  answerable only by remembering and is this file's own failure mode (*Keeping this file honest*).
+  And the removal is not even terminal, which is the other half of it — *Worktree cleanup*.
 - **Anyone else re-briefs.** Then only the session knows. The user reaching a session directly is
   not exotic here: *If nobody could see it, the user looks before the merge* has his comments
   during a showcase turning into fixes on the branch, and a design session talks to him by
@@ -2440,6 +2448,35 @@ Three layers, and the middle one is what makes forgetting the first harmless:
 Two orphaned worktrees from 27 August were found by hand while this model was being written. A
 worktree nobody removed holds a slot and a database permanently, and the cost surfaces weeks later,
 in an unrelated session, as a failure with no visible cause.
+
+**Layer 1 reads as one act with one outcome, and for a session the app can still reach it is not
+one.** Removing such a worktree is **not terminal**: the next message delivered to that session
+makes the harness create a fresh worktree for it, **under a new name, on the same branch** — so the
+branch is checked out again and `git branch -D` refuses. Measured rather than inferred, on
+2026-09-10 (#1094). A correctly `✅`-titled outgoing lead's worktree `vigorous-keller-01e96d` was
+removed and `git worktree prune` ran clean; the incoming lead then sent that session a question, and
+it came back as `musing-hugle-b7cfec`, still on `claude/vigorous-keller-01e96d`, with its transcript
+moved across intact (3.8 MB before, 4.9 MB after, the old path gone) and its `sessionId` unchanged.
+
+**The sweep's test was right and answered rightly; the order was wrong.** `✅` meant the session had
+finished, and it had. What invalidated the removal was the lead's **own next act** — re-briefing a
+session it had just swept, which makes that session live again (*A re-brief hands the branch back*,
+where the act is now named). So the ordering is **finish asking, then sweep**. What no test here can
+see is *still reachable, and about to be re-briefed*: a property of what the lead is about to do
+rather than of what the session has done. That is the incident below one notch milder — there the
+title said *working* and the lead read a merge as the licence; here the title accurately said
+*finished*.
+
+**Nothing was lost, and the cost is the belief rather than the bytes**: one impossible branch
+deletion, and a lead reporting a worktree swept when it was about to exist again.
+
+**No claim is made about why the harness does this, and none should be.** It is the app's behaviour,
+machine-local, outside this repository and beyond anything here to change — the same footing as the
+preview reminder (#1040), the stale `prState` cache (#1010) and the rewritten `cwd` (#1089). Those
+are three behaviours of one session layer and this is a fourth, but the mechanisms differ: a field
+rewritten, a field going stale, and here an object re-created. **And do not make the sweep consult
+the app for liveness.** Its whole value is one string comparison against a title, and a reachability
+probe rebuilds the per-worktree GitHub lookup the done marker was introduced to replace.
 
 ### A held session's worktree is not stale
 
