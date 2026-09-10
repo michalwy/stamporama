@@ -2068,7 +2068,10 @@ function TileSelectionBar({
     >
       <strong>
         {hidden > 0
-          ? `${count} of ${tickedCount} ticked tiles in view`
+          ? // The noun follows the **total**, not the number in view: `0 of 1 ticked tiles` is the
+            // reachable case (tick one square, press a chip that hides it) and it reads as a
+            // template rather than as a sentence.
+            `${count} of ${tickedCount} ticked ${tickedCount === 1 ? "tile" : "tiles"} in view`
           : `${count} ${count === 1 ? "tile" : "tiles"} selected`}
       </strong>
       <span style={{ color: "var(--color-text-secondary)" }}>
