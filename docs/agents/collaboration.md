@@ -646,6 +646,46 @@ else. The icon goes in front; nothing else about that title changes.
 rather than legibility: to the worktree sweep a handed-over lead **is** a finished session, and it
 is removed on the same comparison as a spent worker.
 
+#### A spawned session's first title is the chip's
+
+**Before any of the renames below there is a title nobody in this section writes: the one the chip
+carries.** A session's title is set when the chip is written, which is before the session exists, so
+the vocabulary above has to be **in** the chip rather than applied to it afterwards — `⏳ Worker N`,
+with the number spelled out, and never a description of what the chip is for. *Spawn ahead and hold*
+has said since 2026-09-08 that *the chip's title says what the session is, in a fixed vocabulary*
+and pointed here; nothing here pointed back, and this is that half (#1104).
+
+**Ten chips got it wrong at once, which is what it took to notice.** On 2026-09-10 the lead raised
+ten pooled workers and all ten came up titled `Pooled worker (no task yet)` — the chip's own title,
+describing the chip rather than naming the worker — and were renamed by hand afterwards. The user
+noticed inside a minute, which is exactly what the vocabulary is for: ten identical rows say nothing
+about which worker is which at the moment he is choosing what to click. **The by-hand correction was
+then performed once more, on the session writing this**, whose chip arrived correctly titled
+`⏳ Worker 51` — which is the workaround working and not the rule, exactly as the re-read instruction
+was before #1060 gave it a home.
+
+**And the prompt could not have rescued it, because the number is the part that went missing.** It
+said *rename yourself `⏳ Worker N`* and never said what N was, which is not an instruction anybody
+can carry out. The prompt it was copied from carried its own number in its **first sentence** —
+precisely the part that does not survive being used as a template. **So the number goes in both
+places, the chip's title and the prompt's first sentence**, and the second is not redundant: a
+session that knows which worker it is can say so, and can put a wrong title right; one handed a
+placeholder can do neither.
+
+**This is the lead's step and not a fourth self-rename.** The three renames below are a session
+acting on itself, unenforced by design, and *what this convention cannot do* is written about them.
+This one sits upstream of all three and **has a single responsible party** — the lead writes the
+chip, so the lead can simply get it right, and no session has to remember anything. **The narrower
+claim is the honest one**: what the prompt's number buys is not a rename but the ability to correct
+one, in the case where the chip was wrong and the session can tell. Growing that into a fourth
+required rename would give an owned step back to the unenforced pile it was rescued from.
+
+**It was never a risk to the worktree sweep, and recording that is part of the record rather than a
+softening.** That sweep's whole test is a leading `✅`, and a title with no icon at all falls through
+to *ask the user* (*A held session's worktree is not stale*) — the direction it is built to fail in.
+What ten untitled rows cost is the user reading his own screen. **So do not read this as a case for
+the sweep testing anything beyond the leading icon**; that argument is above and is untouched here.
+
 #### The changeover from `[DONE]`
 
 **Sessions titled `[DONE] …` exist at the moment this lands, so the sweep accepts both spellings
@@ -2944,7 +2984,11 @@ Every backlog review asks whether the model above still describes what actually 
   *Worktree cleanup*. It deliberately does not ask whether anybody remembered to sweep — that is a
   question answerable only by remembering, which is this section's own failure mode.
 - Does every session's title match the vocabulary in *Session titles*, and in particular **did every
-  finished session get its `✅`**? A lookup in the app's session list — machine-local, and no
+  finished session get its `✅`**? **A session that never had a correct title at all is a different
+  finding, with a different owner**: a spawned session's first title is the chip's, written by the
+  lead before the session existed (*A spawned session's first title is the chip's*, #1104), so ten
+  rows saying nothing is one chip written from a template rather than ten sessions
+  forgetting — report it against the chip. A lookup in the app's session list — machine-local, and no
   part of the repository. **The marker's job has changed twice underneath it**, which is the answer
   worth having. Until 2026-09-07 it had one purpose, telling the user that a chip costs nothing to
   start now, and on that reading #868 — waiting only for `main` to carry #844 — needed none.
