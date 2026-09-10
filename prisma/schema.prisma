@@ -2406,6 +2406,16 @@ model AssistantToken {
   tokenHash    String    @unique
   // Optional human label, e.g. the profile/instance name it was issued for.
   label        String?
+  /** How far the token reaches (#707): `read` or `read_write`, from `ASSISTANT_TOKEN_SCOPES` in
+   *  `src/lib/assistant-token-scope.ts`. Enforced server-side in `route-auth.ts` against the
+   *  operation's own `writes` declaration — a `read` token is refused on a writing `/api/v1`
+   *  operation. Deliberately **no** `@default`: the migration's default existed only to backfill the
+   *  extension tokens that predate the column and was dropped straight after, so every mint has to
+   *  state a scope rather than arrive at the widest one by omission. */
+  scope        String
+  /** What kind of client this was minted for (#707): `extension` or `agent`. A label the collector
+   *  reads in Settings, never a permission — what a token may do is `scope` and nothing else. */
+  kind         String
   createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
 

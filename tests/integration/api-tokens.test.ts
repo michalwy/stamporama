@@ -48,17 +48,49 @@ describe("assistant tokens", () => {
   });
 
   it("creates a token and verifies it back to owner + collection", async () => {
-    const { token, record } = await createAssistantToken(userId, collectionId, "Dev laptop");
+    const { token, record } = await createAssistantToken(userId, collectionId, {
+      label: "Dev laptop",
+      scope: "read_write",
+      kind: "extension",
+    });
     assert.ok(token.startsWith("stmpa_"));
     assert.equal(record.label, "Dev laptop");
     assert.equal(record.lastUsedAt, null);
 
     const verified = await verifyAssistantToken(token);
-    assert.deepEqual(verified, { collectionId, ownerId: userId });
+    assert.deepEqual(verified, {
+      collectionId,
+      ownerId: userId,
+      scope: "read_write",
+      kind: "extension",
+    });
+  });
+
+  it("stores the scope and the kind the mint asked for, and reads them back (#707)", async () => {
+    // The whole point of the column: what a token may do is a fact about the row rather than about
+    // whoever presents it, so it has to survive a real write and a real read.
+    const { token, record } = await createAssistantToken(userId, collectionId, {
+      label: "Read-only agent",
+      scope: "read",
+      kind: "agent",
+    });
+    assert.equal(record.scope, "read");
+    assert.equal(record.kind, "agent");
+
+    const verified = await verifyAssistantToken(token);
+    assert.equal(verified?.scope, "read");
+    assert.equal(verified?.kind, "agent");
+
+    const listed = (await listAssistantTokens(userId, collectionId)).find((r) => r.id === record.id);
+    assert.equal(listed?.scope, "read", "the Settings list shows what the token may do");
+    assert.equal(listed?.kind, "agent", "and what it was minted for");
   });
 
   it("bumps lastUsedAt on verification", async () => {
-    const { token, record } = await createAssistantToken(userId, collectionId);
+    const { token, record } = await createAssistantToken(userId, collectionId, {
+      scope: "read_write",
+      kind: "extension",
+    });
     await verifyAssistantToken(token);
     const rows = await listAssistantTokens(userId, collectionId);
     const row = rows.find((r) => r.id === record.id);
@@ -70,14 +102,20 @@ describe("assistant tokens", () => {
     assert.equal(await verifyAssistantToken("not-a-token"), null);
     assert.equal(await verifyAssistantToken("stmpa_deadbeef"), null);
 
-    const { token, record } = await createAssistantToken(userId, collectionId);
+    const { token, record } = await createAssistantToken(userId, collectionId, {
+      scope: "read_write",
+      kind: "extension",
+    });
     assert.ok(await verifyAssistantToken(token));
     await revokeAssistantToken(userId, collectionId, record.id);
     assert.equal(await verifyAssistantToken(token), null);
   });
 
   it("only the owner can create/list/revoke", async () => {
-    await assert.rejects(() => createAssistantToken("wrong-user", collectionId), /access denied/i);
+    await assert.rejects(
+      () => createAssistantToken("wrong-user", collectionId, { scope: "read", kind: "agent" }),
+      /access denied/i
+    );
     await assert.rejects(() => listAssistantTokens("wrong-user", collectionId), /access denied/i);
   });
 
@@ -91,7 +129,10 @@ describe("assistant tokens", () => {
       data: { stampId: stamp.id, catalogVendorId: mi.id, number: "10" },
     });
 
-    const { token } = await createAssistantToken(userId, collectionId);
+    const { token } = await createAssistantToken(userId, collectionId, {
+      scope: "read_write",
+      kind: "extension",
+    });
     const auth = await verifyAssistantToken(token);
     assert.ok(auth);
 
@@ -106,7 +147,10 @@ describe("assistant tokens", () => {
   it("a token is scoped to its collection (route pins collectionId)", async () => {
     // The route helper requires the token's collectionId to equal the URL's; verify the raw token
     // carries the collection it was minted for so a mismatch can be rejected upstream.
-    const { token } = await createAssistantToken(userId, otherCollectionId);
+    const { token } = await createAssistantToken(userId, otherCollectionId, {
+      scope: "read_write",
+      kind: "extension",
+    });
     const auth = await verifyAssistantToken(token);
     assert.equal(auth?.collectionId, otherCollectionId);
     assert.notEqual(auth?.collectionId, collectionId);

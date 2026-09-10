@@ -4,7 +4,7 @@
 behind it, and the conventions every operation obeys. Read this before adding an operation, and read
 [ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists at all.
 
-The track is #706 (this foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
+The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later).
 
 ## It is beside the screen API, never over it
@@ -46,7 +46,8 @@ as the tool description. It is not a changelog line.
 
 **Declare `writes` honestly.** It is the one place that decides: #707 reads it to refuse a read-only
 token, and the document says so to the agent. An operation that writes and declares `false` is a
-security defect with no test that can see it.
+security defect with no test that can see it — nothing checks a `writes` declaration against what a
+handler does, and nothing can.
 
 ## The module layout is the Prisma-free split, and the whole track follows it
 
@@ -70,6 +71,7 @@ src/lib/agent-api/
   list.ts           the window parameters, the cursor, the list envelope
   path-template.ts  "{name}" matching for the dispatcher
   photo-url.ts      the one spelling of a photo link
+  scope.ts          whether a token's scope covers an operation (#707)
   openapi.ts        buildOpenApiDocument + validateOperations
   registry.ts       the operations array and the path lookup       ← the only server-side module
 ```
@@ -145,6 +147,60 @@ it meant and the id would have to come back into the path. A browser that wants 
 token like any other agent.
 
 `resolveCollectionOwner` is untouched and the screen routes go on accepting both.
+
+### A token's scope, and where it is checked
+
+**A token carries a scope, and the operation carries `writes`; the two meet in one place** (#707).
+`AssistantToken` gained `scope` (`read` / `read_write`) and `kind` (`extension` / `agent`).
+`resolveAgentApiCaller` derives the scope from the credential exactly as it derives the collection,
+and `assertAgentApiScope` beside it refuses a `read` token on an operation that declares
+`writes: true`. **The dispatcher calls it after the operation is resolved and before a parameter is
+parsed** — after, because the answer depends on which operation was picked; before, because there is
+no point validating parameters for a call that will not be made.
+
+**The decision is on the pure side and the enforcement point is not, and both halves are
+deliberate.** `agent-api/scope.ts` holds `assertOperationScope`, a function of a scope and a
+`writes` declaration, so `pnpm test:unit` can hold it; `route-auth.ts` holds the one-line function
+the dispatcher calls, because that is where the collection pinning already lives and because
+authorization here is server-side and never in a caller. The vocabulary itself is one level further
+out again, in the pure `src/lib/assistant-token-scope.ts` — Settings → Assistant is a `"use client"`
+panel and `api-tokens.ts` carries `server-only`, so a constant both halves read belongs in a module
+neither owns (`platform.md`).
+
+**The refusal is the error convention of this surface**: `forbidden`, 403, one English sentence
+naming the operation and the scope that would have worked, and `accepted` carrying both scopes. An
+agent cannot widen its own token; what the sentence buys is that it stops retrying and can say which
+scope the collector has to grant.
+
+**Two things about `writes` that are worth stating rather than inferring.** It is read here and
+nowhere else, so an operation does not check its own scope — one that forgot to would be a defect
+with nothing to see it, which is the same argument as declaring it honestly above. And the check
+reads `writes` and **nothing** else: a verb in an operation's name buys no protection at all.
+
+**And `kind` is a label, never a permission.** It says what a token was minted for so that the
+collector can tell one row of the Settings list from another; what a token may do is `scope` and
+only `scope`. Do not grow a check on it.
+
+**The criterion is demonstrated against fixtures on purpose.** #707's *Done when* says a `read`
+token is refused on any writing operation and accepted on every reading one — and the registry is
+empty until #710, so there is nothing writing on `main` to refuse it on.
+`tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations, and
+`tests/integration/agent-api-auth.test.ts` does the same over a real hashed token row, which is
+where a scope actually comes from. **Adding a domain operation to make the test real would breach
+the *What is deliberately absent* rule below one issue early**; a fixture is the honest instrument,
+exactly as it was for #706's generator criterion.
+
+**Existing tokens are `read_write` + `extension`, and the migration is what makes that true.** They
+are extension tokens doing extension work and narrowing them would break a working install, so
+`20260911000000_assistant_token_scope_and_kind` adds both columns with those values as SQL defaults
+— which backfills every existing row — and then **drops the defaults**. That second statement is the
+point: with no default the generated client makes both fields required, so every mint has to state a
+scope rather than arrive at the widest one by omission. Registration (#252) states `extension` +
+`read_write` explicitly, because the extension connecting itself has nobody to ask.
+
+**Per-area scopes (`offers:write`, `trades:write`, …) are out of scope and a second token model is
+not wanted.** One model, one Settings screen: `read` / `read_write` widens into per-area scopes later
+without either. If a real need appears, that is the shape to reach for.
 
 ## What is deliberately absent
 
