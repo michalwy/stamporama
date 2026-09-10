@@ -113,7 +113,7 @@
       "automerge": false
     },
     {
-      "description": "NEVER ALONE — the toolchain the build runs on: node is pinned in Dockerfile and in .github/workflows/ci.yml, pnpm in packageManager and in CI. Grouped so the two CI pins and the Dockerfile pin move in one pull request rather than three.",
+      "description": "NEVER ALONE — the toolchain the build runs on: node is pinned in Dockerfile and in the setup-node steps of .github/workflows/ci.yml. pnpm is pinned once, in packageManager in package.json, and CI holds no pnpm version at all — pnpm/action-setup carries no version input and reads that field, as the Dockerfile's corepack enable does; platform.md states that derivation and it is not restated here. Grouped so the two node pins and the pnpm pin move in one pull request rather than three.",
       "groupName": "Node and pnpm toolchain",
       "matchDepNames": ["node", "pnpm"],
       "schedule": [],
