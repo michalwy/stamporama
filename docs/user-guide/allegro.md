@@ -483,7 +483,7 @@ What it does not need is the connection: nothing about ⚡ asks Allegro for perm
 
 ## Sold on Allegro
 
-Once connected, **Offers → Sold on Allegro** shows what has sold and is still waiting to be written
+Once connected, **Marketplaces → Allegro** shows what has sold and is still waiting to be written
 down. It is a worklist, not a search: rows leave it as you record the sales, and it fills itself
 again in the background.
 
