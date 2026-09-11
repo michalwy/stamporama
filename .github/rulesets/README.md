@@ -92,10 +92,10 @@ one direction and used it for both: fed an artifact claiming `Organization` agai
 that is `Repository`, it announced that the gate was now inherited — and would have sent somebody
 hunting an incident that does not exist, on the first execution of a message written for an
 emergency. Reading the code would not have shown it; it reads correctly. Both directions are now
-planted as fixtures in `tests/unit/ruleset-drift.test.ts` (dev-agent `rules/R-013`). **The incident
-branch cannot be reached against this repository** — `michalwy/stamporama` is owned by a `User`
-account, so no organisation ruleset can exist over it — and that is recorded as **unexercised**
-rather than assumed working, here, in the script and in `.github/workflow-rules.yaml`.
+planted as fixtures in `tests/unit/ruleset-drift.test.ts`. **The incident branch cannot be reached
+against this repository** — `michalwy/stamporama` is owned by a `User` account, so no organisation
+ruleset can exist over it — and that is recorded as **unexercised** rather than assumed working, both
+here and in the script.
 
 **`id` is stripped on purpose, and this is the one worth arguing about.** The ruleset's numeric id
 is a fact about which object GitHub happens to be holding, not about what is intended. If the
@@ -139,8 +139,8 @@ by something, and here that is the guard rather than the fetch; `docs/agents/col
 § *Verification, not trust* collects the rest of this family.
 
 **The temp file is load-bearing here for the same reason it is in the other pipeline**, and it is
-worth saying where this one bites. The `jq` guard exists for the case R-007 calls drift: a second
-ruleset appearing that also governs the default branch. A redirection straight at `main.json` opens
+worth saying where this one bites. The `jq` guard exists for the drift case: a second ruleset
+appearing that also governs the default branch. A redirection straight at `main.json` opens
 and truncates the target *before* `jq` runs, so the guard firing would empty the artifact — at
 exactly the moment somebody has found drift and least wants the file gone. It is recoverable from
 git, but the reader is then debugging two problems, one of which this document caused. The trailing
@@ -245,8 +245,7 @@ the branch name is actually written down:
 `description`, `topics`, star and fork counts, `pushed_at`, and permission fields that differ by
 *who is asking*. A snapshot of the whole object could never compare equal twice, and a check that is
 noisy is a check people learn to ignore — the same reason the ruleset snapshot strips
-`current_user_can_bypass`. Adding a field "while we are here" is how that is undone
-(`dev-agent decisions/0004`, whose consequences section says exactly this).
+`current_user_can_bypass`. Adding a field "while we are here" is how that is undone.
 
 **The filename is part of that defence.** It says *merge*, so a field that has nothing to do with
 merging looks out of place in it — which a file called `repository.json` would not.
@@ -431,5 +430,3 @@ under both, on a branch that was allowed to die rather than on the one that merg
 same for the removal above, and had to: a change justified entirely by *this failure becomes loud*
 is worth nothing until somebody has watched it become loud.
 
-The estate reasoning behind all of the above is dev-agent's `rules/R-004` and `rules/R-007`, and
-`decisions/0003` and `decisions/0005`.
