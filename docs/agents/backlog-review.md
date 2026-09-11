@@ -1,16 +1,69 @@
 # Backlog Review
 
-When asked to review the backlog and propose next steps:
+A backlog-review session answers one question: **what should the next session or two take, and how
+should it be grouped?** It proposes and changes nothing — no issues written, no issues closed, no
+release cut, no branch touched.
 
-- Always start with `gh issue list --state open --limit 100` to get the full picture. Never rely on recently closed issues or git log alone — new issues can appear at any time.
-- Always check `gh release list` fresh to know the current version. Never assume it from memory or a prior git log in the same session.
-- Present results in two sections:
-  - **Najbliższe** (2–3 next sessions): three-column table with columns `Sesja`, `Temat` (short theme label), `Opis` (issue links + description, `<br>`-separated when multiple), and `Dlaczego?` (one sentence rationale). No separate Issues column — embed issue links in Opis.
-  - **Dalsze** (beyond that): table with columns `Track`, `Opis`, `Dlaczego?` — high-level track descriptions only, no per-session breakdown.
-- Before proposing session order for near-term issues, check the "Depends on" section of each issue body (`gh issue view <n> --json body`). Never schedule an issue before its open dependencies are closed.
-- Do not ask the user which direction to pursue — just present the plan and let them redirect.
-- Proactively suggest when it is a good time to cut a release: after a coherent batch of shippable commits has accumulated since the last tag. Only suggest — do not cut the release yourself; that is handled by a separate release session, spawned fresh (`release-versioning.md`, `collaboration.md`).
-- **Sweep the worktrees**: `git worktree list`, then `git worktree prune`, and remove what is stale — the worktree, its local `task/` branch, and the remote branch too if the work was dropped rather than merged. **And the throwaway `claude/<name>` branch the spawn handed out goes too** (`collaboration.md`, *The throwaway `claude/` branch goes too*, #1095): a worktree arrives on one and the wake-up drill immediately cuts `task/<issue>-<slug>` from `origin/main`, so that branch is dead from the moment the drill runs, and until 2026-09-10 no cleanup rule named it — forty-six had accumulated, none of them carrying a commit that was not on `main`. **Its guard is the checkout and never the age**, exactly as the worktree's is: `git worktree list --porcelain` prints a `branch refs/heads/…` line for every checked-out branch, so the candidates are `comm -23 <(git branch --list 'claude/*' --format='%(refname:short)' | sort) <(git worktree list --porcelain | sed -n 's|^branch refs/heads/||p' | sort)` and each is deleted only once `git cherry origin/main <branch>` prints no `+`. Run both checks per branch inside the loop rather than once up front — sessions start and cut branches while the sweep is running, and a count taken minutes before one run was already wrong about how many were held. **Re-derive the numbers rather than quoting these.** **Local only**: nothing pushes a `claude/` branch and there are no `origin/claude/*` refs, so this reaches no remote. **This is not a defect in the sweep below** — that sweep resolves worktree paths to sessions, and a branch no worktree holds appears in nothing it enumerates; what was missing was a rule about a different object. `git branch -D` may be refused to a lead running in a worktree, which is every lead: `Bash(git branch -D:*)`, `Bash(git worktree remove:*)` and `Bash(git worktree prune:*)` in the gitignored `.claude/settings.local.json` clear it, and that is machine-local rather than something this repository carries. **Stale is a lookup, not a judgement**: resolve each worktree path to the session whose `cwd` it is, and remove it only when that session's title begins **`✅`** — the fixed vocabulary the user set on 2026-09-08 and gave state icons on 2026-09-10 (`collaboration.md`, *Session titles*, #1042). No session for the path means orphaned, and it goes; anything unclear goes to the user. A session whose title begins **`⏳`**, **`🔨`**, **`🎨`** or **`👑`** is pooled, working, designing or leading — whether it holds one issue or a bundle of them, and whether or not it has opened a pull request: **its worktree is not stale, whatever its age.** (`🎨` joined on 2026-09-10, #1048; a design session leads with it while it runs and with `✅` when it is done. **`👑` joined the same day, #1063** — the lead runs in a worktree like everything else, whether it was drawn from the pool by message or spawned by a tile, so this sweep resolves its path every time; **a lead is never stale while it is the lead**, and the sweep you are running is normally the lead's own, so this row is usually about you.) A pooled or held one is indistinguishable from an abandoned one by every git signal — no branch, no pull request, untouched for the length of the hold — and a working one is mid-change, whether or not it has pushed. **`✅` is the whole test**; the other four icons only say which not-finished states exist, so that *anything unclear* stays rare — a shorter list than the title shapes it replaced, not a stronger one, since a title with no icon still falls through to the user rather than into a removal. **During the changeover the old spellings count as well**: `[DONE]` is finished, and `Worker N`, `#NNN: …`, `#NNN/#NNN/…: …` or any of those carrying `[#PPP]` with nothing in front is pooled or working, until no live session carries them (`collaboration.md`, *The changeover from `[DONE]`*). The marker replaced *go and establish whether its pull request merged*, which the sweep had to do per worktree and which said nothing about a session that finished without opening one. A held release session's worktree was removed by this sweep on 2026-09-07 (`collaboration.md`, *A held session's worktree is not stale*), and with *spawn ahead and hold* the default and **one worker working at a time since 2026-09-10** (`collaboration.md`, *The pool of generic workers*, #1059), most of the pool is idle by design and most of these worktrees look abandoned at any moment. A merged branch deletes itself on GitHub and the lead removes the worktree it came from once that session is finished — which the done icon says and the merge does not (`collaboration.md`, *Merging a pull request is not the event that ends a session*) — but that is the layer that gets forgotten; this sweep is what makes forgetting it harmless. Two orphaned worktrees from 27 August were found by hand before this rule existed, and a worktree nobody removed holds a slot and a database permanently — the cost surfaces weeks later, in an unrelated session, as a failure with no visible cause.
-- **Sweep the Renovate pull requests**: `gh pr list --author app/renovate --state open --json number,title,createdAt,statusCheckRollup`. Report every open one whose checks are **red**, that is **older than a week**, or that has automerge armed and has not merged; then open the Dependency Dashboard issue and report anything rate-limited behind `prConcurrentLimit`. This exists because automerge (`collaboration.md`, *Automerge is the one exception*) is an arrangement whose whole point is that **nobody watches it** — so nobody notices when it stops working, and it fails by going quiet rather than by going wrong. That is not a hypothetical here. Between `main` being protected and #814, `renovate.json` asked Renovate to merge by squash, which this repository does not allow: automerge was impossible for the entire period and **no signal anywhere said so**. What was there to find, had anyone looked: five stale pull requests, one red for eight weeks (#47, which could never have gone green — its two halves, `eslint` and `eslint-config-next`, sat in different groups and could not move together), and thirteen further updates rate-limited behind them — Prisma, better-auth, the Next.js/React group, sharp, node, pnpm and two majors among them — visible only on the Dependency Dashboard, which nobody was reading. **A quiet week is not evidence that this works**: a batch that merged and a batch that was never opened look identical from outside, so check that the weekly batch actually appeared, and say so if none has in a fortnight. Report what you find and stop there — do not merge, close or rebase a Renovate pull request, and do not edit `renovate.json` as part of a review.
-- **Sweep the memory store for what this period's process changes retired.** `git log --since=<the last review> --name-only -- AGENTS.md docs/agents/ .github/workflow-rules.yaml .github/rulesets/` lists the process changes that landed; for each, grep `~/.claude/projects/-Users-michalwy-stamporama/memory/` for the claim it replaced and report a superseded entry as a finding rather than editing it — the store is the lead's. Sweep it the way `collaboration.md`, *Sweeping for a claim* says rather than the way this line used to: counting the hits is one guard of three and **not** a guarantee against a silent zero — an instrument that never ran produces an empty result and a count of nothing — so run a positive control beside it and check that the search actually executed. **This is a backstop, not the rule**: the sweep belongs to whoever landed the change, in that session, because that is the one person who knows what it retired (`collaboration.md`, *Memory is not versioned, and nothing expires it*). It exists for the same reason the worktree sweep does — the layer above it is the one that gets forgotten. The store is machine-local and in no repository, so nothing in a pull request and no required check can ever contradict it, and a session reading a stale entry cannot tell it from a live one: on 2026-09-08 the store held both the correct location of `docker` here and a newer entry concluding it was absent, and the index carried the wrong half (#933, #947).
-- **Check that `collaboration.md` still describes what actually happens**, and report what you find as a finding rather than quietly fixing it. Did a task session stall waiting on the lead, and for how long? Did the lead answer something that was not written down anywhere? Did anything reach `main` without the user's explicit go-ahead — anything, that is, other than the three shapes `collaboration.md` authorises: a Renovate automerge inside its boundary, a pull request inside the `Detect changes` safe list that the lead read and merged (#906), and process work in `.github/`, `scripts/` or `package.json` merged by the lead (2026-09-08, *Process work the lead may merge*)? The second shape's membership has widened once already (#970) and is deliberately not written out here — read it off the `case` glob in the `Detect changes` job in `.github/workflows/ci.yml`, which is the record every sentence about it summarises (`collaboration.md`, *Automerge is the one exception*): **a stale authorisation list manufactures a finding against somebody doing the right thing.** The lead may **merge** all three shapes and may **write** none of them — a documentation task gets a worker like any other, so a documentation pull request the lead both wrote and merged is a finding (`collaboration.md`, *The lead's licences are to merge, never to write*). Did a task session open an issue, close one, or merge a pull request? Does every session's title match the vocabulary in `collaboration.md`, *Session titles*, and did every finished session actually gain its **`✅`** — a missing icon leaves a worktree standing, so the register drifts toward too many live-looking sessions and never toward too few, and several missing at once is a missing mechanism rather than a careless session? **A session that never carried a correct title at all is a different finding with a different owner**: a spawned session's first title is the chip's, set by the lead before the session existed (`collaboration.md`, *A spawned session's first title is the chip's*, #1104), so ten rows saying nothing about which worker is which is one chip written from a template rather than ten sessions forgetting — report it against the chip, and note that the sweep above was never at risk, since a title with no icon falls through to the user. Did a held session start writing before what it waited for had landed: `gh pr view <n> --json commits` for its first commit's author date, against `--json mergedAt` on the pull request it waited for — and did its body name that pull request at all? The model has one day of practice behind it, and each of these is one of its rules failing in a way that looks like nothing at the time.
+## Measure, never remember
+
+Every number in the proposal comes from a command run in this session:
+
+```bash
+gh issue list --state open --limit 300           # the full picture, not recent activity
+gh release list                                  # the current version
+gh pr list --state open                          # what is already in flight
+```
+
+Never infer the backlog from `git log`, from closed issues, or from a number quoted in an earlier
+message — issues appear at any time and a released version is one command away.
+
+## The proposal
+
+Two sections, in Polish, as the user reads them:
+
+- **Najbliższe** — the next 2–3 sessions. Three columns: `Sesja`, `Temat` (short theme label), `Opis`
+  (issue links and a sentence each, `<br>`-separated when a session holds several), and `Dlaczego?`
+  (one sentence of rationale).
+- **Dalsze** — beyond that. Three columns: `Track`, `Opis`, `Dlaczego?` — track-level only, no
+  per-session breakdown.
+
+**Product first.** Process and documentation work is what fills a gap while something is waiting on
+the user; it is never what the queue is made of.
+
+**Check dependencies before ordering.** Read the *Depends on* section of each issue body (`gh issue
+view <n> --json body,comments`) and never schedule an issue ahead of an open dependency.
+
+**Group by whether one issue has to point at what another is moving** — not by whether they land in
+the same file or the same section. Two issues 900 lines apart in one document collide with nothing
+and do not need to share a session. An issue that needs the pointer says so in its own *Done when*,
+so the question is answerable from the bodies alone.
+
+**Do not ask which direction to pursue.** Present the plan and let the user redirect.
+
+## Suggest a release, never cut one
+
+When a coherent batch of shippable commits has accumulated since the last tag, say so. Preparing,
+tagging and publishing is a release-manager session's work — see
+[`release-versioning.md`](release-versioning.md).
+
+## Sweep the Renovate pull requests
+
+```bash
+gh pr list --author app/renovate --state open --json number,title,createdAt,statusCheckRollup
+```
+
+Report every open one whose checks are **red**, that is **older than a week**, or that has automerge
+armed and has not merged; then open the Dependency Dashboard issue and report anything rate-limited
+behind `prConcurrentLimit`.
+
+This exists because automerge is an arrangement whose whole point is that nobody watches it, so it
+fails by going quiet rather than by going wrong. For most of one period `renovate.json` asked
+Renovate to merge by squash, which this repository does not allow: automerge was impossible
+throughout and no signal anywhere said so — five stale pull requests, one red for eight weeks, and
+thirteen further updates rate-limited behind them, visible only on a dashboard nobody was reading.
+**A quiet week is not evidence that this works**: a batch that merged and a batch that was never
+opened look identical from outside, so check that the weekly batch actually appeared and say so if
+none has in a fortnight.
+
+Report what you find and stop there — do not merge, close or rebase a Renovate pull request, and do
+not edit `renovate.json` as part of a review.

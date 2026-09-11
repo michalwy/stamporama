@@ -633,7 +633,7 @@ Delivery is a **manual upload** — there is no Delcampe API (#154 is an open sc
 
 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of it. Where the two disagree, the workflow is right.
 
-**Not every job runs on every event.** `Detect changes` runs first and on everything, and decides whether the change touches anything the application is built from; the four application suites are gated on its output, so a change staying inside its safe list leaves all four skipped. That safe list is the `case` glob inside that job and is the record of its own membership — see `docs/agents/collaboration.md`, *A pull request no CI job can speak to skips all four*, for why it is not restated anywhere. `Closing reference check` is gated on nothing and runs on every pull request. The publishing jobs run on `v*` tags only.
+**Not every job runs on every event.** `Detect changes` runs first and on everything, and decides whether the change touches anything the application is built from; the four application suites are gated on its output, so a change staying inside its safe list leaves all four skipped. That safe list is the `case` glob inside that job and is the record of its own membership — the comment above that `case` block says why it is not restated anywhere, and what a path added to it costs. `Closing reference check` is gated on nothing and runs on every pull request. The publishing jobs run on `v*` tags only.
 
 The four application suites, each gated on `Detect changes`:
 

@@ -1,8 +1,12 @@
 # Release Versioning
 
-Cutting a release is its own kind of session: no issue, no branch, and **it changes nothing in the
-repository** — see `collaboration.md`. What it produces is a tag, a GitHub Release and a published
-image.
+A release-manager session has no issue, no branch and no commit, and **it changes nothing in the
+repository**. What it produces is a tag, a GitHub Release and a published image.
+
+Read this file with `git show origin/main:docs/agents/release-versioning.md` if your worktree has
+been sitting: this session never cuts a branch, so nothing refreshes the copy on disk, and a
+procedure missing its newest step reports nothing at all — the steps it does carry are real steps
+and every one of them comes back clean.
 
 ## The procedure
 
@@ -89,69 +93,6 @@ failure actually withholds the image.
 
 **No commit, no branch, no pull request** — the whole procedure is tags and a Release.
 
-## The wake-up drill is not this session's
-
-AGENTS.md opens an assignment with the wake-up drill — `git fetch origin main`, cut
-`task/<issue>-<slug>` from `origin/main`, `pnpm install`, then `pnpm prisma:generate` — and says
-*unconditionally*. **That word is about a session with an issue, and a release session has none**:
-the drill's second step cuts a branch named after one. Only the fetch survives, and it survives on
-its own merit rather than by inheritance — you need `main`'s actual head to know what you are
-tagging, which is the discipline step 1 already states about the version.
-
-**`pnpm install` and `pnpm prisma:generate` are the two steps that word was written for, and neither
-can mislead a release session.** #862 is about a Prisma client that is stale rather than missing,
-which compiles and whose tests pass against a schema the branch no longer declares — a failure that
-needs a local build or a local suite to happen in. **A release session runs neither.** Every check
-it reads is a run on GitHub against a fresh checkout: `main`'s at step 3 and the tag's at step 5.
-There is nothing local here for a stale client to be stale against.
-
-**The drill's *read each step's own exit status* clause does not reach this session either, and the
-reason is structural rather than a judgement that it does not matter** (#1066). That clause is about
-a `&&` chain ending in a pipe reporting the pipe's status; a release session runs the fetch and
-nothing else, so it has one command, nothing to chain it to, and a status that is its own. Run it
-alone anyway — you need `main`'s actual head to know what you are tagging, which is step 1's
-discipline — and the failure shape the clause names cannot arise here.
-
-**So read this file and `collaboration.md` with `git show origin/main:<path>`, at the moment you are
-assigned and before step 1.** That follows from the paragraphs above rather than adding to them: the
-step this session does not run is the **cut**, and the cut is the whole of what a task session's
-reading depends on. `AGENTS.md` puts the fetch and the branch cut before any process file is read,
-because after the cut the worktree **is** `origin/main` and every file in it is current by
-construction (#1060; `collaboration.md`, *A pooled worker reads nothing until it is assigned*). A
-release session runs the fetch and stops there, and **the fetch moves `origin/main` without moving a
-single file it can open** — so its worktree is as old as the pool for the whole of its life, and the
-explicit read is its only answer rather than a fallback for what it forgot to do.
-
-**And nothing has to remember to tell you so.** `CLAUDE.md` says to read `AGENTS.md` with
-`git show origin/main:AGENTS.md` until a branch has been cut, and `AGENTS.md`'s wake-up-drill bullet
-names this section for the release narrowing — so a session arriving here has already read one file
-the explicit way and is being told to go on doing it, rather than meeting the instruction for the
-first time inside the procedure it governs.
-
-**The gap is sharper here than the one that ordering was written for.** A task session that read its
-worktree first held a file some hours old and then cut a branch that corrected it, for free and
-without being told. Nothing corrects this one. And what it is reading is a **procedure** rather than
-a rule about how to work: this file took 102 added lines on 2026-09-10, the largest single move of
-any process file that day, two hours before the session that noticed this was assigned. A release
-session on the stale copy would tag on a step that had been replaced, and everything it then ran
-would come back clean — the steps it did read are real steps, and a procedure missing its newest one
-reports nothing at all (#1067).
-
-**Step 1 does not get the same sentence beside it, and that is a decision rather than an oversight.**
-It guards the same failure about a different fact — never trust a remembered version — and that
-parallel is worth having, which is why the section above already draws it twice. What step 1 must not
-become is a second statement of *this* rule: **a rule about which copy to read cannot have its record
-inside the thing being read**, because a session that has reached step 1 has finished reading, and a
-warning placed there arrives after the moment it governs. That is why `AGENTS.md` rather than
-`collaboration.md` is the record of the ordering for a task session, and it applies here unchanged.
-The two facts are not answered alike either: the released version has a one-command answer that is
-correct whenever it is run, which is why naming the command is all step 1 has to do — **which copy of
-a procedure you are holding has no command that answers it**, and is settled before step 1 is
-reached.
-
-This is stated in this file rather than in AGENTS.md because `collaboration.md` gives this file the
-release procedure end to end.
-
 ## There is no version bump commit
 
 The `chore: bump version to X.Y.Z` commit that used to open a release has been **dropped**.
@@ -195,5 +136,5 @@ release note when the job actually submitted something.
 
 ## Who may cut a release
 
-In a backlog-review session, only *suggest* a release — do not prepare, tag, push or create it.
-Release preparation is handled by a separate session, spawned fresh each time (`collaboration.md`).
+A session the user opens for it, and nobody else. A backlog-review session may only *suggest* a
+release — it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).

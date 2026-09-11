@@ -234,10 +234,10 @@ the branch name is actually written down:
   files answer *"can this be squashed"* only when read together.
 - `allow_auto_merge` — whether `gh pr merge --auto` is offered at all.
 - `allow_update_branch` — whether GitHub will bring a behind branch up to date on its own. This is
-  the field the merge loop rests on: `docs/agents/collaboration.md` § *Who moves a branch that has
-  fallen behind* exists because an armed pull request never becomes mergeable by itself, and the
-  lead therefore runs `gh pr update-branch --rebase` by hand. Read the value here rather than from
-  that section, which is why it no longer states one.
+  the field the merge loop rests on: `docs/agents/collaboration.md` § *Branches and pull requests* has
+  the session that opened a pull request keep it current by hand, because an armed pull request never
+  becomes mergeable by itself. Read the value here rather than from that section, which is why it no
+  longer states one.
 - `delete_branch_on_merge` — whether a merged branch removes itself.
 - `default_branch` — the branch name every one of the above is about.
 
