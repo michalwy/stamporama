@@ -144,6 +144,24 @@ reachable from the internet, and publishing the list of things a valid token cou
 unauthenticated reader something and buys the collector nothing: the agent that needs the document
 already holds a token.
 
+### 8. The MCP wrapper is hand-written, and that is its own decision
+
+§3 said *two wrappers* and left open how the second one is built. **It is a hand-written module
+rather than `@modelcontextprotocol/sdk`** (#709), and the deciding reason is the Prisma-free split:
+hand-rolled, the protocol layer is a pure function of an operation list, so `pnpm test:unit` holds
+the whole of it, where an SDK transport — written against Node stream objects an App Router handler
+does not have — would sit behind a boundary only the integration suite could reach. **The cost is
+that a specification revision is ours to implement**, which is why the revision is pinned and the
+endpoint reports its own drift.
+
+**This section is a finding aid and not the argument.** It is here because a reader asking *was this
+decided, or did it merely happen* looks in `docs/decisions/`, and the answer would otherwise have
+lived only in a topic file. The reasoning is in
+**[ADR-0051](0051-hand-rolled-mcp-transport.md)** — the alternatives, the never-alone arithmetic,
+and the two places the implementation deviates from the specification — with the working detail in
+[`agent-api.md`](../agents/agent-api.md). Do not restate any of it here: prose that points does not
+drift; prose that copies does.
+
 ## Consequences
 
 - **`src/lib/agent-api/` is split by what may reach Prisma, and the split is not stylistic.**
