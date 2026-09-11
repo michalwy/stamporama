@@ -8,16 +8,24 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**; both wrappers exist and the registry carries **twenty-five operations** —
-#708's vocabulary read, #710's six reads over the collection, #711's six offer verbs, and #712's two
-want reads, checklist gap and nine trade verbs.
+track has landed**; both wrappers exist and the registry carries **twenty-six operations** —
+#708's vocabulary read, #710's six reads over the collection, #711's six offer verbs, #712's two
+want reads, checklist gap and nine trade verbs, and #1168's bid recommendation. *The registry
+carries twenty-five operations* is quoted rather than deleted: it was true from #712 until #1168.
 
-**Eight of them write**, which is the change #712 made to this page. Two earlier sentences are
+**Eight of them write**, which is the change #712 made to this page and which #1168 did **not**
+move: `recommend_bid` reads and computes and stores nothing. Two earlier sentences are
 quoted rather than deleted, because each was true when it was written and will go on arriving in
 anything copied from it: *the registry carries seven operations … **Nothing in it writes**, which
 several statements below still rest on* (#706 through #710), and *the registry carries thirteen
 operations … **Three of them write*** (#711). Every statement that rested on either is corrected
 below, each saying what it used to say.
+
+**And the surface now answers four workflows rather than three** (#1168). The first three are the
+ones #710, #711 and #712 name, and every one of them is about material the collection holds or is
+looking for. The fourth is not: it is a **stateless query about a lot nothing here records**, asked
+before any of the other three could have anything to say. *The three agent workflows* is quoted
+rather than deleted wherever it appears below, for the same reason.
 
 ## It is beside the screen API, never over it
 
@@ -94,6 +102,7 @@ src/lib/agent-api/
   offer-reads.ts    the offer responses, their projections and the text vocabulary (#711)
   want-reads.ts     the want and checklist-gap responses and their projections (#712)
   trade-reads.ts    the trade, line and balance responses and their projections (#712)
+  bid-reads.ts      the bid-recommendation response and its projections (#1168)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -106,10 +115,11 @@ src/lib/agent-api/
     offers.ts       the six offer verbs (#711)                          ← server-side
     wants.ts        the two want reads and the checklist gap (#712)     ← server-side
     trades.ts       the nine trade verbs (#712)                         ← server-side
+    bids.ts         recommend_bid (#1168)                                ← server-side
 ```
 
-**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts` and `trade-reads.ts` are on the pure side
-and are typed structurally** rather than against
+**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts` and `bid-reads.ts` are
+on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -431,7 +441,7 @@ implemented is the reading that is correct either way and costs nothing when the
 
 ## Reading the collection
 
-**Six operations, answering the first of the three agent workflows** (#710): *what do I have, in
+**Six operations, answering the first of the workflows** (#710): *what do I have, in
 what condition, where does it sit, what is it worth, what is missing*. All six are `read` scope and
 none of them writes.
 
@@ -554,7 +564,7 @@ knowing before something is "simplified" back:
 
 ## Working on offers
 
-**Six operations, answering the second of the three agent workflows** (#711): *what is not listed,
+**Six operations, answering the second of the workflows** (#711): *what is not listed,
 what is it worth, draft a listing, price it, word it.* Three of them **write**, and they are the
 first writes on this surface.
 
@@ -719,7 +729,7 @@ specificity, which is what decides the order a `405` lists its methods in.
 
 ## Wants and checklists
 
-**Three operations, opening the third of the three agent workflows** (#712): *what am I looking for,
+**Three operations, opening the third of the workflows** (#712): *what am I looking for,
 what does a counterparty have that answers it, and what is this set still missing.* All three are
 `read` scope and none of them writes.
 
@@ -987,6 +997,137 @@ single, then one with a picture, then the lowest copy number. N takes N distinct
 serves two requirements. An agent choosing for itself would be a second ranking rule, and a bad trade
 is what a wrong one costs.
 
+## Deciding whether an auction is worth looking at
+
+**One operation, answering a fourth workflow — and the first that is a query about something the
+collection does not hold** (#1168). `recommend_bid` is `read` scope and writes nothing.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `recommend_bid` | no | what a described lot would be worth bidding, before any of it exists here |
+
+**The workflow decides the shape, and it is worth stating before the mechanics.** The agent is at an
+auctioneer's page. Nothing exists in Stamporama — no lot, no sale, no `AuctionLotLine` — and it has
+the description of a stamp and an opening price. It wants one thing: **if the opening price is above
+the recommendation, drop it and move on.** So this is a **stateless query** rather than a read of a
+record, and `writes: false` is literal — it stores nothing at all, not even the question.
+
+### Why the agent must not do this arithmetic itself
+
+`find_unlisted_copies` hands it `catalogValue` and `marketValue` and its own description says what
+they are: *"they answer different questions, so both are given and neither is a recommendation."* A
+bid recommendation is arithmetic **over** those — an anchor per line, quantity multiplying it
+(ADR-0020), a band in percent of the fair figure (#508), and the buyer's premium subtracted to get
+from an all-in valuation to the hammer price that may be typed. An agent reconstructing that from
+two numbers would be **a second valuation rule beside the existing one**, which is this page's own
+prohibition and the defect class no test can see.
+
+### It is lot-free by extraction, not by copying
+
+**`auction-lot-anchors.ts` was keyed on lots and is not any more.** `resolveAuctionLotAnchors` and
+`valuateAuctionLotLines` both took lot ids, and the tempting answer — a parallel lot-free path — is
+exactly the second anchoring rule the issue forbids. What was done instead:
+
+- **`lotLineValueOf`** (pure, `auction-lot.ts`) is the three-outcome catalogue rule — *unpriced*, a
+  figure, and *unconvertible* — stated **once**. Both `valuateAuctionLotLines` and the lot-free
+  `valuateLineSpecs` call it. It is three lines of arithmetic and it is extracted because it is the
+  whole of the valuation rule sitting above `valuateItemRows`: a second copy is how one surface
+  comes to call a line unpriced while the other calls it unconvertible.
+- **`AnchorableLine`** (`auction-lines.ts`) is what the anchoring rule actually reads off a line —
+  a `stamp × condition × certificate × format × quantity` with its catalogue value resolved.
+  `AuctionLotLineItem` **extends** it rather than merely resembling it, so the fit is a compile
+  error away rather than a coincidence.
+- **`loadAnchorContext` + `anchorLine`** are `resolveAuctionLotAnchors`'s own body, lifted. The lots
+  screen goes through them and so does the agent. **Batching is unchanged**: one market read, one
+  rate map, one ratio load and one ownership count cover a whole page of lots, which a
+  per-composition extraction would have turned into four queries per row.
+- **`recommendBid` is reused unchanged.** It was already pure and already lot-free — `BidLine` is
+  `{quantity, anchor, source, unconvertible}` and names no record — which is what made this issue
+  cheap.
+
+**The point is not tidiness.** If the agent's answer and the lot row's answer could diverge, nothing
+would ever go red over it. One function is the only form of that guarantee this repository can have.
+
+### The four questions the issue named, and what each was answered with
+
+**Currency: the caller names one, defaulting to the collection's base currency.** The three figures
+are all-in in *some* currency and the fees are in that same one, so answering in the base currency
+about a house listing in EUR would be arithmetic on nothing. Base is the default because it always
+has a rate and because it is the one currency `get_collection_vocabulary` already hands over as a
+scalar. **`unconvertible` survives it and is not collapsed into *no price***: a market median with
+no rate into the currency asked for is reported unconvertible, exactly as a sale currency with no
+rate behaves on the lots screen.
+
+**One rate does both halves, which is worth saying because ADR-0029 §5 invites reading it as two
+rules.** §5 says catalogue anchors need no conversion because they already roll up in the sale's
+currency — true of `auction-lot-anchors.ts`, and true because `valuateAuctionLotLines` has *already*
+applied that same base → target rate by the time a line arrives. It is a statement about that module
+rather than about the pipeline, and the lot-free path applies the rate in the same place.
+
+**Fees: two optional parameters, and the answer echoes what it used.** With no premium,
+`maxBidWithin` returns the all-in figure itself, so `bid` equals `allIn` and an agent reading only
+the hammer price would bid the whole fair valuation and pay the premium on top — **omitting fees
+overstates what may be bid**, which is the wrong direction for a control whose job is to say *do not
+bother*. It cannot be defaulted: there is no sale, and the only place a premium lives is the seller,
+which would mean naming one. Requiring it would make an agent invent a number it does not have. So
+the answer carries `premiumPercent` / `premiumFixed` back, and **the overstatement stops being
+silent**, which is the half that was actually wrong. No shipping parameter — `recommendBid` strips
+it deliberately, a parcel shipping once however many lots are in it.
+
+**Naming the stamp: `search_collection`, and #708's resolver is not the route for this half.** The
+issue points at #708's name-or-id resolver, and it is right about three of the four axes and wrong
+about the fourth. #708 resolves per-collection, **cuid-keyed vocabularies**; a stamp is not one of
+them and has no entry to match a name against. The established route for a stamp id here is
+`search_collection` (#710) — what `list_wants`, `match_wants`, `list_holdings` and
+`find_checklist_gaps` all say — and it searches catalogue numbers over free text, which is exactly
+what the agent holds at an auctioneer's page. `resolveVocabularyValue` owns the grade, the
+certificate and the format.
+
+**Several lines, in `match_wants`' shape.** An auction lot is usually a run, `recommendBid` takes a
+list and ADR-0029 §6 makes a lot the sum of its lines. #706 keeps parameter types to scalars and
+string lists, so a per-line object would mean widening `ParameterType` across four modules for one
+operation; `match_wants` met the identical problem and answered it with a list of stamps at one
+stated grade, and this takes the same shape plus a `quantity` applying to each.
+
+**What that cannot express is a lot mixing grades, and it is said on the operation rather than left
+to be found** — `agent-api.md`'s own move for *"at least this grade" is inexpressible and is not
+missing*. It also cannot be worked around by calling twice and adding: **a fixed premium is charged
+once per lot, so two answers are not additive.** Both sentences are in the result description,
+because that is what a model actually reads.
+
+### The three unanswerable cases stay three answers
+
+This is the requirement the whole response shape is built around, and `BidRecommendation` already
+separated them — what #1168 had to do was carry the distinction out to the wire and into the
+`description`:
+
+- **no anchor at all** — `unanchoredLines`. Nothing prices the key and nothing was ever recorded
+  against it. The anchored lines still sum, and the count is what says the total is partial.
+- **an anchor with no rate** — `unconvertibleLines`. There *is* a figure and it cannot be stated in
+  the currency asked for. Calling it unpriced would send the collector off to enter a value that
+  already exists, which is the distinction `LotLineValue.unconvertible` has carried since #353.
+- **a figure the fees alone consume** — a level whose `allIn` is stated and whose `bid` is
+  **absent**. It is a real answer and emphatically not a zero: at that premium no hammer price stays
+  inside the figure, which is the clearest *do not bother* there is and would read as *bid nothing*
+  at `0.00`.
+
+A fourth case looks like one of these and is not: **no line anchored at all**, where `fair` is null
+outright and all three levels are absent. ADR-0029 §1 is explicit that a lot whose composition is
+entered but unpriceable is *unanswered, not worthless*.
+
+**And a stamp that is not in this collection is refused rather than dropped.** A line silently
+missing from the sum would make `fair` read as the lot's worth while describing a smaller lot —
+`match_wants`' own rule and #710's *a scope that names nothing is a refusal, never an empty answer*,
+with the refusal naming `search_collection`.
+
+### What it deliberately is not
+
+**It creates nothing.** No lot, no sale, no `AuctionLotLine` — *this workflow exists precisely
+because none of that has happened yet*. There is no operation that reads existing lots and their
+recommendations either; exposing the auctions area to the agent is #1036 and is a separate and
+larger question. And nothing here changes how the lot screen computes its own figures — it now
+computes them through two functions that were lifted out of it, and the figures are the same ones.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Two boundaries in this track are enforced by there being no operation, and
@@ -1196,16 +1337,17 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries twenty-five operations.** It was empty on #706, which shipped none; #708
+**The document carries twenty-six operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
 `list_wants`, `match_wants`, `find_checklist_gaps`, `list_trades`, `create_trade`, `get_trade`,
 `list_trade_lines`, `get_trade_balance`, `add_trade_give_lines`, `serve_trade_requirement`,
-`add_trade_receive_lines` and `remove_trade_line`. Four earlier sentences are
-quoted rather than deleted because each stood in several files and will go on arriving in anything
-copied from them: *#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the
-honest state of the surface until #710*, *the document carries one operation*, *the document
-carries seven operations*, and *the document carries thirteen operations*. What is unchanged is that `build([])` is still the right way to ask what an
+`add_trade_receive_lines` and `remove_trade_line`; #1168 added `recommend_bid`. Five earlier
+sentences are quoted rather than deleted because each stood in several files and will go on arriving
+in anything copied from them: *#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI
+3.1, and the honest state of the surface until #710*, *the document carries one operation*, *the
+document carries seven operations*, *the document carries thirteen operations*, and *the document
+carries twenty-five operations*. What is unchanged is that `build([])` is still the right way to ask what an
 empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
 asks it of a fixture list rather than of the registry.

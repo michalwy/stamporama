@@ -2,8 +2,8 @@ import "server-only";
 import {
   baseToSaleRates,
   valuateAuctionLotLines,
+  type AnchorableLine,
   type AuctionLotComposition,
-  type AuctionLotLineItem,
 } from "./auction-lines";
 import type { BidLine } from "./bid-recommendation";
 import { countCopiesByStampAndCondition, stampConditionKey } from "./copy-counts";
@@ -12,8 +12,18 @@ import { readStampMarketValues, type StampMarketValue } from "./market-values";
 import { getCollectionBaseCurrency } from "./pricing";
 import { loadRealizationRatios, type RealizationRatio } from "./realization-ratios";
 
-// **What anchors each line of an auction lot** (#510; ADR-0029 §1, §5, §7) — the domain layer
-// between the valuation modules and the recommendation arithmetic in `bid-recommendation.ts`.
+// **What anchors a line** (#510; ADR-0029 §1, §5, §7) — the domain layer between the valuation
+// modules and the recommendation arithmetic in `bid-recommendation.ts`.
+//
+// **It was keyed on lots until #1168 and is not any more, and that is one rule rather than two.**
+// The agent workflow this surface now answers is a query about something the collection does not
+// hold: an auctioneer's description of a stamp and an opening price, with no lot, no sale and no
+// `AuctionLotLine` anywhere. What the anchoring rule actually reads off a line is a
+// `stamp × condition × certificate × format × quantity` with its catalogue value resolved
+// (`AnchorableLine`), which is what a composition line *is* — so the lots screen and a lot-free
+// caller go through `loadAnchorContext` + `anchorLine` alike. A second anchoring rule beside this
+// one is the defect with no detector: the agent's answer and the lot screen's would disagree and
+// nothing would ever go red over it (`agent-api.md`).
 //
 // Nothing is decided here that the modules below have already decided. The market median is
 // ADR-0022's for the line's exact key, the catalogue value is the composition rollup the lots
@@ -32,20 +42,26 @@ import { loadRealizationRatios, type RealizationRatio } from "./realization-rati
 // argument of ADR-0022. There is no blend of the two: a figure that is part-measured and
 // part-policy cannot be explained when it looks wrong.
 //
-// **Currency** (ADR-0029 §5). Catalogue values already roll up in the sale's currency and ratios
-// are unitless, so a catalogue anchor needs no conversion. Market medians are in the base currency
-// and are converted base → sale at the **current** rate, because the recommendation is about a bid
-// being placed now — not at a rate frozen on some past lot. A line whose anchor cannot be converted
-// is reported *unconvertible*, never unanchored: it has a price and cannot be summed, which must
-// not send the collector off to enter a value that already exists.
+// **Currency** (ADR-0029 §5). Catalogue values arrive already stated in the currency being answered
+// in — the sale's on the lots screen, the caller's otherwise — and ratios are unitless, so a
+// catalogue anchor needs no conversion *here*. Market medians are in the base currency and are
+// converted at the **current** rate, because the recommendation is about a bid being placed now —
+// not at a rate frozen on some past lot. A line whose anchor cannot be converted is reported
+// *unconvertible*, never unanchored: it has a price and cannot be summed, which must not send the
+// collector off to enter a value that already exists.
+//
+// **One rate does both halves**, which is worth saying because §5's wording invites reading it as
+// two rules. `valuateAuctionLotLines` has already applied that same base → target rate to the
+// catalogue figure by the time a line reaches here, so the catalogue side needing no conversion is
+// a statement about *this* module rather than about the pipeline.
 //
 // **Ownership is evidence, never arithmetic** (ADR-0029 §7). How many copies are already held is
 // reported and does not move a figure: duplicates are bought deliberately for trade and resale, so
 // a system-applied haircut would under-bid the material a collector most wants.
 //
-// Resolved for a whole page of lots at a time: one composition pass, one market read, one ratio
-// load, one ownership count. Ownership is **not** checked here — the caller has already resolved
-// the collection for the owner, as everywhere in the auction modules.
+// Resolved for a whole page at a time: one composition pass, one market read, one ratio load, one
+// ownership count, however many lots or lines are in play. Ownership is **not** checked here — the
+// caller has already resolved the collection for the owner, as everywhere in the auction modules.
 
 /** The market side of an anchor: ADR-0022's figures for the line's exact key, in the **base**
  * currency, with the evidence #511 renders beside them. */
@@ -60,10 +76,10 @@ export interface AnchorMarketEvidence {
   confidence: { score: number; badge: MarketConfidenceBadge };
 }
 
-/** One `AuctionLotLine`, resolved: what anchors it, in what currency, and what is known about it. */
-export interface AuctionLotLineAnchor {
-  lineId: string;
-  auctionLotId: string;
+/** One line, resolved: what anchors it, in what currency, and what is known about it. Carries no
+ * identity of its own — a line the caller merely described has none — so the lot path adds its
+ * `lineId` and `auctionLotId` on top (see {@link AuctionLotLineAnchor}). */
+export interface LineAnchor {
   stampId: string;
   /** The leading catalog number, prefix-formatted (`Mi·PL 12`) — how a line is named on screen. */
   catalogLabel: string | null;
@@ -74,24 +90,25 @@ export interface AuctionLotLineAnchor {
   formatId: string | null;
   formatAbbreviation: string | null;
   quantity: number;
-  /** The sale's currency: what {@link anchor} and {@link catalogueValue} are in. */
+  /** What {@link anchor} and {@link catalogueValue} are in — the sale's on the lots screen, the
+   * one the caller asked for otherwise. */
   currency: string;
   /** What {@link market}'s figures are in. */
   baseCurrency: string;
 
-  /** What **one** of them is worth, in the sale's currency — the figure #509 sums. Null when the
-   * line is unanchored or unconvertible. */
+  /** What **one** of them is worth, in {@link currency} — the figure #509 sums. Null when the line
+   * is unanchored or unconvertible. */
   anchor: number | null;
   /** Which route produced it; null when neither could. */
   source: "market" | "catalogue" | null;
-  /** An anchor exists and cannot be stated in the sale's currency. */
+  /** An anchor exists and cannot be stated in {@link currency}. */
   unconvertible: boolean;
 
   /** ADR-0022's figures for this key, or null when nothing has ever been recorded against it. */
   market: AnchorMarketEvidence | null;
-  /** The composition rollup for this line, sale currency, 2-dp. Null when the catalogue prices it
-   * at nothing — or prices it in a currency with no rate to the sale's, which {@link unconvertible}
-   * is what says. */
+  /** The catalogue rollup for this line, in {@link currency}, 2-dp. Null when the catalogue prices
+   * it at nothing — or prices it in a currency with no rate to this one, which
+   * {@link unconvertible} is what says. */
   catalogueValue: string | null;
   /** The ladder #520 resolved for this line's `stamp × condition`. Carried only for a line the
    * catalogue anchors, since that is the only figure it multiplies. */
@@ -100,12 +117,87 @@ export interface AuctionLotLineAnchor {
   owned: number;
 }
 
+/** A resolved line that **is** an `AuctionLotLine`, which is every line on the lots screen. The two
+ * identity fields are the only thing the lot path adds. */
+export interface AuctionLotLineAnchor extends LineAnchor {
+  lineId: string;
+  auctionLotId: string;
+}
+
 /** A lot's lines, resolved. */
 export interface AuctionLotAnchors {
   lotId: string;
   currency: string;
   baseCurrency: string;
   lines: AuctionLotLineAnchor[];
+}
+
+// ── The shared context, loaded once for a whole page ─────────────────────────
+
+/**
+ * Everything anchoring needs from the database, for however many lines are being resolved at once.
+ *
+ * **The batching is the reason this is a context rather than a per-line read.** One market read, one
+ * rate map, one ratio load and one ownership count cover a whole page of lots — resolving a line at
+ * a time would turn a forty-lot watchlist into four separate queries per row.
+ */
+export interface AnchorContext {
+  /** What the market medians are in, and what a catalogue figure was converted *from*. */
+  baseCurrency: string;
+  /** Base → each currency being answered in, current. Null for a currency no rate could be had for,
+   * which is what makes a line *unconvertible* rather than unanchored. */
+  rates: Map<string, number | null>;
+  marketByStamp: Map<string, StampMarketValue[]>;
+  ratios: {
+    resolve(subject: {
+      areaId: string | null;
+      conditionId: string;
+      issuedYear: number | null;
+    }): RealizationRatio;
+  };
+  /** Keyed by {@link stampConditionKey}. */
+  owned: Map<string, number>;
+}
+
+/**
+ * Load {@link AnchorContext} for a set of stamps and the currencies the answers are wanted in.
+ *
+ * Both callers load it the same way and neither may load half of it: the lots screen resolves a
+ * page's worth of lots across several sale currencies, and a lot-free query resolves one line-set in
+ * one currency (#1168).
+ */
+export async function loadAnchorContext(
+  collectionId: string,
+  stampIds: string[],
+  currencies: string[]
+): Promise<AnchorContext> {
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const [marketByStamp, rates, ratios, owned] = await Promise.all([
+    readStampMarketValues(collectionId, stampIds),
+    baseToSaleRates(collectionId, baseCurrency, currencies),
+    loadRealizationRatios(collectionId),
+    countCopiesByStampAndCondition(collectionId, stampIds),
+  ]);
+  return { baseCurrency, rates, marketByStamp, ratios, owned };
+}
+
+/**
+ * **The anchoring rule, and the only statement of it.**
+ *
+ * Market median for the line's exact key when it has any datapoint, else catalogue × the learned
+ * ratio, else nothing — per line, never per lot, and the same function whether the line came off an
+ * `AuctionLotLine` or out of a caller's description of a lot that does not exist here (#1168). A
+ * second spelling of this is the defect the whole arrangement exists to prevent: the agent's answer
+ * and the lot screen's would diverge and nothing would ever go red over it.
+ */
+export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAnchor {
+  return resolveLine(line, {
+    baseCurrency: context.baseCurrency,
+    rate: context.rates.get(line.currency) ?? null,
+    market: findMarketValue(context.marketByStamp.get(line.stampId), line),
+    ratios: context.ratios,
+    owned: context.owned.get(stampConditionKey(line.stampId, line.conditionId)) ?? 0,
+  });
 }
 
 /**
@@ -136,36 +228,28 @@ export async function resolveAuctionLotAnchors(
   if (compositions.length === 0) return new Map();
 
   const lines = compositions.flatMap((composition) => composition.lines);
-  const stampIds = lines.map((line) => line.stampId);
 
-  const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [marketByStamp, rates, ratios, owned] = await Promise.all([
-    readStampMarketValues(collectionId, stampIds),
-    baseToSaleRates(
-      collectionId,
-      baseCurrency,
-      compositions.map((composition) => composition.currency)
-    ),
-    loadRealizationRatios(collectionId),
-    countCopiesByStampAndCondition(collectionId, stampIds),
-  ]);
+  // The same context the lot-free caller loads, over this page's stamps and sale currencies. One
+  // market read, one rate map, one ratio load and one ownership count for the whole page.
+  const context = await loadAnchorContext(
+    collectionId,
+    lines.map((line) => line.stampId),
+    compositions.map((composition) => composition.currency)
+  );
 
   const out = new Map<string, AuctionLotAnchors>();
   for (const composition of compositions) {
-    const rate = rates.get(composition.currency) ?? null;
     out.set(composition.lotId, {
       lotId: composition.lotId,
       currency: composition.currency,
-      baseCurrency,
-      lines: composition.lines.map((line) =>
-        resolveLine(line, {
-          baseCurrency,
-          rate,
-          market: findMarketValue(marketByStamp.get(line.stampId), line),
-          ratios,
-          owned: owned.get(stampConditionKey(line.stampId, line.conditionId)) ?? 0,
-        })
-      ),
+      baseCurrency: context.baseCurrency,
+      // `AuctionLotLineItem` satisfies `AnchorableLine` structurally, so this is the shared rule
+      // with the line's own identity put back on top — not a lot-shaped variant of it.
+      lines: composition.lines.map((line) => ({
+        lineId: line.id,
+        auctionLotId: line.auctionLotId,
+        ...anchorLine(line, context),
+      })),
     });
   }
   return out;
@@ -176,7 +260,7 @@ export async function resolveAuctionLotAnchors(
  * on a figure describing something that was never sold. */
 function findMarketValue(
   values: StampMarketValue[] | undefined,
-  line: AuctionLotLineItem
+  line: AnchorableLine
 ): StampMarketValue | null {
   if (!values) return null;
   const wanted = marketKeyOf(line);
@@ -192,10 +276,8 @@ interface LineContext {
   owned: number;
 }
 
-function resolveLine(line: AuctionLotLineItem, context: LineContext): AuctionLotLineAnchor {
+function resolveLine(line: AnchorableLine, context: LineContext): LineAnchor {
   const identity = {
-    lineId: line.id,
-    auctionLotId: line.auctionLotId,
     stampId: line.stampId,
     catalogLabel: line.catalogLabel,
     stampName: line.stampName,
@@ -302,7 +384,7 @@ function resolveLine(line: AuctionLotLineItem, context: LineContext): AuctionLot
  * where there is an anchor, so the unanchored case is handed the catalogue label and counted as
  * unanchored on its null figure — which is the one place the two shapes do not line up exactly.
  */
-export function toBidLines(lines: AuctionLotLineAnchor[]): BidLine[] {
+export function toBidLines(lines: LineAnchor[]): BidLine[] {
   return lines.map((line) => ({
     quantity: line.quantity,
     anchor: line.anchor,

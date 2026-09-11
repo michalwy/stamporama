@@ -111,6 +111,29 @@ series' checklists are still missing.
 list, make the link, agree the trade, answer what they wrote on it, or close it. A trade it builds
 sits on your trades screen as a draft until you look at it.
 
+**And there is one thing it can answer about a stamp you do not own and have not recorded: what a
+lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
+stamps, the grade, whether there is a certificate, whether it is a block rather than singles, how
+many — and it comes back with three figures: a floor under which the lot is a bargain, a fair figure
+your own recorded results support, and a walk-away past which it belongs to somebody else. If the
+opening price is above the walk-away, that is the end of it, and you never had to look. It is the
+same arithmetic the *REC* figure on your own lots screen shows, out of the same code, so the two
+cannot tell you different things. Nothing is created by asking — no lot, no sale, nothing on your
+watchlist — and a **read only** token can ask it.
+
+Three things about that answer are worth knowing before you act on one:
+
+- **Tell it the buyer's premium if you know it.** Each figure comes twice — what the lot is worth
+  all-in, and the hammer price that still fits inside that once the premium is added. Without the
+  premium the two are the same number, which **overstates what you can actually bid**. The answer
+  says which fees it used, so you can see when none were given.
+- **A figure it cannot work out is not a figure of nought.** It tells you separately when nothing
+  prices a stamp at all, when there *is* a price it cannot convert into the auction's currency, and
+  when the premium alone eats the whole figure. The last one is the clearest *do not bother* there
+  is, and reading it as zero would be the opposite of what it means.
+- **Ask about one grade at a time.** A lot that is half mint and half used cannot be answered in one
+  question, and two answers do not add up — a flat lot fee is charged once, not twice.
+
 **Everything it writes is on a screen you already know, and is undone there.**
 
 **Which is exactly why *read only* is the setting to start from.** A listing drafted at the wrong
@@ -125,7 +148,8 @@ Two things it will never do, however you ask, and they are absent rather than sw
   else's platform.
 - **It never reaches a counterparty.** It can build and balance a trade; it does not send a
   proposal, share a link, agree or close a trade, answer what a partner wrote on one, or write to
-  Colnect. It also never sees a partner's email address, telephone number or the notes you keep
+  Colnect. Nor does it bid on anything: working out what a lot is worth is as far as it goes, and
+  typing a figure into an auction house's box stays with you. It also never sees a partner's email address, telephone number or the notes you keep
   about them — the only thing it is told about a person is their name.
 
 And with a **read only** token it changes nothing at all, which is the setting to start from.

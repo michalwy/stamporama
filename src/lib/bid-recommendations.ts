@@ -1,11 +1,14 @@
 import "server-only";
 import { prisma } from "./db";
-import type { AuctionLotComposition } from "./auction-lines";
+import { valuateLineSpecs, type AuctionLotComposition, type LineSpec } from "./auction-lines";
 import type { AuctionFees } from "./auction-lot";
 import {
+  anchorLine,
+  loadAnchorContext,
   resolveAuctionLotAnchors,
   toBidLines,
   type AuctionLotLineAnchor,
+  type LineAnchor,
 } from "./auction-lot-anchors";
 import {
   recommendBid,
@@ -23,7 +26,7 @@ import {
 // currency, `bid-recommendation.ts` (#509) does the arithmetic, and the collection's band (#508) is
 // two columns. What is left is reading them together, once per screen.
 //
-// **Two reads, because the two surfaces ask different questions.**
+// **Three reads, because three surfaces ask different questions.**
 //
 //   - {@link resolveLotRecommendations} answers *what would the quick fill write* for a whole page
 //     of lots. That is three figures per row, and it is what the `REC` control needs before it is
@@ -33,6 +36,15 @@ import {
 //     counts. Fetched only while the popover is open, on the rule the composition editor already
 //     follows (#353): a forty-lot watchlist must not pull forty lots' evidence to draw forty
 //     collapsed rows.
+//   - {@link recommendBidForLines} answers *is this worth looking at at all* for a lot that **does
+//     not exist here** (#1168) — an auctioneer's description and an opening price, no lot, no sale,
+//     no line. It is stateless: it reads and computes and writes nothing.
+//
+// **The third one is the reason the first two were not left keyed on lots.** It goes through the
+// same `loadAnchorContext` + `anchorLine` and the same `recommendBid` rather than a lot-free copy
+// of either, because a bid recommendation the agent states and one the lot row states must be the
+// same figure — and two spellings of the anchoring rule is precisely the defect nothing would ever
+// go red over (`agent-api.md`).
 //
 // **Nothing is stored** (ADR-0029 §10) — not the recommendation and not the ratios behind it. The
 // figures move as results accumulate, and that is the point: a lot recommended differently a month
@@ -83,6 +95,72 @@ export async function resolveLotRecommendations(
     out.set(lotId, recommendBid(toBidLines(resolved.lines), band, feesOf(lotId)));
   }
   return out;
+}
+
+/** What a set of described lines is worth bidding, with the evidence behind each of them. */
+export interface LineBidRecommendation {
+  /** What every figure here is in. */
+  currency: string;
+  /** What the market medians are in, so a reader can label them where the two differ. */
+  baseCurrency: string;
+  band: BidBandPercents;
+  /** The fees the hammer prices were computed with — **stated rather than assumed**. With none, the
+   * bid equals the all-in figure, and a caller that did not know the house's premium must be able
+   * to see that rather than read an overstatement as an answer (#1168). */
+  fees: AuctionFees;
+  recommendation: BidRecommendation;
+  lines: LineAnchor[];
+  /** Stamp ids the caller asked about that are not in this collection. Reported rather than
+   * dropped: answering short about one would read as *this is worth nothing*. */
+  unknownStampIds: string[];
+}
+
+/**
+ * **What a lot would be worth, for a lot that does not exist** (#1168).
+ *
+ * The agent workflow this answers is the one before anything is recorded: an auctioneer's page
+ * describes a stamp and opens at a price, and the only question is whether the lot is worth a
+ * second look. Nothing is created and nothing is read back — no `AuctionSale`, no `AuctionLot`, no
+ * `AuctionLotLine`.
+ *
+ * **It is the lots screen's own answer and not a second one.** `valuateLineSpecs` calls
+ * `valuateItemRows` and `lotLineValueOf`, `loadAnchorContext` + `anchorLine` are the very functions
+ * `resolveAuctionLotAnchors` goes through, the band is the collection's, and `recommendBid` is
+ * reused unchanged. The point of the whole arrangement is that the agent's figure and the figure on
+ * the lot row cannot disagree — a divergence there is the defect class no test can see.
+ */
+export async function recommendBidForLines(
+  collectionId: string,
+  currency: string,
+  specs: LineSpec[],
+  fees: AuctionFees
+): Promise<LineBidRecommendation> {
+  const [band, lines] = await Promise.all([
+    readBidBand(collectionId),
+    valuateLineSpecs(collectionId, currency, specs),
+  ]);
+
+  const resolved = new Set(lines.map((line) => line.stampId));
+  const unknownStampIds = [...new Set(specs.map((spec) => spec.stampId))].filter(
+    (stampId) => !resolved.has(stampId)
+  );
+
+  const context = await loadAnchorContext(
+    collectionId,
+    lines.map((line) => line.stampId),
+    [currency]
+  );
+  const anchors = lines.map((line) => anchorLine(line, context));
+
+  return {
+    currency,
+    baseCurrency: context.baseCurrency,
+    band,
+    fees,
+    recommendation: recommendBid(toBidLines(anchors), band, fees),
+    lines: anchors,
+    unknownStampIds,
+  };
 }
 
 /** Everything the evidence popover renders for one lot (ADR-0029 §8). */

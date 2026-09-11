@@ -5,9 +5,12 @@
 Accepted, and the whole track is implemented: #706 (the foundation), #707 (token scopes), #708 (the
 collection vocabulary, which put the registry's first operation in it), #710 (collection reads),
 #711 (offers, short of publishing) and #712 (wants, checklists and trades, short of sending). The
-registry carries **twenty-five** operations, eight of which write. Two gaps filed against the track
-afterwards are still open — #1036 (auction reads) and #1037 (resolving foreign catalog-number
-strings). The MCP wrapper over this same registry is #709, landed — **how** it is built, and why it
+registry carries **twenty-six** operations, eight of which write — the twenty-sixth being #1168's
+`recommend_bid`, the first operation on this surface that is a **query about something the
+collection does not hold**, and a read for all that. *The registry carries twenty-five operations*
+is quoted rather than deleted: it was true from #712 until #1168 and will go on arriving in anything
+copied from it. Two gaps filed against the track afterwards are still open — #1036 (auction reads)
+and #1037 (resolving foreign catalog-number strings). The MCP wrapper over this same registry is #709, landed — **how** it is built, and why it
 takes no dependency, is [ADR-0051](0051-hand-rolled-mcp-transport.md).
 
 It rests on #253 (`AssistantToken`) and on `src/lib/route-auth.ts`, and it adds **no table and no
@@ -185,10 +188,11 @@ drift; prose that copies does.
 - **This issue ships no operation, so the published document has an empty `paths` object.** That was
   valid OpenAPI 3.1 and the honest state of the surface when #706 landed. **It is no longer the
   state**: #708 added `get_collection_vocabulary`, so the first operation arrived before #710; #710
-  added six reads over the collection, #711 six offer verbs and #712 twelve more, and the document
-  now carries twenty-five. The consequence is left as written, dated to this ADR's own issue, with
-  the correction beside it — and *#710 has since added six reads over the collection* is what that
-  correction said until #712, quoted for the same reason.
+  added six reads over the collection, #711 six offer verbs, #712 twelve more and #1168 one, and the
+  document now carries twenty-six. The consequence is left as written, dated to this ADR's own
+  issue, with the correction beside it — and *#710 has since added six reads over the collection* is
+  what that correction said until #712, and *the document now carries twenty-five* until #1168,
+  both quoted for the same reason.
 - **§5's task-shaped rule was exercised by every later issue and refined three of their verb lists,
   which is the rule working rather than three deviations.** #710's five verbs became six and one
   moved onto a row; #711 added `list_offers` and `get_offer` because nothing on this surface reaches
@@ -196,7 +200,12 @@ drift; prose that copies does.
   *Done when* asks for a trade to be left behind, and left out a *set a line's manual value* verb
   because an agent reaching for one would be clearing a valuation gate rather than balancing a
   trade. Each issue's verb list called itself *a starting set to refine during implementation*, and
-  refining it against the domain is what the rule is for.
+  refining it against the domain is what the rule is for. **#1168 is a fourth instance and refines
+  in the other direction** — it asks for a recommendation *for a stamp specification*, and the
+  task-shaped answer is one verb, `recommend_bid`, rather than a lot-shaped resource with the
+  specification hanging off it. What it could not have is a per-line object, because §5's parameter
+  types are scalars and string lists: it takes the stamps at one stated grade, which is
+  `match_wants`' own shape, and says in its description what that cannot express.
 - **No schema change and no migration.** #707 owns the one this track needs.
 
 ## Alternatives considered
