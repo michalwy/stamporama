@@ -269,10 +269,13 @@ export interface AgentOfferDetail {
    *  following the listing's composition (#380). Send `set_offer_text` with no `text` to hand one
    *  back to the platform's template. */
   readonly editedTexts: string[];
-  /** The texts this marketplace has a template for, and so the ones `set_offer_text` can render
-   *  with no `text` of its own. A field absent from this list has nothing to be handed back to —
-   *  which is why the collector's own ↻ is disabled there rather than clearing the field, and why
-   *  the operation refuses rather than writing an empty text over a listing (#266/#267). */
+  /** The texts there is a template to render — the listing's own where it carries one (#774), the
+   *  marketplace's otherwise — and so the ones `set_offer_text` can render with no `text` of its
+   *  own. A field absent from this list has nothing to be handed back to — which is why the
+   *  collector's own ↻ is disabled there rather than clearing the field, and why the operation
+   *  refuses rather than writing an empty text over a listing (#266/#267). It says nothing about
+   *  whether a field was written by hand: handing an edited field back to its template is exactly
+   *  what this list is for, and `editedTexts` is where that question is answered (#1146). */
   readonly templatedTexts: string[];
   readonly platform: string;
   readonly state: string;

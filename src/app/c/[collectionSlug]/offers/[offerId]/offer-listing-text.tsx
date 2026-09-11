@@ -108,10 +108,14 @@ const FIELDS: readonly {
     label: "Description",
     limitKey: "maxDescriptionLength",
     placeholder: "No description yet — write one, or generate it from the platform's template.",
-    regenerateTitle: "Regenerate from the platform's description template",
-    noTemplateTitle: "This platform has no description template — set one on its contact",
+    regenerateTitle: "Regenerate this description from its template",
+    noTemplateTitle: "Neither this listing nor the platform has a description template — set one on the platform's contact",
   },
   {
+    // The private note names the platform where the description does not, and that is the schema
+    // speaking rather than an inconsistency: an offer may carry its own title and description
+    // template (#774) and deliberately carries no private-note one, so the platform's really is the
+    // only template this field could have (#1146).
     key: "privateNote",
     label: "Private note",
     limitKey: "maxPrivateNoteLength",

@@ -330,9 +330,12 @@ Each field carries its own three controls:
 - **✎** opens it for editing — a plain text box, so line breaks are yours to place. **⌘/Ctrl + Enter**
   saves, **Esc** cancels, and saving an empty box clears the field. Editable in every state, like the
   title.
-- **↻ Regenerate** rebuilds *that field only* from the platform's current template over whatever the
-  offer lists now, overwriting what is there — a hand-written title is never touched by regenerating
-  the description. It is greyed out when the platform has no template for that field.
+- **↻ Regenerate** rebuilds *that field only* from the current template over whatever the offer
+  lists now, overwriting what is there — a hand-written title is never touched by regenerating the
+  description. That is the offer's **own** template where it carries one, which a
+  [bulk lot](#naming-the-listing) does, and the platform's otherwise. It is greyed out only when
+  there is no template either way — so a lot worded with its own template regenerates even on a
+  platform that configures none.
 
 ### How long the text may be
 
@@ -376,9 +379,9 @@ fields beside it carry on updating. Two things hand a field back to the template
 - **clearing** the field — an empty field has no wording to protect, so it starts filling itself in
   again from the next change onwards.
 
-A field the platform has no template for is never touched either way, and a text that was already
-written when this behaviour arrived is treated as hand-written: press ↻ once on any field you would
-rather have kept up to date automatically.
+A field with no template — neither the offer's own nor the platform's — is never touched either
+way, and a text that was already written when this behaviour arrived is treated as hand-written:
+press ↻ once on any field you would rather have kept up to date automatically.
 
 ### Description format
 

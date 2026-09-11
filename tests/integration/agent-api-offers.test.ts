@@ -828,10 +828,10 @@ describe("the offer operations (#711)", () => {
       assert.ok(refusal.error.accepted?.includes("description"));
     });
 
-    it("refuses a regenerate the platform has no template for, rather than emptying the field", async () => {
+    it("refuses a regenerate with no template to render from, rather than emptying the field", async () => {
       // **The one guard the domain does not make for itself.** `regenerateOfferText` writes what the
       // generator produced, which over no template is null — so a `set_offer_text` with no `text`
-      // on a field the platform has no template for would *clear* it. The collector's own ↻ is
+      // on a field with no template to render from would *clear* it. The collector's own ↻ is
       // disabled there rather than refused, off the same `regeneratable` answer this reads, so the
       // two surfaces say the same thing about the same field.
       //

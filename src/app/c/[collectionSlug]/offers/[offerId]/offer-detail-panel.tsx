@@ -500,7 +500,8 @@ export function OfferDetailPanel({
     { key: "regenerate", label: "Regenerate title", icon: "refresh", onSelect: () => regenerate("name") },
     // One entry per generated text × *other* language the collection lists in (#297/#266/#267) —
     // each field's own ↻ on the screen already covers the platform's own language, and a field the
-    // platform has no template for is skipped. Absent for a single-language collection.
+    // there is no template for — the offer's own or the platform's — is skipped. Absent for a
+    // single-language collection.
     ...otherTitleLanguages.flatMap((code) =>
       REGENERATABLE_TEXTS.filter((t) => offer.regeneratable[t.field]).map(
         (t): RowAction => ({

@@ -618,13 +618,15 @@ export async function setOfferText(
     // second text path: #711's *compose a listing text through the existing machinery* is this
     // branch, and its *edit an offer's text* is the other one.
     //
-    // **A field the marketplace has no template for is refused rather than rendered**, and this is
-    // the one guard the domain does not make for itself: `regenerateOfferText` writes what the
-    // generator produced, which over no template is null, so calling it there would **empty** the
-    // field. The collector's own ↻ is *disabled* in that case rather than refused — off
+    // **A field with no template to render from is refused rather than rendered**, and this is the
+    // one guard the domain does not make for itself: `regenerateOfferText` writes what the generator
+    // produced, which over no template is null, so calling it there would **empty** the field. The
+    // collector's own ↻ is *disabled* in that case rather than refused — off
     // `OfferDetail.regeneratable`, which is the same answer this reads, so the two surfaces cannot
     // come to disagree about which fields are the template's (#266/#267). #273's rule on the wire:
-    // a control that cannot act says why.
+    // a control that cannot act says why. **The listing's own template counts** (#774): a bulk lot
+    // carries one where its marketplace has none, and reading the marketplace's alone refused a
+    // render that would have worked (#1146).
     const before = await getOfferDetail(context.ownerId, offerId);
     if (!before) {
       throw notFound(
@@ -633,7 +635,7 @@ export async function setOfferText(
     }
     if (!before.regeneratable[column]) {
       throw invalidRequest(
-        `${before.platformName} has no template for the ${field.replace("_", " ")}, so there is nothing to render. Send the wording as "text", or ask the collector to set a template for this platform.`
+        `There is no template for the ${field.replace("_", " ")} on this listing or on ${before.platformName}, so there is nothing to render. Send the wording as "text", or ask the collector to set a template for this platform.`
       );
     }
     await refusingDomainGuards(() => regenerateOfferText(context.ownerId, offerId, column));
@@ -677,7 +679,7 @@ export const setOfferTextOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The listing as it now stands, in `get_offer`'s shape, so the text that was actually written — or rendered — can be read back rather than assumed. A field whose marketplace has no template for it renders as nothing and keeps what it had.",
+      "The listing as it now stands, in `get_offer`'s shape, so the text that was actually written — or rendered — can be read back rather than assumed. A field with no template to render from — neither the listing's own nor the marketplace's — renders as nothing and keeps what it had.",
   },
   handler: async (context, params) => setOfferText(context, params),
 };

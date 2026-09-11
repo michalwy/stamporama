@@ -181,7 +181,9 @@ describe("offer description + private note (#266, #267)", () => {
     assert.equal(detail?.name, "Mi 12 Mercury");
     assert.equal(detail?.description, null);
     assert.equal(detail?.privateNote, null);
-    // …and the detail read model says which fields can be regenerated at all.
+    // …and the detail read model says which fields can be regenerated at all. This offer carries no
+    // template of its own, so here the answer *is* the platform's — the case where it is not is the
+    // #1146 block below.
     assert.deepEqual(detail?.regeneratable, { name: true, description: false, privateNote: false });
   });
 
@@ -296,6 +298,109 @@ describe("offer description + private note (#266, #267)", () => {
     assert.equal((await getOfferDetail(userId, offerId))?.description, "Line one\nLine two");
     await patchOffer(userId, offerId, { description: null });
     assert.equal((await getOfferDetail(userId, offerId))?.description, null);
+  });
+
+  // #1146: the offer's own template (#774) is the one `regenerateOfferText` renders from, and until
+  // this issue `getOfferDetail.regeneratable` read the *platform's* alone — so a listing carrying
+  // its own template on a platform with none showed ↻ disabled over wording it would have rendered.
+  // A bulk lot is the case that meets it; the failure direction is the quiet one, a greyed-out
+  // control nobody reports. **Both halves are asserted deliberately**: the projection alone goes
+  // green the moment it changes and says nothing about whether it now agrees with what ↻ does.
+  describe("regeneratable answers what regeneration would actually do (#1146)", () => {
+    /** A listing carrying its own templates, exactly as `commitLotProposal` writes them (#774) —
+     *  the columns directly, `*Edited` left false, then one sync. */
+    async function lotOn(platformId: string, itemIds: string[]): Promise<string> {
+      const offerId = await offerOn(platformId);
+      await prisma.offer.update({
+        where: { id: offerId },
+        data: {
+          nameTemplate: "Job lot — {count} stamps",
+          descriptionTemplate: "A lot of {count} from {area}.",
+        },
+      });
+      await addOfferSet(userId, offerId, itemIds);
+      return offerId;
+    }
+
+    it("enables ↻ on a field the *offer* has a template for, on a platform with none", async () => {
+      const offerId = await lotOn(noTemplatePlatformId, [mercuryId, venusId]);
+      const detail = await getOfferDetail(userId, offerId);
+
+      // The platform configures nothing at all; the offer configures title and description.
+      assert.deepEqual(detail?.regeneratable, { name: true, description: true, privateNote: false });
+
+      // …and the other half, which is the one that makes this a test of the *agreement* rather than
+      // of the projection: ↻ renders the offer's own template, not the platform's absent one.
+      assert.equal(await regenerateOfferText(userId, offerId, "name"), "Job lot — 2 stamps");
+      assert.equal(
+        await regenerateOfferText(userId, offerId, "description"),
+        "A lot of 2 from Poland."
+      );
+      const after = await getOfferDetail(userId, offerId);
+      assert.equal(after?.name, "Job lot — 2 stamps");
+      assert.equal(after?.description, "A lot of 2 from Poland.");
+    });
+
+    it("prefers the offer's template over a platform that has one of its own", async () => {
+      const offerId = await lotOn(fullPlatformId, [mercuryId]);
+      assert.equal((await getOfferDetail(userId, offerId))?.regeneratable.name, true);
+      // `{catalog} {name}` is the platform's; the offer's wins wherever the platform's is read.
+      assert.equal(await regenerateOfferText(userId, offerId, "name"), "Job lot — 1 stamps");
+    });
+
+    it("leaves the private note the platform's alone, because an offer carries no note template", async () => {
+      // Not an oversight to be tidied up: `Offer` has `nameTemplate` and `descriptionTemplate` and
+      // deliberately no `privateNoteTemplate` (#774), so the platform's is the only one this field
+      // could ever have. The pair below is what says the projection reads the schema and not a rule.
+      assert.equal(
+        (await getOfferDetail(userId, await lotOn(fullPlatformId, [mercuryId])))?.regeneratable
+          .privateNote,
+        true
+      );
+      assert.equal(
+        (await getOfferDetail(userId, await lotOn(titleOnlyPlatformId, [mercuryId])))?.regeneratable
+          .privateNote,
+        false
+      );
+    });
+
+    it("stays true on a hand-edited field, because ↻ is how one is handed back (#380)", async () => {
+      // `nameEdited` is weighed here rather than assumed. `regenerateOfferText` never reads the
+      // `*Edited` flags — it renders and *clears* them, which `offers.md` states as ↻ being
+      // "literally hand this back to the template". Following the flag would therefore disable the
+      // control on precisely the fields it exists for, and would re-open the same disagreement this
+      // issue closes, in the other direction. (The `null` template on an edited field lives in
+      // `syncGeneratedTexts`, the *automatic* path, which ↻ is the deliberate exception to.)
+      const offerId = await lotOn(noTemplatePlatformId, [mercuryId]);
+      await patchOffer(userId, offerId, { name: "Hand-written title" });
+      const edited = await getOfferDetail(userId, offerId);
+      assert.equal(edited?.edited.name, true);
+      assert.equal(edited?.regeneratable.name, true, "the control must still offer the way back");
+
+      assert.equal(await regenerateOfferText(userId, offerId, "name"), "Job lot — 1 stamps");
+      assert.equal((await getOfferDetail(userId, offerId))?.edited.name, false);
+    });
+
+    it("says no when neither the offer nor the platform has one", async () => {
+      const offerId = await offerOn(noTemplatePlatformId);
+      await addOfferSet(userId, offerId, [mercuryId]);
+      assert.deepEqual((await getOfferDetail(userId, offerId))?.regeneratable, {
+        name: false,
+        description: false,
+        privateNote: false,
+      });
+    });
+
+    it("counts a blank offer template as absent, exactly as the generator does", async () => {
+      // `generateListingTexts` trims before deciding, so a whitespace-only template renders nothing
+      // and ↻ would empty the field. `??` picks the blank string over the platform's, which is what
+      // regeneration does too — the two must agree about that as well.
+      const offerId = await offerOn(fullPlatformId);
+      await prisma.offer.update({ where: { id: offerId }, data: { nameTemplate: "   " } });
+      await addOfferSet(userId, offerId, [mercuryId]);
+      assert.equal((await getOfferDetail(userId, offerId))?.regeneratable.name, false);
+      assert.equal(await regenerateOfferText(userId, offerId, "name"), null);
+    });
   });
 
   it("gives a duplicate the *new* platform's wording", async () => {
