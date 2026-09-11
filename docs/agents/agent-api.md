@@ -1020,11 +1020,14 @@ recognise it by.
 
 **And #712's *writing to Colnect* clause is guarded by the architecture rather than by that list**,
 which is the one entry nobody can add correctly by reading `src/` alone. **This app does write to
-Colnect**: `extension/src/platform/colnect/list-write.ts` builds `POST /item/col` with `act=check` —
-list membership, and since #704 an entry's quantity and grades (#689, ADR-0042, which
-`colnect-list-sync.md` calls *a step change with an ADR of its own*). It runs in the **content
-script**, on a colnect.com page, under the collector's own session cookie, same-origin because the
-call carries no CSRF token. **No `/api/v1` handler can reach it** — a different package, shipped to
+Colnect**: `extension/src/platform/colnect/list-write.ts` builds `POST /item/col` — `act=check` for
+list membership, and since #704 `act=cond` / `act=quantity` / `act=x_cond_qty` to correct the
+quantity and grades of an entry the run has just created, because on a *new* entry silence hands the
+decision to the list's own defaults rather than preserving anything (#689, ADR-0042, which
+`colnect-list-sync.md` calls *a step change with an ADR of its own*). `list-export.ts` asks for a
+list's export under the same authority and is a **read** (#690). It runs in the **content script**,
+on a colnect.com page, under the collector's own session cookie, same-origin because the call
+carries no CSRF token. **No `/api/v1` handler can reach it** — a different package, shipped to
 the collector's browser rather than run on the server — so there is no import for the map to forbid
 and nothing for it to catch. `markColnectApplied` is the one thing on *this* side that touches the
 Colnect story at all, and it writes nothing outbound: it clears the flag saying the public record
