@@ -351,15 +351,18 @@ function StampTreeNode({
                 <StampTitle node={node} />
               </span>
 
-              {/* Edit · add a variant under this stamp · add a copy of it · put it on the want
-                  list — what a collector repeats while working through an issue, on hover beside
-                  the menu. Wanting sits beside adding a copy because the two are the same reflex
-                  pointed opposite ways: this one I have, that one I am after. */}
+              {/* Edit · add the lettered run the catalogue splits this stamp into · add a copy
+                  of it · put it on the want list — what a collector repeats while working through
+                  an issue, on hover beside the menu. The *range* rather than its one-at-a-time
+                  sibling (#1150): a catalogue that splits a stamp into a run splits it into
+                  several at once, so `Add child stamp` is the exception and keeps to the menu.
+                  Wanting sits beside adding a copy because the two are the same reflex pointed
+                  opposite ways: this one I have, that one I am after. */}
               <RowQuickActions
                 actions={pickRowActions(actions, [
                   "detail-page",
                   "edit",
-                  "add-child",
+                  "add-variant-range",
                   "add-copy",
                   "add-want",
                 ])}
