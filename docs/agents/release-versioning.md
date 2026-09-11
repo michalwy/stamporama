@@ -24,9 +24,30 @@ and every one of them comes back clean.
    release nobody has checked**, and that hazard has not gone away.
 
    ```bash
-   gh run list --branch main --commit <sha> --workflow ci.yml --json databaseId,conclusion
+   git rev-parse origin/main
+   gh run list --branch main --commit <full-40-char-sha> --workflow ci.yml --json databaseId,conclusion
    gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
    ```
+
+   **`--commit` matches on the full forty characters and answers `[]` for an abbreviated SHA**, so
+   the first line is `git rev-parse origin/main` and never `git rev-parse --short origin/main`
+   (#1147). The trap is not that the short form is confusing: `[]` is byte-identical to the truthful
+   *no run exists*, which this step reads as the cancelled run above and so as a reason not to tag.
+   The session would decline the release, be right by this procedure, and be wrong about the world.
+   Measured on `f158a4d`, the head of `main` on 2026-09-11, both forms against that one commit:
+
+   | command | answer |
+   | --- | --- |
+   | `gh run list --branch main --commit f158a4d …` | `[]` |
+   | `gh run list --branch main --commit f158a4de37e2092c539a0b772611756625b06213 …` | `[{"conclusion":"success","databaseId":34609362324}]` |
+
+   **Do not shorten it back.** Every SHA this project writes down is short — status tables, handover
+   files, and the commit references in prose. Measured over `AGENTS.md` and `docs/agents/` on this
+   branch: five seven-character SHAs, two of them the demonstration above, and exactly one
+   forty-character SHA, the one in the table. So the value a release session already has in front of
+   it is the value that silently fails, and the command is where the correction has to live — a
+   warning beside a copyable command is answerable only by remembering. Step 5's
+   `gh run list --branch vX.Y.Z` selects by branch rather than by commit and is unaffected.
 
    **Green is not the whole answer, and since #798 it is frequently not an answer at all.** When
    `Static checks`, `Unit tests`, `Integration tests` and `Extension checks` all report
