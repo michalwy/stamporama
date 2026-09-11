@@ -17,10 +17,18 @@ import type { Operation } from "../../src/lib/agent-api/types";
 // is a column on a real hashed row, so the claim *a `read` token is refused on a writing operation*
 // is only worth anything when the token was actually minted and read back through the database. The
 // decision itself is pure and is exercised over both directions in
-// `tests/unit/agent-api-scope.test.ts`; the operations here are fixtures because **nothing on
-// `main` writes** — #706 shipped no operation at all and #708's one declares `writes: false` — and
-// adding a writing one to make the test real would breach its issue's *Out of scope*. #711 and #712
-// are where that stops being true.
+// `tests/unit/agent-api-scope.test.ts`.
+//
+// **The operations below are fixtures, and since #711 that is a choice rather than a necessity.**
+// The sentence that stood here read: *the operations here are fixtures because **nothing on `main`
+// writes** — #706 shipped no operation at all and #708's one declares `writes: false` — and adding a
+// writing one to make the test real would breach its issue's* Out of scope. *#711 and #712 are where
+// that stops being true.* It was true when written and is quoted rather than deleted. #711 put
+// `draft_offer`, `set_offer_price` and `set_offer_text` in the registry, so the refusal **is** made
+// against real operations, by the real dispatcher, in
+// `tests/integration/agent-api-offers.test.ts`. What this file is about is narrower and unchanged —
+// that a scope read off a real hashed row reaches `assertAgentApiScope` — and a fixture keeps that
+// answerable without a platform, a stamp and an offer to draft against.
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -35,9 +43,11 @@ async function createTestUser(suffix: string) {
   });
 }
 
-/** Stand-ins, and still stand-ins now that #710 has landed: all seven real operations declare
- *  `writes: false`, so there is still nothing on `main` a `read` token could be refused on. `writes`
- *  is the only field the check reads, which is what makes a fixture the honest instrument here. */
+/** Stand-ins, named after two operations that now genuinely exist — #711 added `set_offer_price` as
+ *  a writing one and `find_unlisted_copies` as a reading one. They stay stand-ins because `writes`
+ *  is the only field the check reads, so a fixture answers this file's question exactly and without
+ *  a collection's worth of fixture data behind it. The end-to-end claim is made over the real ones
+ *  in `tests/integration/agent-api-offers.test.ts`. */
 const READING: Pick<Operation, "name" | "writes"> = { name: "find_unlisted_copies", writes: false };
 const WRITING: Pick<Operation, "name" | "writes"> = { name: "set_offer_price", writes: true };
 

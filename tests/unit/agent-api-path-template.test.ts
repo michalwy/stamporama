@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { matchPathTemplate, parsePathTemplate } from "../../src/lib/agent-api/path-template";
+import {
+  matchPathTemplate,
+  parsePathTemplate,
+  templateSpecificity,
+} from "../../src/lib/agent-api/path-template";
 import { isApiError } from "../../src/lib/agent-api/errors";
 
 // Path matching for the `/api/v1` dispatcher (#706). One catch-all route serves the whole surface,
@@ -57,5 +61,27 @@ describe("agent API path templates", () => {
 
   it("reports the parameter names in the order they appear", () => {
     assert.deepEqual(parsePathTemplate("/a/{x}/b/{y}").parameterNames, ["x", "y"]);
+  });
+
+  it("ranks a literal segment above a parameter at the same length (#711)", () => {
+    // Two templates can both match one path, and until #711 the winner was whichever operation was
+    // appended to `OPERATIONS` first — so `/copies/unlisted` was dispatched as `get_copy` with an id
+    // of `"unlisted"`, and the refusal an agent read was a truthful sentence about the wrong
+    // operation. `validateOperations` cannot see it: the two paths are different, so neither the
+    // duplicate-name rule nor the duplicate-binding rule has anything to say about them.
+    const literal = templateSpecificity(parsePathTemplate("/copies/unlisted"));
+    const parameter = templateSpecificity(parsePathTemplate("/copies/{copyId}"));
+    assert.ok(literal < parameter, "a literal segment must win");
+  });
+
+  it("ranks two all-literal templates equally, so registry order still decides", () => {
+    assert.equal(
+      templateSpecificity(parsePathTemplate("/offers")),
+      templateSpecificity(parsePathTemplate("/holdings"))
+    );
+    assert.equal(
+      templateSpecificity(parsePathTemplate("/offers/{offerId}/price")),
+      templateSpecificity(parsePathTemplate("/offers/{offerId}/text"))
+    );
   });
 });

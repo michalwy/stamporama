@@ -68,7 +68,11 @@ const READING: Operation = {
   handler: async (_context, params) => listResponse([], 0, parseListWindow(params)),
 };
 
-/** A writing operation, because nothing on `main` writes and the refusal needs something to bite on. */
+/** A writing operation the refusal can bite on. It stays a **fixture** now that #711 has put three
+ *  real ones in the registry, and for the reason it always was one: `tests/unit/` may not import
+ *  `registry.ts`, which carries handlers and so reaches Prisma. What changed is that the claim this
+ *  file could not make — *the binding in the route is the thing being called* — is now made against
+ *  the real operations in `tests/integration/agent-api-offers.test.ts`. */
 const WRITING: Operation = {
   name: "set_offer_price",
   method: "PATCH",

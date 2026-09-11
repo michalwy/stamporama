@@ -6,15 +6,23 @@
 // itself needs neither Prisma nor a request, so it belongs where a unit test can hold it
 // (`agent-api.md`, *The module layout is the Prisma-free split*).
 //
-// **Nothing on `main` writes yet**, so the refusal is exercised against a fixture operation rather
-// than against a domain one. That is deliberate: adding an operation in order to make a test real
-// would breach the *Out of scope* of whichever issue did it. **The premise has been corrected twice
-// and the conclusion has not moved either time**: it used to read "the registry is empty until
-// #710", then "#708 filled it, whose one operation declares `writes: false`", and #710 has since
-// added six more — all of them `writes: false`. What the criterion waits for is a **writing**
-// operation, not a populated registry, so a busy registry beside a fixture test is this rule working
-// rather than a gap. #711 and #712 are where the first writing operation lands and where this stops
-// being a fixture claim.
+// **#711 landed the first writing operations, and this stopped being a fixture claim.**
+// `draft_offer`, `set_offer_price` and `set_offer_text` declare `writes: true`, so a `read` token is
+// refused on a real operation, by the real dispatcher, over a real hashed row —
+// `tests/integration/agent-api-offers.test.ts`, *a read token is refused on the wire*.
+//
+// **What stood here until then is quoted rather than deleted**, because it was true when it was
+// written and will go on arriving in anything copied from it: *nothing on `main` writes yet, so the
+// refusal is exercised against a fixture operation rather than against a domain one — adding an
+// operation in order to make a test real would breach the* Out of scope *of whichever issue did it.*
+// The premise had been corrected twice without the conclusion moving ("the registry is empty until
+// #710", then "#708 filled it, whose one operation declares `writes: false`"), which is the part
+// worth carrying: what the criterion waited for was a **writing** operation and not a populated
+// registry.
+//
+// `tests/unit/agent-api-scope.test.ts` still exercises the decision over **fixtures**, and that is
+// unchanged rather than left over: `tests/unit/` may not import `registry.ts`, which carries
+// handlers and so reaches Prisma (`agent-api.md`).
 //
 // Pure: no Prisma, no `next/server`, no `server-only`.
 

@@ -2136,6 +2136,33 @@ export async function listOffersPaginated(
 }
 
 /**
+ * How many offers a filter selection matches, whatever page anybody is holding (#711).
+ *
+ * **Beside {@link listOffersPaginated} and over the same `where`**, which is the point of it rather
+ * than an implementation note: it resolves the overlays the same way, hands `offerListWhere` the
+ * same arguments, and therefore cannot come to count a different set from the rows under it —
+ * `countItems`' own rule in `items.ts`, *a count that disagrees with the rows under it is worse
+ * than no count*, on the offers side.
+ *
+ * It exists because the agent API states a full `total` on every list (#706): an agent handed
+ * twenty-five rows and no total cannot tell a page from the whole collection, so it answers
+ * confidently about a slice. The screens do not need it — the offers list is an endless scroll and
+ * says how many it has loaded — which is why nothing had asked for it before.
+ */
+export async function countOffers(
+  ownerId: string,
+  collectionId: string,
+  filters: OfferListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const overlays = await resolveOfferOverlays(collectionId, filters);
+  if (overlays.ids?.length === 0) return 0;
+  return prisma.offer.count({
+    where: offerListWhere(collectionId, filters, overlays.ids, overlays.platformSoldIds),
+  });
+}
+
+/**
  * The derived overlays a filter selection asks for, resolved once (#499).
  *
  * `ids` is what the page is narrowed to — undefined when neither overlay is selected, an **empty

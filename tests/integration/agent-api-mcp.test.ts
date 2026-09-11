@@ -29,10 +29,14 @@ import { OPERATIONS } from "../../src/lib/agent-api/registry";
 // tools, and that half needs a person with one. `docs/user-guide/agent-api.md` is the instructions
 // for doing it.
 //
-// **And one line of the route is not covered by anything below, which was measured rather than
-// guessed.** Replacing the route's `assertScope` binding with a no-op leaves every test in this
-// file green, because nothing in `OPERATIONS` writes and no request can therefore be refused. The
-// comment beside that line carries the whole of it; the gap goes when #711 lands.
+// **One line of the route used to be covered by nothing below, and #711 closed it.** That paragraph
+// read: *replacing the route's `assertScope` binding with a no-op leaves every test in this file
+// green, because nothing in `OPERATIONS` writes and no request can therefore be refused* — true when
+// written, quoted rather than deleted, and it will go on arriving in anything copied from it. With
+// `draft_offer`, `set_offer_price` and `set_offer_text` in the registry a `read` token calling one
+// through this wrapper is refused by that binding; the assertion lives in
+// `tests/integration/agent-api-offers.test.ts`, because the request needs a real offer and a real
+// platform, which is that file's fixture rather than this one's.
 
 const ts = Date.now();
 
@@ -272,10 +276,13 @@ describe("the remote MCP endpoint", () => {
   });
 
   it("refuses a read token on a writing tool, from the scope on the real row (#707)", async () => {
-    // **Nothing in `OPERATIONS` writes**, so the refusal is exercised against an operation shaped
-    // like the ones #711 and #712 will add — but the scope is not a fixture: it was minted as
-    // `read`, hashed, stored, and read back through `resolveAgentApiCaller`, which is where a scope
-    // actually comes from. The decision itself is held over both directions in the unit suite.
+    // The operation is a **fixture**, and stays one now that #711 has put three real writing ones in
+    // the registry: this case is about the wrapper's own handling of a refusal, and a fixture keeps
+    // it readable without a platform and an offer to draft against. The scope was never a fixture —
+    // minted as `read`, hashed, stored, and read back through `resolveAgentApiCaller`, which is
+    // where a scope actually comes from. What this file could not claim, and
+    // `tests/integration/agent-api-offers.test.ts` now does, is that the **route's** binding is the
+    // thing doing the refusing on a real operation.
     const caller = await resolveAgentApiCaller(mcpRequest(readToken, {}));
     assert.ok(caller);
     assert.equal(caller.scope, "read");

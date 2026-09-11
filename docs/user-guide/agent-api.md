@@ -92,6 +92,17 @@ call every assistant makes first anyway.
 The tools grow with each release, and the assistant reads the current list itself, so what it can do
 is whatever your instance offers rather than whatever was written here.
 
+**A read-and-write token can now change things, and this release is the first where that is true.**
+It can start a listing around copies you are not offering yet, set what you are asking for it, and
+write or re-generate its title and description — all of it inside Stamporama, on a listing that is
+still a **draft**. Nothing it does goes anywhere near a marketplace, and it cannot mark a listing
+ready or make it live: those are still your two clicks on the offer's own screen. Everything it
+writes is on that screen and is undone there.
+
+**Which is exactly why *read only* is the setting to start from.** A listing drafted at the wrong
+price is a minute to fix, and it is still a minute you did not plan to spend — so let an assistant
+look around your collection first, and hand it a writing token when you know what you want it to do.
+
 Two things it will never do, however you ask, and they are absent rather than switched off:
 
 - **It never publishes to a marketplace.** It can draft, price and title an offer inside
