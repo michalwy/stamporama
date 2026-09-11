@@ -35,6 +35,7 @@ import {
   loadStampWantSummaries,
   type StampWantSummary,
 } from "./wants";
+import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
@@ -1454,6 +1455,10 @@ export interface ItemListItem {
   /** Free-text identifier within the location (e.g. `A234`), or null. */
   locationRef: string | null;
   createdAt: Date;
+  /** The collector's own labels on this copy (#152/#1181), in the dictionary's own alphabetical
+   * order. Empty is the normal case. **Nothing is inherited**: a tag on this copy's stamp — or on
+   * any of the stamps a multi-stamp copy carries (ADR-0044) — is not reported here. */
+  tags: TagSummary[];
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -1534,6 +1539,10 @@ const ITEM_LIST_SELECT = {
     },
   },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  // The collector's own labels on this very copy (#1181) — never the stamp's. Two columns on a
+  // handful of rows, so they ride on the row rather than through a batch loader, exactly as the
+  // stamp and issue reads carry theirs.
+  tags: TAG_SUMMARY_SELECT,
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
   format: { select: { id: true, name: true, abbreviation: true } },
@@ -1654,6 +1663,7 @@ function toItemListItem(
     locationId: row.locationId,
     locationRef: row.locationRef,
     createdAt: row.createdAt,
+    tags: orderTagSummaries(row.tags),
     photos: row.photos
       .map((p) => ({
         id: p.id,

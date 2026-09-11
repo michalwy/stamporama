@@ -32,6 +32,12 @@ export interface BulkCopyChanges {
   /** The physical format written on the copies (#723). Present-but-`null` is *single*
    * (ADR-0020). */
   formatId?: string | null;
+  /** Tags put **on** every picked copy (#1181), and tags taken **off** them. Two lists rather than
+   * one set, because a copy carries any number of tags and there is no single value to state: the
+   * ones this pass does not name are left alone on each copy, which is this dialog's *leave as is*
+   * everywhere else. Empty or absent writes nothing. */
+  addTagIds?: string[];
+  removeTagIds?: string[];
 }
 
 /** Serialize {@link BulkCopyChanges} onto a form, for both the id-list and scoped bulk actions.
@@ -53,4 +59,8 @@ export function appendBulkChanges(fd: FormData, changes: BulkCopyChanges): void 
     fd.set("certificateStatusId", changes.certificateStatusId ?? "");
   }
   if (changes.formatId !== undefined) fd.set("formatId", changes.formatId ?? "");
+  // Only ever set when non-empty: an empty list is *no tag change*, and this axis has no null
+  // value for a present-but-empty field to mean.
+  if (changes.addTagIds?.length) fd.set("addTagIds", changes.addTagIds.join(","));
+  if (changes.removeTagIds?.length) fd.set("removeTagIds", changes.removeTagIds.join(","));
 }

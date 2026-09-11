@@ -21,6 +21,7 @@ import type { TagData } from "@/lib/tags";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
+import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { tagKeys } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
 
@@ -108,14 +109,23 @@ function TagForm({
   );
 }
 
-/** *On 3 issues and 12 stamps* — the sentence the row and the delete confirmation both read from,
- *  so the count the collector agrees to is the count the list showed them. */
-function describeUsage(issueCount: number, stampCount: number): string | null {
+/** *On 3 issues, 12 stamps and 40 copies* — the sentence the row and the delete confirmation both
+ *  read from, so the count the collector agrees to is the count the list showed them. Copies are
+ *  named beside the other two (#1181) rather than folded in: a tag that is on no stamp and on
+ *  ninety copies is precisely the one a collector would otherwise delete believing it unused. */
+function describeUsage(usage: {
+  issueCount: number;
+  stampCount: number;
+  copyCount: number;
+}): string | null {
   const parts = [
-    issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? "" : "s"}` : null,
-    stampCount > 0 ? `${stampCount} stamp${stampCount === 1 ? "" : "s"}` : null,
+    usage.issueCount > 0 ? `${usage.issueCount} issue${usage.issueCount === 1 ? "" : "s"}` : null,
+    usage.stampCount > 0 ? `${usage.stampCount} stamp${usage.stampCount === 1 ? "" : "s"}` : null,
+    usage.copyCount > 0 ? `${usage.copyCount} cop${usage.copyCount === 1 ? "y" : "ies"}` : null,
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" and ") : null;
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0]!;
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 export function TagsPanel({
@@ -127,11 +137,12 @@ export function TagsPanel({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // A tag's name and colour are drawn on the chip, so both ride on the Issues and Stamps rows
-  // (`tag-chip.tsx` says why) — which means a rename, a recolour or a delete stales those lists as
-  // surely as editing the stamp itself would. The two detail screens' own picker reads the
-  // dictionary through `tagKeys`, so that goes too.
+  // A tag's name and colour are drawn on the chip, so both ride on the Issues, Stamps **and
+  // Copies** rows (`tag-chip.tsx` says why) — which means a rename, a recolour or a delete stales
+  // those lists as surely as editing the stamp itself would. The three detail screens' own picker
+  // reads the dictionary through `tagKeys`, so that goes too.
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
+  const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<TagActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -149,6 +160,7 @@ export function TagsPanel({
     setDialog({ kind: "none" });
     void queryClient.invalidateQueries({ queryKey: tagKeys.all(collectionId) });
     void invalidateStampsAndIssues(collectionId);
+    void invalidateInventory(collectionId);
     router.refresh();
   }
 
@@ -215,7 +227,7 @@ export function TagsPanel({
         }}
       >
         {initialTags.map((tag, i) => {
-          const usage = describeUsage(tag.issueCount, tag.stampCount);
+          const usage = describeUsage(tag);
           return (
             <div
               key={tag.id}
@@ -350,7 +362,11 @@ function DeleteTagDialog({
   isPending: boolean;
   error?: string;
 }) {
-  const [usage, setUsage] = useState({ issueCount: tag.issueCount, stampCount: tag.stampCount });
+  const [usage, setUsage] = useState({
+    issueCount: tag.issueCount,
+    stampCount: tag.stampCount,
+    copyCount: tag.copyCount,
+  });
   useEffect(() => {
     let cancelled = false;
     void getTagUsageAction(tag.id)
@@ -363,7 +379,7 @@ function DeleteTagDialog({
     };
   }, [tag.id]);
 
-  const carried = describeUsage(usage.issueCount, usage.stampCount);
+  const carried = describeUsage(usage);
   return (
     <ConfirmDialog
       title="Delete tag"

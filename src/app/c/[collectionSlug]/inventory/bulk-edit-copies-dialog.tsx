@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   DialogShell,
@@ -14,6 +15,8 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { BulkCopyChanges } from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
+import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -82,6 +85,10 @@ const DISPOSITION_FLAGS: { flag: DispositionFlag; label: string }[] = [
   { flag: "forTrade", label: "For trade" },
 ];
 
+/** Above this dialog's own panel (`zIndexBase + 1` = 101), so a tag menu opened inside it is not
+ *  painted behind it — `MultiSelectFilter`'s own note. */
+const MENU_Z_INDEX = 200;
+
 /** What one flag is being told to do. `keep` writes nothing at all for it. */
 type FlagOp = "keep" | "on" | "off";
 
@@ -122,11 +129,24 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
  * with the box left blank clears the refs the copies carried — a slot name from the old album
  * addresses nothing in the new one.
  *
+ * **Tags are the one axis stated as two verbs** (#1181), and they are the exception that proves
+ * every other section's rule rather than a break from it. A copy has one location, one grade and
+ * one answer per disposition flag, so *leave as is* there is a third option beside the values; a
+ * copy carries **any number** of tags, so there is no single value a picker could show and a
+ * replace over a mixed drawer would flatten forty copies onto whatever this dialog happened to
+ * hold. So it adds the tags it names, removes the tags it names, and leaves every tag it does not
+ * name exactly where it is on each copy. A tag ticked on one side is not offered on the other, so
+ * the contradiction cannot be typed.
+ *
  * The write is the intake screen's own (`bulkUpdateLotItemsAction`, #121/#565): the same fields
  * over the same rows, so a copy filed from the Copies list and one filed while its purchase was
- * being sorted cannot end up written two different ways.
+ * being sorted cannot end up written two different ways. The tags ride in that same call and the
+ * same transaction — a bulk edit is one act, and half of it landing is the thing a bulk pass must
+ * never do quietly.
  */
 export function BulkEditCopiesDialog({
+  collectionId,
+  collectionSlug,
   copies,
   locations,
   conditions,
@@ -137,6 +157,9 @@ export function BulkEditCopiesDialog({
   onClose,
   onSubmit,
 }: {
+  collectionId: string;
+  /** For the *Add one in Settings* link the empty dictionary offers — nothing is seeded (#152). */
+  collectionSlug: string;
   copies: ItemListItem[];
   locations: LocationData[];
   /** The collection's grades (#723). Empty hides the section — there is nothing to change to. */
@@ -159,6 +182,15 @@ export function BulkEditCopiesDialog({
   const [conditionChoice, setConditionChoice] = useState(KEEP);
   const [certificateChoice, setCertificateChoice] = useState(KEEP);
   const [formatChoice, setFormatChoice] = useState(KEEP);
+  // The two tag lists (#1181). Their own hook rather than a prop, exactly as the `TagsCard` picker
+  // reads the dictionary: it is small, per-collection and cached, and this dialog is opened from a
+  // list that has no other reason to hold it.
+  const { data: tags } = useCollectionTags(collectionId);
+  const [addTagIds, setAddTagIds] = useState<string[]>([]);
+  const [removeTagIds, setRemoveTagIds] = useState<string[]>([]);
+  // A tag menu is a popover with an Escape listener of its own and is not an escape layer (#361),
+  // so one Escape would otherwise close the menu *and* this dialog under it.
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   const count = copies.length;
@@ -214,11 +246,18 @@ export function BulkEditCopiesDialog({
     },
   ].filter((axis) => axis.available);
   const changedIdentity = identityAxes.filter((axis) => axis.choice !== KEEP);
+  const changesTags = addTagIds.length > 0 || removeTagIds.length > 0;
   const canApply =
-    !isPending && (locationAnswered || changedFlags.length > 0 || changedIdentity.length > 0);
+    !isPending &&
+    (locationAnswered || changedFlags.length > 0 || changedIdentity.length > 0 || changesTags);
 
   return (
-    <DialogShell title={`Bulk edit — ${copiesLabel}`} onClose={onClose} maxWidth="30rem">
+    <DialogShell
+      title={`Bulk edit — ${copiesLabel}`}
+      onClose={onClose}
+      maxWidth="30rem"
+      dismissable={!tagMenuOpen}
+    >
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={(e) => {
@@ -244,6 +283,9 @@ export function BulkEditCopiesDialog({
           if (formatChoice !== KEEP) {
             changes.formatId = formatChoice === NONE ? null : formatChoice;
           }
+          // Sent only when non-empty: an empty list is not a value on this axis, it is silence.
+          if (addTagIds.length > 0) changes.addTagIds = addTagIds;
+          if (removeTagIds.length > 0) changes.removeTagIds = removeTagIds;
           onSubmit(changes);
         }}
       >
@@ -356,9 +398,7 @@ export function BulkEditCopiesDialog({
                       />
                       {op !== "keep" && (
                         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                          {already === count
-                            ? `all ${already === 1 ? "of it" : "of them"} already`
-                            : `${already} of ${count} already`}
+                          {describeAlready(already, count)}
                         </span>
                       )}
                     </div>
@@ -417,9 +457,7 @@ export function BulkEditCopiesDialog({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {axis.unchanged === count
-                            ? `all ${count === 1 ? "of it" : "of them"} already`
-                            : `${axis.unchanged} of ${count} already`}
+                          {describeAlready(axis.unchanged, count)}
                         </span>
                       )}
                     </div>
@@ -432,6 +470,83 @@ export function BulkEditCopiesDialog({
                 </p>
               </div>
             )}
+
+            {/* The collector's own labels (#1181). Two controls, never one: a copy carries any
+                number of tags, so *what these copies are tagged* has no single answer a picker
+                could show — the pass says what to put on and what to take off, and everything it
+                does not name stays. Shown even with an empty dictionary, because nothing is seeded
+                and the link is where the first tag is made (the `TagsCard` picker's rule). */}
+            <div>
+              <LabelWithError>Tags</LabelWithError>
+              {(tags?.length ?? 0) === 0 ? (
+                <p style={HINT_STYLE}>
+                  No tags yet.{" "}
+                  <Link
+                    href={`/c/${collectionSlug}/settings?tab=tags`}
+                    style={{ color: "var(--color-accent)" }}
+                  >
+                    Add one in Settings
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <TagRow
+                      label="Add"
+                      // A tag already ticked to be removed is not offered here, so *put it on and
+                      // take it off in one pass* cannot be stated at all.
+                      options={(tags ?? [])
+                        .filter((t) => !removeTagIds.includes(t.id))
+                        .map((t) => ({ id: t.id, label: t.name }))}
+                      selected={addTagIds}
+                      onChange={setAddTagIds}
+                      allLabel="No tags to add"
+                      disabled={isPending}
+                      onOpenChange={setTagMenuOpen}
+                      // How many already carry **every** tag being added — the number that says
+                      // whether this is a tagging pass or a no-op, as each row above it does.
+                      note={
+                        addTagIds.length === 0
+                          ? null
+                          : describeAlready(
+                              copies.filter((c) =>
+                                addTagIds.every((id) => c.tags.some((t) => t.id === id))
+                              ).length,
+                              count
+                            )
+                      }
+                    />
+                    <TagRow
+                      label="Remove"
+                      options={(tags ?? [])
+                        .filter((t) => !addTagIds.includes(t.id))
+                        .map((t) => ({ id: t.id, label: t.name }))}
+                      selected={removeTagIds}
+                      onChange={setRemoveTagIds}
+                      allLabel="No tags to remove"
+                      disabled={isPending}
+                      onOpenChange={setTagMenuOpen}
+                      // Here the useful count is the opposite one: how many the removal actually
+                      // reaches. A copy not carrying the tag is left alone rather than failing.
+                      note={
+                        removeTagIds.length === 0
+                          ? null
+                          : `on ${
+                              copies.filter((c) =>
+                                removeTagIds.some((id) => c.tags.some((t) => t.id === id))
+                              ).length
+                            } of ${count}`
+                      }
+                    />
+                  </div>
+                  <p style={HINT_STYLE}>
+                    Only the tags named here change. Every other tag each copy carries is left
+                    exactly as it is — this is not a way to set the tags to one list.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         </DialogBody>
         <DialogActions
@@ -443,6 +558,73 @@ export function BulkEditCopiesDialog({
         />
       </form>
     </DialogShell>
+  );
+}
+
+/** *all of them already* / *3 of 40 already* — the phrasing the disposition and identity rows use,
+ *  shared so the tag rows cannot word the same fact differently. */
+function describeAlready(already: number, count: number): string {
+  return already === count
+    ? `all ${count === 1 ? "of it" : "of them"} already`
+    : `${already} of ${count} already`;
+}
+
+/** One half of the tag change: a label, a multi-select over the dictionary, and the count saying
+ *  what it would actually reach. Laid out as the disposition and identity rows are, so the three
+ *  sections read down the same two columns. */
+function TagRow({
+  label,
+  options,
+  selected,
+  onChange,
+  allLabel,
+  disabled,
+  onOpenChange,
+  note,
+}: {
+  label: string;
+  options: { id: string; label: string }[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  allLabel: string;
+  disabled: boolean;
+  onOpenChange: (open: boolean) => void;
+  note: string | null;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+      <span
+        style={{
+          width: "7.5rem",
+          flexShrink: 0,
+          fontSize: "0.8125rem",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <MultiSelectFilter
+          options={options}
+          selected={selected}
+          onChange={onChange}
+          allLabel={allLabel}
+          itemNoun="tags"
+          ariaLabel={`${label} tags`}
+          disabled={disabled}
+          fullWidth
+          zIndex={MENU_Z_INDEX}
+          onOpenChange={onOpenChange}
+        />
+      </span>
+      {note && (
+        <span
+          style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}
+        >
+          {note}
+        </span>
+      )}
+    </div>
   );
 }
 

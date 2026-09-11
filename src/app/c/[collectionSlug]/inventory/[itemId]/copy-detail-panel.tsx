@@ -42,6 +42,9 @@ import {
   CertificateStatusChip,
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
+import { TagsCard } from "@/app/c/[collectionSlug]/shared/tags-card";
+import { setItemTagsAction } from "@/app/actions/tags";
 import { Icon } from "@/app/icons";
 
 // The copy detail screen (#517). Read-only by design: every field here is edited through the copy
@@ -172,6 +175,9 @@ export function CopyDetailPanel({
               </span>
             </Tooltip>
           )}
+          {/* The collector's own labels on this copy (#1181), on the line that says which copy this
+              is — the same chips the Copies list draws, from the same source. */}
+          <TagChips tags={item.tags} size="medium" />
           {/* What this screen can start (#673), at the end of the line that says which copy it is
               about. Both open the Copies list's own dialogs. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
@@ -313,6 +319,24 @@ export function CopyDetailPanel({
             <DetailCard title="Notes" empty={!item.notes}>
               <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>
             </DetailCard>
+
+            {/* Where a tag is put on and taken off, one at a time (#1181) — this copy's own, and
+                nothing inherited from the stamp it is linked to or from that stamp's issue. Tagging
+                a drawerful at once is the Copies list's bulk edit, which adds and removes named
+                tags instead of replacing the set. */}
+            <TagsCard
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              tags={item.tags}
+              onSave={async (tagIds) => {
+                const result = await setItemTagsAction(item.id, tagIds);
+                if (result.status === "success") {
+                  router.refresh();
+                  void invalidateInventory(collectionId);
+                }
+                return result;
+              }}
+            />
 
             <DetailCard title="Photos" count={item.photos.length} empty={item.photos.length === 0}>
               <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />

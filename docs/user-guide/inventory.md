@@ -1061,6 +1061,22 @@ whether you are about to change anything.
 
 The certificate and format rows appear only once your collection defines some.
 
+**Tags** is the fourth section, and it is the one worded as two verbs rather than as a value:
+
+- **Add** puts the tags you name on every picked copy. A copy already carrying one is left as it is.
+- **Remove** takes the tags you name off every picked copy. A copy not carrying one is left as it
+  is.
+
+**Every tag you do not name stays exactly where it is on each copy.** There is deliberately no way
+to set the tags to one list: a copy carries any number of [tags](tags.md), so one pass over a mixed
+drawer would otherwise flatten forty copies onto whatever the dialog happened to show. A tag you
+have ticked to add is not offered under *Remove*, and the other way round, so the two cannot
+contradict each other.
+
+Beside each you answer, the dialog says what it would reach — how many of the picked copies already
+carry everything you are adding, and how many actually carry something you are removing. If your
+collection has no tags yet, the section says so and links to Settings.
+
 Applying acts on every ticked copy, clears the selection (what has been dealt with should not invite
 doing it twice) and confirms with a toast — worth having on this list, where a moved or re-flagged
 copy often lands outside the filter you are looking through.

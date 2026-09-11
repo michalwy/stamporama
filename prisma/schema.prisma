@@ -861,6 +861,9 @@ model Tag {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   issues     IssueTag[]
   stamps     StampTag[]
+  // The third thing a tag hangs on (#1181) — the physical piece, where the collector's own labels
+  // are worth most. Nothing is inherited from the stamp a copy is linked to.
+  copies     ItemTag[]
 
   // Names are unique within a collection and a duplicate is refused with a message rather than
   // silently merged (#152). A tag is found by reading its name, so two rows spelled the same are
@@ -903,6 +906,27 @@ model StampTag {
   @@id([stampId, tagId])
   @@index([tagId])
   @@map("stamp_tag")
+}
+
+// A tag hung on a **copy** (#1181) — the physical piece in the collector's hands, which is where
+// this vocabulary earns most of its keep: *to check*, *for expertising*, *duplicate for the swap
+// box*. `IssueTag`'s rules exactly, one level down from `StampTag`, cascading at both ends for the
+// same reason.
+//
+// **Nothing is inherited here either**, and this direction is the one a reader will look for: a tag
+// on a stamp is not on the copies of that stamp, and a copy carrying several stamps (ADR-0044)
+// takes tags of its own rather than any of theirs. A copy is a physical object and a stamp is a
+// catalogue entry — *this one needs expertising* is never a statement about the catalogue.
+model ItemTag {
+  itemId String
+  tagId  String
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
+  @@index([tagId])
+  @@map("item_tag")
 }
 
 // A collection-level **render preset** for album pages (#766) — everything about how an album
@@ -2893,6 +2917,9 @@ model Item {
    * not a promise, so unlike the line above it guards nothing — `onDelete: SetNull` takes the
    * suggestion out and leaves the line naming the copy it always named. */
   proposedTradeLines TradeLine[] @relation("TradeLineProposedItem")
+  /** The collector's own labels on this copy (#1181). See {@link ItemTag}: nothing is inherited
+   *  from the stamp this copy is linked to, or from that stamp's issue. */
+  tags ItemTag[]
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
