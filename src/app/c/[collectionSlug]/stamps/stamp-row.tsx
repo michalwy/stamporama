@@ -19,6 +19,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { StampAttributesLine } from "@/app/c/[collectionSlug]/shared/stamp-attributes-line";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
@@ -270,6 +271,7 @@ export function StampRow({
           secondaryCNs.length > 0 ||
           stamp.colnectId ||
           stamp.copies.total > 0 ||
+          stamp.tags.length > 0 ||
           stamp.mainCatalogPrice) && (
         <div
           style={{
@@ -312,6 +314,9 @@ export function StampRow({
           {/* Beside the copies held, because the two answer one question between them: what the
               collection has of this stamp, and what it is still after (#532). */}
           <WantChip wants={stamp.wants} />
+          {/* The collector's own labels (#152), last of the chips because they are the one thing on
+              the line the catalogue did not say. Nothing at all when there are none. */}
+          <TagChips tags={stamp.tags} size="medium" />
           {stamp.mainCatalogPrice && (
             <span
               style={{

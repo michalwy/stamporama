@@ -115,6 +115,7 @@ import {
   StickyNote,
   Store,
   Tag,
+  Tags,
   Trash2,
   TriangleAlert,
   Truck,
@@ -152,6 +153,11 @@ const GLYPHS = {
    *  drawing is a sheet with a card on it, which is what an album page is. */
   albums: Album,
   offers: Tag,
+  /** The collector's own labels (#152) — the plural drawing, deliberately, because `offers`
+   *  already holds the single tag: an offer is a price ticket on a thing, a tag is one of several
+   *  words the collector hangs on it. Two meanings never share a name here even when they share a
+   *  family of drawings. */
+  tags: Tags,
   sales: Banknote,
   purchases: ShoppingBag,
   /** What the collection is looking for but does not have (#532) — the want list. A crosshair, not

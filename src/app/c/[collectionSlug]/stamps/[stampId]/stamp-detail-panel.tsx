@@ -40,6 +40,9 @@ import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chi
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
+import { TagsCard } from "@/app/c/[collectionSlug]/shared/tags-card";
+import { setStampTagsAction } from "@/app/actions/tags";
 import { StampVariantsCard } from "./stamp-variants-card";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
@@ -126,6 +129,9 @@ export function StampDetailPanel({
             variantCopies={stamp.variantCopies}
             size="medium"
           />
+          {/* The collector's own labels (#152), on the line that says which stamp this is — the
+              same chips the Stamps list draws, from the same source. */}
+          <TagChips tags={stamp.tags} size="medium" />
           {price && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
               <span style={PRICE_MAIN}>{moneyPrimaryText(price)}</span>
@@ -204,6 +210,22 @@ export function StampDetailPanel({
                 <Field label="Size">{statedSize}</Field>
               </FieldGrid>
             </DetailCard>
+
+            {/* Where a tag is put on and taken off (#152) — this stamp's own, and nothing is
+                inherited from its parent or from its issue. */}
+            <TagsCard
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              tags={stamp.tags}
+              onSave={async (tagIds) => {
+                const result = await setStampTagsAction(stamp.id, tagIds);
+                if (result.status === "success") {
+                  router.refresh();
+                  void invalidateStampsAndIssues(collectionId);
+                }
+                return result;
+              }}
+            />
 
             <DetailCard
               title="Issues"

@@ -36,6 +36,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import {
   RowQuickActions,
@@ -817,6 +818,9 @@ export function IssueRow({
           }}
         >
           <EntityNoChip entity="issue" no={issue.issueNo} prefix="iss" />
+          {/* The collector's own labels on the issue (#152), beside its number. They say nothing
+              about the stamps inside it — those carry their own. */}
+          <TagChips tags={issue.tags} />
           {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
             <>
             <IssueCatalogChips

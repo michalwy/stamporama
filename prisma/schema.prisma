@@ -144,6 +144,7 @@ model Collection {
   refCardTemplates RefCardTemplate[]
   hawidStrips     HawidStrip[]
   stampSizePresets StampSizePreset[]
+  tags            Tag[]
   albumTemplates  AlbumTemplate[]
   albums          Album[]
   lotBuilderPresets LotBuilderPreset[]
@@ -829,6 +830,79 @@ model StampSizePreset {
   @@unique([collectionId, widthMm, heightMm])
   @@index([collectionId])
   @@map("stamp_size_preset")
+}
+
+// A **tag** (#152) — the collector's own label for what the fixed schema does not name: *to check*,
+// *for expertising*, *birds*, *from the box grandfather left*. Areas, subtypes, catalogue attributes
+// (#71), dispositions and wants each answer one fixed question; the collector's own reason for
+// putting things together is not one of them, and a tag is that free label.
+//
+// **A dictionary row, not a free-text field on the thing.** A word typed onto each of forty stamps
+// is forty spellings of it, and nothing could then find them; a row means one spelling, one colour,
+// one rename. It is the shape `StampSubtype` and the four attribute dictionaries already have,
+// minus the parts a tag has no use for: **no `sortOrder`** (a tag list is the collector's whole
+// invented vocabulary rather than a handful of grades, so it is read alphabetically and there is no
+// order to drag), and **no translations** — a tag is never printed in a listing, it is what the
+// collector calls his own filing, so #344's rule does not reach it.
+//
+// `color` is a `TagColor` key from `src/lib/tag-colors.ts` (#728), the same closed vocabulary a
+// condition and a certificate status are painted from — never a hex. Null is *no colour* and is a
+// real answer: a collector who wants one tag to jump out wants the rest quiet.
+model Tag {
+  id           String   @id @default(cuid())
+  collectionId String
+  name         String
+  // A palette key (#728) or null for the neutral chip. Stored as text and validated by
+  // `isTagColor` on the way in and out, exactly as `StampCondition.color` is — the vocabulary
+  // lives in one pure module rather than in a Postgres enum that a migration would have to widen.
+  color        String?
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  issues     IssueTag[]
+  stamps     StampTag[]
+
+  // Names are unique within a collection and a duplicate is refused with a message rather than
+  // silently merged (#152). A tag is found by reading its name, so two rows spelled the same are
+  // two piles nobody can tell apart.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("tag")
+}
+
+// A tag hung on an issue (#152). **Cascade on both sides**, which is where this table parts company
+// with every other dictionary here: the four attribute dictionaries are `onDelete: Restrict`,
+// because a colour in use is a fact about the stamp that a delete would silently erase, while
+// deleting a tag *is* the act of taking that label off everything carrying it — the collector is
+// told how many things that is and confirms it. Nothing about the issue changes.
+model IssueTag {
+  issueId String
+  tagId   String
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, tagId])
+  // *What carries this tag* — the direction the delete confirmation's count and any later filter
+  // (#1182) read it in.
+  @@index([tagId])
+  @@map("issue_tag")
+}
+
+// A tag hung on a stamp (#152). **Nothing is inherited** — a tag on an issue is not on its stamps,
+// a tag on a parent stamp is not on its variants, and a tag on a variant is not on its parent —
+// which is the answer ADR-0010 already gives for catalogue attributes: a variant is its own stamp.
+// So there is no resolution to write and no walk to filter: a row here is the whole statement.
+model StampTag {
+  stampId String
+  tagId   String
+
+  stamp Stamp @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([stampId, tagId])
+  @@index([tagId])
+  @@map("stamp_tag")
 }
 
 // A collection-level **render preset** for album pages (#766) — everything about how an album
@@ -2646,6 +2720,9 @@ model Stamp {
   listedVariantChoices   OfferListedVariant[] @relation("OfferListedVariantChoice")
   /** Receive-side trade lines naming this stamp (#646). */
   tradeLines             TradeLine[]          @relation("TradeLineStamp")
+  /** The collector's own labels on this stamp (#152). Nothing is inherited from its parent or
+   *  from its issue — see {@link StampTag}. */
+  tags                   StampTag[]
 
   @@index([subtypeId])
   @@index([colorId])
@@ -5487,6 +5564,8 @@ model Issue {
   catalogPrefixes IssueCatalogPrefix[]
   translations   IssueTranslation[]
   formatFactors  StampFormatFactor[]
+  /** The collector's own labels on this issue (#152) — see {@link IssueTag}. */
+  tags           IssueTag[]
 
   @@unique([collectionId, issueNo])
   @@index([collectionId, year, primaryCatalogSortKey])
