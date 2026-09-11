@@ -1,5 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { prisma } from "../../src/lib/db";
 import {
   getStampSubtypes,
@@ -355,5 +357,167 @@ describe("seedDefaultSubtypes via createCollection", () => {
     const subtypes = await getStampSubtypes(userId, collection.id);
     assert.equal(subtypes.length, DEFAULT_STAMP_SUBTYPES.length);
     assert.equal(subtypes[0].name, DEFAULT_STAMP_SUBTYPES[0].name);
+  });
+
+  it("seeds Forgery last, as a distinct entry and not the default (#1000)", async () => {
+    const collection = await createCollection(userId, "Seeded Forgery", "EUR");
+    const subtypes = await getStampSubtypes(userId, collection.id);
+    const forgery = subtypes.filter((s) => s.name === "Forgery");
+    assert.equal(forgery.length, 1);
+    assert.equal(forgery[0].actsAsVariant, false, "ADR-0049 §1: a forgery is a distinct entry");
+    assert.equal(forgery[0].isDefault, false);
+    assert.equal(subtypes[subtypes.length - 1].name, "Forgery");
+  });
+});
+
+// The `Forgery` row reaches a NEW collection through DEFAULT_STAMP_SUBTYPES above, and an
+// EXISTING one through `20260911100000_forgery_subtype`. Only the first of those is
+// reachable from the application, and the suite cannot see the second at all the ordinary
+// way: `prisma migrate deploy` runs against a fresh database, where no collection predates
+// the migration, so every collection this suite creates already carries the row.
+//
+// So these cases build the pre-migration state by hand — the nine rows
+// `20260719100000_add_stamp_subtype` seeded, spelled out here rather than derived from
+// DEFAULT_STAMP_SUBTYPES so that the reference value is not a projection of the thing under
+// test — and then execute the migration file itself, bytes off disk. Each runs inside a
+// transaction that is rolled back, because the statement is deliberately unscoped (it reads
+// every row of `collection`) and this database is shared with whatever else is running.
+const FORGERY_MIGRATION = fileURLToPath(
+  new URL("../../prisma/migrations/20260911100000_forgery_subtype/migration.sql", import.meta.url)
+);
+
+/** The nine rows every collection carried before `20260911100000_forgery_subtype`. */
+const PRE_FORGERY_SUBTYPES: ReadonlyArray<{ name: string; actsAsVariant: boolean; isDefault: boolean }> = [
+  { name: "Variant", actsAsVariant: true, isDefault: true },
+  { name: "Colour variety", actsAsVariant: true, isDefault: false },
+  { name: "Perforation variety", actsAsVariant: true, isDefault: false },
+  { name: "Paper variety", actsAsVariant: true, isDefault: false },
+  { name: "Watermark variety", actsAsVariant: true, isDefault: false },
+  { name: "Print variety", actsAsVariant: true, isDefault: false },
+  { name: "Error", actsAsVariant: false, isDefault: false },
+  { name: "Plate flaw", actsAsVariant: false, isDefault: false },
+  { name: "Overprint", actsAsVariant: false, isDefault: false },
+];
+
+/** Thrown to roll the migration back out of the shared database once it has been read. */
+class RollbackSignal extends Error {}
+
+interface SubtypeRow {
+  name: string;
+  actsAsVariant: boolean;
+  isDefault: boolean;
+  sortOrder: number;
+}
+
+/**
+ * Runs `migration.sql` verbatim, returns that collection's rows, and rolls the write back.
+ *
+ * The `LOCK` is scaffolding around the file rather than part of it, and it is here because
+ * the statement reads **every** row of `collection` while the rest of the suite is creating
+ * and deleting collections in other processes. Without it the migration's own `SELECT` can
+ * read a collection that another test deletes before the `INSERT` reaches its foreign key,
+ * which fails with `23503` — observed on the first run of this test. `SHARE` conflicts with
+ * `ROW EXCLUSIVE`, so it holds every other writer to that table off for the ~100 ms this
+ * transaction lasts, and it is taken first so nothing can be waiting on us when we ask.
+ */
+async function runForgeryMigration(collectionId: string): Promise<SubtypeRow[]> {
+  const sql = await readFile(FORGERY_MIGRATION, "utf8");
+  let rows: SubtypeRow[] = [];
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('LOCK TABLE "collection" IN SHARE MODE');
+        await tx.$executeRawUnsafe(sql);
+        rows = await tx.stampSubtype.findMany({
+          where: { collectionId },
+          orderBy: { sortOrder: "asc" },
+          select: { name: true, actsAsVariant: true, isDefault: true, sortOrder: true },
+        });
+        throw new RollbackSignal();
+      },
+      // The lock may have to wait behind a concurrent writer, so this is not the 5 s default.
+      { timeout: 30_000, maxWait: 30_000 }
+    );
+  } catch (err) {
+    if (!(err instanceof RollbackSignal)) throw err;
+  }
+  return rows;
+}
+
+describe("20260911100000_forgery_subtype", () => {
+  let userId: string;
+
+  before(async () => {
+    userId = (await createTestUser(`mig-${Date.now()}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  /** A collection as it stood before this migration: the nine rows at sortOrder 0..8. */
+  async function preMigrationCollection(suffix: string, extra: { name: string }[] = []) {
+    const collection = await createTestCollection(userId, `${suffix}-${Date.now()}`);
+    await prisma.stampSubtype.createMany({
+      data: [
+        ...PRE_FORGERY_SUBTYPES.map((s, i) => ({ collectionId: collection.id, ...s, sortOrder: i })),
+        ...extra.map((s, i) => ({
+          collectionId: collection.id,
+          name: s.name,
+          actsAsVariant: false,
+          isDefault: false,
+          sortOrder: PRE_FORGERY_SUBTYPES.length + i,
+        })),
+      ],
+    });
+    return collection.id;
+  }
+
+  it("appends Forgery as a distinct entry, after the nine seeded rows", async () => {
+    const collectionId = await preMigrationCollection("plain");
+    const rows = await runForgeryMigration(collectionId);
+    const forgery = rows.filter((r) => r.name === "Forgery");
+    assert.equal(forgery.length, 1, "the migration seeds exactly one Forgery row");
+    assert.equal(forgery[0].actsAsVariant, false);
+    assert.equal(forgery[0].isDefault, false);
+    // The TypeScript path derives sortOrder from the array index, so an untouched
+    // collection must land on 9 by either route.
+    assert.equal(forgery[0].sortOrder, PRE_FORGERY_SUBTYPES.length);
+    assert.equal(rows[rows.length - 1].name, "Forgery");
+    assert.equal(rows.length, PRE_FORGERY_SUBTYPES.length + 1);
+  });
+
+  it("appends after the collector's own rows rather than at a hardcoded 9", async () => {
+    // `sortOrder` carries no unique constraint, so a hardcoded 9 would not fail here — it
+    // would sort among the collector's rows, silently.
+    const collectionId = await preMigrationCollection("appended", [
+      { name: "Reprint" },
+      { name: "Essay" },
+    ]);
+    const rows = await runForgeryMigration(collectionId);
+    assert.equal(rows[rows.length - 1].name, "Forgery");
+    assert.equal(rows[rows.length - 1].sortOrder, PRE_FORGERY_SUBTYPES.length + 2);
+  });
+
+  it("leaves a collection that already has a Forgery row alone, whatever its case", async () => {
+    // Nothing in the database stops a second row of the same name: the only unique index on
+    // this table is the partial one on `isDefault`, and this row is not the default.
+    const collectionId = await preMigrationCollection("existing");
+    await prisma.stampSubtype.create({
+      data: {
+        collectionId,
+        name: "forgery",
+        // The collector's own classification, deliberately the opposite of the seeded row's.
+        actsAsVariant: true,
+        isDefault: false,
+        sortOrder: PRE_FORGERY_SUBTYPES.length,
+      },
+    });
+    const rows = await runForgeryMigration(collectionId);
+    const named = rows.filter((r) => r.name.toLowerCase() === "forgery");
+    assert.equal(named.length, 1, "no second Forgery row is created");
+    assert.equal(named[0].name, "forgery");
+    assert.equal(named[0].actsAsVariant, true, "the collector's own flag is not overwritten");
   });
 });

@@ -54,9 +54,15 @@ export interface StampSubtypeData {
  * Exactly one row is `isDefault` — the type assigned to newly created children and
  * the backfill target for existing children.
  *
- * This list is REPLICATED BY HAND in the migration SQL
- * (prisma/migrations/20260719100000_add_stamp_subtype/migration.sql); the two must
- * be kept in sync.
+ * This list is REPLICATED BY HAND in migration SQL, and by now in more than one file:
+ * `20260719100000_add_stamp_subtype` seeds the first nine and
+ * `20260911100000_forgery_subtype` appends `Forgery`. The array and the union of those
+ * seeds must stay in sync — `tests/integration/subtypes-domain.test.ts` checks that they
+ * do, since nothing else can see a migration drift apart from the list it was copied from.
+ *
+ * A row appended here reaches a **new** collection through {@link seedDefaultSubtypes},
+ * which derives `sortOrder` from the array index. Existing collections are the migration's
+ * job, and the two paths have to agree about the number they land on.
  */
 export const DEFAULT_STAMP_SUBTYPES: ReadonlyArray<{
   name: string;
@@ -72,6 +78,14 @@ export const DEFAULT_STAMP_SUBTYPES: ReadonlyArray<{
   { name: "Error", actsAsVariant: false, isDefault: false },
   { name: "Plate flaw", actsAsVariant: false, isDefault: false },
   { name: "Overprint", actsAsVariant: false, isDefault: false },
+  // A forgery is a child of the stamp it imitates, and a distinct entry rather than a
+  // variant (ADR-0049 §1, #1000): owning one completes no series and it is not the lowest
+  // child price of the genuine stamp. `actsAsVariant: false` is also what keeps a
+  // forgery's photo off the genuine stamp — `photos.ts` breaks the promotion walk on
+  // `!childIsVariant(current)` (#347, #368). It is an ordinary editable dictionary row and
+  // deliberately not a system sentinel: the collector may rename or delete it, and nothing
+  // in the app keys on this name.
+  { name: "Forgery", actsAsVariant: false, isDefault: false },
 ];
 
 /**
