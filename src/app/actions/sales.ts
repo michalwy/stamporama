@@ -17,6 +17,7 @@ import {
   deleteSale,
   setSaleStatus,
   setSaleLineItemPacked,
+  markSaleCopiesPacked,
   isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
@@ -309,6 +310,19 @@ export async function setSaleLineItemPackedAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the packed status.");
+  }
+}
+
+/** Mark every copy on a sale as packed (#973) — the answer given when a sale is moved to `packed`
+ * or past it with copies still unmarked. One write for the whole parcel, and it changes copy flags
+ * only: the caller moves the status itself, in a separate call it can abandon. */
+export async function markSaleCopiesPackedAction(saleId: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await markSaleCopiesPacked(session.user.id, saleId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to mark the copies as packed.");
   }
 }
 

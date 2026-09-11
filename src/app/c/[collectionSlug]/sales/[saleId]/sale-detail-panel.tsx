@@ -25,7 +25,9 @@ import { ChooseSetDialog } from "./choose-set-dialog";
 import { SaleShareDialog } from "./sale-share-dialog";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
+import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
+import { isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -98,7 +100,8 @@ type Dialog =
   | { kind: "chooseSet"; lineId: string }
   | { kind: "share" }
   | { kind: "paidTotal" }
-  | { kind: "shipment"; mode: "sent" | "edit" };
+  | { kind: "shipment"; mode: "sent" | "edit" }
+  | { kind: "unpacked"; next: SaleStatus };
 
 interface SaleDetailPanelProps {
   collectionId: string;
@@ -139,6 +142,25 @@ export function SaleDetailPanel({
   const packedIdx = SALE_STATUS_ORDER.indexOf("packed");
   const showPackedHint = sale.allItemsPacked && statusIdx >= 0 && statusIdx < packedIdx;
 
+  /**
+   * The other direction of the same fact (#973): the sale is being moved to `packed` **or past
+   * it** while copies are still unmarked, so ask before it goes.
+   *
+   * `packed` *or past it*, rather than `packed` alone, because the select can jump a sale straight
+   * from `paid` to `sent` — the same situation and the worse one, since the parcel has supposedly
+   * gone. Decided by the user on 2026-09-08 against asking only on `packed`.
+   *
+   * Forward moves only: putting a sale *back* to `packed` from `sent` is a correction, and
+   * stopping a correction to ask about packing would be noise.
+   *
+   * Nothing is asked when every copy is already packed, or when the sale has no copies at all —
+   * that is #192's hint territory and it must not gain a dialog.
+   */
+  function needsPackingCheck(next: SaleStatus): boolean {
+    const nextIdx = SALE_STATUS_ORDER.indexOf(next);
+    return sale.unpackedItemCount > 0 && nextIdx >= packedIdx && nextIdx > statusIdx;
+  }
+
   // Moving to `paid` is the moment the money is known, and #205's buyer handling is derived from
   // it — so a sale whose buyer side has no anchor yet is asked for the total right here (#443)
   // instead of sending the collector to the amounts card. A sale that already carries either
@@ -150,8 +172,23 @@ export function SaleDetailPanel({
   // (#699) would be asking about, and what decides whether the header offers one.
   const pendingSetCount = sale.lines.filter((l) => l.setChoicePending).length;
 
+  /** Both controls that move the status come through here (#973): the inline select and the
+   *  advance button. A guard added to one and not the other is a guard the button walks past. */
   function applyStatus(next: string) {
     if (next === sale.status) return;
+    // The packing question comes first, because it is the only one that can abandon the move
+    // altogether. Answering it hands the transition on to the prompts below, so a jump to `sent`
+    // still asks for the tracking number afterwards.
+    if (isSaleStatus(next) && needsPackingCheck(next)) {
+      setError(undefined);
+      setDialog({ kind: "unpacked", next });
+      return;
+    }
+    proceedWithStatus(next);
+  }
+
+  /** The transition once the packing question (#973) has been answered, or was never asked. */
+  function proceedWithStatus(next: string) {
     if (next === "paid" && buyerSideUnanchored) {
       setError(undefined);
       setDialog({ kind: "paidTotal" });
@@ -733,6 +770,46 @@ export function SaleDetailPanel({
               () => setDialog({ kind: "none" })
             )
           }
+        />
+      )}
+
+      {/* Some copies are not packed, asked for on the way to `packed` or past it (#973). Two runs
+          rather than one, unlike the prompts below: marking the copies and moving the sale are two
+          facts about the world, and a refused status change leaves behind copy marks that are true
+          anyway — they *were* packed, which is what the collector just said. Handing the move back
+          to `proceedWithStatus` is what keeps a jump to `sent` asking for the tracking number
+          afterwards, instead of the packing question swallowing it. */}
+      {dialog.kind === "unpacked" && (
+        <UnpackedCopiesDialog
+          unpackedCount={sale.unpackedItemCount}
+          targetLabel={SALE_STATUS_META[dialog.next].label}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            // *Do nothing*: the status stays put and no copy flag changes.
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onAdvanceAnyway={() => {
+            const next = dialog.next;
+            setDialog({ kind: "none" });
+            proceedWithStatus(next);
+          }}
+          onMarkPacked={() => {
+            const next = dialog.next;
+            run(
+              async () => {
+                const { markSaleCopiesPackedAction } = await import("@/app/actions/sales");
+                return markSaleCopiesPackedAction(sale.id);
+              },
+              () => {
+                setDialog({ kind: "none" });
+                proceedWithStatus(next);
+              }
+            );
+          }}
         />
       )}
 
