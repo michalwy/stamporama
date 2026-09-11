@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
@@ -17,7 +18,7 @@ export default async function AuctionsPage({ params }: AuctionsPageProps) {
   const { collectionSlug } = await params;
 
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();

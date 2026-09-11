@@ -13,9 +13,17 @@ Stamporama uses email and password authentication. No external accounts or third
 
 1. Navigate to the Stamporama URL. You will be redirected to `/sign-in` if you are not already signed in.
 2. Enter your email address and password.
-3. Click **Sign in**. You will be taken to your collections page.
+3. Click **Sign in**.
 
 If your credentials are incorrect, an error message is shown and you can try again.
+
+### Where signing in takes you
+
+**Back to the screen you came from.** If being sent to the sign-in page interrupted you — on an intake sheet, an offer, an album page — signing in returns you there rather than to your collections page, so you do not have to find it again through the sidebar. This works whether you signed out yourself or the session ended for one of the reasons below.
+
+You are taken to your **collections page** instead when there is no screen to return to: you opened `/sign-in` deliberately, or you were signed out by something happening in the background rather than by a screen you were looking at.
+
+Only a screen of Stamporama itself is ever returned to. An address on the sign-in URL pointing anywhere else is ignored — you are taken to your collections page, with nothing to read and nothing to do.
 
 ## Staying signed in
 
@@ -37,8 +45,8 @@ You will not see it after signing out yourself, nor when you simply have not sig
 
 ## Signing out
 
-Click the **Sign out** button on the collections page, or in the sidebar of a collection. You will be redirected to the sign-in page and your session will be ended.
+Click the **Sign out** button on the collections page, or in the sidebar of a collection. You will be redirected to the sign-in page and your session will be ended. Signing in again brings you back to the screen you signed out from.
 
 ## Accessing protected pages
 
-All collection pages (`/c/...`) and the collections picker (`/collections`) require a valid session. Navigating to these pages without being signed in redirects you to `/sign-in` automatically.
+All collection pages (`/c/...`) and the collections picker (`/collections`) require a valid session. Navigating to these pages without being signed in redirects you to `/sign-in` automatically, and the page you asked for is the one you land on once you have signed in.

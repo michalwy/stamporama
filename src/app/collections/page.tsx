@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionsByOwner } from "@/lib/collections";
@@ -11,7 +12,7 @@ export const metadata = { title: "Collections" };
 
 export default async function CollectionsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   const collections = await getCollectionsByOwner(session.user.id);
 

@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth";
 import {
@@ -24,7 +25,7 @@ export type CarrierActionState =
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   return session;
 }
 
