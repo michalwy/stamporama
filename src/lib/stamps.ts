@@ -35,6 +35,7 @@ import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
+import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import {
   loadStampCopyCounts,
   NO_COPIES,
@@ -429,6 +430,10 @@ export interface StampListItem {
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. */
   wants: StampWantSummary | null;
+  /** The collector's own labels on this stamp (#152), in the dictionary's own alphabetical order.
+   *  Empty is the normal case. Nothing is inherited: a tag on the parent stamp or on the issue is
+   *  not reported here. */
+  tags: TagSummary[];
   /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
    *  their names. Every value is null on a stamp that states none, which is the normal case. */
   attributes: StampAttributeLabels;
@@ -483,6 +488,9 @@ const STAMP_LIST_SELECT = {
   },
   checklistEntries: { select: { checklistId: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  // The collector's own labels (#152) — this stamp's own rows and nothing else: a tag on its
+  // parent, on one of its variants or on its issue is not on this stamp.
+  tags: TAG_SUMMARY_SELECT,
   ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
   ...STAMP_SIZE_SELECT,
 } as const;
@@ -514,6 +522,7 @@ function toStampListItem(
     }[];
     checklistEntries: { checklistId: string }[];
     photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
+    tags: { tag: { id: string; name: string; color: string | null } }[];
   } & StampAttributeDisplayRow & {
       widthMm: Prisma.Decimal | null;
       heightMm: Prisma.Decimal | null;
@@ -600,6 +609,7 @@ function toStampListItem(
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
     variantCopies: copyCounts.variant.get(stamp.id) ?? NO_COPIES,
     wants: wantsByStamp.get(stamp.id) ?? null,
+    tags: orderTagSummaries(stamp.tags),
     attributes: stampAttributeLabels(stamp),
     size: stampSizeFields(stamp),
   };

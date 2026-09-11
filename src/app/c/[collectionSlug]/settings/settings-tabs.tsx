@@ -11,6 +11,7 @@ import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { AttributeDictionaryPanel } from "./attributes-panel";
 import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
+import { TagsPanel } from "./tags-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
@@ -44,6 +45,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { StampAttributeLists } from "@/lib/stamp-attributes";
 import type { StampSizePresetData } from "@/lib/stamp-size-presets";
+import type { TagData } from "@/lib/tags";
 import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
@@ -78,6 +80,9 @@ interface SettingsTabsProps {
   /** The collection's stamp size presets (#804) — the seventh and eighth attribute's dictionary,
    *  a saved pair of millimetres copied onto a stamp rather than referenced by it. */
   initialStampSizePresets: StampSizePresetData[];
+  /** The collection's tags (#152) — the collector's own labels, with what each is on. Empty until
+   *  the collector invents one: nothing is seeded. */
+  initialTags: TagData[];
   initialCollageTemplates: CollageTemplateData[];
   /** The collection's ref-card formats (#569) — what the blank ref-card sheet prints. */
   initialRefCardTemplates: RefCardTemplateData[];
@@ -152,6 +157,12 @@ const TABS = [
   // The four stamp-attribute dictionaries on one tab, not four (#72): they are one subject — what a
   // catalogue says about a stamp — set up in one sitting, and the strip is already long.
   { key: "attributes", label: "Attributes" },
+  // A tab of its own rather than a fifth list under Attributes (#152), and the topic file says why:
+  // an attribute is a fact the *catalogue* states about a stamp, while a tag is a label the
+  // collector invents. They are also set up at different moments — the attribute dictionaries in
+  // one sitting when the catalogue is being modelled, a tag the day there is a pile that needs a
+  // name — and a tag reaches issues where an attribute never does.
+  { key: "tags", label: "Tags" },
   { key: "collages", label: "Collage templates" },
   // Beside the collage templates (#569): the collection's other named dictionary of render numbers,
   // one for the images a listing carries and one for the paper cards a box is filed onto. Its own
@@ -207,6 +218,7 @@ export function SettingsTabs({
   initialSubtypes,
   initialAttributes,
   initialStampSizePresets,
+  initialTags,
   initialCollageTemplates,
   initialRefCardTemplates,
   initialHawidStrips,
@@ -250,6 +262,7 @@ export function SettingsTabs({
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "attributes" ||
+    rawTab === "tags" ||
     rawTab === "collages" ||
     rawTab === "refcards" ||
     rawTab === "albums" ||
@@ -429,6 +442,12 @@ export function SettingsTabs({
             />
           </section>
         </div>
+      )}
+      {activeTab === "tags" && (
+        <section>
+          <h2 style={sectionHeadingStyle}>Tags</h2>
+          <TagsPanel collectionId={collectionId} initialTags={initialTags} />
+        </section>
       )}
       {activeTab === "collages" && (
         <section>

@@ -28,6 +28,7 @@ import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
+import { TagChips } from "./tag-chip";
 import { FilterChip } from "./filter-chip";
 import { filterStampTreeBy, filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
 
@@ -360,6 +361,7 @@ export function StampDetailLine({
     !showsSubtype &&
     node.copies.total === 0 &&
     node.variantCopies.total === 0 &&
+    node.tags.length === 0 &&
     !node.mainCatalogPrice &&
     !onSetPrice
   )
@@ -403,6 +405,9 @@ export function StampDetailLine({
       {/* Beside the copies held: what the collection has of this stamp, and what it is still
           after (#532). */}
       <WantChip wants={node.wants} />
+      {/* The collector's own labels on this stamp (#152) — its own rows, never the issue's and
+          never its parent's. */}
+      <TagChips tags={node.tags} />
       {!node.mainCatalogPrice && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip

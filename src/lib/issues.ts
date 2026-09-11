@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
+import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
 import {
@@ -171,6 +172,9 @@ export interface StampNodeData {
   /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
    *  their names — what tells `240a` from `240b` without opening either. */
   attributes: StampAttributeLabels;
+  /** The collector's own labels on this stamp (#152), alphabetically. Nothing is inherited — the
+   *  issue's own tags are not here, and neither are the parent stamp's. */
+  tags: TagSummary[];
 }
 
 export interface IssueCatalogNumberData {
@@ -231,6 +235,8 @@ const MEMBER_SELECT = {
       // unknown-variant umbrella whose price rolls up from its variants (#238).
       ...VARIANT_FLAG_SELECT,
       variants: { select: VARIANT_FLAG_SELECT },
+      // The stamp's own tags (#152) — the issue's are the issue's, and nothing is inherited.
+      tags: TAG_SUMMARY_SELECT,
       ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
     },
   },
@@ -298,6 +304,7 @@ function toStampNode(
         actsAsVariantOverride: boolean | null;
         subtype: { actsAsVariant: boolean } | null;
       }[];
+      tags: { tag: { id: string; name: string; color: string | null } }[];
     } & StampAttributeDisplayRow;
   },
   pricing?: {
@@ -379,6 +386,7 @@ function toStampNode(
     variantCopies: copyCounts?.variant.get(m.stampId) ?? NO_COPIES,
     wants: wantsByStamp?.get(m.stampId) ?? null,
     attributes: stampAttributeLabels(m.stamp),
+    tags: orderTagSummaries(m.stamp.tags),
   };
 }
 
@@ -518,6 +526,9 @@ export interface IssueListItem {
   /** Main photos of the checklists' stamps (#137), deduped across checklists, shown on the
    * collapsed issue row as a representative gallery of the issue. */
   photos: PhotoSummary[];
+  /** The collector's own labels on this issue (#152), alphabetically. Empty is the normal case,
+   *  and the issue's tags say nothing about its stamps — nothing is inherited. */
+  tags: TagSummary[];
 }
 
 /** One checklist on a list row: what it is called, how big it is, and what it is worth. */
@@ -576,6 +587,9 @@ const ISSUE_LIST_SELECT = {
   checklists: {
     select: { id: true, name: true, sortOrder: true, createdAt: true, stamps: { select: { stampId: true } } },
   },
+  // The collector's own labels on the issue itself (#152). The issue's tags are the issue's: they
+  // say nothing about its stamps, which carry their own.
+  tags: TAG_SUMMARY_SELECT,
 } as const;
 
 /**
@@ -748,6 +762,7 @@ function toIssueListItem(
       };
     }[];
     checklists: ChecklistRow[];
+    tags: { tag: { id: string; name: string; color: string | null } }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
@@ -828,6 +843,7 @@ function toIssueListItem(
     checklists,
     rangeSuggestions,
     photos,
+    tags: orderTagSummaries(issue.tags),
   };
 }
 

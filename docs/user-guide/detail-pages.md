@@ -91,8 +91,8 @@ Details is always there; the rest appear when the copy has them.
 
 ## The stamp page
 
-*Left column:* Details, Attributes, Issues, Photos, Catalog prices, Variants. *Right column:* Wants,
-Copies, Offers. Only Details is always there.
+*Left column:* Details, Attributes, Tags, Issues, Photos, Catalog prices, Variants. *Right column:*
+Wants, Copies, Offers. Only Details and Tags are always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
@@ -111,6 +111,11 @@ Copies, Offers. Only Details is always there.
   visible too. The size shown is the stamp's own — nothing borrowed from a neighbour on its
   checklist. Read-only here, as everything on this page is — the values are edited from **Edit**
   above.
+- **Tags** — your own labels on this stamp, and the one card on this page that is an **editor**:
+  **Tags** opens your whole dictionary with the current ones ticked, and a `×` on a chip takes one
+  off. A tag is not a field of the stamp — it is a label you hang on it — which is why it is worked
+  here rather than in the form above. Nothing is inherited: the issue's tags and the parent stamp's
+  tags are not here. See [Tags](tags.md).
 - **Issues** — which issues the stamp belongs to, and which of each issue's
   [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
   counts it.
@@ -143,14 +148,16 @@ Copies, Offers. Only Details is always there.
 
 ## The issue page
 
-*Left column:* Details, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers. Only
-Details is always there.
+*Left column:* Details, Tags, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers.
+Only Details and Tags are always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
   required/total stamp count. At the end of the line, **Edit** opens the issue dialog — the same one
   the Issues list opens, over this issue — for its name, year, area, catalog numbers and checklists.
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
   many of them are actually priced.
+- **Tags** — your own labels on the issue, put on and taken off here exactly as on the stamp page.
+  They say nothing about the stamps inside the issue, which carry their own. See [Tags](tags.md).
 - **Completeness** — the breakdown described below.
 - **Catalog value** — averages across catalogs for the stamps on one
   [checklist](collections.md#checklists), full breakdown behind the button. An issue collected more

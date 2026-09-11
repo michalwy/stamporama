@@ -754,6 +754,14 @@ All six are available as tokens in [listing texts](contacts.md#adding-and-editin
 
 The four list ones use the language of the platform being listed on, and the title preview marks one that has no translation yet so you can fill it in from there. Denomination and perforation are printed as recorded in every language.
 
+## Tags
+
+The six attributes above are what the *catalogue* says about a stamp. A **tag** is what **you** say
+about it — *to check*, *for expertising*, *birds*, *from the box grandfather left* — a short label
+you define once in **Settings → Tags** and hang on an issue or a stamp from its own screen.
+
+Tags are their own subject and have their own page: see [Tags](tags.md).
+
 ## Carriers
 
 The post offices and couriers you post with, kept under **Settings → Shipping**. A carrier is a name
