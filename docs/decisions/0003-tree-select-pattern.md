@@ -12,7 +12,7 @@ Issue #62 requires replacing this with a proper tree-aware picker that shows exp
 
 ## Decision
 
-Implement a custom tree-select primitive using the pattern established in the ohm-sweet-ohm sibling project (`/Users/michalwy/ohm-sweet-ohm`). The implementation consists of three layers:
+Implement a custom tree-select primitive, following the pattern established in a sibling project. The implementation consists of three layers:
 
 1. **`src/app/tree-picker-utils.ts`** — Generic, pure TypeScript utilities:
    - `buildTree<T>` — converts a flat array with `parentId` references into a `TreeNode<T>[]` hierarchy
