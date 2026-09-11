@@ -559,16 +559,35 @@ user's decision** — #906 marks them as such, and they are refutable:
   did, and the same answer follows — read the thing rather than perform it. Running it
   unconditionally and not reading whether it succeeded discharges the ceremony and not the reason.
 
-  **The stated form is *do not pipe*, deliberately, because the obvious guard is itself a second
-  instance of the trap.** `cmd | tail -20; echo ${PIPESTATUS[0]}` is a bash idiom and **prints
-  nothing in zsh** — that array is bash's, zsh's is lowercase `pipestatus` and is 1-indexed — so
-  the guard renders as `exit=` with a blank after it, which reads at a glance like a zero. A lead ran
-  exactly that line all afternoon on 2026-09-10 without noticing, including on the commands
-  verifying that the machine's `pnpm` breakage was fixed; nothing went wrong only because the output
-  beside it happened to be unambiguous. It is *Sweeping for a claim*'s zsh sentence again, on the
-  one idiom this rule most invites. Running the command alone needs no array, no index convention
-  and no knowledge of which shell the session got — and it is the conclusion that section already
-  reaches for sweeps.
+  **The stated form is *do not pipe*, deliberately, because the obvious guard is itself an instance
+  of the trap.** `cmd | tail -20; echo ${PIPESTATUS[0]}` is a bash idiom and **prints nothing in
+  zsh** — that array is bash's, zsh's is lowercase `pipestatus` and is 1-indexed — so the guard
+  renders as `exit=` with a blank after it, which reads at a glance like a zero. It is *Sweeping for
+  a claim*'s zsh sentence again, on the one idiom this rule most invites.
+
+  **Three sessions reached for it on 2026-09-10, and the property they share is the finding rather
+  than the tally.** A lead ran exactly that line all afternoon, including on the commands verifying
+  that the machine's `pnpm` breakage was fixed. The #1073 session ran it on its own `git push` that
+  evening — one message after reporting the drill unchained for precisely this reason, on the branch
+  amending this paragraph. The #709 session ran `pnpm typecheck 2>&1 | tail -25` and read `EXIT=0`,
+  which was `tail`'s. **In all three the guard the session had deliberately added is the thing that
+  failed, and something other than the guard is what saved it.** That is an argument about the
+  guard; three people making a shell mistake is not, and the difference is why this is a paragraph
+  rather than a line (#1131).
+
+  **The third is the one the first two understate.** Those two were rescued by adjacent output that
+  happened to be unambiguous — `Everything up-to-date`, or refs being named — and a session that
+  pipes a `grep` gets no such rescue. A `typecheck` prints a wall of diagnostics when it fails and
+  almost nothing when it passes, so `| tail -25` shows errors on a failing run and silence on a
+  passing one: **the case where the guard matters is the case where a glance at the output tells you
+  least.** All three were caught and nothing was lost; what the count establishes is the failure
+  rate of the habit, not a cost.
+
+  **So run the command alone.** It needs no array, no index convention and no knowledge of which
+  shell the session got, and it is the conclusion that section already reaches for sweeps. **A
+  corrected zsh spelling is deliberately not offered beside it** — a rule stating two forms is
+  read as licensing the one that looks familiar, and `pipestatus[1]` is exactly the spelling nobody
+  recalls under pressure.
 - **A worker that used the integration suite releases its slot before it finishes**:
   `pnpm e2e:db:down && pnpm slot release`. A slot is allocated **lazily**, on first use of that
   suite, so releasing it holds demand at the number of sessions actually running rather than the size
@@ -1410,6 +1429,58 @@ until ordering is the only thing left, and the trap reproduces. The session caug
 with nobody looking, which is the only way it ever gets caught: a control that passes for the wrong
 reason is indistinguishable from one that works, and it is green either way.
 
+**After one control fails, run the rest of that branch's controls as a batch.** What a failed
+control invalidates is not the one assertion it caught but **your calibration about the whole
+branch**, and that is why this is a rule rather than an exhortation to be thorough: the trigger is
+a state a session can notice — *you have just been wrong about the shape of one of your own
+claims* — and at that moment every other claim on the branch is suspect for the same reason, most
+of them one command each. **Two instances on #708's branch, and the second is the interesting one
+because it is not a test.** The first was #814's shape again: removing a `where: { language }`
+filter left the integration suite green, the assertion having passed on Prisma's row ordering
+rather than on the filter. The second was a **sentence already reported to the lead** — that a
+contact leak was held by *"two independent guards, neither relied on alone"* — and dropping the
+`where: { platform: true }` filter **and** adding `email` to the `select` both left the leak test
+green, because the mapper copies neither. **Exactly one of the three guards was load-bearing, and
+it was the one an obvious tidy-up would delete.** Nothing shipped broken; what the batch bought was
+finding a documented guard decorative before a later session tidied it away. **It does not become a
+per-assertion requirement** — the trigger is a failed control, not the existence of a claim, which
+is also what makes it performable on the way to doing something else rather than a rule that reads
+as coverage (#1141).
+
+**And a batch answers something one-at-a-time cannot, because a control run once records what that
+moment happened to look at.** The #709 session re-ran its **nine** controls as one batch after a
+later commit rather than trusting the calibration each was first written under, and **one changed
+answer**: the *scope check removed* control fails an integration test as well as a unit test, which
+the first pass had never seen because it had been run against the unit suite alone. Eight of the
+nine discriminated; **the ninth is a hole reported as one** — replacing that route's scope-check
+binding with a no-op leaves every integration test green, because nothing in the registry writes
+yet and no request exists that could be refused (#711). A control that cannot fail, said to be one,
+is worth more than one quietly dropped.
+
+**A count is only a control against an identically-shaped invocation.** The same session compared a
+`grep -cE` against an earlier `grep -inE`, got a total one lower than the listing, and spent a
+minute building a case that the tool disagreed with its own `-n`. It does not: the two differed by
+`-i`, and `Closes` with a capital C matches only with it. **`ci.yml` uses `-iE`, and that is the
+shape to match** when checking that job by hand. The instrument was fine and the comparison was
+broken — which is the head of this section (*name the source of the reference value, and check it
+is not the thing under test*) pointed at the **shape of the invocation** rather than at the value.
+
+**And a control's own edit is verified before its suite is trusted — mechanically, not by
+remembering.** A control is *break the thing on purpose, then check something goes red*; where the
+break never applies, the suite passes, and **a no-op edit and a non-discriminating test are
+byte-identical from the exit status**. Hash the file before and after the edit and refuse to run
+the suite on an unchanged one: three lines, no judgement. **Name the third outcome** —
+DISCRIMINATED, DID NOT DISCRIMINATE, and **INCONCLUSIVE, the edit did not apply** — which is the
+case a control reporting only pass and fail cannot express at all.
+[`.github/rulesets/README.md`](../../.github/rulesets/README.md) § *What the check could not see, it
+says* is the same move one surface over, and its reason transfers whole: an instrument that could
+not see is never normalised into a confident negative. **The pairing is the argument.** On #710, in
+one night, a `perl` in-place edit whose pattern assumed the wrong indentation never applied and its
+control came back **green** — caught only because every green control was checked for whether the
+file had actually changed — while three `cost`-total controls failed the same way against a shared
+helper and came back **INCONCLUSIVE**. Identical cause, one silent and one refused, separated only
+by the hash.
+
 **And a check that cannot see the failure is not a check.** The never-alone list in `renovate.json`
 has two criteria, and the second is the one that gets missed: a dependency waits for a person either
 because something written in this tree states a reason a bump could invalidate, **or because its
@@ -1419,6 +1490,30 @@ logic, `test:integration` is server-side, and `Closing reference check` reads wh
 says — so nothing in the five checks exercises a React Query cache, and nothing in them looks at a
 screen at all. Green means *the failure modes these five can see did not occur*, and **which failure
 modes they cannot see** is worth asking of any change, not only of a bump.
+
+**And an instrument whose range cannot hold the answer is not a measurement.** That is the same
+question asked of a **measurement** rather than of a check, and it is sharper — not *which failures
+are invisible* but *which values the instrument cannot express*. **It is neither of the two
+families above**: the search ran (*Sweeping for a claim*, where the guards exist because it did
+not), and the reference is independent of the subject (#1011, at the head of this section) — what
+fails is that the reading has nowhere to put the value, so it saturates, exits truthfully, and
+answers a question nobody asked. **Its instances share nothing at the surface**, which is the same
+argument #1011 makes for stating a shape one level up — whoever meets the fourth will not recognise
+it from the Node story. A `MaxListenersExceededWarning` prints the threshold plus one whatever the
+real count is, which carried three retractions on one issue (`platform.md`, the #1123 bullets,
+where the mechanism is); three documentation-only sessions reported that the preview reminder had
+not fired **while their own positive controls were `.md` too**, so nothing in them could have fired
+(*No browser verification*); and `${PIPESTATUS[0]}` in zsh renders as a blank that reads as a zero,
+which saturates the **guard** rather than the measurement and is the boundary case rather than the
+third instance (*A pooled worker reads nothing until it is assigned*).
+
+**So a saturated reading is a bound in one direction and never a value: where the count is present
+it is a floor, where the instrument is silent it is a ceiling.** That is what makes this actionable
+rather than only recognisable, and the failure direction is the dangerous one — a saturating
+instrument reads as a **clean** measurement, so it produces confidence rather than doubt, and every
+retraction in that series was written by somebody who had read the previous one. **Nothing has been
+lost to it yet**; what the three cost was rework and two published retractions, and all three were
+caught late rather than not at all (#1130).
 
 **A correction is verified by grepping for the retired claim, not by re-reading the passage you
 fixed.** #880 had stated a local speed-up ratio as a fact about CI, noticed, and shipped the
@@ -2220,6 +2315,36 @@ a way that went green** — which is why it is now three steps rather than one (
    this**: step 1 moves the head as a matter of course, so a SHA quoted in a report is stale by
    construction in precisely the case the check exists for, and asking a session to supply half of
    the lead's control would make the control worse rather than better.
+
+   **Two acts on the branch are named there. A third moves that head and it is the lead's own
+   brief: a brief asking for a change invalidates its own recorded SHA by being acted on** — not
+   because anything went wrong, but because the brief worked. **The worker's statement of it is the
+   sharper one and is the one to keep**: the window is not between reading the branch and writing
+   the brief, it is **between writing the brief and the next report**, which is exactly the window a
+   merge decision sits in. On `task/709-mcp-server`, twice in three messages: the lead read the
+   branch at `fbdf421`, asked for a finding aid, and asserted in the asking that today an answer
+   *"lives only in a topic file and a pull request body"* — true of the commit it had read and false
+   of the branch, `ed03c8e` having landed in between; it then recorded `ed03c8e`, asked for the
+   `Origin` falsifiers, and the branch moved to `b8e6783` and `e59c835`, **both commits the lead had
+   requested** (#1143).
+
+   **It has gone unnoticed because it fails safe, and the cost is upstream of the merge.** A stale
+   recorded SHA makes this step fire and produces a delta the lead was expecting anyway, so the
+   mechanism looks like it is working — which it is, and nothing was lost in either instance. What
+   no comparison protects is **what the lead's next message asserts**, where no comparison runs at
+   all. **And that reaches past a brief.** On 2026-09-11 a second lead verified PR #1149 at
+   `dd78c4a` and quoted that SHA to the user in the question asking him to release the merge; the
+   head was `6a8fa19` when he answered, and the one commit in between — *read ADR-0042 rather than
+   paraphrase it* — was the worker complying with **that same lead's earlier re-brief**. The
+   approval question therefore described a state the lead's own instruction had already superseded.
+   **One instance under each of two leads is what makes this structural** rather than one lead's
+   carelessness.
+
+   **So a message that describes the branch re-reads the head first, or describes no state at all.**
+   This does **not** become a rule to re-read before every message — the cheaper form is already
+   here: *say what you believe the state is, in a form somebody can contradict* (*Sweeping for a
+   claim*). Both `task/709` instances were settled in one exchange precisely because the lead's
+   wrong premise was written down explicitly enough for the worker to answer it with three commands.
 
    **Re-fetching the value is the failure, and it is indistinguishable from the check working.** On
    2026-09-08 the lead re-read the head and compared it against a SHA it had itself pulled from the
