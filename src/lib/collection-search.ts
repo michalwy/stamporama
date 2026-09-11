@@ -438,8 +438,12 @@ function toSearchWants(
   };
 }
 
-/** What the page needs to draw a row's catalog chips and name its area. */
-interface CatalogLabelling {
+/** What the page needs to draw a row's catalog chips and name its area.
+ *
+ * Exported since #710: the agent API's reads hand back the same labels, and a stamp reading
+ * `Mi\u00b7PL 200` in this window while reading `Mi 200` to an agent would be two spellings of one
+ * catalog identity (#66/#377, `catalog-and-stamps.md`). */
+export interface CatalogLabelling {
   labelFor: (
     areaId: string | null,
     issueId: string | null,
@@ -464,7 +468,7 @@ interface CatalogLabelling {
  * area's primary catalog names. It is resolved server-side here because the window is a plain page
  * with no area tree of its own to resolve it against.
  */
-async function makeCatalogLabeller(
+export async function makeCatalogLabeller(
   collectionId: string,
   vendors: readonly { id: string; abbreviation: string }[]
 ): Promise<CatalogLabelling> {
