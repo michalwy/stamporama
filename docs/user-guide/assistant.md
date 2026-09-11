@@ -73,6 +73,10 @@ To make a token by hand — for a script, an agent, or a browser without the Ass
 **Generate token by hand** and pick both. The token is shown **only once**: copy it then, and if you
 lose it, revoke it and make another.
 
+**To hand this collection to an AI assistant**, that is the token you want, and
+[Connecting an AI assistant](agent-api.md) is the rest of it: where to point the client, and what
+such an assistant can and cannot do.
+
 Every token that existed before this choice arrived is an **Extension** token that can **read and
 write** — which is exactly what it could do before, so nothing you already have stopped working.
 

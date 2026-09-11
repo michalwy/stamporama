@@ -1,12 +1,14 @@
 # The Agent API
 
-`/api/v1`: the versioned, described surface an agentic AI client uses, the shared operation registry
-behind it, and the conventions every operation obeys. Read this before adding an operation, and read
-[ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists at all.
+`/api/v1` and `/api/mcp`: the versioned, described surface an agentic AI client uses, the shared
+operation registry behind it, and the conventions every operation obeys. Read this before adding an
+operation, and read [ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists
+at all.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
-#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707 and
-#708 have landed; the registry carries one operation and the rest of the track adds to it.
+#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707,
+#708 and #709 have landed; **both wrappers exist and the registry carries one operation**, and the
+rest of the track adds to it.
 
 ## It is beside the screen API, never over it
 
@@ -22,8 +24,10 @@ meaning of its answer only ever grow — a break is `/api/v2`.
 ## Adding an operation
 
 One edit. Append an `Operation` to `OPERATIONS` in `src/lib/agent-api/registry.ts`; it appears in
-`GET /api/v1/openapi.json` and, from #709, in the MCP tool list, with no second place to change.
-That property is the whole point of the registry and it is the thing to preserve.
+`GET /api/v1/openapi.json` **and** in the MCP tool list at `POST /api/mcp`, with no second place to
+change. That property is the whole point of the registry and it is the thing to preserve, and since
+#709 it is the thing being preserved rather than the thing being promised — there are now two
+generated wrappers to drift, and neither has a hand-written list to drift from.
 
 ```ts
 {
@@ -43,7 +47,9 @@ eighteen filters. An agent resolves a wide parameter surface by guessing and a n
 and a tool with eighteen optional arguments is a tool a model uses wrongly.
 
 **Write the description for a model.** It is what the agent reads in the document and, through #709,
-as the tool description. It is not a changelog line.
+in the tool description — where it is the **first** thing, with the `result` description after it,
+because an MCP tool has one description field and a model decides whether to call a tool from both
+halves. It is not a changelog line.
 
 **Declare `writes` honestly.** It is the one place that decides: #707 reads it to refuse a read-only
 token, and the document says so to the agent. An operation that writes and declares `false` is a
@@ -54,12 +60,13 @@ handler does, and nothing can.
 
 **This is the rule, not a description of how #706 happened to arrange its files.** The layer is cut
 in exactly one place — **what may reach Prisma** — and every issue in this track sits on one side of
-that cut or the other. The vocabulary, the parsers, the list and cursor helpers, the error helpers
-and the document generator are **pure**; the registry array, which reaches handlers, is the only
-server-side module. **Add to the pure side by default, and put something on the server side only
-because it genuinely needs the database.** #708's name-or-id resolver, #709's registry-to-tool
-generation and every operation's parameter declarations all belong on the pure side; only the
-handler behind an operation does not.
+that cut or the other. The vocabulary, the parsers, the list and cursor helpers, the error helpers,
+the document generator and **the whole MCP protocol layer** are **pure**; the registry array, which
+reaches handlers, is the only server-side module. **Add to the pure side by default, and put
+something on the server side only because it genuinely needs the database.** #708's name-or-id
+resolver, #709's registry-to-tool generation and every operation's parameter declarations all
+belong on the pure side; only the handler behind an operation — and the two route files that read a
+request — does not.
 
 Two things fall out of it, and both are why it is a rule rather than a preference — they are stated
 under the tree below.
@@ -74,7 +81,8 @@ src/lib/agent-api/
   photo-url.ts      the one spelling of a photo link
   scope.ts          whether a token's scope covers an operation (#707)
   vocabulary.ts     the response shape and the name-or-id resolver (#708)
-  openapi.ts        buildOpenApiDocument + validateOperations
+  openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
+  mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
   operations/
     vocabulary.ts   the vocabulary read and its registry entry (#708)   ← server-side
@@ -336,6 +344,117 @@ exist cannot be.
   send a proposal, touch a share token, or write to Colnect.
 
 Do not add a publish-shaped or send-shaped operation to the registry, whatever it is called.
+
+## The MCP wrapper
+
+`POST /api/mcp` (#709), served by the app itself — nothing extra runs beside the existing
+container. **REST is the contract and MCP is a thin wrapper**: one domain layer, one set of
+operations, two ways of reaching them.
+
+**The tools are generated from `OPERATIONS` and there is no hand-written list anywhere.** That is
+the whole of this issue; everything else on this page about MCP is transport. A hand-maintained tool
+list is how MCP and REST drift, and the drift is silent — the list goes on describing an operation
+whose parameters moved, and the agent goes on believing it. `buildToolList` is a pure function of an
+operation list, exactly as `buildOpenApiDocument` is, and `tests/unit/agent-api-mcp.test.ts` holds
+the criterion the same way #706's generator test does: build from one fixture operation, build from
+two, and nothing in the test names the second one's parameters.
+
+**Both wrappers run the same `validateOperations` and the same `parameterSchema`.** A malformed
+entry fails the first `tools/list` as it fails the first request for the document, and a parameter
+type has one spelling rather than one per wrapper — which is the registry's own argument, one level
+below the operation.
+
+### What it implements, and what it refuses
+
+`initialize`, `tools/list`, `tools/call` and `ping`, over JSON-RPC 2.0. **Streamable HTTP,
+stateless**: no `Mcp-Session-Id`, because the tool list is compiled into the build and every call is
+authorised from its own `Authorization` header, so there is no session state to key. A notification
+— `notifications/initialized` is the one every client sends — is answered with `202` and no body,
+because a message carrying no id has nothing to answer.
+
+`GET` and `DELETE` are refused with `405` and an `Allow: POST`: there is no server-initiated stream
+to open and no session to terminate, and a client that would like one should be told rather than
+left waiting on a channel that never sends anything.
+
+**Batching is refused**, which is the current specification rather than a shortcut — the 2025-06-18
+revision removed JSON-RPC batching from MCP. **Protocol-version negotiation is an echo**: a client
+asking for a revision this server knows gets that one back, and anything else is answered with the
+newest one it speaks, which is what the specification asks a server to do.
+
+**MCP resources and prompts are deliberately absent — and this is a different kind of absence from
+the section above.** *What is deliberately absent* is about boundaries that must stay, enforced by
+there being no operation. This one is *tools first*: resources and prompts are worth adding the
+moment a concrete need shows up, and are missing only because none has.
+
+### There is no SDK, and the reason is the Prisma-free split
+
+`@modelcontextprotocol/sdk` writes its HTTP transport against Node's `IncomingMessage` and
+`ServerResponse`. A Next App Router route handler is handed a Web `Request` and must return a Web
+`Response`, so using it means a stream adapter between the two shapes — more code than the four
+methods it wraps, with a failure mode (a half-consumed body, a response that never ends) that no
+suite here can see. **And it would move the protocol to the server side of the cut**, where only the
+integration suite could reach it; the hand-written module is pure, so `pnpm test:unit` holds the
+handshake, the tool schemas and the error mapping.
+
+The cost is stated rather than glossed: when the specification revises, the revision is ours. For
+four methods that is the right side of the trade, and `renovate.json`'s never-alone list is why —
+an SDK at 0.x tracking a specification that has changed its transport twice would be a never-alone
+entry by construction, so the honest comparison is *SDK plus adapter plus a standing never-alone
+entry* against *a pure module a unit test holds*.
+
+### Which failures are protocol errors and which are tool errors
+
+**This is the one judgement in the wrapper worth stating rather than inferring.**
+
+- **A malformed message, an unknown method, an unknown tool** is a **JSON-RPC error**. The client
+  built the call from a list this server gave it, so the fault is the client's rather than the
+  model's reasoning.
+- **Anything an agent could act on** — a rejected parameter, a refused scope, a domain refusal — is
+  a **tool error**: an ordinary result carrying `isError: true`, the sentence, and the #706 body
+  beside it. A JSON-RPC error is handled by the client's transport and may never reach the model at
+  all; an `isError` result always does, and the whole point of #706's error convention is that the
+  agent reads the sentence and corrects itself.
+
+Nothing runs in either case, so this is a choice about **who reads the refusal** and not about
+whether it is enforced.
+
+### One token, one parser, one scope check
+
+**The same `Bearer stmpa_…` token as REST**, through the same `resolveAgentApiCaller`, with the same
+collection pinning. No second credential and nothing second to revoke. An unauthenticated call is
+`401` with the same sentence `/api/v1` uses, plus `WWW-Authenticate: Bearer` — there is no OAuth
+metadata to point at, because this surface takes the token the collector minted and nothing here can
+issue one.
+
+**The same parser.** MCP takes a single `arguments` object, so a tool's schema flattens an
+operation's path, query and body parameters into one — and before `parseParameters` sees them, each
+value is put back where its own declaration says it came from. Nothing is reimplemented, so every
+coercion and every rejection sentence is the REST surface's. **Unknown keys are routed to the query
+bucket on purpose**: that is what makes them refused *with the accepted names beside them*, by the
+rejection #706 already wrote, rather than dropped here with a second sentence saying the same thing.
+
+**The same scope check.** The route binds `assertAgentApiScope` to the caller and hands it in; the
+wrapper derives nothing and checks nothing itself. The ordering is the REST dispatcher's and for its
+reasons — after the tool is resolved, because the answer depends on which one, and before a
+parameter is parsed, because there is no point validating inputs for a call that will not be made.
+
+**That binding is the one line of #709 no test covers, and it was measured rather than assumed.**
+Replacing it with a no-op leaves every test in `tests/integration/agent-api-mcp.test.ts` green,
+because **nothing in `OPERATIONS` writes** and no request exists that could be refused. It is the
+same hole #707 records for its own criterion, for the same reason, and the gap goes when #711
+lands. What is covered meanwhile: the decision over both directions against the real
+`assertOperationScope`, the ordering (a writing tool called with a bad parameter under a `read`
+scope answers *forbidden* and never mentions the parameter), and a `read` scope read back off a
+real hashed row.
+
+### What the integration test can and cannot claim
+
+`tests/integration/agent-api-mcp.test.ts` imports the route module and drives it with real
+`Request` objects: a real hashed token, a real collection, a real `tools/call` answering out of
+Postgres. **What it does not establish is that a client library has spoken to it over a socket** —
+framing, header negotiation and what a particular client does at connect time are untested. #709's
+*Done when* asks for a client to connect and list the tools, and that half needs a person with one;
+[`docs/user-guide/agent-api.md`](../user-guide/agent-api.md) is the instructions for doing it.
 
 ## The document
 

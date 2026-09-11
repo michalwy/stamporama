@@ -27,8 +27,15 @@ export const API_VERSION = "1";
 
 const SECURITY_SCHEME = "assistantToken";
 
-/** A JSON Schema for one parameter, as OpenAPI 3.1 wants it (JSON Schema 2020-12). */
-function parameterSchema(spec: ParameterSpec): Record<string, unknown> {
+/**
+ * A JSON Schema for one parameter, as OpenAPI 3.1 wants it (JSON Schema 2020-12).
+ *
+ * **Exported because #709's tool generation reads it too.** An MCP tool's `inputSchema` is JSON
+ * Schema as well, so two wrappers that each spelled a `ParameterSpec` out for themselves would be
+ * two places for a parameter type to be described differently — which is the drift the registry
+ * exists to prevent, one level below the operation.
+ */
+export function parameterSchema(spec: ParameterSpec): Record<string, unknown> {
   switch (spec.type) {
     case "string":
       return spec.values ? { type: "string", enum: [...spec.values] } : { type: "string" };
