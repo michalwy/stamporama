@@ -92,6 +92,20 @@ call every assistant makes first anyway.
 The tools grow with each release, and the assistant reads the current list itself, so what it can do
 is whatever your instance offers rather than whatever was written here.
 
+**It can read a catalog number the way a dealer writes one.** Listings and price lists write numbers
+in their own way — `Mi 123a`, `Michel 123`, `Fi 456`, or just `123a` with the catalogue taken for
+granted — and the assistant can hand a whole batch of them over at once and get back, for each, the
+stamp in your collection it means. What matters is that it is told **how sure** each one is: exactly
+this stamp, several it cannot choose between, a number written in a catalogue you do not keep, or a
+number you simply do not have. Those last two are different news — the first means *tell me which of
+your catalogues to read it as*, the second means *you have not got it* — and it will say which.
+
+**It will not pick between candidates**, and that is deliberate rather than a limitation. If `123a`
+is a number in two of your catalogues, it comes back with both and says so. Nor does it guess across
+catalogues: a number written as Fischer's is never quietly answered with the Michel stamp of the same
+number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
+everywhere else in the app. A **read only** token can do all of this.
+
 **A read-and-write token can change things, and there are two places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking

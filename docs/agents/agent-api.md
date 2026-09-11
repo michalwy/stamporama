@@ -8,13 +8,16 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**; both wrappers exist and the registry carries **twenty-six operations** —
-#708's vocabulary read, #710's six reads over the collection, #711's six offer verbs, #712's two
-want reads, checklist gap and nine trade verbs, and #1168's bid recommendation. *The registry
-carries twenty-five operations* is quoted rather than deleted: it was true from #712 until #1168.
+track has landed**, #1037 with it; both wrappers exist and the registry carries **twenty-seven
+operations** — #708's vocabulary read, #710's six reads over the collection, #711's six offer verbs,
+#712's two want reads, checklist gap and nine trade verbs, #1168's bid recommendation, and #1037's
+catalog-number resolver. Two counts are quoted rather than deleted, because each was true when it
+was written: *the registry carries twenty-five operations* (from #712 until #1168) and *the registry
+carries twenty-six operations* (from #1168 until #1037).
 
-**Eight of them write**, which is the change #712 made to this page and which #1168 did **not**
-move: `recommend_bid` reads and computes and stores nothing. Two earlier sentences are
+**Eight of them write**, which is the change #712 made to this page and which neither #1168 nor
+#1037 moved: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+nothing. Two earlier sentences are
 quoted rather than deleted, because each was true when it was written and will go on arriving in
 anything copied from it: *the registry carries seven operations … **Nothing in it writes**, which
 several statements below still rest on* (#706 through #710), and *the registry carries thirteen
@@ -26,6 +29,12 @@ ones #710, #711 and #712 name, and every one of them is about material the colle
 looking for. The fourth is not: it is a **stateless query about a lot nothing here records**, asked
 before any of the other three could have anything to say. *The three agent workflows* is quoted
 rather than deleted wherever it appears below, for the same reason.
+
+**#1037 added no fifth workflow, and that is worth saying rather than leaving to be counted.** It is
+the step *in front of* all four: an agent that has been handed `Mi 123a` cannot ask any of them
+anything until that string is a stamp id. `search_collection` is the same step asked with a phrase;
+`resolve_catalog_numbers` is it asked with a number, over a batch, and answered with a verdict
+instead of a result list. See *Resolving a number an agent was handed* below.
 
 ## It is beside the screen API, never over it
 
@@ -103,6 +112,7 @@ src/lib/agent-api/
   want-reads.ts     the want and checklist-gap responses and their projections (#712)
   trade-reads.ts    the trade, line and balance responses and their projections (#712)
   bid-reads.ts      the bid-recommendation response and its projections (#1168)
+  catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -110,6 +120,7 @@ src/lib/agent-api/
     vocabulary.ts   the vocabulary read and its registry entry (#708)   ← server-side
     reads-shared.ts the collection header, the labeller, the location tree (#710)  ← server-side
     search.ts       search_collection (#710)                            ← server-side
+    catalog.ts      resolve_catalog_numbers (#1037)                     ← server-side
     records.ts      get_stamp / get_issue / get_copy (#710)             ← server-side
     holdings.ts     list_holdings / summarize_valuation (#710)          ← server-side
     offers.ts       the six offer verbs (#711)                          ← server-side
@@ -118,8 +129,8 @@ src/lib/agent-api/
     bids.ts         recommend_bid (#1168)                                ← server-side
 ```
 
-**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts` and `bid-reads.ts` are
-on the pure side and are typed structurally** rather than against
+**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts` and
+`catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -561,6 +572,101 @@ knowing before something is "simplified" back:
   `src/app/stamp-display.ts` re-exporting it, so `src/lib` can state an issue's declared range
   without reaching into `src/app`. It shortens the numeric end — `100–104` renders `100–04`, exactly
   as `1298–302` does on screen — which is the app's own rule and not a defect to correct.
+
+## Resolving a number an agent was handed
+
+**One operation, and it is a step rather than a workflow** (#1037). `resolve_catalog_numbers` is
+`read` scope and writes nothing.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `resolve_catalog_numbers` | no | foreign catalog strings in, one stamp identity **and a verdict** each out |
+
+**The hard part already existed and the issue says so.** `src/lib/catalog-number.ts` was built for
+this exact problem on the search side (#104/#146/#435): `normalizeCatalogKey` folds spacing and
+punctuation, `catalogMatchKey` builds the comparison key from vendor abbreviation + area prefix +
+number, `catalogNumberRuns` is the recall net that survives `BL30 B4` against `304`. So this
+operation **adds no second matching rule** — it exposes the one that works, which is the rule #710
+and #711 state about their own domains.
+
+### What it adds is an answer about confidence
+
+A person typing into a search box sees the results and picks, so recall may be generous and
+**containment is the right comparison**: `catalogKeyMatches` finds `"200"` inside `"mipl2000"` on
+purpose, and the person ignores the rows they did not mean. An agent cannot ignore anything. So the
+resolver compares **the same keys by equality**, and answers one of four things:
+
+- **`resolved`** — exactly one stamp, with `matchedNumber` saying which of its own numbers answered;
+- **`ambiguous`** — several, all returned with their numbers, name, series and area, and *none
+  picked*;
+- **`unknown_vendor`** — the string names a catalogue this collection does not keep;
+- **`no_match`** — the number is simply not held here.
+
+**The third and fourth are the issue's reason for existing.** `Fi 456` where no Fischer vendor is
+configured is a different fact from a number that is not held: the first is fixed by naming a
+catalogue the collection does have, the second by buying the stamp, and an agent that conflates them
+files a wrong report every morning.
+
+**An `unknown_vendor` entry is never looked up at all**, which is the sharp end of that. An agent
+that wrote `Fi 456` said *Fischer*, so answering it with a `Mi 456` that happens to exist would be
+the mistake that is both invisible and expensive — it looks exactly like a right answer. The row
+carries `vendorToken` and `acceptedVendors` instead, which is `errors.ts`'s `accepted` convention
+carried **in the row** rather than thrown: one unresolvable entry must not refuse the other
+nineteen.
+
+### The three things the parse must not do
+
+Each is a guard rather than a nicety, and each is measured by the unit suite:
+
+- **A prefix the collection uses is never dropped.** `Mi·SP 1` and `Mi·PL 1` are two stamps
+  (#66/#377), so the bare-number fallback that lets `Michel 123a` — `chel123a` once `mi` is off the
+  front — reach the same stamp as `Mi 123a` is **switched off** when the letters being dropped are a
+  prefix this collection actually configures. The prefix set is the area tree's *and* the issues'
+  overrides, both levels, because both are catalog identity.
+- **A prefix is never read as a catalogue's name.** `PL 200` names no vendor, so the same set is
+  consulted a second time before a leading word is called an unknown catalogue.
+- **A leading word is read conservatively.** `leadingCatalogueWord` refuses a word with nothing after
+  it (`VIII` is a whole catalog number, #383), a word carrying anything but letters (`BL30`,
+  `Ark. 103`), a word longer than twelve letters, and a word the collection uses as a prefix. It is
+  written to be wrong in the cheap direction: a word it misses costs a `no_match` where an
+  `unknown_vendor` would have helped more, and a word it invents blocks a resolution that worked.
+
+### `stripCatalogVendor` was lifted, not copied
+
+`parseCatalogSearch` did the vendor strip inline and then dropped whatever led the remainder — right
+for a search box, and it throws away the area prefix a resolver needs. The loop is now
+`stripCatalogVendor` in `catalog-number.ts` and `parseCatalogSearch` is three lines over it, which is
+#1168's own `lotLineValueOf` move: **if the picker's answer and the resolver's could diverge about
+which vendor a string names, nothing would ever go red over it.**
+
+**A vendor's full name needs no branch of its own**, which is the small surprise in that function.
+An abbreviation is by convention the start of the name it stands for, so `Michel 123a` normalizes to
+`michel123a`, gives `mi` up to the existing longest-first strip, and leaves `chel123a` — whose
+leading letters the caller already drops as it drops an area code. #1037's *Done when* names
+`Michel 123a` explicitly and it was answered by the code that was already there.
+
+### Two reads rather than one, and a cap that would have lied
+
+The prefix a stamp's number carries depends on its area and its issue, so the exact comparison
+cannot run until those are loaded — and loading them for every row the recall net pulls back would
+mean capping the scan. **A cap turns a stamp that was simply row 201 into a `no_match`**, which is
+the one answer this operation must never give wrongly. So `loadCandidateStamps` reads three columns,
+applies a *necessary* condition that needs no prefix (`couldMatchForeignCatalogNumber`), and reads
+in full only what survives it. That filter is never the answer; the exact comparison still decides,
+which is what keeps it from becoming a second matching rule in its own right.
+
+### What it deliberately is not
+
+**It does not say what is held.** `stamps` carries identity — the numbers, the name, the series, the
+area, the path — and stops there. The issue's own *Out of scope* points at #710 for the rest: this
+says what a number *is*, and `list_holdings` or `get_stamp` says what there is of it.
+
+**There is no collection-level default catalogue, and none was invented.** #1037's Context mentions
+*the collection's default*; the schema has no such column — `CollectionArea.primaryCatalogVendorId`
+is per **area** (#675) and a bare number arrives with no area. So a bare number with no `vendor`
+parameter is matched against every catalogue and reported `ambiguous` when more than one stamp
+answers, which is the honest reading and needs no schema change. A collection with one vendor gets
+*the default* for free. A real collection-level setting is a product decision and would be an issue.
 
 ## Working on offers
 
