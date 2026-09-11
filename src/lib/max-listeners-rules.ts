@@ -19,7 +19,42 @@
  *
  * **So a warning reappearing is a finding rather than more noise** — it means something crossed
  * *twenty*, which nothing measured here does — and it is the signal to revisit this number rather
- * than to raise it again.
+ * than to raise it again. **That sentence is about the server, and the section below is why it has
+ * to say so.**
+ *
+ * ## The raise is the server's only, and `scripts/migrate-photos-to-gcs.ts` runs without it (#1152)
+ *
+ * `register()` is Next's server boot hook and does not fire in a `tsx`-run script, so that
+ * migration runs on Node's default of **10**. It is the only script this applies to: exactly two
+ * files under `scripts/` import `src/lib` — it and `refresh-delcampe-categories.ts`, which touches
+ * no storage. **Read that as scoped to `scripts/` and not to "everything outside the server"** —
+ * the test suites import `src/lib` too, and they are not long-running processes streaming bytes.
+ *
+ * **The decision was to leave it that way, and the reason is that nothing here has measured that
+ * script's path.** What #1123 measured is a cache-missing **fetch** — a GCS download. The migration
+ * performs no GCS read at all: it selects rows `where: { storageBackend: "filesystem" }`, reads
+ * them through `FilesystemStorage.get`, which is a bare `createReadStream` and constructs no
+ * `PassThrough`, and writes with `"delivery"`, which `CachingStorage.put` passes straight to
+ * `GcsStorage.put` → `file.createWriteStream({ resumable: false })`. That is the **upload** half of
+ * the same SDK: `startSimpleUpload_` → `makeWritableStream` → `teeny-request`, which does build a
+ * plain `PassThrough` in `createMultipartStream` — but with `maxRetries: 0` and no `retry-request`
+ * around it, so the repeated adder that took the download to a peak of 12 is absent. **Whether that
+ * path warns at all is unmeasured**, and it needs a real bucket to measure.
+ *
+ * **So: a warning from that script is not a finding about this number, and it does not mean what
+ * the paragraph above means.** It would be Node's default being crossed — *eleven*, not
+ * twenty-one — and the line prints `MaxListeners is 10`, which is how to tell the two apart at a
+ * glance. Revisit `DEFAULT_MAX_LISTENERS` on a warning from the **server**; a warning from the
+ * migration is a reason to measure that path, not to raise this constant.
+ *
+ * **Why not simply call {@link raiseDefaultMaxListeners} from the script as well.** It is a second
+ * *entry point* rather than a per-module call, so #1137's *not scattered* would not forbid it. What
+ * it cannot do is close: the criterion that admits the migration is *drives GCS streaming*, not
+ * *imports `src/lib`* — `refresh-delcampe-categories.ts` does the latter and would still get
+ * nothing — so the list would be open at two rather than closed at two, and the next script to
+ * touch storage reopens it. Against that, the raise buys nothing measured. **Add a caller when
+ * there is a measurement, not before**, and correct the "one place" comment in
+ * `instrumentation-node.ts` in the same change.
  *
  * `tests/unit/max-listeners-warning.test.ts` owns what the warning itself can and cannot tell you,
  * and this module deliberately asserts none of that: the claim here is only that the process ends
