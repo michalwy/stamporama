@@ -413,12 +413,16 @@ number of any copy** sold on the sale — so you can find a sale by what was in 
 bought it. The platform dropdown narrows the list to a single marketplace, and the status chips to
 particular [fulfillment steps](#fulfillment-status). All three combine.
 
-The status chips are **multi-select**: click as many as you want and the list shows all of them
-together, so "everything Paid *or* Packed but not yet Sent" is one selection rather than three
-passes. Clicking an active chip again drops it, and clearing them all shows every status.
+The status chips select **one status at a time**: clicking a chip replaces whatever was chosen, and
+clicking the one lit chip again clears it back to every status. A sale is in exactly one status, and the
+list is worked through a status at a time — everything paid, then everything packed.
 
-The chips you picked are **remembered** for this collection and re-applied the next time you open
-the screen; a status named in the URL wins over them, so a link you share always shows what you
+The chips used to be multi-select, so a link or a remembered filter you kept from then may still
+name two statuses. Such a value **still means what it said**: the list shows both, with both chips
+lit, and collapses to whichever one you click next.
+
+The chip you picked is **remembered** for this collection and re-applied the next time you open
+the screen; a status named in the URL wins over it, so a link you share always shows what you
 meant it to.
 
 **What you searched for is remembered the same way.** Sales is a list you work through rather than

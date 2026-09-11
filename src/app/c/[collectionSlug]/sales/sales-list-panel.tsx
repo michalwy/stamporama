@@ -51,9 +51,16 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   // when it names one, so a link is still shareable, and a fresh navigation falls back to the last
   // chip picked here. Every change writes both, so clearing the filter clears the memory of it too.
   //
-  // Several chips can be on at once (#475), so the stored value and the URL param both carry a
-  // comma-separated set. Unrecognised tokens are dropped rather than refused, exactly as the route
-  // drops them: a stale link narrows to nothing otherwise.
+  // **One status at a time** (#972) — see the chips below for why, and for what was given up.
+  //
+  // `statuses` stays a **list** all the same, here and on `SaleFilters` and in the `status` param,
+  // because a link somebody kept and a value `rememberStatusFilter` wrote while #475's multi-select
+  // was in force must go on meaning what it said. This is the offers list's answer to the identical
+  // question (#735, `offers.md`) rather than a second one: a stored `paid,sent` **reads back whole**
+  // — both chips lit, the list narrowed to both — and collapses to one status on the next click. The
+  // alternatives were to take the first token or to clear the filter, and both answer a narrowing
+  // question with something the collector never asked for. Unrecognised tokens are dropped rather
+  // than refused, exactly as the route drops them: a stale link narrows to nothing otherwise.
   const [storedStatus, rememberStatusFilter] = usePersistedCollectionValue(
     "sales-status",
     collectionId
@@ -83,9 +90,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
 
   // "Only the sales still waiting on which set went" (#697). A filter of its own rather than a chip
   // among the statuses: it is not a place in the fulfilment lifecycle but a decision outstanding
-  // *inside* a sale, and a sale can be waiting on it in any status. URL-only and **not** remembered
-  // per collection like the status set is — it answers a question one comes to the list with today,
-  // and a remembered one would silently hide every settled sale on the next visit.
+  // *inside* a sale, and a sale can be waiting on it in any status. It therefore **combines** with
+  // whichever status is chosen, and the status chips going exclusive (#972) does not touch it: they
+  // select on different axes, which is what the separator between them says. URL-only and **not**
+  // remembered per collection the way the status is — it answers a question one comes to the list
+  // with today, and a remembered one would silently hide every settled sale on the next visit.
   const setChoicePending = searchParams.get("setChoice") === "1";
 
   const filters: SaleFilters = useMemo(
@@ -166,23 +175,33 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
         </select>
 
         {/* Fulfillment status (#191/#392) — chips rather than a second select, so where a sale has
-            got to is readable without opening anything. Multi-select (#475): a sale is in exactly
-            one status, but the question asked of the list is routinely a group of them ("what is
-            paid but not yet sent"), so a chip toggles its own status in and out of the set. */}
+            got to is readable without opening anything. **Mutually exclusive** (#972): a sale is in
+            exactly one status, and the list now asks about exactly one at a time. Picking a chip
+            replaces whatever was chosen; clicking the *sole* lit chip clears back to every status.
+
+            This reverses #475, which made them multi-select so that a question spanning statuses —
+            *"what is paid but not yet sent"* — could be asked of the list at all. **That argument
+            was put to the user on 2026-09-08 with the cost named, and he chose exclusive anyway**,
+            so the multi-status question is one this screen no longer answers: it is asked by reading
+            two lists, not one. Recorded here rather than deleted, because a reversal that erases its
+            predecessor is how the same argument gets had again in three months. The offers list made
+            the same reversal first (#735) and the two controls now agree again. */}
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           {SALE_STATUS_ORDER.map((value) => {
+            // Lit for any status in force, so a link or a remembered value carrying two of them is
+            // described honestly rather than showing a narrowed list with no chip on.
             const active = statuses.includes(value);
+            const onlyThis = active && statuses.length === 1;
             return (
               <FilterChip
                 key={value}
                 label={SALE_STATUS_META[value].label}
                 active={active}
                 onClick={() => {
-                  // Kept in lifecycle order however they were clicked, so the stored value and the
-                  // shared link read the same for one selection whatever route reached it.
-                  const next = SALE_STATUS_ORDER.filter((s) =>
-                    s === value ? !active : statuses.includes(s)
-                  ).join(",");
+                  // Clicking one of two lit chips *replaces* the pair rather than subtracting from
+                  // it — subtracting is the multi-select behaviour this reverts. Only the sole
+                  // active chip clears, back to every status.
+                  const next = onlyThis ? "" : value;
                   rememberStatusFilter(next);
                   updateParams({ status: next });
                 }}

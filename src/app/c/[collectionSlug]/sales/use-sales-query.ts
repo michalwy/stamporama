@@ -18,8 +18,9 @@ interface SalesPage {
 export interface SaleFilters {
   platformId?: string;
   /** Fulfillment statuses (#191) the list is narrowed to (#392), OR-matched — empty (or absent)
-   * for all of them. A multi-select (#475): the question asked of the list is routinely a group
-   * of statuses ("what is paid but not yet sent"). */
+   * for all of them. Still a **list** although the chips became mutually exclusive (#972, reversing
+   * #475), for the offers list's reason (#735): a link or a remembered value written while they
+   * were multi-select has to go on meaning what it said, and one axis keeps one filter on it. */
   statuses?: SaleStatus[];
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
