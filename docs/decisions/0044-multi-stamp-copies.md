@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted, not yet implemented. The work is tracked in #744 (schema), #745 (the exclusion rule),
-#746 (the editor), #747 (valuation), #748 (the list), #749 (listing tokens) and #750 (intake).
+Accepted. The schema, the migration and the write module are in (#744); the rest is tracked in
+#745 (the exclusion rule), #746 (the editor), #747 (valuation), #748 (the list), #749 (listing
+tokens) and #750 (intake).
 
 ## Context
 
@@ -183,12 +184,28 @@ CREATE UNIQUE INDEX "item_stamp_unique"
 
 Backfill writes one entry per existing `Item` (its `stampId`, quantity 1, format null, sortOrder 0)
 and leaves `stampCount` at 1, so no existing row changes meaning and nothing needs re-recording.
-`onDelete: Cascade` from the item; `Restrict` from the stamp and from the format.
+`onDelete: Cascade` from the item; `Restrict` from the format.
+
+**The stamp side is `Cascade`, and the `Restrict` this section asked for lives in `deleteStamp`
+instead** (#744). It cannot be a constraint. PostgreSQL checks a RESTRICT *immediately*, before the
+referential actions queued beside it have run, so it fires on the entry of a perfectly ordinary
+one-stamp copy — whose own `Item.stampId` cascade was about to remove that entry anyway — and
+deleting any stamp anybody owns a copy of fails. `NO ACTION` does not rescue it: the queue is FIFO,
+so the end-of-statement check still runs before the `itemId` cascade that the `item` cascade only
+queues once it executes. The same collision makes a **collection** undeletable, since the cascade
+into `stamp` is reached before the one into `item`. Both were measured, not reasoned about; the
+migration carries the transcript. So `deleteStamp` removes the stamp's own copies and then refuses
+if any **other** piece still carries it, naming the copy to edit first — the rule of §3 intact, one
+layer up, and with a sentence a collector can act on instead of a constraint name.
 
 ## Consequences
 
 - `Item.stampId` and `Item.stampCount` are **derived**. One module (`src/lib/item-stamps.ts`) writes
-  them; no call site sets them by hand, or the invariant §3 rests on decays silently.
+  them; no call site sets them by hand, or the invariant §3 rests on decays silently. Every path
+  that creates a copy — the copy form, purchase intake, an auction settlement, the demo seed —
+  writes its one entry through that module in the same transaction, so an `Item` with no entry is
+  never a state the application can produce. A copy is not *born* a carrier; a carrier is made by
+  editing one.
 - Editing a carrier back down to one stamp returns it to every count it had left. That is an
   ordinary edit with no confirmation of its own: the counts follow the facts.
 - The existing 171 readers of `Item.stampId` keep working unchanged. What changes is what the value

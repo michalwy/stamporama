@@ -32,6 +32,7 @@ import { loadIssuePrefixMap } from "./issue-prefix";
 import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
 import type { BaseCurrency } from "./currencies";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
+import { createLeadingEntriesTx } from "./item-stamps";
 import { parseEntityNoSearch } from "./quick-jump";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
@@ -3190,7 +3191,15 @@ export async function settleAuctionSale(
           forTrade: false,
         }))
       );
-      if (copies.length > 0) await tx.item.createMany({ data: copies });
+      if (copies.length > 0) {
+        // `createManyAndReturn` rather than `createMany`: each copy needs the `ItemStamp` entry
+        // naming its stamp written beside it (ADR-0044 §2), and that takes the ids back.
+        const made = await tx.item.createManyAndReturn({
+          data: copies,
+          select: { id: true, stampId: true },
+        });
+        await createLeadingEntriesTx(tx, made);
+      }
 
       await tx.auctionLot.update({
         where: { id: lot.id },

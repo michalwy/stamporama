@@ -29,6 +29,7 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
+import { createLeadingEntriesTx, repointLeadingStampTx } from "./item-stamps";
 import {
   loadItemWantSummaries,
   loadStampWantSummaries,
@@ -542,29 +543,36 @@ export async function createItem(
   const excludedPlatformIds = data.excludedPlatformIds
     ? await resolvePlatformIds(collectionId, data.excludedPlatformIds)
     : [];
-  const itemNo = await allocateItemNumber(prisma, collectionId);
-  const item = await prisma.item.create({
-    data: {
-      platformExclusions: {
-        create: excludedPlatformIds.map((platformId) => ({ platformId })),
+  // One transaction, because the copy and the `ItemStamp` entry naming its stamp are one fact
+  // (ADR-0044 §2): a copy with no entry is a copy whose stamps are unknown, and the number the
+  // create reserved would be spent on it.
+  const item = await prisma.$transaction(async (tx) => {
+    const itemNo = await allocateItemNumber(tx, collectionId);
+    const created = await tx.item.create({
+      data: {
+        platformExclusions: {
+          create: excludedPlatformIds.map((platformId) => ({ platformId })),
+        },
+        collectionId,
+        itemNo,
+        stampId: data.stampId,
+        conditionId: data.conditionId,
+        certificateStatusId: data.certificateStatusId ?? null,
+        formatId: data.formatId ?? null,
+        inCollection: data.inCollection ?? true,
+        forSale: data.forSale ?? false,
+        forTrade: data.forTrade ?? false,
+        notes: data.notes ?? null,
+        locationId: data.locationId ?? null,
+        // A ref only makes sense with a location; drop it when none is set.
+        locationRef: data.locationId ? (data.locationRef ?? null) : null,
+        lotId: data.lotId ?? null,
+        deliveryState,
       },
-      collectionId,
-      itemNo,
-      stampId: data.stampId,
-      conditionId: data.conditionId,
-      certificateStatusId: data.certificateStatusId ?? null,
-      formatId: data.formatId ?? null,
-      inCollection: data.inCollection ?? true,
-      forSale: data.forSale ?? false,
-      forTrade: data.forTrade ?? false,
-      notes: data.notes ?? null,
-      locationId: data.locationId ?? null,
-      // A ref only makes sense with a location; drop it when none is set.
-      locationRef: data.locationId ? (data.locationRef ?? null) : null,
-      lotId: data.lotId ?? null,
-      deliveryState,
-    },
-    select: ITEM_SELECT,
+      select: ITEM_SELECT,
+    });
+    await createLeadingEntriesTx(tx, [{ id: created.id, stampId: created.stampId }]);
+    return created;
   });
   return toItemData(item);
 }
@@ -707,6 +715,10 @@ export async function updateItem(
       }
     }
     if (repointing) {
+      // `Item.stampId` is a denormalised pointer at the first entry (ADR-0044 §2), so re-pointing
+      // the copy means moving that entry — and only that one. The other stamps on a carrier are
+      // facts about the piece that this edit says nothing about.
+      await repointLeadingStampTx(tx, itemId, data.stampId!);
       await tx.itemVariantHistory.create({
         data: {
           itemId,
@@ -3144,6 +3156,8 @@ export async function resolveItemVariant(
       data: { stampId: toStampId },
       select: ITEM_SELECT,
     });
+    // …and the entry the pointer points at moves with it (ADR-0044 §2).
+    await repointLeadingStampTx(tx, itemId, toStampId);
     await tx.itemVariantHistory.create({
       data: {
         itemId,
