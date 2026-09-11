@@ -86,6 +86,19 @@ body — GitHub acts on it the moment the change lands and closes the issue befo
 verified it. Use `Refs #NNN`. The `Closing reference check` job in CI enforces this over both the
 body and the commit messages; `gh pr view <n> --json closingIssuesReferences` sees the body only.
 
+## Plans are a working note, not a record
+
+A plan is for the session that writes it; nothing downstream reads it. Write one when a task spans
+more than one logical area and setting the steps out first would help — the session's own call rather
+than a requirement (#875). Keep the shape that makes it useful to its author: a `## Progress`
+checkbox list of numbered steps, executed in order, each marked `[x]` as it completes, each stating a
+**Done when**.
+
+Store it under `.claude/plans/`, which is gitignored, so it lives only in that worktree and goes with
+it. Nothing is lost, because **the durable record is the pull request body, the closing comment on
+the issue, and the topic file the task updates** — all three in git, all three read. So do not write
+a plan for a reader.
+
 ## Verification, not trust
 
 Run the suites that **could see the change** — the question is what each one's configuration
