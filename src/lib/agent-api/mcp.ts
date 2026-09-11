@@ -26,7 +26,8 @@
 //
 // - **A malformed message, an unknown method, an unknown tool** is a **JSON-RPC error**. The client
 //   built the call from a list this server gave it, so the fault is in the client rather than in
-//   the model's reasoning, and MCP's own guidance puts them there.
+//   the model's reasoning. The specification agrees and even fixes the code: an unknown tool is
+//   `-32602`.
 // - **Anything an agent could act on** — a rejected parameter, a refused scope, a domain refusal —
 //   is a **tool error**: an ordinary result carrying `isError: true` and the sentence. That is not
 //   a technicality about status codes. A JSON-RPC error is handled by the client's transport and
@@ -38,6 +39,22 @@
 //
 // Nothing runs in either case, so this is a choice about who reads the refusal and not about
 // whether it is enforced.
+//
+// **On one half of that, the specification divides it differently, and the deviation is deliberate
+// rather than a misreading** (checked against the published text rather than remembered — ADR-0051
+// records why that check was run at all). *Tools* §Error Handling lists **invalid arguments** under
+// protocol errors and **invalid input data** under tool execution errors. A missing required
+// parameter and a wrong type land on its protocol side; here they come back as tool errors, with
+// only an unknown tool, an unknown method and a malformed message kept as JSON-RPC.
+//
+// **The reason is `accepted`.** #706's error carries the values that would have worked, and it is
+// the field that turns a refusal into a correction the agent makes in one turn. In a tool error it
+// reaches the model inside the text it reads; in a JSON-RPC error it lives in `error.data`, which
+// is the client transport's to render and which many clients drop. Following the division exactly
+// would put the most common recoverable mistake an agent makes — a guessed parameter name — in the
+// one channel where the list of real names may never be seen. The spec's own wording is
+// descriptive ("Tools use two error reporting mechanisms") rather than a MUST, so this is a choice
+// it leaves open.
 
 import { isApiError } from "./errors";
 import { LIST_PARAMETERS } from "./list";
@@ -47,18 +64,51 @@ import type { ScopedOperation } from "./scope";
 import type { Operation, OperationContext, ParameterSpec } from "./types";
 
 /**
- * The MCP revision this server speaks. A client that asks for one of the others gets that one back;
- * anything else is answered with this one, which is what the specification asks a server to do —
- * the client then decides whether it can proceed.
+ * **The MCP revision this implementation was written against, pinned deliberately.**
+ *
+ * This is hand-rolled against a moving specification (ADR-0051), and the failure mode of that is
+ * **silent**: a client stops connecting months from now with nothing in this repository having
+ * changed. So the revision is named here, in the ADR and in the user guide, and it is the one to
+ * check a new revision's changelog against:
+ * <https://modelcontextprotocol.io/specification/2025-06-18/>
+ *
+ * **What would say it has gone stale**, in the order it will actually be noticed:
+ *
+ * 1. **The endpoint says so itself.** A client sending `MCP-Protocol-Version` for a revision not in
+ *    the list below is refused with `400` and the route logs it — so the first client newer than
+ *    this build announces the drift in the server log rather than as an unexplained failure. That
+ *    refusal is the specification's own requirement, and it doubles as the alarm.
+ * 2. A revision appears at the URL above whose changelog touches the Streamable HTTP transport,
+ *    `tools/list`, `tools/call` or the `initialize` handshake — the four things implemented here.
+ * 3. A client negotiates down: `initialize` answered with this constant rather than with what the
+ *    client asked for means the client is older, which is fine, and repeated across clients means
+ *    this build is the old one.
  */
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
-/** Revisions this server will echo back to a client that asks for them. */
+/**
+ * Revisions this server will echo back to a client that asks for them, newest first.
+ *
+ * `2025-03-26` is on the list for a second reason beyond politeness: the specification says that a
+ * server receiving **no** `MCP-Protocol-Version` header should assume that revision, so it has to
+ * be one this build accepts or every header-less request would be refused.
+ */
 export const SUPPORTED_MCP_PROTOCOL_VERSIONS: readonly string[] = [
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
 ];
+
+/**
+ * The revision to assume when a client sends no `MCP-Protocol-Version` header. The specification
+ * names this one for backwards compatibility; it is not a default we chose.
+ */
+export const ASSUMED_MCP_PROTOCOL_VERSION = "2025-03-26";
+
+/** Whether this build speaks a revision. Used by the handshake and by the route's header check. */
+export function isSupportedProtocolVersion(value: unknown): value is string {
+  return typeof value === "string" && SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(value);
+}
 
 /** The server's own identity in the handshake. */
 export const MCP_SERVER_NAME = "stamporama";
@@ -212,11 +262,12 @@ export function buildInitializeResult(options: {
   readonly appVersion: string;
   readonly requestedProtocolVersion?: unknown;
 }): Record<string, unknown> {
-  const requested = options.requestedProtocolVersion;
-  const protocolVersion =
-    typeof requested === "string" && SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(requested)
-      ? requested
-      : MCP_PROTOCOL_VERSION;
+  // The specification's own rule: answer with the requested revision where it is supported, and
+  // otherwise with another one this server supports — which should be the latest. It is not an
+  // error; the client reads the answer and decides whether it can proceed.
+  const protocolVersion = isSupportedProtocolVersion(options.requestedProtocolVersion)
+    ? options.requestedProtocolVersion
+    : MCP_PROTOCOL_VERSION;
 
   return {
     protocolVersion,

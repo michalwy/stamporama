@@ -65,6 +65,10 @@ server over HTTP, it looks like this:
 Where a client insists on launching a local command rather than talking to a URL, point it at any
 of the usual HTTP bridges for MCP and give the bridge the same URL and header.
 
+Stamporama speaks MCP revision **2025-06-18**, and also answers to `2025-03-26` and `2024-11-05`. A
+client newer than that is told so in as many words rather than failing quietly, so if yours reports
+an unsupported protocol version, that is what it means — the instance needs updating.
+
 **The collection is not in the address, and that is deliberate.** The token already says which
 collection it is for, so there is nothing to get wrong and nothing an assistant could point at the
 wrong one. Two tokens for two collections are simply two entries.

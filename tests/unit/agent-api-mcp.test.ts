@@ -1,10 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ASSUMED_MCP_PROTOCOL_VERSION,
   JSON_RPC,
   MCP_PROTOCOL_VERSION,
+  SUPPORTED_MCP_PROTOCOL_VERSIONS,
   buildToolList,
   handleMcpMessage,
+  isSupportedProtocolVersion,
   operationTool,
   readRequestId,
 } from "../../src/lib/agent-api/mcp";
@@ -486,6 +489,35 @@ describe("the window conventions survive the wrapper", () => {
     );
     assert.equal(result.isError, true);
     assert.match(toolText(result), /between 1 and 100/);
+  });
+});
+
+describe("the pinned protocol revision", () => {
+  it("speaks the revision it was written against, newest first", () => {
+    // Pinned deliberately: this is hand-rolled against a moving specification, and the drift is
+    // silent (ADR-0051). If this constant is edited, the ADR and the user guide say so too.
+    assert.equal(MCP_PROTOCOL_VERSION, "2025-06-18");
+    assert.equal(SUPPORTED_MCP_PROTOCOL_VERSIONS[0], MCP_PROTOCOL_VERSION);
+  });
+
+  it("speaks the revision a client with no version header is assumed to be on", () => {
+    // The specification says a server receiving no `MCP-Protocol-Version` should assume this one,
+    // so it has to be one this build accepts — otherwise every header-less request is refused.
+    assert.ok(
+      SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(ASSUMED_MCP_PROTOCOL_VERSION),
+      "the assumed revision must be one this build speaks"
+    );
+  });
+
+  it("recognises what it speaks and nothing else", () => {
+    for (const revision of SUPPORTED_MCP_PROTOCOL_VERSIONS) {
+      assert.equal(isSupportedProtocolVersion(revision), true, revision);
+    }
+    // The control: a plausible future revision, which is what the staleness alarm fires on.
+    assert.equal(isSupportedProtocolVersion("2027-01-01"), false);
+    assert.equal(isSupportedProtocolVersion(""), false);
+    assert.equal(isSupportedProtocolVersion(undefined), false);
+    assert.equal(isSupportedProtocolVersion(20250618), false);
   });
 });
 
