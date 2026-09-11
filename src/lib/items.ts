@@ -1001,8 +1001,26 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   /** Restrict to copies whose catalog valuation is `unpriced` — no price recorded for the
    * copy's own condition × certificate (#229), so users can find and fix pricing gaps. Since
    * "unpriced" is derived (no column carries it), the reads valuate the matching set once and
-   * narrow to the resulting ids (see {@link resolveMissingCatalogItemIds}). */
+   * narrow to the resulting ids (see {@link resolveValuationNarrowedIds}). */
   missingCatalogValue?: boolean;
+  /** Restrict to copies whose **catalog value** falls in a band (#711), either bound on its own and
+   * inclusive at each end, stated in the collection's base currency. The agent API's
+   * `find_unlisted_copies` asks it — *which of these is worth listing on its own, and which goes
+   * into a job lot* — and it is the one axis of that question no stored column can answer.
+   *
+   * Narrowed exactly as {@link missingCatalogValue} is, through the same valuation pass and the
+   * same id narrowing, so the list, its count and its holdings total cannot disagree about which
+   * copies are in scope.
+   *
+   * **A copy with no catalog value is outside every band**, which is {@link yearFrom}'s own rule
+   * one axis over: a bound is a claim about what the goods are worth, and a copy that cannot answer
+   * it has not met it. It is deliberately *not* #758's reading — the bulk-lot builder's per-copy
+   * ceiling admits an unpriced copy and reports it, because that pass is filling a lot and a gap
+   * there may be read neither as "cheap enough" nor as zero. Here the caller is asking which copies
+   * are in a band, and an unpriced copy is not known to be. `missingCatalogValue` is the filter for
+   * finding those, and the two compose. */
+  catalogValueMin?: number;
+  catalogValueMax?: number;
   /** Restrict to for-sale copies not yet offered on this platform (#259): copies with no
    * *non-terminal* offer (any state except sold/withdrawn) on the given platform. A copy listed on
    * a different platform still matches — multi-platform listing is expected (#165) — unless that
@@ -1251,10 +1269,11 @@ function buildItemWhere(
  * carries it), so this valuates the whole matching set once; callers then narrow their read to
  * `id IN (…)`, keeping pagination/aggregation in SQL and the list, holdings total, and year
  * facets consistent under the "missing catalog value" filter. */
-async function resolveMissingCatalogItemIds(
+async function resolveValuationNarrowedIds(
   collectionId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  baseWhere: any
+  baseWhere: any,
+  keep: (valuation: CopyValuation) => boolean
 ): Promise<string[]> {
   const rows = await prisma.item.findMany({
     where: baseWhere,
@@ -1277,12 +1296,35 @@ async function resolveMissingCatalogItemIds(
       isUnknownVariantStamp(row.stamp),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
-  return rows.filter((row) => valuations.get(row.id)!.unpriced).map((row) => row.id);
+  return rows.filter((row) => keep(valuations.get(row.id)!)).map((row) => row.id);
 }
 
-/** Wrap a base `where` so it also matches only copies missing a catalog value, when the filter
- * is set (#229). Returns the base `where` untouched otherwise. Kept as a helper so the list,
- * holdings, and year-facet reads narrow identically. */
+/** Whether a copy's catalog valuation falls inside the band a caller asked for (#711). Pure, and a
+ * function of the valuation alone, so the rule reads in one place: an **unpriced** copy is outside
+ * every band — see {@link ItemListFiltersPaginated.catalogValueMin} — and so is one priced in a
+ * currency with no rate to base, which is the same statement about a figure that cannot be
+ * compared. `baseAmount` is the only figure a band could be stated against, every other one being
+ * in a currency the caller never named. */
+function valuationInBand(
+  valuation: CopyValuation,
+  min: number | undefined,
+  max: number | undefined
+): boolean {
+  if (valuation.unpriced || valuation.baseAmount === null) return false;
+  if (min !== undefined && valuation.baseAmount < min) return false;
+  if (max !== undefined && valuation.baseAmount > max) return false;
+  return true;
+}
+
+/** Wrap a base `where` so it also matches only copies whose **derived** catalog valuation answers
+ * what the caller asked — missing a value (#229), or inside a band (#711). Returns the base `where`
+ * untouched when neither filter is set. Kept as one helper, and called by every read, so the list,
+ * its counts, the holdings total and the year facets narrow identically.
+ *
+ * The two compose: asking for both is asking for the copies that are unpriced *and* in the band,
+ * which is empty by {@link valuationInBand}'s own rule. That is the truthful answer to a
+ * contradictory question rather than a refusal — the same thing `notOfferedPlatformId` beside a
+ * `forSale: false` would give. */
 async function withMissingCatalogFilter(
   collectionId: string,
   filters: ItemListFiltersPaginated,
@@ -1290,8 +1332,15 @@ async function withMissingCatalogFilter(
   baseWhere: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
-  if (!filters.missingCatalogValue) return baseWhere;
-  const ids = await resolveMissingCatalogItemIds(collectionId, baseWhere);
+  const banded = filters.catalogValueMin !== undefined || filters.catalogValueMax !== undefined;
+  if (!filters.missingCatalogValue && !banded) return baseWhere;
+  const ids = await resolveValuationNarrowedIds(
+    collectionId,
+    baseWhere,
+    (valuation) =>
+      (!filters.missingCatalogValue || valuation.unpriced) &&
+      (!banded || valuationInBand(valuation, filters.catalogValueMin, filters.catalogValueMax))
+  );
   return { AND: [baseWhere, { id: { in: ids } }] };
 }
 

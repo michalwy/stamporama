@@ -75,6 +75,31 @@ export function matchPathTemplate(
 }
 
 /**
+ * How specific a template is, lower being more specific — for ordering two templates that both
+ * match one path (#711).
+ *
+ * **A literal segment beats a `{name}` at the same position**, which is what every router does and
+ * what this app's own routing already does one layer over: `offers/listing/` is a sub-route of
+ * `offers/[offerId]` and *the static segment takes precedence* (`offers.md`, #322). Without it the
+ * winner is whichever operation was appended to `OPERATIONS` first, and the loser is reached by no
+ * request at all — silently, because both matched.
+ *
+ * It was `/copies/unlisted` against #710's `/copies/{copyId}` that found this, and the failure is
+ * the shape worth remembering rather than the instance: `find_unlisted_copies` was dispatched as
+ * `get_copy`, whose only parameter is a path one, so the refusal an agent saw was *this operation
+ * has no query parameter "platform"* — a truthful sentence about the wrong operation.
+ * `validateOperations` cannot catch it either: the two paths are different, so neither the
+ * duplicate-name rule nor the duplicate-binding rule has anything to say.
+ *
+ * The count is enough because a request only ever matches templates of its own length: with the
+ * same number of segments, fewer parameters **is** more literals. Comparing position by position
+ * would be a finer rule that answers identically over every path a request can reach.
+ */
+export function templateSpecificity(template: PathTemplate): number {
+  return template.parameterNames.length;
+}
+
+/**
  * A percent-decoded segment. Next hands the catch-all its segments already decoded, but a hand-built
  * caller may not, and `decodeURIComponent` throws on a malformed escape — which is a request error
  * and gets an agent-readable sentence rather than a 500.

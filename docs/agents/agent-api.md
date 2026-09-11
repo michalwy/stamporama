@@ -8,9 +8,15 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707,
-#708, #709 and #710 have landed; **both wrappers exist and the registry carries seven operations** —
-#708's vocabulary read and #710's six reads over the collection — and the rest of the track adds to
-it. **Nothing in it writes**, which several statements below still rest on.
+#708, #709, #710 and #711 have landed; **both wrappers exist and the registry carries thirteen
+operations** — #708's vocabulary read, #710's six reads over the collection and #711's six offer
+verbs — and #712 adds to it.
+
+**Three of them write**, which is the change #711 made to this page. What stood here read
+*the registry carries seven operations … **Nothing in it writes**, which several statements below
+still rest on* — true when it was written, quoted rather than deleted, and it will go on arriving in
+anything copied from it. Every statement that rested on it is corrected below, each saying what it
+used to say.
 
 ## It is beside the screen API, never over it
 
@@ -84,6 +90,7 @@ src/lib/agent-api/
   scope.ts          whether a token's scope covers an operation (#707)
   vocabulary.ts     the response shape and the name-or-id resolver (#708)
   collection-reads.ts  the read responses and their projections (#710)
+  offer-reads.ts    the offer responses, their projections and the text vocabulary (#711)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -93,6 +100,7 @@ src/lib/agent-api/
     search.ts       search_collection (#710)                            ← server-side
     records.ts      get_stamp / get_issue / get_copy (#710)             ← server-side
     holdings.ts     list_holdings / summarize_valuation (#710)          ← server-side
+    offers.ts       the six offer verbs (#711)                          ← server-side
 ```
 
 **`collection-reads.ts` is on the pure side and is typed structurally** rather than against
@@ -209,22 +217,29 @@ reads `writes` and **nothing** else: a verb in an operation's name buys no prote
 collector can tell one row of the Settings list from another; what a token may do is `scope` and
 only `scope`. Do not grow a check on it.
 
-**The criterion is demonstrated against fixtures on purpose.** #707's *Done when* says a `read`
-token is refused on any writing operation and accepted on every reading one — and **nothing on
-`main` writes**, so there is nothing to refuse it on. That premise used to be *the registry is empty
-until #710*, and then *#708 filled the registry and the conclusion is untouched, because its one
-operation declares `writes: false`*. Both are quoted rather than deleted, because each was true when
-it was written and will go on arriving in anything copied from it. **#710 filled the registry
-properly — seven operations — and the conclusion is untouched a second time, because every one of
-them declares `writes: false`.** That is the point worth carrying: what the criterion waits for is a
-*writing* operation and not a populated registry, so a reader meeting a busy registry and a fixture
-test is looking at the rule working rather than at a gap. #711 and #712 are where a real refusal
-first becomes possible.
-`tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations, and
-`tests/integration/agent-api-auth.test.ts` does the same over a real hashed token row, which is
-where a scope actually comes from. **Adding a domain operation to make the test real would breach
-the *What is deliberately absent* rule below one issue early**; a fixture is the honest instrument,
-exactly as it was for #706's generator criterion.
+**#711 made the criterion real, and the three premises it had before are worth keeping.** #707's
+*Done when* says a `read` token is refused on any writing operation and accepted on every reading
+one. For four issues there was nothing to refuse it on, and the premise was restated three times
+without the conclusion moving: *the registry is empty until #710*; then *#708 filled the registry and
+the conclusion is untouched, because its one operation declares `writes: false`*; then *#710 filled
+the registry properly — seven operations — and the conclusion is untouched a second time, because
+every one of them declares `writes: false`*. All three are quoted rather than deleted, because each
+was true when it was written and will go on arriving in anything copied from it. **The point they
+were carrying is the one that survives**: what the criterion waited for was a *writing* operation and
+not a populated registry.
+
+`draft_offer`, `set_offer_price` and `set_offer_text` declare `writes: true`, so
+`tests/integration/agent-api-offers.test.ts` refuses a real `read` token on each of them through the
+real dispatcher, and through the MCP wrapper besides. **That test is owed to #707 and #709 rather
+than to #711** and says so in its own header, because it is the first end-to-end proof that scope
+enforcement works on the wire.
+
+**The fixture tests stay, and that is unchanged rather than left over.**
+`tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations because
+`tests/unit/` may not import `registry.ts` at all, and
+`tests/integration/agent-api-auth.test.ts` keeps its fixtures because its own question — that a scope
+read off a real hashed row reaches `assertAgentApiScope` — is answerable without a collection's worth
+of fixture data behind it.
 
 **Existing tokens are `read_write` + `extension`, and the migration is what makes that true.** They
 are extension tokens doing extension work and narrowing them would break a working install, so
@@ -308,6 +323,10 @@ nothing in #710, #711 or #712 takes one.
 
 **Platforms are included, and they are the one vocabulary derived from #711's body rather than from
 #708's list of nine** — marked as such in the type, so whoever implements #711 can contradict it.
+**#711 did not contradict it, and that is worth recording rather than leaving to be inferred**: three
+of its six operations take a platform (`find_unlisted_copies` requires one, `list_offers` takes one
+optionally, `draft_offer` requires one), each resolving it through `resolveVocabularyValue` against
+this very key. The derivation was right.
 #708's Context names nine and platforms is not among them; **the binding statement is the *Done
 when***, and #711's *draft an offer* cannot be called without naming a platform, because an offer's
 currency is inherited and locked from `Contact.platformCurrency` (#196). That is the same test that
@@ -473,6 +492,164 @@ knowing before something is "simplified" back:
   without reaching into `src/app`. It shortens the numeric end — `100–104` renders `100–04`, exactly
   as `1298–302` does on screen — which is the app's own rule and not a defect to correct.
 
+## Working on offers
+
+**Six operations, answering the second of the three agent workflows** (#711): *what is not listed,
+what is it worth, draft a listing, price it, word it.* Three of them **write**, and they are the
+first writes on this surface.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `find_unlisted_copies` | no | for-sale copies with no open listing on a marketplace, with what each is worth |
+| `list_offers` | no | the listings, narrowed to a marketplace, a state or a piece of text |
+| `get_offer` | no | one listing in full, **including what it could be priced at** |
+| `draft_offer` | yes | a new `preparing` listing around some copies, titled from the marketplace's template |
+| `set_offer_price` | yes | what the seller is asking |
+| `set_offer_text` | yes | write a text, or hand it back to the marketplace's template |
+
+**Everything here is `src/lib/` exposed rather than reinvented**, which is #710's rule and the one to
+keep. `find_unlisted_copies` is `listItemsPaginated` with `notOfferedPlatformId`, which is #259's own
+worklist; `draft_offer` is `createOffer`; `set_offer_price` is `patchOffer`; `set_offer_text` is
+`patchOffer` or `regenerateOfferText`; the price suggestions are `getOfferDetail`'s own figures.
+Two things were added, both **beside the reads they belong with** rather than inside an operation:
+`countOffers` in `offers.ts`, and the catalogue-value band in `items.ts`.
+
+### The boundary is absence, and since #711 it is checked
+
+**The agent writes inside Stamporama and nowhere else.** There is no publish operation, no state
+operation, and no way to reach `active`: `draft_offer` creates a `preparing` listing and nothing here
+moves it. *What is deliberately absent* above says why; this section says how it is kept.
+
+**Two tests, failing on different things, and the pairing is the point.**
+`tests/integration/agent-api-offers.test.ts` enumerates `OPERATIONS` and fails on a publish-shaped
+**name** — the mistake somebody makes deliberately.
+`tests/unit/agent-api-operation-boundary.test.ts` fails on an operation module **importing** a domain
+function that publishes, records a listing or moves a state — the mistake somebody makes without
+noticing, and the one a name guard passes: an operation called `finalize_listing` defeats the first
+test and not the second.
+
+**The name guard matches a leading verb rather than a fragment**, because `list_offers` and
+`find_unlisted_copies` both contain `list` and a pattern crude enough to catch `list_on_colnect`
+would take both of them with it. **The import guard reads the parse tree rather than the text**, for
+a reason worth stating before somebody simplifies it to a `grep`: these modules explain at length
+why they do not publish, so the first thing a regular expression would flag is the documentation of
+the rule it is checking.
+
+**`getOfferListingKit` was weighed for that list and left off.** The listing kit (#405) is the
+payload a marketplace form is filled from, so it looks like the sharpest thing to ban — and it
+publishes nothing and moves nothing, it already answers to this same token on its own endpoint, and
+banning it would make the list mean *anything near a marketplace* rather than *the acts that go
+public*. A list that means two things is one a later reader cannot add to correctly.
+
+### What "unlisted" means, and why it takes a platform
+
+`find_unlisted_copies` **requires** a `platform`, which looks like a restriction and is the question
+being asked. *Unlisted* is a fact about one marketplace: a copy already sold on one is routinely
+still worth listing on another (#165), and the copies the collector has ruled out for a particular
+platform (#506) are not candidates there and are candidates everywhere else. The filter is
+`notOfferedPlatformId` whole — for sale, no non-terminal offer on that platform, nothing committed
+by a live bid anywhere (#334), nothing that never arrived, and nothing excluded — plus `excludeGone`,
+because a copy that has **left** passes the first clause (the offer it left on is terminal) and is
+not unlisted but gone.
+
+**An offer-level reading was considered and is not what the domain answers.** *Copies in no offer at
+all* would need a new `where` clause and would hand an agent copies it must not list on the platform
+it is about to draft for, which is the worklist-that-keeps-asking #506 fixed.
+
+### The catalogue-value band, and the one product question in it
+
+`min_catalogue_value` / `max_catalogue_value` are the *value band* #711 asks for, and a catalogue
+value is **computed and never stored** (#758) — so it cannot be a `where` clause, and filtering a
+page after the fact would give a `total` that disagrees with its rows. It goes through the same
+narrowing `missingCatalogValue` (#229) already uses: valuate the whole matching set once, narrow to
+the resulting ids, so the list, its count and the holdings total behind it cannot differ about which
+copies are in scope. One helper, thirteen call sites, none of them changed.
+
+**A copy with no catalogue value is outside every band**, which is the one thing nothing in the tree
+decided for us. It is `yearFrom`/`yearTo`'s own rule one axis over — *a stamp with no issued year is
+outside every span: a bound is a claim about when the goods were issued, and a copy that cannot
+answer it has not met it* — and it is deliberately **not** #758's reading, where the bulk-lot
+builder's per-copy ceiling admits an unpriced copy and reports it. The two are asking different
+questions: that pass is filling a lot and a gap there may be read neither as *cheap enough* nor as
+zero, while this one is asking which copies are in a band and an unpriced copy is not known to be.
+**Stated rather than assumed**, so that a collector who disagrees has something to point at.
+
+### What a row says, and what a verb would have been
+
+**An unlisted-copy row states its own catalogue value and its own market median**, and that is where
+#711's *price suggestions for an offer **or a copy*** went. It is #710's move said again: a holdings
+row states its own `location`, so there is no *where is this copy* operation; this row states its own
+worth, so there is no *what is this copy worth* operation either — a verb would have been a third way
+of asking one question.
+
+The two figures are **never merged**. `catalogValue` is a book's opinion at this exact
+`condition × certificate × format`; `marketValue` is the median of what copies like it have actually
+fetched (#458), and it is **absent** where no auction result answers, which is *no evidence* and
+deliberately not a catalogue-derived stand-in (ADR-0022 §6).
+
+### `get_offer`'s `pricing` is four claims, not a recommendation
+
+`suggested` is the catalogue value averaged **per set**, in the listing's own currency, because a
+buyer takes one set (#190). `marketTotal` is evidence. `platformOpening` is what this house opens an
+auction at whatever the goods are worth (#553), and outranks the other two **on an auction only**.
+`platformMinimum` is what the marketplace costs to post on (#731) and is the weakest of the four.
+
+**Collapsing them into one number is what would make an agent price a stamp confidently and
+wrongly**, which is the same argument `offers.md` makes for drawing the three figures in a fixed
+order on the wizard's price step. And `suggested` never travels without `suggestedValuedSets` and
+`suggestedUnpricedSets`, which partition the listing — `valuation.md`'s standing rule.
+
+**`get_offer` is the verb #711 does not name and `list_offers` is the other one**, and both are here
+because *adjust an offer's price* and *edit an offer's text* are unreachable without them:
+`search_collection` (#710) searches stamps, issues and copies, and nothing on this surface reaches an
+offer id. Folding the price suggestion into the record read rather than giving it a verb of its own
+costs one call instead of two, and the suggestion is computed by `getOfferDetail` anyway.
+
+### `set_offer_price` writes the figure the seller *states*
+
+On a quick buy that is `price`; on an auction it is `startingPrice`. The operation takes **one**
+`price` parameter and routes it by the listing's own format, which is `offers.md`'s rule said once
+more rather than a new one: an auction's `price` is where the bidding has got to — an observation of
+what buyers did — so writing a number into it would put a bid in the record that nobody placed.
+
+`statedAmount` in `offer-reads.ts` is the reading half of the same rule: a stored `0.00` is what an
+unbid auction and an unpriced draft both carry, and neither is a price somebody stated, so it is
+reported as **absent** rather than as nought.
+
+### `set_offer_text` is one verb for two acts, and the second is a refusal short of one
+
+Sending `text` writes the wording and takes the field **off** the template (#380). Omitting it hands
+the field back to the marketplace's template and renders it now — `regenerateOfferText`, the ↻ on the
+collector's own screen, which is how wording written by hand is undone. #711 lists *compose a listing
+text* and *edit an offer's text* as two of its six verbs and they are two ways of setting one field,
+so they are one operation whose description says which is which.
+
+**A field the marketplace has no template for is refused, and this is the one guard the domain does
+not make for itself.** `regenerateOfferText` writes what the generator produced, which over no
+template is null — so the call would **empty** the field. The collector's own ↻ is *disabled* there
+rather than refused, off `OfferDetail.regeneratable`, and the operation reads that same answer so the
+two surfaces cannot come to disagree. It was found by a test failing rather than by reading.
+
+`get_offer` publishes both answers — `templatedTexts` and `editedTexts` — in the agent's own
+spelling, so an agent need not find out by trying. **The agent's word for the title is `title`**;
+`name` is what the schema calls the column, and the mapping lives once, on the pure side, because the
+name a field is *sent* under has to be the name it is *read back* under.
+
+### A literal path segment beats a parameter
+
+`/copies/unlisted` and #710's `/copies/{copyId}` both match one request, and until #711 the winner
+was whichever operation was appended to `OPERATIONS` first — so `find_unlisted_copies` was dispatched
+as `get_copy` with an id of `"unlisted"`, and the refusal an agent read was *this operation has no
+query parameter "platform"*: a truthful sentence about the wrong operation. `validateOperations`
+cannot see it, because the two paths are genuinely different and neither the duplicate-name rule nor
+the duplicate-binding rule has anything to say.
+
+`matchPath` now orders its candidates by `templateSpecificity` — the pure comparator in
+`path-template.ts`, so a unit test holds it — most specific first. It is **this app's own routing
+rule one layer over**: `offers/listing/` is a sub-route of `offers/[offerId]` and *the static segment
+takes precedence* (`offers.md`, #322). A stable sort keeps registry order between templates of equal
+specificity, which is what decides the order a `405` lists its methods in.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Two boundaries in this track are enforced by there being no operation, and
@@ -482,7 +659,8 @@ exist cannot be.
 - **The agent never publishes to a marketplace** (#711). It drafts, prices and titles an offer inside
   Stamporama; going public stays in the collector's hands. An agent that misreads costs a minute; an
   agent that mispublishes lists a stamp at the wrong price under the collector's name on someone
-  else's platform.
+  else's platform. **Since #711 this is checked rather than asserted**, by two tests that fail on
+  different things — see *Working on offers* below.
 - **The agent never reaches a counterparty** (#712). It builds and balances trade lines; it does not
   send a proposal, touch a share token, or write to Colnect.
 
@@ -593,14 +771,20 @@ wrapper derives nothing and checks nothing itself. The ordering is the REST disp
 reasons — after the tool is resolved, because the answer depends on which one, and before a
 parameter is parsed, because there is no point validating inputs for a call that will not be made.
 
-**That binding is the one line of #709 no test covers, and it was measured rather than assumed.**
-Replacing it with a no-op leaves every test in `tests/integration/agent-api-mcp.test.ts` green,
-because **nothing in `OPERATIONS` writes** and no request exists that could be refused. It is the
-same hole #707 records for its own criterion, for the same reason, and the gap goes when #711
-lands. What is covered meanwhile: the decision over both directions against the real
-`assertOperationScope`, the ordering (a writing tool called with a bad parameter under a `read`
-scope answers *forbidden* and never mentions the parameter), and a `read` scope read back off a
-real hashed row.
+**That binding was the one line of #709 no test covered, and #711 closed it.** The paragraph here
+read: *replacing it with a no-op leaves every test in `tests/integration/agent-api-mcp.test.ts`
+green, because **nothing in `OPERATIONS` writes** and no request exists that could be refused* —
+measured rather than assumed, true when written, and quoted rather than deleted. With three writing
+operations in the registry, a `read` token calling `draft_offer` through this wrapper is refused by
+that binding and by nothing else;
+`tests/integration/agent-api-offers.test.ts` makes the call and reads the refusal out. It is in that
+file rather than in the MCP one because the request needs a real platform and real copies, which is
+that suite's fixture.
+
+What the MCP suite covers on its own is unchanged: the decision over both directions against the
+real `assertOperationScope`, the ordering (a writing tool called with a bad parameter under a `read`
+scope answers *forbidden* and never mentions the parameter), and a `read` scope read back off a real
+hashed row.
 
 ### What the integration test can and cannot claim
 
@@ -624,11 +808,13 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries seven operations.** It was empty on #706, which shipped none; #708 added
+**The document carries thirteen operations.** It was empty on #706, which shipped none; #708 added
 `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`, `get_copy`,
-`list_holdings` and `summarize_valuation`. Two earlier sentences are quoted rather than deleted
-because each stood in several files and will go on arriving in anything copied from them: *#706 ships
-no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface
-until #710*, and *the document carries one operation*. What is unchanged is that `build([])` is still the right way to ask what an
+`list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`, `list_offers`,
+`get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`. Three earlier sentences are
+quoted rather than deleted because each stood in several files and will go on arriving in anything
+copied from them: *#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the
+honest state of the surface until #710*, *the document carries one operation*, and *the document
+carries seven operations*. What is unchanged is that `build([])` is still the right way to ask what an
 empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
 asks it of a fixture list rather than of the registry.

@@ -106,15 +106,18 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       // #707's enforcement point, bound to this caller. The wrapper reuses it rather than deriving
       // a scope of its own — one place decides what a token may do, and this is not it.
       //
-      // **This one line is not covered end to end, and that is measured rather than assumed.**
-      // Replacing it with a no-op and running `tests/integration/agent-api-mcp.test.ts` leaves all
+      // **This line is covered end to end since #711, and what it used to say is worth keeping.**
+      // It read: *this one line is not covered end to end, and that is measured rather than assumed
+      // — replacing it with a no-op and running `tests/integration/agent-api-mcp.test.ts` leaves all
       // twelve green, because **nothing in `OPERATIONS` writes**: there is no request that could be
-      // refused. It is the same hole #707 records for its own criterion and for the same reason —
-      // adding a writing operation to make the test real would breach an issue's *Out of scope* —
-      // and the gap goes when #711 lands the first one. Until then the decision is held over both
-      // directions in `tests/unit/agent-api-mcp.test.ts` against the real `assertOperationScope`,
-      // and the scope on a real hashed row is exercised in the integration suite beside it; what
-      // no test here can see is that *this binding* is the thing being called.
+      // refused.* That was true when it was written and is quoted rather than deleted, because it
+      // will go on arriving in anything copied from it.
+      //
+      // #711 put three writing operations in the registry, so a `read` token calling `draft_offer`
+      // through this wrapper is now refused by **this** binding and nothing else — asserted in
+      // `tests/integration/agent-api-offers.test.ts`, *a read token is refused on the wire*, which
+      // is deliberately in that file rather than here: the request it has to make needs a real
+      // offer and a real platform, which is that suite's fixture and not this one's.
       assertScope: (operation) => assertAgentApiScope(caller, operation),
     });
 
