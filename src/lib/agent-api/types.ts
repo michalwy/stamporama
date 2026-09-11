@@ -88,8 +88,9 @@ export interface Operation {
    */
   readonly path: string;
   /**
-   * What the operation does, in English, written for a model to read. #709 surfaces it verbatim as
-   * the MCP tool description.
+   * What the operation does, in English, written for a model to read. #709 puts it **first** in the
+   * MCP tool description, with `result.description` after it — an MCP tool has one description
+   * field, and a model decides whether to call a tool from both halves.
    */
   readonly description: string;
   /**
