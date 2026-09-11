@@ -391,6 +391,34 @@ describe("offer description + private note (#266, #267)", () => {
       });
     });
 
+    // **And what that `false` is protecting, asserted rather than described** (#1163). The header's
+    // ⋮ *Regenerate title* entry read this answer **not at all** until that issue, so a collector
+    // on a listing with neither template could take it by name and lose the wording — nothing
+    // errored, the title was simply replaced with nothing, and the title is the one generated text
+    // with no ↻ of its own to hand it back. The gate itself is a property of the menu array, which
+    // nothing here can see (`tests/unit/offer-regenerate-title-gate.test.ts` reads it statically and
+    // says so); this is the other half — the destruction the gate exists to prevent, on the exact
+    // state the projection above reports.
+    it("empties a hand-written title when neither has a template (#1163)", async () => {
+      const offerId = await offerOn(noTemplatePlatformId);
+      await addOfferSet(userId, offerId, [mercuryId]);
+      await patchOffer(userId, offerId, { name: "Mercury 1850 — nice used copy" });
+
+      const before = await getOfferDetail(userId, offerId);
+      assert.equal(before?.name, "Mercury 1850 — nice used copy");
+      assert.equal(before?.regeneratable.name, false, "nothing to render from");
+
+      // The generator answers `null`, and `regenerateOfferText` writes that answer — it does not
+      // refuse. Whether it *should* refuse is a wider question about its contract, deliberately left
+      // alone (#1163, *Out of scope*): while it writes, the caller is what must not call it.
+      assert.equal(await regenerateOfferText(userId, offerId, "name"), null);
+      assert.equal(
+        (await getOfferDetail(userId, offerId))?.name,
+        null,
+        "the collector's title is gone — this is why the ⋮ entry is disabled rather than hidden"
+      );
+    });
+
     it("counts a blank offer template as absent, exactly as the generator does", async () => {
       // `generateListingTexts` trims before deciding, so a whitespace-only template renders nothing
       // and ↻ would empty the field. `??` picks the blank string over the platform's, which is what

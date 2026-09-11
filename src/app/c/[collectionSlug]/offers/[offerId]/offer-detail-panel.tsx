@@ -497,11 +497,35 @@ export function OfferDetailPanel({
           onSelect: () => setState(s),
         };
       }),
-    { key: "regenerate", label: "Regenerate title", icon: "refresh", onSelect: () => regenerate("name") },
+    // The title is the one generated text with **no ↻ of its own** — the description and the private
+    // note carry theirs in `OfferListingText`, and the header gives the title a pencil and this
+    // entry — so this is the only control on the screen that names the act. Ungated it emptied the
+    // title outright (#1163): with neither the offer's own template nor the platform's,
+    // `regenerateOfferText` writes the generator's `null` and the wording is gone, silently.
+    //
+    // Gated on `regeneratable`, the one answer every surface asking this question reads — the
+    // per-field ↻, the agent surface (#711) and the entries below — which since #1146 is the
+    // offer's own template or, failing that, the platform's. **Disabled with a hint rather than
+    // hidden** (#273): a fixed entry reached for by name cannot silently vanish, and with no ↻
+    // beside the title there is nothing else on the screen to answer the question. The
+    // other-language entries below *filter*, which is right for them and not for this one — the
+    // reasoning is in `docs/agents/offers.md`.
+    {
+      key: "regenerate",
+      label: "Regenerate title",
+      icon: "refresh",
+      disabled: !offer.regeneratable.name,
+      hint: offer.regeneratable.name
+        ? undefined
+        : "Neither this listing nor the platform has a title template — set one on the platform's contact",
+      onSelect: () => regenerate("name"),
+    },
     // One entry per generated text × *other* language the collection lists in (#297/#266/#267) —
-    // each field's own ↻ on the screen already covers the platform's own language, and a field the
+    // the entry above and each field's own ↻ already cover the platform's own language, and a field
     // there is no template for — the offer's own or the platform's — is skipped. Absent for a
-    // single-language collection.
+    // single-language collection. Filtering is safe here in a way it would not be above: these are a
+    // *generated cross-product* whose normal state is empty, so no named entry goes missing, and the
+    // disabled entry above is what says why a title one is absent.
     ...otherTitleLanguages.flatMap((code) =>
       REGENERATABLE_TEXTS.filter((t) => offer.regeneratable[t.field]).map(
         (t): RowAction => ({

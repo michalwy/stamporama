@@ -297,10 +297,15 @@ The title is yours to change:
   falls back to the derived label. The title stays editable in every state, including sold and
   withdrawn, so you can keep the record straight.
 - **Regenerate it** — the header's **⋮** menu has **Regenerate title**, which rebuilds it from the
-  platform's current template over whatever the offer lists now. Use it after changing the platform's
-  template, or to bring a title you edited by hand back under the template (see
+  current title template — this listing's own if it has one, the platform's otherwise — over
+  whatever the offer lists now. Use it after changing the template, or to bring a title you edited by
+  hand back under it (see
   [Generated texts follow the composition](#generated-texts-follow-the-composition)). Regenerating
-  overwrites a title you edited by hand.
+  overwrites a title you edited by hand. With **no title template at all** — neither this listing's
+  nor the platform's — there is nothing to rebuild from, so the entry is there but greyed out, with
+  a line under it saying so; set a title template on the platform's contact first. It is greyed
+  rather than missing on purpose: the title is the one text with no **↻** of its own beside it, so
+  this entry is the only place on the screen that can explain itself.
 - **Regenerate it in another language** — once your platforms list in more than one
   [language](contacts.md#adding-and-editing), the same menu also offers **Regenerate title in …** for
   each of the others, and the same for the description and private note where the platform has a
