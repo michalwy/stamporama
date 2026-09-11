@@ -90,8 +90,8 @@ jobs:
           # conditional would undo it. `.github/rulesets/README.md` keeps the declaration mechanism
           # documented, because a future blind spot may need it.
           #
-          # The rule the removal applies is the one the declaration applied before it — dev-agent
-          # `rules/R-004` as amended by `decisions/0005`: **could-not-see may exit as success only
+          # The rule the removal applies is the one the declaration applied before it:
+          # **could-not-see may exit as success only
           # when declared, never when inferred.** Nothing is declared here now, so nothing that
           # cannot be seen exits as success.
           #

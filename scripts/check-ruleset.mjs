@@ -76,7 +76,7 @@ const VOLATILE_FIELDS = [
  *
  * **Arrays are left in the order the API returned them, except the two the README names** —
  * `rules` by `type`, and a `required_status_checks` list by `context`. This is a deliberate
- * departure from the sibling implementation in `darkroom`, which sorts every array by the
+ * departure from the sibling implementation, which sorts every array by the
  * canonical JSON of its elements. That rule is defensible in itself and it is not this
  * repository's: sorting the `rules` array by element JSON puts the two rules carrying
  * `parameters` first, which is a different order from the committed artifact's, so adopting it
@@ -124,14 +124,13 @@ function canonical(ruleset) {
  * reviewed concession — the exact failure this design closes everywhere else, reached through its
  * own escape hatch. `source_type` and `target` are in the envelope too and are not here; neither
  * should be until something is observed to redact them. A field joins this list when a caller has
- * been seen unable to read it, never because the flag happened to accept the string
- * (dev-agent `decisions/0005`).
+ * been seen unable to read it, never because the flag happened to accept the string.
  */
 const REDACTABLE_FIELDS = ["bypass_actors"];
 
 /**
  * **`source` is stripped from the comparison and printed here instead, and that is the whole of
- * why this function exists.** The pair looks symmetrical and is not (dev-agent, settled
+ * why this function exists.** The pair looks symmetrical and is not (settled
  * 2026-09-08):
  *
  * `source_type` is a **policy fact**. `Organization` over `main` is not a field changing value —
@@ -151,13 +150,13 @@ const REDACTABLE_FIELDS = ["bypass_actors"];
  * which *nothing* is inherited and the record is merely stale — and told its reader the gate was
  * now inherited from somewhere it could not see change. It would have sent somebody hunting an
  * incident that does not exist, on the first run of a message written for an emergency, and
- * **reading the code would not have shown it: it reads correctly** (`rules/R-013`).
+ * **reading the code would not have shown it: it reads correctly**.
  *
  * **One of the two branches below cannot be exercised against this repository, and is recorded as
  * unexercised rather than assumed working.** `michalwy/stamporama` is owned by a **`User`**
  * account (`gh api repos/michalwy/stamporama --jq .owner.type`), so no organisation ruleset can
  * exist over it and no real run will ever take the incident branch. Its only exercise is the
- * fixture in `tests/unit/ruleset-drift.test.ts`, which is what R-013 asks for — say which branch
+ * fixture in `tests/unit/ruleset-drift.test.ts` — say which branch
  * has never met the platform, and do not report the control as verified where it has not.
  */
 function sourceTypeDiagnosis(liveRuleset) {
@@ -261,8 +260,8 @@ function repository() {
  * deliberately stricter than the `jq` pipeline in `.github/rulesets/README.md`, whose
  * `map(select(.conditions.ref_name.include == ["~DEFAULT_BRANCH"]))` would filter such a ruleset
  * out and then find exactly one survivor — going quiet at precisely the moment the gate grew.
- * dev-agent's own checker had that bug and `rules/R-007` now says a second ruleset is drift rather
- * than an ambiguity to resolve.
+ * A sibling checker had exactly that bug, which is why a second ruleset is treated as drift rather
+ * than as an ambiguity to resolve.
  *
  * The list endpoint answers with envelopes only — no `rules` and no `conditions` — so the body has
  * to be fetched by id before anything can be compared.
@@ -375,7 +374,7 @@ function show(value) {
  * that is no longer needed gets a `warning`, because it asks for an action — and because the
  * alternative channels are both wrong. Failing would turn the check red immediately after somebody
  * did the right thing by adding the token; printing it only to stdout puts the signal in the log of
- * a green run, which is the one place nobody looks (dev-agent `rules/R-004`, `decisions/0005`).
+ * a green run, which is the one place nobody looks.
  */
 function annotate(level, title, message) {
   if (!process.env.GITHUB_ACTIONS) return;
@@ -383,7 +382,7 @@ function annotate(level, title, message) {
 }
 
 /**
- * Three outcomes, never two (dev-agent `rules/R-004`), and the third is where the care goes:
+ * Three outcomes, never two, and the third is where the care goes:
  *
  *   - present on both sides and equal → **pass**, and the run names what it verified rather than
  *     leaving coverage in an exit code nobody reads.

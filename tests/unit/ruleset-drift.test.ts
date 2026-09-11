@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 // re-implements that contract in JavaScript. If the two ever disagree, `--write` rewrites a file
 // nobody changed and every reader afterwards is looking at churn instead of a decision. The
 // difference is not hypothetical, and it was measured rather than argued: the sibling
-// implementation in `darkroom` keeps `source` and sorts every array by the canonical JSON of its
+// implementation keeps `source` and sorts every array by the canonical JSON of its
 // elements *instead of* by the two keys this repository's pipeline names. Both divergences were
 // re-introduced here as mutations and both turn the first case red — the ordering one because
 // canonical-JSON order puts the two rules carrying `parameters` first, and `source` because it is
@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 // as much else as it likes.
 //
 // **Second, that a declared blind spot does not suppress a real finding.** That is the property
-// dev-agent's `decisions/0005` says the whole design lives or dies on, and it is the one a check
+// the whole design lives or dies on, and it is the one a check
 // can silently lose while staying green. **No scheduled run declares anything today** — the
 // workflow's `--allow-unverifiable=bypass_actors` went with the conditional that produced it once
 // `RULESET_READ_TOKEN` existed (#956) — so these cases are the only place the mechanism is
@@ -60,7 +60,7 @@ function scramble(value: Json): Json {
 
 /**
  * What the API returns: the artifact, scrambled, plus the fields the contract strips. `source` is
- * among them because this repository strips it and `darkroom` does not — the one place the two
+ * among them because this repository strips it and the sibling does not — the one place the two
  * normalisers genuinely disagree about content rather than order.
  */
 function liveResponse(mutate: (ruleset: Record<string, Json>) => void = () => {}) {
@@ -223,7 +223,7 @@ describe("the ruleset drift check", () => {
     assert.match(output, /cannot exclude rules/);
   });
 
-  // **Both directions, planted rather than trusted** (dev-agent `rules/R-013`). The upstream
+  // **Both directions, planted rather than trusted.** The upstream
   // implementation of this message was correct to read and wrong in one direction: fed an artifact
   // claiming `Organization` against a live gate that is `Repository`, it announced that the gate
   // was now inherited — the one direction in which nothing is inherited and the record is merely

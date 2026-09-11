@@ -23,6 +23,29 @@ produced, and most of the issues it generated were about itself rather than abou
 | **Backlog manager** | Turns the user's ideas, remarks and bug reports into issues. Writes no code. → [`backlog-manager.md`](backlog-manager.md) |
 | **Release manager** | Cuts a release: a tag, a Release and a published image. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
 
+## Starting a task
+
+```bash
+git fetch origin main
+git checkout -b task/<issue>-<slug> origin/main
+pnpm install
+pnpm prisma:generate
+```
+
+**Run each step alone and read its own exit status.** Do not chain with `&&` and do not pipe — after
+a pipe `$?` belongs to the filter, so a drill in which both `pnpm` calls failed reports the same `0`
+as a clean one and is recorded as done (#1066).
+
+**`pnpm prisma:generate` runs unconditionally.** A worktree may be hours old, and if `main` has taken
+a migration since, `pnpm install` reports *Already up to date*, skips the postinstall, and leaves a
+Prisma client that is **stale rather than missing** — it compiles, and its tests pass against a
+schema the branch no longer declares (#862).
+
+**The fetch and the cut come before you read anything** — `AGENTS.md`, this file and the topic files
+included. After the cut the worktree *is* `origin/main`; before it, read with
+`git show origin/main:<path>` (#1060). A release session has no issue and cuts no branch, so only the
+fetch reaches it.
+
 ## One session owns one issue, end to end
 
 It decides, migrates, implements, tests, opens the pull request and follows it to merge. Nothing is
