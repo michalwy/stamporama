@@ -20,7 +20,9 @@ export async function GET(
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const platformId = sp.get("platformId") || undefined;
-  // A comma-separated set since the chips became multi-select (#475). An unrecognised status is
+  // A comma-separated set since the chips became multi-select (#475). It stays one now that they
+  // are exclusive again (#972): a link written under #475 carries several and still has to mean
+  // what it said, which is #735's rule for the offers list. An unrecognised status is
   // dropped rather than refused — a stale link narrows to nothing otherwise, and the chips are the
   // authority on what exists.
   const statuses = (sp.get("status") || "").split(",").filter(isSaleStatus);
