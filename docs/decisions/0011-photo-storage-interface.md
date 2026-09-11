@@ -235,8 +235,11 @@ The mechanism, its cap and its sweep are in `docs/agents/storage-and-jobs.md`.
 
 Decision 1 above lists the interface as `put` / `get` / `delete` / `move` / `resolveUrl`, and that
 sentence is the decision as it was taken in #112 rather than the live method set — read it with the
-note at the head of that section. **A sixth operation, `copy(fromKey, toKey)`, was added in #1134**,
-and this section is why.
+note at the head of that section. **`copy(fromKey, toKey)` was added in #1134**, and this section is
+why. It is stated without an ordinal deliberately: `describe` and `healthCheck` arrived with the
+binding in #138 (§7), so counting from decision 1's five makes `copy` the sixth of a list that was
+never the live set, and the live set is **eight**. An ordinal here is a count that goes stale in
+prose while the interface it describes moves (#1162).
 
 **The gap it closes was a cost, not a missing feature.** Promoting a copy photo to its stamp (#137)
 duplicates the bytes, and with no `copy` on the interface the one caller that needs one reached for
