@@ -4,8 +4,10 @@
  * Node's warning is not a measurement, and reading it as one sends you looking for the wrong
  * thing. `EventEmitter._addListener` sets `warned = true` the first time a listener count passes
  * `maxListeners`, so a given (emitter, event name) warns **once**, and the number it prints is
- * always `maxListeners + 1` — 11 by default. A stream that goes on to collect 500 listeners logs
- * the same "11 error listeners added" as one that stops at 11 and never says anything again.
+ * always `maxListeners + 1` — 11 on Node's default of 10, and **21 in this app's server**, which
+ * raises the default to 20 at boot (#1137, `src/lib/max-listeners-rules.ts`). A stream that goes on
+ * to collect 500 listeners logs the same line as one that stops at the threshold and never says
+ * anything again.
  *
  * Two consequences, and they are why this file exists rather than a note in an issue:
  *

@@ -39,6 +39,7 @@
 //     Its own timer rather than a faster sync: it reads what *changed* and so costs two requests
 //     when nothing did, where a sync re-reads the whole account.
 
+import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
 import { gcStaleScanUploads } from "@/lib/scan-uploads";
 import { formatBytes } from "@/lib/format-bytes";
@@ -65,6 +66,13 @@ let started = false;
 export async function start(): Promise<void> {
   if (started) return;
   started = true;
+
+  // The one place the process-wide listener limit is raised (#1137). First, and before
+  // `logStorageStartup()` below, because that probe is already the GCS download path whose nested
+  // `pipeline()` calls produce the warning. The number, what it costs and when to revisit it are
+  // in `max-listeners-rules.ts`; nothing else here calls this, and nothing calls `setMaxListeners`
+  // on an individual emitter.
+  raiseDefaultMaxListeners();
 
   // Report the configured photo-storage backend and probe it once at boot, so a misconfigured
   // volume or bucket surfaces in the logs immediately rather than on the first upload (#138).

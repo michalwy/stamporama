@@ -136,6 +136,11 @@ describe("MaxListenersExceededWarning is not a measurement", () => {
   it("counts against the default limit, so the threshold is 11 unless something raises it", () => {
     // Pinned because every count quoted in #1123 and in `platform.md` assumes this default. A
     // Node that shipped a different one would make all of them wrong without anything else moving.
+    //
+    // This is Node's default in a bare process, which is what this file is about. **The running
+    // server no longer uses it** — since #1137 it raises the default to 20 at its entry point, and
+    // `tests/unit/max-listeners-configured.test.ts` is what pins that. The two do not collide:
+    // `node --test` runs one process per file, and nothing here imports the module that raises it.
     assert.equal(EventEmitter.defaultMaxListeners, 10);
     assert.equal(new PassThrough().getMaxListeners(), 10);
   });
