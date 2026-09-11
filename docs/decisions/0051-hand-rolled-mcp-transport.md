@@ -110,6 +110,31 @@ it. An `Origin` check would refuse requests that are already refused while break
 legitimately sets one. **It is written down rather than skipped quietly, because a `MUST` a later
 reader finds missing should read as a decision and not as an oversight.**
 
+**What would make this wrong, named because the argument rests on a property of the deployment
+rather than on a property of MCP.** The reasoning above holds only while `/api/mcp` has **no
+ambient authority to steal**, and each of the following retires it completely:
+
+- **Any unauthenticated or session-authenticated path on this endpoint.** A Better Auth cookie is
+  ambient by definition — the browser attaches it without the page asking — so accepting one here
+  hands a rebound page exactly the authority this argument says does not exist. ADR-0050 §2 refuses
+  a session on `/api/v1` for an unrelated reason (it covers every collection its user owns), and
+  that refusal is load-bearing here too.
+- **Any CORS headers on this route.** An `Access-Control-Allow-Origin` paired with
+  `Access-Control-Allow-Headers: authorization` is what makes the preflight stop being a barrier.
+- **Any credential a browser sends by itself** — the token moving into a cookie, or being accepted
+  from a query parameter, both of which remove the step a page cannot perform.
+
+**Whoever makes one of those changes owns the `Origin` check**, and the change is the moment to
+implement it rather than to re-derive this paragraph. That is the honest risk in this deviation: it
+is not that the analysis is wrong today, it is that **the change which invalidates it is one nobody
+would think to weigh against an ADR about `Origin`** — so it is named here, in the section that
+would otherwise only say why the check is unnecessary.
+
+**And this one is the owner's to ratify rather than a session's to settle.** Deviating from a
+security `MUST` is a decision about his posture, not an implementation detail; it was raised for
+ratification on 2026-09-11, with the analysis above as what he is ratifying. Nothing else in this
+ADR has that character.
+
 **Deviation 2 — a rejected argument comes back as a tool error, where the specification's division
 puts it on the protocol side.** *Tools* §Error Handling lists *invalid arguments* under protocol
 errors and *invalid input data* under tool execution errors; a missing required parameter or a wrong
