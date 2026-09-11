@@ -209,7 +209,7 @@ listed still says **ready** here and has no link to its listing — which is why
 **active-items export** is the other half of the loop.
 
 On Delcampe, go to your selling area and download the export of your **current sales** (the list of
-what you have running). Then, under **Offers → On Delcampe**, press **↑ Import active items** and
+what you have running). Then, under **Marketplaces → Delcampe**, press **↑ Import active items** and
 pick that file.
 
 What the import does:

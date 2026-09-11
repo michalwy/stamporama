@@ -6,8 +6,8 @@ more **sets**. Nothing is shared between offers, so the *same* copy listed on tw
 independent offers — each tracked, edited, and sold on its own.
 
 **Offers** in the **Selling** section of the sidebar is the offer list itself, with the screens
-that feed it indented underneath, in the order the work reaches them — and the two marketplace
-screens sit in the **Marketplaces** group just below, one per platform:
+that feed it indented underneath, in the order the work reaches them. Below it come **Sales**, and
+then a **Marketplaces** group holding one screen per platform, named for the platform alone:
 
 - **Offers** — the list itself, and the screen you spend the day on.
 - **Lot builder** — where a job lot of a hundred copies is put together and turned into an offer.
@@ -15,10 +15,11 @@ screens sit in the **Marketplaces** group just below, one per platform:
 - **Bulk listing** — where you post a batch that is prepared and ready to go live. See
   [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
   list's toolbar as well, which carries the platform filter across.
-- **Sold on Allegro** — the other end of the same job: what has sold there and is still waiting to
-  be recorded here. See the [Allegro guide](allegro.md#sold-on-allegro).
-- **On Delcampe** — the same sitting on the marketplace next door. See the
-  [Delcampe guide](delcampe.md).
+- **Marketplaces → Allegro** — the other end of the same job: what has sold there and is still
+  waiting to be recorded here. The screen itself is headed *Sold on Allegro*. See the
+  [Allegro guide](allegro.md#sold-on-allegro).
+- **Marketplaces → Delcampe** — the same sitting on the marketplace next door, headed *On
+  Delcampe*: what you currently have listed there. See the [Delcampe guide](delcampe.md).
 
 ## Offer number and short link
 
@@ -1428,8 +1429,8 @@ format. See the [Delcampe guide](delcampe.md#uploading-a-batch) for what the row
 an offer that cannot be written stops the whole export rather than being quietly left out.
 
 The batch stays **ready** after the export: uploading the file is a step this app cannot see. What
-moves those offers to *active* is reading Delcampe's own active-items export back, under **Offers →
-On Delcampe** — see [reading your listings back](delcampe.md#reading-your-listings-back).
+moves those offers to *active* is reading Delcampe's own active-items export back, under
+**Marketplaces → Delcampe** — see [reading your listings back](delcampe.md#reading-your-listings-back).
 
 ### When something turns out to be missing
 

@@ -595,31 +595,43 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
-          {/* What the marketplaces have already done with what was posted (#502, #611) — its own
-              group (#762) rather than two more children of Offers. Those three are one sitting at
-              this end of the work; these two are the *other* end of it, one screen per platform,
-              and a five-child Offers group said all five were the same job. Named for what they
-              state rather than for what they do, and ordered the way the work reaches them. */}
-          <NavGroup icon={<Icon name="marketplaces" />} label="Marketplaces">
-            <NavItem
-              href={`${base}/offers/allegro`}
-              label="Sold on Allegro"
-              active={isActive(`${base}/offers/allegro`)}
-              nested
-            />
-            <NavItem
-              href={`${base}/offers/delcampe`}
-              label="On Delcampe"
-              active={isActive(`${base}/offers/delcampe`)}
-              nested
-            />
-          </NavGroup>
+          {/* Sales leads the two marketplace screens (#971): of the three rows that sit after
+              Offers it is the one opened daily — every order, on every platform and off them —
+              while the per-platform views are read when one wants to know what a single
+              marketplace has been doing. The order used to follow the *pipeline* (offers go out,
+              the marketplace shows them, sales come back); it now follows how often the screen is
+              wanted, which is the same rule that puts Selling before Buying at the top of this
+              section. */}
           <NavItem
             href={`${base}/sales`}
             icon={<Icon name="sales" />}
             label="Sales"
             active={isActive(`${base}/sales`)}
           />
+          {/* What the marketplaces have already done with what was posted (#502, #611) — its own
+              group (#762) rather than two more children of Offers. Composing a listing and reading
+              back what a platform has since done with it are opposite ends of the work, and a
+              five-child Offers group said all five were the same job. The children take the **bare
+              platform name** (#971): the group names the set and the child says which one, which
+              is the same principle that leaves a child without an icon. It is also what lets the
+              two labels be uniform even though the screens are not the same kind of thing — the
+              Allegro screen is what has *sold* and the Delcampe one is what is *listed* — since
+              neither label claims either way. Each page keeps its own heading, which is where a
+              screen standing alone has to say what it shows. */}
+          <NavGroup icon={<Icon name="marketplaces" />} label="Marketplaces">
+            <NavItem
+              href={`${base}/offers/allegro`}
+              label="Allegro"
+              active={isActive(`${base}/offers/allegro`)}
+              nested
+            />
+            <NavItem
+              href={`${base}/offers/delcampe`}
+              label="Delcampe"
+              active={isActive(`${base}/offers/delcampe`)}
+              nested
+            />
+          </NavGroup>
         </NavSection>
 
         <NavSection {...sectionProps("buying")}>
