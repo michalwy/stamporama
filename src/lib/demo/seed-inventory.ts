@@ -1,5 +1,6 @@
 import "server-only";
 import { PrismaClient } from "@/generated/prisma/client";
+import { createLeadingEntriesTx } from "../item-stamps";
 
 // Inventory demo data: owned copies (`Item`), contacts (`Contact` address book),
 // certificate statuses, and refinement history (`ItemVariantHistory`). Seeded on
@@ -212,7 +213,13 @@ export async function seedInventory(
     for (let c = 0; c < copies; c++) bulk.push(buildItem(stamp, nextItemNo++));
   }
   for (let i = 0; i < bulk.length; i += 500) {
-    await tx.item.createMany({ data: bulk.slice(i, i + 500) });
+    // Every copy gets the `ItemStamp` entry naming its stamp (ADR-0044 §2), so the demo dataset is
+    // the shape a real collection is in rather than a collection of copies whose stamps are unknown.
+    const made = await tx.item.createManyAndReturn({
+      data: bulk.slice(i, i + 500),
+      select: { id: true, stampId: true },
+    });
+    await createLeadingEntriesTx(tx, made);
   }
 
   // Refinement history: for each variant stamp, add one copy that was refined
@@ -221,7 +228,8 @@ export async function seedInventory(
   const variants = stamps.filter((s) => s.parentId);
   for (const variant of variants) {
     const data = buildItem(variant, nextItemNo++);
-    const item = await tx.item.create({ data, select: { id: true } });
+    const item = await tx.item.create({ data, select: { id: true, stampId: true } });
+    await createLeadingEntriesTx(tx, [item]);
     await tx.itemVariantHistory.create({
       data: {
         itemId: item.id,

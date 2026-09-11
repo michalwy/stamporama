@@ -242,6 +242,9 @@ model StampFormat {
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
   items         Item[]
+  /** Components of a multi-stamp copy described by this format (ADR-0044) — "a block of four, on
+   *  this cover" — as distinct from `items`, which is what a whole copy physically is. */
+  itemStamps    ItemStamp[]
   factors       StampFormatFactor[]
   translations  StampFormatTranslation[]
   auctionLotLines AuctionLotLine[]
@@ -2628,6 +2631,9 @@ model Stamp {
   albumPrintedPages AlbumPrintedPageStamp[]
   wants             Want[]                @relation("WantStamp")
   items              Item[]               @relation("ItemStamp")
+  /** The copies that **carry** this stamp (ADR-0044) — a superset of `items` in meaning, since the
+   *  leading entry of every ordinary copy is here too. See {@link ItemStamp}. */
+  itemStamps         ItemStamp[]
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
   auctionLotLines    AuctionLotLine[]
@@ -2726,7 +2732,18 @@ model Item {
   // what a collector writes on the physical piece, so it must stay stable and must not be
   // reused — deleting a copy retires its number.
   itemNo              Int
+  // The leading stamp, and since ADR-0044 a **denormalised pointer** rather than an assertion:
+  // it always equals the first entry of `stamps` (`sortOrder` 0). It is kept — and not made
+  // nullable — because 171 files under `src/` read it, but a copy whose `stampCount` is above 1 is
+  // a copy of *none* of its stamps, this one included (ADR-0044 §3). Derived: written only by
+  // `src/lib/item-stamps.ts`.
   stampId             String
+  // The summed `quantity` of `stamps`, materialised (ADR-0044 §4) so that every "held copies"
+  // predicate stays a flat `where` beside `disposedAt: null` rather than a join — three queries
+  // answering "how much of this do I have" must not be able to disagree. It counts **described
+  // components, not sheets of paper**: a block of four on a cover is one component of quantity 1
+  // with the entry's `formatId` set, never four. Derived: written only by `src/lib/item-stamps.ts`.
+  stampCount          Int      @default(1)
   conditionId         String
   certificateStatusId String?
   // Physical format of this copy; null = single. A multiple is one copy in one format — it is
@@ -2772,6 +2789,8 @@ model Item {
   lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
+  /** Every stamp this copy carries, the leading one included (ADR-0044 §2). See {@link ItemStamp}. */
+  stamps            ItemStamp[]
   photos            Photo[]
   // Sales module (ADR-0013). A copy is packaged into offer sets (N:M — the same copy can be
   // listed on several platforms at once) and, once sold, is recorded on exactly one `SaleLine`
@@ -2809,6 +2828,67 @@ model Item {
   // indexed together with the scope rather than on its own.
   @@index([collectionId, disposedAt])
   @@map("item")
+}
+
+// One stamp on one copy (ADR-0044, #744) — the join that lets a **multi-stamp copy** exist: an
+// indivisible carrier (a cover, a fragment, a card, an FDC) bearing several different catalogue
+// positions the catalogue never numbered as a whole.
+//
+// The carrier is still **one** `Item`, exactly as ADR-0020 §2 refuses to decompose a block of four
+// into four copies: `itemNo`, location, cost basis, photos, offers, sales and trades all describe
+// the thing that is sold, and splitting a cover into three copies would force every one of them to
+// answer "which of the three?".
+//
+// This table carries **every** stamp on the piece, the leading one included. `Item.stampId` is then
+// a denormalised pointer at the first entry, which is what makes "which pieces carry Mi 200" one
+// query instead of two that could come to disagree.
+//
+// `quantity` counts **described components, not sheets of paper** (ADR-0044 §4). A block of four on
+// the cover is one entry of quantity 1 whose `formatId` is `Blk4`; a cover bearing Mi 200 twice,
+// loose, is one entry of quantity 2. Reading the block as "four" would mean inventing a unit count
+// for formats, which ADR-0020 §2 exists to refuse.
+//
+// `formatId` describes **the component** — "a block of four, on this cover" — with null meaning
+// single, the ADR-0020 §3 idiom. `Item.formatId` keeps the meaning it has always had, *what this
+// physical thing is*, which for a carrier is the carrier type ("Cover", "FDC"), itself an ordinary
+// `StampFormat` row (ADR-0044 §5).
+//
+// `sortOrder` is the collector's order, not a ranking: the order the stamps sit on the piece is a
+// fact about it, and it drives what `{catalog}` enumerates (ADR-0044 §8). Deliberately **not**
+// unique per item — a reorder that shifted values along a unique index would collide transiently
+// (`platform.md`), and nothing needs the database to enforce a permutation.
+//
+// `onDelete`: **Cascade** from the copy — the entries describe it and have no life without it — and
+// **Restrict** from the format, the way `Item.formatId` already is. The stamp side is `Cascade`
+// rather than the `Restrict` ADR-0044 asked for, and the rule the ADR wanted is kept in
+// `deleteStamp` instead: PostgreSQL checks a RESTRICT before the cascades queued beside it have run,
+// so the constraint fired on every ordinary copy and made a collection undeletable. The migration
+// that introduces the table carries the measurement.
+//
+// Written **only** by `src/lib/item-stamps.ts`, which also derives `Item.stampId` and
+// `Item.stampCount` from these rows. No call site sets those two by hand, or the rule they carry
+// decays silently.
+model ItemStamp {
+  id        String  @id @default(cuid())
+  itemId    String
+  stampId   String
+  /** How many of this component the carrier bears. Never a count of the stamps in a multiple. */
+  quantity  Int     @default(1)
+  /** The component's own format; null = single. */
+  formatId  String?
+  sortOrder Int
+
+  item   Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  stamp  Stamp        @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  format StampFormat? @relation(fields: [formatId], references: [id], onDelete: Restrict)
+
+  @@index([itemId])
+  @@index([stampId])
+  @@index([formatId])
+  // One carrier may hold the same stamp as a single *and* as a block — two entries — so the
+  // identity includes the format. The unique index over ("itemId", "stampId", "formatId") lives in
+  // the migration only: it needs `NULLS NOT DISTINCT`, which Prisma cannot express (ADR-0006 §3).
+  @@map("item_stamp")
 }
 
 // A copy the collector has decided is **never** to be listed on one platform (#506).

@@ -178,16 +178,21 @@ export async function updateStampFormat(
 
 /**
  * Whether a format is referenced by a catalog price or a recorded copy, and therefore cannot be
- * deleted. Both FKs are `onDelete: Restrict`; this check surfaces a friendly error before the
+ * deleted. All three FKs are `onDelete: Restrict`; this check surfaces a friendly error before the
  * constraint fires. Factor rows are deliberately **not** counted — they cascade, because a factor
  * is a rule *about* the format with no meaning once it is gone, unlike a price or a copy.
+ *
+ * The third is a **component** of a multi-stamp copy (ADR-0044 §5) — "a block of four, on this
+ * cover" — which is a use of the format exactly as a copy's own is, and reached through a different
+ * column only because a carrier says two things about format at once.
  */
 export async function isFormatInUse(formatId: string): Promise<boolean> {
-  const [prices, items] = await Promise.all([
+  const [prices, items, components] = await Promise.all([
     prisma.stampCatalogPrice.count({ where: { formatId } }),
     prisma.item.count({ where: { formatId } }),
+    prisma.itemStamp.count({ where: { formatId } }),
   ]);
-  return prices > 0 || items > 0;
+  return prices > 0 || items > 0 || components > 0;
 }
 
 export class FormatInUseError extends Error {

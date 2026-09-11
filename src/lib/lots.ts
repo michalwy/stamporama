@@ -12,6 +12,7 @@ import {
   type ItemListItem,
   type LotCopyFilter,
 } from "./items";
+import { createLeadingEntriesTx } from "./item-stamps";
 import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
@@ -777,17 +778,29 @@ export async function intakeStamps(
   // …and only when it is the *one* copy: a run of copies of one stamp (#596) is the scan-tile pass,
   // where every copy takes its own tile's crops afterwards and one shared change-set would be the
   // very thing that flow must not do.
+  // Each copy is written together with the `ItemStamp` entry naming its stamp (ADR-0044 §2), in one
+  // transaction: a copy with no entry is a copy whose stamps are unknown, not a copy of one stamp.
+  // The photos stay outside it — they are stored bytes, and a storage write has no business holding
+  // a database transaction open.
   if (singleStamp && stampIds.length === 1 && input.photoChangeSet) {
-    const item = await prisma.item.create({
-      data: copyData(stampIds[0], itemNos[0]),
-      select: { id: true, itemNo: true, stampId: true },
+    const item = await prisma.$transaction(async (tx) => {
+      const row = await tx.item.create({
+        data: copyData(stampIds[0], itemNos[0]),
+        select: { id: true, itemNo: true, stampId: true },
+      });
+      await createLeadingEntriesTx(tx, [row]);
+      return row;
     });
     await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
     created.push(item);
   } else {
-    const rows = await prisma.item.createManyAndReturn({
-      data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
-      select: { id: true, itemNo: true, stampId: true },
+    const rows = await prisma.$transaction(async (tx) => {
+      const made = await tx.item.createManyAndReturn({
+        data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
+        select: { id: true, itemNo: true, stampId: true },
+      });
+      await createLeadingEntriesTx(tx, made);
+      return made;
     });
     created.push(...rows);
   }

@@ -218,6 +218,38 @@ export async function updateStamp(
   await prisma.stamp.update({ where: { id: stampId }, data });
 }
 
+/**
+ * Clear the way for a stamp to be deleted: remove the copies that are copies *of* it, then refuse if
+ * any piece still **carries** it (ADR-0044 §3).
+ *
+ * This *is* the ADR's `Restrict` on `ItemStamp.stampId`, enforced here rather than by the constraint.
+ * It cannot be a constraint: PostgreSQL checks a RESTRICT immediately, before the referential actions
+ * queued beside it have run, so it fired on the entry of every perfectly ordinary copy — whose own
+ * cascade was about to remove it anyway — and made a whole collection undeletable. The migration that
+ * introduces the table carries the measurement.
+ *
+ * The `deleteMany` is therefore load-bearing twice over: it is the deletion the cascade used to do,
+ * and it is what leaves the check below looking only at the case worth refusing — an entry on
+ * **another** piece, a cover whose leading stamp is a different one and which the collector still
+ * owns. Deleting the catalogue position out from under that piece would quietly rewrite what it is,
+ * so the collector is told which copy to edit first instead.
+ */
+async function clearStampFromCopiesTx(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  stampId: string
+): Promise<void> {
+  await tx.item.deleteMany({ where: { stampId } });
+  const carried = await tx.itemStamp.findFirst({
+    where: { stampId },
+    select: { item: { select: { itemNo: true } } },
+  });
+  if (carried) {
+    throw new Error(
+      `This stamp is one of the stamps on copy #${carried.item.itemNo}. Take it off that copy before deleting the stamp.`
+    );
+  }
+}
+
 async function deleteStampTreeTx(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   stampId: string,
@@ -230,6 +262,7 @@ async function deleteStampTreeTx(
   for (const child of children) {
     await deleteStampTreeTx(tx, child.id, deletedIds);
   }
+  await clearStampFromCopiesTx(tx, stampId);
   await tx.stamp.delete({ where: { id: stampId } });
   deletedIds.push(stampId);
 }
@@ -257,6 +290,7 @@ export async function deleteStamp(
         where: { parentId: stampId },
         data: { parentId: stamp.parentId },
       });
+      await clearStampFromCopiesTx(tx, stampId);
       await tx.stamp.delete({ where: { id: stampId } });
       deletedIds.push(stampId);
     });
