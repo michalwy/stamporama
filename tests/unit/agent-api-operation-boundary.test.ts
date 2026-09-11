@@ -95,12 +95,27 @@ const FORBIDDEN = new Map<string, string>([
   ["markColnectApplied", "claims a difference has been carried out on Colnect, clearing the report (#689)"],
 ]);
 
-// **Nothing in this tree writes to Colnect over the wire, and that half of #712's boundary is
-// therefore vacuous today** — said here rather than left to be discovered, because a guard silently
-// covering nothing is worse than no guard. `grep -rln 'colnect.com' src/` finds only routes building
-// outbound **links** for a person to click and the generated Prisma client; there is no HTTP write
-// to forbid, so `markColnectApplied` above is the nearest act there is and it is a *local* claim.
-// If an outbound Colnect write is ever added, its name belongs here.
+// **The Colnect clause is guarded by the architecture rather than by this list, and that is worth
+// stating because it is the one entry nobody can add correctly by reading `src/` alone.**
+//
+// **This app does write to Colnect.** `extension/src/platform/colnect/list-write.ts` builds
+// `POST /item/col` with `act=check` — list membership, and since #704 an entry's quantity and grades
+// (#689, ADR-0042). It runs in the **content script**, on a colnect.com page, under the collector's
+// own session cookie, same-origin because the call carries no CSRF token. No `/api/v1` handler can
+// reach it: it is a different package, shipped to the collector's browser rather than run on the
+// server, so there is no import for this list to forbid and nothing for it to catch.
+//
+// `markColnectApplied` above is the one thing on **this** side that touches the Colnect story at
+// all, and it writes nothing outbound: it clears the flag saying the public record and this one
+// disagree, which is why it is forbidden for `markOfferListingSynced`'s reason and not for being a
+// Colnect write.
+//
+// **An earlier draft of this comment said the clause was *vacuous today* because *nothing in this
+// tree writes to Colnect over the wire*.** It is quoted because it was asserted in a report before
+// it was checked, and because the mistake is the reusable part: the grep behind it was
+// `grep -rln 'colnect.com' src/`, which is one package of a two-package repository, and the
+// conclusion was stated about *the tree*. `git grep -lF 'colnect.com'` answers **59 files**, 17 of
+// them under `extension/`.
 
 // **`deleteTrade` was weighed and left off, on `getOfferListingKit`'s reasoning.** It destroys a
 // trade, which is worse than most things here — and it is not a *send*, and no operation calls it.

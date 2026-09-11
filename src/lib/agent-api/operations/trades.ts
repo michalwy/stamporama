@@ -97,11 +97,24 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // trade behind**, which needs something to leave it on: `create_trade` is `draft_offer`'s analogue,
 // making a `preparing` trade with one section and nothing that reaches anybody.
 //
-// **No operation sets a line's manual value**, which the *adjust* bullet arguably asks for. The
-// reasoning is `trades.md`'s own: the manual value is deliberately narrow and *the default reflex
-// stays type the price on the stamp*, a price being a property of the stamp. An agent reaching for
-// it would be an agent making the valuation gate pass rather than making a trade balance.
-// `get_trade_balance` names the unvalued lines instead, so the agent can say which need a price.
+// **No operation sets a line's manual value, and the hole is deliberate rather than forgotten.**
+// #712's *add and adjust trade lines* arguably asks for one, and two arguments keep it out.
+//
+// **The decisive one is the contract.** `/api/v1` only ever grows: once an operation is published,
+// its name, its parameters and the meaning of its answer are fixed, and a break is `/api/v2`. So
+// the two directions are not symmetrical — **leaving it out is reversible next week and publishing
+// it is not** — and absent a positive reason to ship it now, out. **That argument is bounded, and
+// stating the bound is what stops it being used to refuse everything**: every operation here is
+// equally irreversible, so it decides nothing on its own. It decides *this* case because the
+// positive reason is weak, which is the second argument.
+//
+// **And the second is what makes it weak.** `trades.md` keeps the manual value narrow on purpose —
+// *the default reflex stays type the price on the stamp*, a price being a property of the stamp —
+// so an agent reaching for it would be an agent **making the valuation gate pass rather than making
+// a trade balance**. The gate exists because a trade whose lines carry no figure cannot be judged,
+// and a typed number clears the refusal without answering it. `get_trade_balance` names the
+// blocking lines instead, so the agent hands them back and the collector prices the stamp — after
+// which the figure is true on every screen rather than true inside one trade.
 //
 // ## Nothing here computes a figure or decides a rule
 //

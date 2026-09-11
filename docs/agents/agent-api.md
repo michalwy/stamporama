@@ -339,9 +339,23 @@ it was true when written and will go on arriving in anything copied from it: *An
 the three takes one as input: an offer's currency is inherited and locked from
 `Contact.platformCurrency` (#196), so drafting an offer names a platform, never a currency.* The
 offer half still holds. What does not is *no operation takes one*: #712's `create_trade` takes an
-optional `currency`, because a trade's currency is the one the **partner's** figures are in, it is
-nobody's platform, and it defaults to the collection's own base currency exactly as the collector's
-form defaults it.
+optional `currency`, and it defaults to the collection's own base currency exactly as the
+collector's form defaults it.
+
+**The sharper correction is not that it became false but that the justification never covered #712
+at all.** The sentence says *the three* — #710, #711 and #712 — and supports it with a fact about
+**offers alone**, so it was a prediction about an unimplemented issue written in the present tense
+as a fact. `Trade.currency` is a real column, and its schema comment says what it is: *the currency
+the partner's figures are expressed in (#638)*. Nothing inherits it from a platform, because **a
+trade has no platform** — the inheritance that made the claim true of an offer has no counterpart on
+the other side of the scope it was asserted over.
+
+**And the sentence two lines below it has the identical shape, so #712 settles it too:**
+*Catalog editions are absent for the same kind of reason — an edition is a year on a book, and
+nothing in #710, #711 or #712 takes one.* **That one holds.** None of #712's twelve operations takes
+a catalog edition as input: an edition is chosen by the valuation rule from the stamp's area and the
+collection's own catalogue configuration, and every figure this surface states — a copy's, a want's
+range, a trade line's — arrives already read in whatever edition that rule picked. Left as written.
 
 **That does not reopen #708's decision, and reading it as a case for a currency vocabulary would be
 the mistake.** What #708 settled is that currencies need no *vocabulary read* — they are not
@@ -842,13 +856,23 @@ making a `preparing` trade with one section and nothing that reaches anybody.
 
 ### No operation sets a line's manual value, and that is a refinement rather than a gap
 
-#712's *add and adjust trade lines* arguably asks for one. `trades.md` is why there is none: the
-manual value is kept deliberately narrow and *the default reflex stays type the price on the stamp*,
-a price being a property of the stamp rather than of a line. **An agent reaching for it would be an
-agent making the valuation gate pass rather than making a trade balance** — the gate exists because
-a trade whose lines have no value cannot be judged, and a typed figure clears the refusal without
-answering it. `get_trade_balance` names the unvalued lines instead, so the agent can say which need
-a price and hand that back.
+#712's *add and adjust trade lines* arguably asks for one, and two arguments keep it out.
+
+**The decisive one is the contract at the top of this page.** `/api/v1` only ever grows: once an
+operation is published its name, its parameters and the meaning of its answer are fixed, and a break
+is `/api/v2`. The two directions are therefore **not symmetrical** — leaving it out is reversible
+next week and publishing it is not — so absent a positive reason to ship it now, out. **The bound is
+worth stating, because without it the argument refuses everything**: every operation here is equally
+irreversible, so this decides nothing on its own. It decides *this* case because the positive reason
+is weak, which is the second argument.
+
+**And the second is what makes it weak.** `trades.md` keeps the manual value narrow on purpose —
+*the default reflex stays type the price on the stamp*, a price being a property of the stamp rather
+than of a line — so **an agent reaching for it would be an agent making the valuation gate pass
+rather than making a trade balance**. The gate exists because a trade whose lines carry no figure
+cannot be judged, and a typed number clears the refusal without answering it. `get_trade_balance`
+names the blocking lines instead, so the agent hands them back and the collector prices the stamp;
+the figure is then true on every screen rather than true inside one trade.
 
 The same reasoning leaves out *restate a receive line*: removing and re-adding is the same act, and
 the only thing lost is the line's `position`, which nothing sorts by — the screen groups rather than
@@ -994,12 +1018,25 @@ saying the public record and this one disagree). Each is labelled in the map wit
 because a seventh kind is what a later reader will have to recognise and there is no pattern to
 recognise it by.
 
-**And one half of #712's own boundary is vacuous today, which is said rather than left to be
-discovered.** The issue forbids *writing to Colnect in any form*, and **nothing in this tree writes
-to Colnect over the wire**: `grep -rln 'colnect.com' src/` finds routes building outbound links for
-a person to click, and the generated Prisma client. There is no HTTP write to forbid and no test
-that could go red over one. A guard silently covering nothing is worse than no guard, so the list
-says so; if an outbound Colnect write is ever added, its name belongs on it.
+**And #712's *writing to Colnect* clause is guarded by the architecture rather than by that list**,
+which is the one entry nobody can add correctly by reading `src/` alone. **This app does write to
+Colnect**: `extension/src/platform/colnect/list-write.ts` builds `POST /item/col` with `act=check` —
+list membership, and since #704 an entry's quantity and grades (#689, ADR-0042, which
+`colnect-list-sync.md` calls *a step change with an ADR of its own*). It runs in the **content
+script**, on a colnect.com page, under the collector's own session cookie, same-origin because the
+call carries no CSRF token. **No `/api/v1` handler can reach it** — a different package, shipped to
+the collector's browser rather than run on the server — so there is no import for the map to forbid
+and nothing for it to catch. `markColnectApplied` is the one thing on *this* side that touches the
+Colnect story at all, and it writes nothing outbound: it clears the flag saying the public record
+and this one disagree, which is `markOfferListingSynced`'s reason and not a Colnect write's.
+
+**An earlier draft of this passage said the clause was *vacuous today* because *nothing in this tree
+writes to Colnect over the wire*, and it is quoted because the mistake is the reusable part.** The
+grep behind it was `grep -rln 'colnect.com' src/` — one package of a two-package repository — and
+the conclusion was stated about *the tree*. `git grep -lF 'colnect.com'` answers **59 files**, 17 of
+them under `extension/`. The instrument ran, exited truthfully and answered exactly what it was
+asked; what was wrong was the question's scope, which is *the guards protect the instrument; the
+remaining failure is the question* (`collaboration.md`) met on a path list rather than on a pattern.
 
 **`deleteTrade` was weighed for that list and left off**, on the reasoning `getOfferListingKit` was
 left off #711's. It destroys a trade, which is worse than most things on the list — and it is not a
