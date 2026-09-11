@@ -595,12 +595,24 @@ Stamps can be nested: a base stamp (for example catalog number **2**) can have c
 
 Each collection keeps its own list of **subtypes** that records this distinction. Manage them from **Settings → Subtypes**. Each subtype carries an **Acts as variant** switch — turn it **on** for variant-like categories and **off** for distinct entries.
 
-- Every new collection starts with a default set: **Variant**, **Colour variety**, **Perforation variety**, **Paper variety**, **Watermark variety** and **Print variety** (acts as variant), plus **Error**, **Plate flaw** and **Overprint** (distinct entries). These are ordinary rows — rename, reorder, or delete any of them.
+- Every new collection starts with a default set: **Variant**, **Colour variety**, **Perforation variety**, **Paper variety**, **Watermark variety** and **Print variety** (acts as variant), plus **Error**, **Plate flaw**, **Overprint** and **Forgery** (distinct entries). These are ordinary rows — rename, reorder, or delete any of them.
 - **Add** a subtype with a name (e.g. "Colour variety") and choose whether it acts as a variant.
 - **Select the default** with the radio button on the left of each row. Exactly one subtype is always the default; it is the one assigned to newly created child stamps. Choosing a new default clears the old one.
 - **Toggle Acts as variant** directly on a row at any time.
 - **Reorder** subtypes by dragging rows.
 - **Delete** a subtype you no longer need. The current default cannot be deleted — pick another default first — and a subtype already assigned to stamps cannot be deleted either.
+
+### Recording a forgery
+
+A forgery is recorded as a **child stamp of the stamp it imitates**, on the **Forgery** subtype. Identifying a forgery is the same work as identifying a variant — you compare a run of details — so there is no separate place to put one: add it under the genuine stamp exactly as you would add a variant, and pick **Forgery** as its subtype.
+
+Because **Forgery** is a distinct entry rather than a variant, the genuine stamp is left alone. Owning a forgery never completes a set for you, it is never taken as the cheapest price of the genuine stamp, and a photo of it cannot be carried up onto the genuine stamp the way a variant's photo is — see [promoting a copy photo to its stamp](#promoting-a-copy-photo-to-its-stamp), which walks up through variants only.
+
+The verdict is the identification itself. A copy you have decided is a forgery is simply moved onto the forgery stamp, which records the change with a date and a note the way any variant identification does. There is nothing else to fill in — no authenticity field, no examination log — and deciding a copy is *ordinary* leaves no trace, because a copy sitting under the genuine stamp already says so.
+
+A forgery is ordinary stock from there on. It can be valued, stored, put in an album and deliberately sold as a forgery.
+
+**Forgery** is an ordinary row like every other subtype — rename it, reorder it, or delete it if you never record forgeries. Nothing in the app looks for it by name.
 
 ### Assigning a subtype to a child stamp
 
