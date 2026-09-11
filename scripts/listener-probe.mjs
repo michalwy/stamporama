@@ -27,13 +27,17 @@
  * `next start` runs the server in a child process, so signal the `next-server` process rather
  * than the `pnpm` one — `NODE_OPTIONS` is inherited, the signal is not.
  *
- * ESM and `--import` rather than CommonJS and `--require`, and the reason is lint rather than
- * taste: `eslint-config-next` registers its plugins for js, jsx, mjs, ts, tsx, mts and cts — `cjs`
- * is not in that list — while `eslint.config.mjs` applies `react-hooks/exhaustive-deps` in a config
- * object with no `files:` of its own. So any `.cjs` file under a linted path makes `pnpm lint` exit
- * 2 on a configuration error before it reads a line of code, and an empty one reproduces it.
- * `--import` runs this before the main module just as `--require` did, and wants Node 20.6+, which
- * the Dockerfile's `node:24` satisfies.
+ * ESM and `--import` rather than CommonJS and `--require`. **The reason this was written with was
+ * lint, and that reason is gone** — it read: *"`eslint-config-next` registers its plugins for js,
+ * jsx, mjs, ts, tsx, mts and cts — `cjs` is not in that list — while `eslint.config.mjs` applies
+ * `react-hooks/exhaustive-deps` in a config object with no `files:` of its own. So any `.cjs` file
+ * under a linted path makes `pnpm lint` exit 2 on a configuration error before it reads a line of
+ * code, and an empty one reproduces it."* That was true when it was written and is quoted rather
+ * than deleted, because it is what sent #1126 looking. #1126 scoped that rule to the glob its
+ * plugin is registered for, so a `.cjs` file lints cleanly now and `tests/fixtures/lint/` holds one
+ * that proves it on every run. **Nothing here changes: this stays ESM because there is no reason to
+ * move it back**, not because it cannot be CommonJS. `--import` runs this before the main module
+ * just as `--require` did, and wants Node 20.6+, which the Dockerfile's `node:24` satisfies.
  *
  * Environment:
  *   PROBE_CTORS         comma-separated constructor names to watch (default `PassThrough`)
