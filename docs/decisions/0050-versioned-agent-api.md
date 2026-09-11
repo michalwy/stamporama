@@ -183,8 +183,9 @@ drift; prose that copies does.
   `GET`, and a list operation redeclaring the shared window parameters are all refused.
 - **This issue ships no operation, so the published document has an empty `paths` object.** That was
   valid OpenAPI 3.1 and the honest state of the surface when #706 landed. **It is no longer the
-  state**: #708 added `get_collection_vocabulary`, so the first operation arrived before #710. The
-  consequence is left as written, dated to this ADR's own issue, with the correction beside it.
+  state**: #708 added `get_collection_vocabulary`, so the first operation arrived before #710, and
+  #710 has since added six reads over the collection. The consequence is left as written, dated to
+  this ADR's own issue, with the correction beside it.
 - **No schema change and no migration.** #707 owns the one this track needs.
 
 ## Alternatives considered

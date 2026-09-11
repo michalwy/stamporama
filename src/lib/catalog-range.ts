@@ -145,3 +145,23 @@ export function formatCatalogRange(
 
   return `${start}${separator}${end}`;
 }
+
+/** An issue's declared per-vendor range as its catalog identity — `Mi·PL 1298–302`. The span goes
+ * through {@link formatCatalogRange} above (#400), so a declared range reads the way the same span
+ * reads in a generated listing title or an offer set's name; only the separator differs, an
+ * on-screen chip and an agent's answer both taking the en dash. The issue form's own First/Last
+ * inputs stay written out in full — those are the values being stored.
+ *
+ * **It lives here rather than beside the display helpers since #710**: the agent API states an
+ * issue's range too, and `src/lib` must not reach into `src/app` for it. `src/app/stamp-display.ts`
+ * re-exports it, so every existing caller is untouched and there is still one spelling of the
+ * label — the same move `valuateItemRows` made into `item-valuation.ts`. */
+export function formatIssueCatalogNumber(
+  firstNumber: string,
+  lastNumber: string | null | undefined,
+  vendorAbbr: string,
+  areaPrefix: string | null | undefined
+): string {
+  const prefix = areaPrefix ? `${vendorAbbr}·${areaPrefix}` : vendorAbbr;
+  return `${prefix} ${formatCatalogRange(firstNumber, lastNumber, "–")}`;
+}

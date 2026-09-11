@@ -35,7 +35,9 @@ async function createTestUser(suffix: string) {
   });
 }
 
-/** Stand-ins for the operations #710 will add. `writes` is the only field the check reads. */
+/** Stand-ins, and still stand-ins now that #710 has landed: all seven real operations declare
+ *  `writes: false`, so there is still nothing on `main` a `read` token could be refused on. `writes`
+ *  is the only field the check reads, which is what makes a fixture the honest instrument here. */
 const READING: Pick<Operation, "name" | "writes"> = { name: "find_unlisted_copies", writes: false };
 const WRITING: Pick<Operation, "name" | "writes"> = { name: "set_offer_price", writes: true };
 

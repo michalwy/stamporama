@@ -8,8 +8,9 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707,
-#708 and #709 have landed; **both wrappers exist and the registry carries one operation**, and the
-rest of the track adds to it.
+#708, #709 and #710 have landed; **both wrappers exist and the registry carries seven operations** —
+#708's vocabulary read and #710's six reads over the collection — and the rest of the track adds to
+it. **Nothing in it writes**, which several statements below still rest on.
 
 ## It is beside the screen API, never over it
 
@@ -82,12 +83,24 @@ src/lib/agent-api/
   photo-url.ts      the one spelling of a photo link
   scope.ts          whether a token's scope covers an operation (#707)
   vocabulary.ts     the response shape and the name-or-id resolver (#708)
+  collection-reads.ts  the read responses and their projections (#710)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
   operations/
     vocabulary.ts   the vocabulary read and its registry entry (#708)   ← server-side
+    reads-shared.ts the collection header, the labeller, the location tree (#710)  ← server-side
+    search.ts       search_collection (#710)                            ← server-side
+    records.ts      get_stamp / get_issue / get_copy (#710)             ← server-side
+    holdings.ts     list_holdings / summarize_valuation (#710)          ← server-side
 ```
+
+**`collection-reads.ts` is on the pure side and is typed structurally** rather than against
+`ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
+for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
+module would pass the purity walk (it is erased before it runs), and it is still not what this side
+of the cut is for: the read models carry sixty fields apiece, and a projection naming them would stop
+being readable as a statement of what an agent is told.
 
 **Everything but `registry.ts` and `operations/` is pure and carries no `server-only`.** That is
 load-bearing twice over:
@@ -199,8 +212,14 @@ only `scope`. Do not grow a check on it.
 **The criterion is demonstrated against fixtures on purpose.** #707's *Done when* says a `read`
 token is refused on any writing operation and accepted on every reading one — and **nothing on
 `main` writes**, so there is nothing to refuse it on. That premise used to be *the registry is empty
-until #710*; #708 filled the registry and the conclusion is untouched, because its one operation
-declares `writes: false`. #711 and #712 are where a real refusal first becomes possible.
+until #710*, and then *#708 filled the registry and the conclusion is untouched, because its one
+operation declares `writes: false`*. Both are quoted rather than deleted, because each was true when
+it was written and will go on arriving in anything copied from it. **#710 filled the registry
+properly — seven operations — and the conclusion is untouched a second time, because every one of
+them declares `writes: false`.** That is the point worth carrying: what the criterion waits for is a
+*writing* operation and not a populated registry, so a reader meeting a busy registry and a fixture
+test is looking at the rule working rather than at a gap. #711 and #712 are where a real refusal
+first becomes possible.
 `tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations, and
 `tests/integration/agent-api-auth.test.ts` does the same over a real hashed token row, which is
 where a scope actually comes from. **Adding a domain operation to make the test real would breach
@@ -330,6 +349,129 @@ canonical name where one exists*, and the obvious implementation would be dead c
 columns **are** the default-language value, and the schema says the default language is excluded from
 the per-language inputs, so a translation row *for* `defaultLanguage` should not exist. What is
 implemented is the reading that is correct either way and costs nothing when there is nothing.
+
+## Reading the collection
+
+**Six operations, answering the first of the three agent workflows** (#710): *what do I have, in
+what condition, where does it sit, what is it worth, what is missing*. All six are `read` scope and
+none of them writes.
+
+| operation | what it is for |
+| --- | --- |
+| `search_collection` | one piece of text in, ids out — the only operation that takes no id |
+| `get_stamp` / `get_issue` / `get_copy` | one record in full, as one call |
+| `list_holdings` | what is held, scoped to a series, stamp, area, year, location or grade |
+| `summarize_valuation` | what that same scope is worth, four ways |
+
+**Everything here is `src/lib/` exposed rather than reinvented, and that is the rule to keep.**
+`search_collection` is `searchCollection` — the browser extension's *have I got this?* window
+(#529), which deliberately runs three searches rather than one because the three lists a collector
+reads already disagree about what a query means. The three records read through the **list's own**
+enrichment, `getStampListItem` / `getIssueListItem` / `listItemsPaginated`, which is what the detail
+*pages* already do (`inventory-lists.md`) so that a record cannot read one way to an agent and
+another on the screen beside it. The holdings pair is `listItemsPaginated` + `countItems` +
+`getHoldingsValuation`, which already narrow through one private `buildItemWhere`. **If you find
+yourself writing domain logic in an operation, stop** — it exists somewhere, or it is a decision
+that needs an issue.
+
+### The five verbs became six, and the fifth moved
+
+#710 named its five verbs *a starting set to refine during implementation*. What changed is one
+thing, and the reasoning is the part worth keeping rather than the count.
+
+**There is no *where is this copy* operation.** Every holdings row states its own `location` — the
+full filing path — and its `locationRef`, so *where is it* is answered by the row without a second
+call, and the other half of that bullet (*what is in this drawer*) is the `location` scope on
+`list_holdings`. A verb of its own would have been a third way of asking one question. **This is
+what makes the issue's own *Done when* reachable**: *what do I hold from this issue, in what
+condition, and where is it* is one call, and
+`tests/integration/agent-api-collection-reads.test.ts` makes it and reads the answer out rather than
+asserting that it could.
+
+**And *one thing in full* is three operations rather than one `get_thing(kind, id)`.** The *three*
+in *"as one call rather than three"* is the calls it takes to assemble one record — the stamp, then
+its prices, then its copies — not the three kinds. A discriminated resource verb would be the wide
+parameter surface the first decision rules out, and an agent that got an id out of
+`search_collection` already knows which kind it holds.
+
+### Six named scopes, and why the list stops there
+
+`list_holdings` and `summarize_valuation` share one scope — `issue_id`, `stamp_id`, `area`, `year`,
+`location`, `condition` — declared once, ANDed, and every one of them something a collector would
+say out loud. The Copies list's other two dozen filters are deliberately absent: an agent resolves a
+wide parameter surface by guessing, and each knob is one more thing to guess wrong.
+
+**They share the scope *in one function*, and that is not tidiness.** `countItems`'s own comment says
+a count that disagrees with the rows under it is worse than no count; the two operations resolving
+the same parameters twice, in two files, is how that guarantee is lost one refactor later.
+
+**A scope that names nothing is a refusal, never an empty answer.** An agent handed `[]` cannot tell
+*you hold none of these* from *that id was wrong*, and only the second is a mistake it can fix. So an
+`issue_id` or `stamp_id` matching nothing is `not_found` naming `search_collection`, a bad area,
+location or condition is #708's own refusal carrying the accepted names — and a **real** series that
+happens to hold nothing is an ordinary empty list. All three states are distinguishable, which is the
+whole point.
+
+**Vocabulary values resolve against `readCollectionVocabulary`**, the very endpoint the agent took
+the names from, rather than against a narrower query. A name the agent was told to send being
+refused is the failure that would be, and one dictionary row spelled in two places is how it
+happens.
+
+### What a row says, and what it deliberately does not
+
+The projections are pure, in `agent-api/collection-reads.ts`, structurally typed so `pnpm test:unit`
+holds them — `issue-stamp-match.ts`'s precedent, and for its reason. Four decisions live there:
+
+- **`null` and `""` are dropped; `0` and `false` are kept.** `copies: 0` is the answer *not held*
+  (#348) and `forSale: false` is a disposition the collector set.
+- **A null certificate and a null format are absent, never spelled.** A null certificate *is* "no
+  certificate" (ADR-0006 §2) and a null format *is* the single (ADR-0020); neither has a dictionary
+  row, so naming one would hand the agent a vocabulary value it could not find in
+  `get_collection_vocabulary` and could not send back. The result description says so instead.
+- **A stamp's two copy counts are never summed** (#348/#528) — copies of this stamp exactly, and
+  copies under its variants.
+- **A holdings row is leaner than a record.** A list is read twenty-five rows at a time and every
+  field is paid for on each of them; the rest is one `get_copy` away.
+
+### Two conventions this issue had to extend
+
+**`byCondition` counts the whole match, not the page.** `total` tells an agent it was trimmed and
+still leaves it nothing to say about the ninety rows it did not get, so `list_holdings` carries a
+condition breakdown over the whole matched set — `countItemsByCondition`, added beside `countItems`
+and through the same three calls, so it narrows over exactly the `where` the rows came from. It is
+what lets *what do I hold and in what condition* be one call over an area as well as over an issue.
+
+**A search states that it may be trimmed rather than stating a total.** The three searches behind
+`search_collection` take a fixed number of rows and count none of the rest, so
+`stampsMayBeTrimmed` / `issuesMayBeTrimmed` / `copiesMayBeTrimmed` say *this group came back full*
+rather than a total nothing measured. Counting the matches would mean changing all three searches,
+which is the reinvention #710 says not to do; claiming a definite *there are more* would be a fact
+nothing here took.
+
+### The valuation reads over a wider set than the holdings list
+
+`summarize_valuation` states four totals — catalogue, market, cost, write-off — and **every one of
+them travels with the counts saying how much of the collection is behind it** (`valuation.md`): a
+figure built from a tenth of the copies must never read as the collection's worth.
+
+**It covers the held copies *and* the ones in the same scope that are gone**, because
+`getHoldingsValuation` lifts the disposal exclusion on purpose (#396) so it can state a write-off.
+`list_holdings` shows the held ones only, so its `total` and `catalogue.pricedCount` are **not meant
+to agree** — stated here and in the operation's own result description, because a later reader who
+finds them disagreeing will otherwise "fix" it.
+
+### Two things outside `agent-api/` that #710 moved
+
+Both are one spelling being shared rather than a second one being written, and both are worth
+knowing before something is "simplified" back:
+
+- **`makeCatalogLabeller` is exported from `collection-search.ts`.** A stamp reading `Mi·PL 200` in
+  the window a collector opens at an auction and `Mi 200` to an agent would be two spellings of one
+  catalog identity (#66/#377).
+- **`formatIssueCatalogNumber` moved to `src/lib/catalog-range.ts`**, with
+  `src/app/stamp-display.ts` re-exporting it, so `src/lib` can state an issue's declared range
+  without reaching into `src/app`. It shortens the numeric end — `100–104` renders `100–04`, exactly
+  as `1298–302` does on screen — which is the app's own rule and not a defect to correct.
 
 ## What is deliberately absent
 
@@ -482,10 +624,11 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one operation.** It was empty on #706, which shipped none, and #708 added
-`get_collection_vocabulary` — so `paths` is no longer `{}`. That earlier sentence is quoted rather
-than deleted because it stood in four files and will go on arriving in anything copied from them:
-*#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the
-surface until #710.* What is unchanged is that `build([])` is still the right way to ask what an
+**The document carries seven operations.** It was empty on #706, which shipped none; #708 added
+`get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`, `get_copy`,
+`list_holdings` and `summarize_valuation`. Two earlier sentences are quoted rather than deleted
+because each stood in several files and will go on arriving in anything copied from them: *#706 ships
+no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface
+until #710*, and *the document carries one operation*. What is unchanged is that `build([])` is still the right way to ask what an
 empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
 asks it of a fixture list rather than of the registry.

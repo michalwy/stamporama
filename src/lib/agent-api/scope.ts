@@ -8,10 +8,13 @@
 //
 // **Nothing on `main` writes yet**, so the refusal is exercised against a fixture operation rather
 // than against a domain one. That is deliberate: adding an operation in order to make a test real
-// would breach the *Out of scope* of whichever issue did it. The registry stopped being empty with
-// #708, whose one operation declares `writes: false` — so the premise this comment used to give
-// ("the registry is empty until #710") has gone while its conclusion is untouched. #711 and #712
-// are where the first writing operation lands and where this stops being a fixture claim.
+// would breach the *Out of scope* of whichever issue did it. **The premise has been corrected twice
+// and the conclusion has not moved either time**: it used to read "the registry is empty until
+// #710", then "#708 filled it, whose one operation declares `writes: false`", and #710 has since
+// added six more — all of them `writes: false`. What the criterion waits for is a **writing**
+// operation, not a populated registry, so a busy registry beside a fixture test is this rule working
+// rather than a gap. #711 and #712 are where the first writing operation lands and where this stops
+// being a fixture claim.
 //
 // Pure: no Prisma, no `next/server`, no `server-only`.
 

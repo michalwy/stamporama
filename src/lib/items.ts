@@ -1703,7 +1703,13 @@ export async function listItemsPaginated(
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
   const dir = filters.sortDir ?? "asc";
-  const orderBy = [{ createdAt: dir }];
+  // `id` is the tiebreak, and it is what makes an offset page stable over ties (#710) —
+  // `listWantsPaginated`'s own last clause, for its own reason. `createdAt` alone is not a total
+  // order: `createMany` gives a bulk intake's copies the same millisecond, so two rows tying on it
+  // could come back in different orders on two reads, and an offset page boundary falling inside the
+  // tie would then repeat one row and skip another. It changes nothing anybody sees — the order
+  // within a tie was arbitrary before and is merely fixed now.
+  const orderBy = [{ createdAt: dir }, { id: dir }];
 
   const locationIds = await resolveLocationScope(collectionId, filters);
 
@@ -1753,6 +1759,43 @@ export async function countItems(
     buildItemWhere(collectionId, filters, locationIds)
   );
   return prisma.item.count({ where });
+}
+
+/** How many copies the current filter holds, **broken down by condition** (#710) — the same
+ * question {@link countItems} answers, asked one axis further in.
+ *
+ * Deliberately beside it and through the same three calls, so the breakdown narrows over exactly
+ * the `where` the list pages and the count totals: a breakdown taken over a different scope is a
+ * sentence whose halves describe different copies, which is `copy-counts.ts`' own argument for
+ * grouping condition and disposition in one `groupBy` rather than two.
+ *
+ * It exists for the agent API's holdings read (`agent-api.md`): that surface returns at most a
+ * hundred rows and states the full `total`, so an agent asked *what do I hold from this area and in
+ * what condition* can see that it was trimmed but could not answer the second half from the page.
+ * This answers it over the whole matched set for the price of one `groupBy`.
+ *
+ * The counts are returned by **id**, not by name: the caller already holds the condition dictionary
+ * (`get_collection_vocabulary`), and resolving a name here would be a second place for a dictionary
+ * row to be spelled.
+ */
+export async function countItemsByCondition(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<Map<string, number>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+  const rows = await prisma.item.groupBy({
+    by: ["conditionId"],
+    where,
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.conditionId, row._count._all]));
 }
 
 // ── Duplicate groups (#372) ──────────────────────────────────────────────────
