@@ -99,8 +99,11 @@ const FORBIDDEN = new Map<string, string>([
 // stating because it is the one entry nobody can add correctly by reading `src/` alone.**
 //
 // **This app does write to Colnect.** `extension/src/platform/colnect/list-write.ts` builds
-// `POST /item/col` with `act=check` — list membership, and since #704 an entry's quantity and grades
-// (#689, ADR-0042). It runs in the **content script**, on a colnect.com page, under the collector's
+// `POST /item/col` — `act=check` for list membership, and since #704 `act=cond` / `act=quantity` /
+// `act=x_cond_qty` to correct the quantity and grades of an entry the run has just created
+// (#689, ADR-0042 §*What is written* and §*An addition carries its quantity and grades*).
+// `list-export.ts` asks for a list's export under the same authority and is a **read** (#690).
+// It runs in the **content script**, on a colnect.com page, under the collector's
 // own session cookie, same-origin because the call carries no CSRF token. No `/api/v1` handler can
 // reach it: it is a different package, shipped to the collector's browser rather than run on the
 // server, so there is no import for this list to forbid and nothing for it to catch.
