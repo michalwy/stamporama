@@ -527,6 +527,52 @@ export interface GeneratedListingTexts {
 /** Which of an offer's generated texts a caller means (#266/#267). Also the `Offer` column name. */
 export type OfferTextField = "name" | "description" | "privateNote";
 
+/** The offer's own templates (#774), as every reader of them selects them. */
+interface OfferOwnTemplates {
+  nameTemplate: string | null;
+  descriptionTemplate: string | null;
+}
+
+/**
+ * **The template one field actually renders from**: the offer's own where it has one, the platform's
+ * otherwise (#774). The private note has no offer-own column by decision — a lot has nothing to say
+ * in a seller-only note the platform's template does not already say — so it is the platform's or
+ * nothing.
+ *
+ * It exists as one function because *which template applies* and *is there one to apply at all* are
+ * the same question, and asking them apart is how they came to disagree: {@link regenerateOfferText}
+ * preferred the offer's own while {@link getOfferDetail}'s `regeneratable` read the platform's alone,
+ * so an offer carrying its own template on a platform with none showed ↻ **disabled** over wording it
+ * would have rendered perfectly (#1146). A bulk lot is the case that meets it, since that is where an
+ * offer-own template is normal — and the failure direction is the quiet one, a greyed-out control
+ * nobody files a bug about.
+ */
+function effectiveTemplate(
+  field: OfferTextField,
+  own: OfferOwnTemplates | null,
+  platform: Pick<PlatformTemplates, "titleTemplate" | "descriptionTemplate" | "privateNoteTemplate">
+): string | null {
+  switch (field) {
+    case "name":
+      return own?.nameTemplate ?? platform.titleTemplate;
+    case "description":
+      return own?.descriptionTemplate ?? platform.descriptionTemplate;
+    case "privateNote":
+      return platform.privateNoteTemplate;
+  }
+}
+
+/** Whether ↻ Regenerate on this field would produce anything — the question the control is enabled
+ * on, and the one the agent surface refuses on (#711). Blank counts as absent, because that is what
+ * {@link generateListingTexts} does with it. */
+function hasEffectiveTemplate(
+  field: OfferTextField,
+  own: OfferOwnTemplates | null,
+  platform: Pick<PlatformTemplates, "titleTemplate" | "descriptionTemplate" | "privateNoteTemplate">
+): boolean {
+  return !!effectiveTemplate(field, own, platform)?.trim();
+}
+
 /**
  * Generate every listing text a platform has a template for (#209/#210, #266, #267) over one
  * composition, in a single copy load. The title renders over all the copies flat; the description and
@@ -3438,8 +3484,12 @@ export interface OfferDetail {
    * how it renders on screen and what the copy action puts on the clipboard. The private note has no
    * format; it is always plain. */
   descriptionFormat: DescriptionFormat;
-  /** Which generated texts the platform actually has a template for (#266/#267) — each field's
-   * ↻ Regenerate control enables itself on this. */
+  /** Which generated texts there is actually a template to render — the offer's own where it carries
+   * one (#774), the platform's otherwise (#266/#267). Each field's ↻ Regenerate control enables
+   * itself on this, and `set_offer_text` refuses on it (#711), so it answers what regeneration would
+   * do rather than what the platform happens to configure (#1146). Never `nameEdited`: ↻ is how a
+   * hand-edited field is *handed back* to the template, so a field it works on is exactly a field
+   * this must say yes to. */
   regeneratable: Record<OfferTextField, boolean>;
   /** Which of them the collector has written by hand (#380). Such a field no longer follows the
    * offer's composition, which the screen says beside it — otherwise "why didn't my title update?"
@@ -3687,6 +3737,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       nameEdited: true,
       descriptionEdited: true,
       privateNoteEdited: true,
+      // The offer's own templates (#774), read for `regeneratable` alone: whether ↻ has anything to
+      // render turns on these before it turns on the platform's (#1146).
+      nameTemplate: true,
+      descriptionTemplate: true,
       descriptionFormat: true,
       collectionId: true,
       platformId: true,
@@ -4002,10 +4056,12 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     description: offer.description,
     privateNote: offer.privateNote,
     descriptionFormat: normalizeDescriptionFormat(offer.descriptionFormat),
+    // The offer's own template counts here exactly as it does when the text is rendered (#1146) —
+    // one expression, so the control cannot be disabled over a template the offer is carrying.
     regeneratable: {
-      name: !!offer.platform.titleTemplate?.trim(),
-      description: !!offer.platform.descriptionTemplate?.trim(),
-      privateNote: !!offer.platform.privateNoteTemplate?.trim(),
+      name: hasEffectiveTemplate("name", offer, offer.platform),
+      description: hasEffectiveTemplate("description", offer, offer.platform),
+      privateNote: hasEffectiveTemplate("privateNote", offer, offer.platform),
     },
     edited: {
       name: offer.nameEdited,
@@ -5206,17 +5262,20 @@ export async function regenerateOfferText(
     select: { nameTemplate: true, descriptionTemplate: true },
   });
   // Only the asked-for field's template is handed to the generator, so the others are neither
-  // rendered nor written — a regenerated description never disturbs a hand-edited title.
+  // rendered nor written — a regenerated description never disturbs a hand-edited title. Which
+  // template that is comes from {@link effectiveTemplate}, the same call `getOfferDetail` enables
+  // the control on, so *would ↻ produce something* and *what does ↻ render* cannot part (#1146).
+  const template = effectiveTemplate(field, own, platform);
   const only: PlatformTemplates = {
     titleTemplate: null,
     descriptionTemplate: null,
     privateNoteTemplate: null,
     titleLanguage: platform.titleLanguage,
     ...(field === "name"
-      ? { titleTemplate: own?.nameTemplate ?? platform.titleTemplate }
+      ? { titleTemplate: template }
       : field === "description"
-        ? { descriptionTemplate: own?.descriptionTemplate ?? platform.descriptionTemplate }
-        : { privateNoteTemplate: platform.privateNoteTemplate }),
+        ? { descriptionTemplate: template }
+        : { privateNoteTemplate: template }),
   };
   const texts = await generateListingTexts(
     ownerId,

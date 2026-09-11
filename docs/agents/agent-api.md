@@ -684,11 +684,18 @@ collector's own screen, which is how wording written by hand is undone. #711 lis
 text* and *edit an offer's text* as two of its six verbs and they are two ways of setting one field,
 so they are one operation whose description says which is which.
 
-**A field the marketplace has no template for is refused, and this is the one guard the domain does
+**A field with no template to render from is refused, and this is the one guard the domain does
 not make for itself.** `regenerateOfferText` writes what the generator produced, which over no
 template is null — so the call would **empty** the field. The collector's own ↻ is *disabled* there
 rather than refused, off `OfferDetail.regeneratable`, and the operation reads that same answer so the
 two surfaces cannot come to disagree. It was found by a test failing rather than by reading.
+
+**That shared answer is load-bearing in both directions, and #1146 is the second direction arriving.**
+The refusal was worded and computed as *the marketplace has no template*, while a listing may carry
+its own (#774) — so an agent omitting `text` on a bulk lot's title was refused a render that would
+have worked, and the collector's ↻ was greyed out over the same wording. One projection was wrong and
+both surfaces were wrong with it; correcting it there corrected both, which is exactly what reading
+one answer is for. Giving either surface a computation of its own would undo that.
 
 `get_offer` publishes both answers — `templatedTexts` and `editedTexts` — in the agent's own
 spelling, so an agent need not find out by trying. **The agent's word for the title is `title`**;
