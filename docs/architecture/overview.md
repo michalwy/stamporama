@@ -656,11 +656,15 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 
 **API handler:** `src/app/api/auth/[...all]/route.ts` — catches all Better Auth API requests (`GET` + `POST`) via `toNextJsHandler(auth)`.
 
-**Middleware:** `src/middleware.ts` — protects `/c/*` (collection routes) and `/collections` (collection picker). Runs on the Next.js Edge runtime; calls `/api/auth/get-session` via native `fetch` to avoid importing Node.js-only modules in Edge context. Unauthenticated requests are redirected to `/sign-in`.
+**Proxy (middleware):** `src/proxy.ts` — **renews the session cookie's lease, and authorizes nothing** (#1175; [ADR-0052](../decisions/0052-sessions-last-until-sign-out.md)). It re-issues whichever of the two session cookie names the request carried, verbatim, with a fresh `Max-Age`; the value is opaque to it, so it needs no secret, no database and no Prisma and stays on the Edge runtime. Every request that carries the cookie still has it checked server-side by Better Auth. Its matcher excludes `/api/auth`, because Better Auth's own routes write that cookie themselves and a renewal on the sign-out response would be a competing `Set-Cookie`. *(An earlier version of this paragraph described a middleware that redirected unauthenticated requests to `/sign-in`; no such file existed — route protection is and was each layout's and each server action's own `getSession` call, below.)*
+
+**Session lifetime:** `src/lib/session-lifetime.ts` — being signed in lasts until the collector signs out (#1175). Better Auth's defaults were seven days with a daily refresh, and the refresh only ever reached the **stored row**: `auth.api.getSession({ headers })` discards the `Set-Cookie` it produces, and nothing here calls Better Auth through a path that would apply it. So the cookie expired on a clock that started at sign-in and nothing the collector did reset it. The module holds the spans (`expiresIn` ten years, `updateAge` thirty days), the two cookie names, and the pure rules behind the sign-in screen's explanation; `src/lib/session-end.ts` performs the lookup that chooses between them.
 
 **Prisma schema:** Better Auth manages four tables — `user`, `session`, `account`, `verification` — added in migration `20260714190000_add_better_auth_schema`.
 
-**Session check in Server Components:** call `auth.api.getSession({ headers: await headers() })` directly (Node.js runtime, safe outside middleware).
+**Session check in Server Components:** call `auth.api.getSession({ headers: await headers() })` directly (Node.js runtime, safe outside the proxy). This is also where route protection lives — each collection layout, page and server action redirects to `/sign-in` on a `null` session.
+
+**Why the sign-in screen can explain itself:** a cookie still in the browser while the sign-in form is on screen means something other than the collector ended the session (signing out clears it). The signed cookie carries the session token in the clear, so looking it up separates the three reasons: no row (the database was replaced or reset), an expired row, and a live row (the cookie's signature or its `__Secure-` prefix no longer matches — the secret was rotated, or the scheme changed). A move to a different **host** cannot be explained, because that browser never offers the cookie there.
 
 ## The agent API (`/api/v1` and `/api/mcp`, #706; [ADR-0050](../decisions/0050-versioned-agent-api.md))
 

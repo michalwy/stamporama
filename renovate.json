@@ -108,7 +108,7 @@
       "automerge": false
     },
     {
-      "description": "NEVER ALONE — authentication. No written reason in the tree; on the user's instruction (2026-09-06), because it is the authentication library.",
+      "description": "NEVER ALONE — authentication. On the user's instruction (2026-09-06), because it is the authentication library; since #1175 there is also a written reason. src/lib/session-lifetime.ts states Better Auth's two session cookie names, derived from its cookiePrefix default and its __Secure- rule, and src/proxy.ts renews whichever of them the browser sent so a session lasts until the collector signs out (ADR-0052). A release that renamed the cookie would break that renewal silently — the lease would go back to expiring on a clock nothing resets, and no required check can see it.",
       "groupName": "Auth",
       "matchDepNames": ["better-auth"],
       "schedule": [],
