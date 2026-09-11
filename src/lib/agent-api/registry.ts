@@ -1,27 +1,34 @@
 // The operation registry (#706) — the single list every wrapper reads.
 //
-// **It carries the vocabulary read, the collection reads and the offer verbs.** #706 built the
-// foundation and shipped none; #708 added `get_collection_vocabulary`, which is the operation every
-// later one leans on — it is what lets an agent send `"MNH"` instead of a cuid; #710 added the six
-// reads over the collection; #711 added the six offer verbs, the **first three writes on this
-// surface**. #712 adds wants and trades, and each one adds an entry here and nowhere else. The
-// OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both generated from this
-// array.
+// **It carries the vocabulary read, the collection reads, the offer verbs and the trade verbs.**
+// #706 built the foundation and shipped none; #708 added `get_collection_vocabulary`, which is the
+// operation every later one leans on — it is what lets an agent send `"MNH"` instead of a cuid;
+// #710 added the six reads over the collection; #711 added the six offer verbs, the **first three
+// writes on this surface**; #712 added the two want reads, the checklist gap and the nine trade
+// verbs — twelve operations, five of which write — taking the array to **twenty-five**. Each one is
+// an entry here and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP
+// tool list are both generated from this array.
 //
 // **The order is the order an agent meets them in**, which is the only thing this array decides
 // beyond membership: the vocabulary first because a session starts by fetching it, then the search
 // that turns text into ids, then the three records those ids open, then the two reads over what is
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
-// drafting a listing and drafting one before pricing and wording it. It is what the generated
-// document lists them in and what a model reads down.
+// drafting a listing and drafting one before pricing and wording it — then the exchange workflow in
+// **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
+// this counterparty have that answers it, what is this set still missing, then the trade itself,
+// built one side at a time and read back as a verdict. It is what the generated document lists them
+// in and what a model reads down.
 //
-// **Nothing here publishes to a marketplace, and that is enforced by there being no such entry**
-// (#711, `agent-api.md`, *What is deliberately absent*). It is not a flag: a switch is something
-// that can be flipped, and an operation that does not exist cannot be. Two tests keep it that way —
-// `tests/integration/agent-api-offers.test.ts` fails on a publish-shaped **name** in this array, and
+// **Nothing here publishes to a marketplace and nothing here reaches a counterparty, and both are
+// enforced by there being no such entry** (#711, #712; `agent-api.md`, *What is deliberately
+// absent*). It is not a flag: a switch is something that can be flipped, and an operation that does
+// not exist cannot be. Four tests keep it that way, in two pairs that fail on different things —
+// `tests/integration/agent-api-offers.test.ts` and `tests/integration/agent-api-trades.test.ts` fail
+// on a publish-shaped or send-shaped **name** in this array, and
 // `tests/unit/agent-api-operation-boundary.test.ts` fails on an operation module reaching the domain
-// functions that publish, record a listing or move a state, which is the half that still works when
-// somebody adds an operation called something else entirely.
+// functions that publish a listing, move a state, mint a share link, write as the partner, record
+// what arrived, close a trade, or claim a Colnect list is in step — which is the half that still
+// works when somebody adds an operation called something else entirely.
 //
 // **The import direction is one-way and it matters.** This module imports the operation modules; an
 // operation module imports the types and the helpers beside it, never this file. A registry that
@@ -47,6 +54,22 @@ import {
   setOfferPriceOperation,
   setOfferTextOperation,
 } from "./operations/offers";
+import {
+  findChecklistGapsOperation,
+  listWantsOperation,
+  matchWantsOperation,
+} from "./operations/wants";
+import {
+  addTradeGiveLinesOperation,
+  addTradeReceiveLinesOperation,
+  createTradeOperation,
+  getTradeBalanceOperation,
+  getTradeOperation,
+  listTradeLinesOperation,
+  listTradesOperation,
+  removeTradeLineOperation,
+  serveTradeRequirementOperation,
+} from "./operations/trades";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -65,6 +88,18 @@ export const OPERATIONS: readonly Operation[] = [
   draftOfferOperation,
   setOfferPriceOperation,
   setOfferTextOperation,
+  listWantsOperation,
+  matchWantsOperation,
+  findChecklistGapsOperation,
+  listTradesOperation,
+  createTradeOperation,
+  getTradeOperation,
+  listTradeLinesOperation,
+  getTradeBalanceOperation,
+  addTradeGiveLinesOperation,
+  serveTradeRequirementOperation,
+  addTradeReceiveLinesOperation,
+  removeTradeLineOperation,
 ];
 
 interface Bound {

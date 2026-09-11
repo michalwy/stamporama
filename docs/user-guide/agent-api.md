@@ -92,12 +92,26 @@ call every assistant makes first anyway.
 The tools grow with each release, and the assistant reads the current list itself, so what it can do
 is whatever your instance offers rather than whatever was written here.
 
-**A read-and-write token can now change things, and this release is the first where that is true.**
-It can start a listing around copies you are not offering yet, set what you are asking for it, and
-write or re-generate its title and description — all of it inside Stamporama, on a listing that is
-still a **draft**. Nothing it does goes anywhere near a marketplace, and it cannot mark a listing
-ready or make it live: those are still your two clicks on the offer's own screen. Everything it
-writes is on that screen and is undone there.
+**A read-and-write token can change things, and there are two places where that is now true.**
+
+On **listings**, it can start one around copies you are not offering yet, set what you are asking
+for it, and write or re-generate its title and description — all of it inside Stamporama, on a
+listing that is still a **draft**. Nothing it does goes anywhere near a marketplace, and it cannot
+mark a listing ready or make it live: those are still your two clicks on the offer's own screen.
+
+On **exchanges**, it can start a trade with somebody you already have in Contacts, say what you
+would send and what you would like back, take a line off, and tell you whether the two sides
+balance. It works out which of your copies would answer *"the Kościuszko, mint"* using the same
+order the app uses — one you have marked for trade first, then a plain single, then one with a
+picture — and it tells you plainly when you hold nothing that fits, which is the half you send back
+to your partner. It can also tell you which of somebody's stamps are on your want list, and what a
+series' checklists are still missing.
+
+**What it cannot do on an exchange is anything your partner would see.** It does not share the
+list, make the link, agree the trade, answer what they wrote on it, or close it. A trade it builds
+sits on your trades screen as a draft until you look at it.
+
+**Everything it writes is on a screen you already know, and is undone there.**
 
 **Which is exactly why *read only* is the setting to start from.** A listing drafted at the wrong
 price is a minute to fix, and it is still a minute you did not plan to spend — so let an assistant
@@ -110,7 +124,9 @@ Two things it will never do, however you ask, and they are absent rather than sw
   a minute, and one that mispublishes lists a stamp at the wrong price under your name on somebody
   else's platform.
 - **It never reaches a counterparty.** It can build and balance a trade; it does not send a
-  proposal, share a link, or write to Colnect.
+  proposal, share a link, agree or close a trade, answer what a partner wrote on one, or write to
+  Colnect. It also never sees a partner's email address, telephone number or the notes you keep
+  about them — the only thing it is told about a person is their name.
 
 And with a **read only** token it changes nothing at all, which is the setting to start from.
 

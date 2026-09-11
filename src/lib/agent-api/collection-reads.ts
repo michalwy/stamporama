@@ -182,7 +182,7 @@ export interface SearchStampRow {
  * give, and repeating it on every variant scales noise with the collection. The read models report
  * the subtype as stored and each surface drops the default; this is that drop, for this surface.
  */
-function subtypeName(
+export function subtypeName(
   subtype: { readonly name: string; readonly isDefault: boolean } | null
 ): string | null {
   return subtype && !subtype.isDefault ? subtype.name : null;

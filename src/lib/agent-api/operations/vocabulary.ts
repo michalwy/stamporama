@@ -73,7 +73,7 @@ function entry(
 /**
  * Read the collection's vocabulary.
  *
- * One `Promise.all`, because these are nine independent reads and nothing here depends on anything
+ * One `Promise.all`, because these are ten independent reads and nothing here depends on anything
  * else here — except the collection row itself, which has to come first: it carries the
  * `defaultLanguage` every translation is selected by, and it is where ownership is proved.
  */
@@ -106,6 +106,7 @@ export async function readCollectionVocabulary(
     vendors,
     catalogs,
     platforms,
+    exchangePartners,
   ] = await Promise.all([
       prisma.stampCondition.findMany({
         where: { collectionId },
@@ -192,6 +193,16 @@ export async function readCollectionVocabulary(
         orderBy: { name: "asc" },
         select: { id: true, name: true, platformCurrency: true },
       }),
+      // **The same three guards over the same table, and here the mapper matters more** (#712).
+      // A platform is a marketplace; an exchange partner is a **person** — and `Contact` is the row
+      // that carries `email`, `phone`, `fullName` and `notes`. Two fields leave this query and two
+      // reach the agent. The role flags are independent and combinable (ADR-0007 §4), so a contact
+      // who is both a partner and a seller is returned; their personal columns still are not.
+      prisma.contact.findMany({
+        where: { collectionId, exchangePartner: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
     ]);
 
   return {
@@ -239,6 +250,7 @@ export async function readCollectionVocabulary(
       ...entry(row.id, row.name, null, undefined),
       currency: row.platformCurrency,
     })),
+    exchangePartners: exchangePartners.map((row) => entry(row.id, row.name, null, undefined)),
   };
 }
 
@@ -262,13 +274,13 @@ export const getCollectionVocabularyOperation: Operation = {
   method: "GET",
   path: "/vocabulary",
   description:
-    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs and platforms — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
+    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs, marketplaces and exchange partners — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
   writes: false,
   parameters: [],
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

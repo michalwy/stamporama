@@ -305,6 +305,44 @@ function toSectionData(row: {
 }
 
 /**
+ * The `where` behind the page and behind {@link countTrades}, so a count can never disagree with the
+ * rows under it. Extracted for #712 rather than written a second time: `countItems`' own comment
+ * says a count that disagrees with its rows is worse than no count, and two spellings of one filter
+ * is how that happens.
+ */
+function buildTradeListWhere(
+  collectionId: string,
+  filters: TradeListFilters
+): Prisma.TradeWhereInput {
+  return {
+    collectionId,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.partnerId ? { partnerId: filters.partnerId } : {}),
+    ...(filters.tradeNo ? { tradeNo: filters.tradeNo } : {}),
+    ...(filters.partnerSearch
+      ? { partner: { name: { contains: filters.partnerSearch, mode: "insensitive" } } }
+      : {}),
+  };
+}
+
+/**
+ * How many trades match, whatever a page holds (#712).
+ *
+ * Beside the read it belongs with, `countOffers`' move for #711, and over the very same `where`.
+ * The screen does not use it — the trades list pages and says *load more* — while `/api/v1` states
+ * the full `total` on every list (#706), which is what stops an agent answering about a slice as
+ * though it had seen the whole thing.
+ */
+export async function countTrades(
+  ownerId: string,
+  collectionId: string,
+  filters: TradeListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.trade.count({ where: buildTradeListWhere(collectionId, filters) });
+}
+
+/**
  * Paginated trades for a collection (offset-based, mirroring `listPurchasesPaginated`).
  *
  * Newest first by default: a trade is worked on for a few weeks and then filed, so the ones being
@@ -324,15 +362,7 @@ export async function listTradesPaginated(
     sortBy === "tradeNo" ? [{ tradeNo: dir }] : [{ createdAt: dir }, { tradeNo: dir }];
 
   const rows = await prisma.trade.findMany({
-    where: {
-      collectionId,
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.partnerId ? { partnerId: filters.partnerId } : {}),
-      ...(filters.tradeNo ? { tradeNo: filters.tradeNo } : {}),
-      ...(filters.partnerSearch
-        ? { partner: { name: { contains: filters.partnerSearch, mode: "insensitive" } } }
-        : {}),
-    },
+    where: buildTradeListWhere(collectionId, filters),
     orderBy,
     take: pageSize + 1,
     skip: offset,

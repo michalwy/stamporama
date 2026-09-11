@@ -84,6 +84,25 @@ export interface PlatformVocabularyEntry extends VocabularyEntry {
   readonly currency: string | null;
 }
 
+/**
+ * Somebody the collection exchanges stamps with (#712).
+ *
+ * **A `Contact` with `exchangePartner: true`, projected down to two fields, and the projection is
+ * the point** — {@link PlatformVocabularyEntry}'s own rule, and here it matters more rather than
+ * less. A platform is a marketplace; an exchange partner is a **person**, and the row carrying them
+ * is the one that also carries `email`, `phone`, `fullName` and `notes`. None of those is here, and
+ * only rows flagged `exchangePartner` are returned at all. Do not replace the mapper with a spread:
+ * #708 measured that the `where` and the `select` are depth behind it and that the mapper is what
+ * actually protects the response.
+ *
+ * **It is here because `create_trade` needs a partner and must not invent one.** `createTrade` will
+ * find-or-create a contact from a typed name, exactly as a purchase's supplier does — which is
+ * right for a person filling in a form and wrong for this surface, where *writing to the vocabulary
+ * is out of scope* (#708). So the agent resolves a partner the collection already knows, or it is
+ * refused with the names that would have worked.
+ */
+export type ExchangePartnerVocabularyEntry = VocabularyEntry;
+
 /** A catalog book, flat, with its vendor as an id rather than as a nested object. */
 export interface CatalogVocabularyEntry extends VocabularyEntry {
   /** The vendor whose book this is — join against `catalogVendors` in the same response. */
@@ -108,9 +127,19 @@ export interface CatalogVocabularyEntry extends VocabularyEntry {
  * module-level constant in `src/lib/currencies.ts`, app-wide, not per-collection, not configurable
  * and already known to any model. What the agent actually needs is the **denomination** a figure it
  * reads back is stated in, and that is {@link baseCurrency}: one scalar rather than twenty-five
- * codes it would carry for a whole session and never send. Where an agent might have thought it was
- * *choosing* a currency — drafting an offer — it is choosing a {@link platforms} entry, and the
- * currency is locked from that (#196).
+ * codes it would carry for a whole session and never send.
+ *
+ * **One sentence that stood here is retired by #712 and is quoted rather than deleted**, because it
+ * was true when it was written and will go on arriving in anything copied from it: *"Where an agent
+ * might have thought it was choosing a currency — drafting an offer — it is choosing a
+ * {@link platforms} entry, and the currency is locked from that (#196)"*, resting on *no operation
+ * in #710, #711 or #712 takes a currency as input*. **#712's `create_trade` does**: a trade's
+ * currency is the one the *partner's* figures are in, it is nobody's platform, and it defaults to
+ * {@link baseCurrency} exactly as the collector's own form defaults it. **The decision above is
+ * untouched and this is not a case for revisiting it**: what #708 settled is that currencies need no
+ * *vocabulary read*, because they are not cuid-keyed — and a closed `values` list on the parameter
+ * is the mechanism #706 already provides for a small, fixed set. What is retired is the premise's
+ * factual half, not its conclusion, and the offer case it describes still holds.
  */
 export interface CollectionVocabulary {
   /**
@@ -142,6 +171,16 @@ export interface CollectionVocabulary {
    * that kept currencies out.
    */
   readonly platforms: readonly PlatformVocabularyEntry[];
+  /**
+   * **Added by #712 on the same test, and #708 wrote the licence for it in advance**: *if a
+   * vocabulary turns out to be missing when one of them is built, adding a key is not a break* —
+   * `/api/v1` only ever grows. `create_trade` cannot name a partner without this, and the
+   * alternative is a `create_trade` that writes a person into the address book from a typed name,
+   * which is the *writing to the vocabulary* that is out of scope for the whole surface.
+   *
+   * See {@link ExchangePartnerVocabularyEntry} for what is projected and what deliberately is not.
+   */
+  readonly exchangePartners: readonly ExchangePartnerVocabularyEntry[];
 }
 
 /** How a vocabulary is named in an error sentence — the agent reads these, so they are English. */
@@ -154,7 +193,8 @@ export type VocabularyName =
   | "location"
   | "catalog vendor"
   | "catalog"
-  | "platform";
+  | "platform"
+  | "exchange partner";
 
 /** Trim and case-fold, so that `"mnh"`, `" MNH "` and `"MNH"` are one value. */
 function fold(value: string): string {

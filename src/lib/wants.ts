@@ -482,6 +482,28 @@ export async function listWantsPaginated(
 }
 
 /**
+ * How many wants match, whatever a page holds (#712).
+ *
+ * Here rather than in the agent operation that needs it, beside the read it belongs with — the move
+ * `countOffers` made for #711. It runs over `buildWantListWhere`, the *same* `where` the page and
+ * the year facets already share, so a count that disagreed with the rows under it is not a thing
+ * that can happen: `countItems`' own comment says such a count is worse than no count at all.
+ *
+ * The screen does not use it. The want list is cursor-scrolled and says *load more* rather than
+ * *of N*, while `/api/v1` states the full `total` on every list (#706) — an agent handed
+ * twenty-five rows and no total cannot tell a page from the whole want list, and answers
+ * confidently about a slice.
+ */
+export async function countWants(
+  ownerId: string,
+  collectionId: string,
+  filters: WantListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.want.count({ where: buildWantListWhere(collectionId, filters) });
+}
+
+/**
  * The catalogue range for one page of wants (#532), keyed by want id.
  *
  * Everything it loads is scoped to **the page**: the catalogue prices of the page's stamps and of
@@ -1361,8 +1383,45 @@ export async function findWantsSatisfiedBy(
   collectionId: string,
   copies: ArrivingCopy[]
 ): Promise<WantMatchForCopy[]> {
+  const matches = await findWantsMatching(
+    ownerId,
+    collectionId,
+    copies.map((copy) => ({ ...copy, key: copy.itemId }))
+  );
+  return matches.map(({ key, want }) => ({ itemId: key, want }));
+}
+
+/** A key to ask about, with a handle the caller gets back so it can tell the answers apart. */
+export interface WantMatchCandidate extends WantCandidateCopy {
+  key: string;
+}
+
+/** One open want a candidate would satisfy, against the caller's own handle for it. */
+export interface WantMatchForKey {
+  key: string;
+  want: WantListItem;
+}
+
+/**
+ * The open wants each of these **keys** would satisfy — the body of {@link findWantsSatisfiedBy},
+ * asked about material that is not a copy in this collection.
+ *
+ * **Extracted rather than written a second time** (#712). The intake review asks it of copies
+ * arriving in the collector's hands; the agent API asks it of a counterparty's list, where there is
+ * no `Item` and so no `itemId` to key by. **A second implementation is the thing to avoid**: the
+ * rule is `wantMatchesCopy` and a second reading of it would let the agent and the intake review
+ * disagree about what satisfies a want, with nothing ever going red over it. So the key becomes the
+ * caller's, and `findWantsSatisfiedBy` passes its own `itemId` as one.
+ *
+ * Read, never write: closing, narrowing or leaving each want open is the collector's decision.
+ */
+export async function findWantsMatching(
+  ownerId: string,
+  collectionId: string,
+  candidates: readonly WantMatchCandidate[]
+): Promise<WantMatchForKey[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  const stampIds = [...new Set(copies.map((c) => c.stampId))];
+  const stampIds = [...new Set(candidates.map((c) => c.stampId))];
   if (stampIds.length === 0) return [];
 
   const rows = await prisma.want.findMany({
@@ -1371,7 +1430,7 @@ export async function findWantsSatisfiedBy(
   });
   if (rows.length === 0) return [];
 
-  const matches: WantMatchForCopy[] = [];
+  const matches: WantMatchForKey[] = [];
   for (const row of rows) {
     const acceptance: WantAcceptance = {
       stampId: row.stampId,
@@ -1379,11 +1438,11 @@ export async function findWantsSatisfiedBy(
       certificateStatusIds: row.certificateStatuses.map((c) => c.certificateStatusId),
       formatIds: row.formats.map((f) => f.formatId),
     };
-    for (const copy of copies) {
-      if (wantMatchesCopy(acceptance, copy)) {
-        // Counts all zero = not asked, as in `getWant` — the review dialog names the arriving copy,
-        // not the pile behind it.
-        matches.push({ itemId: copy.itemId, want: toWantListItem(row, NO_COPIES) });
+    for (const candidate of candidates) {
+      if (wantMatchesCopy(acceptance, candidate)) {
+        // Counts all zero = not asked, as in `getWant` — the caller names the material it asked
+        // about, not the pile behind it.
+        matches.push({ key: candidate.key, want: toWantListItem(row, NO_COPIES) });
       }
     }
   }
