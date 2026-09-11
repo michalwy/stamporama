@@ -42,6 +42,7 @@ class CountingStorage implements Storage {
   readonly objects = new Map<string, { bytes: Buffer; mime: string }>();
   gets = 0;
   puts = 0;
+  copies = 0;
 
   async put(key: string, input: StorageInput, mime: string): Promise<void> {
     this.puts += 1;
@@ -66,6 +67,15 @@ class CountingStorage implements Storage {
       this.objects.set(toKey, held);
       this.objects.delete(fromKey);
     }
+  }
+
+  /** Counted apart from `gets` and `puts` on purpose: a server-side copy is the backend moving
+   * bytes inside itself, and the whole claim of #1134 is that it costs neither of the other two. */
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    this.copies += 1;
+    const held = this.objects.get(fromKey);
+    if (!held) throw new Error(`No such object: ${fromKey}`);
+    this.objects.set(toKey, { ...held });
   }
 
   async resolveUrl(key: string): Promise<ResolveResult> {
@@ -172,6 +182,41 @@ describe("local storage cache (#591)", () => {
     assert.equal(remote.gets, 2);
     assert.equal(await prisma.storageCacheEntry.count(), 0);
     assert.deepEqual(await cachedFiles(), []);
+  });
+
+  it("a copy keeps the source's cached entry and drops the destination's (#1134)", async () => {
+    const remote = new CountingStorage();
+    const storage = new CachingStorage(remote);
+    const from = `${COLLECTION}/photo-copy-src/full.jpg`;
+    const to = `${COLLECTION}/photo-copy-dst/full.jpg`;
+    const bytes = blob(16 * 1024, 9);
+
+    // The source is warm because something did real work over it.
+    await storage.put(from, bytes, MIME, "work");
+    assert.equal(await prisma.storageCacheEntry.count(), 1);
+    // And the destination key is stale from an earlier life, which a copy must not let survive.
+    await storage.put(to, blob(16 * 1024, 1), MIME, "work");
+    assert.equal(await prisma.storageCacheEntry.count(), 2);
+
+    await storage.copy(from, to);
+
+    const rows = await prisma.storageCacheEntry.findMany({ select: { key: true } });
+    assert.deepEqual(
+      rows.map((r) => r.key),
+      [from],
+      "the source survives — unlike a move, the object it copies is still there"
+    );
+    assert.deepEqual(await cachedFiles(), [
+      path.join(cacheRoot(), "gcs", from),
+    ]);
+
+    // The source is still served locally: a copy must not cost the warm object a fetch.
+    assert.deepEqual(await readAll(await storage.get(from, MIME, "work")), bytes);
+    assert.equal(remote.gets, 0);
+
+    // The destination is a miss and comes back with the copied bytes, not the stale ones.
+    assert.deepEqual(await readAll(await storage.get(to, MIME, "work")), bytes);
+    assert.equal(remote.gets, 1);
   });
 
   it("resolveUrl never populates — the bytes bypass the app entirely", async () => {
@@ -387,6 +432,7 @@ describe("local storage cache (#591)", () => {
       get: (key: string, mime: string) => remote.get(key, mime),
       delete: (key: string) => remote.delete(key),
       move: (from: string, to: string) => remote.move(from, to),
+      copy: (from: string, to: string) => remote.copy(from, to),
       resolveUrl: (key: string) => remote.resolveUrl(key),
       describe: () => remote.describe(),
       healthCheck: () => remote.healthCheck(),

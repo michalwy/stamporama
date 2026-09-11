@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 import type {
@@ -82,13 +82,24 @@ export class FilesystemStorage implements Storage {
     } catch (err) {
       // rename fails across devices/mounts (EXDEV); fall back to copy + delete.
       if ((err as NodeJS.ErrnoException).code === "EXDEV") {
-        const { copyFile } = await import("node:fs/promises");
         await copyFile(from, to);
         await rm(from, { force: true });
         return;
       }
       throw err;
     }
+  }
+
+  /** A copy on this backend is a file copy, and there is nothing cheaper available: the bytes
+   * are already on this disk, so no round trip is saved and none was ever paid (#1134). It
+   * exists so that the caller does not have to know which backend it is talking to — the whole
+   * point of this interface — and so that the GCS binding, where the saving is real, is reached
+   * through a method every binding has. */
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    const from = keyToPath(fromKey);
+    const to = keyToPath(toKey);
+    await mkdir(path.dirname(to), { recursive: true });
+    await copyFile(from, to);
   }
 
   async resolveUrl(key: string, mime: string): Promise<ResolveResult> {

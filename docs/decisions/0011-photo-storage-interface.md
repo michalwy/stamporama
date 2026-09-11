@@ -231,6 +231,54 @@ any moment, which is what makes a cap, an LRU and delete-through meaningful.
 
 The mechanism, its cap and its sweep are in `docs/agents/storage-and-jobs.md`.
 
+### 10. The interface gains `copy`, and get-then-put survives only across backends (#1134)
+
+Decision 1 above lists the interface as `put` / `get` / `delete` / `move` / `resolveUrl`, and that
+sentence is the decision as it was taken in #112 rather than the live method set — read it with the
+note at the head of that section. **A sixth operation, `copy(fromKey, toKey)`, was added in #1134**,
+and this section is why.
+
+**The gap it closes was a cost, not a missing feature.** Promoting a copy photo to its stamp (#137)
+duplicates the bytes, and with no `copy` on the interface the one caller that needs one reached for
+`get` then `put`: every variant streamed down from the backend and back up to it, **through the
+application process**. #347 then propagates the promotion up the variant tree, once per photoless
+ancestor, so a copy identified to a variant under an umbrella under an issue cost **6 downloads and
+6 uploads** of two images — measured, not estimated, against `origin/main` before the change.
+
+**The backend could already do it and was not being asked.** `GcsStorage.move` has always been
+`file.move()`, a server-side copy followed by a delete, because GCS has no atomic rename — so the
+client's object copy was a capability this project already depended on. `copy` is that operation
+without the delete; on the filesystem it is `copyFile`. The same tree now costs **6 server-side
+copies and no transfer at all**.
+
+Three things are decided with it:
+
+- **`copy` is defined *within one backend*, and the streaming path is kept for the case it cannot
+  reach.** Write-one/read-many (decision 2) means a photo's recorded `storageBackend` is routinely
+  not the active write backend, and there is no server-side path between two of them. That fallback
+  is **live code with a live case**, and is commented as such where it is written so a later reader
+  does not delete it as a leftover.
+- **The ancestor walk stops multiplying the byte movement.** The first duplicate is made from the
+  copy photo's own bytes; **every later target is copied from that first duplicate**, which is
+  byte-identical and already on the active write backend. Within one backend this changes nothing —
+  each target is a server-side copy either way — but across backends it pays the stream **once for
+  the whole promotion** instead of once per ancestor: 2 uploads and 4 server-side copies, where it
+  used to be 6 uploads.
+- **`copy` takes no `StorageAccess`.** That argument (decision 9) exists so a caller says whether
+  bytes crossing the process are wanted by the server or by a browser; a server-side copy crosses
+  the process with nothing. So what the local cache does about its own entries is the cache's
+  decision, and it is asymmetric on purpose: the **source keeps** its cached copy, because unlike a
+  `move` the object it copies is still there — and it is the object most likely to be wanted again
+  in the next second, being copied once per ancestor — while the **destination's is dropped**,
+  anything held under a key that has just been written being stale. Nothing is populated: a copy is
+  not an operation over the image, and the destination's first read is a thumbnail on its way to a
+  browser, which is exactly the read that must not populate.
+
+**Independence is untouched and was the constraint throughout** (#137): each target still gets a
+new `Photo` row with its own `storageKey` and its own lifecycle, and deleting either photo still
+never affects the other. A server-side copy makes sharing a key tempting and cheap; it is still
+wrong, and the promotion test asserts four distinct prefixes rather than trusting the sentence.
+
 ## Consequences
 
 - Self-hosted deployments must mount a writable volume at `STAMPORAMA_DATA_DIR`
