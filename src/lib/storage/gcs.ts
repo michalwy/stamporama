@@ -107,6 +107,14 @@ export class GcsStorage implements Storage {
     await this.file(fromKey).move(this.objectName(toKey));
   }
 
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    // The same server-side copy `move` above is built on, without the delete: the bucket
+    // duplicates the object internally and **no byte passes through this process** (#1134).
+    // Object metadata, Content-Type included, is carried by the copy, which is why this takes no
+    // `mime` — the destination is the source, byte for byte and header for header.
+    await this.file(fromKey).copy(this.objectName(toKey));
+  }
+
   // `mime` is part of the contract but a signed URL doesn't need it (Content-Type was set on the
   // object at write time), so it's omitted here — structural typing still matches.
   async resolveUrl(key: string): Promise<ResolveResult> {

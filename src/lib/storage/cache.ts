@@ -176,6 +176,32 @@ export class CachingStorage implements Storage {
     await this.forget(toKey);
   }
 
+  /**
+   * A copy is **not** a move, and the two cached entries go opposite ways (#1134).
+   *
+   * **The source keeps its copy.** `move` drops it because the object it copies is gone, and that
+   * is the only reason; after a `copy` the source object is exactly where it was, so the local
+   * copy is still a true copy of something that still exists remotely — which is the whole
+   * condition for holding anything here. Dropping it would throw away a warm object *because
+   * something else was written*, and the caller doing this is `duplicatePhotoOntoStamp`, which
+   * copies the same source once per photoless ancestor: the source is precisely the object most
+   * likely to be wanted again in the next second.
+   *
+   * **The destination loses its copy**, for the reason `move` drops its destination: anything held
+   * under a key that has just been written is stale, and a cache that serves it is a lie.
+   *
+   * **And nothing is populated**, which is the `work`/`delivery` rule (#591) rather than an
+   * omission. A copy is not an operation over the image — nothing decodes it, and with a
+   * server-side copy the bytes never reach this machine at all, so there is nothing here to
+   * populate *from* without inventing a fetch the fix exists to remove. The destination's first
+   * read is a thumbnail on its way to a browser, which is the read this cache must not populate
+   * on; if something later does real work over it, that read populates then, on its own merits.
+   */
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    await this.inner.copy(fromKey, toKey);
+    await this.forget(toKey);
+  }
+
   /** Never populates: on a redirect the bytes bypass the app entirely, and on a stream this is the
    * serving route handing them to a browser. Neither is work. */
   async resolveUrl(key: string, mime: string): Promise<ResolveResult> {

@@ -79,6 +79,23 @@ export interface Storage {
   /** Move bytes from one key to another within this backend (staging → permanent). On
    * filesystem this is a cheap rename; the GCS binding pays a server-side-copy cost. */
   move(fromKey: string, toKey: string): Promise<void>;
+  /** Duplicate the bytes at `fromKey` to `toKey` **within this backend**, leaving the source
+   * where it is (#1134). Both backends already do this server-side — GCS with the same object
+   * copy `move` is built on, the filesystem with `copyFile` — so the one caller that needs a
+   * duplicate (`duplicatePhotoOntoStamp`, promoting a copy photo to its stamp) no longer has to
+   * reach for `get` then `put` and stream every byte down and back up through this process.
+   *
+   * **Within this backend** is the whole of the contract, and it is why get-then-put survives at
+   * that caller: there is no server-side path between two different backends, so a photo whose
+   * recorded `storageBackend` is not the active write backend (write-one/read-many, ADR-0011)
+   * still streams. That fallback is not dead code.
+   *
+   * It takes no {@link StorageAccess}, unlike `put` and `get`, and the omission is deliberate:
+   * that argument exists so a caller says whether bytes crossing this process are wanted by the
+   * server or by a browser, and a server-side copy moves no bytes through this process at all.
+   * What the local cache does about its own entries is therefore the cache's decision and not a
+   * caller's — `CachingStorage.copy` states it. */
+  copy(fromKey: string, toKey: string): Promise<void>;
   /** Resolve how the serving route should hand `key` to a client. */
   resolveUrl(key: string, mime: string): Promise<ResolveResult>;
   /** One-line, non-secret summary of this binding's effective config, for the startup log. */

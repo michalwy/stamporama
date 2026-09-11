@@ -556,10 +556,23 @@ export async function promoteCopyPhotoToStamp(
 
   const role = normalizeRole(target.role);
 
-  await duplicatePhotoOntoStamp(collectionId, stampId, source, role, target.title);
+  // The copy photo's own bytes seed the first duplicate; **every later one is copied from that
+  // first duplicate**, never from the source again (#1134). On one backend it makes no difference
+  // — each target is a server-side copy either way — but where the source sits on a backend that is
+  // not the active one, the cross-backend stream is paid once for the whole promotion instead of
+  // once per ancestor. The first duplicate is a byte-for-byte copy of the source and is on the
+  // active backend, so it is the better source for the rest by both measures.
+  const seed = await duplicatePhotoOntoStamp(
+    collectionId,
+    stampId,
+    source,
+    { backend: source.storageBackend, key: source.storageKey },
+    role,
+    target.title
+  );
 
   for (const ancestorId of await photolessAncestors(collectionId, stampId)) {
-    await duplicatePhotoOntoStamp(collectionId, ancestorId, source, role, target.title);
+    await duplicatePhotoOntoStamp(collectionId, ancestorId, source, seed, role, target.title);
   }
 }
 
@@ -602,13 +615,17 @@ async function photolessAncestors(
 
 /** Byte-for-byte duplicate of a photo onto one stamp: a fresh permanent key on the active
  * backend plus an independent `Photo` row. Singleton front/back displaces an incumbent in that
- * slot; an extra is appended after the stamp's current extras and may carry a title. */
+ * slot; an extra is appended after the stamp's current extras and may carry a title.
+ *
+ * `source` is what the new row *says* — the dimensions and mime of the photo being promoted, which
+ * are the same whichever duplicate the bytes are taken from. `bytesFrom` is where the bytes are
+ * actually read, which is not the same question once a promotion propagates (#1134).
+ *
+ * Returns the new photo's byte location, so the next target can copy from it. */
 async function duplicatePhotoOntoStamp(
   collectionId: string,
   stampId: string,
   source: {
-    storageBackend: string;
-    storageKey: string;
     mime: string;
     width: number;
     height: number;
@@ -616,28 +633,37 @@ async function duplicatePhotoOntoStamp(
     originalHeight: number | null;
     sizeBytes: number;
   },
+  bytesFrom: { backend: string; key: string },
   role: PhotoRole,
   title: string | null
-): Promise<void> {
+): Promise<{ backend: string; key: string }> {
   // Duplicate the bytes to a fresh permanent key on the active backend (write-one/read-many).
   const newPhotoId = randomUUID();
   const toPrefix = permanentPrefix(collectionId, newPhotoId);
-  const srcStorage = getStorage(source.storageBackend);
+  const srcStorage = getStorage(bytesFrom.backend);
   const dstStorage = getActiveStorage();
+  const sameBackend = srcStorage.backend === dstStorage.backend;
   for (const v of ["full", "thumb"] as PhotoVariant[]) {
-    // `delivery` (#591): promoting a copy photo to its stamp is a byte copy between keys, not an
-    // operation over the image — nothing here decodes it.
-    const obj = await srcStorage.get(
-      variantKey(source.storageKey, v, source.mime),
-      source.mime,
-      "delivery"
-    );
-    await dstStorage.put(
-      variantKey(toPrefix, v, source.mime),
-      obj.stream,
-      source.mime,
-      "delivery"
-    );
+    const fromKey = variantKey(bytesFrom.key, v, source.mime);
+    const toKey = variantKey(toPrefix, v, source.mime);
+    if (sameBackend) {
+      // The backend duplicates the object inside itself and **no byte crosses this process**
+      // (#1134). It is the same server-side operation `move` has always relied on, which is what
+      // made the streaming version below indefensible rather than merely inelegant.
+      await dstStorage.copy(fromKey, toKey);
+      continue;
+    }
+    // **The cross-backend fallback, and the only remaining case that streams.** `copy` is defined
+    // within one backend, and there is no server-side path between two of them, so the bytes come
+    // down and go back up. It is reached whenever the photo's recorded `storageBackend` is not the
+    // active write backend — which write-one/read-many makes ordinary rather than exotic, since
+    // flipping `STAMPORAMA_STORAGE_BACKEND` migrates nothing (ADR-0011 §2). **This is not dead
+    // code; do not delete it because the branch above covers the deployments you have seen.**
+    //
+    // `delivery` (#591): this is a byte copy between keys, not an operation over the image —
+    // nothing here decodes it — so it must not populate the cache.
+    const obj = await srcStorage.get(fromKey, source.mime, "delivery");
+    await dstStorage.put(toKey, obj.stream, source.mime, "delivery");
   }
 
   const stampPhotos = await prisma.photo.findMany({
@@ -680,6 +706,8 @@ async function duplicatePhotoOntoStamp(
   if (displaced) {
     await deleteVariants(displaced.storageBackend, displaced.storageKey, displaced.mime);
   }
+
+  return { backend: dstStorage.backend, key: toPrefix };
 }
 
 /** All photos on a copy, ordered front, back, then extras by `sortOrder` (#112 display). */
