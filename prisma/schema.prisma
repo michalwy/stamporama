@@ -4453,8 +4453,15 @@ model SaleLineItem {
   itemId     String
   // Whether this individual physical copy has been packed (#192). Independent of the sale's overall
   // fulfillment status (#191): packing happens per copy, and a sale can span many copies packed at
-  // different times. When every copy of a sale is packed the UI hints that the sale can advance to
-  // the `packed` status, but never changes `Sale.status` automatically.
+  // different times.
+  //
+  // The UI relates the two in **both directions**, and never silently (#192, #973):
+  //   • copies → sale: when every copy is packed, the detail screen *hints* that the sale can
+  //     advance to the `packed` status. It never changes `Sale.status` automatically.
+  //   • sale → copies: moving a sale to `packed` or past it while some copies are unmarked *asks*,
+  //     naming how many, and one of the answers sets this flag on all of them at once. That is a
+  //     write to copy flags from an explicit choice the collector made in a dialog, not the sale
+  //     status moving on its own — the rule above is untouched by it.
   packed     Boolean  @default(false)
 
   saleLine SaleLine @relation(fields: [saleLineId], references: [id], onDelete: Cascade)

@@ -198,6 +198,20 @@ The prompt only appears when the buyer side has **no** figure at all. A sale tha
 total paid — or a buyer handling you entered directly — is not asked again: the two are alternate
 anchors for the same money, and answering would replace the one you chose.
 
+**Moving to Packed — or past it — asks about unpacked copies.** If some of the sale's copies are
+still not [marked packed](#packing-view), moving the sale to **Packed**, **Sent** or **Delivered**
+stops and asks, naming how many are unmarked. You get three answers:
+
+- **Mark all packed and move** — they did go in the parcel and the marks were simply never made.
+  Every copy on the sale is marked packed, and the sale moves on.
+- **Move anyway** — the sale moves and the copies stay as they are.
+- **Do nothing** — nothing changes: not the status, not a single copy.
+
+It asks on a jump too, not only on the step into Packed: going straight from Paid to Sent with
+copies unmarked is the same question, and a sharper one, since the parcel has supposedly gone. It
+never asks when every copy is already packed, and it never asks on a move *backwards* — putting a
+sale back to Packed from Sent is a correction, not a packing decision.
+
 **Moving to Sent asks about the parcel.** The moment it goes is the moment you know which courier
 took it and hold the receipt with the number on it, so a **Mark as sent** prompt asks for both. The
 carrier arrives **pre-selected** from the sale's shipping method — change it when the parcel went

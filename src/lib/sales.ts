@@ -586,6 +586,36 @@ export async function setSaleLineItemPacked(
   await prisma.saleLineItem.update({ where: { itemId }, data: { packed } });
 }
 
+/**
+ * Mark **every** copy on one sale as packed (#973), in one write.
+ *
+ * The counterpart to the all-packed hint (#192), which points the other way: that one notices the
+ * copies are all packed and suggests the sale can advance. This one is reached from the opposite
+ * situation — the sale is being moved to `packed` or past it while copies are still unmarked — and
+ * it is the answer "they did all go in the parcel, the marks were just never made".
+ *
+ * **This does not breach the rule that `Sale.status` never changes on its own.** That rule is about
+ * the sale's status, and nothing here touches it: this writes copy flags, from a choice the
+ * collector made in a dialog, and the caller moves the status separately.
+ *
+ * An `updateMany` rather than a write per copy, scoped by the sale: a parcel of eighty copies is
+ * one statement, and the client never learns the item ids to loop over.
+ */
+export async function markSaleCopiesPacked(ownerId: string, saleId: string): Promise<number> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: { collection: { select: { ownerId: true } } },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const result = await prisma.saleLineItem.updateMany({
+    where: { saleLine: { saleId }, packed: false },
+    data: { packed: true },
+  });
+  return result.count;
+}
+
 /** Edit a sale header (platform / buyer / date / handling / commission). The currency is a fixed
  * snapshot (#196): inherited from the platform at creation and never rewritten by an edit, so the
  * FX rate is re-frozen against the sale's own currency. The platform cannot change once the sale
@@ -1312,8 +1342,10 @@ function toSaleListItem(
 
 export interface SaleListFilters {
   platformId?: string;
-  /** Fulfillment statuses (#191) to narrow to, for the list's status chips (#392). OR-matched and
-   * multi-select (#475); empty or absent means every status. */
+  /** Fulfillment statuses (#191) to narrow to, for the list's status chips (#392). OR-matched;
+   * empty or absent means every status. The chips became mutually exclusive again in #972
+   * (reversing #475), but the filter stays a **set**: a link or a remembered value written while
+   * they were multi-select still reads back whole, on #735's reasoning for the offers list. */
   statuses?: SaleStatus[];
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
@@ -1505,6 +1537,13 @@ export interface SaleDetail {
   /** True when the sale has at least one copy and every copy is packed (#192) — drives the
    * "mark sale packed?" hint. Never auto-advances the status. */
   allItemsPacked: boolean;
+  /** How many of the sale's copies are **not** packed (#973) — the other direction of the same
+   * fact as {@link allItemsPacked}, and the number the "some copies are not packed" question puts
+   * in front of the collector when the sale is moved to `packed` or past it. A count rather than a
+   * boolean because the count is what makes that question answerable: *three of eleven* and *ten of
+   * eleven* are the same flag and very different decisions. Zero on a sale with no copies at all,
+   * which is why it cannot simply be read as `!allItemsPacked`. */
+  unpackedItemCount: number;
   lines: SaleDetailLine[];
   /** The buyer's link for choosing their own copy (#699), or null when the sale has none. Here
    *  rather than behind a second fetch, so the header can say a question is out there — and whether
@@ -1646,6 +1685,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
   const allCopies = sale.lines.flatMap((l) => l.items);
   const allItemsPacked = allCopies.length > 0 && allCopies.every((i) => i.packed);
+  const unpackedItemCount = allCopies.filter((i) => !i.packed).length;
 
   return {
     id: sale.id,
@@ -1680,6 +1720,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     netProceeds: net.toFixed(2),
     status: sale.status,
     allItemsPacked: allItemsPacked,
+    unpackedItemCount,
     lines,
     share: sale.shareToken
       ? {
