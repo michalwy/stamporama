@@ -6,13 +6,17 @@
 // agent send `"MNH"` instead of a cuid; #710 added the six reads over the collection; #711 added the
 // six offer verbs, the **first three writes on this surface**; #712 added the two want reads, the
 // checklist gap and the nine trade verbs — twelve operations, five of which write — taking the array
-// to twenty-five; #1168 added `recommend_bid`, taking it to **twenty-six**. Each one is an entry here
+// to twenty-five; #1168 added `recommend_bid`, taking it to twenty-six; #1037 added
+// `resolve_catalog_numbers`, taking it to **twenty-seven**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
 // **The order is the order an agent meets them in**, which is the only thing this array decides
-// beyond membership: the vocabulary first because a session starts by fetching it, then the search
-// that turns text into ids, then the three records those ids open, then the two reads over what is
+// beyond membership: the vocabulary first because a session starts by fetching it, then the two
+// operations that turn what an agent was handed into ids — the search over free text, and #1037's
+// catalog-number resolver beside it, which is the same step asked with a number instead of a
+// phrase and answered with a verdict instead of a result list — then the three records those ids
+// open, then the two reads over what is
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
 // drafting a listing and drafting one before pricing and wording it — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
@@ -48,6 +52,7 @@
 
 import { getCollectionVocabularyOperation } from "./operations/vocabulary";
 import { searchCollectionOperation } from "./operations/search";
+import { resolveCatalogNumbersOperation } from "./operations/catalog";
 import { getCopyOperation, getIssueOperation, getStampOperation } from "./operations/records";
 import { listHoldingsOperation, summarizeValuationOperation } from "./operations/holdings";
 import {
@@ -82,6 +87,7 @@ import type { PathTemplate } from "./path-template";
 export const OPERATIONS: readonly Operation[] = [
   getCollectionVocabularyOperation,
   searchCollectionOperation,
+  resolveCatalogNumbersOperation,
   getStampOperation,
   getIssueOperation,
   getCopyOperation,

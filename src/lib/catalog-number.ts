@@ -167,31 +167,58 @@ export function parseCatalogSearch(
   raw: string,
   vendors: readonly { id: string; abbreviation: string }[]
 ): ParsedCatalogSearch {
-  const key = normalizeCatalogKey(raw);
-  if (!key) return { vendorId: null, number: "" };
-
-  // Strip a known vendor abbreviation prefix, longest first so a vendor whose
-  // abbreviation is a prefix of another's ("S" vs "Sc") doesn't win spuriously.
-  // Require something after the abbreviation so "Mi" alone isn't consumed to empty.
-  let vendorId: string | null = null;
-  let rest = key;
-  const byLength = [...vendors].sort(
-    (a, b) => b.abbreviation.length - a.abbreviation.length
-  );
-  for (const v of byLength) {
-    const abbr = normalizeCatalogKey(v.abbreviation);
-    if (abbr && key.length > abbr.length && key.startsWith(abbr)) {
-      vendorId = v.id;
-      rest = key.slice(abbr.length);
-      break;
-    }
-  }
+  const { vendorId, rest } = stripCatalogVendor(raw, vendors);
+  if (!rest) return { vendorId: null, number: "" };
 
   // Whatever leads the remainder (an area code like "pl") is dropped; the number is
   // the digit run plus any trailing suffix.
   const parts = parseCatalogNumberParts(rest);
   const number = parts ? `${parts.base}${parts.suffix}` : "";
   return { vendorId, number };
+}
+
+export interface StrippedCatalogVendor {
+  /** The vendor whose abbreviation led the input, or null when none did. */
+  vendorId: string | null;
+  /** Everything after that abbreviation, normalized — the whole normalized input when no vendor
+   *  abbreviation led it, and `""` for an input that normalizes to nothing. */
+  rest: string;
+}
+
+/**
+ * Take a known vendor abbreviation off the front of a catalog string and say what is left.
+ *
+ * **Lifted out of {@link parseCatalogSearch} rather than written a second time** (#1037). That
+ * function then drops whatever leads the remainder — an area code, or the tail of a vendor's *full*
+ * name — which is right for a search box and loses the one thing an identity resolver needs: a
+ * prefix is part of a stamp's catalog identity, so `Mi·SP 1` and `Mi·PL 1` are two stamps
+ * (#66/#377) and a resolver has to still be holding the `SP`. Two copies of this loop are how the
+ * picker and the resolver would come to disagree about which vendor a string names.
+ *
+ * The abbreviation is matched **longest first**, so a vendor whose abbreviation is a prefix of
+ * another's (`S` against `Sc`) does not win spuriously, and something must follow it, so `"Mi"`
+ * alone is not consumed to empty. A vendor's **full name** needs no branch of its own: an
+ * abbreviation is by convention the start of the name it stands for, so `"Michel 123a"` normalizes
+ * to `"michel123a"`, gives `"mi"` up here, and leaves `"chel123a"` — whose leading letters the
+ * caller drops exactly as it drops an area code.
+ */
+export function stripCatalogVendor(
+  raw: string,
+  vendors: readonly { id: string; abbreviation: string }[]
+): StrippedCatalogVendor {
+  const key = normalizeCatalogKey(raw);
+  if (!key) return { vendorId: null, rest: "" };
+
+  const byLength = [...vendors].sort(
+    (a, b) => b.abbreviation.length - a.abbreviation.length
+  );
+  for (const v of byLength) {
+    const abbr = normalizeCatalogKey(v.abbreviation);
+    if (abbr && key.length > abbr.length && key.startsWith(abbr)) {
+      return { vendorId: v.id, rest: key.slice(abbr.length) };
+    }
+  }
+  return { vendorId: null, rest: key };
 }
 
 // ── Auto-generate range parsing (#70, #148, #149, #150, #383) ────────────────
