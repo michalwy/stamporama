@@ -397,6 +397,56 @@ export interface LotLineValue {
 }
 
 /**
+ * A catalogue valuation as `valuateItemRows` returns it, reduced to the three fields the rule below
+ * actually reads. Structural rather than `CopyValuation` itself, so this module stays pure: a
+ * `stamp × condition × certificate × format` valued for a copy, for a lot's composition line, or
+ * for a line that exists nowhere but in the caller's question, all satisfy it.
+ */
+export interface CatalogueLineValuation {
+  unpriced: boolean;
+  /** The figure in the **collection's base** currency, or null when nothing priced it. */
+  baseAmount: number | null;
+  uncertain: boolean;
+}
+
+/**
+ * The three outcomes a catalogue-valued line can have, kept apart — **the one place that decides
+ * it** (#1168).
+ *
+ * It is three lines of arithmetic and it is extracted for exactly one reason: it is the whole of the
+ * valuation rule that sits above `valuateItemRows`, and a second copy of it is how one caller comes
+ * to call a line unpriced while another calls it unconvertible. `valuateAuctionLotLines` (#353) is
+ * one caller and the lot-free recommendation for a specification nobody holds (#1168) is the other,
+ * and they must not be able to disagree.
+ *
+ * - **unpriced** — nothing in the catalogue answers this `stamp × condition × certificate × format`.
+ *   A multiple with neither an explicit price nor a factor lands here rather than being valued at
+ *   the single's figure (ADR-0020).
+ * - **unconvertible** — there *is* a figure and no rate carries it into the target currency. It is
+ *   deliberately not *unpriced*: reporting it as having no price sends the collector off to enter a
+ *   value that already exists.
+ * - a **figure**, `baseAmount × rate`.
+ *
+ * `rate` is base → the currency being answered in, exactly as `baseToSaleRates` produces it, and
+ * null there means *no rate could be had* rather than zero.
+ */
+export function lotLineValueOf(
+  quantity: number,
+  valuation: CatalogueLineValuation | undefined,
+  rate: number | null
+): LotLineValue {
+  const unpriced = !valuation || valuation.unpriced || valuation.baseAmount === null;
+  const unconvertible = !unpriced && rate === null;
+  return {
+    quantity,
+    unitValue: unpriced || unconvertible ? null : valuation!.baseAmount! * rate!,
+    unpriced,
+    unconvertible,
+    uncertain: valuation?.uncertain ?? false,
+  };
+}
+
+/**
  * Does this lot still need saying what it holds (#442)?
  *
  * Zero lines is the normal state while a lot is merely being watched, so this is not an error — it

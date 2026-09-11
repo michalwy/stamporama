@@ -263,6 +263,22 @@ if a screen is ever measurably slow.
   that legible rather than surprising.
 - The app ships with no market opinion of its own: the band is the collector's, and the ratio is the
   evidence's.
+- **Everything here turned out to be reusable for a lot that does not exist** (#1168), and §10 is
+  why. `recommendBid` is pure and names no record, so an agent asking *is this auction worth looking
+  at* — with the auctioneer's description and an opening price, and no `AuctionSale`, `AuctionLot`
+  or `AuctionLotLine` anywhere — gets the same three figures the lot screen states, out of the same
+  functions. The anchoring half **was** keyed on lots and was lifted rather than copied
+  (`auctions.md`, `agent-api.md`); nothing in this ADR was re-decided. Three of its statements did
+  have to be answered for a caller with no sale, and none of the answers changes a rule here: the
+  **currency** is the caller's, defaulting to the collection's base rather than a sale's, with §5's
+  *unconvertible* intact; the **fees** are the caller's and are echoed back, because §5's per-lot
+  premium comes off a sale and there is none; and the **band** is still the collection's §9
+  percentages, which was already the one input that never came from a lot.
+- **§5's first sentence reads as two currency rules and is one.** *Catalogue values already roll up
+  in the sale's currency* is true of `auction-lot-anchors.ts` because `valuateAuctionLotLines` has
+  already applied the base → sale rate by the time a line reaches it — a statement about that module
+  rather than about the pipeline. One rate does both halves, and the lot-free path applies it in the
+  same place (#1168).
 
 ## Child issues
 

@@ -1,7 +1,12 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { summarizeLotComposition, type LotCompositionValue, type LotLineValue } from "./auction-lot";
+import {
+  lotLineValueOf,
+  summarizeLotComposition,
+  type LotCompositionValue,
+  type LotLineValue,
+} from "./auction-lot";
 import { getOrFetchRate } from "./exchange-rates";
 import { valuateItemRows, type ValuationRow } from "./items";
 import type { PhotoSummary } from "./photos";
@@ -43,66 +48,87 @@ import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeL
 // Ownership is **not** checked here — every entry point is called from `auctions.ts`, which has
 // already resolved the lot or the collection for the owner.
 
-/** One line as the composition editor renders it: what it points at, and what that is worth. */
-export interface AuctionLotLineItem {
-  id: string;
-  auctionLotId: string;
+/**
+ * The fields the anchoring rule reads off a line — **and the whole of why #1168 needed no second
+ * one.**
+ *
+ * It is a `stamp × condition × certificate × format × quantity` with its catalogue value already
+ * resolved and stated in the currency being answered in. A composition line is one; so is a line
+ * that exists nowhere but in a caller's question — an agent deciding whether an auction is worth
+ * looking at holds the auctioneer's description and an opening price, and no `AuctionLot`,
+ * `AuctionSale` or `AuctionLotLine` exists for any of it.
+ *
+ * {@link AuctionLotLineItem} **extends** it rather than merely resembling it, so the fit is a
+ * compile error away rather than a coincidence somebody may quietly break.
+ */
+export interface AnchorableLine {
   stampId: string;
   stampName: string | null;
+  /** The leading catalog number, prefix-formatted (`Mi·PL 12`). */
+  catalogLabel: string | null;
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  /** The certificate the line is described as carrying; null is **none**, the unmarked default a
+   * copy uses (ADR-0006 §2). Matching is exact — a line with an Attest is unpriced until a price
+   * exists at that level, exactly as a copy is. */
+  certificateStatusId: string | null;
+  /** Null is the single — no such row exists (ADR-0020). */
+  formatId: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
+  /** Quantity multiplies and nothing else does: a multiple is never decomposed (ADR-0020). */
+  quantity: number;
+  /** The currency {@link unitValue} is stated in — a sale's on the lots screen, the one the
+   * caller asked to be answered in otherwise. */
+  currency: string;
+  /** The stamp's primary area, which the realization-ratio ladder is keyed on. */
+  areaId: string | null;
+  /** The stamp's own year of issue, which that ladder's period bucket is centred on. */
+  issuedYear: number | null;
+  /** Catalogue value of **one** of them, in {@link currency}, 2-dp. Null when the line contributes
+   * nothing, for either of the two reasons below. */
+  unitValue: string | null;
+  /** No catalogue price for this stamp at that condition × certificate × format. */
+  unpriced: boolean;
+  /** Priced, but in a currency with no rate to {@link currency}. */
+  unconvertible: boolean;
+}
+
+/**
+ * One line as the composition editor renders it: what it points at, and what that is worth.
+ *
+ * **Everything the anchoring rule reads is inherited** (#1168) rather than restated here, so a
+ * field going out of step with {@link AnchorableLine} is a compile error rather than a drift. What
+ * is added is the line's own identity and the enrichment only a screen wants — its photos, the
+ * issue it groups under, the want marker, the catalogue numbers as raw pairs.
+ */
+export interface AuctionLotLineItem extends AnchorableLine {
+  id: string;
+  auctionLotId: string;
   /** Raw numbers + vendor, so the client can prefix-format them with the area's vendor map exactly
    * as every other stamp surface does (#357). Ordered **primary vendor first**. */
   catalogNumbers: { catalogVendorId: string; number: string }[];
-  /**
-   * The leading number **prefix-formatted** (`Mi·PL 12`), or null when the stamp carries none.
-   *
-   * Resolved here rather than on the client because the derived lot name (#353) is a server read,
-   * and a bare `1-12` does not say which catalogue it is 1–12 of — which is the whole question a
-   * lot's numbers answer.
-   */
-  catalogLabel: string | null;
   /** Owning issue, for the issue sub-grouping the composition view shares with the PO and offer
    * screens; null when the stamp belongs to none. */
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
-  /** Issue date of the stamp itself, rendered on the row exactly as a copy's is. */
+  /** Issue date of the stamp itself, rendered on the row exactly as a copy's is. `issuedYear` is
+   * inherited — the ratio ladder's period bucket is centred on it. */
   issuedDay: number | null;
   issuedMonth: number | null;
-  issuedYear: number | null;
   /** Colnect Marketplace item id (#247/#290), for the chip beside the catalog numbers. */
   colnectId: string | null;
-  /** The stamp's primary area, which is what the client resolves the area name, primary vendor and
-   * vendor map from for the quick-price dialog. */
-  areaId: string | null;
   subtype: SubtypeLabel | null;
   photos: PhotoSummary[];
   /** The line points at a base stamp that has variants: "one of these, which one is not recorded".
    * Its value is a lowest-child estimate and is rendered as such (#238). */
   unknownVariant: boolean;
-  conditionId: string;
-  conditionName: string;
-  conditionAbbreviation: string;
-  /** The certificate the lot is described as carrying; null is **none**, the unmarked default a
-   * copy uses (ADR-0006 §2). Matching is exact — a lot with an Attest is unpriced until a price
-   * exists at that level, exactly as a copy is. */
-  certificateStatusId: string | null;
   certificateStatusName: string | null;
   certificateStatusAbbreviation: string | null;
-  /** Null is the single — no such row exists (ADR-0020). */
-  formatId: string | null;
-  formatName: string | null;
-  formatAbbreviation: string | null;
-  quantity: number;
-  /** The sale's currency, which every figure below is in. */
-  currency: string;
-  /** Catalogue value of **one** of them, or null when the line contributes nothing. */
-  unitValue: string | null;
   /** `unitValue × quantity`. */
   lineValue: string | null;
-  /** No catalogue price for this stamp at that condition × format. */
-  unpriced: boolean;
-  /** Priced, but in a currency with no rate to the sale's. */
-  unconvertible: boolean;
   /** The figure is a lowest-variant estimate (#238) — *inferred, not recorded*. */
   uncertain: boolean;
   /** The open wants recorded for this stamp (#532), or null for none. On a lot being bid on this
@@ -255,11 +281,13 @@ export async function valuateAuctionLotLines(
     const valuation = valuations.get(row.id);
     const rate = rates.get(currency) ?? null;
     // Three outcomes, kept apart on purpose: no price at all, a price that cannot be expressed in
-    // the sale's currency, and a figure.
-    const unpriced = !valuation || valuation.unpriced || valuation.baseAmount === null;
-    const unconvertible = !unpriced && rate === null;
-    const unitValue = unpriced || unconvertible ? null : valuation!.baseAmount! * rate!;
+    // the sale's currency, and a figure. The rule is `lotLineValueOf` in the pure module and is
+    // **not** restated here — a lot-free caller resolves a line the same way (#1168), and two
+    // copies of this is how one surface comes to call a line unpriced while the other calls it
+    // unconvertible.
     const quantity = row.quantity;
+    const value = lotLineValueOf(quantity, valuation, rate);
+    const { unpriced, unconvertible, unitValue } = value;
 
     const link = row.stamp.stampAreaLinks.find((l) => l.isPrimary) ?? row.stamp.stampAreaLinks[0];
     const areaId = link?.collectionAreaId ?? null;
@@ -314,15 +342,9 @@ export async function valuateAuctionLotLines(
       lineValue: unitValue === null ? null : (unitValue * quantity).toFixed(2),
       unpriced,
       unconvertible,
-      uncertain: valuation?.uncertain ?? false,
+      uncertain: value.uncertain,
     });
-    entry.values.push({
-      quantity,
-      unitValue,
-      unpriced,
-      unconvertible,
-      uncertain: valuation?.uncertain ?? false,
-    });
+    entry.values.push(value);
     byLot.set(row.auctionLotId, entry);
   }
 
@@ -337,6 +359,142 @@ export async function valuateAuctionLotLines(
       },
     ])
   );
+}
+
+/** A line as a caller describes one that does not exist here: the same five fields an
+ * `AuctionLotLine` row carries, and nothing about a lot. */
+export interface LineSpec {
+  stampId: string;
+  conditionId: string;
+  /** Null is no certificate (ADR-0006 §2). */
+  certificateStatusId: string | null;
+  /** Null is the single (ADR-0020). */
+  formatId: string | null;
+  quantity: number;
+}
+
+/**
+ * Value lines that exist nowhere — the lot-free half of {@link valuateAuctionLotLines} (#1168).
+ *
+ * An agent deciding whether an auction is worth looking at has the auctioneer's description and an
+ * opening price, and nothing in this collection to point at. **Every rule it needs is already
+ * owned by somebody and is called rather than restated**: `valuateItemRows` for the catalogue
+ * figure — which is where the unknown-variant rollup (#238), format pricing (ADR-0020) and the
+ * strict certificate match all come from — `baseToSaleRates` for the conversion, `lotLineValueOf`
+ * for the three outcomes, and `buildAreaVendorMaps` + `formatStampCN` for the number as it is
+ * printed everywhere else. There is no valuation decision in this function.
+ *
+ * **A stamp not in this collection is simply absent from the result**, so the caller can say which
+ * ids it asked about and did not get back. Answering short for one is what a caller must not do
+ * silently; refusing is its job rather than this module's, because only the caller knows what
+ * sentence its reader can act on.
+ *
+ * Ownership is **not** checked here — the caller has resolved the collection, as everywhere in
+ * these modules.
+ */
+export async function valuateLineSpecs(
+  collectionId: string,
+  currency: string,
+  specs: LineSpec[]
+): Promise<AnchorableLine[]> {
+  if (specs.length === 0) return [];
+
+  const stampIds = [...new Set(specs.map((spec) => spec.stampId))];
+  const [stamps, conditions, formats] = await Promise.all([
+    prisma.stamp.findMany({
+      where: { id: { in: stampIds }, collectionId },
+      select: {
+        id: true,
+        name: true,
+        issuedYear: true,
+        catalogNumbers: { select: { catalogVendorId: true, number: true } },
+        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        issueMemberships: { select: { issueId: true }, take: 1 },
+        variants: { select: VARIANT_FLAG_SELECT },
+        ...VARIANT_FLAG_SELECT,
+      },
+    }),
+    prisma.stampCondition.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+    prisma.stampFormat.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+  ]);
+
+  const stampById = new Map(stamps.map((stamp) => [stamp.id, stamp]));
+  const conditionById = new Map(conditions.map((row) => [row.id, row]));
+  const formatById = new Map(formats.map((row) => [row.id, row]));
+
+  // Only the specs whose stamp is really in this collection. A spec keyed to somebody else's stamp
+  // is dropped here and reported by the caller — valuing it would answer about nothing.
+  const known = specs.filter((spec) => stampById.has(spec.stampId));
+  if (known.length === 0) return [];
+
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const [valuations, rates, areas, issuePrefixes] = await Promise.all([
+    // The same batched call the lot path makes, so the format-factor table and the area tree load
+    // once for the whole question rather than per line.
+    valuateItemRows(
+      collectionId,
+      known.map<ValuationRow>((spec, index) => ({
+        id: String(index),
+        stampId: spec.stampId,
+        conditionId: spec.conditionId,
+        certificateStatusId: spec.certificateStatusId,
+        formatId: spec.formatId,
+        unknownVariant: isUnknownVariantStamp(stampById.get(spec.stampId)!),
+      }))
+    ),
+    baseToSaleRates(collectionId, baseCurrency, [currency]),
+    readCollectionAreas(collectionId),
+    loadIssuePrefixMap(collectionId),
+  ]);
+  const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
+  const rate = rates.get(currency) ?? null;
+
+  return known.map((spec, index) => {
+    const stamp = stampById.get(spec.stampId)!;
+    const condition = conditionById.get(spec.conditionId) ?? null;
+    const format = spec.formatId === null ? null : (formatById.get(spec.formatId) ?? null);
+
+    const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
+    const areaId = link?.collectionAreaId ?? null;
+    const primaryVendorId = areaId ? (primaryVendorByArea.get(areaId) ?? null) : null;
+    const ordered = primaryVendorId
+      ? [
+          ...stamp.catalogNumbers.filter((cn) => cn.catalogVendorId === primaryVendorId),
+          ...stamp.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId),
+        ]
+      : stamp.catalogNumbers;
+    const leading = ordered[0] ?? null;
+    const vendorMap = vendorMapFor(areaId, stamp.issueMemberships[0]?.issueId ?? null);
+
+    const value = lotLineValueOf(spec.quantity, valuations.get(String(index)), rate);
+    return {
+      stampId: spec.stampId,
+      stampName: stamp.name,
+      catalogLabel: leading
+        ? formatStampCN(leading.number, vendorMap.get(leading.catalogVendorId))
+        : null,
+      conditionId: spec.conditionId,
+      conditionName: condition?.name ?? spec.conditionId,
+      conditionAbbreviation: condition?.abbreviation ?? "",
+      certificateStatusId: spec.certificateStatusId,
+      formatId: spec.formatId,
+      formatName: format?.name ?? null,
+      formatAbbreviation: format?.abbreviation ?? null,
+      quantity: spec.quantity,
+      currency,
+      areaId,
+      issuedYear: stamp.issuedYear,
+      unitValue: value.unitValue === null ? null : value.unitValue.toFixed(2),
+      unpriced: value.unpriced,
+      unconvertible: value.unconvertible,
+    };
+  });
 }
 
 /** An empty composition, for a lot nothing has been entered against. Keeps every caller off a
