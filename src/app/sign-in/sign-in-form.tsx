@@ -5,12 +5,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 
-/** The instance refused a session this browser still holds, said in one sentence (#1175). */
 interface SignInFormProps {
+  /** The instance refused a session this browser still holds, said in one sentence (#1175). */
   readonly signedOutNotice: string | null;
+  /**
+   * Where a successful sign-in goes (#1176) — the screen the collector came from, or the
+   * collections list. Already checked by the page above; this component never decides it.
+   */
+  readonly landing: string;
 }
 
-export default function SignInForm({ signedOutNotice }: SignInFormProps) {
+export default function SignInForm({ signedOutNotice, landing }: SignInFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,14 +30,14 @@ export default function SignInForm({ signedOutNotice }: SignInFormProps) {
     const { error: signInError } = await authClient.signIn.email({
       email,
       password,
-      callbackURL: "/collections",
+      callbackURL: landing,
     });
 
     if (signInError) {
       setError(signInError.message ?? "Sign-in failed. Please try again.");
       setPending(false);
     } else {
-      router.push("/collections");
+      router.push(landing);
     }
   }
 

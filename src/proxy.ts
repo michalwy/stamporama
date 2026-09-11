@@ -4,6 +4,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
   isSecureSessionCookieName,
 } from "@/lib/session-lifetime";
+import { CURRENT_SCREEN_HEADER, screenPath } from "@/lib/sign-in-return";
 
 // **Renew the session cookie's lease on every request the collector makes** (#1175).
 //
@@ -25,9 +26,23 @@ import {
 // `Path=/`), and `Secure` is read off the cookie's name rather than from configuration: the
 // `__Secure-` prefix is added by Better Auth exactly when it sets the flag, so the name the browser
 // sent already answers the question.
+//
+// **It also tells the request which screen it is for** (#1176), and that is the whole of its second
+// job. A server component is given its `params`, never the address the browser asked for, and a
+// server action is given neither — so without this, a redirect to the sign-in screen cannot say
+// where the collector was and signing back in has to land on the collections list. This is
+// information and not authorization: nothing downstream is permitted by it, and the header is
+// **set** rather than added, so a browser sending one of its own has it overwritten. The rules that
+// read it are in `src/lib/sign-in-return.ts`.
 
 export function proxy(request: NextRequest) {
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(
+    CURRENT_SCREEN_HEADER,
+    screenPath(request.nextUrl.pathname, request.nextUrl.search)
+  );
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   for (const name of SESSION_COOKIE_NAMES) {
     const cookie = request.cookies.get(name);

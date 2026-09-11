@@ -4,6 +4,7 @@ import { createContext, useContext, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { signInPathFrom } from "@/lib/sign-in-return";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
 import { QuickJumpBox } from "./quick-jump-box";
@@ -734,7 +735,10 @@ export function CollectionSidebar({
         <button
           onClick={async () => {
             await authClient.signOut();
-            router.push("/sign-in");
+            // Signing out carries the screen so that signing back in returns to it (#1176). Read
+            // off the address bar inside the handler rather than from `useSearchParams`, which
+            // would put a Suspense requirement on every screen this sidebar renders beside.
+            router.push(signInPathFrom(window.location.pathname + window.location.search));
           }}
           style={{
             display: "flex",

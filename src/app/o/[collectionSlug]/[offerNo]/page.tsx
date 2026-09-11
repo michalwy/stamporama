@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
@@ -30,7 +31,7 @@ export default async function ShortOfferLink({ params }: ShortOfferLinkProps) {
   // Sign-in always lands on `/collections` (it takes no return address), so a link followed in a
   // signed-out browser costs one more click on the link afterwards. Not worked around here: a
   // return-to parameter is a change to the auth flow, with its own open-redirect question.
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   // Resolved for the session's own owner, exactly as the collection shell resolves a slug: the
   // number is per collection, so it authorizes nothing on its own.

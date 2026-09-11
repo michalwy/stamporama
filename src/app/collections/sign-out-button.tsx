@@ -2,13 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { signInPathFrom } from "@/lib/sign-in-return";
 
 export default function SignOutButton() {
   const router = useRouter();
 
   async function handleSignOut() {
     await authClient.signOut();
-    router.push("/sign-in");
+    // The same call as the sidebar's, and here it resolves to a plain `/sign-in`: the collections
+    // list is already where signing in lands, so there is nothing to carry (#1176).
+    router.push(signInPathFrom(window.location.pathname + window.location.search));
   }
 
   return (

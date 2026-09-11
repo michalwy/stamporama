@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   getStampFormatPricing,
@@ -19,7 +20,7 @@ export async function getStampFormatPricingAction(
   stampId: string | null
 ): Promise<StampFormatPricing> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   return stampId
     ? getStampFormatPricing(session.user.id, stampId)
     : getCollectionFormatsForPricing(session.user.id, collectionId);

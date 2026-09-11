@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   createCollection,
@@ -27,7 +28,7 @@ export async function createCollectionAction(
   formData: FormData
 ): Promise<CreateCollectionState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   const name = ((formData.get("name") as string | null) ?? "").trim();
   if (!name) {
@@ -70,7 +71,7 @@ export async function resetToDemoDataAction(
   collectionId: string
 ): Promise<ResetToDemoState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   try {
     await resetCollectionToDemo(session.user.id, collectionId);
@@ -91,7 +92,7 @@ export async function updateCollectionDefaultLanguageAction(
   language: string
 ): Promise<DefaultLanguageState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionDefaultLanguage(session.user.id, collectionId, language);
     return { status: "success", language };
@@ -114,7 +115,7 @@ export async function updateCollectionItemNoPadAction(
   pad: number
 ): Promise<ItemNoPadState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionItemNoPad(session.user.id, collectionId, pad);
     return { status: "success", pad };
@@ -142,7 +143,7 @@ export async function updateCollectionClosedOfferPhotoTtlAction(
   setting: string | null
 ): Promise<ClosedOfferPhotoTtlState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionClosedOfferPhotoTtl(session.user.id, collectionId, setting);
     return { status: "success", setting };
@@ -171,7 +172,7 @@ export async function updateCollectionScanSheetTtlAction(
   setting: string | null
 ): Promise<ScanSheetTtlState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionScanSheetTtl(session.user.id, collectionId, setting);
     return { status: "success", setting };
@@ -200,7 +201,7 @@ export async function updateCollectionScanDpiAction(
   dpi: number
 ): Promise<ScanDpiState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionScanDpi(session.user.id, collectionId, dpi);
     return { status: "success", dpi };
@@ -223,7 +224,7 @@ export async function updateCollectionBidPercentsAction(
   patch: BidPercentPatch
 ): Promise<BidPercentsState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setCollectionBidPercents(session.user.id, collectionId, patch);
     return { status: "success" };
@@ -238,7 +239,7 @@ export async function updateCollectionBidPercentsAction(
 /** The collection's copy-number width, for the client rows that render one (#268). */
 export async function getCollectionItemNoPadAction(collectionId: string): Promise<number> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   return getCollectionItemNoPad(session.user.id, collectionId);
 }
 
@@ -259,7 +260,7 @@ export async function clearCollectionStorageCacheAction(
   collectionId: string
 ): Promise<ClearStorageCacheState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     const freed = await clearCollectionStorageCache(session.user.id, collectionId);
     return { status: "success", bytes: freed.bytes, files: freed.files };

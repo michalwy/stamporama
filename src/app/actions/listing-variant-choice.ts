@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   getOfferListedVariantChoice,
@@ -21,7 +22,7 @@ export async function getOfferListedVariantChoiceAction(
   { status: "success"; choice: ListedVariantChoice } | { status: "error"; message: string }
 > {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     return {
       status: "success",
@@ -44,7 +45,7 @@ export async function setOfferListedVariantAction(
   variantStampId: string | null
 ): Promise<{ status: "success" } | { status: "error"; message: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   try {
     await setOfferListedVariant(session.user.id, offerId, stampId, conditionId, variantStampId);
     return { status: "success" };

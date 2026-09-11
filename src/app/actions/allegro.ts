@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { setAllegroPlatform } from "@/lib/allegro";
 import {
@@ -31,7 +32,7 @@ export type AllegroActionState = { status: "success" } | { status: "error"; mess
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
   return session;
 }
 

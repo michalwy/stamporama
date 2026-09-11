@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { OverviewPanel } from "./overview-panel";
@@ -17,7 +18,7 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
   const { collectionSlug } = await params;
 
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInPath());
 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
