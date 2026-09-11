@@ -36,6 +36,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import {
   CertificateStatusChip,
   ConditionChip,
@@ -925,6 +926,11 @@ export function InventoryItemRow({
                 {d.label}
               </span>
             ))}
+          {/* The collector's own labels on this copy (#1181) — on the line about the copy rather
+              than the one above it, which is about the stamp: *to check* and *for the swap box* are
+              things said about the piece in hand. Last of the chips, because they are the one thing
+              on the line the app did not put there, and nothing at all when there are none. */}
+          <TagChips tags={item.tags} />
           {showCostBasis && <CostBasisChip item={item} baseCurrency={baseCurrency} />}
           {trailingChips}
         </div>

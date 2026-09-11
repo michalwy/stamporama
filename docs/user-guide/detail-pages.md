@@ -67,8 +67,8 @@ records you were last on are listed under it; see
 
 ## The copy page
 
-*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers. Only
-Details is always there; the rest appear when the copy has them.
+*Left column:* Details, Notes, Tags, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers.
+Only Details and Tags are always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
   page), and its catalog numbers. At the end of the line, **Edit** opens the copy form — the same one
@@ -76,7 +76,8 @@ Details is always there; the rest appear when the copy has them.
   here instead of back on the list. A copy whose variant is not identified also carries **Identify
   variant** beside it, opening the same picker the list's row menu does.
 - **State chips** — disposition (*In collection*, *For sale*, *For trade*), delivery state, *Sold*
-  and any disposal.
+  and any disposal. Your own tags sit on the identity line above, the same chips the Copies list
+  draws.
 - **Details** — condition, certificate status, physical format, area, issue, storage location and
   in-location ref, cost-basis, catalog value, and the date it was added.
 - **Photos** — the full gallery, not just the first photo. Click any thumbnail to view it
@@ -84,6 +85,11 @@ Details is always there; the rest appear when the copy has them.
 - **Catalog prices** — the cross-catalog averages for the copy's stamp, with **Full breakdown**
   opening the same per-edition dialog the row menu opens.
 - **Notes** — the copy's own text.
+- **Tags** — your own labels on this copy, and the one card on this page that is an **editor**, for
+  the stamp page's reason below: a tag is not a field of the copy but a label you hang on it.
+  Nothing is inherited — the stamp's tags are not here, and a copy carrying several stamps takes
+  tags of its own. Tagging a whole drawer at once is the Copies list's **Bulk edit…**. See
+  [Tags](tags.md).
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
   the line price, the offer it went out through, and whether it has been packed.

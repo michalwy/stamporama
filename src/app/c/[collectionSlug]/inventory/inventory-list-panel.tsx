@@ -1381,7 +1381,7 @@ export function InventoryListPanel({
                           are (#723). One dialog for all of it, and the only bar action that acts on
                           the *whole* selection: the listing ones beside it can only speak for the
                           copies that are for sale and in hand. */}
-                      <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, and restate their condition, certificate or format — all in one pass.">
+                      <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, restate their condition, certificate or format, and add or remove your own tags — all in one pass.">
                         <button
                           type="button"
                           onClick={() => setDialog({ kind: "bulkEdit", items: selectedInView })}
@@ -2251,6 +2251,8 @@ export function InventoryListPanel({
           way. */}
       {dialog.kind === "bulkEdit" && (
         <BulkEditCopiesDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
           copies={dialog.items}
           locations={locations}
           conditions={conditions}

@@ -463,7 +463,23 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
     changes.certificateStatusId = optionalStr(formData, "certificateStatusId");
   }
   if (formData.has("formatId")) changes.formatId = optionalStr(formData, "formatId");
+  // The tags the pass puts on and takes off (#1181), each a comma-separated list of ids. Two
+  // fields rather than one, because this axis is the only one that is not *a value the copies now
+  // have*: a copy carries any number of tags, so the change is stated as what to add and what to
+  // remove, and everything unnamed is left alone.
+  const addTagIds = idList(formData, "addTagIds");
+  if (addTagIds.length > 0) changes.addTagIds = addTagIds;
+  const removeTagIds = idList(formData, "removeTagIds");
+  if (removeTagIds.length > 0) changes.removeTagIds = removeTagIds;
   return changes;
+}
+
+/** A comma-separated id field off a form, empties dropped. */
+function idList(formData: FormData, name: string): string[] {
+  return str(formData, name)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export async function bulkUpdateLotItemsAction(

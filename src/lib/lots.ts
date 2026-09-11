@@ -12,6 +12,7 @@ import {
   type ItemListItem,
   type LotCopyFilter,
 } from "./items";
+import { applyItemTagChanges, hasItemTagChanges } from "./tags";
 import { createLeadingEntriesTx } from "./item-stamps";
 import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
@@ -1071,6 +1072,19 @@ export interface LotBulkChanges {
   /** The physical format written on the copies (#723). Present-but-`null` is *single* (ADR-0020),
    * the same distinction the certificate above draws. */
   formatId?: string | null;
+  /**
+   * Tags put **on** every targeted copy (#1181), and tags taken **off** them. Deliberately two
+   * lists rather than one set: the tags this pass does not name are left exactly as they are on
+   * each copy, which is the *leave as is* rule every other field here already follows. A set would
+   * flatten a mixed drawer onto whatever the dialog happened to be showing, and unlike a condition
+   * or a location a copy carries any number of these — there is no single value to state.
+   *
+   * Written through `applyItemTagChanges` in `tags.ts`, inside this module's own transaction, so a
+   * bulk edit remains **one** act: a failure half way leaves neither the fields nor the labels
+   * written. Ids that are not the collection's own are dropped there rather than refused.
+   */
+  addTagIds?: string[];
+  removeTagIds?: string[];
 }
 
 /** The three identity axes a bulk change can re-state (#723), as a group: they are validated
@@ -1134,7 +1148,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
     !changes.deliveryState &&
     !hasDisposition &&
     !changes.markSorted &&
-    !hasVariantChange(changes)
+    !hasVariantChange(changes) &&
+    !hasItemTagChanges(changes)
   );
 }
 
@@ -1142,6 +1157,7 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
  * `baseWhere` is trusted to already scope to owner copies in a single collection (the callers
  * assert that). Shared by the id-list and server-scoped bulk entry points (#121/#172). */
 async function applyLotBulkChanges(
+  collectionId: string,
   baseWhere: Prisma.ItemWhereInput,
   changes: LotBulkChanges
 ): Promise<ArrivingCopy[]> {
@@ -1196,6 +1212,19 @@ async function applyLotBulkChanges(
           ...(changes.formatId !== undefined ? { formatId: changes.formatId } : {}),
         },
       });
+    }
+    if (hasItemTagChanges(changes)) {
+      // The one change here that cannot be an `updateMany`: a tag is a row in a join table, so the
+      // targeted copies have to be named. Resolved **inside** the transaction and only when the
+      // pass actually carries tags, so the scoped write (#172) pays for the extra read exactly
+      // when it is asked for tags and never otherwise.
+      const targeted = await tx.item.findMany({ where: baseWhere, select: { id: true } });
+      await applyItemTagChanges(
+        tx,
+        collectionId,
+        targeted.map((r) => r.id),
+        changes
+      );
     }
     if (changes.deliveryState) {
       const inCollection = inCollectionForDelivery(changes.deliveryState);
@@ -1303,7 +1332,7 @@ export async function bulkUpdateLotItems(
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
   await assertVariantDictionaries(collectionId, changes);
 
-  const delivered = await applyLotBulkChanges({ id: { in: ids } }, changes);
+  const delivered = await applyLotBulkChanges(collectionId, { id: { in: ids } }, changes);
   return { count: ids.length, delivered };
 }
 
@@ -1520,7 +1549,7 @@ export async function bulkUpdateLotItemsScoped(
   const where = await resolveLotBulkScope(collectionId, scope);
   const count = await prisma.item.count({ where });
   if (count === 0) return { count: 0, delivered: [] };
-  const delivered = await applyLotBulkChanges(where, changes);
+  const delivered = await applyLotBulkChanges(collectionId, where, changes);
   return { count, delivered };
 }
 

@@ -12,6 +12,7 @@ import {
   getTagUsage,
   listTags,
   setIssueTags,
+  setItemTags,
   setStampTags,
   TagNameTakenError,
   type TagData,
@@ -44,7 +45,7 @@ export async function listTagsAction(collectionId: string): Promise<TagSummary[]
 
 export async function getTagUsageAction(
   tagId: string
-): Promise<{ issueCount: number; stampCount: number }> {
+): Promise<{ issueCount: number; stampCount: number; copyCount: number }> {
   const session = await getSession();
   return getTagUsage(session.user.id, tagId);
 }
@@ -127,6 +128,22 @@ export async function setStampTagsAction(
   const session = await getSession();
   try {
     await setStampTags(session.user.id, stampId, tagIds);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to save tags. Please try again." };
+  }
+}
+
+/** The whole set of tags on one **copy** (#1181), from the copy's own screen. The Copies list's
+ *  bulk edit does not come through here: it adds and removes named tags over a selection, and
+ *  rides on the bulk write the rest of that dialog already uses. */
+export async function setItemTagsAction(
+  itemId: string,
+  tagIds: string[]
+): Promise<TagActionState> {
+  const session = await getSession();
+  try {
+    await setItemTags(session.user.id, itemId, tagIds);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save tags. Please try again." };

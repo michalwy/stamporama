@@ -9,20 +9,30 @@ import {
   getTagUsage,
   listTags,
   setIssueTags,
+  setItemTags,
   setStampTags,
   TagNameTakenError,
 } from "../../src/lib/tags";
 import { getStampListItem } from "../../src/lib/stamps";
 import { getIssueListItem, listIssueMembers } from "../../src/lib/issues";
+import { getItemListItem } from "../../src/lib/items";
+import { bulkUpdateLotItems, createLot, intakeStamps } from "../../src/lib/lots";
+import { createPurchase, setPurchaseStatus } from "../../src/lib/purchases";
 
-// User-defined tags (#152): the dictionary, and tags on issues and stamps.
+// User-defined tags (#152): the dictionary, and tags on issues, stamps and copies (#1181).
 //
 // What is pinned here is everything the schema and the types cannot say on their own — that a
 // duplicate name is refused rather than merged, that deleting a tag takes it off what carries it
 // (the join rows cascade) rather than being blocked by it the way every other dictionary here is,
 // that a set is *replaced* by a write rather than appended to, and above all that **nothing is
-// inherited** down issue → stamp → variant. That last one is a rule about what the readers do
-// *not* do, so nothing goes red if a later reader starts resolving upwards.
+// inherited** down issue → stamp → variant, or from a stamp to the copies of it. That last kind is
+// a rule about what the readers do *not* do, so nothing goes red if a later reader starts resolving
+// upwards.
+//
+// The copies block below pins the one place the *replace* rule does not hold: a bulk pass **adds**
+// and **removes** named tags and leaves every unnamed tag alone on each copy. That is the whole
+// point of #1181 and it is invisible to the types — an accidental replace would compile, pass a
+// same-tag test, and quietly strip a drawer.
 
 const ts = Date.now();
 
@@ -270,7 +280,11 @@ describe("tags on issues and stamps (#152)", () => {
     await setStampTags(userId, parentStampId, [checkId, birdsId]);
     await setStampTags(userId, variantStampId, [checkId]);
 
-    assert.deepEqual(await getTagUsage(userId, checkId), { issueCount: 2, stampCount: 2 });
+    assert.deepEqual(await getTagUsage(userId, checkId), {
+      issueCount: 2,
+      stampCount: 2,
+      copyCount: 0,
+    });
     const listed = (await getTags(userId, collectionId)).find((t) => t.id === checkId)!;
     assert.equal(listed.issueCount, 2);
     assert.equal(listed.stampCount, 2);
@@ -294,5 +308,210 @@ describe("tags on issues and stamps (#152)", () => {
       () => setStampTags("wrong-user", parentStampId, [birdsId]),
       /access denied/i
     );
+  });
+});
+
+describe("tags on copies (#1181)", () => {
+  let userId: string;
+  let collectionId: string;
+  let conditionId: string;
+  let stampId: string;
+  let otherStampId: string;
+  let checkId: string;
+  let swapId: string;
+  let expertiseId: string;
+  /** A tag in another of this owner's collections, for the scoping check. */
+  let foreignTagId: string;
+
+  /** `count` copies of `stampId`, delivered into an arrived lot of their own. */
+  async function addCopies(count: number, stamp = stampId): Promise<string[]> {
+    const purchase = await createPurchase(userId, collectionId, {
+      currency: "EUR",
+      purchasedAt: "2026-01-01",
+    });
+    await setPurchaseStatus(userId, purchase.id, "arrived");
+    const lotId = await createLot(userId, purchase.id, 10);
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const [copy] = await intakeStamps(userId, { lotId }, { stampId: stamp, conditionId });
+      ids.push(copy.itemId);
+    }
+    return ids;
+  }
+
+  async function tagNamesOn(itemId: string): Promise<string[]> {
+    return (await getItemListItem(userId, itemId)).tags.map((t) => t.name);
+  }
+
+  before(async () => {
+    userId = `test-user-tags-copies-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: "Tags copies",
+        email: `test-tags-copies-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: { slug: `col-tags-copies-${ts}`, name: "Tags", baseCurrency: "EUR", ownerId: userId },
+      })
+    ).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    stampId = (await prisma.stamp.create({ data: { collectionId, name: "Numeral 5f" } })).id;
+    otherStampId = (await prisma.stamp.create({ data: { collectionId, name: "Numeral 10f" } })).id;
+
+    await createTag(userId, collectionId, { name: "To check", color: "amber" });
+    await createTag(userId, collectionId, { name: "Swap box", color: "green" });
+    await createTag(userId, collectionId, { name: "For expertising", color: "red" });
+    const tags = await listTags(userId, collectionId);
+    checkId = tags.find((t) => t.name === "To check")!.id;
+    swapId = tags.find((t) => t.name === "Swap box")!.id;
+    expertiseId = tags.find((t) => t.name === "For expertising")!.id;
+
+    const otherCol = await prisma.collection.create({
+      data: {
+        slug: `col-tags-copies-other-${ts}`,
+        name: "Other",
+        baseCurrency: "EUR",
+        ownerId: userId,
+      },
+    });
+    foreignTagId = (
+      await prisma.tag.create({ data: { collectionId: otherCol.id, name: "Elsewhere" } })
+    ).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("puts tags on one copy from its own screen, and replaces the set on the next write", async () => {
+    const [itemId] = await addCopies(1);
+    await setItemTags(userId, itemId, [checkId, swapId]);
+    // Alphabetical, the dictionary's own order — so the chips on the row and in Settings agree.
+    assert.deepEqual(await tagNamesOn(itemId), ["Swap box", "To check"]);
+
+    await setItemTags(userId, itemId, [expertiseId]);
+    assert.deepEqual(await tagNamesOn(itemId), ["For expertising"]);
+    await setItemTags(userId, itemId, []);
+    assert.deepEqual(await tagNamesOn(itemId), []);
+  });
+
+  it("inherits nothing from the stamp a copy is linked to, in either direction", async () => {
+    const [itemId] = await addCopies(1);
+    await setStampTags(userId, stampId, [checkId]);
+    await setItemTags(userId, itemId, [swapId]);
+
+    assert.deepEqual(await tagNamesOn(itemId), ["Swap box"]);
+    assert.deepEqual(
+      (await getStampListItem(userId, stampId)).tags.map((t) => t.name),
+      ["To check"]
+    );
+    await setStampTags(userId, stampId, []);
+  });
+
+  it("adds a tag across a selection without disturbing what each copy already carries", async () => {
+    const ids = await addCopies(3);
+    // A mixed starting point: one copy already carries the tag being added, another carries one
+    // the pass never names. A replace would flatten both.
+    await setItemTags(userId, ids[0]!, [checkId]);
+    await setItemTags(userId, ids[1]!, [expertiseId]);
+
+    await bulkUpdateLotItems(userId, ids, { addTagIds: [checkId] });
+
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["To check"]);
+    assert.deepEqual(await tagNamesOn(ids[1]!), ["For expertising", "To check"]);
+    assert.deepEqual(await tagNamesOn(ids[2]!), ["To check"]);
+  });
+
+  it("removes a named tag and leaves every unnamed one where it is", async () => {
+    const ids = await addCopies(2);
+    await setItemTags(userId, ids[0]!, [checkId, expertiseId]);
+    await setItemTags(userId, ids[1]!, [expertiseId]);
+
+    await bulkUpdateLotItems(userId, ids, { removeTagIds: [checkId] });
+
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["For expertising"]);
+    // A copy that was not carrying it is left alone rather than failing the pass.
+    assert.deepEqual(await tagNamesOn(ids[1]!), ["For expertising"]);
+  });
+
+  it("adds and removes in one pass, and reaches exactly the copies named", async () => {
+    const ids = await addCopies(3);
+    await setItemTags(userId, ids[0]!, [checkId]);
+    await setItemTags(userId, ids[1]!, [checkId]);
+    await setItemTags(userId, ids[2]!, [checkId]);
+
+    // The third copy stands in for everything the collector could not see: it is not in the
+    // selection, so the pass must not reach it.
+    await bulkUpdateLotItems(userId, [ids[0]!, ids[1]!], {
+      addTagIds: [swapId],
+      removeTagIds: [checkId],
+    });
+
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["Swap box"]);
+    assert.deepEqual(await tagNamesOn(ids[1]!), ["Swap box"]);
+    assert.deepEqual(await tagNamesOn(ids[2]!), ["To check"]);
+  });
+
+  it("is idempotent — adding a tag twice leaves one row, not two", async () => {
+    const ids = await addCopies(1);
+    await bulkUpdateLotItems(userId, ids, { addTagIds: [swapId] });
+    await bulkUpdateLotItems(userId, ids, { addTagIds: [swapId] });
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["Swap box"]);
+    assert.equal(await prisma.itemTag.count({ where: { itemId: ids[0]! } }), 1);
+  });
+
+  it("drops a tag id that is not this collection's rather than writing it", async () => {
+    const ids = await addCopies(1);
+    await setItemTags(userId, ids[0]!, [swapId, foreignTagId]);
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["Swap box"]);
+
+    await bulkUpdateLotItems(userId, ids, { addTagIds: [foreignTagId] });
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["Swap box"]);
+  });
+
+  it("writes nothing when the pass names no tag at all", async () => {
+    const ids = await addCopies(1);
+    await setItemTags(userId, ids[0]!, [checkId]);
+    const result = await bulkUpdateLotItems(userId, ids, { addTagIds: [], removeTagIds: [] });
+    // No change at all is a no-op, exactly as a dialog with every section on *leave as is* is.
+    assert.equal(result.count, 0);
+    assert.deepEqual(await tagNamesOn(ids[0]!), ["To check"]);
+  });
+
+  it("counts copies in what a tag is on, and deleting it takes the label off them", async () => {
+    const ids = await addCopies(2, otherStampId);
+    const doomed = (
+      await prisma.tag.create({ data: { collectionId, name: `Doomed ${ts}`, color: "blue" } })
+    ).id;
+    await bulkUpdateLotItems(userId, ids, { addTagIds: [doomed] });
+
+    assert.deepEqual(await getTagUsage(userId, doomed), {
+      issueCount: 0,
+      stampCount: 0,
+      copyCount: 2,
+    });
+    assert.equal((await getTags(userId, collectionId)).find((t) => t.id === doomed)!.copyCount, 2);
+
+    // Never refused: the join rows cascade, which is what makes a delete *the* way to take a
+    // label off everything carrying it.
+    await deleteTag(userId, doomed);
+    assert.equal(await prisma.itemTag.count({ where: { tagId: doomed } }), 0);
+    assert.equal(await prisma.item.count({ where: { id: { in: ids } } }), 2);
+  });
+
+  it("refuses to write another owner's copy", async () => {
+    const [itemId] = await addCopies(1);
+    await assert.rejects(() => setItemTags("wrong-user", itemId, [checkId]), /access denied/i);
   });
 });
