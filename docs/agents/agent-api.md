@@ -3,7 +3,8 @@
 `/api/v1` and `/api/mcp`: the versioned, described surface an agentic AI client uses, the shared
 operation registry behind it, and the conventions every operation obeys. Read this before adding an
 operation, and read [ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists
-at all.
+at all and [ADR-0051](../decisions/0051-hand-rolled-mcp-transport.md) for why the MCP half is
+hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707,
@@ -376,10 +377,18 @@ because a message carrying no id has nothing to answer.
 to open and no session to terminate, and a client that would like one should be told rather than
 left waiting on a channel that never sends anything.
 
-**Batching is refused**, which is the current specification rather than a shortcut — the 2025-06-18
-revision removed JSON-RPC batching from MCP. **Protocol-version negotiation is an echo**: a client
-asking for a revision this server knows gets that one back, and anything else is answered with the
-newest one it speaks, which is what the specification asks a server to do.
+**Batching is refused**, which is the current specification rather than a shortcut — in this
+revision the body of a POST must be a single JSON-RPC message. **Protocol-version negotiation at
+`initialize` is an echo**: a client asking for a revision this server knows gets that one back, and
+anything else is answered with the newest one it speaks, which is what the specification asks a
+server to do — it is a negotiation rather than an error.
+
+**The `MCP-Protocol-Version` *header* is a different thing and is refused rather than negotiated.**
+A request carrying one for a revision this build does not speak gets `400`, which the specification
+requires — and **that one line is also this build's staleness alarm** (ADR-0051 §4), because it logs
+the mismatch naming the ADR. **The revision is pinned at `2025-06-18`** in `MCP_PROTOCOL_VERSION`;
+a header-less request is not refused, because the specification says to assume `2025-03-26` for one
+and this build speaks it.
 
 **MCP resources and prompts are deliberately absent — and this is a different kind of absence from
 the section above.** *What is deliberately absent* is about boundaries that must stay, enforced by
@@ -387,6 +396,10 @@ there being no operation. This one is *tools first*: resources and prompts are w
 moment a concrete need shows up, and are missing only because none has.
 
 ### There is no SDK, and the reason is the Prisma-free split
+
+**[ADR-0051](../decisions/0051-hand-rolled-mcp-transport.md) is the decision and carries the whole
+argument**, including the two places this implementation deviates from the specification and why.
+What follows is the summary; where the two differ, the ADR is right.
 
 `@modelcontextprotocol/sdk` writes its HTTP transport against Node's `IncomingMessage` and
 `ServerResponse`. A Next App Router route handler is handed a Web `Request` and must return a Web

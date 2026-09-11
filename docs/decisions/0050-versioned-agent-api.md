@@ -6,7 +6,8 @@ Accepted, foundation implemented in #706, token scopes in #707, and the collecti
 #708 — which put the registry's first operation in it. The rest come later: #710 (collection reads),
 #711 (offers, short of publishing), #712 (wants, checklists and trades, short of sending), plus the
 two gaps filed against the track afterwards — #1036 (auction reads) and #1037 (resolving foreign
-catalog-number strings). The MCP wrapper over this same registry is #709.
+catalog-number strings). The MCP wrapper over this same registry is #709, landed — **how** it is
+built, and why it takes no dependency, is [ADR-0051](0051-hand-rolled-mcp-transport.md).
 
 It rests on #253 (`AssistantToken`) and on `src/lib/route-auth.ts`, and it adds **no table and no
 migration**.

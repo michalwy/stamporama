@@ -4,7 +4,12 @@ import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken, revokeAssistantToken } from "../../src/lib/api-tokens";
 import { DELETE, GET, POST } from "../../src/app/api/mcp/route";
-import { JSON_RPC, MCP_PROTOCOL_VERSION, handleMcpMessage } from "../../src/lib/agent-api/mcp";
+import {
+  JSON_RPC,
+  MCP_PROTOCOL_VERSION,
+  SUPPORTED_MCP_PROTOCOL_VERSIONS,
+  handleMcpMessage,
+} from "../../src/lib/agent-api/mcp";
 import { assertAgentApiScope, resolveAgentApiCaller } from "../../src/lib/route-auth";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 
@@ -32,13 +37,18 @@ import { OPERATIONS } from "../../src/lib/agent-api/registry";
 const ts = Date.now();
 
 /** One JSON-RPC request, as an MCP client would post it. */
-function mcpRequest(token: string | null, body: unknown): NextRequest {
+function mcpRequest(
+  token: string | null,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): NextRequest {
   return new NextRequest("http://localhost/api/mcp", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -347,6 +357,46 @@ describe("the remote MCP endpoint", () => {
     assert.equal(response.status, 200);
     const body = (await response.json()) as JsonRpcBody;
     assert.equal(body.error?.code, JSON_RPC.parseError);
+  });
+
+  it("accepts the protocol-version header for a revision it speaks", async () => {
+    // The control for the refusal below, and it runs first: a header check that refused everything
+    // would make the next test pass for a reason unrelated to the revision in it.
+    for (const revision of SUPPORTED_MCP_PROTOCOL_VERSIONS) {
+      const response = await POST(
+        mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 9, method: "ping" }, {
+          "MCP-Protocol-Version": revision,
+        })
+      );
+      assert.equal(response.status, 200, `revision ${revision} is accepted`);
+    }
+  });
+
+  it("accepts a request with no protocol-version header at all", async () => {
+    // The specification says to assume `2025-03-26` for one, so a header-less client — which is
+    // most of them — must not be refused.
+    const response = await POST(
+      mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 10, method: "ping" })
+    );
+    assert.equal(response.status, 200);
+  });
+
+  it("refuses a revision it does not speak, and says which it does", async () => {
+    // **This is the specification's own `MUST` and this build's staleness alarm** (ADR-0051): the
+    // first client newer than this implementation is the thing that notices the drift, so the
+    // refusal names what it speaks rather than failing opaquely.
+    const response = await POST(
+      mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 11, method: "ping" }, {
+        "MCP-Protocol-Version": "2027-01-01",
+      })
+    );
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as JsonRpcBody;
+    assert.match(String(body.error?.message), /2027-01-01/);
+    assert.deepEqual(
+      (body.error?.data as { supported: string[] }).supported,
+      [...SUPPORTED_MCP_PROTOCOL_VERSIONS]
+    );
   });
 
   it("refuses GET and DELETE, saying what this endpoint does offer", async () => {
