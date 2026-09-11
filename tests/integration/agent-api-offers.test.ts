@@ -870,12 +870,22 @@ describe("the offer operations (#711)", () => {
       // `agent-api-auth.test.ts` and `agent-api-mcp.test.ts` green. With writing operations in the
       // registry it does not: each assertion below is a real `read` token, on a real hashed row,
       // refused by the real dispatcher.
-      const writing = OPERATIONS.filter((operation) => operation.writes).map((o) => o.name);
-      assert.deepEqual(
-        writing.sort(),
-        ["draft_offer", "set_offer_price", "set_offer_text"],
-        "the writing operations #711 added"
+      // **Asked as *are #711's three still declared* rather than as *is this the whole registry*.**
+      // It was an exact list until #712, and #712 broke it by adding four writing verbs of its own —
+      // which is the assertion having been about the registry when its own sentence said it was
+      // about this issue's operations. An exact list here would go red on every later issue that
+      // adds a write, against a file that has nothing to do with it.
+      const writing = new Set(
+        OPERATIONS.filter((operation) => operation.writes).map((o) => o.name)
       );
+      for (const name of ["draft_offer", "set_offer_price", "set_offer_text"]) {
+        assert.ok(writing.has(name), `${name} writes and must still declare it`);
+      }
+      // And the reading half of #711, which is the direction an accident would go: a read operation
+      // quietly gaining `writes: true` would refuse a `read` token that should have worked.
+      for (const name of ["find_unlisted_copies", "list_offers", "get_offer"]) {
+        assert.ok(!writing.has(name), `${name} writes nothing and must say so`);
+      }
 
       const draft = await refused(readOnlyToken, "POST", "/offers", {
         platform: "Colnect",
@@ -983,10 +993,15 @@ describe("the offer operations (#711)", () => {
       }
     });
 
-    it("declares the three that write, and only those three", () => {
+    it("declares which of #711's six write, and which do not", () => {
       // `writes` is the only field the scope check reads, and a verb in a name buys no protection
       // at all — so an operation that writes and declares `false` is a security defect with no test
       // that could see it. This is the nearest thing there is: the declaration, pinned.
+      //
+      // **Six assertions about #711's own operations, and deliberately not a claim about the
+      // registry** — the title said *and only those three*, which was a sentence about the whole
+      // array that this issue's file has no business making, and #712's writing verbs are what
+      // showed it. The per-issue enumerations live in each issue's own file.
       const byName = new Map(OPERATIONS.map((operation) => [operation.name, operation.writes]));
       assert.equal(byName.get("find_unlisted_copies"), false);
       assert.equal(byName.get("list_offers"), false);

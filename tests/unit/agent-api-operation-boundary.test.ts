@@ -5,21 +5,34 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-// **The agent writes inside Stamporama and nowhere else** (#711, `agent-api.md`, *What is
+// **The agent writes inside Stamporama and nowhere else** (#711, #712; `agent-api.md`, *What is
 // deliberately absent*). It never publishes to a marketplace, never moves a listing's lifecycle,
-// and never claims a live listing has been brought back into step with this record.
+// never claims a live listing has been brought back into step with this record — and since #712 it
+// never reaches a **counterparty** either: no trade proposal, no share token, no partner feedback,
+// no closing, nothing to Colnect.
 //
 // That boundary is enforced by **absence** — there is no such operation in the registry — and an
 // absence is exactly the kind of thing that stops being true without anything going red. #711's
-// *Done when* says *no publish-shaped operation exists in the registry*, and a sentence is not a
-// check.
+// *Done when* says *no publish-shaped operation exists in the registry* and #712's says the same of
+// a send-shaped one, and a sentence is not a check.
 //
-// **Two tests answer it and they fail on different things, which is why there are two.**
-// `tests/integration/agent-api-offers.test.ts` enumerates `OPERATIONS` and fails on a publish-shaped
-// **name** — the mistake somebody makes deliberately. This one fails on an operation module
-// **reaching a domain function that publishes**, whatever the operation is called, which is the
-// mistake somebody makes without noticing. A name guard alone would pass an operation called
-// `finalize_listing`; this one would not.
+// **Two tests answer each of them and they fail on different things, which is why there are two.**
+// `tests/integration/agent-api-offers.test.ts` and `tests/integration/agent-api-trades.test.ts`
+// enumerate `OPERATIONS` and fail on a publish-shaped or send-shaped **name** — the mistake
+// somebody makes deliberately. This one fails on an operation module **reaching a domain function
+// that does the act**, whatever the operation is called, which is the mistake somebody makes
+// without noticing. A name guard alone would pass an operation called `finalize_listing` or
+// `tidy_up_trade`; this one would not.
+//
+// **The two boundaries are not the same shape, and reading this file as one list of one thing is
+// the mistake to avoid** (#712). Publishing is an **outbound act** with a handful of entry points
+// all doing one kind of thing, which is what made #711's list tight. Nothing in this app posts
+// anything to a trading partner at all — the partner opens a link — so *sending* has no single
+// chokepoint, and the trade half of the map below is **six kinds of act** rather than one: minting
+// or altering or revoking the share link, writing as the partner, moving the lifecycle, recording
+// what actually arrived, closing into a purchase, and claiming a Colnect list is in step. Each is
+// labelled with which it is, because a seventh kind is what a later reader will have to recognise
+// and there is no pattern here to recognise it by.
 //
 // **It is a unit test even though it is about the registry**, because it *reads* the modules off
 // disk rather than importing them: `tests/unit/` may not import `registry.ts`, which carries
@@ -44,6 +57,7 @@ const AGENT_API = path.join(ROOT, "src/lib/agent-api");
  * the thing this surface is not allowed to touch.
  */
 const FORBIDDEN = new Map<string, string>([
+  // ── Publishing to a marketplace (#711) — one kind of act, several doors ──
   ["publishOffer", "posts a listing to its marketplace and moves it to `active`"],
   ["recordOfferListed", "records a listing as posted, activating the offer (#412)"],
   ["setOfferState", "moves a listing's lifecycle, `active` included"],
@@ -51,7 +65,49 @@ const FORBIDDEN = new Map<string, string>([
   ["publishOfferToAllegro", "creates the listing on Allegro through its API (#477)"],
   ["activateAllegroDraft", "takes an Allegro draft live (#477)"],
   ["buildDelcampeUploadBundle", "writes the CSV Delcampe's uploader creates listings from (#610)"],
+
+  // ── Reaching a counterparty (#712) — six different kinds of act ──
+  // 1. The share link **is** how a trade reaches a partner (#640). There is no *send*: minting the
+  //    link is the act, altering what it discloses is a second one, and revoking it breaks an
+  //    address somebody is halfway through reading.
+  ["createTradeShareToken", "mints the link a trading partner reads the list at (#640)"],
+  ["setTradeShareOptions", "changes what the partner's link discloses, the figures included (#640)"],
+  ["revokeTradeShareToken", "breaks the link a partner is holding (#640)"],
+  // 2. Writing **as** the partner. These are the endpoints behind the page with no session on it;
+  //    an agent calling them would be putting words in a real person's mouth.
+  ["savePartnerTradeFeedback", "writes what the partner said about a line, as the partner (#641)"],
+  ["saveTradeCopyProposal", "writes the partner's request for a particular copy, as the partner (#658)"],
+  // 3. Answering the partner. #712 puts trade feedback out of scope in both directions: accepting a
+  //    rejection deletes a line off a list somebody agreed to, and dismissing one closes a question
+  //    the partner asked and is waiting on.
+  ["resolveTradeFeedback", "settles what the partner asked for, which can delete a line (#641)"],
+  ["dismissTradeCopyProposal", "closes the partner's copy request without answering it (#658)"],
+  // 4. Moving the lifecycle. `shared` is the partner being handed the list, `agreed` is the
+  //    handshake that freezes it, `closed` and `cancelled` end it — one function, all four.
+  ["setTradeStatus", "moves a trade's lifecycle: `shared`, `agreed`, `closed` and `cancelled` (ADR-0039 §5)"],
+  ["setTradeShipping", "records that a parcel was posted or arrived, which is after the handshake (ADR-0039 §4)"],
+  // 5. Recording what actually moved, and closing. Both are past `agreed` by construction.
+  ["setTradeLineFulfillment", "records what became of a line after the handshake (#642)"],
+  ["createTradePurchase", "closes a trade into a purchase, carrying the cost basis over (#644)"],
+  // 6. Claiming Colnect is in step. **The `markOfferListingSynced` analogue exactly**: it writes
+  //    nothing to Colnect and it clears the one flag telling the collector that the public record
+  //    and this one disagree.
+  ["markColnectApplied", "claims a difference has been carried out on Colnect, clearing the report (#689)"],
 ]);
+
+// **Nothing in this tree writes to Colnect over the wire, and that half of #712's boundary is
+// therefore vacuous today** — said here rather than left to be discovered, because a guard silently
+// covering nothing is worse than no guard. `grep -rln 'colnect.com' src/` finds only routes building
+// outbound **links** for a person to click and the generated Prisma client; there is no HTTP write
+// to forbid, so `markColnectApplied` above is the nearest act there is and it is a *local* claim.
+// If an outbound Colnect write is ever added, its name belongs here.
+
+// **`deleteTrade` was weighed and left off, on `getOfferListingKit`'s reasoning.** It destroys a
+// trade, which is worse than most things here — and it is not a *send*, and no operation calls it.
+// Putting it on this list would make the list mean *anything dangerous* rather than *the acts that
+// reach somebody else*, and a list that means two things is one a later reader cannot add to
+// correctly. That there is no `delete_trade` operation is a fact about the registry, which is what
+// the name guards beside this one are for.
 
 // **`getOfferListingKit` was weighed and left off, and the reasoning matters more than the verdict.**
 // The listing kit (#405) is the payload a marketplace form is filled from, so it *looks* like the
@@ -104,8 +160,8 @@ function importedBindings(file: string): { name: string; from: string }[] {
   return found;
 }
 
-describe("the agent API's operation modules (#711)", () => {
-  it("reach no domain function that publishes a listing or moves its lifecycle", () => {
+describe("the agent API's operation modules (#711, #712)", () => {
+  it("reach no domain function that publishes a listing, moves a state, or reaches a counterparty", () => {
     const modules = operationModules();
     assert.ok(
       modules.length >= 6,
@@ -126,7 +182,7 @@ describe("the agent API's operation modules (#711)", () => {
     assert.deepEqual(
       breaches,
       [],
-      `The agent API never publishes to a marketplace and never moves a listing's lifecycle (#711).\n  ${breaches.join("\n  ")}`
+      `The agent API never publishes to a marketplace, never moves a listing's or a trade's lifecycle, and never reaches a counterparty (#711, #712).\n  ${breaches.join("\n  ")}`
     );
   });
 
@@ -135,15 +191,31 @@ describe("the agent API's operation modules (#711)", () => {
     // one that cannot fail (#814), and here the thing most likely to break it is silent: the parse
     // walk returning nothing at all — a renamed directory, a changed file extension — would leave
     // every assertion above green over an empty set.
-    const fixture = path.join(AGENT_API, "operations/offers.ts");
-    const names = importedBindings(fixture).map((binding) => binding.name);
-    assert.ok(names.length > 10, `the walk read almost nothing out of ${path.relative(ROOT, fixture)}`);
-    // `patchOffer` is a write this surface *is* allowed to make, so it is exactly the binding that
-    // proves the instrument sees writing imports and is not simply blind to all of them.
-    assert.ok(names.includes("patchOffer"), "the walk did not see the writes that are allowed");
-    assert.ok(
-      !names.some((name) => FORBIDDEN.has(name)),
-      "the fixture module was expected to be clean"
-    );
+    //
+    // **Two fixtures since #712, because the two halves of the map are proved by different files**:
+    // a green offers module says nothing about whether the walk can see the trade modules at all.
+    for (const [relative, allowed] of [
+      // `patchOffer` is a write this surface *is* allowed to make, so it is exactly the binding that
+      // proves the instrument sees writing imports and is not simply blind to all of them.
+      ["operations/offers.ts", "patchOffer"],
+      // The same, one boundary over: `addTradeGiveLines` writes lines onto a trade, which is #712's
+      // whole point, while `setTradeStatus` four lines away in the same module's domain is not.
+      ["operations/trades.ts", "addTradeGiveLines"],
+    ] as const) {
+      const fixture = path.join(AGENT_API, relative);
+      const names = importedBindings(fixture).map((binding) => binding.name);
+      assert.ok(
+        names.length > 10,
+        `the walk read almost nothing out of ${path.relative(ROOT, fixture)}`
+      );
+      assert.ok(
+        names.includes(allowed),
+        `the walk did not see the writes that are allowed in ${relative}`
+      );
+      assert.ok(
+        !names.some((name) => FORBIDDEN.has(name)),
+        `${relative} was expected to be clean`
+      );
+    }
   });
 });

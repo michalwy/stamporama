@@ -7,16 +7,17 @@ at all and [ADR-0051](../decisions/0051-hand-rolled-mcp-transport.md) for why th
 hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
-#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). #706, #707,
-#708, #709, #710 and #711 have landed; **both wrappers exist and the registry carries thirteen
-operations** — #708's vocabulary read, #710's six reads over the collection and #711's six offer
-verbs — and #712 adds to it.
+#710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
+track has landed**; both wrappers exist and the registry carries **twenty-five operations** —
+#708's vocabulary read, #710's six reads over the collection, #711's six offer verbs, and #712's two
+want reads, checklist gap and nine trade verbs.
 
-**Three of them write**, which is the change #711 made to this page. What stood here read
-*the registry carries seven operations … **Nothing in it writes**, which several statements below
-still rest on* — true when it was written, quoted rather than deleted, and it will go on arriving in
-anything copied from it. Every statement that rested on it is corrected below, each saying what it
-used to say.
+**Eight of them write**, which is the change #712 made to this page. Two earlier sentences are
+quoted rather than deleted, because each was true when it was written and will go on arriving in
+anything copied from it: *the registry carries seven operations … **Nothing in it writes**, which
+several statements below still rest on* (#706 through #710), and *the registry carries thirteen
+operations … **Three of them write*** (#711). Every statement that rested on either is corrected
+below, each saying what it used to say.
 
 ## It is beside the screen API, never over it
 
@@ -91,6 +92,8 @@ src/lib/agent-api/
   vocabulary.ts     the response shape and the name-or-id resolver (#708)
   collection-reads.ts  the read responses and their projections (#710)
   offer-reads.ts    the offer responses, their projections and the text vocabulary (#711)
+  want-reads.ts     the want and checklist-gap responses and their projections (#712)
+  trade-reads.ts    the trade, line and balance responses and their projections (#712)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -101,9 +104,12 @@ src/lib/agent-api/
     records.ts      get_stamp / get_issue / get_copy (#710)             ← server-side
     holdings.ts     list_holdings / summarize_valuation (#710)          ← server-side
     offers.ts       the six offer verbs (#711)                          ← server-side
+    wants.ts        the two want reads and the checklist gap (#712)     ← server-side
+    trades.ts       the nine trade verbs (#712)                         ← server-side
 ```
 
-**`collection-reads.ts` is on the pure side and is typed structurally** rather than against
+**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts` and `trade-reads.ts` are on the pure side
+and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -232,7 +238,18 @@ not a populated registry.
 `tests/integration/agent-api-offers.test.ts` refuses a real `read` token on each of them through the
 real dispatcher, and through the MCP wrapper besides. **That test is owed to #707 and #709 rather
 than to #711** and says so in its own header, because it is the first end-to-end proof that scope
-enforcement works on the wire.
+enforcement works on the wire. #712's five writing verbs are refused the same way in
+`tests/integration/agent-api-trades.test.ts`.
+
+**One assertion in #711's file had to be loosened by #712, and the reason is worth carrying.** It
+read `deepEqual(writing.sort(), ["draft_offer", "set_offer_price", "set_offer_text"])` under the
+label *the writing operations #711 added* — a sentence about one issue, asked as a question about
+the **whole registry**, so the next issue to declare a write turned it red in a file that has
+nothing to do with it. It now asks that #711's three still declare `writes: true` **and** that
+#711's three reads still do not, which is the direction an accident would actually go: a read
+quietly gaining `writes: true` refuses a `read` token that should have worked. **An exact list over
+`OPERATIONS` belongs only where the subject is the registry**, which is
+*What is deliberately absent* below.
 
 **The fixture tests stay, and that is unchanged rather than left over.**
 `tests/unit/agent-api-scope.test.ts` exercises both directions over fixture operations because
@@ -301,6 +318,7 @@ shaped per kind rather than flattened into one:
 | --- | --- | --- |
 | flat, per-collection, cuid | conditions, formats, certificate statuses, subtypes, catalog vendors | `{id, name, abbreviation?, label?}` |
 | flat, plus one locked fact | platforms | the same, plus the `currency` an offer there is locked to |
+| flat, and **people** | exchange partners (#712) | `{id, name}` and nothing else — see below |
 | **trees** | areas, locations | the same, plus `parentId` and `assignable` |
 | hangs off a vendor | catalogs | the same, plus `vendorId` and `currency` |
 | **not this kind of thing at all** | currencies | not returned — see below |
@@ -313,10 +331,23 @@ for all nine*.
 **Currencies are deliberately absent, and #708's own premise is the argument.** That premise is *all
 of them are cuid-keyed, and an agent will never guess a cuid* — true of the eight above and false of
 `"EUR"`. Currencies are a module-level constant in `src/lib/currencies.ts`: app-wide, not
-per-collection, not configurable, and already known to any model. **And no operation in the three
-takes one as input**: an offer's currency is inherited and locked from `Contact.platformCurrency`
-(#196), so drafting an offer names a *platform*, never a currency. What the agent actually needs is
+per-collection, not configurable, and already known to any model. What the agent actually needs is
 the denomination of a figure it reads, and that is the `baseCurrency` scalar on the response.
+
+**The second half of that argument was retired by #712 and is quoted rather than deleted**, because
+it was true when written and will go on arriving in anything copied from it: *And no operation in
+the three takes one as input: an offer's currency is inherited and locked from
+`Contact.platformCurrency` (#196), so drafting an offer names a platform, never a currency.* The
+offer half still holds. What does not is *no operation takes one*: #712's `create_trade` takes an
+optional `currency`, because a trade's currency is the one the **partner's** figures are in, it is
+nobody's platform, and it defaults to the collection's own base currency exactly as the collector's
+form defaults it.
+
+**That does not reopen #708's decision, and reading it as a case for a currency vocabulary would be
+the mistake.** What #708 settled is that currencies need no *vocabulary read* — they are not
+cuid-keyed, so there is nothing to resolve. A small closed set is expressed as a `values` list on
+the parameter, which is the mechanism #706 already provides, and `create_trade` uses
+`COMMON_CURRENCIES` there. The premise's factual half moved; its conclusion did not.
 
 **Catalog editions are absent for the same kind of reason** — an edition is a year on a book, and
 nothing in #710, #711 or #712 takes one.
@@ -346,6 +377,21 @@ to the `select` still leaked nothing, because the mapper names its fields instea
 row. The other two are depth behind it, so do not replace the mapper with a spread. The role flags are independent and
 combinable (ADR-0007 §4), so a contact that is a platform *and* a seller is returned — `platform` is
 the whole test — and its personal columns still are not.
+
+**Exchange partners joined on the same test, and the projection matters more there than it does for
+a platform** (#712). A platform is a marketplace; an exchange partner is a **person**, and the row
+carrying one is the same row that carries their email, their telephone number and the collector's
+private notes about them. Two fields leave the query — `{id, name}` — and two reach the agent, and
+the paragraph above is the rule being followed rather than a second one: **do not replace that
+mapper with a spread.** `tests/integration/agent-api-trades.test.ts` asks the wire rather than the
+query, searching a real vocabulary response for a real partner's email, telephone and note.
+
+**The reason they are here at all is that the alternative was worse.** `create_trade` needs a
+partner, and `createTrade` will find-or-create a contact from a typed name exactly as a purchase's
+supplier does — right for a person filling in a form, and *writing to the vocabulary* for this
+surface. So the agent resolves somebody the collection already knows, or is refused with the names
+that would have worked; the integration suite checks the contact count across that refusal, because
+a partner quietly created on the way is the failure that would look like success.
 
 **Writing to the vocabulary is out of scope for the whole surface.** An agent works within the
 collector's configured terms; changing them is a settings decision and stays in the UI. There is no
@@ -650,6 +696,266 @@ rule one layer over**: `offers/listing/` is a sub-route of `offers/[offerId]` an
 takes precedence* (`offers.md`, #322). A stable sort keeps registry order between templates of equal
 specificity, which is what decides the order a `405` lists its methods in.
 
+## Wants and checklists
+
+**Three operations, opening the third of the three agent workflows** (#712): *what am I looking for,
+what does a counterparty have that answers it, and what is this set still missing.* All three are
+`read` scope and none of them writes.
+
+| operation | what it is for |
+| --- | --- |
+| `list_wants` | the want list, each row with its acceptance sets and what is already held of its stamp |
+| `match_wants` | stamps a counterparty holds, at a stated grade, against the open wants |
+| `find_checklist_gaps` | what a series' checklists are missing, per checklist |
+
+**Everything here is `src/lib/` exposed rather than reinvented**, which is #710's rule and the one
+to keep. `list_wants` is `listWantsPaginated`; `match_wants` is `wantMatchesCopy` — the intake
+review's own predicate — through `findWantsMatching`; `find_checklist_gaps` is
+`previewIssueMissingWants`, which reads held-ness through the variant rollup (#661) exactly as the
+completeness card does. **A second matching rule would be the defect**: the agent and the screen
+would come to disagree about what satisfies a want or what a checklist is missing, and nothing would
+ever go red over it.
+
+**Two things were added, both beside the reads they belong with**, which is #711's move for
+`countOffers`: `countWants` in `wants.ts`, and `findWantsMatching` — the body of
+`findWantsSatisfiedBy` with the key made the caller's, because the intake review keys by `itemId`
+and a counterparty's material has no `Item` to key by. `findWantsSatisfiedBy` now passes its own
+`itemId` as that key, so there is one implementation and not two.
+
+### The issue's four bullets became three verbs, and the two that merged are the interesting ones
+
+#712 asks for *list and read wants*, *match wants against stock — the collector's wants against what
+is held, and the mirror direction for a trade*, and *checklist gaps: what is missing from a
+checklist, and which held copies would fill one*.
+
+**There is no *read one want* operation.** A `list_wants` row is the whole want — its acceptance
+sets, its urgency, its note, its catalogue range — so a detail verb would answer a question the row
+already answers, and `stamp_id` narrows the list to one stamp's wants when that is what is wanted.
+
+**And *the collector's wants against what is held* is answered by the row rather than by a verb**,
+which is #710's own move said again: a holdings row states its own `location`, so there is no *where
+is this copy* operation, and an unlisted-copy row states its own worth (#711), so there is no *what
+is this copy worth* one. Every want row carries **two** tallies — `copiesOfStamp`, everything held
+of the stamp whichever want it answers, and `copiesMatching`, only what would satisfy *this* want —
+and **they are never merged** (#532): a used copy in the post satisfies a want for "anything" and a
+mint-only want not at all, so one figure would tell a collector to stop chasing the mint copy they
+were right to chase.
+
+**`match_wants` is the mirror direction, and it takes one grade for a batch of stamps.** A want
+accepts a *set* of grades, so *would I want this* is unanswerable about material whose grade is
+unstated — hence `condition` is required — and the parameter types on this surface are scalars and
+string lists rather than objects (#706), so a batch is *these stamps, in this grade* rather than a
+list of rows. An agent asks twice for a partner offering some mint and some used.
+
+**A stamp id that is not in this collection is refused rather than answered short.** A row simply
+missing from the result would read as *not wanted*, which is the one wrong answer an agent cannot
+tell from a right one. An empty `wants` array is the opposite: *no* is the answer that was asked for.
+
+**And *which held copies would fill a checklist* is `list_holdings` with the same `issue_id`**
+(#710), whose rows already state their copy ids, grades and filing places. `find_checklist_gaps`
+answers the half that has no other home — which members are missing — and the result description
+says where the other half lives.
+
+### What an acceptance set says, and the one place this contradicts #710
+
+**An empty acceptance set means *any*** (ADR-0032 §1), and that is the single most misreadable thing
+about a want: an agent handed `"conditions": []` reads it as *accepts nothing* about half the time,
+and then tells the collector that a want they can plainly satisfy cannot be. So an unnarrowed axis
+comes back as `["(any)"]`.
+
+**The null members are spelled rather than dropped, which is the opposite of what a copy does** —
+`collection-reads.ts` drops a null certificate and a null format because on a copy the null *is* the
+whole answer, so its absence says exactly what spelling it would. Here the null is **one member of a
+set**, and dropping it changes the set outright: `{null, "PZF"}` means *uncertificated, or with a
+PZF certificate*, and dropped it reads as *PZF only*, which is a different want. They are
+`"(no certificate)"` and `"(single)"`, and **the parentheses are load-bearing**: nothing stops a
+collector naming a certificate status `No certificate`, and a bare word would be indistinguishable
+from that row's own name.
+
+**The way to *send* those values is to leave the parameter out**, since a null certificate and a
+null format have no dictionary row to name. The read spells them and the write omits them, and that
+asymmetry is stated on both.
+
+**"At least this grade" is inexpressible and is not missing** (ADR-0032 §1). `StampCondition.sortOrder`
+is display order, `U` and `MNG` are cancellation and gum rather than two points on a scale, and
+`CTO`/`FDC` are on no scale at all — so a minimum-quality rule would invent an ordering the
+dictionary does not guarantee. An upgrade needs no concept of its own: a used copy against a
+mint-only acceptance set simply does not satisfy the want.
+
+**There is no price on a want and `catalogRange` is not one.** A max price was built and dropped
+before it meant anything (`20260811140000_want_drop_max_price`), because a want has no date and a
+figure on it is a price opinion frozen the day it was typed. The range is computed now, over the
+combinations the want accepts, and **it never travels without `pricedCombinations` /
+`acceptedCombinations`** — `valuation.md`'s standing rule, because a range built from one
+combination in twenty-four is real and is not the whole story.
+
+### The checklist gap is per checklist, and *already wanted* means something narrow
+
+**Per checklist and never over an issue's merged membership** (#531, #661). Which member a variant
+copy answers for is a question about *one* membership: a `226yw` copy answers the basic list as `226`
+and the specialized one as itself. Asked of the union it would answer for the specialized list and
+leave the basic list's umbrella looking missing — wanting a stamp the completeness card on the same
+screen calls held.
+
+**`alreadyWanted` means an open want on the same wide-open terms**, which is `wantGapForStamps`'s own
+rule rather than a simplification of it: a second want for "anything" beside a want for "anything"
+says nothing the first does not, while a mint-only want beside it is a *different intent* about one
+stamp. Mirroring it here is what keeps this answer and the *add what is missing* button from
+disagreeing, and the operation's result description says so in as many words so that an agent does
+not read a marked-absent row as *nobody is looking for this*.
+
+**There is no operation that creates, narrows or closes a want**, and that is absence rather than an
+oversight. ADR-0032 §7 makes closing and narrowing the collector's decision at the moment a copy
+reaches their hands — *nothing closes automatically, because that would discard a record of intent* —
+and an agent is not that moment. The gap generator is the same decision one level up: a button the
+collector presses on the completeness card, having looked at it.
+
+## Working on trades
+
+**Nine operations, answering the rest of the third workflow** (#712): *read an exchange, build both
+its sides, and see whether it balances.* Five of them write.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_trades` | no | the exchanges, narrowed to a stage, a partner or one trade number |
+| `get_trade` | no | one exchange with its terms and its sections |
+| `list_trade_lines` | no | one side of one section, each row with its own catalogue value |
+| `get_trade_balance` | no | both sides in both valuations, the verdict, and what is blocking |
+| `create_trade` | yes | a new **draft** exchange with one section |
+| `add_trade_give_lines` | yes | promise particular copies |
+| `serve_trade_requirement` | yes | *they asked for this stamp in this grade* — the resolver picks the copies |
+| `add_trade_receive_lines` | yes | ask for a stamp, or a whole set, in a grade |
+| `remove_trade_line` | yes | take a line off, which is the other half of making it balance |
+
+**Everything here is `src/lib/` exposed rather than reinvented.** `create_trade` is `createTrade`;
+the give verbs are `addTradeGiveLines` and `addTradeGiveLinesFromRequirement`; the receive verb is
+`addTradeReceiveLines`; the balance is `readTradeBalance` whole. **Nothing here computes a figure or
+decides a rule**, and one addition — `countTrades`, with `buildTradeListWhere` extracted so the
+count and the page cannot narrow differently — went into `trades.ts` beside the read it belongs with.
+
+**`list_trades` and `create_trade` are additions to the issue's verb list**, and both on grounds
+#711 already settled. `search_collection` reaches stamps, issues and copies and nothing else, so
+without `list_trades` every other verb here is callable only on a trade drafted in the same session
+— `list_offers`' own argument. And the *Done when* asks the agent to leave a **drafted, balanced
+trade behind**, which needs something to leave it on: `create_trade` is `draft_offer`'s analogue,
+making a `preparing` trade with one section and nothing that reaches anybody.
+
+### No operation sets a line's manual value, and that is a refinement rather than a gap
+
+#712's *add and adjust trade lines* arguably asks for one. `trades.md` is why there is none: the
+manual value is kept deliberately narrow and *the default reflex stays type the price on the stamp*,
+a price being a property of the stamp rather than of a line. **An agent reaching for it would be an
+agent making the valuation gate pass rather than making a trade balance** — the gate exists because
+a trade whose lines have no value cannot be judged, and a typed figure clears the refusal without
+answering it. `get_trade_balance` names the unvalued lines instead, so the agent can say which need
+a price and hand that back.
+
+The same reasoning leaves out *restate a receive line*: removing and re-adding is the same act, and
+the only thing lost is the line's `position`, which nothing sorts by — the screen groups rather than
+ordering by hand (#637).
+
+### A section is the unit, and the two sides are read one at a time
+
+`list_trade_lines` takes a **section** and a **side**, which looks like a restriction and is the
+model showing through. `listTradeLinePage` is per `(section, side)` by construction, because the two
+sides are **two independent bags with no pairing between them** (ADR-0039 §2) and a section is the
+unit a collector reasons in. Reading a whole trade in one call would mean writing domain logic in an
+operation, which is exactly what this page forbids. `get_trade` lists the sections with their ids
+and their counts, so the agent knows how many calls that is — usually two.
+
+**It is read flat, with no grouping levels.** The screen nests by area › year › issue › grade because
+a collector reads a column; an agent reads rows, and every heading would be paid for twice.
+
+**A give row names a copy and a receive row does not**, and rendering the second as a copy row would
+print an empty copy number and five blank slots and call that consistency. A give line's `quantity`
+is always 1 — a multiple is one copy in one format, never N singles (ADR-0020) — and a receive
+line's is any number, which is why a section's `receivePieces` and `receiveLines` are two figures.
+
+**`fulfillment` is read and never written.** Recording what actually moved is after the handshake
+and is past this surface's boundary, so every line reads `pending` until the collector says
+otherwise on their own screen.
+
+### The row states its worth and the balance states the judgement
+
+**A line row carries its own `catalogValue`, per piece**, and carries no verdict; `get_trade_balance`
+carries the totals, the verdicts and the blockers and does **not** repeat the per-line figures. Two
+readings of one question in two responses is how they come to disagree, and the balance read's own
+`lines` array is unpaged besides, which the cursor convention forbids.
+
+**The two valuations are never merged** (ADR-0039 §7). `own` is the collector's own figure in the
+collection's `baseCurrency` and `agreed` is the figure in the catalogue both sides named, in
+`tradeCurrency`. Two fields of two units, labelled apart wherever both appear, because the failure
+the whole engine exists to prevent is somebody one day adding 340 to 78.
+
+**A missing figure is counted, never summed as zero.** `ownMissing` is what the gates refuse on, and
+a total that quietly assumed nought would read as an answer while being a guess.
+
+**Both modes are computed and `balanceBy` says which is the verdict.** The piece count is a fact
+whatever the trade is judged on, and the own-valuation skew is computed in **both**, because *am I
+giving away a thousand for ten* is a question a piece-count trade gets wrong just as easily.
+`ownWarn` is a **warning and never a block**: a deliberately uneven exchange is a normal thing.
+
+**`blockers` names the lines by id**, and is empty-lined for the one fault that is the trade's rather
+than any line's — a value-balanced trade naming no agreed catalogue, which `create_trade` refuses up
+front rather than leaving to the first balance read.
+
+### What the projection drops, and why that is the guard
+
+**`get_trade` does not carry the trade's share block.** `TradeData.share` holds the address the
+partner opens the list at (#640), and handing an agent that address would hand it the one thing this
+issue's boundary exists to keep out of reach — a `where` and a `select` are depth behind a mapper
+that names its fields, which is #708's measured lesson about the platform vocabulary. **Do not
+replace that mapper with a spread**, and the integration suite mints a real share token and searches
+the whole response for it rather than testing a fixture that never had one.
+
+**The agreed catalogue is named by its canonical name in all three places, and that was a real
+disagreement rather than a tidy-up.** `TradeData.catalogVendorName` is the vendor's **abbreviation**
+(`Mi`) because that is what a trades row has room for; `TradeBalanceRead.agreedCatalogVendorName` is
+the vendor's `name` (`Michel`). Published as they stood, `get_trade` and `get_trade_balance` would
+have called one catalogue two different things, and neither would have been the value
+`get_collection_vocabulary` tells the agent to send back (#708: `name` is the canonical value). It
+is resolved off the vocabulary in the operation. **Found by the integration suite disagreeing with
+itself**, which is the argument for a test that reads two operations' answers in one sequence rather
+than asserting each alone.
+
+### Refusals, and the one place this differs from #711
+
+#711 had `OfferActionBlockedError` to catch. **The trade domain throws a plain `Error` with a
+sentence written for a collector**, and #706 deliberately does not relay one of those — an internal
+message may carry an internal identifier and spends an agent's context on a sentence it cannot act
+on. So the inputs an agent controls are checked in the operation, against the domain's own **pure**
+answers: `isTradeContentEditable` for the lock, `resolveVocabularyValue` for every dictionary value,
+and a collection-scoped `findFirst` for every id. That is not a second rule; it is the same rule read
+early so the refusal can be written for the caller, which is `set_offer_text`'s `regeneratable`
+pre-check said again.
+
+**The lock refusal names the step that would unfreeze it and says the agent cannot take it.** From
+`agreed` the list is what two people shook hands on, and reopening it is the collector's decision.
+
+### Silence means two opposite things on the two write paths, and both are the domain's
+
+**On `serve_trade_requirement` an unstated certificate or format means *anything will do***; on
+`add_trade_receive_lines` it means **no certificate** and **single**. That looks like an
+inconsistency and is the difference between the two acts. A requirement **narrows a search** over
+copies the collection holds, and a wish list that says nothing about a certificate would refuse a
+certificated copy the partner would have been delighted with (#659's `GiveAxisNarrowing`, whose three
+states exist for exactly this). A receive line **describes a piece**, and there a null *is* a value —
+"no certificate" (ADR-0006 §2) and "single" (ADR-0020). Both are stated on the parameters rather than
+left to be inferred.
+
+### A gap is an outcome, not an error
+
+`serve_trade_requirement` reports every requirement's own outcome — requested, served, missing —
+**including the ones nothing served** (#659). *You do not hold this in this grade* is what the
+collector sends back to the partner, and on an imported wish list it is the main output. A refused
+copy comes off the resolution that chose it, so the report says *served 2 of 3* rather than claiming
+a line that does not exist.
+
+**Which copy goes is #659's order and never the agent's**: one already marked for trade, then a plain
+single, then one with a picture, then the lowest copy number. N takes N distinct copies and no copy
+serves two requirements. An agent choosing for itself would be a second ranking rule, and a bad trade
+is what a wrong one costs.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Two boundaries in this track are enforced by there being no operation, and
@@ -660,11 +966,46 @@ exist cannot be.
   Stamporama; going public stays in the collector's hands. An agent that misreads costs a minute; an
   agent that mispublishes lists a stamp at the wrong price under the collector's name on someone
   else's platform. **Since #711 this is checked rather than asserted**, by two tests that fail on
-  different things — see *Working on offers* below.
+  different things — see *Working on offers* above.
 - **The agent never reaches a counterparty** (#712). It builds and balances trade lines; it does not
-  send a proposal, touch a share token, or write to Colnect.
+  send a proposal, touch a share token, write the partner's feedback or answer it, move a trade's
+  lifecycle, record what actually arrived, close a trade, or claim a Colnect list is in step.
+  **Since #712 this is checked rather than asserted**, by the same pair of tests failing on
+  different things — see *Working on trades* above.
 
 Do not add a publish-shaped or send-shaped operation to the registry, whatever it is called.
+
+### The two boundaries are not the same shape
+
+**Publishing has a chokepoint and sending does not, and reading the second guard as the first is the
+mistake to avoid** (#712). Publishing is an **outbound act**: a handful of domain functions post
+something to a marketplace or move a listing's state, all doing one kind of thing, which is what let
+#711's forbidden list be short and obvious.
+
+**Nothing in this app sends anything to a trading partner at all.** The partner opens a link. So
+*reaching a counterparty* has no single door, and the trade half of
+`tests/unit/agent-api-operation-boundary.test.ts` is **six kinds of act** rather than one: minting or
+altering or revoking the share link (#640), writing *as* the partner (#641, #658), answering the
+partner (#641, #658), moving the lifecycle — `setTradeStatus` is `shared`, `agreed`, `closed` and
+`cancelled` in one function (ADR-0039 §5) — recording what actually arrived and closing into a
+purchase (#642, #644), and claiming a Colnect list has been carried out (#689, which is
+`markOfferListingSynced`'s analogue exactly: it writes nothing outbound and it clears the flag
+saying the public record and this one disagree). Each is labelled in the map with which kind it is,
+because a seventh kind is what a later reader will have to recognise and there is no pattern to
+recognise it by.
+
+**And one half of #712's own boundary is vacuous today, which is said rather than left to be
+discovered.** The issue forbids *writing to Colnect in any form*, and **nothing in this tree writes
+to Colnect over the wire**: `grep -rln 'colnect.com' src/` finds routes building outbound links for
+a person to click, and the generated Prisma client. There is no HTTP write to forbid and no test
+that could go red over one. A guard silently covering nothing is worse than no guard, so the list
+says so; if an outbound Colnect write is ever added, its name belongs on it.
+
+**`deleteTrade` was weighed for that list and left off**, on the reasoning `getOfferListingKit` was
+left off #711's. It destroys a trade, which is worse than most things on the list — and it is not a
+*send*, no operation calls it, and putting it there would make the list mean *anything dangerous*
+rather than *the acts that reach somebody else*. That there is no `delete_trade` operation is a fact
+about the registry, which is what the name guards are for.
 
 ## The MCP wrapper
 
@@ -808,13 +1149,16 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries thirteen operations.** It was empty on #706, which shipped none; #708 added
-`get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`, `get_copy`,
-`list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`, `list_offers`,
-`get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`. Three earlier sentences are
+**The document carries twenty-five operations.** It was empty on #706, which shipped none; #708
+added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
+`get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
+`list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
+`list_wants`, `match_wants`, `find_checklist_gaps`, `list_trades`, `create_trade`, `get_trade`,
+`list_trade_lines`, `get_trade_balance`, `add_trade_give_lines`, `serve_trade_requirement`,
+`add_trade_receive_lines` and `remove_trade_line`. Four earlier sentences are
 quoted rather than deleted because each stood in several files and will go on arriving in anything
 copied from them: *#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI 3.1, and the
-honest state of the surface until #710*, *the document carries one operation*, and *the document
-carries seven operations*. What is unchanged is that `build([])` is still the right way to ask what an
+honest state of the surface until #710*, *the document carries one operation*, *the document
+carries seven operations*, and *the document carries thirteen operations*. What is unchanged is that `build([])` is still the right way to ask what an
 empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
 asks it of a fixture list rather than of the registry.
