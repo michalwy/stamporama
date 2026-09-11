@@ -149,15 +149,12 @@ jobs:
           # The question is whether the whole diff stays inside the list, not whether part of it
           # does: one file outside runs everything.
           #
-          # **Membership is load-bearing twice, and the second one is invisible from here.**
-          # Besides deciding which jobs run, this list is exactly what authorises the lead to
-          # merge a pull request without the user's go-ahead (#906, and
-          # `docs/agents/collaboration.md`, *A pull request no CI job can speak to skips all
-          # four*). Adding a path therefore grants a merge licence over it. For `renovate.json`
-          # that consequence was put to the user and **accepted deliberately** — it covers the
+          # **A path added here is a path no job in this workflow can report a finding about.**
+          # A pull request whose whole diff is inside the list merges on four skipped checks, so
+          # the only thing standing between it and `main` is a person reading it. `renovate.json`
+          # was added deliberately, with that consequence put to the user (#906) — it covers the
           # automerge boundary and the never-alone list — so it is a decision, not an oversight;
-          # do not "correct" it back. Anything added here in future carries the same second cost,
-          # and it must be weighed before the first one.
+          # do not "correct" it back. Anything added here in future carries the same cost.
           #
           # The patterns are shell `case` globs, where `*` crosses a `/` — so `docs/*` covers
           # `docs/agents/albums.md` and `*.md` covers `extension/README.md`. `renovate.json` is a
@@ -283,7 +280,7 @@ jobs:
           cat <<'EOF'
 
           Reference the issue as `Refs #NNN` instead. Merging closes it otherwise, at the merge
-          timestamp, before the lead has verified anything — that is how #780 was closed before
+          timestamp, before anybody has verified anything — that is how #780 was closed before
           anybody had read its "Done when" (docs/agents/collaboration.md, "Refs #NNN, never a
           closing keyword").
 
@@ -291,8 +288,8 @@ jobs:
           resolve/resolves/resolved wherever they land, so an ordinary sentence that happens to
           put the verb in front of the number arms it just as well as a reference line does — and
           so does a sentence quoting the mistake in order to warn about it. Rewrite it so the verb
-          and the number are not adjacent: "the lead closes it" and "#780" in one sentence is
-          fine.
+          and the number are not adjacent: "the reviewer closes it" and "#780" in one sentence
+          is fine.
 
           A parenthetical asking GitHub not to does not help; GitHub does not read parentheticals.
 
