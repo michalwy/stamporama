@@ -13,6 +13,11 @@ import { stampNodeLabel } from "./stamp-select";
 import { useIssueMembers, useItemVariantHistory } from "./use-inventory-query";
 import { VariantHistoryList } from "./variant-history-list";
 import { SelectableStampTree } from "./selectable-stamp-tree";
+import { PhotoStrip } from "./photo-thumb";
+
+/** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
+ * which is as large as a front and a back can be drawn here without the dialog growing. */
+const PICTURE_SIZE = "15rem";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -52,7 +57,12 @@ export interface IdentifyVariantDialogProps {
 /** First-class "Identify variant" flow (#100, ADR-0007 §6). Lists only the descendant
  * variants of the copy's current base stamp, so an unknown-variant copy can be resolved to
  * a more specific variant — never re-pointed elsewhere. Shows the copy's refinement history
- * for context. One logical save: the picked variant + optional reason submit together. */
+ * for context. One logical save: the picked variant + optional reason submit together.
+ *
+ * The copy's own front and back are shown above the picker (#1003): a variant is told apart by
+ * looking, and this is the one place a copy already in the collection is re-identified. They are
+ * the copy's attached photos through the shared `PhotoStrip` — never a scan tile, since a photo
+ * uploaded straight onto the copy (#112) never came off a card. */
 export function IdentifyVariantDialog({
   collectionId,
   item,
@@ -86,6 +96,7 @@ export function IdentifyVariantDialog({
   }, [members, item.stampId]);
 
   const hasVariants = descendantTree.length > 0;
+  const pictures = item.photos.filter((p) => p.role === "front" || p.role === "back");
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,6 +116,18 @@ export function IdentifyVariantDialog({
             Pick the specific variant this copy actually is. The copy is re-pointed and the
             change is recorded in its refinement history.
           </p>
+
+          {/* The copy's picture — front and back */}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <div style={SECTION_LABEL}>Picture</div>
+            {pictures.length === 0 ? (
+              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
+                This copy has no front or back photo. Use <strong>Edit</strong> to add one.
+              </p>
+            ) : (
+              <PhotoStrip collectionId={collectionId} photos={pictures} size={PICTURE_SIZE} />
+            )}
+          </div>
 
           {/* Variant picker — descendants of the current stamp only */}
           <div style={{ marginBottom: "1.25rem" }}>
