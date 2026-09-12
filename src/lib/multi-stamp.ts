@@ -53,3 +53,54 @@ export const NOT_MULTI_STAMP_SQL = '"stampCount" = 1';
 export function isMultiStampCount(stampCount: number): boolean {
   return stampCount > 1;
 }
+
+// ── The Copies list (#748; ADR-0044 §7) ──────────────────────────────────────
+//
+// Multi-stamp copies live on the Copies list rather than on a screen of their own, so the list needs
+// two things this module is the natural home of: a filter for and against them, and a name for the
+// group they are collected into when the list is grouped.
+
+/**
+ * The Copies list's multi-stamp filter. **Absent is both** — the default, and not a value of its
+ * own, so an untouched list and a cleared one key the same query. `only` narrows to the carriers,
+ * `exclude` to everything else.
+ */
+export type MultiStampFilter = "only" | "exclude";
+
+export const MULTI_STAMP_FILTERS: readonly MultiStampFilter[] = ["only", "exclude"];
+
+/** Read a filter value off a query string or storage. Anything unrecognised is **no filter** rather
+ *  than an unmatchable one: a stale or hand-edited link should show the list, not an empty screen. */
+export function asMultiStampFilter(value: string | null | undefined): MultiStampFilter | undefined {
+  return (MULTI_STAMP_FILTERS as readonly string[]).includes(value ?? "")
+    ? (value as MultiStampFilter)
+    : undefined;
+}
+
+/** The `Item` fragment a filter value narrows to — {@link MULTI_STAMP} and {@link NOT_MULTI_STAMP}
+ *  themselves, so the list filter and the counts cannot come to mean different copies by it. */
+export function multiStampFilterWhere(
+  filter: MultiStampFilter | undefined
+): Prisma.ItemWhereInput {
+  if (filter === "only") return MULTI_STAMP;
+  if (filter === "exclude") return NOT_MULTI_STAMP;
+  return {};
+}
+
+/**
+ * The key of the one group every multi-stamp copy is collected into when the Copies list is grouped
+ * by duplicates or by issue. Both of those file a copy **under its stamp** — its `stampId`, or its
+ * stamp's series — and that is exactly the claim §3 removes, so a carrier is filed under neither and
+ * the carriers are one bucket of their own instead. Filing by location is untouched: where a piece
+ * is kept is a fact about the object, not about a catalogue position.
+ *
+ * A sentinel no cuid can collide with, in the same spelling family as `NO_ISSUE`.
+ */
+export const MULTI_STAMP_GROUP_KEY = "__multi_stamp__";
+
+/** The multi-stamp bucket of a grouped Copies list. Deliberately thin: the bucket is not a stamp,
+ *  an issue or a place, so all it can honestly state is how many carriers the filter holds. */
+export interface MultiStampGroupRow {
+  key: typeof MULTI_STAMP_GROUP_KEY;
+  count: number;
+}

@@ -8,6 +8,8 @@ import type {
 } from "@/lib/items";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { IssueGroupRow } from "./issue-group-row";
+import { MultiStampGroupRow } from "./multi-stamp-group-row";
+import type { MultiStampGroupRow as MultiStampGroupRowData } from "@/lib/multi-stamp";
 import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
 import type { GroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
@@ -31,6 +33,7 @@ export function IssueGroupList({
   selection,
   rowActions,
   completeness,
+  multiStampGroup,
 }: {
   collectionId: string;
   groups: IssueGroupRowData[];
@@ -50,6 +53,9 @@ export function IssueGroupList({
   /** Per-checklist, per-condition completeness keyed by issue id (#594) — read for the whole page
    * of groups at once, absent while it is still loading. */
   completeness?: IssueGroupCompleteness;
+  /** The multi-stamp bucket (#748), drawn after `No issue` once the last page has said it exists: a
+   *  carrier is filed under none of its stamps' series. */
+  multiStampGroup?: MultiStampGroupRowData | null;
 }) {
   return (
     <>
@@ -62,7 +68,7 @@ export function IssueGroupList({
           areas={areas}
           locations={locations}
           baseCurrency={baseCurrency}
-          isLast={idx === groups.length - 1 && !hasNextPage}
+          isLast={idx === groups.length - 1 && !hasNextPage && !multiStampGroup}
           open={expansion.isExpanded(group.key)}
           onToggle={() => expansion.toggle(group.key)}
           selection={selection}
@@ -70,6 +76,21 @@ export function IssueGroupList({
           completeness={group.issueId ? completeness?.[group.issueId] : undefined}
         />
       ))}
+      {multiStampGroup && (
+        <MultiStampGroupRow
+          collectionId={collectionId}
+          group={multiStampGroup}
+          baseFilters={baseFilters}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          isLast={!hasNextPage}
+          open={expansion.isExpanded(multiStampGroup.key)}
+          onToggle={() => expansion.toggle(multiStampGroup.key)}
+          selection={selection}
+          rowActions={rowActions}
+        />
+      )}
       <InfiniteScrollSentinel
         onLoadMore={onLoadMore}
         hasMore={hasNextPage}

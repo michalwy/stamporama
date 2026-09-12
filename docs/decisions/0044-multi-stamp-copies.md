@@ -3,8 +3,15 @@
 ## Status
 
 Accepted. The schema, the migration and the write module are in (#744), the exclusion rule of §3 is
-enforced (#745) and a copy's stamps are editable (#746); the rest is tracked in #747 (valuation),
-#748 (the list), #749 (listing tokens) and #750 (intake).
+enforced (#745), a copy's stamps are editable (#746) and §7's list is in place (#748); the rest is
+tracked in #747 (valuation), #749 (listing tokens) and #750 (intake).
+
+**§7 on the Copies list** (#748): the row names every carried stamp in `sortOrder`, each equally, with
+a *Several stamps* chip drawn on the copy screen's own test; a `multiStamp` filter (`only` / `exclude`,
+absent both) spreads `MULTI_STAMP` / `NOT_MULTI_STAMP` rather than restating them; the search box
+reaches every carried stamp; and grouping by duplicates or by issue files a carrier under **neither**
+but in one bucket after the last group, while filing by location is untouched — where a piece is
+kept is a fact about the object.
 
 **§3 is one predicate, `NOT_MULTI_STAMP` in `src/lib/multi-stamp.ts`** (#745), spread wherever the
 sold, traded-away and disposed guards are — `copy-counts.ts`, the checklist grid, the lot's for-sale

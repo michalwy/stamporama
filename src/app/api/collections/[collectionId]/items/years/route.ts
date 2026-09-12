@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { listItemYearFacets } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
 
@@ -41,6 +42,8 @@ export async function GET(
       // unless includeGone=true, and copies no longer held unless includeDisposed=true (#395).
       excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
       includeDisposed: boolParam(sp.get("includeDisposed")),
+      // The multi-stamp filter (#748), which narrows the rail exactly as it narrows the rows.
+      multiStamp: asMultiStampFilter(sp.get("multiStamp")),
     });
     return NextResponse.json({ years });
   } catch {

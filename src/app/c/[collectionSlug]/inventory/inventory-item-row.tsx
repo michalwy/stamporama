@@ -7,7 +7,7 @@ import {
   moneySecondaryText,
   type MoneyLike,
 } from "@/app/stamp-display";
-import type { ItemListItem } from "@/lib/items";
+import type { CarriedStamp, ItemListItem } from "@/lib/items";
 import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
@@ -44,6 +44,7 @@ import {
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { PhotoThumb } from "./photo-thumb";
@@ -92,6 +93,90 @@ function disposalChipStyle(reason: string | null): React.CSSProperties {
 /** Sold chip (#393), tinted like its sibling axes. `success` rather than the disposal chip's error
  * tint: a copy that sold left the collection the way it was meant to — the chip states an outcome,
  * it does not raise an alarm. */
+/**
+ * The *Several stamps* chip (#748), tinted in the accent the copy's own screen draws it in (#746) —
+ * the same flag from the same test (`multiStamp`), so the list and the page cannot disagree about
+ * which pieces are carriers. Its hover is the page's sentence, word for word.
+ */
+const MULTI_STAMP_CHIP: React.CSSProperties = {
+  ...CHIP,
+  color: "var(--color-accent)",
+  borderColor: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+};
+
+const MULTI_STAMP_HINT =
+  "This piece carries more than one stamp, so it is a copy of none of them: it counts towards no stamp and closes no want. It is still an ordinary copy for offers, sales, trades and storage.";
+
+const CARRIED_DETAIL: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+  whiteSpace: "nowrap",
+};
+
+/**
+ * Every stamp a multi-stamp copy carries, in the collector's order (#748) — the numbers themselves,
+ * never a count: a piece that carries a stamp is not hidden behind one.
+ *
+ * **Every entry equal**, the leading one included, each drawn in the primary chip. ADR-0044 §3 is
+ * symmetric, and a row that set the first number in the heavy chip and the rest in the light one
+ * would be drawing the asymmetry the rule removes. Each is resolved against **its own** area and
+ * issue, because a cover can carry stamps from two countries; the vendor maps are read here, in a
+ * component only a carrier renders, so an ordinary row pays nothing for it.
+ */
+function CarriedStampChips({
+  collectionId,
+  areas,
+  stamps,
+}: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  stamps: CarriedStamp[];
+}) {
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  return (
+    <>
+      <Tooltip content={MULTI_STAMP_HINT}>
+        <span style={MULTI_STAMP_CHIP}>Several stamps</span>
+      </Tooltip>
+      {stamps.map((entry, idx) => {
+        const vendorMap = vendorMapFor(entry.areaId, entry.issueId);
+        const primaryVendorId = entry.areaId ? primaryVendorByArea.get(entry.areaId) : undefined;
+        const number =
+          entry.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ??
+          entry.catalogNumbers[0] ??
+          null;
+        return (
+          // Keyed by position as well: one carrier may hold the same stamp as a single and as a block.
+          <span
+            key={`${entry.stampId}-${idx}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          >
+            {number ? (
+              <CatalogNumberChip
+                number={number.number}
+                vendor={vendorMap.get(number.catalogVendorId)}
+                style={STAMP_PRIMARY_CHIP}
+                tooltip={entry.stampName ?? undefined}
+              />
+            ) : (
+              <span style={CARRIED_DETAIL}>{entry.stampName ?? "(stamp)"}</span>
+            )}
+            {/* The component's own format and how many of it — quiet at their defaults, a single
+                once, exactly as the copy's own screen spells them. */}
+            {entry.formatAbbreviation && (
+              <Tooltip content={entry.formatName ?? "Format"}>
+                <span style={CARRIED_DETAIL}>{entry.formatAbbreviation}</span>
+              </Tooltip>
+            )}
+            {entry.quantity > 1 && <span style={CARRIED_DETAIL}>×{entry.quantity}</span>}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function soldChipStyle(): React.CSSProperties {
   return {
     ...CHIP,
@@ -431,8 +516,19 @@ export function InventoryItemRow({
   const hasCatalog = item.catalogNumbers.length > 0;
 
   const areaPath = buildAreaPath(areas, item.areaId);
-  const dateStr = formatIssuedDate(item.issuedDay, item.issuedMonth, item.issuedYear);
-  const hasIssue = !!(item.issueName || item.issueYear);
+  // A multi-stamp copy is described by **all** its stamps (#748), so the row names every one of them
+  // and drops the facts that belong to one stamp alone — its issue date and its series — rather than
+  // quietly reporting the leading stamp's as though they were the piece's.
+  const dateStr = item.multiStamp
+    ? null
+    : formatIssuedDate(item.issuedDay, item.issuedMonth, item.issuedYear);
+  const hasIssue = !item.multiStamp && !!(item.issueName || item.issueYear);
+  const stampName = item.multiStamp
+    ? item.carriedStamps
+        .map((entry) => entry.stampName)
+        .filter((name): name is string => !!name)
+        .join(" · ") || item.stampName
+    : item.stampName;
 
   const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
 
@@ -666,7 +762,7 @@ export function InventoryItemRow({
 
         <div style={{ flex: 1, minWidth: 0 }}>
         {/* Line 1: stamp name + actions (only when the copy's stamp is named) */}
-        {item.stampName && (
+        {stampName && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span
               style={{
@@ -679,20 +775,20 @@ export function InventoryItemRow({
                 whiteSpace: "nowrap",
               }}
             >
-              {item.stampName}
+              {stampName}
             </span>
             {actions}
           </div>
         )}
 
         {/* Line 2: area path, date, issue (actions here when there is no name) */}
-        {(areaPath || dateStr || hasIssue || !item.stampName) && (
+        {(areaPath || dateStr || hasIssue || !stampName) && (
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
-              marginTop: item.stampName ? "0.2rem" : undefined,
+              marginTop: stampName ? "0.2rem" : undefined,
             }}
           >
             {areaPath && <span style={AREA_CHIP}>{areaPath}</span>}
@@ -710,8 +806,8 @@ export function InventoryItemRow({
               </span>
             )}
 
-            {!item.stampName && <span style={{ flex: 1 }} />}
-            {!item.stampName && actions}
+            {!stampName && <span style={{ flex: 1 }} />}
+            {!stampName && actions}
           </div>
         )}
 
@@ -725,42 +821,55 @@ export function InventoryItemRow({
             flexWrap: "wrap",
           }}
         >
-          {primaryCN && (
-            <CatalogNumberChip
-              number={primaryCN.number}
-              vendor={vendorMap.get(primaryCN.catalogVendorId)}
-              style={STAMP_PRIMARY_CHIP}
+          {item.multiStamp ? (
+            <CarriedStampChips
+              collectionId={collectionId}
+              areas={areas}
+              stamps={item.carriedStamps}
             />
+          ) : (
+            // An ordinary copy's identity — the one stamp it is a copy of, and what is known about
+            // that stamp. None of it is drawn for a carrier, whose chips above name every stamp
+            // equally and whose leading stamp is no more the piece than the others (#745).
+            <>
+              {primaryCN && (
+                <CatalogNumberChip
+                  number={primaryCN.number}
+                  vendor={vendorMap.get(primaryCN.catalogVendorId)}
+                  style={STAMP_PRIMARY_CHIP}
+                />
+              )}
+              {secondaryCNs.map((cn) => (
+                <CatalogNumberChip
+                  key={cn.catalogVendorId}
+                  number={cn.number}
+                  vendor={vendorMap.get(cn.catalogVendorId)}
+                  style={STAMP_SECONDARY_CHIP}
+                />
+              ))}
+              <ColnectChip
+                colnectId={item.colnectId}
+                searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+              />
+              <SubtypeChip subtype={item.subtype} />
+              {/* Whether this stamp is wanted, and whether **this copy** would satisfy one (#532). On a
+                  purchase order being sorted that is the question the row exists to answer; on the
+                  Copies list it is the upgrade signal, since holding a copy never closes a want. */}
+              <WantChip
+                wants={item.wants}
+                copy={{
+                  stampId: item.stampId,
+                  conditionId: item.conditionId,
+                  certificateStatusId: item.certificateStatusId,
+                  formatId: item.formatId,
+                }}
+              />
+              {!hasCatalog && !item.stampName && (
+                <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
+              )}
+              {unknownVariantChip}
+            </>
           )}
-          {secondaryCNs.map((cn) => (
-            <CatalogNumberChip
-              key={cn.catalogVendorId}
-              number={cn.number}
-              vendor={vendorMap.get(cn.catalogVendorId)}
-              style={STAMP_SECONDARY_CHIP}
-            />
-          ))}
-          <ColnectChip
-            colnectId={item.colnectId}
-            searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
-          />
-          <SubtypeChip subtype={item.subtype} />
-          {/* Whether this stamp is wanted, and whether **this copy** would satisfy one (#532). On a
-              purchase order being sorted that is the question the row exists to answer; on the
-              Copies list it is the upgrade signal, since holding a copy never closes a want. */}
-          <WantChip
-            wants={item.wants}
-            copy={{
-              stampId: item.stampId,
-              conditionId: item.conditionId,
-              certificateStatusId: item.certificateStatusId,
-              formatId: item.formatId,
-            }}
-          />
-          {!hasCatalog && !item.stampName && (
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
-          )}
-          {unknownVariantChip}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
             <CopyValue value={item.value} baseCurrency={baseCurrency} onSetPrice={onSetCatalogPrice} />
           </span>

@@ -37,7 +37,15 @@ import {
   validateItemStampEntries,
   type ItemStampEntryInput,
 } from "./item-stamps";
-import { isMultiStampCount } from "./multi-stamp";
+import {
+  isMultiStampCount,
+  MULTI_STAMP,
+  MULTI_STAMP_GROUP_KEY,
+  multiStampFilterWhere,
+  NOT_MULTI_STAMP,
+  type MultiStampFilter,
+  type MultiStampGroupRow,
+} from "./multi-stamp";
 import {
   loadItemWantSummaries,
   loadStampWantSummaries,
@@ -1113,6 +1121,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  hand and was never a statement about the catalogue entry. */
   tagIds?: string[];
   tagMode?: TagFilterMode;
+  /** The multi-stamp copies (#748; ADR-0044 §7): `only` the carriers, or everything `exclude` them.
+   *  Absent is both — the list's default, since a carrier stays an ordinary copy for everything the
+   *  list does. Narrows through the very fragments the counts spread (`multi-stamp.ts`). */
+  multiStamp?: MultiStampFilter;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -1200,21 +1212,32 @@ function buildItemWhere(
     // Added to the OR rather than replacing it — `200` is a plausible catalog number too.
     const itemNo = parseItemNoSearch(s);
     if (itemNo !== null) or.push({ itemNo });
+    // Every stamp the copy **carries** (#748; ADR-0044 §3), not only the one `Item.stampId` points
+    // at: a carrier's stamps are a description of the piece and stay searchable, and a buyer — or
+    // the collector — looking for the third number on a cover must find the cover. The branches
+    // above stay as they are: they are the same question about the leading stamp, and reach a copy
+    // an older build left with no entry at all.
+    const carried: Prisma.StampWhereInput[] = [
+      { name: { contains: s, mode: "insensitive" } },
+      { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
+      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
+    ];
     // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
     // when one was recognized) so "Mi PL 200" resolves even though the raw text
     // isn't a substring of the stored "200".
     if (filters.catalogNumber) {
-      or.push({
-        stamp: {
-          catalogNumbers: {
-            some: {
-              number: { contains: filters.catalogNumber, mode: "insensitive" },
-              ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
-            },
+      const parsed: Prisma.StampWhereInput = {
+        catalogNumbers: {
+          some: {
+            number: { contains: filters.catalogNumber, mode: "insensitive" },
+            ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
           },
         },
-      });
+      };
+      or.push({ stamp: parsed });
+      carried.push(parsed);
     }
+    or.push({ stamps: { some: { stamp: { OR: carried } } } });
     and.push({ OR: or });
   }
   if (filters.notOfferedPlatformId) {
@@ -1328,6 +1351,9 @@ function buildItemWhere(
     // Disposed copies are hidden unless asked for (#395) — `disposedAt` doubles as the flag, so
     // this stays a plain `where` rather than a derived narrowing.
     ...(filters.includeDisposed ? {} : { disposedAt: null }),
+    // For or against the multi-stamp copies (#748). A flat `stampCount` clause like the counts', and
+    // nothing else in this `where` touches that column, so it spreads without colliding.
+    ...multiStampFilterWhere(filters.multiStamp),
     ...(filters.notInOfferId
       ? { offerSetMemberships: { none: { offerSet: { offerId: filters.notInOfferId } } } }
       : {}),
@@ -1447,6 +1473,20 @@ export interface ItemScanOrigin {
   label: string | null;
 }
 
+/** One stamp a multi-stamp copy carries, as its row on the Copies list names it (#748). Only what a
+ *  catalogue-number chip needs — the number, and the area and issue it is prefix-formatted against —
+ *  plus the component's own quantity and format, which are part of what the piece *is*. */
+export interface CarriedStamp {
+  stampId: string;
+  stampName: string | null;
+  quantity: number;
+  formatName: string | null;
+  formatAbbreviation: string | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  areaId: string | null;
+  issueId: string | null;
+}
+
 export interface ItemListItem {
   id: string;
   /** Internal copy number (#268): per-collection, assigned on creation, never editable.
@@ -1551,6 +1591,14 @@ export interface ItemListItem {
   scan: ItemScanOrigin | null;
   /** Catalog valuation of this copy (ADR-0007 §7). Uncertain for unknown variants. */
   value: CopyValuation;
+  /** More than one catalogue position on one indivisible piece, so a copy of none of them (#745) —
+   *  read off `stampCount` through `isMultiStampCount`, the same test the copy's own screen chips on,
+   *  so the row and the page cannot disagree about which pieces are carriers (#748). */
+  multiStamp: boolean;
+  /** Every stamp the piece carries, in the collector's order (`sortOrder`), for a multi-stamp copy;
+   *  **empty** for any other. The row names them all rather than hiding them behind a count (#748),
+   *  and an ordinary copy's one stamp is already the row's own identity. */
+  carriedStamps: CarriedStamp[];
 }
 
 export interface PaginatedItemsResult {
@@ -1647,6 +1695,26 @@ const ITEM_LIST_SELECT = {
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
   format: { select: { id: true, name: true, abbreviation: true } },
+  // Whether the piece is a carrier, and what it carries (#748). Read for every row because a select
+  // cannot be conditional on the row it selects; an ordinary copy has exactly one entry, so the cost
+  // is one narrow row each, and the mapping below drops it again.
+  stampCount: true,
+  stamps: {
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: {
+      stampId: true,
+      quantity: true,
+      format: { select: { name: true, abbreviation: true } },
+      stamp: {
+        select: {
+          name: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issueId: true } },
+        },
+      },
+    },
+  },
   stamp: {
     select: {
       parentId: true,
@@ -1778,6 +1846,24 @@ function toItemListItem(
       .sort(sortPhotos),
     scan: scanOriginOf(row),
     value: valuation,
+    multiStamp: isMultiStampCount(row.stampCount),
+    carriedStamps: isMultiStampCount(row.stampCount) ? row.stamps.map(carriedStampOf) : [],
+  };
+}
+
+/** One entry of a carrier, in the shape its row names it by (#748). The area is the stamp's primary
+ *  one, falling back to its first, exactly as the copy's own `areaId` is resolved above. */
+function carriedStampOf(entry: ItemListRow["stamps"][number]): CarriedStamp {
+  const links = entry.stamp.stampAreaLinks;
+  return {
+    stampId: entry.stampId,
+    stampName: entry.stamp.name,
+    quantity: entry.quantity,
+    formatName: entry.format?.name ?? null,
+    formatAbbreviation: entry.format?.abbreviation ?? null,
+    catalogNumbers: entry.stamp.catalogNumbers,
+    areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
+    issueId: entry.stamp.issueMemberships[0]?.issueId ?? null,
   };
 }
 
@@ -1809,9 +1895,14 @@ async function enrichItemRows(
     // Keyed **per copy**, each leaving itself out: the marker is drawn beside the very copy whose
     // delivery state it would otherwise count, and a purchase order that reported "1 in transit"
     // about the row you were reading was answering the wrong question.
+    // …and **never for a carrier** (#748). The marker says *this copy would satisfy a want* and
+    // *you hold one already*, and a multi-stamp copy is neither of those for any of its stamps
+    // (#745) — drawn on its row, it would file the piece under its leading stamp after all.
     loadItemWantSummaries(
       collectionId,
-      rows.map((r) => ({ itemId: r.id, stampId: r.stampId }))
+      rows
+        .filter((r) => !isMultiStampCount(r.stampCount))
+        .map((r) => ({ itemId: r.id, stampId: r.stampId }))
     ),
   ]);
   return rows.map((row) =>
@@ -2036,6 +2127,10 @@ export interface CopyGroupRow {
 export interface PaginatedCopyGroupsResult {
   groups: CopyGroupRow[];
   nextCursor: string | null;
+  /** The multi-stamp bucket (#748), on the **last** page only and only when the filter holds a
+   *  carrier — null everywhere else, so a list reading every page meets it exactly once, after the
+   *  groups it is not one of. */
+  multiStampGroup: MultiStampGroupRow | null;
 }
 
 /** The stamp identity a group row shows — the stamp half of {@link ITEM_LIST_SELECT}, resolved once
@@ -2101,11 +2196,17 @@ export async function listItemDuplicateGroups(
   const offset = filters.offset ?? 0;
 
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const filtered = await withMissingCatalogFilter(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
   );
+
+  // A duplicate group is keyed **on a stamp**, so a carrier cannot be in one (#748; ADR-0044 §3):
+  // filed under its leading stamp it would be counted as a duplicate of a stamp it is not a copy
+  // of. The carriers are counted into one bucket of their own below instead. Narrowed here, once,
+  // so the group counts and the member read that follows agree about it.
+  const where = { AND: [filtered, NOT_MULTI_STAMP] };
 
   // `by` is chosen at runtime from the axes, which Prisma's generic `groupBy` signature cannot
   // express — the alternative is four literal call sites of the same query.
@@ -2136,7 +2237,8 @@ export async function listItemDuplicateGroups(
   const hasMore = grouped.length > pageSize;
   const page = hasMore ? grouped.slice(0, pageSize) : grouped;
   const nextCursor = hasMore ? String(offset + pageSize) : null;
-  if (page.length === 0) return { groups: [], nextCursor };
+  const multiStampGroup = hasMore ? null : await readMultiStampGroup(filtered);
+  if (page.length === 0) return { groups: [], nextCursor, multiStampGroup };
 
   const keys: CopyGroupKey[] = page.map((g) => ({
     stampId: g.stampId,
@@ -2263,7 +2365,21 @@ export async function listItemDuplicateGroups(
       valueVaries: values.length > 0 && !agreed,
     });
   }
-  return { groups, nextCursor };
+  return { groups, nextCursor, multiStampGroup };
+}
+
+/**
+ * The multi-stamp bucket of a grouped Copies list (#748): how many carriers the list's own filtered
+ * `where` holds, or null when it holds none. One count, taken by the grouping reads on their **last**
+ * page — the bucket sorts after every group it is not one of, the way `No issue` does, and a page
+ * boundary cannot split a group that is a single row.
+ */
+async function readMultiStampGroup(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filtered: any
+): Promise<MultiStampGroupRow | null> {
+  const count = await prisma.item.count({ where: { AND: [filtered, MULTI_STAMP] } });
+  return count > 0 ? { key: MULTI_STAMP_GROUP_KEY, count } : null;
 }
 
 // ── Filing groups: by location and by ref (#421) ─────────────────────────────
@@ -2392,6 +2508,9 @@ export interface IssueGroupRow {
 export interface PaginatedIssueGroupsResult {
   groups: IssueGroupRow[];
   nextCursor: string | null;
+  /** The multi-stamp bucket (#748) — on the last page, after `No issue`. See
+   *  {@link PaginatedCopyGroupsResult.multiStampGroup}. */
+  multiStampGroup: MultiStampGroupRow | null;
 }
 
 /**
@@ -2437,8 +2556,12 @@ export async function listItemIssueGroups(
     buildItemWhere(collectionId, filters, locationIds)
   );
 
+  // A carrier is filed under **no** issue (#748; ADR-0044 §3). Its leading stamp's series is a
+  // claim about one of its stamps, and a cover franked from three series would otherwise sit under
+  // whichever was put first. The carriers are one bucket after the issue-less one instead, so the
+  // groups still partition the list and their counts still add up to it.
   const rows = await prisma.item.findMany({
-    where,
+    where: { AND: [where, NOT_MULTI_STAMP] },
     select: {
       stamp: {
         select: {
@@ -2481,6 +2604,7 @@ export async function listItemIssueGroups(
   const ordered = [...groups.values()].sort(compareIssueGroups);
   const page = ordered.slice(offset, offset + pageSize);
   const nextCursor = offset + pageSize < ordered.length ? String(offset + pageSize) : null;
+  const multiStampGroup = nextCursor ? null : await readMultiStampGroup(where);
   // `catalogSortKey` is an ordering input, not something a row states — it is a denormalized
   // column, and a screen has the catalog numbers themselves.
   return {
@@ -2493,6 +2617,7 @@ export async function listItemIssueGroups(
       count,
     })),
     nextCursor,
+    multiStampGroup,
   };
 }
 
@@ -2593,7 +2718,12 @@ export async function listIssueGroupCompleteness(
           by: ["stampId", "conditionId"],
           // AND-ed rather than spread: the filter `where` already carries an `AND` list and an
           // `OR` of its own, and a stray key would silently replace one of them.
-          where: { AND: [where, { stampId: { in: rollup.countingStampIds } }] },
+          // …and `NOT_MULTI_STAMP` beside it (#745/#748): a set figure is a count of copies *of* the
+          // checklist's stamps, which a carrier is not, and the header sits over groups that already
+          // leave the carriers out.
+          where: {
+            AND: [where, NOT_MULTI_STAMP, { stampId: { in: rollup.countingStampIds } }],
+          },
           _count: { _all: true },
         }),
     prisma.stampCondition.findMany({
