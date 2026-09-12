@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   DialogShell,
   DialogBody,
@@ -18,7 +19,12 @@ import {
   EMPTY_INTAKE_CATALOG_VALUE,
   type IntakeCatalogValue,
 } from "@/lib/intake-catalog-value";
-import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
+import {
+  PhotoEditor,
+  type PhotoEditorPreview,
+  type PhotoEditorValue,
+} from "@/app/c/[collectionSlug]/inventory/photo-editor";
+import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
@@ -229,6 +235,9 @@ export interface IntakeConditionDialogProps {
   /** Open the stamp editor over this step (#750). Present only in the scan-tile chain, where the
    * piece is on screen to be read: nowhere else is there a single piece of paper being described. */
   onEditStamps?: () => void;
+  /** The copy a re-identified scan tile already became (#1207) — the piece on screen, so left out
+   * of the held copies it is compared with. Absent on every intake that creates a copy. */
+  correctedCopyId?: string;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -254,6 +263,7 @@ function IntakeConditionDialog({
   lotChoice,
   carriedStamps,
   onEditStamps,
+  correctedCopyId,
   onBack,
   onClose,
   onSubmit,
@@ -359,6 +369,13 @@ function IntakeConditionDialog({
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
   }, []);
+
+  // The comparison with the copies already held (#1207), opened from the holdings line. It opens
+  // **over** this step rather than replacing it, so every answer here is as it was left on closing.
+  // The photos added above are its picture of the piece when there is no tile — state rather than a
+  // ref like the change-set, because the comparison draws them.
+  const [comparing, setComparing] = useState(false);
+  const [photoPreviews, setPhotoPreviews] = useState<PhotoEditorPreview[]>([]);
 
   // The catalogue value typed while the paper catalogue is still open at this stamp (#593). Held in
   // a ref for the reason the photo change-set is: the field re-reads on every change of condition,
@@ -553,6 +570,7 @@ function IntakeConditionDialog({
                 conditionId={conditionId}
                 certificateStatusId={certId}
                 formatId={formatId}
+                onCompare={() => setComparing(true)}
               />
             )}
           </div>
@@ -749,6 +767,7 @@ function IntakeConditionDialog({
                 initialPhotos={[]}
                 disabled={isPending}
                 onChange={handlePhotoChange}
+                onPreviewsChange={setPhotoPreviews}
               />
             </div>
           )}
@@ -769,6 +788,26 @@ function IntakeConditionDialog({
           error={priceError ?? error}
         />
       </form>
+      {/* Portalled to the body rather than drawn inside the shell: the shell's panel is transformed,
+          which would make it the containing block of the comparison's fixed overlay and crop it to
+          this dialog — the lightbox's own reason for a portal. */}
+      {comparing &&
+        selection.kind === "stamp" &&
+        createPortal(
+          <HeldCopiesCompareDialog
+            collectionId={collectionId}
+            stampId={selection.stampId}
+            stampLabel={selection.label}
+            conditions={conditions}
+            certificateStatuses={certificateStatuses}
+            excludeItemId={correctedCopyId ?? null}
+            pieces={pieces}
+            previews={photos ? photoPreviews : []}
+            scanDpi={scanDpi}
+            onClose={() => setComparing(false)}
+          />,
+          document.body
+        )}
     </DialogShell>
   );
 }

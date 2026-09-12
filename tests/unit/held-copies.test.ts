@@ -2,7 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   heldConditionsText,
+  heldCopyPlace,
+  orderHeldCopyPictures,
   summarizeHeldCopies,
+  type HeldCopyPicture,
   type HeldCopyRow,
 } from "../../src/lib/held-copies";
 
@@ -211,5 +214,139 @@ describe("heldConditionsText", () => {
       ORDER
     );
     assert.equal(heldConditionsText(several.markers[0], nameFor), "3 MNH, 1 U");
+  });
+});
+
+/** A held copy to compare against (#1207) — delivered, no disposition, no photo, unless the case
+ *  says otherwise. */
+function copy(
+  partial: Partial<HeldCopyPicture> & { id: string; itemNo: number; conditionId: string }
+): HeldCopyPicture {
+  return {
+    certificateStatusId: null,
+    deliveryState: "delivered",
+    inCollection: false,
+    forSale: false,
+    forTrade: false,
+    photos: [],
+    ...partial,
+  };
+}
+
+describe("orderHeldCopyPictures", () => {
+  it("puts the copies in the collection first, whatever their number or condition", () => {
+    const ordered = orderHeldCopyPictures(
+      [
+        copy({ id: "sale", itemNo: 1, conditionId: "mnh", forSale: true }),
+        copy({ id: "none", itemNo: 2, conditionId: "mnh" }),
+        copy({ id: "trade", itemNo: 3, conditionId: "mnh", forTrade: true }),
+        copy({ id: "coll", itemNo: 9, conditionId: "u", inCollection: true }),
+      ],
+      ORDER
+    );
+    assert.deepEqual(
+      ordered.map((c) => c.id),
+      ["coll", "sale", "trade", "none"]
+    );
+  });
+
+  it("files a copy both in the collection and for sale with the collection", () => {
+    const ordered = orderHeldCopyPictures(
+      [
+        copy({ id: "sale", itemNo: 1, conditionId: "mnh", forSale: true }),
+        copy({ id: "both", itemNo: 2, conditionId: "mnh", inCollection: true, forSale: true }),
+      ],
+      ORDER
+    );
+    assert.deepEqual(
+      ordered.map((c) => c.id),
+      ["both", "sale"]
+    );
+  });
+
+  it("lists the copies not yet filed after every filed one, in lifecycle order", () => {
+    // An in-flight copy's flags are unset or provisional, so an `inCollection` on one must not lift
+    // it among the copies actually in the collection.
+    const ordered = orderHeldCopyPictures(
+      [
+        copy({ id: "ordered", itemNo: 1, conditionId: "mnh", deliveryState: "ordered" }),
+        copy({ id: "post", itemNo: 2, conditionId: "mnh", deliveryState: "in_transit" }),
+        copy({
+          id: "desk",
+          itemNo: 3,
+          conditionId: "mnh",
+          deliveryState: "to_sort",
+          inCollection: true,
+        }),
+        copy({ id: "held", itemNo: 4, conditionId: "mnh" }),
+      ],
+      ORDER
+    );
+    assert.deepEqual(
+      ordered.map((c) => c.id),
+      ["held", "desk", "post", "ordered"]
+    );
+  });
+
+  it("orders inside a group by the collection's condition order, then by copy number", () => {
+    const ordered = orderHeldCopyPictures(
+      [
+        copy({ id: "u-1", itemNo: 1, conditionId: "u", inCollection: true }),
+        copy({ id: "mnh-7", itemNo: 7, conditionId: "mnh", inCollection: true }),
+        copy({ id: "gone", itemNo: 2, conditionId: "deleted", inCollection: true }),
+        copy({ id: "mnh-3", itemNo: 3, conditionId: "mnh", inCollection: true }),
+      ],
+      ORDER
+    );
+    assert.deepEqual(
+      ordered.map((c) => c.id),
+      ["mnh-3", "mnh-7", "u-1", "gone"]
+    );
+  });
+
+  it("does not reorder what it was given", () => {
+    const given = [
+      copy({ id: "b", itemNo: 2, conditionId: "mnh" }),
+      copy({ id: "a", itemNo: 1, conditionId: "mnh", inCollection: true }),
+    ];
+    orderHeldCopyPictures(given, ORDER);
+    assert.deepEqual(
+      given.map((c) => c.id),
+      ["b", "a"]
+    );
+  });
+});
+
+describe("heldCopyPlace", () => {
+  it("words a filed copy by every disposition it carries, in the line's order", () => {
+    const place = heldCopyPlace(
+      copy({ id: "x", itemNo: 1, conditionId: "mnh", forTrade: true, inCollection: true })
+    );
+    assert.equal(place.kind, "held");
+    assert.deepEqual(
+      place.kind === "held" ? place.markers.map((m) => m.label) : [],
+      ["in collection", "for trade"]
+    );
+  });
+
+  it("says a filed copy with no flag has no disposition", () => {
+    const place = heldCopyPlace(copy({ id: "x", itemNo: 1, conditionId: "mnh" }));
+    assert.deepEqual(
+      place.kind === "held" ? place.markers.map((m) => m.label) : [],
+      ["with no disposition"]
+    );
+  });
+
+  it("gives a copy not yet filed its clause and no disposition, whatever its flags say", () => {
+    assert.deepEqual(
+      heldCopyPlace(
+        copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "to_sort", forSale: true })
+      ),
+      { kind: "inFlight", label: "being sorted", state: "to_sort" }
+    );
+    assert.deepEqual(
+      heldCopyPlace(copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "ordered" })),
+      { kind: "inFlight", label: "on its way", state: "ordered" }
+    );
   });
 });

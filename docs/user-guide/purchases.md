@@ -1197,6 +1197,30 @@ counts the **same copies** as the copies-held badge on the catalogue lists (sold
 no longer hold and copies that never arrived are left out of both); what differs is that the badge
 gives one number and this line splits it, because *hold* is a claim and the badge is a count.
 
+**Comparing with the copies you hold.** Often the question is not *do I need this* but *is this one
+better than mine* — better centred, fresher colour, full perforations, a cleaner cancel — and that is
+judged by looking, not by reading a condition code. So whenever the line says you hold something, it
+ends with **Compare with it…** (or **Compare with them…**). It opens a window over the step:
+
+- **On the left, the piece you are identifying** — the scan tile, in the same viewer with its zoom,
+  or, when you are not working from a scan, the photos you have added under **Photos** in this step.
+  With no picture of it yet the left side just says so; the copies you hold are still shown.
+- **On the right, every copy you still hold of that stamp**, the ones **in your collection first**,
+  then the ones for sale, for trade and with no disposition, then any not filed yet (*being sorted*,
+  *in the post*, *on its way*). Each is labelled with its copy number, condition, certificate and
+  disposition — or, for a copy not filed yet, where it is. Its front and back are drawn large; click
+  any picture to open it full size.
+- A copy you hold **without a photo is still listed** and says *No picture of this copy*, because
+  leaving it out would look as if you did not hold it.
+- Copies you **no longer hold** — sold, traded away, written off, never arrived — are not shown.
+
+It is **only for looking**. Nothing in the window changes anything, and nothing decides which copy is
+better: that call is yours. **Back to the identification** (or Escape) returns you to the step with
+everything as you left it, and whatever you then decide — keeping the new piece in the collection,
+putting your old copy up for sale — you do exactly as before. When you use **Identify again** on a
+tile that is already a copy, that copy is the piece on the left, so it is not listed among the ones
+you compare it with.
+
 **The want marker.** The same line carries the **crosshair chip** when the stamp is on your
 [want list](wants.md), ringed once the condition, certificate and format you have picked would
 satisfy one of the wants — all three are axes a want is matched on, so a block of four does not ring
