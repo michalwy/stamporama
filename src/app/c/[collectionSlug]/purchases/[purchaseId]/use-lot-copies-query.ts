@@ -14,6 +14,7 @@ import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { CopyContainer } from "@/lib/lot-selection";
 import { formatTilePhotoRoles, type TilePhotoRole } from "@/lib/tile-photo-roles";
+import { formatIntakeGroupAxes, type IntakeGroupAxis } from "@/lib/intake-groups";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -37,6 +38,10 @@ export interface LotCopiesParams extends IntakeFilterParams {
   freePhotoSlots?: readonly TilePhotoRole[];
   /** Restrict to a single issue group (issue id or `"__none__"`) for the grouped view. */
   issueKey?: string;
+  /** Restrict to one area heading (area id or `"__none__"`) (#1189). */
+  areaKey?: string;
+  /** Restrict to one year-of-issue heading (the year as digits, or `"__none__"`) (#1189). */
+  yearKey?: string;
 }
 
 export const lotCopiesKeys = {
@@ -45,15 +50,23 @@ export const lotCopiesKeys = {
     ["lot-copies", collectionId, lotId] as const,
   list: (collectionId: string, lotId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, lotId, "list", params] as const,
-  summary: (collectionId: string, lotId: string, filters: IntakeFilterParams) =>
-    ["lot-copies", collectionId, lotId, "summary", filters] as const,
+  summary: (
+    collectionId: string,
+    lotId: string,
+    filters: IntakeFilterParams,
+    groupBy: readonly IntakeGroupAxis[]
+  ) => ["lot-copies", collectionId, lotId, "summary", filters, groupBy] as const,
   purchaseList: (collectionId: string, purchaseId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "list", params] as const,
   /** Every copy of the collection, for a scan tile with no order to narrow to (#725). */
   collectionList: (collectionId: string, params: LotCopiesParams) =>
     ["lot-copies", collectionId, "collection", "list", params] as const,
-  purchaseSummary: (collectionId: string, purchaseId: string, filters: IntakeFilterParams) =>
-    ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters] as const,
+  purchaseSummary: (
+    collectionId: string,
+    purchaseId: string,
+    filters: IntakeFilterParams,
+    groupBy: readonly IntakeGroupAxis[]
+  ) => ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters, groupBy] as const,
   purchaseReturn: (collectionId: string, purchaseId: string) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "return"] as const,
   lotReturn: (collectionId: string, lotId: string) =>
@@ -130,6 +143,8 @@ function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchPar
   if (params.filter) sp.set("filter", params.filter);
   if (params.disposition) sp.set("disposition", params.disposition);
   if (params.issueKey) sp.set("issueKey", params.issueKey);
+  if (params.areaKey) sp.set("areaKey", params.areaKey);
+  if (params.yearKey) sp.set("yearKey", params.yearKey);
   if (params.freePhotoSlots?.length) {
     sp.set("freePhotoSlots", formatTilePhotoRoles(params.freePhotoSlots));
   }
@@ -247,12 +262,16 @@ export function useLotSummary(
   collectionId: string,
   lotId: string,
   filters: IntakeFilterParams = {},
+  /** How the view is piled up (#1189). Part of the key: the headings the summary reports are the
+   * headings of *these* axes, so two groupings are two caches rather than one that flickers. */
+  groupBy: readonly IntakeGroupAxis[] = [],
   enabled = true
 ) {
   return useQuery<LotIntakeSummary>({
-    queryKey: lotCopiesKeys.summary(collectionId, lotId, filters),
+    queryKey: lotCopiesKeys.summary(collectionId, lotId, filters, groupBy),
     queryFn: async () => {
       const sp = buildCopyParams(filters);
+      if (groupBy.length) sp.set("groupBy", formatIntakeGroupAxes(groupBy));
       const res = await fetch(
         `/api/collections/${collectionId}/purchases/lots/${lotId}/copies/summary?${sp.toString()}`
       );
@@ -270,12 +289,15 @@ export function usePurchaseSummary(
   collectionId: string,
   purchaseId: string,
   filters: IntakeFilterParams = {},
+  /** How the view is piled up (#1189) — see {@link useLotSummary}. */
+  groupBy: readonly IntakeGroupAxis[] = [],
   enabled = true
 ) {
   return useQuery<PurchaseIntakeSummary>({
-    queryKey: lotCopiesKeys.purchaseSummary(collectionId, purchaseId, filters),
+    queryKey: lotCopiesKeys.purchaseSummary(collectionId, purchaseId, filters, groupBy),
     queryFn: async () => {
       const sp = buildCopyParams(filters);
+      if (groupBy.length) sp.set("groupBy", formatIntakeGroupAxes(groupBy));
       const res = await fetch(
         `/api/collections/${collectionId}/purchases/${purchaseId}/copies/summary?${sp.toString()}`
       );

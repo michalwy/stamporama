@@ -53,3 +53,21 @@ export function batchLabelFromFileName(fileName: string): string | null {
 export function isBatchLabelTooLong(label: string | null): boolean {
   return label != null && label.length > MAX_BATCH_LABEL_LENGTH;
 }
+
+/**
+ * What a scan is called where there is room for one name and no number beside it (#1188) — a copy's
+ * row on a purchase lot's item list.
+ *
+ * The name if the card has one, and **`Batch N` when it has not**. That is not a placeholder: an
+ * unnamed card is still a card, and the number is the identifier everything else on the scans card
+ * leads with, so falling back to it answers *which sheet did this come off* exactly as well. The
+ * row shows nothing at all only when there was no scan — which is a different statement and is made
+ * by the caller, not here.
+ *
+ * The two are never printed together. `Batch 3 · Klaser Polska 1` is what the scans card shows,
+ * where the batch is the subject of the line; on a copy's row the scan is one chip among a dozen
+ * and a two-part name would be the widest thing on it.
+ */
+export function scanBatchName(batchNo: number, label: string | null): string {
+  return normalizeBatchLabel(label) ?? `Batch ${batchNo}`;
+}

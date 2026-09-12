@@ -39,6 +39,11 @@ export async function GET(
   // alongside `filter` rather than folded into it.
   const disposition = parseDispositionFilter(sp.get("disposition"));
   const issueKey = sp.get("issueKey") || undefined;
+  // The area and year headings a grouped view pages within (#1189). Validated no further than
+  // this: they are matched against a derived reading of each copy, so an unknown key simply
+  // matches nothing rather than widening the read.
+  const areaKey = sp.get("areaKey") || undefined;
+  const yearKey = sp.get("yearKey") || undefined;
   // Which photo slots a scan tile needs free, for its assign list (#567) — asked at the **order**
   // level since #586, a card of a settled auction holding pieces of every lot in the parcel.
   // Parsed through the shared encoding, so what the list asked for and what the read filters on
@@ -53,6 +58,8 @@ export async function GET(
       disposition,
       freePhotoSlots,
       issueKey,
+      areaKey,
+      yearKey,
       offset,
       pageSize: 50,
     });
