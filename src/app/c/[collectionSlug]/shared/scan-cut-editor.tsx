@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pickBoxAction } from "@/app/actions/scans";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DialogFooter,
@@ -44,6 +45,18 @@ import { useSheetRegion } from "./use-sheet-region";
  * not, but because a crop is. Nothing here paints a mask or edits an outline.
  *
  * Nothing is created until Commit, so the whole review is free to be wrong.
+ *
+ * ## Pointing at a stamp, since #1196
+ *
+ * Placing two corners precisely on a small object is the laborious half of drawing a box, and it is
+ * the half the collector has no doubt about: they know where the stamp is, what is slow is saying
+ * where it *ends*. **Pick** arms a mode where one click inside a stamp asks the server for the box
+ * around it — the same separation the proposal came out of, read at that one point.
+ *
+ * **An addition and never a replacement.** A click can fail, and drawing by hand is untouched
+ * underneath it. A click that cannot find the edges says so and creates nothing, and a click inside
+ * a box that already exists selects it instead of laying a second one over it: a wrong box is worse
+ * than no box, because it looks like a right one and is found long after the card has been cut.
  *
  * Coordinates are the **sheet's original pixels** throughout, converted for display by one scale
  * factor. That is what `sharp.extract` is handed, it survives the browser being resized mid-cut,
@@ -95,9 +108,14 @@ interface Props {
   onClose: () => void;
 }
 
-/** What the next pointer-down will do. `select` is the resting state; the two split modes are armed
- * by a toolbar button and disarmed by committing one cut or pressing Escape. */
-type Mode = "select" | "split-v" | "split-h";
+/** What the next pointer-down will do. `select` is the resting state; the other modes are armed by
+ * a toolbar button and disarmed by pressing Escape.
+ *
+ * The two splits also disarm themselves after one cut, and `pick` deliberately does not: a split is
+ * aimed at one box the collector has already selected, while picking is the answer to *the proposal
+ * missed several*, and on a card of forty re-arming it between each would be the cost the tool
+ * exists to remove. */
+type Mode = "select" | "split-v" | "split-h" | "pick";
 
 type Drag =
   | { kind: "draw"; originX: number; originY: number; current: Box | null }
@@ -133,6 +151,13 @@ export function ScanCutEditor({
   const [drag, setDrag] = useState<Drag | null>(null);
   /** Where the split guide currently sits, in sheet pixels, while a split mode is armed. */
   const [splitAt, setSplitAt] = useState<number | null>(null);
+  /** A click is out at the server, working out where the stamp under it ends (#1196). One at a
+   * time: the answer takes a second or so, and a second click while the first is in flight would
+   * be aimed at a card that is about to change under it. */
+  const [picking, setPicking] = useState(false);
+  /** What the last click had to say for itself, if anything — the refusal, or the box that was
+   * already there. Cleared by the next click, so it reads as an answer to this one. */
+  const [pickNote, setPickNote] = useState<string | null>(null);
 
   /** The window onto the card. Everything is drawn inside it and nothing scrolls: this surface owns
    * the wheel, because on a card of forty the wheel is the zoom. */
@@ -298,7 +323,7 @@ export function ScanCutEditor({
 
   const commitSplit = useCallback(
     (at: number) => {
-      if (!soleSelected || mode === "select") return;
+      if (!soleSelected || (mode !== "split-v" && mode !== "split-h")) return;
       const halves = splitBox(soleSelected.box, mode === "split-v" ? "vertical" : "horizontal", at);
       // A cut that would leave a sliver is simply refused; the guide stays up so the collector can
       // aim again, rather than producing a box they then have to notice and delete.
@@ -312,6 +337,50 @@ export function ScanCutEditor({
       setSplitAt(null);
     },
     [mode, regions, soleSelected, replaceSelection]
+  );
+
+  /**
+   * One click inside a stamp, answered with the box around it (#1196).
+   *
+   * **A click inside a box that already exists creates nothing** — it selects that box instead, so
+   * the gesture that would have laid a second box over the first is the gesture that picks up the
+   * first. Two overlapping tiles on one stamp is the kind of mistake nothing downstream can see.
+   *
+   * Everything else is the server's answer, and a refusal is shown rather than swallowed: a click
+   * that quietly does nothing is indistinguishable from a click that never registered.
+   */
+  const pickAt = useCallback(
+    async (p: { x: number; y: number }) => {
+      if (picking) return;
+      setPickNote(null);
+
+      const hit = [...regions].reverse().find((r) => inside(r.box, p));
+      if (hit) {
+        setSelected(new Set([hit.id]));
+        setPickNote("That point is already inside a box, so nothing was added.");
+        return;
+      }
+
+      setPicking(true);
+      try {
+        const result = await pickBoxAction(sheet.id, {
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+        });
+        if (result.status === "error") {
+          setPickNote(result.message);
+          return;
+        }
+        // An ordinary box from here on, indistinguishable from a drawn or a proposed one — and
+        // selected, because the next thing to do with a box the app found for you is look at it.
+        const created = newRegion(result.box);
+        setRegions((rs) => [...rs, created]);
+        setSelected(new Set([created.id]));
+      } finally {
+        setPicking(false);
+      }
+    },
+    [picking, regions, sheet.id]
   );
 
   // ── Pointer ────────────────────────────────────────────────────────────────────────────────
@@ -328,6 +397,10 @@ export function ScanCutEditor({
     if (e.button !== 0) return;
     const p = toSheet(e.clientX, e.clientY);
 
+    if (mode === "pick") {
+      void pickAt(p);
+      return;
+    }
     if (mode !== "select") {
       commitSplit(mode === "split-v" ? p.x : p.y);
       return;
@@ -365,6 +438,8 @@ export function ScanCutEditor({
       setDrag({ kind: "pan", lastX: e.clientX, lastY: e.clientY });
       return;
     }
+
+    if (mode === "pick") return;
 
     const p = toSheet(e.clientX, e.clientY);
 
@@ -443,6 +518,7 @@ export function ScanCutEditor({
         e.stopPropagation();
         setMode("select");
         setSplitAt(null);
+        setPickNote(null);
       } else if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setSelected(new Set(regions.map((r) => r.id)));
@@ -486,6 +562,32 @@ export function ScanCutEditor({
   const countMismatch =
     sheet.side === "back" && frontTileCount != null && frontTileCount !== regions.length;
 
+  // One strip, and what it says is decided in one place. A commit error outranks everything because
+  // it is about the press the collector just made; a click's answer outranks the count because the
+  // count is about the card as a whole and will still be there in a second.
+  const notice: { tone: "error" | "warning" | "info"; body: React.ReactNode } | null = error
+    ? { tone: "error", body: error }
+    : picking
+      ? { tone: "info", body: "Working out where this stamp ends…" }
+      : pickNote
+        ? { tone: "warning", body: pickNote }
+        : countMismatch
+          ? {
+              tone: "warning",
+              body: (
+                <>
+                  <strong>
+                    Front {frontTileCount}, back {regions.length}.
+                  </strong>{" "}
+                  A stamp fell out, two were drawn as one, backs were scanned for only some of the
+                  stamps, or this is the wrong file. Committing is allowed — but with the counts
+                  differing <strong>nothing is paired by position</strong>: every back lands in the
+                  unpaired backs below the tiles, to be dragged onto the stamp it belongs to.
+                </>
+              ),
+            }
+          : null;
+
   return (
     <DialogShell
       title={`${sheet.side === "front" ? "Front" : "Back"} of batch ${sheet.batchNo} — review the cut`}
@@ -501,9 +603,11 @@ export function ScanCutEditor({
           count={regions.length}
           selectedCount={selectedRegions.length}
           mode={mode}
+          picking={picking}
           onMode={(m) => {
             setMode(m);
             setSplitAt(null);
+            setPickNote(null);
           }}
           onDelete={deleteSelected}
           onMerge={mergeSelected}
@@ -517,27 +621,17 @@ export function ScanCutEditor({
           onActualSize={actualSize}
         />
 
-        {(countMismatch || error) && (
+        {notice && (
           <div
             style={{
               padding: "0.625rem 1.25rem",
               fontSize: "0.8125rem",
-              background: error ? "var(--color-error-soft)" : "var(--color-warning-soft)",
-              color: error ? "var(--color-error)" : "var(--color-warning)",
+              background: `var(--color-${notice.tone}-soft)`,
+              color: `var(--color-${notice.tone})`,
               borderBottom: "1px solid var(--color-border)",
             }}
           >
-            {error ?? (
-              <>
-                <strong>
-                  Front {frontTileCount}, back {regions.length}.
-                </strong>{" "}
-                A stamp fell out, two were drawn as one, backs were scanned for only some of the
-                stamps, or this is the wrong file. Committing is allowed — but with the counts
-                differing <strong>nothing is paired by position</strong>: every back lands in
-                the unpaired backs below the tiles, to be dragged onto the stamp it belongs to.
-              </>
-            )}
+            {notice.body}
           </div>
         )}
 
@@ -565,11 +659,15 @@ export function ScanCutEditor({
                 ? "grabbing"
                 : spaceHeld
                   ? "grab"
-                  : mode === "select"
-                    ? "crosshair"
-                    : mode === "split-v"
-                      ? "col-resize"
-                      : "row-resize",
+                  : mode === "pick"
+                    ? picking
+                      ? "progress"
+                      : "cell"
+                    : mode === "select"
+                      ? "crosshair"
+                      : mode === "split-v"
+                        ? "col-resize"
+                        : "row-resize",
             userSelect: "none",
             touchAction: "none",
           }}
@@ -643,7 +741,7 @@ export function ScanCutEditor({
               />
             )}
 
-            {mode !== "select" && soleSelected && splitAt != null && (
+            {(mode === "split-v" || mode === "split-h") && soleSelected && splitAt != null && (
               <SplitGuide box={soleSelected.box} axis={mode} at={splitAt} scale={view.scale} />
             )}
           </div>
@@ -658,9 +756,19 @@ export function ScanCutEditor({
             color: "var(--color-text-muted)",
           }}
         >
-          Drag on the card to draw · click a box to select · shift-click to add · Delete removes ·
-          wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms, <kbd>0</kbd> fits · hold space or the middle
-          button to pan
+          {mode === "pick" ? (
+            <>
+              Click inside a stamp and the box finds its own edges · <kbd>Esc</kbd> goes back to
+              drawing · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms, <kbd>0</kbd> fits · hold space or
+              the middle button to pan
+            </>
+          ) : (
+            <>
+              Drag on the card to draw · click a box to select · shift-click to add · Delete removes
+              · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms, <kbd>0</kbd> fits · hold space or the
+              middle button to pan
+            </>
+          )}
         </span>
         <DialogSecondaryButton onClick={onClose} disabled={committing}>
           Cancel
@@ -692,6 +800,7 @@ function Toolbar({
   count,
   selectedCount,
   mode,
+  picking,
   onMode,
   onDelete,
   onMerge,
@@ -707,6 +816,7 @@ function Toolbar({
   count: number;
   selectedCount: number;
   mode: Mode;
+  picking: boolean;
   onMode: (m: Mode) => void;
   onDelete: () => void;
   onMerge: () => void;
@@ -772,6 +882,13 @@ function Toolbar({
         hint="One screen pixel per pixel of the scan itself — the size a crop is actually taken at"
         active={!fitted && Math.abs(zoom - 1) < 1e-6}
         onClick={onActualSize}
+      />
+      <ScanToolButton
+        icon="pick"
+        label={picking ? "Picking…" : "Pick"}
+        hint="Click inside a stamp and the box finds its own edges — for one the proposal missed"
+        active={mode === "pick"}
+        onClick={() => onMode(mode === "pick" ? "select" : "pick")}
       />
       <ScanToolButton
         icon="merge"

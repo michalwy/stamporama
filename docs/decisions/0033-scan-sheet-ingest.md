@@ -495,6 +495,56 @@ eight stockbook cards return the figures #574 recorded, unchanged. No synthetic 
 #574 refused to start on generated images because constants fitted to them are worse than none, and
 that reasoning did not stop applying because the background changed colour.
 
+## What #1196 added: a click carries the one thing detection had not got
+
+The pass is only ever reached for correction **after** it has gone wrong — a stamp it missed, or one
+it ran into its neighbour. Running the same pass again would miss the same stamp again, so a repair
+tool has to carry something the pass had not got. A click carries exactly one bit: *there is a piece
+here*.
+
+**That bit is worth precisely the filters.** The minimum area, the containment rule and the album
+page's enclosure share are all stand-ins for the same question — *is this a piece* — and a finger on
+it answers better than any of them. So the click reads the pass's own mask and takes the one
+connected region the point lies in, unfiltered, instead of searching the card again. That is the
+whole design, and it is why picking is a handful of lines rather than a second detector.
+
+**The separation was extracted rather than the pick written beside it.** `separateSheet` now holds
+the decode, the elected ground, the threshold, the morphology and the erosion; the pass labels the
+whole of it and filters, and the click takes one region out of it. Written as two routines over the
+same constants they would drift, and the drift would be invisible: two subtly different boxes on one
+card, with nothing on screen saying which came from where. So the harness clicks the **centre of
+every piece the pass proposed** — 148 of them across the set — and asserts the very same four
+numbers come back. Measured: 147 exact, 0 disagreements, and one that finds nothing, which is the
+interlocking pair from #574 whose bounding box has bare card down the middle of it. Clicking bare
+card and getting nothing is the right answer, so it is a printed figure with a budget rather than a
+failure.
+
+A 3×3 grid inside every box was measured once, off the harness, because at ~1.3 s a click it is a
+forty-minute run: 1332 points, 1323 exact, 5 finding nothing, and **4 coming back a few pixels wider
+than the proposal**. Those four are the one place the two routes part. A click within an erosion
+radius of a notch the artwork left in the mask falls outside the *eroded* mask the pass labels, so
+the mask before the erosion answers instead, and its bounding box is the wider one. It is the same
+piece either way, and it is the right way round: the alternative is refusing a click that landed
+squarely on a stamp.
+
+**Refusing is the feature.** A wrong box looks exactly like a right one and is discovered long
+after — after the tile has been identified, and after the card has been broken up. So every case
+where the answer would be a guess returns null and the editor says so: a point on the ground itself,
+a mount with nothing enclosed the point is inside of, a region under the same physical floor the
+pass drops specks by, and a mask covering so much of the frame that the ground has plainly been
+mis-elected — the one case that could otherwise hand back the entire card as a single tile. #566's
+hand-drawn box is untouched underneath all of it and stays the move that always works, which is what
+makes refusing affordable.
+
+**What it deliberately will not do is separate two stamps the mask holds as one.** The region under
+the click is the region, teeth interlocked and all. That is #574's stated information limit, not a
+tuning failure, and Split is the answer to it.
+
+**A click answers out loud where a proposal does not.** `proposeCut` swallows its failures into an
+empty card, because a failed proposal costs the collector a saving and nothing else. A click that
+quietly does nothing is indistinguishable from a click that never registered, and the collector goes
+on clicking — so the refusal is a message on the editor's own notice strip.
+
 ## What #585 added: the same viewport over a tile, which is where the detail was all along
 
 #579 justified zoom by the *cut*. The larger prize was one step later. Deciding **which variant** a

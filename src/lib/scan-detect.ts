@@ -62,6 +62,19 @@ import { readingOrder, type Box } from "./scan-boxes";
  * the seam is white paper against white paper and no threshold finds it; the reference eroded to 14
  * iterations without splitting one. The fix is physical — leave about a tooth of gap when laying
  * the card out — and it is in the user guide for that reason.
+ *
+ * ## Two ways of asking, one separation
+ *
+ * #1196 added a second question to the same pixels: not *where are the pieces* but *what is the
+ * piece under this point*, asked by the collector clicking a stamp the pass got wrong. The decode,
+ * the background election, the threshold, the morphology and the erosion are one arrangement
+ * ({@link separateSheet}) and both questions read it. The pass labels the whole mask and filters
+ * what it finds; the click takes the one region the finger landed in and skips the filters, because
+ * the click is the evidence those filters were standing in for.
+ *
+ * They must not drift: a click that answered differently from the pass over the same pixels would
+ * be a second detector wearing the first one's constants, and the collector would have no way to
+ * tell which of the two boxes on the card came from which.
  */
 
 /**
@@ -270,6 +283,87 @@ export async function detectSheetBoxesReported(
   original: Buffer,
   kind: SheetKind
 ): Promise<DetectionReport> {
+  const sep = await separateSheet(original, kind);
+  const { data, w, h, sheet, scale, grow } = sep;
+
+  const regions = labelComponents(sep.labelled, w, h).map((r) => grownBy(r, grow, w, h));
+
+  const minArea = minimumRegionArea(sep.density, scale, regions);
+  const bigEnough = regions.filter((r) => r.w * r.h >= minArea);
+
+  // Containment: a region all but inside a kept one is a piece of that piece — a fragment of a
+  // stamp's own edge that the erosion cut loose, a dark panel inside a souvenir sheet's border, a
+  // hole the fill missed. Largest first, so the survivor is the whole.
+  //
+  // **Mostly inside, not wholly inside.** The reference tested strict containment, and a fragment
+  // whose bounding box overhangs its parent's by a few pixels — which is ordinary, since the two
+  // were labelled separately and each keeps its own extremes — survives that test and lands on the
+  // card as a spurious box over a stamp that already has one. The share is of the *smaller* box's
+  // own area, so two genuinely adjacent pieces whose padded boxes graze each other are unaffected.
+  const kept: Box[] = [];
+  for (const r of [...bigEnough].sort((a, b) => b.w * b.h - a.w * a.h)) {
+    if (!kept.some((k) => overlapShare(k, r) >= CONTAINED_OVERLAP_SHARE)) kept.push(r);
+  }
+
+  // On a stockbook card the regions **are** the pieces. On an album page they are the mounts, and
+  // the piece is one level inside each of them — so the second separation runs here, over the very
+  // buffer the first one read, and what comes back is already a stamp box in working pixels.
+  const pieces = kind === "album" ? stampsInsideMounts(data, w, h, kept, grow) : kept;
+
+  const scaled = pieces.map((r) => scaleBox(r, scale, paddingFor(kind, sep), sheet));
+  const ordered = readingOrder(scaled).map((i) => scaled[i]);
+
+  return {
+    boxes: ordered,
+    kind,
+    workingWidth: w,
+    workingHeight: h,
+    backgrounds: sep.background.clusters.map((c) => c.median),
+    threshold: sep.background.threshold,
+    maskCoverage: sep.coverage,
+    erosionRadius: sep.erosionRadius,
+    droppedSmall: regions.length - bigEnough.length,
+    droppedContained: bigEnough.length - kept.length,
+    droppedWithoutStamp: kept.length - pieces.length,
+  };
+}
+
+// ── The separation both questions read (#1196) ─────────────────────────────────────────────────
+
+/**
+ * The working image, the ground it was separated from, and the mask that separation produced.
+ *
+ * One arrangement, two readers. {@link detectSheetBoxesReported} labels the whole mask; {@link
+ * pickBoxAt} takes the single region a click landed in. Nothing here knows which is about to ask.
+ */
+interface Separation {
+  /** The working image's RGB pixels. */
+  data: Buffer;
+  w: number;
+  h: number;
+  /** The sheet's own oriented dimensions, and sheet pixels per working pixel. */
+  sheet: { width: number; height: number };
+  scale: number;
+  /** The scan's recorded resolution, or undefined — what the physical rules are measured through. */
+  density: number | undefined;
+  background: BackgroundEstimate;
+  /** Share of the working frame the mask covered. A card is mostly black and a page shows its own
+   * border, so a figure near 1 means the background estimate went wrong rather than that the card
+   * is full. */
+  coverage: number;
+  /** What regions are labelled from: the eroded mask where the erosion left anything, the plain
+   * mask where it did not. Grow anything labelled from it back by {@link Separation.grow}. */
+  labelled: Uint8Array;
+  /** The mask **before** the erosion. The pass never reads it; a click does, when the erosion has
+   * taken the very pixel that was clicked. */
+  mask: Uint8Array;
+  grow: number;
+  erosionRadius: number;
+}
+
+/** Decode, elect the ground, threshold against it, and clean up — everything up to the point where
+ * *where are the pieces* and *what is the piece here* become different questions. */
+async function separateSheet(original: Buffer, kind: SheetKind): Promise<Separation> {
   const base = sharp(original, { failOn: "error" }).rotate();
   const meta = await base.metadata();
 
@@ -309,60 +403,175 @@ export async function detectSheetBoxesReported(
   // back by the same radius afterwards, so the pixels it took are given back.
   const eroded = erodeDiamond(mask, w, h, erosionRadius);
   const labelled = countSet(eroded) > 0 ? eroded : mask;
-  const grow = labelled === eroded ? erosionRadius : 0;
-
-  const regions = labelComponents(labelled, w, h).map((r) => ({
-    x: Math.max(0, r.x - grow),
-    y: Math.max(0, r.y - grow),
-    w: Math.min(w, r.x + r.w + grow) - Math.max(0, r.x - grow),
-    h: Math.min(h, r.y + r.h + grow) - Math.max(0, r.y - grow),
-  }));
-
-  const scale = sheet.width / w;
-  const minArea = minimumRegionArea(meta.density, scale, regions);
-  const bigEnough = regions.filter((r) => r.w * r.h >= minArea);
-
-  // Containment: a region all but inside a kept one is a piece of that piece — a fragment of a
-  // stamp's own edge that the erosion cut loose, a dark panel inside a souvenir sheet's border, a
-  // hole the fill missed. Largest first, so the survivor is the whole.
-  //
-  // **Mostly inside, not wholly inside.** The reference tested strict containment, and a fragment
-  // whose bounding box overhangs its parent's by a few pixels — which is ordinary, since the two
-  // were labelled separately and each keeps its own extremes — survives that test and lands on the
-  // card as a spurious box over a stamp that already has one. The share is of the *smaller* box's
-  // own area, so two genuinely adjacent pieces whose padded boxes graze each other are unaffected.
-  const kept: Box[] = [];
-  for (const r of [...bigEnough].sort((a, b) => b.w * b.h - a.w * a.h)) {
-    if (!kept.some((k) => overlapShare(k, r) >= CONTAINED_OVERLAP_SHARE)) kept.push(r);
-  }
-
-  // On a stockbook card the regions **are** the pieces. On an album page they are the mounts, and
-  // the piece is one level inside each of them — so the second separation runs here, over the very
-  // buffer the first one read, and what comes back is already a stamp box in working pixels.
-  const pieces = kind === "album" ? stampsInsideMounts(data, w, h, kept, grow) : kept;
-
-  // **No padding on an album page.** The stockbook pad exists because a mask stops at the last
-  // pixel that differs from the card and a perforation tip is the faintest part of a stamp, so a
-  // crop flush to the mask clips teeth. Against a black mount the selvedge is the strongest edge on
-  // the page and the mask reaches the paper itself; growing the box there would put mount in the
-  // tile, which is precisely what this kind exists to keep out of it.
-  const pad = kind === "album" ? 0 : paddingPixels(meta.density, scale, erosionRadius);
-  const scaled = pieces.map((r) => scaleBox(r, scale, pad, sheet));
-  const ordered = readingOrder(scaled).map((i) => scaled[i]);
 
   return {
-    boxes: ordered,
-    kind,
-    workingWidth: w,
-    workingHeight: h,
-    backgrounds: background.clusters.map((c) => c.median),
-    threshold: background.threshold,
-    maskCoverage: coverage,
+    data,
+    w,
+    h,
+    sheet,
+    scale: sheet.width / w,
+    density: meta.density,
+    background,
+    coverage,
+    labelled,
+    mask,
+    grow: labelled === eroded ? erosionRadius : 0,
     erosionRadius,
-    droppedSmall: regions.length - bigEnough.length,
-    droppedContained: bigEnough.length - kept.length,
-    droppedWithoutStamp: kept.length - pieces.length,
   };
+}
+
+/** How far a box is grown outward on the way to the sheet's own pixels. **None on an album page**:
+ * the stockbook pad exists because a mask stops at the last pixel that differs from the card and a
+ * perforation tip is the faintest part of a stamp, so a crop flush to the mask clips teeth. Against
+ * a black mount the selvedge is the strongest edge on the page and the mask reaches the paper
+ * itself; growing the box there would put mount in the tile, which is precisely what that kind
+ * exists to keep out of it. */
+function paddingFor(kind: SheetKind, sep: Separation): number {
+  return kind === "album" ? 0 : paddingPixels(sep.density, sep.scale, sep.erosionRadius);
+}
+
+// ── The piece under one point (#1196) ──────────────────────────────────────────────────────────
+
+/**
+ * The box around the piece the collector **clicked**, in the sheet's oriented original pixels, or
+ * null when its edges cannot be determined.
+ *
+ * ## Why a click is a different question and the same answer
+ *
+ * The pass is reached when it has already gone wrong: a stamp it missed, or one it ran into its
+ * neighbour. Running the same pass again would miss it again, so the click has to carry something
+ * the pass had not got — and what it carries is exactly one bit of ground truth, *there is a piece
+ * here*. That bit is worth precisely the filters: the minimum area, the containment rule and the
+ * album page's enclosure share are all stand-ins for *is this a piece*, and a finger on it answers
+ * better than any of them. So the click reads {@link separateSheet}'s mask and takes the one region
+ * the point lies in, unfiltered, rather than searching the card again.
+ *
+ * Everything else is the pass, deliberately: the same working resolution, the same ground, the same
+ * threshold, the same morphology, the same erosion and the same grow-back, the same second
+ * separation inside a mount, and the same padding rule. A box from here is a box from there.
+ *
+ * ## What it refuses, and why refusing is the feature
+ *
+ * A wrong box is worse than no box: it looks exactly like a right one, and it is found much later —
+ * after the tile has been identified, and after the card has been broken up. So every case where
+ * the answer would be a guess returns null and the editor says so, leaving the hand-drawn box
+ * (#566) as the move that always works. That is the whole of the error budget here.
+ *
+ * It refuses when the point is on the ground itself (a click on the black card, or on the page
+ * between mounts), when a mount holds nothing enclosed the click is inside of, when what was found
+ * is under the same physical floor the pass drops specks by, and when the mask covered so much of
+ * the frame that the background estimate has plainly failed — the one case that could otherwise
+ * hand back the entire card as a single tile.
+ *
+ * **What it does not refuse is two stamps the mask holds as one.** The region under the click is
+ * the region, teeth interlocked and all; that is the information limit stated at the top of this
+ * file, and the editor's Split is what answers it.
+ */
+export async function pickBoxAt(
+  original: Buffer,
+  kind: SheetKind,
+  point: { x: number; y: number }
+): Promise<Box | null> {
+  const sep = await separateSheet(original, kind);
+  const { data, w, h, sheet, scale, grow } = sep;
+
+  if (sep.coverage >= FAILED_ESTIMATE_COVERAGE) return null;
+
+  const ax = Math.round(point.x / scale);
+  const ay = Math.round(point.y / scale);
+  if (ax < 0 || ay < 0 || ax >= w || ay >= h) return null;
+
+  // The eroded mask first, so that a click on a piece the pass also found answers with the very
+  // box the pass proposed for it. Where the erosion has taken the clicked pixel itself — within a
+  // radius of the piece's own edge, or of a notch the artwork left in the mask — the mask before it
+  // answers instead, ungrown, because nothing was taken off that one to give back. That box is the
+  // honest extent of the same piece and runs a few pixels wider than the pass's, which is the right
+  // way round: the alternative is refusing a click that landed squarely on a stamp.
+  const eroded = componentAt(sep.labelled, w, h, ax, ay);
+  const regionGrow = eroded ? grow : 0;
+  const region = eroded ?? componentAt(sep.mask, w, h, ax, ay);
+  if (!region) return null;
+  const piece = grownBy(region, regionGrow, w, h);
+
+  // On a stockbook card that region **is** the piece. On an album page it is the mount, and the
+  // stamp is one level inside it — the pass's second separation, asked for the one region the
+  // click landed in rather than for every one the mount holds. The stamp's own selvedge is what
+  // comes back, for the reason {@link stampsInsideMounts} states: the edge being measured is white
+  // paper against black film, and the printed design is never asked about.
+  let answer = piece;
+  if (kind === "album") {
+    const held = insideMount(data, w, h, piece, regionGrow);
+    if (!held) return null;
+    const { win, inner } = held;
+    const lx = ax - win.x;
+    const ly = ay - win.y;
+    if (lx < 0 || ly < 0 || lx >= win.w || ly >= win.h) return null;
+    const stamp = componentAt(inner, win.w, win.h, lx, ly);
+    if (!stamp || !isStampInMount(stamp, win)) return null;
+    answer = { x: win.x + stamp.x, y: win.y + stamp.y, w: stamp.w, h: stamp.h };
+  }
+
+  // The pass's own physical floor, with no regions to fall back on — which is the right answer for
+  // a scan that records no resolution: there the floor is unmeasurable, and a click is still an
+  // assertion that something is there.
+  if (answer.w * answer.h < minimumRegionArea(sep.density, scale, [])) return null;
+
+  return scaleBox(answer, scale, paddingFor(kind, sep), sheet);
+}
+
+/** Mask coverage at which the ground has plainly been mis-elected rather than the card being full.
+ * The regression harness asserts the same figure over the whole set and the densest card in it
+ * measures 81%; here it is the refusal itself, because the failure it prevents — a click anywhere
+ * handing back the entire card as one tile — is the worst outcome this step has. */
+const FAILED_ESTIMATE_COVERAGE = 0.9;
+
+/**
+ * The bounding box of the connected region one pixel belongs to, or null when that pixel is
+ * background.
+ *
+ * 4-connected, like {@link labelComponents}, and for the same reason: a region reached only through
+ * a corner is a different region, and a click has to mean what the labelling means.
+ */
+function componentAt(mask: Uint8Array, w: number, h: number, x: number, y: number): Box | null {
+  const seed = y * w + x;
+  if (mask[seed] === 0) return null;
+
+  const seen = new Uint8Array(mask.length);
+  const stack = [seed];
+  seen[seed] = 1;
+  let x0 = x;
+  let x1 = x;
+  let y0 = y;
+  let y1 = y;
+
+  while (stack.length > 0) {
+    const i = stack.pop()!;
+    const px = i % w;
+    const py = (i - px) / w;
+    if (px < x0) x0 = px;
+    if (px > x1) x1 = px;
+    if (py < y0) y0 = py;
+    if (py > y1) y1 = py;
+    const push = (j: number) => {
+      if (mask[j] === 1 && seen[j] === 0) {
+        seen[j] = 1;
+        stack.push(j);
+      }
+    };
+    if (px > 0) push(i - 1);
+    if (px < w - 1) push(i + 1);
+    if (py > 0) push(i - w);
+    if (py < h - 1) push(i + w);
+  }
+
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/** A labelled region grown back by what the erosion took off it, clamped to the working image. */
+function grownBy(r: Box, by: number, w: number, h: number): Box {
+  const x = Math.max(0, r.x - by);
+  const y = Math.max(0, r.y - by);
+  return { x, y, w: Math.min(w, r.x + r.w + by) - x, h: Math.min(h, r.y + r.h + by) - y };
 }
 
 /**
@@ -440,45 +649,69 @@ function stampsInsideMounts(
 ): Box[] {
   const stamps: Box[] = [];
   for (const mount of mounts) {
-    // Back to the mount's own outline. The regions were grown by the erosion radius on the way out
-    // of the first separation, which on a card gives back the pixels the erosion took; here it
-    // would put a band of **page** around the window, and the window's border has to be mount for
-    // the ring to elect the mount as its background.
-    const win = insetBox(mount, grow, w, h);
-    if (win.w < MIN_MOUNT_WINDOW_PX || win.h < MIN_MOUNT_WINDOW_PX) continue;
-
-    const sub = cropRgb(data, w, win);
-    const inner = thresholdAgainst(
-      sub,
-      win.w,
-      win.h,
-      estimateBackground(sub, win.w, win.h, "dark")
-    );
-    closeSquare(inner, win.w, win.h, 3);
-    fillHoles(inner, win.w, win.h);
-    openSquare(inner, win.w, win.h, 5);
-    fillHoles(inner, win.w, win.h);
+    const held = insideMount(data, w, h, mount, grow);
+    if (!held) continue;
+    const { win, inner } = held;
 
     // Enclosed, and then **every** one of them that is big enough — not the largest. A mount
     // usually holds one stamp and the two readings agree; where they differ is a mount holding
     // two, and there the largest would quietly return one of them. #574's asymmetry decides it:
     // a surviving extra box costs one click, while a stamp dropped is simply absent from a page
     // the collector has moved on from, with nothing on screen saying so.
-    const found = labelComponents(inner, win.w, win.h).filter(
-      // The page leaking in at a corner of the window is the thing most likely to be *bigger* than
-      // the stamp, and it is also the one thing guaranteed to touch the border.
-      (r) =>
-        r.x > 0 &&
-        r.y > 0 &&
-        r.x + r.w < win.w &&
-        r.y + r.h < win.h &&
-        r.w * r.h >= STAMP_MIN_MOUNT_SHARE * win.w * win.h
-    );
-    for (const stamp of found) {
+    for (const stamp of labelComponents(inner, win.w, win.h)) {
+      if (!isStampInMount(stamp, win)) continue;
       stamps.push({ x: win.x + stamp.x, y: win.y + stamp.y, w: stamp.w, h: stamp.h });
     }
   }
   return stamps;
+}
+
+/**
+ * One mount's own window, and the mask of what lies inside it — the second separation itself,
+ * without the question of which region in it is the answer.
+ *
+ * Its own function because two callers ask it differently (#1196): the pass wants every stamp the
+ * mount holds, a click wants the one the point is in. They must see the same window and the same
+ * mask, or a page would carry boxes from two subtly different second separations.
+ *
+ * Returns null for a window too small for a ring, a threshold and a morphology to mean anything —
+ * whatever it holds is a speck rather than a mount.
+ */
+function insideMount(
+  data: Buffer,
+  w: number,
+  h: number,
+  mount: Box,
+  grow: number
+): { win: Box; inner: Uint8Array } | null {
+  // Back to the mount's own outline. The regions were grown by the erosion radius on the way out
+  // of the first separation, which on a card gives back the pixels the erosion took; here it
+  // would put a band of **page** around the window, and the window's border has to be mount for
+  // the ring to elect the mount as its background.
+  const win = insetBox(mount, grow, w, h);
+  if (win.w < MIN_MOUNT_WINDOW_PX || win.h < MIN_MOUNT_WINDOW_PX) return null;
+
+  const sub = cropRgb(data, w, win);
+  const inner = thresholdAgainst(sub, win.w, win.h, estimateBackground(sub, win.w, win.h, "dark"));
+  closeSquare(inner, win.w, win.h, 3);
+  fillHoles(inner, win.w, win.h);
+  openSquare(inner, win.w, win.h, 5);
+  fillHoles(inner, win.w, win.h);
+  return { win, inner };
+}
+
+/** Whether a region found inside a mount's window is a stamp the mount holds: **enclosed** by the
+ * mount on every side, and filling enough of the window to be a stamp rather than a fragment of
+ * one. The page leaking in at a corner of the window is the thing most likely to be *bigger* than
+ * the stamp, and it is also the one thing guaranteed to touch the border. */
+function isStampInMount(r: Box, win: Box): boolean {
+  return (
+    r.x > 0 &&
+    r.y > 0 &&
+    r.x + r.w < win.w &&
+    r.y + r.h < win.h &&
+    r.w * r.h >= STAMP_MIN_MOUNT_SHARE * win.w * win.h
+  );
 }
 
 /** Below this a window has too few pixels for a ring, a threshold and a morphology to mean

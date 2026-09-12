@@ -384,6 +384,8 @@ Every edit below works the same whether the box was proposed or drawn by hand:
 - **Split ↔** and **Split ↕** cut one selected box into two: press the button, then click where
   the seam is. The guide line turns red where the cut would leave a sliver, and such a cut is
   refused rather than made.
+- **Pick** boxes a stamp you point at. Press it, then click anywhere inside a stamp the proposal
+  missed, and the box works outwards to that stamp's own edges — see below.
 
 Each box carries the number it will be created with — rows top to bottom, each row left to right.
 **Nothing is created until you press Cut**, so the whole review is free to be wrong. Cancel and
@@ -392,6 +394,32 @@ the scan is still stored, waiting to be cut.
 **Clear all** empties the card if the proposal is more trouble than it is worth, and a scan the
 detection could not read simply opens on an empty card — drawing every box by hand is always
 available, and always works the same way.
+
+##### Picking a stamp by clicking it
+
+Correcting the proposal usually means one stamp, and you already know exactly where it is; what is
+slow is saying where it *ends*, corner by corner, on a card of forty. **Pick** does that half for
+you: press the button, click inside the stamp, and a second later the box is there.
+
+It works on both kinds of scan. On a black card it finds the stamp against the card; on an album
+page it finds the stamp inside its mount, out to the perforated selvedge and no further — the same
+answer the automatic pass gives, asked at the one point you clicked.
+
+Three things it deliberately will not do:
+
+- **It will not guess.** If it cannot work out where the stamp ends it says so and adds nothing. A
+  wrong box looks exactly like a right one and you would only find it much later, after the tile had
+  been identified and the card broken up. Draw that one by hand.
+- **It will not lay a second box over an existing one.** Clicking inside a box you already have
+  selects it instead.
+- **It will not separate two stamps it cannot see a gap between.** Click inside a pair that came out
+  as one box and you get that same box back — the seam is not there to be found. **Split** is the
+  answer to that one.
+
+The tool stays armed until you press **Esc** or press the button again, so several missed stamps are
+several clicks. Everything else about the box is ordinary: move it, resize it, delete it, merge or
+split it, exactly as if you had drawn it yourself. **Drawing by hand never goes away** and is still
+the thing that always works.
 
 #### Looking closer
 

@@ -5,9 +5,11 @@ import path from "node:path";
 import sharp from "sharp";
 import {
   detectSheetBoxesReported,
+  pickBoxAt,
   recogniseSheetKind,
   type SheetKind,
 } from "../../src/lib/scan-detect";
+import type { Box } from "../../src/lib/scan-boxes";
 
 /**
  * The detection regression set (#574, ADR-0033).
@@ -154,6 +156,10 @@ const present = existsSync(SCANS_DIR)
 
 describe("scan detection against real card scans", { skip: present.length === 0 && "no scans in tests/fixtures/scans — see its README" }, () => {
   const found: { file: string; detected: number; expected: number }[] = [];
+  /** Each card's proposal, kept so the click tests read it rather than paying for a second pass. */
+  const proposed = new Map<string, Box[]>();
+  /** Proposed pieces whose own centre turned out not to be on the piece — see the budget below. */
+  const unreached: { file: string; box: Box }[] = [];
 
   for (const file of present.sort()) {
     const expected = expectations[file];
@@ -172,6 +178,7 @@ describe("scan detection against real card scans", { skip: present.length === 0 
 
       const report = await detectSheetBoxesReported(scan, kind);
       found.push({ file, detected: report.boxes.length, expected: expected.pieces });
+      proposed.set(file, report.boxes);
 
       const off = Math.abs(report.boxes.length - expected.pieces);
       assert.ok(
@@ -212,6 +219,101 @@ describe("scan detection against real card scans", { skip: present.length === 0 
       );
     });
   }
+
+  // ── Picking one piece by clicking it (#1196) ────────────────────────────────────────────────
+  //
+  // The click is the pass read a second way, so what this measures is **agreement**: clicking
+  // inside a piece the pass proposed must come back with the very same four numbers. That is the
+  // property `separateSheet` exists to hold, and the one that would rot silently — a click and a
+  // proposal drifting apart puts two subtly different boxes on one card with nothing on screen
+  // saying which came from where.
+  //
+  // It is a stronger check than it looks, because every documented failure of the pass is in it:
+  // the interlocking pair that comes out as one box, the stamp-plus-coupon that comes out as two,
+  // the souvenir sheet filling a card, an album page's thirteen mounts and the same page's pale
+  // backs, each of which has to answer identically through a second route.
+  //
+  // **Disagreement is the assertion; finding nothing is a measured figure.** A proposed box whose
+  // own centre is bare card is a merged pair with a gap down the middle of it, and a click there
+  // is a click on the card — refusing is right, and the budget below is what says how often that
+  // arrangement happens rather than something having gone wrong.
+  //
+  // **One click per piece, at its centre**, because a pick costs a decode of the whole scan (~1.3 s
+  // on this set) and nine per piece is forty minutes. A 3×3 grid inside every box was measured once
+  // while this was written — 1332 points: 1323 exact, 5 found nothing, and 4 came back a few pixels
+  // wider than the proposal. Those four are the documented fallback: the click landed within an
+  // erosion radius of a notch the artwork left in the mask, so the mask before the erosion answered
+  // and its bounding box is the wider one. Always the same piece, never a different one. Recorded
+  // here rather than asserted, because the run would cost more than it would catch.
+  //
+  // What this cannot measure is the case the tool exists for — a piece the pass **missed** — since
+  // a piece the pass missed is not in `report.boxes` to click inside. Recorded in `_gaps`, not
+  // approximated with a card the constants were never fitted to.
+  for (const file of present.sort()) {
+    const expected = expectations[file];
+    const kind = expected.kind ?? "stockbook";
+    it(`${file}: clicking a piece answers with that piece, and clicking the bare ${kind === "album" ? "page" : "card"} answers with nothing`, async (t) => {
+      const boxes = proposed.get(file);
+      if (!boxes) return t.skip("the proposal for this card did not come out");
+      const scan = readFileSync(path.join(SCANS_DIR, file));
+
+      for (const [i, box] of boxes.entries()) {
+        const picked = await pickBoxAt(scan, kind, {
+          x: Math.round(box.x + box.w / 2),
+          y: Math.round(box.y + box.h / 2),
+        });
+        if (picked == null) {
+          unreached.push({ file, box });
+          continue;
+        }
+        assert.deepEqual(
+          picked,
+          box,
+          `${file}: clicking the centre of piece ${i + 1} came back with ` +
+            `${JSON.stringify(picked)} instead of the proposal's own ${JSON.stringify(box)} — ` +
+            `the click and the pass have drifted apart`
+        );
+      }
+
+      // Two opposite corners, inside the border ring — the very pixels the estimator elects the
+      // ground from, and background by construction on both kinds. A box here would be the
+      // estimate having failed, and refusing is the whole of what a click promises over a wrong
+      // box that looks exactly like a right one.
+      const meta = await sharp(scan).rotate().metadata();
+      for (const [fx, fy] of [
+        [0.01, 0.01],
+        [0.99, 0.99],
+      ]) {
+        const picked = await pickBoxAt(scan, kind, {
+          x: Math.round(fx * meta.width!),
+          y: Math.round(fy * meta.height!),
+        });
+        assert.equal(
+          picked,
+          null,
+          `${file}: a click at (${fx}, ${fy}) of the frame — on the bare ` +
+            `${kind === "album" ? "page" : "card"} — proposed ${JSON.stringify(picked)}`
+        );
+      }
+    });
+  }
+
+  it("reports how often a piece's own centre is not on the piece", () => {
+    const pieces = found.reduce((n, r) => n + r.detected, 0);
+    console.log(
+      `\n  ${pieces} proposed pieces clicked in the centre: ${unreached.length} found nothing.\n` +
+        unreached.map((u) => `    ${u.file}  ${JSON.stringify(u.box)}`).join("\n") +
+        "\n"
+    );
+    // A budget, not a target — the same shape as the error rate above. Measured at 1 of 148: the
+    // interlocking pair on 0003, whose two stamps meet only at their teeth, so the centre of the
+    // box holding both is the black card between them. A rise here means clicks are landing on
+    // ground inside boxes that ought to be solid, which is the pass having changed shape.
+    assert.ok(
+      unreached.length / pieces <= 0.03,
+      `${unreached.length} of ${pieces} proposed pieces could not be reached by a click in the centre`
+    );
+  });
 
   it("reports the error rate the constants were fitted to", () => {
     const pieces = found.reduce((n, r) => n + r.expected, 0);
