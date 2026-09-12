@@ -35,7 +35,10 @@ import type {
   LotCopySort,
 } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
-import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
+import type {
+  ChecklistSetCompleteness,
+  SetCompletenessByIssue,
+} from "@/lib/lot-set-completeness";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import {
   EMPTY_SELECTION,
@@ -104,6 +107,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/sticky-header";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
+import { LotGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-group-header";
 import {
   appendBulkChanges,
   type BulkCopyChanges,
@@ -122,6 +126,15 @@ import {
   usePurchaseLotExpansion,
 } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
+import { scanBatchName } from "@/lib/scan-batch-label";
+import {
+  INTAKE_GROUP_AXES,
+  NO_GROUP_KEY,
+  withGroupScope,
+  type IntakeGroupAxis,
+  type IntakeGroupNode,
+  type IntakeGroupScope,
+} from "@/lib/intake-groups";
 import {
   readLast,
   writeLast,
@@ -369,13 +382,31 @@ export function PurchaseDetailPanel({
     lotExpansionStore
   );
 
-  // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
-  // a flat list of every copy in the order. Persisted per collection; default groups by both.
+  // Order-level grouping of the copies view (#121, #1189): lot cards or one stream, and inside
+  // that, headings by area, by year of issue and by issue. Every chip off is a flat list of every
+  // copy in the order. Persisted per collection; the default is unchanged — by lot, by issue.
   const [storedByLot, setStoredByLot] = usePersistentToggle(
     `${LS_GROUP_BY_LOT}:${collectionId}`,
     true
   );
   const [byIssue, setByIssue] = usePersistentToggle(`${LS_GROUP_BY_ISSUE}:${collectionId}`, true);
+  // The two the collector sorts by (#1189). Off by default: the ungrouped list is what this screen
+  // did before, and a new heading appearing over an order already half worked through would be a
+  // change nobody asked for.
+  const [byArea, setByArea] = usePersistentToggle(`${LS_GROUP_BY_AREA}:${collectionId}`, false);
+  const [byYear, setByYear] = usePersistentToggle(`${LS_GROUP_BY_YEAR}:${collectionId}`, false);
+
+  // The heading axes as one ordered value, **always in nesting order** (#1189): area outside year
+  // outside issue. The chips are independent, but what they mean together is fixed — so `Area` +
+  // `Year` is "areas, with the years inside each", which is the two-level view the collector asked
+  // for, and no combination of presses can produce the other order.
+  const groupAxes = useMemo(
+    () =>
+      INTAKE_GROUP_AXES.filter((a) =>
+        a === "area" ? byArea : a === "year" ? byYear : byIssue
+      ),
+    [byArea, byYear, byIssue]
+  );
 
   // **An arrival switches the view to Group by lot** (#911). Only that view draws lot cards, so
   // everything the arrival treatment does — open the card, scroll to it, flash it — needs it; and
@@ -447,7 +478,8 @@ export function PurchaseDetailPanel({
   // (#743). Those counts are over the whole order whatever is filtered, exactly as the lot cards'
   // are over the whole lot — a chip counting only what its own filter left would drop to zero the
   // moment it was pressed (#623).
-  const orderSummary = usePurchaseSummary(collectionId, purchase.id, orderFilters).data;
+  const orderSummary = usePurchaseSummary(collectionId, purchase.id, orderFilters, groupAxes)
+    .data;
   const purchaseHoldings = orderSummary?.holdings;
 
   // What the order has earned back so far (#559): the cost side above read against the sale side.
@@ -891,14 +923,25 @@ export function PurchaseDetailPanel({
           Lots
         </h3>
 
-        {/* Order-level grouping: by lot and/or by issue; both off = flat list. Only lot-level
-            management (add stamps, close, price…) lives in the by-lot view (#121). */}
+        {/* Order-level grouping (#121, #1189): lot cards, then headings by area, year of issue and
+            issue — nesting in the order the chips are printed in, whichever of them are on. All
+            off = flat list. Only lot-level management (add stamps, close, price…) lives in the
+            by-lot view (#121).
+
+            Four independent chips rather than a *Group by …* select, because this row already
+            composed two of them and the collector's two asks — *by area* and *areas with years
+            inside* — are one press apart that way. The nesting order is fixed rather than
+            chosen: a stack the collector could reorder is a second thing to remember for a view
+            whose point is that it needs no thought, and area-outside-year is the order a sorting
+            pass actually wants. */}
         {purchase.lots.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={TOOLBAR_LABEL}>Group by</span>
             {(
               [
                 { on: byLot, set: setByLot, label: "Lot" },
+                { on: byArea, set: setByArea, label: "Area" },
+                { on: byYear, set: setByYear, label: "Year" },
                 { on: byIssue, set: setByIssue, label: "Issue" },
               ] as const
             ).map(({ on, set, label }) => (
@@ -919,7 +962,7 @@ export function PurchaseDetailPanel({
                 {on && <Icon name="check" size="xs" />} {label}
               </button>
             ))}
-            {!byLot && !byIssue && (
+            {!byLot && groupAxes.length === 0 && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Flat list</span>
             )}
           </div>
@@ -1166,7 +1209,7 @@ export function PurchaseDetailPanel({
               isPending={isPending}
               unidentifiedTileCount={purchase.unidentifiedTileCount}
               parkedTileCount={purchase.parkedTileCount}
-              groupByIssue={byIssue}
+              groupAxes={groupAxes}
               sortKey={sortKey}
               sortDir={sortDir}
               filterMode={filterMode}
@@ -1189,7 +1232,7 @@ export function PurchaseDetailPanel({
           locations={locations}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
-          byIssue={byIssue}
+          groupAxes={groupAxes}
           sortKey={sortKey}
           sortDir={sortDir}
           filterMode={filterMode}
@@ -1477,7 +1520,8 @@ interface LotCardProps {
    * likelier of the two to be forgotten, having deliberately left the queue. */
   parkedTileCount: number;
   /** Group this lot's copies by issue (the order-level "By issue" toggle, #121). */
-  groupByIssue: boolean;
+  /** The heading axes, outermost first (#1189); empty for a flat list. */
+  groupAxes: readonly IntakeGroupAxis[];
   /** Copy sort order (order-level control, #157): the field and direction to sort this lot's
    * copies by before rendering. */
   sortKey: string;
@@ -2223,6 +2267,184 @@ function IssueGroupSection({
   );
 }
 
+/** What an issue heading needs to draw itself, resolved once per card rather than per heading. */
+interface IssueGroupChrome {
+  issueHeaderById: Record<string, IssueHeader>;
+  areaNameById: Map<string, string>;
+  primaryVendorByArea: Map<string, string | null>;
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
+  /** Per-checklist for-sale completeness by issue id (#563), absent while it loads. */
+  setCompleteness?: SetCompletenessByIssue;
+}
+
+/**
+ * The headings a grouped item list draws, however many levels deep (#1189).
+ *
+ * One recursive renderer rather than a branch per combination of chips: area, year and issue nest
+ * in a fixed order, so *what the list looks like* is entirely the shape of the tree the summary
+ * sent — the client's only job is to walk it and hand each leaf the scope it was counted under.
+ * That scope goes straight back as query parameters, which is what guarantees the rows under a
+ * heading are the copies the heading counted.
+ */
+function CopyGroupSections({
+  nodes,
+  scope,
+  stickyTop,
+  collapsedGroups,
+  onToggleGroup,
+  countLabel,
+  issueChrome,
+  selectForIssue,
+  renderList,
+}: {
+  nodes: IntakeGroupNode[];
+  /** The narrowing accumulated from the levels above; `{}` at the top. */
+  scope: IntakeGroupScope;
+  stickyTop: number;
+  /** Collapsed headings, by their path — so a heading keeps its state when the chips change. */
+  collapsedGroups: Set<string>;
+  onToggleGroup: (path: string) => void;
+  countLabel?: string;
+  issueChrome: IssueGroupChrome;
+  /** Tick a whole issue heading into the selection (#571). Takes the node, so a caller can
+   * decline on a heading holding nothing writable — `undefined` draws no box. */
+  selectForIssue?: (
+    node: IntakeGroupNode
+  ) => { state: "on" | "off" | "partial"; onChange: () => void; label: string } | undefined;
+  renderList: (scope: IntakeGroupScope) => React.ReactNode;
+}) {
+  return (
+    <>
+      {nodes.map((node) => (
+        <CopyGroupSection
+          key={node.path}
+          node={node}
+          scope={scope}
+          stickyTop={stickyTop}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={onToggleGroup}
+          countLabel={countLabel}
+          issueChrome={issueChrome}
+          selectForIssue={selectForIssue}
+          renderList={renderList}
+        />
+      ))}
+    </>
+  );
+}
+
+function CopyGroupSection({
+  node,
+  scope,
+  stickyTop,
+  collapsedGroups,
+  onToggleGroup,
+  countLabel,
+  issueChrome,
+  selectForIssue,
+  renderList,
+}: {
+  node: IntakeGroupNode;
+  scope: IntakeGroupScope;
+  stickyTop: number;
+  collapsedGroups: Set<string>;
+  onToggleGroup: (path: string) => void;
+  countLabel?: string;
+  issueChrome: IssueGroupChrome;
+  selectForIssue?: (
+    node: IntakeGroupNode
+  ) => { state: "on" | "off" | "partial"; onChange: () => void; label: string } | undefined;
+  renderList: (scope: IntakeGroupScope) => React.ReactNode;
+}) {
+  const childScope = withGroupScope(scope, node.axis, node.key);
+  const collapsed = collapsedGroups.has(node.path);
+  const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
+
+  if (node.axis === "issue") {
+    const header = node.key === NO_GROUP_KEY ? null : issueChrome.issueHeaderById[node.key];
+    const areaId = header?.collectionAreaId ?? null;
+    return (
+      <IssueGroupSection
+        group={{ key: node.key, label: node.label, count: node.count }}
+        header={header ?? null}
+        areaName={areaId ? (issueChrome.areaNameById.get(areaId) ?? null) : null}
+        primaryVendorId={areaId ? (issueChrome.primaryVendorByArea.get(areaId) ?? null) : null}
+        vendorMap={issueChrome.vendorMapFor(areaId, node.key === NO_GROUP_KEY ? null : node.key)}
+        collapsed={collapsed}
+        {...(countLabel ? { countLabel } : {})}
+        stickyTop={stickyTop}
+        completeness={issueChrome.setCompleteness?.[node.key]}
+        onToggle={() => onToggleGroup(node.path)}
+        // **No tick box once an area or year heading sits above** (#1189). The container a tick
+        // records is `{ lot, issueKey }` and is turned back into SQL by the bulk write, which
+        // knows nothing about the pile this heading is inside — so on a lot where one issue's
+        // copies fall under two years (`issuedYear` differs within an issue) the write would
+        // reach copies the collector cannot see, which is the one thing bulk actions must never
+        // do. Turning the new chips off gives the tick back.
+        select={
+          scope.areaKey == null && scope.yearKey == null
+            ? selectForIssue?.(node)
+            : undefined
+        }
+      >
+        {renderList(childScope)}
+      </IssueGroupSection>
+    );
+  }
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div
+        ref={headerRef}
+        style={{
+          position: "sticky",
+          top: stickyTop,
+          // The same level as the issue heading (#172's `2`) and below the lot header's `3`,
+          // because the *geometry* is what keeps these apart: each level pins at its parent's
+          // bottom edge, so two headings of this stack can never occupy the same band. A higher
+          // value for the outer one would say they compete, and they do not.
+          zIndex: 2,
+        }}
+      >
+        <LotGroupHeader
+          label={node.label}
+          copyCount={node.count}
+          {...(countLabel ? { countLabel } : {})}
+          collapsed={collapsed}
+          onToggle={() => onToggleGroup(node.path)}
+        />
+      </div>
+      {!collapsed && (
+        <div
+          style={{
+            background: "var(--color-bg-elevated)",
+            borderTop: "1px solid var(--color-border)",
+            marginLeft: "0.75rem",
+            borderLeft: "2px solid var(--color-border)",
+          }}
+        >
+          {node.children.length > 0 ? (
+            <CopyGroupSections
+              nodes={node.children}
+              scope={childScope}
+              stickyTop={stickyTop + headerHeight}
+              collapsedGroups={collapsedGroups}
+              onToggleGroup={onToggleGroup}
+              countLabel={countLabel}
+              issueChrome={issueChrome}
+              selectForIssue={selectForIssue}
+              renderList={renderList}
+            />
+          ) : (
+            renderList(childScope)
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function LotCard({
   scanDpi,
   index,
@@ -2243,7 +2465,7 @@ function LotCard({
   isPending,
   unidentifiedTileCount,
   parkedTileCount,
-  groupByIssue,
+  groupAxes,
   sortKey,
   sortDir,
   filterMode,
@@ -2264,12 +2486,25 @@ function LotCard({
     | "reopen"
   >("none");
   const [pending, setPending] = useState<PendingSelection | null>(null);
-  // Collapsed issue groups are remembered per lot, inside the order's entry; the grouping mode
-  // itself is an order-level toggle passed in as `groupByIssue` (#121).
+  // Collapsed headings are remembered per lot, inside the order's entry; the grouping itself is
+  // an order-level choice passed in as `groupAxes` (#121, #1189).
   const [collapsedGroups, setCollapsedGroups] = usePurchaseCollapsedGroups(
     collectionId,
     purchaseId,
     lot.id
+  );
+  // Collapsing a heading, at whatever level: the stored key is the heading's **path** (#1189), so
+  // the areas stay shut when the collector opens a year inside one, and a heading keeps its state
+  // when a chip above it is turned on or off.
+  const toggleGroup = useCallback(
+    (path: string) =>
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      }),
+    [setCollapsedGroups]
   );
   // Hold the copies list until the persisted view prefs are read, so grouping/collapse don't
   // flash from their defaults to the stored values for a returning user (#121).
@@ -2327,7 +2562,7 @@ function LotCard({
   // Keyed by the filters the list is reading with (#623): the issue groups it reports are the ones
   // those filters leave with copies in them, so a group emptied by a chip stops being drawn instead
   // of heading a "No copies.".
-  const summaryQuery = useLotSummary(collectionId, lot.id, intakeFilters);
+  const summaryQuery = useLotSummary(collectionId, lot.id, intakeFilters, groupAxes);
   const summary = summaryQuery.data;
   // What this lot has earned back (#559), on the same bar as its cost. Only while the card is
   // open: a collapsed lot draws no bar, so the query would answer nobody.
@@ -2338,7 +2573,7 @@ function LotCard({
   const setCompleteness = useLotSetCompleteness(
     collectionId,
     lot.id,
-    expanded && groupByIssue
+    expanded && groupAxes.includes("issue")
   ).data;
   const totalCount = summary?.totalCount ?? lot.itemCount;
   // Copies actually in the `to sort` state — the header chip and its filter (#375). Copies still
@@ -2354,7 +2589,7 @@ function LotCard({
   const noPhotoCount = summary?.noPhotoCount ?? 0;
   // Denominator for the live per-copy cost estimate (Σ positive base weight over staying copies).
   const weightBase = summary?.estimateWeightBase ?? 0;
-  const issueGroups = summary?.issueGroups ?? [];
+  const groupTree = summary?.groupTree ?? [];
 
   // Live cost-basis estimate for an open lot needs the base-currency pool, so it is unavailable
   // when no FX rate is known.
@@ -2702,61 +2937,43 @@ function LotCard({
                 />
               </div>
 
-              {groupByIssue ? (
-                issueGroups.map((group) => {
-                  const collapsed = collapsedGroups.has(group.key);
-                  const header = group.key === "__none__" ? null : issueHeaderById[group.key];
-                  const areaId = header?.collectionAreaId ?? null;
-                  return (
-                    <IssueGroupSection
-                      key={group.key}
-                      group={group}
-                      header={header ?? null}
-                      areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
-                      primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-                      vendorMap={
-                        vendorMapFor(areaId, group.key === "__none__" ? null : group.key)
-                      }
-                      collapsed={collapsed}
-                      countLabel={
-                        filterMode !== "none" || dispositionFilter ? "shown" : undefined
-                      }
-                      stickyTop={stickyTop + headerHeight}
-                      completeness={setCompleteness?.[group.key]}
-                      onToggle={() =>
-                        setCollapsedGroups((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(group.key)) next.delete(group.key);
-                          else next.add(group.key);
-                          return next;
+              {groupAxes.length > 0 ? (
+                <CopyGroupSections
+                  nodes={groupTree}
+                  scope={{}}
+                  stickyTop={stickyTop + headerHeight}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroup={toggleGroup}
+                  countLabel={filterMode !== "none" || dispositionFilter ? "shown" : undefined}
+                  issueChrome={{
+                    issueHeaderById,
+                    areaNameById,
+                    primaryVendorByArea,
+                    vendorMapFor,
+                    setCompleteness,
+                  }}
+                  selectForIssue={
+                    open
+                      ? ({ key: issueKey }) => ({
+                          state: containerBoxState(selection, { ...lotContainer, issueKey }),
+                          onChange: () =>
+                            setSelection((sel) =>
+                              toggleContainer(sel, { ...lotContainer, issueKey })
+                            ),
+                          label: "Select this issue's copies",
                         })
-                      }
-                      select={
-                        open
-                          ? {
-                              state: containerBoxState(selection, {
-                                ...lotContainer,
-                                issueKey: group.key,
-                              }),
-                              onChange: () =>
-                                setSelection((sel) =>
-                                  toggleContainer(sel, { ...lotContainer, issueKey: group.key })
-                                ),
-                              label: "Select this issue's copies",
-                            }
-                          : undefined
-                      }
-                    >
-                      <LotCopyFlatList
-                        collectionId={collectionId}
-                        lotId={lot.id}
-                        params={{ ...listParams, issueKey: group.key }}
-                        renderRow={renderRow}
-                        emptyText="No copies."
-                      />
-                    </IssueGroupSection>
-                  );
-                })
+                      : undefined
+                  }
+                  renderList={(scope) => (
+                    <LotCopyFlatList
+                      collectionId={collectionId}
+                      lotId={lot.id}
+                      params={{ ...listParams, ...scope }}
+                      renderRow={renderRow}
+                      emptyText="No copies."
+                    />
+                  )}
+                />
               ) : (
                 <LotCopyFlatList
                   collectionId={collectionId}
@@ -3048,7 +3265,7 @@ function OrderCopiesView({
   locations,
   conditions,
   certificateStatuses,
-  byIssue,
+  groupAxes,
   sortKey,
   sortDir,
   filterMode,
@@ -3068,7 +3285,8 @@ function OrderCopiesView({
   locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
-  byIssue: boolean;
+  /** The heading axes, outermost first (#1189); empty for a flat list. */
+  groupAxes: readonly IntakeGroupAxis[];
   sortKey: string;
   sortDir: string;
   /** The order-level *Still needs* chip (#743). This view had no way to read it while it was a
@@ -3103,6 +3321,19 @@ function OrderCopiesView({
     purchaseId,
     ORDER_GROUP_SCOPE
   );
+  // Collapsing a heading, at whatever level: the stored key is the heading's **path** (#1189), so
+  // the areas stay shut when the collector opens a year inside one, and a heading keeps its state
+  // when a chip above it is turned on or off.
+  const toggleGroup = useCallback(
+    (path: string) =>
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      }),
+    [setCollapsedGroups]
+  );
 
   // Each copy's lot drives its editability (its lot must be open) and its estimate (its lot's
   // pool + weight base). Pool + status come from the purchase's lots; the per-lot weight base
@@ -3116,11 +3347,15 @@ function OrderCopiesView({
   // The same filters the panel reads this summary with, so both share one cached answer — and the
   // issue groups come back over the copies those filters show (#623).
   const intakeFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
-  const summary = usePurchaseSummary(collectionId, purchaseId, intakeFilters).data;
-  const issueGroups = summary?.issueGroups ?? [];
+  const summary = usePurchaseSummary(collectionId, purchaseId, intakeFilters, groupAxes).data;
+  const groupTree = summary?.groupTree ?? [];
   // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
   // these groups are merged across every lot of the order, which is what this view is for.
-  const setCompleteness = usePurchaseSetCompleteness(collectionId, purchaseId, byIssue).data;
+  const setCompleteness = usePurchaseSetCompleteness(
+    collectionId,
+    purchaseId,
+    groupAxes.includes("issue")
+  ).data;
 
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
@@ -3189,59 +3424,48 @@ function OrderCopiesView({
         <div style={COPIES_MUTED_STYLE}>Loading copies…</div>
       ) : lots.length === 0 ? (
         <div style={COPIES_MUTED_STYLE}>No copies identified into this order yet.</div>
-      ) : byIssue ? (
-        issueGroups.map((group) => {
-          const collapsed = collapsedGroups.has(group.key);
-          const header = group.key === "__none__" ? null : issueHeaderById[group.key];
-          const areaId = header?.collectionAreaId ?? null;
-          // Only groups with copies in a still-open lot can be selected — the rest are read-only.
-          const canSelect = group.openCount > 0;
-          return (
-            <IssueGroupSection
-              key={group.key}
-              group={group}
-              header={header ?? null}
-              areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
-              primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-              vendorMap={vendorMapFor(areaId, group.key === "__none__" ? null : group.key)}
-              collapsed={collapsed}
-              countLabel={filterMode !== "none" || dispositionFilter ? "shown" : undefined}
-              stickyTop={stickyTop}
-              completeness={setCompleteness?.[group.key]}
-              onToggle={() =>
-                setCollapsedGroups((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(group.key)) next.delete(group.key);
-                  else next.add(group.key);
-                  return next;
-                })
-              }
-              select={
-                canSelect
-                  ? {
-                      state: containerBoxState(selection, {
-                        issueKey: group.key,
-                        ...intakeFilters,
-                      }),
-                      onChange: () =>
-                        setSelection((sel) =>
-                          toggleContainer(sel, { issueKey: group.key, ...intakeFilters })
-                        ),
-                      label: "Select this issue's copies",
-                    }
-                  : undefined
-              }
-            >
-              <PurchaseCopyFlatList
-                collectionId={collectionId}
-                purchaseId={purchaseId}
-                params={{ ...listParams, issueKey: group.key }}
-                renderRow={renderRow}
-                emptyText="No copies."
-              />
-            </IssueGroupSection>
-          );
-        })
+      ) : groupAxes.length > 0 ? (
+        <CopyGroupSections
+          nodes={groupTree}
+          scope={{}}
+          stickyTop={stickyTop}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={toggleGroup}
+          countLabel={filterMode !== "none" || dispositionFilter ? "shown" : undefined}
+          issueChrome={{
+            issueHeaderById,
+            areaNameById,
+            primaryVendorByArea,
+            vendorMapFor,
+            setCompleteness,
+          }}
+          selectForIssue={(node) =>
+            // Only a heading with copies in a still-open lot can be ticked — the rest are
+            // read-only, and a box that writes nothing is worse than no box.
+            node.openCount > 0
+              ? {
+                  state: containerBoxState(selection, {
+                    issueKey: node.key,
+                    ...intakeFilters,
+                  }),
+                  onChange: () =>
+                    setSelection((sel) =>
+                      toggleContainer(sel, { issueKey: node.key, ...intakeFilters })
+                    ),
+                  label: "Select this issue's copies",
+                }
+              : undefined
+          }
+          renderList={(scope) => (
+            <PurchaseCopyFlatList
+              collectionId={collectionId}
+              purchaseId={purchaseId}
+              params={{ ...listParams, ...scope }}
+              renderRow={renderRow}
+              emptyText="No copies."
+            />
+          )}
+        />
       ) : (
         <PurchaseCopyFlatList
           collectionId={collectionId}
@@ -3839,6 +4063,37 @@ function LotCopyChips({
           <span style={{ ...CHIP, color: "var(--color-text-muted)" }}>cost —</span>
         </Tooltip>
       )}
+
+      {/* Which card this copy was identified off (#1188). A lot's copies arrive from several
+          places and, once they are rows, nothing said which sheet any of them came from — so
+          checking a row against the original meant going back to the scans and matching by eye.
+          **Absent, not blank, for a copy that came from anywhere else**: an empty space is the
+          honest statement, and this list has always mixed the two kinds of row, so a dash would
+          only invite the question of which scan it meant. */}
+      {item.scan && (
+        <Tooltip content="Identified from this card scan">
+          <span
+            style={{
+              ...CHIP,
+              color: "var(--color-text-muted)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              // A card's name is up to 60 characters (#587) and this is one chip on a crowded
+              // row: it gives way rather than pushing the figures off the end. The full name is
+              // in the tooltip's place only if it has to be — `title` is forbidden here, so the
+              // ellipsis is the honest end of it.
+              maxWidth: "10rem",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Icon name="scan" size="xs" />
+            {scanBatchName(item.scan.batchNo, item.scan.label)}
+          </span>
+        </Tooltip>
+      )}
     </>
   );
 }
@@ -3875,6 +4130,8 @@ function DispositionInline({
 // under a cap — see shared/purchase-ui-state. Suffixed with the ids by the caller.
 const LS_GROUP_BY_LOT = "stamporama:lot:groupByLot";
 const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
+const LS_GROUP_BY_AREA = "stamporama:lot:groupByArea";
+const LS_GROUP_BY_YEAR = "stamporama:lot:groupByYear";
 const LS_SORT_KEY = "stamporama:lot:sortKey";
 const LS_SORT_DIR = "stamporama:lot:sortDir";
 

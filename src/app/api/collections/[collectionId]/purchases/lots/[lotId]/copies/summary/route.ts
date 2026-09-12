@@ -3,9 +3,10 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getLotIntakeSummary } from "@/lib/items";
 import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
+import { parseIntakeGroupAxes } from "@/lib/intake-groups";
 
 /** Whole-lot aggregates for the paginated intake view (#172): header counts, the live
- * cost-estimate denominator, the derived label, and the issue-group headers.
+ * cost-estimate denominator, the derived label, and the group headings (#1189).
  *
  * Takes the list's own filters (#622/#623): the groups are the one part of the view that is not
  * paged, so they are counted here, and a summary blind to the filters would draw a heading over
@@ -25,6 +26,9 @@ export async function GET(
     const summary = await getLotIntakeSummary(session.user.id, collectionId, lotId, {
       filter: parseLotCopyFilter(sp.get("filter")),
       disposition: parseDispositionFilter(sp.get("disposition")),
+      // How the view is piled up (#1189) — the headings are not paged, so only the summary can
+      // name them. Anything unrecognised drops out and the level is simply not grouped.
+      groupBy: parseIntakeGroupAxes(sp.get("groupBy")),
     });
     return NextResponse.json(summary);
   } catch {

@@ -21,6 +21,19 @@ export interface SortableCopy {
   issueName: string | null;
 }
 
+/**
+ * The year a copy is *of*: the stamp's own year of issue, falling back to its issue's when the
+ * stamp carries none. Null when neither is recorded.
+ *
+ * Exported because the intake grouping (#1189) groups on it and this sort orders by it, and they
+ * are the same question asked twice — a copy that groups under *1950* must be the copy the year
+ * sort puts among the 1950s. The fallback is why: a stamp with no date of its own still sits in a
+ * dated issue, and two definitions would put it in one place and order it in another.
+ */
+export function copyYear(item: Pick<SortableCopy, "issuedYear" | "issueYear">): number | null {
+  return item.issuedYear ?? item.issueYear ?? null;
+}
+
 /** The primary-vendor catalog number of a copy (falling back to any recorded number), or null.
  * Used as the "by catalog number" sort key. */
 export function primaryCatalogNumber(
@@ -78,7 +91,7 @@ export function sortSortableCopies<T extends SortableCopy>(
 ): T[] {
   if (sortKey === "added") return sortDir === "desc" ? [...items].reverse() : items;
   const dir = sortDir === "desc" ? -1 : 1;
-  const yearOf = (it: T) => it.issuedYear ?? it.issueYear ?? null;
+  const yearOf = (it: T) => copyYear(it);
   const nameOf = (it: T) => it.stampName ?? it.issueName ?? "";
   const numCmp = (a: number | null, b: number | null) => {
     if (a == null && b == null) return 0;

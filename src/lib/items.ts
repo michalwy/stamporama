@@ -38,10 +38,16 @@ import {
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
-import { getCollectionAreas } from "./areas";
+import { getCollectionAreas, type CollectionAreaData } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { sortCopies } from "./copy-sort";
+import {
+  buildIntakeGroups,
+  matchesIntakeGroup,
+  type IntakeGroupAxis,
+  type IntakeGroupNode,
+} from "./intake-groups";
 import { parseItemNoSearch } from "./item-number";
 import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import {
@@ -1385,6 +1391,15 @@ export interface ItemTradeMark {
 /** A copy enriched with the display data the list screen needs: the linked stamp's
  * identity (catalog numbers, name, issued date, owning issue), condition and
  * certificate labels, disposition flags, and acquisition/purchase fields. */
+/** Where a copy's images came from (#1188): the scan batch, and the card's own name at the moment
+ * the list was read. `batchNo` rides along because a card need not be named and the number is what
+ * the scans card leads with — {@link scanBatchName} is the one place that decides between them. */
+export interface ItemScanOrigin {
+  batchNo: number;
+  /** The card's name (#587/#603), or null when it has none. */
+  label: string | null;
+}
+
 export interface ItemListItem {
   id: string;
   /** Internal copy number (#268): per-collection, assigned on creation, never editable.
@@ -1478,6 +1493,15 @@ export interface ItemListItem {
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
+  /** The card scan this copy was identified from (#1188), or **null** when it came from anywhere
+   * else — entered by hand, or attached to the lot already made. Read through the `ScanTile` that
+   * was consumed into it (#567), so a copy that merely took a tile's *photographs* names that
+   * tile's card too: the picture on the row did come off that sheet.
+   *
+   * The **current** name, never a snapshot: renaming a card renames it here next time the list is
+   * read, because this is a label on the sheet rather than a record of what it was called when the
+   * piece was identified. */
+  scan: ItemScanOrigin | null;
   /** Catalog valuation of this copy (ADR-0007 §7). Uncertain for unknown variants. */
   value: CopyValuation;
 }
@@ -1555,6 +1579,20 @@ const ITEM_LIST_SELECT = {
     },
   },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  // The card scan this copy was identified from (#1188). At most one is read: a copy is made from
+  // one tile, and the pathological case of two tiles pointing at it (a second tile handing an
+  // existing copy its photographs) still came off *a* card, so the earliest is the answer rather
+  // than a list. The name lives on the sheet, written to both sides of a batch, so `front ?? back`
+  // always finds it and a back-only tile (`frontSheetId` null) is not the exception it looks like.
+  scanTiles: {
+    orderBy: { createdAt: "asc" },
+    take: 1,
+    select: {
+      batchNo: true,
+      frontSheet: { select: { label: true } },
+      backSheet: { select: { label: true } },
+    },
+  },
   // The collector's own labels on this very copy (#1181) — never the stamp's. Two columns on a
   // handful of rows, so they ride on the row rather than through a batch loader, exactly as the
   // stamp and issue reads carry theirs.
@@ -1691,7 +1729,18 @@ function toItemListItem(
         sortOrder: p.sortOrder,
       }))
       .sort(sortPhotos),
+    scan: scanOriginOf(row),
     value: valuation,
+  };
+}
+
+/** The card a copy was identified from (#1188), or null when no tile ever pointed at it. */
+function scanOriginOf(row: ItemListRow): ItemScanOrigin | null {
+  const tile = row.scanTiles[0];
+  if (!tile) return null;
+  return {
+    batchNo: tile.batchNo,
+    label: tile.frontSheet?.label ?? tile.backSheet?.label ?? null,
   };
 }
 
@@ -2657,6 +2706,11 @@ export interface LotIntakePageOptions {
   /** Restrict to a single issue group: an issue id, or `"__none__"` for copies with no issue.
    * Feeds the grouped-by-issue lot view's per-group pagination (#172). */
   issueKey?: string;
+  /** Restrict to one area heading (#1189): a collection-area id, or `"__none__"`.
+   * @see {@link inMemoryGroupScope} for why this one is not a `where`. */
+  areaKey?: string;
+  /** Restrict to one year-of-issue heading (#1189): the year as digits, or `"__none__"`. */
+  yearKey?: string;
   offset?: number;
   pageSize?: number;
 }
@@ -2683,6 +2737,24 @@ export async function listUnpricedItemIds(
   const rows = await prisma.item.findMany({ where, select: ITEM_LIST_SELECT });
   const enriched = await enrichItemRows(collectionId, rows);
   return enriched.filter(isBlockingCopy).map((i) => i.id);
+}
+
+/**
+ * The group headings a read must narrow to **in memory** (#1189), as axis/key pairs.
+ *
+ * Area and year are derived readings rather than columns — see {@link intakeGroupKey} — so they
+ * are applied to the enriched set by the same function that built the heading and counted it.
+ * That is what guarantees the page under a heading is exactly the copies the heading counted;
+ * a hand-written `where` approximating "primary area link, or the first one" would not.
+ *
+ * The issue heading stays SQL (`issueKeyWhere`): it is a plain relation, it has paged that way
+ * since #172, and it is the one the fast path exists for.
+ */
+function inMemoryGroupScope(opts: LotIntakePageOptions): [IntakeGroupAxis, string][] {
+  const scope: [IntakeGroupAxis, string][] = [];
+  if (opts.areaKey) scope.push(["area", opts.areaKey]);
+  if (opts.yearKey) scope.push(["year", opts.yearKey]);
+  return scope;
 }
 
 /** Prisma `where` fragment narrowing intake reads to a single lot or a whole purchase's lots. */
@@ -2713,13 +2785,21 @@ async function getIntakePage(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const issueWhere = issueKeyWhere(opts.issueKey);
+  const groupScope = inMemoryGroupScope(opts);
 
   // Fast path: the natural "added" order plus column-expressible filters page directly in SQL,
   // valuating only the returned page. Sorting by catalog/price or filtering "unpriced" depends
   // on each copy's derived valuation, which no single column carries, so those fall back to
   // enriching the whole scope and applying the shared `sortCopies` before slicing — byte-for-byte
   // identical to the client ordering, at the cost of valuing the scope per page fetch.
-  const needsWholeSet = sort !== "added" || filter === "unpriced";
+  //
+  // An **area or year heading** joins them, for the same reason and not out of caution: neither
+  // key is a column. A copy's area is its stamp's *primary* link, falling back to whichever link
+  // Prisma hands back first, and its year is `issuedYear` falling back to the issue's — derived
+  // readings that SQL cannot reproduce, and a `where` that got them subtly wrong would put a copy
+  // under a heading whose page never returns it. So the heading narrows the enriched set, using
+  // the very function that counted it (#1189).
+  const needsWholeSet = sort !== "added" || filter === "unpriced" || groupScope.length > 0;
 
   if (!needsWholeSet) {
     const rows = await prisma.item.findMany({
@@ -2767,7 +2847,10 @@ async function getIntakePage(
         : filter === "no-photos"
           ? all.filter((i) => i.photos.length === 0)
           : all;
-  const sorted = sortCopies(filtered, sort, sortDir, primaryVendorByArea);
+  const grouped = groupScope.length
+    ? filtered.filter((i) => groupScope.every(([axis, key]) => matchesIntakeGroup(i, axis, key)))
+    : filtered;
+  const sorted = sortCopies(grouped, sort, sortDir, primaryVendorByArea);
   const slice = sorted.slice(offset, offset + pageSize);
   const hasMore = offset + pageSize < sorted.length;
   return { items: slice, nextCursor: hasMore ? String(offset + pageSize) : null };
@@ -2812,18 +2895,6 @@ export async function getCollectionIntakePage(
   return getIntakePage(ownerId, collectionId, {}, opts);
 }
 
-/** One issue group within a lot, for the grouped-by-issue view's headers (#121/#172). */
-export interface LotIssueGroupSummary {
-  /** Issue id, or `"__none__"` for copies with no issue. */
-  key: string;
-  label: string;
-  /** Copies in this lot under this issue **matching the active filters** (#623) — a group whose
-   * copies are all excluded is not reported at all, so the grouped view never draws a heading over
-   * an empty list. */
-  count: number;
-  /** Of those, copies whose owning lot is still open (bulk-action target scope). */
-  openCount: number;
-}
 
 /**
  * *What the copies list is currently showing* — the chip and the disposition axis together (#622).
@@ -2835,6 +2906,11 @@ export interface LotIssueGroupSummary {
 export interface IntakeFilterOptions {
   filter?: LotCopyFilter;
   disposition?: CopyDispositionFilter;
+  /** How the list is piled up (#1189), outermost axis first — `[]` for a flat list. The summary
+   * takes it for the same reason it takes the filters: the headings are the one part of the screen
+   * that is not paged, so a summary that did not know how the list is grouped could not name
+   * them. */
+  groupBy?: readonly IntakeGroupAxis[];
 }
 
 /** Does this copy match the filters the list is showing? Applied over already-enriched rows, which
@@ -2847,29 +2923,16 @@ function matchesIntakeFilters(item: ItemListItem, opts: IntakeFilterOptions): bo
   return true;
 }
 
-/** Issue groups in first-added order over the copies the list is showing, one per issue a matching
- * copy reports under (its `issueId`, or `__none__`). Shared by both intake summaries. */
-function buildIssueGroups(items: ItemListItem[]): LotIssueGroupSummary[] {
-  const order: string[] = [];
-  const byKey = new Map<string, LotIssueGroupSummary>();
-  for (const it of items) {
-    const key = it.issueId ?? "__none__";
-    let group = byKey.get(key);
-    if (!group) {
-      const label =
-        it.issueId == null
-          ? "No issue"
-          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
-              .filter(Boolean)
-              .join(" ") || "Untitled issue";
-      group = { key, label, count: 0, openCount: 0 };
-      byKey.set(key, group);
-      order.push(key);
-    }
-    group.count += 1;
-    if (it.lotStatus === "open") group.openCount += 1;
-  }
-  return order.map((k) => byKey.get(k)!);
+/** The headings the list draws over the copies it is showing (#1189), under the axes the view
+ * asked for. Empty for an ungrouped list. Shared by both intake summaries. */
+function buildGroupTree(
+  items: ItemListItem[],
+  opts: IntakeFilterOptions,
+  areas: CollectionAreaData[]
+): IntakeGroupNode[] {
+  return buildIntakeGroups(items, opts.groupBy ?? [], {
+    areaNameById: new Map(areas.map((a) => [a.id, a.name])),
+  });
 }
 
 /** The market medians every copy in a set might be valued at (#458), read once for the whole set.
@@ -2947,9 +3010,10 @@ export interface LotIntakeSummary {
   /** Label derived from the lot's copies' catalog numbers, or null for an empty lot. The UI
    * still prefers a stored lot title over this. */
   derivedLabel: string | null;
-  /** Issue groups in first-added order, for the grouped-by-issue view headers — over the copies
-   * the active filters show (#623). */
-  issueGroups: LotIssueGroupSummary[];
+  /** The headings the grouped view draws, nested in the order the chips ask for (#1189) — over
+   * the copies the active filters leave (#623), so a heading is never drawn over an empty list.
+   * Empty when the list is ungrouped. */
+  groupTree: IntakeGroupNode[];
   /** Catalog value vs. actual purchase cost over the lot's copies (#179), for the CV-vs-cost
    * bar. Same shape/aggregators as the holdings bar (#134). */
   holdings: HoldingsSummary;
@@ -2995,7 +3059,7 @@ export async function getLotIntakeSummary(
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
-    issueGroups: buildIssueGroups(matching),
+    groupTree: buildGroupTree(matching, filters, areas),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
@@ -3020,10 +3084,11 @@ export interface PurchaseIntakeSummary {
   /** lot id → Σ positive base-currency catalog weight over that lot's staying copies. The
    * client computes a copy's estimate as `poolBase(lot) * weight / lotWeightBase[lotId]`. */
   lotWeightBase: Record<string, number>;
-  /** Issue groups merged across all the purchase's lots, in first-added order, over the copies the
-   * active filters show (#623). `openCount` is copies whose owning lot is still open (the
-   * bulk-action target across the order). */
-  issueGroups: LotIssueGroupSummary[];
+  /** The headings the grouped view draws, merged across every lot of the purchase and nested in
+   * the order the chips ask for (#1189), over the copies the active filters leave (#623).
+   * `openCount` is copies whose owning lot is still open (the bulk-action target across the
+   * order). Empty when the list is ungrouped. */
+  groupTree: IntakeGroupNode[];
   /** Catalog value vs. actual purchase cost over the whole order's copies (#179), for the
    * order-level CV-vs-cost bar. Same shape/aggregators as the holdings bar (#134). */
   holdings: HoldingsSummary;
@@ -3043,6 +3108,9 @@ export async function getPurchaseIntakeSummary(
   });
   const all = await enrichItemRows(collectionId, rows);
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  // Only the area headings need these (#1189) — one read of the collection's area tree, against
+  // one heading per area on screen.
+  const areas = await getCollectionAreas(ownerId, collectionId);
 
   // The estimate denominator is a property of the lot, not of the view: it stays Σ over **all** the
   // lot's staying copies, or a filtered view would print a different cost estimate per copy than the
@@ -3069,14 +3137,14 @@ export async function getPurchaseIntakeSummary(
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     lotWeightBase,
-    issueGroups: buildIssueGroups(matching),
+    groupTree: buildGroupTree(matching, filters, areas),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
 
 /**
  * The issues a lot's (or a whole order's) copies are grouped under — the same one-issue-per-copy
- * answer the intake summaries' `issueGroups` give, without enriching a copy to get it (#563).
+ * answer the intake summaries' issue headings give, without enriching a copy to get it (#563).
  *
  * A stamp's issue membership is many-to-many, but a copy reports under **one** issue: its stamp's
  * first membership, which is what `ItemListItem.issueId` says and what the grouped-by-issue view

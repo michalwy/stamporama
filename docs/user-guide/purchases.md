@@ -1122,6 +1122,15 @@ with no catalog price (or a purchase with no base-currency rate) shows `cost —
 resolved. The estimate is always computed over the **whole lot**, so it stays accurate no
 matter how many copies the lot holds or how far you have scrolled.
 
+**Which card a copy came off.** A copy identified from a [card scan](#card-scans) names that scan
+on its row, by the card's own name — or by `Batch 3` where the card has not been named. A large
+parcel's copies come from several places, and this is what lets you check a row against the
+original, or spot that one sheet's worth of rows went wrong, without going back to the scans and
+matching by eye. The name shown is the card's **current** name: rename a card and the rows say the
+new name next time you read the list. A copy that came from anywhere else — typed in by hand, or
+attached to the lot from elsewhere — shows **nothing** in its place, because there is no scan to
+name.
+
 **Large lots.** A lot's copies **stream in as you scroll** — the list loads more rows when you
 reach the bottom, and the header counts (*to sort*, *unpriced*, *no photos*, the copy total) and the live
 estimate are figured over the whole lot on the server. There is no cap: a "stockbook" lot with
@@ -1132,13 +1141,36 @@ thousands of positions shows every copy, and ticking a whole lot or a whole issu
 new ones are made: the **Lots** heading, **Group by**, **Still needs**, **Kept for**, **Sort
 copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Add lot with stamps**.
 
-**Grouping the copies view.** On that row, a **Group by** control has two toggles —
-**Lot** and **Issue** — that shape how the whole order's copies are shown:
+**Grouping the copies view.** On that row, a **Group by** control has four toggles —
+**Lot**, **Area**, **Year** and **Issue** — that shape how the whole order's copies are shown.
+**Lot** decides whether you get lot cards or one stream; the other three are **headings inside**,
+and they nest in the order they are printed in: areas outermost, then years, then issues.
 
 - **Lot + Issue** (the default) — each lot is a card, its copies grouped by issue inside.
 - **Lot** only — each lot is a card with a flat copy list.
 - **Issue** only — no lot cards; every copy in the order grouped by issue **across all lots**.
-- **neither** — a single **flat list** of every copy in the order, with no lot boundaries.
+- **none of the four** — a single **flat list** of every copy in the order, with no lot boundaries.
+
+**Piling a lot up by area and by year.** Sorting a large parcel is done in piles — *the German
+material*, *everything from the fifties* — and **Area** and **Year** are those piles:
+
+- **Area** — one heading per area, in alphabetical order.
+- **Year** — one heading per year of issue, oldest first.
+- **Area + Year** — two levels: each area, with its years inside it.
+
+Each heading says how many copies are under it, and collapses with its caret like an issue
+heading. A copy with **no area**, or **no year**, is never dropped and never filed under a
+neighbour: it gets its own **No area** / **No year** heading, which always sits last. The year is
+the stamp's own year of issue, falling back to its issue's where the stamp carries no date — the
+same year the **Year** sort orders by, so a copy under *1950* is a copy the sort puts among the
+1950s.
+
+These combine with **Issue**, so **Area + Issue** gives you each area's issues under an area
+heading. One thing changes when you use them: an issue heading inside an **Area** or **Year**
+heading has **no tick box**. Ticking an issue selects that issue's copies across the whole lot,
+which is not the same set as the ones under the heading you are looking at — so rather than
+select more than you can see, the box is not offered. Turn **Area** and **Year** off and it is
+back.
 
 **Arriving from a copy switches the view to Lot.** A copy's
 [**Go to purchase**](inventory.md#going-to-a-copys-purchase) names the lot it is in, and only the
@@ -1161,8 +1193,8 @@ that, across every lot of the order. Press it again to show everything. It works
 here and **N to sort** there. A copy can be kept for more than one purpose, so **For sale** means
 "kept for sale" and says nothing about whether it is also in the collection.
 
-While a filter is narrowing the list, each issue header counts what it is **showing** (`12 shown`
-rather than `12 in lot`), and issues left with nothing to show drop out of the view entirely
+While a filter is narrowing the list, every heading counts what it is **showing** (`12 shown`
+rather than `12 in lot`), and headings left with nothing to show drop out of the view entirely
 instead of appearing as an empty group. Both chip rows are **remembered for that order** — a filing
 pass runs over several sittings, and re-narrowing the screen each time was work you should not have
 to repeat. A chip stays lit for as long as it is
@@ -1175,8 +1207,9 @@ inside each issue group, and in the flat / by-issue copy views) — not the lot 
 Copies missing the chosen field (no year, no catalog number, an uncertain value, no name) always
 sort last. Catalog numbers sort naturally (1, 2, 10 — not 1, 10, 2).
 
-Your choice is remembered per collection, and which issue groups you've collapsed is
-remembered too, so the view stays the way you left it. In a grouped-by-issue view each issue
+Your choice is remembered per collection — the grouping chips included, so a lot you left piled up
+by area is piled up by area when you come back — and which headings you've collapsed is remembered
+too, so the view stays the way you left it. In a grouped-by-issue view each issue
 appears as a header that reads like a row on the Issues screen (area, title, catalog numbers,
 required/total stamp count) and can be collapsed or expanded. **Lot cards themselves start
 collapsed** — an order is read as the lots in it, and a lot's copies are a second question. Open
