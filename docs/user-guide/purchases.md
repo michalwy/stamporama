@@ -255,7 +255,25 @@ is the first moment you can.
 
 You can also give a card a **name** — see below.
 
-#### Laying out the card
+#### Two kinds of card
+
+A scan is one of two things, and the app finds the stamps a different way on each:
+
+- a **stockbook card** — black, with the stamps laid straight onto it;
+- an **album page** — a light page, with a black hawid mount glued to it and the stamp inside the
+  mount.
+
+The kind is **read off the scan when you upload it** — a black border is a card and a light one is a
+page — and it is shown on the batch's own line, as *Stockbook card* or *Album page*. If it is wrong,
+press it: the card is cut again, from the scan already stored. **Nothing has to be scanned a second
+time.** The tiles already cut are thrown away first, exactly as a re-cut throws them away, since
+they were found the other way round — so the warning about discarded tiles applies here too.
+
+Getting the kind wrong is visible rather than subtle: an album page cut as a stockbook card comes
+out as thirteen black mounts with a margin of page around each, and that is the moment to press the
+chip.
+
+#### Laying out a stockbook card
 
 Lay the stamps on a **black** stockbook card and scan the whole card square-on. The app finds the
 pieces on the card by separating them from that black background, so the layout is what decides how
@@ -278,6 +296,28 @@ sheet.
 The card itself can stay as it is — a black card with the creases and weave of one that has been
 used is what the detection was fitted on. What it does need is an **even** black: a shadow falling
 across one half of the card, or a lamp on one side of it, is the case most likely to confuse it.
+
+#### Scanning an album page
+
+Scan the page as it is, mounts and all. There is nothing to lay out — the page was made up long ago
+— and there is nothing to take out of its mount either, which is the point of the whole thing.
+
+What you get is the **stamp**: the box is the whole stamp out to the mount's inner edge, with its
+perforated white selvedge inside it, and neither the mount nor the page around it. The page's own
+printing is not a stamp — the numbers under the mounts, and a heading or a caption if the page
+carries one — so nothing printed is offered as a tile.
+
+The page's **backs** work the same way. Turn each stamp over inside its mount, scan the page again
+as the back scan, and the pieces pair up by position exactly as a turned-over stockbook card does.
+
+Two things to know:
+
+- **Two stamps in one mount come out as two boxes** — each is its own piece of paper. A joined pair
+  in one mount is one box, exactly as it is on a stockbook card, and that is right: a pair is one
+  copy with a format.
+- **A stamp with no mount round it** — hinged, or laid straight on the page — is not what this is
+  looking for. The page kind finds a mount and then finds what is inside it, so a bare stamp on the
+  page may come out as nothing or as a box that is not the shape you wanted. Draw that one by hand.
 
 #### While the scan is uploading
 

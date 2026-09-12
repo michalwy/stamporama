@@ -10,9 +10,11 @@ import {
   pairTilesManually,
   proposeCut,
   recutBatch,
+  setBatchKind,
   setBatchLabel,
   unpairTileBack,
   type CutReport,
+  type SheetKind,
 } from "@/lib/scan-sheets";
 import {
   addTileCandidate,
@@ -80,6 +82,31 @@ export async function commitCutAction(
  * collector the saving and nothing else. An error banner over a card that can still be cut would be
  * telling them about a problem they have no move to make about.
  */
+/**
+ * Say what kind of card a batch is, or correct it (#1195).
+ *
+ * Only the fact. The tiles already cut were found the other way round, so the caller follows this
+ * with the ordinary re-cut and reopens the editor on a **fresh** proposal — the one place a re-cut
+ * does not reopen on the previous boxes, because those boxes are exactly what is being thrown away.
+ */
+export async function setBatchKindAction(
+  owner: ScanOwnerRef,
+  batchNo: number,
+  kind: SheetKind
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await setBatchKind(session.user.id, owner, batchNo, kind);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message:
+        e instanceof Error ? e.message : "Failed to change the kind of card. Please try again.",
+    };
+  }
+}
+
 export async function proposeCutAction(sheetId: string): Promise<{ boxes: Box[] }> {
   const session = await getSession();
   try {

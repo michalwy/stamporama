@@ -16,8 +16,22 @@ import { readingOrder, type Box } from "./scan-boxes";
  * from the **background** — a binary mask and its connected regions — never by dividing the card
  * into cells.
  *
- * The background is black, because the stamps are laid on black stockbook cards. That is a constant
- * of the routine, not a happy accident.
+ * ## Two kinds of card, and the one thing that differs
+ *
+ * #574 built this on the background being black, *"a constant of the routine rather than a happy
+ * accident"*. #1195 withdrew that: an **album page** is a light page with a black hawid mount glued
+ * to it and the stamp inside the mount, so the light and the dark run the other way round — and
+ * they alternate **three deep**: page, mount, stamp.
+ *
+ * What that changes is smaller than it sounds. A stockbook card is one separation — the piece
+ * against the card — and an album page is the **same separation run twice**: the mount against the
+ * page, then the stamp against the mount. Every step below is shared; the kind decides which end of
+ * the luminance range the background is elected from, and whether the answer is the region found or
+ * the region found inside it.
+ *
+ * The kind is **told to this module**, not guessed by it ({@link SheetKind}). {@link
+ * recogniseSheetKind} is what guesses, once, when a scan is uploaded, so that the collector has an
+ * answer to correct rather than a question to answer — and correcting it re-runs this pass.
  *
  * ## What this deliberately is not
  *
@@ -49,6 +63,18 @@ import { readingOrder, type Box } from "./scan-boxes";
  * iterations without splitting one. The fix is physical — leave about a tooth of gap when laying
  * the card out — and it is in the user guide for that reason.
  */
+
+/**
+ * What kind of card a scan is — the one thing detection has to be told (#1195).
+ *
+ * `stockbook`: a black stockbook card, stamps laid straight onto it. The piece is the lighter thing
+ * on a dark ground, and the detected region **is** the answer.
+ *
+ * `album`: an album page, light, with black hawid mounts glued to it and a stamp inside each mount.
+ * The detected region is the **mount**, and the answer is one level inside it. A tile carrying the
+ * mount, or the page around it, is the failure this kind exists to prevent.
+ */
+export type SheetKind = "stockbook" | "album";
 
 // ── The constants, and what they were fitted to ────────────────────────────────────────────────
 //
@@ -157,12 +183,54 @@ const THRESHOLD_FLOOR = 52;
  * Unchanged from the reference. */
 const THRESHOLD_SPREAD_FACTOR = 4;
 
+// ── The album page's own constants (#1195) ─────────────────────────────────────────────────────
+//
+// **Fitted on three real album-page scans at 1200 dpi**: a full page of thirteen Deutsche Post
+// Osten overprints in individual mounts, the same page's backs, and a close crop of two of them.
+// They were the collector's own pages, supplied for this, and no synthetic image was used — #574
+// refused to start on generated images on the grounds that constants fitted to them are worse than
+// none, and that reasoning did not stop applying because the background changed colour.
+//
+// Only three values are new; everything else on an album page is the stockbook constants doing the
+// same work a second time. That is the measure of the kind being one parameter rather than a
+// second detector.
+
+/** …and its mirror, for a page: a candidate is kept if its luminance is within
+ * {@link BACKGROUND_LUM_MARGIN} of the **brightest** candidate's, or above this outright. 255 − 60,
+ * so the two polarities are the same rule read from opposite ends and neither can drift from the
+ * other. The brightness rule is what stops a mount running off the edge of the page from being
+ * elected as the page. */
+const PAGE_LUM_FLOOR = 195;
+
+/** How much of a mount's own box a stamp inside it must fill to be believed.
+ *
+ * A mount is cut a little larger than the stamp it holds — that is what makes it a mount — so the
+ * share is high and it is the **weak** half of the test. It is stated low enough for **two** stamps
+ * in one mount to both clear it, which is the case it is really guarding: every enclosed region
+ * over the share is returned, so the share is what separates a stamp from a fragment of one, not
+ * what picks a winner. The strong half is that the stamp must not
+ * touch the mount's edge: the page is light, the mount dark, the stamp light again, so the middle
+ * level **encloses** the inner one, and a thing with nothing enclosed inside it is not a mount. A
+ * printed numeral under a mount is dark on light and passes the first separation exactly as a mount
+ * does; what it has not got is something lighter strictly inside it, which is the whole of why the
+ * page's own printing is not proposed as a tile. Measured at 0.60–0.75 on the collector's pages. */
+const STAMP_MIN_MOUNT_SHARE = 0.3;
+
+/** Ring luminance above which a scan is read as an **album page** rather than a stockbook card
+ * ({@link recogniseSheetKind}). Not a fitted constant so much as the midpoint of a gap: the border
+ * of a stockbook card measures around 15 and the border of an album page around 225, and there is
+ * nothing in between for a threshold to be wrong about. The collector can change the answer either
+ * way, which is what makes a guess here the right shape at all. */
+const ALBUM_RING_LUM = 128;
+
 // ── The pass ───────────────────────────────────────────────────────────────────────────────────
 
 /** What a detection pass found, beside the boxes: enough to say *why* on a card that came out
  * wrong, without turning the log into an image dump. */
 export interface DetectionReport {
   boxes: Box[];
+  /** Which kind the pass ran as — the one input that changes what a region *means*. */
+  kind: SheetKind;
   /** Working dimensions the mask was computed at. */
   workingWidth: number;
   workingHeight: number;
@@ -179,6 +247,9 @@ export interface DetectionReport {
   droppedSmall: number;
   /** Regions dropped for lying all but inside a larger one. */
   droppedContained: number;
+  /** Album pages only: dark regions with nothing lighter enclosed inside them — the page's own
+   * printing, and whatever else is a mark rather than a mount. */
+  droppedWithoutStamp: number;
 }
 
 /**
@@ -189,13 +260,16 @@ export interface DetectionReport {
  * shrink-on-load means a 66 Mpx card is never decoded at full size), and the boxes are scaled back
  * before they are returned: nothing that leaves this module is measured on a resampled image.
  */
-export async function detectSheetBoxes(original: Buffer): Promise<Box[]> {
-  return (await detectSheetBoxesReported(original)).boxes;
+export async function detectSheetBoxes(original: Buffer, kind: SheetKind): Promise<Box[]> {
+  return (await detectSheetBoxesReported(original, kind)).boxes;
 }
 
 /** {@link detectSheetBoxes} with the numbers behind the answer — what the regression harness reads
  * and what a card that came out wrong is diagnosed from. */
-export async function detectSheetBoxesReported(original: Buffer): Promise<DetectionReport> {
+export async function detectSheetBoxesReported(
+  original: Buffer,
+  kind: SheetKind
+): Promise<DetectionReport> {
   const base = sharp(original, { failOn: "error" }).rotate();
   const meta = await base.metadata();
 
@@ -211,7 +285,11 @@ export async function detectSheetBoxesReported(original: Buffer): Promise<Detect
   const h = info.height;
   const sheet = orientedSize(meta, { width: w, height: h });
 
-  const background = estimateBackground(data, w, h);
+  // The **card**, or the **page**: the one place the kind reaches the separation itself. Which end
+  // of the range the background is elected from is the whole of the difference — everything below
+  // this line runs identically for both, because the question *what is far from the background* is
+  // the same question either way.
+  const background = estimateBackground(data, w, h, kind === "album" ? "light" : "dark");
   const mask = thresholdAgainst(data, w, h, background);
   const coverage = countSet(mask) / (w * h);
 
@@ -258,12 +336,23 @@ export async function detectSheetBoxesReported(original: Buffer): Promise<Detect
     if (!kept.some((k) => overlapShare(k, r) >= CONTAINED_OVERLAP_SHARE)) kept.push(r);
   }
 
-  const pad = paddingPixels(meta.density, scale, erosionRadius);
-  const scaled = kept.map((r) => scaleBox(r, scale, pad, sheet));
+  // On a stockbook card the regions **are** the pieces. On an album page they are the mounts, and
+  // the piece is one level inside each of them — so the second separation runs here, over the very
+  // buffer the first one read, and what comes back is already a stamp box in working pixels.
+  const pieces = kind === "album" ? stampsInsideMounts(data, w, h, kept, grow) : kept;
+
+  // **No padding on an album page.** The stockbook pad exists because a mask stops at the last
+  // pixel that differs from the card and a perforation tip is the faintest part of a stamp, so a
+  // crop flush to the mask clips teeth. Against a black mount the selvedge is the strongest edge on
+  // the page and the mask reaches the paper itself; growing the box there would put mount in the
+  // tile, which is precisely what this kind exists to keep out of it.
+  const pad = kind === "album" ? 0 : paddingPixels(meta.density, scale, erosionRadius);
+  const scaled = pieces.map((r) => scaleBox(r, scale, pad, sheet));
   const ordered = readingOrder(scaled).map((i) => scaled[i]);
 
   return {
     boxes: ordered,
+    kind,
     workingWidth: w,
     workingHeight: h,
     backgrounds: background.clusters.map((c) => c.median),
@@ -272,7 +361,152 @@ export async function detectSheetBoxesReported(original: Buffer): Promise<Detect
     erosionRadius,
     droppedSmall: regions.length - bigEnough.length,
     droppedContained: bigEnough.length - kept.length,
+    droppedWithoutStamp: kept.length - pieces.length,
   };
+}
+
+/**
+ * Read a scan's **kind** off its border (#1195), so that a scan arrives already knowing what it is.
+ *
+ * A guess, made once at upload and recorded on the sheet, where the collector can see it and change
+ * it — never asked as a question and never re-derived later, because a kind that answered
+ * differently on a re-cut than it did on the first cut would be the worst version of this.
+ *
+ * The evidence is the **median luminance of the border ring**, the one part of a scan that is
+ * background by construction on both kinds: a stockbook card's border is the black card and an
+ * album page's is the page. The median is what makes it robust to a tight crop — the close crop of
+ * two mounts in the fixture set has mount black along part of its ring and still reads as a page.
+ *
+ * Read on the sheet's `view` derivative rather than its original: the answer is a median over
+ * hundreds of thousands of pixels and a downscale cannot move it, while decoding a 200 MB card a
+ * second time to learn one bit would be the expensive way to be no more certain.
+ */
+export async function recogniseSheetKind(image: Buffer): Promise<SheetKind> {
+  const { data, info } = await sharp(image, { failOn: "error" })
+    .rotate()
+    .resize(RECOGNITION_MAX_EDGE, RECOGNITION_MAX_EDGE, {
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .removeAlpha()
+    .toColorspace("srgb")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const lums = ringPixels(info.width, info.height).map((p) =>
+    luminance([data[p], data[p + 1], data[p + 2]])
+  );
+  if (lums.length === 0) return "stockbook";
+  return medianOf(lums) >= ALBUM_RING_LUM ? "album" : "stockbook";
+}
+
+/** Enough of the border to take a median of, and no more — the ring alone decides this, and at a
+ * few hundred pixels on a side it already holds tens of thousands of them. */
+const RECOGNITION_MAX_EDGE = 400;
+
+// ── The second separation: the stamp inside the mount (#1195) ──────────────────────────────────
+
+/**
+ * Turn each **mount** into the **stamp** it holds, and drop what turns out not to be a mount.
+ *
+ * The page is light, the mount is black, the stamp is lighter again — so this is the first
+ * separation run a second time with the polarity the other way round, inside each region rather
+ * than over the whole page. That is deliberate to the point of being the design: one estimator, one
+ * threshold, one morphology, applied twice.
+ *
+ * Two things come out of it at once.
+ *
+ * **The tile is the whole stamp, selvedge included.** The edge being measured is white perforated
+ * paper against black film, which is the strongest boundary on the page; the printed design's own
+ * edge — the obvious one, and the one a detector aimed at *the stamp's picture* would stop at — is
+ * never asked about, because the background here is the mount and the design is nowhere near it.
+ * Stopping at the design would silently crop the perforations off every stamp on the page, and this
+ * is the arrangement under which that cannot happen rather than a rule against it.
+ *
+ * **The page's own printing is not a tile.** The numerals under the mounts are dark marks on a light
+ * ground and survive the first separation exactly as a mount does. What they have not got is
+ * something lighter *enclosed* inside them: the region found within a numeral's own box is the page
+ * around it, which runs to the edge of the box. So the test is enclosure — a region touching the
+ * box's border is not a stamp in a mount — and it is a statement of the three-deep alternation
+ * rather than a filter fitted to numerals. A caption, a heading or a rule fails it for the same
+ * reason.
+ */
+function stampsInsideMounts(
+  data: Buffer,
+  w: number,
+  h: number,
+  mounts: readonly Box[],
+  grow: number
+): Box[] {
+  const stamps: Box[] = [];
+  for (const mount of mounts) {
+    // Back to the mount's own outline. The regions were grown by the erosion radius on the way out
+    // of the first separation, which on a card gives back the pixels the erosion took; here it
+    // would put a band of **page** around the window, and the window's border has to be mount for
+    // the ring to elect the mount as its background.
+    const win = insetBox(mount, grow, w, h);
+    if (win.w < MIN_MOUNT_WINDOW_PX || win.h < MIN_MOUNT_WINDOW_PX) continue;
+
+    const sub = cropRgb(data, w, win);
+    const inner = thresholdAgainst(
+      sub,
+      win.w,
+      win.h,
+      estimateBackground(sub, win.w, win.h, "dark")
+    );
+    closeSquare(inner, win.w, win.h, 3);
+    fillHoles(inner, win.w, win.h);
+    openSquare(inner, win.w, win.h, 5);
+    fillHoles(inner, win.w, win.h);
+
+    // Enclosed, and then **every** one of them that is big enough — not the largest. A mount
+    // usually holds one stamp and the two readings agree; where they differ is a mount holding
+    // two, and there the largest would quietly return one of them. #574's asymmetry decides it:
+    // a surviving extra box costs one click, while a stamp dropped is simply absent from a page
+    // the collector has moved on from, with nothing on screen saying so.
+    const found = labelComponents(inner, win.w, win.h).filter(
+      // The page leaking in at a corner of the window is the thing most likely to be *bigger* than
+      // the stamp, and it is also the one thing guaranteed to touch the border.
+      (r) =>
+        r.x > 0 &&
+        r.y > 0 &&
+        r.x + r.w < win.w &&
+        r.y + r.h < win.h &&
+        r.w * r.h >= STAMP_MIN_MOUNT_SHARE * win.w * win.h
+    );
+    for (const stamp of found) {
+      stamps.push({ x: win.x + stamp.x, y: win.y + stamp.y, w: stamp.w, h: stamp.h });
+    }
+  }
+  return stamps;
+}
+
+/** Below this a window has too few pixels for a ring, a threshold and a morphology to mean
+ * anything, and whatever it holds is a speck rather than a mount. In working pixels, where a mount
+ * on a 1200 dpi page measures several hundred on a side. */
+const MIN_MOUNT_WINDOW_PX = 24;
+
+/** A box pulled in by `by` on every side, clamped so it stays inside the image and never inverts. */
+function insetBox(b: Box, by: number, w: number, h: number): Box {
+  const x = Math.min(Math.max(0, b.x + by), w);
+  const y = Math.min(Math.max(0, b.y + by), h);
+  return {
+    x,
+    y,
+    w: Math.max(0, Math.min(w, b.x + b.w - by) - x),
+    h: Math.max(0, Math.min(h, b.y + b.h - by) - y),
+  };
+}
+
+/** The window's own RGB pixels, copied out so that every function below it can go on taking a plain
+ * `w`-wide buffer. A mount is a few hundred pixels on a side at the working resolution, so the copy
+ * is a fraction of a megabyte and buys the whole of the second separation being the same code. */
+function cropRgb(data: Buffer, w: number, win: Box): Buffer {
+  const out = Buffer.allocUnsafe(win.w * win.h * 3);
+  for (let y = 0; y < win.h; y++) {
+    data.copy(out, y * win.w * 3, ((win.y + y) * w + win.x) * 3, ((win.y + y) * w + win.x + win.w) * 3);
+  }
+  return out;
 }
 
 /** Millimetres of card per working pixel, or null when the scan records no usable resolution. */
@@ -341,28 +575,28 @@ interface BackgroundEstimate {
 }
 
 /**
- * The card's own colour, taken from a ring along the four edges — the one part of a scan that is
- * background by construction.
+ * The ground's own colour, taken from a ring along the four edges — the one part of a scan, or of a
+ * mount's own box, that is background by construction.
  *
- * **Several clusters are kept on purpose.** The card is dark but not uniform: scanner banding,
- * vignetting and the shadow a mounted stamp throws all move it. Comparing against the darkest
- * cluster alone made a mid-tone patch of background exceed the threshold, and the mask ballooned to
- * 96% of one frame. The darkness rule is the other half of it — it is what stops a pale object
- * running off the edge of the card from being elected as background.
+ * **Several clusters are kept on purpose.** The ground is not uniform: scanner banding, vignetting
+ * and the shadow a mounted stamp throws all move it. Comparing against the darkest cluster alone
+ * made a mid-tone patch of background exceed the threshold, and the mask ballooned to 96% of one
+ * frame.
+ *
+ * **`polarity` says which end of the range the ground is at**, and it is the one thing the two kinds
+ * of card disagree about (#1195). `dark` elects the darkest candidates — a stockbook card, and a
+ * hawid mount seen from inside its own box. `light` elects the brightest — an album page. The rule
+ * is otherwise the same one read from the opposite end, and it earns its keep the same way in both
+ * directions: it is what stops a pale object running off the edge of a card, or a mount running off
+ * the edge of a page, from being elected as the ground it is lying on.
  */
-function estimateBackground(data: Buffer, w: number, h: number): BackgroundEstimate {
-  const depth = Math.max(3, Math.round(RING_FRACTION * Math.min(w, h)));
-  const ring: number[] = [];
-  for (let y = 0; y < h; y++) {
-    const edgeRow = y < depth || y >= h - depth;
-    for (let x = 0; x < w; x++) {
-      if (!edgeRow && x >= depth && x < w - depth) {
-        x = w - depth - 1;
-        continue;
-      }
-      ring.push((y * w + x) * 3);
-    }
-  }
+function estimateBackground(
+  data: Buffer,
+  w: number,
+  h: number,
+  polarity: "dark" | "light"
+): BackgroundEstimate {
+  const ring = ringPixels(w, h);
 
   // Quantised to 4 bits a channel: fine enough to keep a banded card's two tones apart, coarse
   // enough that noise does not shatter one tone into a hundred bins.
@@ -400,16 +634,48 @@ function estimateBackground(data: Buffer, w: number, h: number): BackgroundEstim
     return { median, spread, lum: luminance(median) };
   });
 
-  const darkest = Math.min(...measured.map((c) => c.lum));
-  const ceiling = Math.max(BACKGROUND_LUM_CEILING, darkest + BACKGROUND_LUM_MARGIN);
-  const clusters = measured.filter((c) => c.lum <= ceiling);
-  const kept = clusters.length > 0 ? clusters : [measured.reduce((a, b) => (b.lum < a.lum ? b : a))];
+  const clusters =
+    polarity === "dark"
+      ? (() => {
+          const darkest = Math.min(...measured.map((c) => c.lum));
+          const ceiling = Math.max(BACKGROUND_LUM_CEILING, darkest + BACKGROUND_LUM_MARGIN);
+          return measured.filter((c) => c.lum <= ceiling);
+        })()
+      : (() => {
+          const brightest = Math.max(...measured.map((c) => c.lum));
+          const floor = Math.min(PAGE_LUM_FLOOR, brightest - BACKGROUND_LUM_MARGIN);
+          return measured.filter((c) => c.lum >= floor);
+        })();
+  const furthest = polarity === "dark" ? (a: number, b: number) => b < a : (a: number, b: number) => b > a;
+  const kept =
+    clusters.length > 0
+      ? clusters
+      : [measured.reduce((a, b) => (furthest(a.lum, b.lum) ? b : a))];
 
   const threshold = Math.max(
     THRESHOLD_FLOOR,
     THRESHOLD_SPREAD_FACTOR * Math.max(...kept.map((c) => c.spread))
   );
   return { clusters: kept.map(({ median, spread }) => ({ median, spread })), threshold };
+}
+
+/** Offsets into a `w`×`h` RGB buffer of the pixels in the border ring — the band along the four
+ * edges that is background by construction. Shared by the estimator and by {@link
+ * recogniseSheetKind}, which ask two different questions of the same pixels. */
+function ringPixels(w: number, h: number): number[] {
+  const depth = Math.max(3, Math.round(RING_FRACTION * Math.min(w, h)));
+  const ring: number[] = [];
+  for (let y = 0; y < h; y++) {
+    const edgeRow = y < depth || y >= h - depth;
+    for (let x = 0; x < w; x++) {
+      if (!edgeRow && x >= depth && x < w - depth) {
+        x = w - depth - 1;
+        continue;
+      }
+      ring.push((y * w + x) * 3);
+    }
+  }
+  return ring;
 }
 
 function luminance([r, g, b]: readonly [number, number, number]): number {

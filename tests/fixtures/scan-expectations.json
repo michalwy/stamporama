@@ -1,5 +1,5 @@
 {
-  "_readme": "Expected detection results for the card scans in tests/fixtures/scans/ (gitignored). `pieces` counts PHYSICAL PIECES, not stamps: a pair, a block or a se-tenant strip is one piece, because perforation joins them and detection cannot separate them without cutting teeth. `note` says which case each card covers, so a partial set states its gaps instead of implying coverage. `allow` is a NAMED shortfall: how many boxes this card is measured to come out by, with `allowReason` saying which documented limit it is. It is never a widened tolerance — a card with no `allow` must come out exactly.",
+  "_readme": "Expected detection results for the card scans in tests/fixtures/scans/ (gitignored). `pieces` counts PHYSICAL PIECES, not stamps: a pair, a block or a se-tenant strip is one piece, because perforation joins them and detection cannot separate them without cutting teeth. `kind` is what the scan is — `stockbook` (a black card, stamps laid on it) or `album` (a light page, stamps in black mounts, #1195) — and it is checked twice over: the pass is RUN under it, and `recogniseSheetKind` is asked to arrive at it from the scan's own border. Omitted means `stockbook`, which is what every scan taken before #1195 is. `note` says which case each card covers, so a partial set states its gaps instead of implying coverage. `allow` is a NAMED shortfall: how many boxes this card is measured to come out by, with `allowReason` saying which documented limit it is. It is never a widened tolerance — a card with no `allow` must come out exactly.",
   "2026-08-14-0002.jpg": {
     "pieces": 9,
     "note": "Large mint stamps, widely spaced, four rows. The easy baseline."
@@ -36,10 +36,26 @@
     "allow": 1,
     "allowReason": "The stamp with an attached coupon comes out as two boxes: the gutter between them is a real perforated separation, so nothing distinguishes it from two pieces. One Merge in the editor. Detection is measured at 14 here."
   },
+  "2026-09-12-0001.jpg": {
+    "pieces": 13,
+    "kind": "album",
+    "note": "An album page: light page, thirteen individual black hawid mounts, a Deutsche Post Osten overprint inside each, and the positions numbered 1–13 in print beneath them. The kind #1195 exists for. Every box must be the STAMP, out to its perforated selvedge and the mount's inner edge — no page, no mount — and not one of the thirteen printed numerals."
+  },
+  "2026-09-12-0002.jpg": {
+    "pieces": 2,
+    "kind": "album",
+    "note": "A close crop of two mounts from the page above, at four times the pixels per stamp. The same answer at a different scale, which is what says the second separation is not fitted to one working resolution. Its numerals are large enough to survive the erosion that removes them on the full page and are dropped by the minimum area instead — the two mechanisms are visible one per file."
+  },
+  "2026-09-12-0003.jpg": {
+    "pieces": 13,
+    "kind": "album",
+    "note": "The BACKS of 0001, each stamp turned over in place inside its mount. Two cases at once: the front/back pair the set never had, and a back's own gum side — pale, almost featureless, with nothing but the overprint showing through — against the same black mount."
+  },
   "_gaps": [
     "Separate stamps laid deliberately touching, teeth interlocking. Expected to fail — the seam is white paper against white paper and no threshold finds it. 0003 holds one such pair by accident, which is where its `allow` comes from.",
     "A card with uneven lighting or a shadow across it. This is what the multi-cluster background estimate exists for, and the one part of the estimator no card here exercises.",
     "A non-rectangular stamp — a triangle or a diamond. Not covered, and the reason there is deliberately no fill-ratio filter.",
-    "A front and back pair of one card, each stamp turned in place. The positional pairing has no scan of its own here."
+    "A front and back pair of one STOCKBOOK card, each stamp turned in place. The positional pairing has no black-card scan of its own here; the album page and its backs (#1195) are such a pair, so what is missing is the kind rather than the case.",
+    "An album page carrying printing larger than a position numeral — a heading, a caption, a printed frame. The three album pages here are numbered and nothing else, and their numerals are gone before the enclosure rule is reached: the erosion removes them on the full page and the minimum area removes them on the close crop. So the rule that a mount must have something lighter ENCLOSED inside it — the stated reason the page's own printing is never a tile — is not exercised by this set. It is load-bearing for printed album pages that carry headings, which is what a page made in AlbumEasy is."
   ]
 }

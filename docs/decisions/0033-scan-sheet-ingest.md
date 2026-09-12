@@ -433,6 +433,68 @@ The physical rule follows from all of this and is in the user guide: **leave abo
 tooth of gap between stamps when laying out the card.** It is the one input to detection quality
 that is entirely in the collector's hands.
 
+## What #1195 added: a second kind of card, and the withdrawal of #574's constant
+
+#574 built detection on the background being black, and said so in as many words: *"the stamps are
+laid on black stockbook cards — that is a constant of the routine, not a happy accident."* It was
+not a constant. The collector also mounts stamps on **album pages**: a light page with a black hawid
+mount glued to it and the stamp inside the mount. On such a page #574's pass proposes the **mount**,
+so every tile arrives as a black rectangle with a margin of page around it — every one of them
+needing the hand that detection exists to remove.
+
+#1195 withdraws the constant rather than editing #574, which stays closed and stays accurate about
+what it measured.
+
+**The polarity runs the other way, and it alternates three deep.** Page light, mount black, stamp
+lighter again. Established from two scans of the collector's own pages, not from reasoning: the
+written description settled that the stamp is a level inside the detected object and left the
+direction to be guessed.
+
+**One parameter, not a second detector.** A stockbook card is one separation — the piece against the
+card — and an album page is *the same separation run twice*: the mount against the page, then the
+stamp against the mount. The estimator, the threshold, the morphology, the labelling and the
+containment rule are shared; the kind decides which end of the luminance range the ground is elected
+from, and whether the answer is the region or what is inside it. Three new constants in all, against
+a module of a dozen.
+
+**The tile is the whole stamp, selvedge included — by arrangement rather than by rule.** The edge
+being measured on an album page is white perforated paper against black film, the strongest boundary
+on the page, while the printed design's own edge is never asked about, because the background inside
+a mount is the mount. A detector aimed at *the stamp's picture* would stop at the design and silently
+crop the perforations off every stamp on the page; here that cannot happen, which is a better answer
+than a rule saying it must not.
+
+**The page's own printing is not a tile, and the reason is the alternation.** The numerals under the
+mounts are dark marks on a light ground and survive the first separation exactly as a mount does.
+What they have not got is something lighter *enclosed* inside them. So the test is enclosure — a
+region touching its own box's border is not a stamp in a mount — and a caption, a heading or a
+printed frame fails it for the same reason. This is a statement of the three-deep structure rather
+than a filter fitted to numerals, which matters because the corpus does not exercise it: on the
+collector's pages the numerals are gone earlier, removed by the erosion on a full page and by the
+minimum area on a close crop. That is recorded as a named gap rather than counted as coverage.
+
+**The kind is a column, guessed once and corrected in one press.** `scan_sheet.kind` is read off the
+scan's own border when it is uploaded — a stockbook card's border measures around 15 and an album
+page's around 225, with nothing in between — and is shown on the batch line beside the card's name.
+Pressing it writes the other kind to both sheets of the batch and goes out through the **existing**
+re-cut, with nothing uploaded again; it is the one re-cut that reopens on a fresh proposal rather
+than on the previous boxes, because those boxes are what is being thrown away. Guessing rather than
+asking is what makes it right to guess at all: the collector is given an answer to correct instead of
+a question to answer, and getting it wrong is visible — thirteen black rectangles — and costs one
+press.
+
+The vocabulary is closed in the application (`SheetKind`) and not in the database, as `side`,
+`Offer.state` and `PurchaseLot.status` are, so the third kind #1195 says is conceivable is a code
+change rather than a migration coordinated with a deploy.
+
+**Measured the way #574 was, and against the same refusal.** Three real 1200 dpi album pages — a
+page of thirteen overprints in individual mounts, the same page's backs, and a close crop of two of
+them — added to the same gitignored set with entries in the same committed expectations file. All
+three come out exactly, the recognition agrees with the manifest on every file in the set, and the
+eight stockbook cards return the figures #574 recorded, unchanged. No synthetic image was fitted to:
+#574 refused to start on generated images because constants fitted to them are worse than none, and
+that reasoning did not stop applying because the background changed colour.
+
 ## What #585 added: the same viewport over a tile, which is where the detail was all along
 
 #579 justified zoom by the *cut*. The larger prize was one step later. Deciding **which variant** a
