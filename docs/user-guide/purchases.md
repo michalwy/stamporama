@@ -527,6 +527,16 @@ what you see; by then the card has been worked through and the close look is ove
 comparison, so flipping sides leaves you looking at the same part of the stamp at the same
 magnification rather than starting again from Fit.
 
+**A piece lying sideways is turned the right way up per tile.** The two arrow buttons beside
+*Front* / *Back* turn the side you are looking at a quarter to the left or to the right. The pieces
+on one card lie every way round, so the turn belongs to the tile and never to the whole card — and
+each side turns on its own, because a stamp turned over in place lies the other way round on its
+back. The picture is cut again from the card scan, turned, so it is just as sharp; the tile's place
+on the card does not move, so zooming past the image, the ruler, the gauge and the size all keep
+measuring the same stamp — and a size taken on a piece stood the right way up is its width and
+height rather than the other way about. The turned picture is what the copy gets when the tile is
+identified. A tile that has already become a copy is not turned here: its pictures are the copy's.
+
 #### Measuring on the scan
 
 Many variants differ by a measurement — the perforation, the size of the design, the gap between two
@@ -648,6 +658,15 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   the question a card cannot answer, because one card routinely holds pieces from several. Your last
   answer leads, since a card, or a run of them, is usually worked through before you start the next.
   With a single lot nothing is asked at all.
+
+  **A cover, a fragment or an FDC** is identified the same way, from the same step: press **Another
+  stamp on this piece…** in the box that names the stamp you picked, and list every stamp the piece
+  carries — the same list the copy's own Edit dialog has, with a quantity and a format per stamp, the
+  one you picked first. The tile still becomes **one copy**, carrying all of them; the box then lists
+  them under *Several stamps on this piece*, and **Change the stamps on this piece…** reopens the list.
+  Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual. A piece
+  carrying several stamps counts towards none of them — see
+  [Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Assign to a copy on this order** — the auction path. An order settled from an
   [auction sale](auctions.md#settling-a-parcel-into-a-purchase) already holds identified copies,
   because the contents had to be described in order to bid. Those copies need *photographs*, not
@@ -766,8 +785,9 @@ you want is often not the one immediately before.
 
 **Each identification appears once.** Ten copies of one stamp taken in one after another is one row,
 not ten — the list is ten *different* things to press, which is the depth it exists to give. Two rows
-are separate when they would read differently: a different stamp, a different condition, or a
-different format. Where two otherwise identical intakes differed only in something the row does not
+are separate when they would read differently: a different stamp, a different condition, a
+different format, or different stamps on the piece. A row for a cover says **several stamps**, and
+pressing it identifies this tile as that cover — every stamp on it, not only the first. Where two otherwise identical intakes differed only in something the row does not
 show — a certificate, a location, its ref, the lot — the **most recent** one stands for them, and it
 is that one's answers you get.
 
@@ -835,6 +855,11 @@ which stamp a piece is usually means being wrong about what you read off it, so 
 say everything the identification said: the stamp, the condition, the certificate, the format, the
 location and its ref, the dispositions, and the catalogue value while the paper catalogue is open at
 the right page.
+
+A **cover** is corrected as a cover: the condition step lists the stamps it carries, picking a
+stamp in the picker re-answers the first of them and leaves the others on the piece, and **Change the
+stamps on this piece…** is where the rest are changed — take the list down to one stamp and the copy
+is an ordinary copy of that stamp again.
 
 Two things differ from a first identification. The picker marks the stamp the copy is pointing at
 now as **current** on its own row, so you can see what you are replacing while you choose the

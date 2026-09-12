@@ -25,6 +25,7 @@ import {
   proposeCut,
   recutBatch,
   renderSheetRegion,
+  turnTileSide,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
 import type { Box } from "../../src/lib/scan-boxes";
@@ -126,6 +127,31 @@ async function centreColour(photo: {
   const cy = info.height >> 1;
   const at = (cy * info.width + cx) * info.channels;
   return [data[at], data[at + 1], data[at + 2]];
+}
+
+/** A stored photo's `full`, decoded — for reading which way round a turned tile came out (#1006). */
+async function storedPixels(photo: {
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+}): Promise<{ data: Buffer; info: { width: number; height: number; channels: number } }> {
+  const object = await getStorage(photo.storageBackend).get(
+    variantKey(photo.storageKey, "full", photo.mime),
+    photo.mime,
+    "delivery"
+  );
+  const chunks: Buffer[] = [];
+  for await (const chunk of object.stream) chunks.push(Buffer.from(chunk));
+  return sharp(Buffer.concat(chunks)).raw().toBuffer({ resolveWithObject: true });
+}
+
+function colourAt(
+  px: { data: Buffer; info: { width: number; channels: number } },
+  x: number,
+  y: number
+): [number, number, number] {
+  const at = (y * px.info.width + x) * px.info.channels;
+  return [px.data[at], px.data[at + 1], px.data[at + 2]];
 }
 
 async function photoBytesExist(photo: {
@@ -236,6 +262,17 @@ describe("scan sheet ingest (#566)", () => {
       SHEET_H,
       FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))
     );
+    return uploadSheet(userId, { purchaseId }, { source: bytes, mime: "image/png", side: "front" });
+  }
+
+  /** The same card with a green corner on the first stamp's top left (#1006) — the one mark a
+   * quarter-turn can be read from, since a solid rectangle looks the same every way round. */
+  const MARK = 150;
+  async function uploadMarkedFront(purchaseId: string) {
+    const bytes = await card(SHEET_W, SHEET_H, [
+      ...FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] })),
+      { box: { x: FRONT_BOXES[0].x, y: FRONT_BOXES[0].y, w: MARK, h: MARK }, colour: GREEN },
+    ]);
     return uploadSheet(userId, { purchaseId }, { source: bytes, mime: "image/png", side: "front" });
   }
 
@@ -650,6 +687,156 @@ describe("scan sheet ingest (#566)", () => {
       () => renderSheetRegion(serving, { x: SHEET_W - 10, y: 0, w: 100, h: 100 }, 100),
       ScanValidationError
     );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  // ── Standing a tile the right way up (#1006) ──────────────────────────────────────────────────
+  //
+  // The box addresses the sheet and must not move; what turns is the side's crop, cut again from
+  // the original. Each assertion below reads *which corner the mark landed in*, because a crop that
+  // is the right size but turned the wrong way — or taken from the wrong corner of the card — is
+  // still a believable picture of a stamp.
+
+  it("stands a tile the right way up by cutting its side again, turned (#1006)", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadMarkedFront(purchaseId);
+    await commitCut(userId, front.id, FRONT_BOXES);
+    const tile = await prisma.scanTile.findFirstOrThrow({
+      where: { purchaseId, position: 0 },
+      include: { photos: true },
+    });
+    const before = tile.photos[0];
+    assert.deepEqual(colourAt(await storedPixels(before), 40, 40), GREEN);
+
+    await turnTileSide(userId, tile.id, "front", 90);
+
+    const turned = await prisma.scanTile.findUniqueOrThrow({
+      where: { id: tile.id },
+      include: { photos: true },
+    });
+    assert.equal(turned.frontTurn, 90);
+    // The box on the card never moves: it is what every measurement and every region stands on.
+    const box = FRONT_BOXES[0];
+    assert.deepEqual([turned.frontX, turned.frontY, turned.frontW, turned.frontH], [box.x, box.y, box.w, box.h]);
+    assert.equal(turned.photos.length, 1);
+    const after = turned.photos[0];
+    // A new row, so no browser holding the sideways picture under its `immutable` URL keeps it.
+    assert.notEqual(after.id, before.id);
+    assert.equal(after.role, "front");
+    assert.deepEqual([after.width, after.height], [box.h, box.w]);
+    assert.deepEqual([after.originalWidth, after.originalHeight], [box.h, box.w]);
+    // A quarter clockwise takes the top-left corner to the top right.
+    const px = await storedPixels(after);
+    assert.deepEqual(colourAt(px, px.info.width - 40, 40), GREEN);
+    assert.deepEqual(colourAt(px, 40, 40), RED);
+    assert.equal(await photoBytesExist(before), false, "the sideways bytes are not left behind");
+    assert.ok(await photoBytesExist(after));
+
+    const listed = (await listScans(userId, { purchaseId })).batches[0].tiles.find(
+      (t) => t.id === tile.id
+    )!;
+    assert.equal(listed.frontTurn, 90);
+    assert.equal(listed.frontPhotoId, after.id);
+
+    // Back to upright: the mark is where it was scanned, and the picture its box's own shape again.
+    await turnTileSide(userId, tile.id, "front", 0);
+    const upright = await prisma.photo.findFirstOrThrow({ where: { tileId: tile.id, role: "front" } });
+    assert.deepEqual([upright.width, upright.height], [box.w, box.h]);
+    assert.deepEqual(colourAt(await storedPixels(upright), 40, 40), GREEN);
+
+    await assert.rejects(() => turnTileSide(userId, tile.id, "front", 45), ScanValidationError);
+    await assert.rejects(() => turnTileSide(userId, tile.id, "back", 90), ScanValidationError);
+    await assert.rejects(() => turnTileSide("someone-else", tile.id, "front", 90), ScanAuthError);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("serves a turned tile's region turned, from the same pixels of the card (#1006)", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadMarkedFront(purchaseId);
+    const serving = await getSheetForServing(sheet.id);
+    assert.ok(serving);
+    const box = FRONT_BOXES[0];
+
+    const turned = await renderSheetRegion(serving, box, box.h, 90);
+    const px = await sharp(turned.buffer).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([px.info.width, px.info.height], [box.h, box.w]);
+    assert.deepEqual(colourAt(px, px.info.width - 40, 40), GREEN);
+    assert.deepEqual(colourAt(px, 40, 40), RED);
+
+    // The render width is the width **as drawn**: asked for half of it, a region laid the other way
+    // comes back half as wide as it stands, with the mark in the bottom-left corner.
+    const half = await renderSheetRegion(serving, box, box.h / 2, 270);
+    const hp = await sharp(half.buffer).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([hp.info.width, hp.info.height], [box.h / 2, box.w / 2]);
+    assert.deepEqual(colourAt(hp, 20, hp.info.height - 20), GREEN);
+
+    await assert.rejects(() => renderSheetRegion(serving, box, box.w, 45), ScanValidationError);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("turns the stored picture once the scan is swept, and never a tile that became a copy (#1006)", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadMarkedFront(purchaseId);
+    await commitCut(userId, front.id, FRONT_BOXES);
+    const tile = await prisma.scanTile.findFirstOrThrow({ where: { purchaseId, position: 0 } });
+    await turnTileSide(userId, tile.id, "front", 90);
+
+    // No original to cut from: the crop already standing at 90 is turned by the other 90.
+    await prisma.scanSheet.update({ where: { id: front.id }, data: { purgedAt: new Date() } });
+    await turnTileSide(userId, tile.id, "front", 180);
+    const photo = await prisma.photo.findFirstOrThrow({ where: { tileId: tile.id, role: "front" } });
+    const box = FRONT_BOXES[0];
+    assert.deepEqual([photo.width, photo.height], [box.w, box.h]);
+    assert.deepEqual([photo.originalWidth, photo.originalHeight], [box.w, box.h]);
+    const px = await storedPixels(photo);
+    assert.deepEqual(colourAt(px, px.info.width - 40, px.info.height - 40), GREEN);
+    assert.equal(
+      (await prisma.scanTile.findUniqueOrThrow({ where: { id: tile.id } })).frontTurn,
+      180
+    );
+    await prisma.scanSheet.update({ where: { id: front.id }, data: { purgedAt: null } });
+
+    // A consumed tile's pictures are its copy's now, so they are not this screen's to turn.
+    await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "consumed" } });
+    await assert.rejects(() => turnTileSide(userId, tile.id, "front", 270), ScanValidationError);
+    await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "unidentified" } });
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("carries a back's turn with it when it is paired onto a tile and taken off again (#1006)", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
+    await commitCut(userId, front.id, FRONT_BOXES);
+    const strayBox: Box = { x: 200, y: 1200, w: 300, h: 300 };
+    const back = await uploadSheet(userId, { purchaseId }, {
+      source: await card(SHEET_W, SHEET_H, [
+        { box: FRONT_BOXES[0], colour: RED },
+        { box: strayBox, colour: GREEN },
+      ]),
+      mime: "image/png",
+      side: "back",
+      batchNo: front.batchNo,
+    });
+    await commitCut(userId, back.id, [FRONT_BOXES[0], strayBox]);
+    const backOnly = await prisma.scanTile.findFirstOrThrow({
+      where: { purchaseId, frontSheetId: null, backX: FRONT_BOXES[0].x, backY: FRONT_BOXES[0].y },
+    });
+    const target = await prisma.scanTile.findFirstOrThrow({ where: { purchaseId, position: 0 } });
+
+    await turnTileSide(userId, backOnly.id, "back", 270);
+    await pairTilesManually(userId, backOnly.id, target.id);
+    assert.equal((await prisma.scanTile.findUniqueOrThrow({ where: { id: target.id } })).backTurn, 270);
+
+    await unpairTileBack(userId, target.id);
+    assert.equal((await prisma.scanTile.findUniqueOrThrow({ where: { id: target.id } })).backTurn, 0);
+    const freed = await prisma.scanTile.findFirstOrThrow({
+      where: { purchaseId, frontSheetId: null, backX: FRONT_BOXES[0].x, backY: FRONT_BOXES[0].y },
+    });
+    assert.equal(freed.backTurn, 270);
 
     await deletePurchase(userId, purchaseId);
   });

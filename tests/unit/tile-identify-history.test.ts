@@ -32,6 +32,17 @@ function item(
     issueId: "iss-1",
     collectionAreaId: "area-1",
     conditionAbbreviation: "MNH",
+    stamps: [
+      {
+        stampId: "stamp-200",
+        quantity: 1,
+        formatId: null,
+        stampName: "Chopin",
+        catalogNumbers: [{ catalogVendorId: "v-mi", number: "200" }],
+        issueId: "iss-1",
+        collectionAreaId: "area-1",
+      },
+    ],
     ...overrides,
   };
 }
@@ -45,6 +56,8 @@ function tile(id: string, overrides: Partial<ScanTileData> = {}): ScanTileData {
     backPhotoId: null,
     frontBox: null,
     backBox: null,
+    frontTurn: 0,
+    backTurn: 0,
     note: null,
     item: item(),
     candidates: [],
@@ -141,7 +154,92 @@ describe("identifyHistory", () => {
       locationRef: "",
       disposition: { inCollection: true, forSale: false, forTrade: false },
       lotId: "lot-1",
+      // A copy that is just its stamp carries no list (#750): its one plain entry is not something
+      // the collector described.
+      stamps: [],
     });
+  });
+
+  it("carries every stamp on a piece that carries several, named as the leading stamp is (#750)", () => {
+    const [entry] = identifyHistory([
+      batch(1, [
+        tile("cover", {
+          item: item({
+            stamps: [
+              {
+                stampId: "stamp-200",
+                quantity: 1,
+                formatId: null,
+                stampName: "Chopin",
+                catalogNumbers: [{ catalogVendorId: "v-mi", number: "200" }],
+                issueId: "iss-1",
+                collectionAreaId: "area-1",
+              },
+              {
+                stampId: "stamp-201",
+                quantity: 2,
+                formatId: "f-blk4",
+                stampName: null,
+                catalogNumbers: [{ catalogVendorId: "v-mi", number: "201" }],
+                issueId: null,
+                collectionAreaId: null,
+              },
+            ],
+          }),
+        }),
+      ]),
+    ]);
+    assert.deepEqual(entry.answers.stamps, [
+      {
+        stampId: "stamp-200",
+        quantity: 1,
+        formatId: "",
+        subject: {
+          areaId: "area-1",
+          issueId: "iss-1",
+          catalogNumbers: [{ catalogVendorId: "v-mi", number: "200" }],
+          name: "Chopin",
+        },
+      },
+      {
+        stampId: "stamp-201",
+        quantity: 2,
+        formatId: "f-blk4",
+        subject: {
+          areaId: null,
+          issueId: null,
+          catalogNumbers: [{ catalogVendorId: "v-mi", number: "201" }],
+          name: null,
+        },
+      },
+    ]);
+  });
+
+  it("keeps a cover and the loose stamp it leads with as two rows (#750)", () => {
+    const second = {
+      stampId: "stamp-201",
+      quantity: 1,
+      formatId: null,
+      stampName: null,
+      catalogNumbers: [],
+      issueId: null,
+      collectionAreaId: null,
+    };
+    const history = identifyHistory([
+      batch(1, [
+        tile("loose", { item: item({ createdAt: "2026-09-04T10:00:00.000Z" }) }),
+        tile("cover", {
+          item: item({
+            createdAt: "2026-09-04T10:01:00.000Z",
+            stamps: [{ ...item().stamps[0] }, second],
+          }),
+        }),
+      ]),
+    ]);
+    assert.deepEqual(
+      history.map((e) => e.tileId),
+      ["cover", "loose"]
+    );
   });
 
   it("falls back to the back when the copy has no front", () => {

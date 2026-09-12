@@ -52,6 +52,7 @@ import {
   type Viewport,
   type ViewportSize,
 } from "@/lib/scan-viewport";
+import { isSideways, turnBy, turnedSize, type QuarterTurn } from "@/lib/tile-turn";
 import { ScanToolButton } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
 import { useWatermarkView, type WatermarkStatus } from "./use-watermark-view";
@@ -149,6 +150,15 @@ interface Props {
    * missing, the figure is not a perforation at all, and the viewer being unmounted.
    */
   onGauge?: (gauge: number | null) => void;
+  /**
+   * Stand the side on screen the right way up (#1006) — absent wherever the pictures are not this
+   * tile's to turn: every step of the chain after the tile dialog, and a tile that has become a copy.
+   * The viewer only asks; the turn is stored on the tile, the side is cut again, and what comes back
+   * is a new photo drawn through the same sides this was given.
+   */
+  onTurn?: (side: TileSideView["side"], turn: QuarterTurn) => void;
+  /** A turn is on its way — the controls wait for it rather than stacking a second on top. */
+  turning?: boolean;
 }
 
 /**
@@ -215,6 +225,8 @@ export function IdentifiedPieceAside({
   pieces,
   scanDpi,
   onGauge,
+  onTurn,
+  turning,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
@@ -225,6 +237,10 @@ export function IdentifiedPieceAside({
    * perforation is measured on **one** of them, and there is no run-wide answer to report. Opening
    * the loupe on a piece starts one; going back to the grid ends it. */
   onGauge?: (gauge: number | null) => void;
+  /** Turning a piece's side (#1006), for whichever viewer is open — only the tile dialog passes it,
+   * and only for tiles whose pictures are still their own. */
+  onTurn?: (tileId: string, side: TileSideView["side"], turn: QuarterTurn) => void;
+  turning?: boolean;
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -264,6 +280,8 @@ export function IdentifiedPieceAside({
         position={shown[0].position}
         scanDpi={scanDpi}
         onGauge={onGauge}
+        onTurn={onTurn ? (side, turn) => onTurn(shown[0].tileId, side, turn) : undefined}
+        turning={turning}
       />
     );
   }
@@ -333,6 +351,8 @@ export function IdentifiedPieceAside({
           position={opened.position}
           scanDpi={scanDpi}
           onGauge={onGauge}
+          onTurn={onTurn ? (side, turn) => onTurn(opened.tileId, side, turn) : undefined}
+          turning={turning}
         />
       </div>
     );
@@ -581,7 +601,15 @@ interface Natural {
   height: number;
 }
 
-export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }: Props) {
+export function TileZoomView({
+  collectionId,
+  sides,
+  position,
+  scanDpi,
+  onGauge,
+  onTurn,
+  turning,
+}: Props) {
   const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
@@ -597,10 +625,20 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
   const [panning, setPanning] = useState(false);
 
   const measured = current ? natural[current.photoId] : undefined;
-  /** The picture in **scan** pixels: the tile's box on the card, or — for a tile carrying no box —
-   * the photo's own size, which is then all there is to know about it. */
-  const pictureWidth = current?.box?.w ?? measured?.width ?? 0;
-  const pictureHeight = current?.box?.h ?? measured?.height ?? 0;
+  /** How far the side on screen is turned from its box (#1006). The photo is already cut turned, so
+   * nothing is rotated here; the turn is only how the picture finds its way back to the card. */
+  const turn = current?.turn ?? 0;
+  /** The picture in **scan** pixels: the tile's box on the card — turned, since the picture is — or,
+   * for a tile carrying no box, the photo's own size, which is then all there is to know about it.
+   *
+   * Everything this view measures is taken in this frame, the one the collector sees. A length does
+   * not care which way round it was taken, and a size taken on a piece stood the right way up is its
+   * width and height rather than the other way about — which is the point of standing it up. */
+  const drawnBox = current?.box
+    ? turnedSize({ width: current.box.w, height: current.box.h }, turn)
+    : null;
+  const pictureWidth = drawnBox?.width ?? measured?.width ?? 0;
+  const pictureHeight = drawnBox?.height ?? measured?.height ?? 0;
   const ready = pictureWidth > 0 && pictureHeight > 0 && size.width > 0;
 
   /**
@@ -734,6 +772,14 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
   /** The two marks, in the picture's own **scan** pixels — the coordinate space every number here
    * is taken in, and the reason a reading does not change when the zoom does. */
   const [marks, setMarks] = useState<{ a: ScanPoint; b: ScanPoint } | null>(null);
+  /** The picture the marks were placed on. A turn (#1006) hands this view a **new** photo in a new
+   * frame, where the old marks would lie across somewhere else — so they go, adjusted while rendering
+   * rather than in an effect, which would draw them over the turned picture for a frame first. */
+  const [marksOn, setMarksOn] = useState<string | null>(current?.photoId ?? null);
+  if (marksOn !== (current?.photoId ?? null)) {
+    setMarksOn(current?.photoId ?? null);
+    setMarks(null);
+  }
 
   /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
    * scanned at 600 measured once is a fact about that card, not a new assumption for every later
@@ -1082,6 +1128,7 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
     viewWidth: measured?.width ?? 0,
     originX: current?.box?.x ?? 0,
     originY: current?.box?.y ?? 0,
+    turn,
     view,
     size,
   });
@@ -1113,10 +1160,12 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
   // the stamp plus whatever slack the cut carried. Good enough to propose, never good enough to
   // write — which is why it travels marked as an estimate and is offered as one.
   const box = current?.box ?? null;
-  const cropSize = useMemo(
-    () => (box && dpi !== null ? sizeFromScanPixels(box, dpi, MM_PER_INCH) : null),
-    [box, dpi]
-  );
+  const cropSize = useMemo(() => {
+    if (!box || dpi === null) return null;
+    // Width and height as the piece stands on screen (#1006), not as it happened to lie on the card.
+    const upright = isSideways(turn) ? { ...box, w: box.h, h: box.w } : box;
+    return sizeFromScanPixels(upright, dpi, MM_PER_INCH);
+  }, [box, dpi, turn]);
   usePublishSizeProposal("estimated", cropSize, dpi);
 
   if (!current) return null;
@@ -1146,6 +1195,28 @@ export function TileZoomView({ collectionId, sides, position, scanDpi, onGauge }
               onClick={() => showSide(s.side)}
             />
           ))}
+        {/* Standing a sideways piece up (#1006), on the side being looked at: the back of a piece is
+            turned over in place, so it lies the other way round and is turned on its own. Beside
+            the side switch because both are about *which picture*, not about how closely it is
+            looked at. */}
+        {onTurn && (
+          <>
+            <ScanToolButton
+              icon="turnLeft"
+              label=""
+              hint={`Turn the ${current.label.toLowerCase()} a quarter to the left — the tile stays where it is on the card, so every measurement stays true`}
+              disabled={turning}
+              onClick={() => onTurn(current.side, turnBy(current.turn, -1))}
+            />
+            <ScanToolButton
+              icon="turnRight"
+              label=""
+              hint={`Turn the ${current.label.toLowerCase()} a quarter to the right — the tile stays where it is on the card, so every measurement stays true`}
+              disabled={turning}
+              onClick={() => onTurn(current.side, turnBy(current.turn, 1))}
+            />
+          </>
+        )}
         {/* The two measuring tools (#598), on the same toolbar as the zoom because they are the
             same act: looking closely at one thing. Absent — not disabled — on a side with no box,
             since there is then no scan geometry to measure against and a greyed control would be

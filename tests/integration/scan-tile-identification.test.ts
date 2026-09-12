@@ -23,6 +23,7 @@ import {
   uploadSheet,
 } from "../../src/lib/scan-sheets";
 import { sharedVariantParent } from "../../src/lib/tile-candidates";
+import { carriedStampAnswers, identifyHistory } from "../../src/lib/tile-identify-history";
 import {
   addTileCandidate,
   assignTileToCopy,
@@ -1171,5 +1172,196 @@ describe("identifying scan tiles into copies (#567)", () => {
     // No description exists, so no tile can disagree with one — the absence of lines must not read
     // as "every stamp here was undescribed".
     assert.ok(batches[0].tiles.every((t) => !t.outsideDescription));
+  });
+
+  // ── A tile identified as a piece carrying several stamps (#750, ADR-0044) ─────────────────────
+
+  /** The entries a copy carries, in order, as `[stampId, quantity, formatId]`. */
+  async function entriesOf(itemId: string) {
+    const rows = await prisma.itemStamp.findMany({
+      where: { itemId },
+      orderBy: { sortOrder: "asc" },
+      select: { stampId: true, quantity: true, formatId: true },
+    });
+    return rows.map((r) => [r.stampId, r.quantity, r.formatId]);
+  }
+
+  it("identifies a tile as a cover: one copy, every entry, the pointer and the count (#750)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    const [outcome] = await identifyTilesAsNewCopies(userId, [tileIds[0]], {
+      stampId,
+      conditionId,
+      stamps: [
+        { stampId, quantity: 1, formatId: null },
+        { stampId: describedStampId, quantity: 2, formatId: null },
+        { stampId: baseStampId, quantity: 1, formatId },
+      ],
+    });
+
+    // One tile, one piece of paper, one copy — the other stamps are entries on it, never copies.
+    assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), 1);
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { stampId: true, stampCount: true },
+    });
+    assert.equal(item.stampId, stampId, "the pointer is the stamp it was identified as");
+    assert.equal(item.stampCount, 4, "the count sums the components");
+    assert.deepEqual(await entriesOf(outcome.itemId), [
+      [stampId, 1, null],
+      [describedStampId, 2, null],
+      [baseStampId, 1, formatId],
+    ]);
+    // …and it is still a tile's copy in every other way: the pictures moved onto it.
+    const photo = await prisma.photo.findFirstOrThrow({ where: { itemId: outcome.itemId } });
+    assert.equal(photo.tileId, null);
+
+    // Both shortcuts read the list back off the tile: the history offers the cover as a cover, and
+    // *Identify again* opens on the same answers.
+    const { batches } = await listScans(userId, { purchaseId });
+    const tile = batches[0].tiles.find((t) => t.id === tileIds[0])!;
+    assert.equal(tile.item?.stamps.length, 3);
+    const [row] = identifyHistory(batches);
+    assert.deepEqual(
+      row.answers.stamps.map((s) => [s.stampId, s.quantity, s.formatId]),
+      [
+        [stampId, 1, ""],
+        [describedStampId, 2, ""],
+        [baseStampId, 1, formatId],
+      ]
+    );
+    assert.deepEqual(carriedStampAnswers(tile.item!), row.answers.stamps);
+  });
+
+  it("repeats a cover onto the next tile exactly, and a run ticked as one cover is a cover each (#750)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    const stamps = [
+      { stampId, quantity: 1, formatId: null },
+      { stampId: describedStampId, quantity: 1, formatId: null },
+    ];
+    const outcomes = await identifyTilesAsNewCopies(userId, tileIds, { stampId, conditionId, stamps });
+    assert.equal(outcomes.length, 2);
+    for (const outcome of outcomes) {
+      assert.deepEqual(await entriesOf(outcome.itemId), [
+        [stampId, 1, null],
+        [describedStampId, 1, null],
+      ]);
+    }
+
+    // What a press on the history row submits is its own answers: the round trip through the list
+    // arrives at the very entries it was read from.
+    const { batches } = await listScans(userId, { purchaseId });
+    const [row] = identifyHistory(batches);
+    const { tileIds: next } = await orderWithTiles();
+    const [repeated] = await identifyTilesAsNewCopies(userId, [next[0]], {
+      stampId: row.answers.stampId,
+      conditionId: row.answers.conditionId,
+      stamps: row.answers.stamps.map((s) => ({
+        stampId: s.stampId,
+        quantity: s.quantity,
+        formatId: s.formatId || null,
+      })),
+    });
+    assert.deepEqual(await entriesOf(repeated.itemId), await entriesOf(outcomes[0].itemId));
+  });
+
+  it("refuses a list that does not lead with the stamp identified, before anything exists (#750)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, [tileIds[0]], {
+          stampId,
+          conditionId,
+          stamps: [{ stampId: describedStampId }, { stampId }],
+        }),
+      /first stamp/
+    );
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, [tileIds[0]], {
+          stampId,
+          conditionId,
+          stamps: [{ stampId }, { stampId: foreignStampId }],
+        }),
+      /not found in this collection/
+    );
+    assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), 0);
+    const tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(tile.state, "unidentified");
+  });
+
+  it("identifies a cover off a card that belongs to no order (#750, #725)", async () => {
+    const sheet = await uploadSheet(userId, { collectionId }, {
+      source: await card(),
+      mime: "image/png",
+      side: "front",
+    });
+    await commitCut(userId, sheet.id, BOXES);
+    const tile = await prisma.scanTile.findFirstOrThrow({
+      where: { frontSheetId: sheet.id },
+      orderBy: { position: "asc" },
+    });
+    const [outcome] = await identifyTilesAsNewCopies(userId, [tile.id], {
+      stampId,
+      conditionId,
+      stamps: [{ stampId }, { stampId: describedStampId }],
+    });
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { lotId: true, stampCount: true },
+    });
+    assert.equal(item.lotId, null);
+    assert.equal(item.stampCount, 2);
+    assert.deepEqual(await entriesOf(outcome.itemId), [
+      [stampId, 1, null],
+      [describedStampId, 1, null],
+    ]);
+  });
+
+  it("corrects a cover as a cover, and takes it back down to a single stamp (#750)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const [outcome] = await identifyTilesAsNewCopies(userId, [tileIds[0]], {
+      stampId,
+      conditionId,
+      stamps: [{ stampId }, { stampId: describedStampId }],
+    });
+
+    // The first stamp was misread: the correction re-answers it and keeps the other on the piece.
+    await reidentifyTileCopy(userId, tileIds[0], {
+      stampId: variantAId,
+      conditionId,
+      stamps: [{ stampId: variantAId }, { stampId: describedStampId }],
+    });
+    assert.deepEqual(await entriesOf(outcome.itemId), [
+      [variantAId, 1, null],
+      [describedStampId, 1, null],
+    ]);
+    const history = await prisma.itemVariantHistory.findMany({
+      where: { itemId: outcome.itemId },
+      select: { fromStampId: true, toStampId: true },
+    });
+    assert.deepEqual(history, [{ fromStampId: stampId, toStampId: variantAId }]);
+
+    // It was never a cover: the list of one takes the other entry off, and the copy counts again.
+    await reidentifyTileCopy(userId, tileIds[0], {
+      stampId: variantAId,
+      conditionId,
+      stamps: [{ stampId: variantAId }],
+    });
+    assert.deepEqual(await entriesOf(outcome.itemId), [[variantAId, 1, null]]);
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { stampCount: true },
+    });
+    assert.equal(item.stampCount, 1);
+
+    await assert.rejects(
+      () =>
+        reidentifyTileCopy(userId, tileIds[0], {
+          stampId: variantAId,
+          conditionId,
+          stamps: [{ stampId: describedStampId }, { stampId: variantAId }],
+        }),
+      ScanValidationError
+    );
   });
 });

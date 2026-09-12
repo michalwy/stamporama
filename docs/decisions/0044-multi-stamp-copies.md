@@ -3,8 +3,16 @@
 ## Status
 
 Accepted. The schema, the migration and the write module are in (#744), the exclusion rule of §3 is
-enforced (#745), a copy's stamps are editable (#746) and §7's list is in place (#748); the rest is
-tracked in #747 (valuation), #749 (listing tokens) and #750 (intake).
+enforced (#745), a copy's stamps are editable (#746), §7's list is in place (#748) and a scan tile
+can be identified as a carrier (#750); the rest is tracked in #747 (valuation) and #749 (listing
+tokens).
+
+**Intake** (#750): the identification chain's condition step opens the copy dialog's own editor over
+itself, and the list rides to `intakeStamps`, which writes it through `setItemStampsTx` in the very
+transaction that creates the copy — so a carrier is never visible as a loose stamp on its way to
+becoming one. One tile is still one copy, and a run ticked as one cover is one cover per tile. Both
+shortcuts carry the list: a repeat off the identification history and *Identify again*, which sends
+the whole list back so a stamp struck off comes off the copy.
 
 **§7 on the Copies list** (#748): the row names every carried stamp in `sortOrder`, each equally, with
 a *Several stamps* chip drawn on the copy screen's own test; a `multiStamp` filter (`only` / `exclude`,
@@ -226,8 +234,9 @@ layer up, and with a sentence a collector can act on instead of a constraint nam
   them; no call site sets them by hand, or the invariant §3 rests on decays silently. Every path
   that creates a copy — the copy form, purchase intake, an auction settlement, the demo seed —
   writes its one entry through that module in the same transaction, so an `Item` with no entry is
-  never a state the application can produce. A copy is not *born* a carrier; a carrier is made by
-  editing one.
+  never a state the application can produce. A copy added by hand is not *born* a carrier; a carrier
+  is made by editing one — or, since #750, identified as one from a scan tile, where the piece is on
+  screen and the entries are written in the same transaction as the copy.
 - Editing a carrier back down to one stamp returns it to every count it had left. That is an
   ordinary edit with no confirmation of its own: the counts follow the facts.
 - The existing 171 readers of `Item.stampId` keep working unchanged. What changes is what the value

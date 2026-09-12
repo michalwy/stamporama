@@ -9,9 +9,17 @@ import {
   StampPickerBrowser,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
 import {
+  orderedCatalogLabels,
   pickedStampText,
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import type { ItemStampRow } from "@/app/c/[collectionSlug]/inventory/item-stamps-field";
+import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import type { CatalogLabelSubject } from "@/lib/area-vendor";
+import { describesMoreThanTheStamp } from "@/lib/item-stamp-entries";
+import { carriedStampAnswers, type CarriedStampAnswer } from "@/lib/tile-identify-history";
+import { useAreaVendorMaps, type AreaVendorMaps } from "./use-area-vendor-maps";
+import { TileStampsDialog } from "./tile-stamps-dialog";
 import {
   IntakeConditionDialog,
   type IntakeConditionDialogProps,
@@ -57,6 +65,61 @@ interface TileCorrection {
   prefill: NonNullable<IntakeConditionDialogProps["prefill"]>;
 }
 
+/**
+ * One stamp on the piece being identified (#750) — a row of the stamp editor the copy dialog uses
+ * (#746), carried through the chain.
+ *
+ * It is named in one of two ways, and resolved to a label only where the vendor maps are: `picked`
+ * when the stamp came off the picker (which already words it), `subject` when it came off a copy —
+ * a correction, or a repeat off the history — which holds the numbers raw.
+ */
+interface PieceStampDraft {
+  key: string;
+  stampId: string;
+  quantity: number;
+  /** The component's format, `""` for a single. */
+  formatId: string;
+  picked?: PickedStamp;
+  subject?: CatalogLabelSubject;
+}
+
+function draftsFromAnswers(answers: readonly CarriedStampAnswer[]): PieceStampDraft[] | null {
+  if (answers.length === 0) return null;
+  return answers.map((answer, i) => ({
+    key: `carried-${i}-${answer.stampId}-${answer.formatId}`,
+    stampId: answer.stampId,
+    quantity: answer.quantity,
+    formatId: answer.formatId,
+    subject: answer.subject,
+  }));
+}
+
+/** A draft's stamp as the editor's rows draw one — the picker's own words where there are some. */
+function pickedOf(draft: PieceStampDraft, maps: AreaVendorMaps): PickedStamp {
+  if (draft.picked) return draft.picked;
+  const subject = draft.subject;
+  return {
+    stampId: draft.stampId,
+    catalogLabels: subject
+      ? orderedCatalogLabels(
+          subject.catalogNumbers,
+          maps.vendorMapFor(subject.areaId, subject.issueId),
+          subject.areaId ? (maps.primaryVendorByArea.get(subject.areaId) ?? null) : null
+        )
+      : [],
+    name: subject?.name ?? null,
+    secondary: null,
+    unknownVariant: false,
+  };
+}
+
+/** A stamp known only by the label a step already gave it — a candidate pressed off a shortlist, a
+ * repeat's leading stamp — as the editor's summary shape. The label is the whole of what is known,
+ * so it stands as the name. */
+function pickedFromLabel(stampId: string, label: string): PickedStamp {
+  return { stampId, catalogLabels: [], name: label, secondary: null, unknownVariant: false };
+}
+
 /** Where the chain is and what it is carrying. Held by {@link useTileIdentifyChain} and handed
  * straight to {@link TileIdentifyChainDialogs}; the three fields a screen actually reads are the
  * handlers at the bottom, which are what `ScansCard` takes. */
@@ -71,6 +134,13 @@ export interface TileIdentifyChainState {
   setTileRepeat: (answers: IdentifyHistoryAnswers | null) => void;
   tileCorrection: TileCorrection | null;
   setTileCorrection: (correction: TileCorrection | null) => void;
+  /** Every stamp on the piece (#750), or null for a piece that is simply the stamp picked. */
+  tileStamps: PieceStampDraft[] | null;
+  setTileStamps: (stamps: PieceStampDraft[] | null) => void;
+  /** The picker's own summary of the stamp picked, so the editor's first row is worded as the picker
+   * worded it. Null on every route that skipped the picker. */
+  tileLeadPick: PickedStamp | null;
+  setTileLeadPick: (picked: PickedStamp | null) => void;
   resetTileIntake: () => void;
   /** What `ScansCard.onIdentifyTiles` is given. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
@@ -133,12 +203,26 @@ export function useTileIdentifyChain(input: {
    * same mistake.
    */
   const [tileCorrection, setTileCorrection] = useState<TileCorrection | null>(null);
+  /**
+   * **Every stamp on the piece** (#750) — null while the piece is simply the stamp picked, which is
+   * nearly always.
+   *
+   * A tile is one piece of paper and becomes one copy whatever is on it (ADR-0044 §1), so a cover is
+   * not a second path through the chain: it is this list, riding beside the answers the chain
+   * already carries, and written as the copy's entries in the same save. Once a list exists it
+   * stays one — a correction that takes a cover back down to a single stamp still has to send the
+   * one entry, or the others would stay on the copy.
+   */
+  const [tileStamps, setTileStamps] = useState<PieceStampDraft[] | null>(null);
+  const [tileLeadPick, setTileLeadPick] = useState<PickedStamp | null>(null);
   function resetTileIntake() {
     setTileStep("none");
     setTileIntake([]);
     setTileSelection(null);
     setTileRepeat(null);
     setTileCorrection(null);
+    setTileStamps(null);
+    setTileLeadPick(null);
     setError(undefined);
   }
   return {
@@ -152,10 +236,16 @@ export function useTileIdentifyChain(input: {
     setTileRepeat,
     tileCorrection,
     setTileCorrection,
+    tileStamps,
+    setTileStamps,
+    tileLeadPick,
+    setTileLeadPick,
     resetTileIntake,
     onIdentifyTiles: (pieces, pick) => {
       setTileIntake(pieces);
       setTileRepeat(null);
+      setTileStamps(null);
+      setTileLeadPick(null);
       setError(undefined);
       if (pick) {
         // The stamp is already known (#607): a candidate pressed on a parked tile's shortlist, or
@@ -176,6 +266,10 @@ export function useTileIdentifyChain(input: {
     onReidentifyTile: (piece, copy) => {
       setTileIntake([piece]);
       setTileRepeat(null);
+      // A cover is corrected as a cover (#750): the editor opens on the stamps the copy carries, and
+      // the save sends the whole list back, so a stamp struck off here comes off the copy.
+      setTileStamps(draftsFromAnswers(carriedStampAnswers(copy)));
+      setTileLeadPick(null);
       setError(undefined);
       setTileCorrection({
         tileId: piece.tileId,
@@ -208,6 +302,10 @@ export function useTileIdentifyChain(input: {
       setTileSelection({ kind: "stamp", stampId: answers.stampId, label: answers.label });
       setTileRepeat(answers);
       setTileCorrection(null);
+      // The stamps on the piece are part of what is repeated (#750): the next cover franked the same
+      // way is identified the way this one was, rather than as its first stamp alone.
+      setTileStamps(draftsFromAnswers(answers.stamps));
+      setTileLeadPick(null);
       setError(undefined);
       setTileStep("condition");
     },
@@ -267,8 +365,55 @@ export function TileIdentifyChainDialogs({
     tileRepeat,
     setTileRepeat,
     tileCorrection,
+    tileStamps,
+    setTileStamps,
+    tileLeadPick,
+    setTileLeadPick,
     resetTileIntake,
   } = chain;
+  // What names a stamp the chain holds only as numbers — a cover's other stamps, come off a copy —
+  // and the component formats the summary names. The same shared queries every catalogue label and
+  // the condition step's own format field already go through.
+  const maps = useAreaVendorMaps(areas, collectionId);
+  const { data: formats = [] } = useCollectionFormats(collectionId);
+  /** Whether the stamp editor (#750) is open over the condition step. Over it rather than instead of
+   * it, so the answers already given there — a condition read off the piece, a location — are still
+   * there when the stamps are settled. */
+  const [editingStamps, setEditingStamps] = useState(false);
+
+  /** The piece's stamps as they stand: the list when there is one, and otherwise the stamp picked. */
+  const currentDrafts = (): PieceStampDraft[] =>
+    tileStamps ??
+    (tileSelection?.kind === "stamp"
+      ? [
+          {
+            key: `lead-${tileSelection.stampId}`,
+            stampId: tileSelection.stampId,
+            quantity: 1,
+            formatId: "",
+            picked:
+              tileLeadPick?.stampId === tileSelection.stampId
+                ? tileLeadPick
+                : pickedFromLabel(tileSelection.stampId, tileSelection.label),
+          },
+        ]
+      : []);
+  /** The summary the condition step draws — only when the list says more than the stamp. */
+  const carriedSummary =
+    tileStamps && describesMoreThanTheStamp(tileStamps)
+      ? tileStamps.map((draft) => {
+          const picked = pickedOf(draft, maps);
+          const format = formats.find((f) => f.id === draft.formatId);
+          return [
+            pickedStampText(picked),
+            draft.quantity > 1 ? `×${draft.quantity}` : null,
+            format ? (format.abbreviation || format.name) : null,
+          ]
+            .filter(Boolean)
+            .join(" ");
+        })
+      : undefined;
+
   return (
     <>
       {/* Identifying a tile: pick the stamp (#567) */}
@@ -308,6 +453,17 @@ export function TileIdentifyChainDialogs({
               stampId: picked.stampId,
               label: pickedStampText(picked),
             });
+            setTileLeadPick(picked);
+            // With the piece already described as carrying several (#750) — a correction of a cover,
+            // or the collector back at the picker after listing them — a pick re-answers **the
+            // first** stamp and leaves the others on the piece, which is what re-identifying one
+            // stamp of a cover means. The editor is where the rest are changed.
+            if (tileStamps && tileStamps.length > 0) {
+              setTileStamps([
+                { ...tileStamps[0], stampId: picked.stampId, picked, subject: undefined },
+                ...tileStamps.slice(1),
+              ]);
+            }
             setError(undefined);
             setTileStep("condition");
           }}
@@ -367,13 +523,19 @@ export function TileIdentifyChainDialogs({
           // is not in question* — the stockbook case, and every card that belongs to no order at
           // all (#725).
           lotChoice={tileCorrection ? undefined : lotChoice}
+          // The stamps on the piece (#750): listed in the summary once there is more than the stamp
+          // itself, and one press from the editor that lists them.
+          carriedStamps={carriedSummary}
+          onEditStamps={() => setEditingStamps(true)}
           onBack={() => {
             if (!isPending) {
               setError(undefined);
               // Backing out of a repeat retires it (#595). *Back* from here is the collector saying
               // this tile is **not** the same as the last, so the stamp they pick next must arrive
               // at the ordinary remembered defaults — a format left standing from the previous tile
-              // would be exactly the inherited value #573 refused.
+              // would be exactly the inherited value #573 refused. The repeated cover's stamps go
+              // with it for the same reason (#750).
+              if (tileRepeat) setTileStamps(null);
               setTileRepeat(null);
               setTileStep("picker");
             }
@@ -382,6 +544,20 @@ export function TileIdentifyChainDialogs({
           onSubmit={(fd) => {
             setError(undefined);
             if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
+            // Every stamp on the piece (#750), the stamp picked first — the copy dialog's own list
+            // shape (#746), read by the same parser on the other side.
+            if (tileStamps) {
+              fd.set(
+                "stamps",
+                JSON.stringify(
+                  tileStamps.map((draft) => ({
+                    stampId: draft.stampId,
+                    quantity: draft.quantity,
+                    formatId: draft.formatId || null,
+                  }))
+                )
+              );
+            }
             // Every ticked tile, in card order — the order the copies are created and numbered in
             // (#596). Each one is handed its own tile's images by the write; nothing here is shared
             // between them but the answers on this form.
@@ -414,6 +590,51 @@ export function TileIdentifyChainDialogs({
                 resetTileIntake();
               }
             );
+          }}
+        />
+      )}
+
+      {/* …and the stamps on the piece, over it (#750) */}
+      {tileStep === "condition" && editingStamps && tileSelection?.kind === "stamp" && (
+        <TileStampsDialog
+          collectionId={collectionId}
+          areas={areas}
+          pieces={tileIntake}
+          scanDpi={scanDpi}
+          formats={formats}
+          initialRows={currentDrafts().map(
+            (draft): ItemStampRow => ({
+              key: draft.key,
+              stampId: draft.stampId,
+              quantity: draft.quantity,
+              formatId: draft.formatId,
+              picked: pickedOf(draft, maps),
+            })
+          )}
+          onClose={() => setEditingStamps(false)}
+          onSave={(rows) => {
+            setEditingStamps(false);
+            if (rows.length === 0) return;
+            setTileStamps(
+              rows.map((row) => ({
+                key: row.key,
+                stampId: row.stampId,
+                quantity: row.quantity,
+                formatId: row.formatId,
+                picked: row.picked,
+              }))
+            );
+            // The first row is the stamp the piece is identified as (ADR-0044 §2). Only a different
+            // one re-answers the selection: a new selection is also what clears the condition
+            // step's format, and reordering the others must not take the piece's own format away.
+            if (rows[0].stampId !== tileSelection.stampId) {
+              setTileSelection({
+                kind: "stamp",
+                stampId: rows[0].stampId,
+                label: pickedStampText(rows[0].picked),
+              });
+              setTileLeadPick(rows[0].picked);
+            }
           }}
         />
       )}

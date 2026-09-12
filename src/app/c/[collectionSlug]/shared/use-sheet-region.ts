@@ -9,6 +9,7 @@ import {
   type Viewport,
   type ViewportSize,
 } from "@/lib/scan-viewport";
+import { turnedSize, unturnBox, type QuarterTurn } from "@/lib/tile-turn";
 
 /**
  * The visible region of a retained card scan, fetched at full resolution and drawn over the
@@ -54,7 +55,8 @@ interface HeldRegion extends SheetRegionDetail {
   owner: string;
 }
 
-const ownerOf = (sheetId: string | null, x: number, y: number) => `${sheetId}:${x},${y}`;
+const ownerOf = (sheetId: string | null, x: number, y: number, turn: QuarterTurn) =>
+  `${sheetId}:${x},${y}^${turn}`;
 
 /** How long the viewport must be still before a region is fetched. */
 const REGION_DEBOUNCE_MS = 200;
@@ -72,6 +74,11 @@ export interface SheetRegionParams {
   /** Where the picture's top-left corner sits on the sheet. Zero for a whole card. */
   originX?: number;
   originY?: number;
+  /** How far the picture on screen is turned from the sheet (#1006) — a tile stood the right way up.
+   * `width`/`height` are the picture's as drawn; the request is turned back onto the sheet's frame
+   * before it is addressed, and the route turns the crop so it lands where it was asked for. Zero for
+   * a whole card, which is always drawn the way it was scanned. */
+  turn?: QuarterTurn;
   view: Viewport;
   size: ViewportSize;
 }
@@ -84,11 +91,12 @@ export function useSheetRegion({
   viewWidth,
   originX = 0,
   originY = 0,
+  turn = 0,
   view,
   size,
 }: SheetRegionParams): SheetRegionDetail | null {
   const [detail, setDetail] = useState<HeldRegion | null>(null);
-  const owner = ownerOf(sheetId, originX, originY);
+  const owner = ownerOf(sheetId, originX, originY, turn);
   /** The region last asked for, so a slow fetch cannot paint a stale crop. */
   const wanted = useRef<string | null>(null);
 
@@ -102,9 +110,19 @@ export function useSheetRegion({
     // sits at close enough to the same place on both that one grid-snapped region can name the same
     // rectangle on each. Without the id, flipping sides would read as "already showing that" and
     // leave the front's detail standing in for the back's.
-    const key = request
-      ? `${sheetId}:${regionKey(regionOnSheet(request, { x: originX, y: originY }))}`
-      : null;
+    // The request is made on the picture as drawn; the sheet only knows the frame it was scanned in.
+    // So a turned tile's region is turned back first (#1006) — against the picture's unturned size,
+    // which is its drawn size turned again — and only then moved to the tile's corner on the sheet.
+    const onSheetOf = (r: NonNullable<typeof request>) =>
+      regionOnSheet(
+        {
+          box: unturnBox(r.box, turn, turnedSize({ width, height }, turn)),
+          renderWidth: r.renderWidth,
+        },
+        { x: originX, y: originY }
+      );
+    const turnKey = turn === 0 ? "" : `^${turn}`;
+    const key = request ? `${sheetId}:${regionKey(onSheetOf(request))}${turnKey}` : null;
     if (key === wanted.current) return;
 
     const timer = setTimeout(() => {
@@ -115,23 +133,32 @@ export function useSheetRegion({
         setDetail(null);
         return;
       }
-      const onSheet = regionOnSheet(request, { x: originX, y: originY });
-      const loaded = `${sheetId}:${regionKey(onSheet)}`;
+      const onSheet = onSheetOf(request);
+      const loaded = `${sheetId}:${regionKey(onSheet)}${turnKey}`;
       const { box, renderWidth } = onSheet;
+      // `rw` stays the width the screen has for the region **as drawn**, which is also the turned
+      // crop's width — the route resizes after it turns.
       const url =
         `/api/collections/${collectionId}/scan-sheets/${sheetId}/region` +
-        `?x=${box.x}&y=${box.y}&w=${box.w}&h=${box.h}&rw=${renderWidth}`;
+        `?x=${box.x}&y=${box.y}&w=${box.w}&h=${box.h}&rw=${renderWidth}` +
+        (turn === 0 ? "" : `&t=${turn}`);
       const image = new Image();
       image.onload = () => {
-        // Placed by the picture's own box, served by the sheet's — the two differ by the origin,
-        // and mixing them up is a crop drawn a tile's width away from where it belongs.
+        // Placed by the picture's own box, served by the sheet's — the two differ by the origin
+        // (and by the turn), and mixing them up is a crop drawn a tile's width away from where it
+        // belongs.
         if (wanted.current === loaded)
-          setDetail({ key: loaded, box: request.box, url, owner: ownerOf(sheetId, originX, originY) });
+          setDetail({
+            key: loaded,
+            box: request.box,
+            url,
+            owner: ownerOf(sheetId, originX, originY, turn),
+          });
       };
       image.src = url;
     }, REGION_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [collectionId, sheetId, width, height, viewWidth, originX, originY, size, view]);
+  }, [collectionId, sheetId, width, height, viewWidth, originX, originY, turn, size, view]);
 
   // A picture swapped underneath (front → back) must not keep the other side's crop on screen while
   // the next one is fetched — and the answer is to *read* the held crop against the picture asking

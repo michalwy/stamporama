@@ -202,6 +202,13 @@ function IdentifyHistoryRow({
             {formatAbbreviation && (
               <span style={{ color: "var(--color-text-muted)" }}>{formatAbbreviation}</span>
             )}
+            {/* A piece carrying more than its first stamp (#750) — said on the row, because
+                pressing it identifies the next tile as that piece and not as the stamp named. */}
+            {entry.answers.stamps.length > 0 && (
+              <span style={{ color: "var(--color-accent)", whiteSpace: "nowrap" }}>
+                several stamps
+              </span>
+            )}
           </span>
           {/* The copy it became, in the number the copies list is searched by (#268) — said quietly,
               because it identifies the row rather than describing the piece. */}

@@ -3380,6 +3380,13 @@ model ScanTile {
   backY        Int?
   backW        Int?
   backH        Int?
+  /** How far each side is turned to stand the right way up (#1006) — degrees clockwise, one of
+   * 0/90/180/270 (`QuarterTurn`). A property of the tile rather than a rewrite of the sheet,
+   * because the box above addresses the **sheet**: the side's crop is cut already turned, and the
+   * viewer maps its turned picture back onto the box. Per side, since a piece turned over in place
+   * lies the other way round on its back. */
+  frontTurn    Int      @default(0)
+  backTurn     Int      @default(0)
   /** Why a tile was discarded (#567) — junk, damaged beyond interest, unidentifiable. For a
    * stockbook bought sight-unseen this is the only record of what was actually inside. */
   note         String?

@@ -22,6 +22,7 @@ import { Icon } from "@/app/icons";
 // same treatment: it began here, and a second one drawn beside it would be the divergence.
 import { ProgressBar } from "@/app/progress-bar";
 import { THUMB_OBJECT_FIT } from "./photo-thumb";
+import { turnBy, type QuarterTurn } from "@/lib/tile-turn";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -67,6 +68,9 @@ interface Entry {
   progress: number;
   /** File size in bytes — weights this upload's share of the aggregate bar. */
   size: number;
+  /** A quarter-turn to apply on Save (#1006) — staged uploads only. Previewed here by turning the
+   * card's picture and written to the bytes by the save, so turning back and forth costs nothing. */
+  turn: QuarterTurn;
 }
 
 export interface PhotoEditorValue {
@@ -124,6 +128,7 @@ function committedToEntry(
     status: "done",
     progress: 1,
     size: 0,
+    turn: 0,
   };
 }
 
@@ -197,7 +202,7 @@ export function PhotoEditor({
       const sortOrder = index;
       if (e.source === "staged") {
         if (e.status === "done" && e.uploadId) {
-          add.push({ uploadId: e.uploadId, role, title, sortOrder });
+          add.push({ uploadId: e.uploadId, role, title, sortOrder, turn: e.turn });
         }
         return;
       }
@@ -308,6 +313,7 @@ export function PhotoEditor({
           status: "uploading" as const,
           progress: 0,
           size: file.size,
+          turn: 0 as const,
         };
       });
       setEntries((es) => {
@@ -330,6 +336,14 @@ export function PhotoEditor({
 
   const removeEntry = useCallback((localId: string) => {
     setEntries((es) => es.filter((e) => e.localId !== localId));
+  }, []);
+
+  /** A quarter to the right, on a photo being added (#1006). Round the clock and back to upright on
+   * the fourth press, so there is one control rather than two. */
+  const turnEntry = useCallback((localId: string) => {
+    setEntries((es) =>
+      es.map((e) => (e.localId === localId ? { ...e, turn: turnBy(e.turn, 1) } : e))
+    );
   }, []);
 
   const setTitle = useCallback((localId: string, title: string) => {
@@ -436,6 +450,10 @@ export function PhotoEditor({
                 onToggleRole={(role) => toggleRole(entry.localId, role)}
                 onSetTitle={(title) => setTitle(entry.localId, title)}
                 onRemove={() => removeEntry(entry.localId)}
+                // Only a photo being added. One already saved is a picture other things may be
+                // showing already, and a sideways scan is put right the moment it is added — which
+                // is when it is noticed.
+                onTurn={entry.source === "staged" ? () => turnEntry(entry.localId) : undefined}
                 // Promotion is only for already-committed copy photos, and only when a handler is
                 // wired (the copy editor, not the stamp editor). Staged uploads must Save first.
                 onPromote={
@@ -472,6 +490,7 @@ function PhotoCard({
   onToggleRole,
   onSetTitle,
   onRemove,
+  onTurn,
   onPromote,
   onDragStart,
   onDropOn,
@@ -482,6 +501,7 @@ function PhotoCard({
   onToggleRole: (role: SlotRole) => void;
   onSetTitle: (title: string) => void;
   onRemove: () => void;
+  onTurn?: () => void;
   onPromote?: (target: {
     role: PhotoRole;
     title: string | null;
@@ -536,6 +556,9 @@ function PhotoCard({
             height: "100%",
             objectFit: THUMB_OBJECT_FIT,
             opacity: entry.status === "uploading" ? 0.5 : 1,
+            // The turn the save will write (#1006). The card is square, so a contained picture turned
+            // inside it still fits whole.
+            transform: entry.turn ? `rotate(${entry.turn}deg)` : undefined,
           }}
         />
         {entry.status === "uploading" && (
@@ -610,6 +633,32 @@ function PhotoCard({
                   }}
                 >
                   <Icon name="promote" size="sm" />
+                </button>
+              </Tooltip>
+            )}
+            {onTurn && (
+              <Tooltip content="Turn a quarter to the right — the photo is saved the way it shows here">
+                <button
+                  type="button"
+                  aria-label="Turn photo"
+                  onClick={onTurn}
+                  style={{
+                    width: "1.375rem",
+                    height: "1.375rem",
+                    borderRadius: "999px",
+                    border: "none",
+                    background: "var(--color-bg-elevated)",
+                    color: "var(--color-text-secondary)",
+                    fontSize: "0.75rem",
+                    lineHeight: 1,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  <Icon name="turnRight" size="sm" />
                 </button>
               </Tooltip>
             )}

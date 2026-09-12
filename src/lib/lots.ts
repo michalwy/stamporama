@@ -13,7 +13,12 @@ import {
   type LotCopyFilter,
 } from "./items";
 import { applyItemTagChanges, hasItemTagChanges } from "./tags";
-import { createLeadingEntriesTx } from "./item-stamps";
+import {
+  createLeadingEntriesTx,
+  setItemStampsTx,
+  validateItemStampEntries,
+  type ItemStampEntryInput,
+} from "./item-stamps";
 import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
@@ -640,6 +645,17 @@ export async function intakeStamps(
     inCollection?: boolean;
     forSale?: boolean;
     forTrade?: boolean;
+    /**
+     * **Every** stamp the piece carries, the leading one first (#750, ADR-0044) — for a piece that is
+     * identified as a cover, a fragment or an FDC rather than a loose stamp. Absent is the ordinary
+     * copy, which gets its one entry exactly as before.
+     *
+     * Single-stamp intake only, and the first entry must be `stampId`: the list *describes* the
+     * piece, and the stamp it is identified as is the one it is filed under (`Item.stampId`, the
+     * denormalised pointer at the first entry). With `copies` above one — a run of tiles ticked as
+     * the same cover — every copy gets the same list, because that is what ticking them asserted.
+     */
+    stamps?: readonly ItemStampEntryInput[] | null;
   }
 ): Promise<ArrivingCopy[]> {
   const lotId = "lotId" in target ? target.lotId : null;
@@ -745,6 +761,20 @@ export async function intakeStamps(
   // inventory copy form).
   const locationRef = locationId ? input.locationRef?.trim() || null : null;
   const singleStamp = !!input.stampId && !input.checklistId;
+
+  // The stamps on the piece (#750) — checked before a number is allocated or a row exists, because
+  // every check is a read and a refusal has to reach the collector as a sentence rather than as a
+  // rolled-back intake. `item-stamps.ts` owns the rules; this only states the one that is intake's.
+  const stamps = input.stamps && input.stamps.length > 0 ? input.stamps : null;
+  if (stamps) {
+    if (!singleStamp) {
+      throw new Error("Only a single stamp can be identified as a piece carrying several.");
+    }
+    if (stamps[0].stampId !== input.stampId) {
+      throw new Error("The first stamp on the piece has to be the one it is identified as.");
+    }
+    await validateItemStampEntries(collectionId, stamps);
+  }
   // The format applies to the one copy a single-stamp intake makes, and to nothing a
   // whole-checklist intake makes: those are several distinct stamps, and "block of four" cannot be
   // true of all of them. Dropped here rather than refused, exactly as a checklist intake's photos
@@ -790,6 +820,7 @@ export async function intakeStamps(
         select: { id: true, itemNo: true, stampId: true },
       });
       await createLeadingEntriesTx(tx, [row]);
+      if (stamps) await setItemStampsTx(tx, row.id, stamps);
       return row;
     });
     await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
@@ -801,6 +832,11 @@ export async function intakeStamps(
         select: { id: true, itemNo: true, stampId: true },
       });
       await createLeadingEntriesTx(tx, made);
+      // A piece identified as carrying several stamps (#750) is written as one in the same
+      // transaction as the copy, through the one module allowed to write the entries — so no copy
+      // is ever visible as a loose stamp on its way to becoming a cover, where a want could close
+      // or a count could include it.
+      if (stamps) for (const row of made) await setItemStampsTx(tx, row.id, stamps);
       return made;
     });
     created.push(...rows);

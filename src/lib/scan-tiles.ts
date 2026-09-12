@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import type { Prisma } from "@/generated/prisma/client";
 import { formatItemNo } from "./item-number";
 import { updateItem } from "./items";
+import type { ItemStampEntryInput } from "./item-stamps";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront } from "./photos";
 import {
@@ -123,6 +124,11 @@ export interface TileIdentification {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
+  /** Every stamp on the piece, `stampId` first (#750) — a tile identified as a cover rather than a
+   * loose stamp. Still **one copy per tile** (ADR-0044 §1): the extra stamps are entries on it, never
+   * extra copies, so nothing about which tile becomes which copy changes. Absent is the ordinary
+   * identification. */
+  stamps?: readonly ItemStampEntryInput[] | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -197,6 +203,7 @@ export async function identifyTilesAsNewCopies(
     inCollection: input.inCollection,
     forSale: input.forSale,
     forTrade: input.forTrade,
+    stamps: input.stamps,
   });
   if (copies.length !== tiles.length) {
     throw new ScanValidationError("The copies could not be created.");
@@ -355,6 +362,11 @@ export interface TileReidentification {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
+  /** The whole list of stamps on the piece, `stampId` first (#750), or absent to leave the entries
+   * alone. A correction of a cover sends it every time — including one taken back down to a single
+   * stamp, which is the one way the extra entries come off — because being wrong about which stamps
+   * are on a piece is as much a mis-identification as being wrong about the first. */
+  stamps?: readonly ItemStampEntryInput[] | null;
 }
 
 /**
@@ -395,6 +407,13 @@ export async function reidentifyTileCopy(
 ): Promise<TileOutcome> {
   if (!input.stampId) throw new ScanValidationError("Pick the stamp this piece actually is.");
   if (!input.conditionId) throw new ScanValidationError("A condition must be selected.");
+  const stamps = input.stamps && input.stamps.length > 0 ? input.stamps : undefined;
+  // The pointer is the first entry (ADR-0044 §2), and refinement history is written against the
+  // stamp this correction names — so a list leading with a different stamp would record one
+  // re-identification and file the piece under another.
+  if (stamps && stamps[0].stampId !== input.stampId) {
+    throw new ScanValidationError("The first stamp on the piece has to be the one it is identified as.");
+  }
   const tile = await loadTileForOwner(ownerId, tileId);
   if (tile.state !== "consumed") {
     throw new ScanValidationError("This tile has not become a copy, so there is nothing to correct.");
@@ -421,6 +440,9 @@ export async function reidentifyTileCopy(
     inCollection: input.inCollection ?? false,
     forSale: input.forSale ?? false,
     forTrade: input.forTrade ?? false,
+    // Through `updateItem`'s own list write (#746), so the copy's columns and the stamps on it are
+    // one save and one transaction, exactly as the copy dialog saves them.
+    ...(stamps ? { stamps } : {}),
   });
   await seedStampImage(ownerId, item.id);
   return { itemId: item.id, itemNo: item.itemNo };

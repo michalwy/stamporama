@@ -4,6 +4,10 @@
 
 Accepted, not yet implemented. Designed 2026-09-08 with the collector, in a design session.
 
+**§6 is in** (#1006): `ScanTile.frontTurn` / `backTurn`, a side re-cut turned from the retained scan
+(the stored crop turned once the scan is swept), the viewer mapping its turned picture back onto the
+box through `src/lib/tile-turn.ts`, and an uploaded photo's turn written to its bytes on Save.
+
 The work is tracked in #1000 (the seeded `Forgery` subtype and its migration), #1001
 (`Photo.sourceUrl`), #1002 (the subtype filter on the copies list), #1003 (a picture in the
 identify-variant dialog), #1004 (the two-photo comparison view), #1005 (reaching the references from

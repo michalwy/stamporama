@@ -17,6 +17,7 @@ import {
 } from "@/lib/items";
 import type { ItemListItem, ItemStampsRead } from "@/lib/items";
 import type { ItemStampEntryInput } from "@/lib/item-stamps";
+import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -125,27 +126,8 @@ function parseItemFields(formData: FormData): ParsedItemFields {
  * field the collector cannot see, and every value the domain actually writes is re-validated there.
  */
 function parseItemStamps(formData: FormData): ItemStampEntryInput[] | undefined {
-  const raw = formData.get("itemStamps");
-  if (typeof raw !== "string" || !raw) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-  if (!Array.isArray(parsed)) return undefined;
-  const entries: ItemStampEntryInput[] = [];
-  for (const row of parsed) {
-    if (!row || typeof row !== "object") continue;
-    const { stampId, quantity, formatId } = row as Record<string, unknown>;
-    if (typeof stampId !== "string" || !stampId) continue;
-    entries.push({
-      stampId,
-      quantity: typeof quantity === "number" ? quantity : 1,
-      formatId: typeof formatId === "string" && formatId ? formatId : null,
-    });
-  }
-  return entries;
+  // The reading is shared with the scan-tile identification, which submits the same list (#750).
+  return parseItemStampEntries(formData.get("itemStamps"));
 }
 
 /** The stamps a copy carries, for the dialog that edits them and the copy's own screen (#746). */
