@@ -66,9 +66,13 @@ export function IntakeHoldingsLine({
   conditionId,
   certificateStatusId,
   formatId,
+  onCompare,
 }: {
   collectionId: string;
   stampId: string;
+  /** Opens the held copies' pictures beside the piece (#1207). Offered only while something is
+   * held, since there is nothing to look at otherwise. */
+  onCompare?: () => void;
   conditions: StampConditionData[];
   /** The condition chosen so far, blank until one is picked — what the want marker is judged on. */
   conditionId: string;
@@ -169,6 +173,29 @@ export function IntakeHoldingsLine({
               </span>
             </span>
           ))}
+          {/* The pictured counterpart of the line (#1207): the question is often not *do I need
+              this* but *is this one better than mine*, and that is answered by looking. On every
+              copy the line counts, the in-flight ones included — it is the same set. */}
+          {onCompare && (
+            <button
+              type="button"
+              onClick={onCompare}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "none",
+                font: "inherit",
+                color: "var(--color-accent)",
+                cursor: "pointer",
+              }}
+            >
+              {`Compare with ${
+                summary.total + summary.inFlight.reduce((n, b) => n + b.count, 0) === 1
+                  ? "it"
+                  : "them"
+              }…`}
+            </button>
+          )}
         </>
       )}
 

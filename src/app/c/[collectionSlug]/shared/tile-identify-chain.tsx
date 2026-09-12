@@ -61,6 +61,9 @@ import type { TileStampPick } from "./tile-identify-dialog";
  */
 interface TileCorrection {
   tileId: string;
+  /** The copy the tile already became — the piece being re-identified, so never one of the held
+   * copies it is compared with (#1207). */
+  itemId: string;
   stampId: string;
   prefill: NonNullable<IntakeConditionDialogProps["prefill"]>;
 }
@@ -273,6 +276,7 @@ export function useTileIdentifyChain(input: {
       setError(undefined);
       setTileCorrection({
         tileId: piece.tileId,
+        itemId: copy.id,
         stampId: copy.stampId,
         prefill: {
           conditionId: copy.conditionId,
@@ -523,6 +527,9 @@ export function TileIdentifyChainDialogs({
           // is not in question* — the stockbook case, and every card that belongs to no order at
           // all (#725).
           lotChoice={tileCorrection ? undefined : lotChoice}
+          // The copy a correction re-answers is the piece on screen, not one of the copies held to
+          // compare it with (#1207).
+          correctedCopyId={tileCorrection?.itemId}
           // The stamps on the piece (#750): listed in the summary once there is more than the stamp
           // itself, and one press from the editor that lists them.
           carriedStamps={carriedSummary}

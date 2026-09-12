@@ -210,3 +210,86 @@ export function heldConditionsText(
     .map((c) => (split ? `${c.count} ${nameFor(c.conditionId)}` : nameFor(c.conditionId)))
     .join(", ");
 }
+
+/**
+ * One held copy **as a picture to look at** (#1207) — the copies #562's line counts, listed, so a
+ * *you hold 2* can be answered by looking at the two rather than by reading their conditions.
+ *
+ * The question is *is the piece in the tweezers better than mine*, and centring, perforations,
+ * colour and a clean cancel are judged by eye; a condition code settles none of them. So this
+ * carries the facts the line already states about each copy — its condition, its disposition, where
+ * it is — and the photos, and nothing that ranks one copy against another.
+ */
+export interface HeldCopyPicture {
+  id: string;
+  itemNo: number;
+  conditionId: string;
+  certificateStatusId: string | null;
+  deliveryState: string;
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
+  /** The copy's attached photos, front and back first. Empty for a copy with no picture — which is
+   *  still listed, because leaving it out would read as *not held*. */
+  photos: { id: string; role: "front" | "back" | null; title: string | null; sortOrder: number }[];
+}
+
+/**
+ * Where a held copy is and what it is held for, worded as #562's line words it — the markers for a
+ * copy that has arrived and been filed, the bucket's clause for one that has not.
+ *
+ * An in-flight copy gets **no disposition**, for the line's own reason: its flags are unset
+ * (auction settlement writes all three false) or provisional, and a marker there would be a blank
+ * dressed up as a decision.
+ */
+export function heldCopyPlace(copy: HeldCopyPicture):
+  | { kind: "held"; markers: (typeof HELD_MARKERS)[number][] }
+  | { kind: "inFlight"; label: string; state: DeliveryState } {
+  const bucket = copyDeliveryBucket(copy.deliveryState);
+  if (bucket !== "held") {
+    const flight = IN_FLIGHT_COPY_BUCKETS.find((b) => b.key === bucket)!;
+    return { kind: "inFlight", label: flight.clause, state: flight.state };
+  }
+  return {
+    kind: "held",
+    markers: HELD_MARKERS.filter((m) =>
+      m.key === "unmarked"
+        ? !copy.inCollection && !copy.forSale && !copy.forTrade
+        : copy[m.key]
+    ),
+  };
+}
+
+/**
+ * The order the pictures are offered in (#1207): **the copies in the collection first**, since the
+ * question is whether the incoming piece should take one of their places.
+ *
+ * Then the other filed copies by the first disposition each carries, in {@link HELD_MARKERS} order
+ * (for sale, for trade, none); then the copies not yet filed, in the lifecycle order of
+ * `COPY_BUCKETS`. Inside a group, the collection's own condition order and then the copy number —
+ * a stable order and nothing more: the condition dictionary is display order, not a quality scale
+ * (ADR-0032), so the first copy shown is not a claim that it is the best one.
+ */
+export function orderHeldCopyPictures<T extends HeldCopyPicture>(
+  copies: readonly T[],
+  conditionOrder: readonly string[]
+): T[] {
+  const conditionRank = new Map(conditionOrder.map((id, i) => [id, i]));
+  const groupRank = (copy: T): number => {
+    const place = heldCopyPlace(copy);
+    if (place.kind === "held") {
+      return HELD_MARKERS.findIndex((m) => m.key === place.markers[0].key);
+    }
+    return (
+      HELD_MARKERS.length +
+      IN_FLIGHT_COPY_BUCKETS.findIndex((b) => b.state === place.state)
+    );
+  };
+  return [...copies].sort(
+    (a, b) =>
+      groupRank(a) - groupRank(b) ||
+      (conditionRank.get(a.conditionId) ?? Number.MAX_SAFE_INTEGER) -
+        (conditionRank.get(b.conditionId) ?? Number.MAX_SAFE_INTEGER) ||
+      a.itemNo - b.itemNo
+  );
+}

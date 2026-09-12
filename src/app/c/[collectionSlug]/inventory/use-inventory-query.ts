@@ -20,6 +20,7 @@ import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { StampHoldings } from "@/lib/stamp-holdings";
+import type { HeldCopyPicture } from "@/lib/held-copies";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
@@ -670,6 +671,34 @@ export function useStampHoldings(collectionId: string, stampId: string | null) {
       return data.holdings;
     },
     enabled: !!stampId,
+  });
+}
+
+/**
+ * The held copies of one stamp **with their photos** (#1207), for the intake step's comparison —
+ * the copies {@link useStampHoldings} counts, listed.
+ *
+ * Its own query rather than a field on the holdings: the line is read on every identification, the
+ * pictures only when the collector opens them. Keyed under the inventory prefix for the same reason
+ * the holdings are, so a copy write re-reads it.
+ */
+export function useHeldCopyPictures(
+  collectionId: string,
+  stampId: string,
+  excludeItemId: string | null
+) {
+  return useQuery<HeldCopyPicture[]>({
+    queryKey: ["inventory", collectionId, "heldCopyPictures", stampId, excludeItemId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ stampId });
+      if (excludeItemId) params.set("exclude", excludeItemId);
+      const res = await fetch(
+        `/api/collections/${collectionId}/stamps/holdings/copies?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the copies you hold of this stamp");
+      const data = await res.json();
+      return data.copies;
+    },
   });
 }
 

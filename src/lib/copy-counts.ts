@@ -39,8 +39,12 @@ export interface StampCopyCounts {
  * with three positions is a copy of none of them, so the badge beside Mi 200 must not count it. That
  * is one flat column rather than a join because `Item.stampCount` is materialised for exactly this
  * spread.
+ *
+ * Exported for the one reader that lists the copies rather than counting them — the pictures the
+ * intake step compares against (#1207) — so the copies shown beside a *you hold 2* are the two it
+ * counted and not a second opinion about which those are.
  */
-function heldCopiesWhere(collectionId: string, stampIds: string[]) {
+export function heldCopiesWhere(collectionId: string, stampIds: string[]) {
   return {
     collectionId,
     stampId: { in: stampIds },

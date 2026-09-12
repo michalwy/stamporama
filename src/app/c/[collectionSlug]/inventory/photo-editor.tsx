@@ -79,6 +79,16 @@ export interface PhotoEditorValue {
   uploading: boolean;
 }
 
+/** One picture on the strip, addressed for looking at (#1207). `src` is the local preview for an
+ * upload — the file itself, so it can be enlarged before the bytes are saved anywhere. */
+export interface PhotoEditorPreview {
+  key: string;
+  src: string;
+  label: string;
+  /** The quarter-turn the save will write, in degrees — the strip's own preview of it. */
+  turn: QuarterTurn;
+}
+
 /** Result of a promote-to-stamp attempt (#137). */
 export interface PromoteResult {
   ok: boolean;
@@ -92,6 +102,10 @@ interface PhotoEditorProps {
   /** Reserved-slot layout: `front-back` (copies, default) or `main` (stamps, #137). */
   roleMode?: RoleMode;
   onChange: (value: PhotoEditorValue) => void;
+  /** The pictures on the strip as the shared viewer takes them, in strip order and with any turn
+   * still to be saved (#1207) — for the intake step, which shows the photos just added beside the
+   * copies already held. Addresses only: what gets saved is still `onChange`'s change-set. */
+  onPreviewsChange?: (previews: PhotoEditorPreview[]) => void;
   /** When provided (copy editor, #137), each already-committed photo can be *promoted* to its
    * copy's stamp — creating an independent duplicated stamp photo. Applies immediately (not part
    * of the Save change-set), so the copy's own photo is untouched regardless of Save/Cancel. */
@@ -162,6 +176,7 @@ export function PhotoEditor({
   disabled = false,
   roleMode = "front-back",
   onChange,
+  onPreviewsChange,
   onPromotePhoto,
 }: PhotoEditorProps) {
   const slots = SLOT_ROLES[roleMode];
@@ -219,6 +234,23 @@ export function PhotoEditor({
     const uploading = entries.some((e) => e.status === "uploading");
     onChange({ changeSet: { add, update, remove }, uploading });
   }, [entries, initialIds, initialById, onChange, slots]);
+
+  // --- Report the pictures themselves, for a caller that shows them elsewhere (#1207) ---
+  // A failed upload is left out: it will not be saved, so it is not a picture of the copy.
+  useEffect(() => {
+    if (!onPreviewsChange) return;
+    onPreviewsChange(
+      entries
+        .filter((e) => e.status !== "error")
+        .map((e) => ({
+          key: e.localId,
+          src: e.previewUrl,
+          label:
+            e.role === "front" ? "Front" : e.role === "back" ? "Back" : e.title.trim() || "Photo",
+          turn: e.turn,
+        }))
+    );
+  }, [entries, onPreviewsChange]);
 
   const markPreviewUrl = useCallback((url: string) => {
     objectUrls.current.add(url);

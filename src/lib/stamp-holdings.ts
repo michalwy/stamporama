@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "./db";
-import { countHeldCopyRowsByStamp } from "./copy-counts";
-import type { HeldCopyRow } from "./held-copies";
+import { countHeldCopyRowsByStamp, heldCopiesWhere } from "./copy-counts";
+import type { HeldCopyPicture, HeldCopyRow } from "./held-copies";
+import { sortPhotos } from "./photos";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 
 /**
@@ -45,4 +46,66 @@ export async function getStampHoldings(
     rows: rowsByStamp.get(stampId) ?? [],
     wants: wantsByStamp.get(stampId) ?? null,
   };
+}
+
+/**
+ * Every copy the collection holds of **one** stamp, with its photos (#1207) — what the intake step
+ * shows beside the piece being identified, so *is this one better than mine* is answered by looking.
+ *
+ * The set is `heldCopiesWhere`'s exactly, the one #562's line counts: sold, traded away, written off
+ * and never-arrived copies are not his any more and are not shown, and a copy still on its way is.
+ * The order is the client's ({@link orderHeldCopyPictures}), because the condition dictionary it
+ * follows is already there.
+ *
+ * `excludeItemId` is the copy a scan tile **already became**, when the tile is being re-identified:
+ * that copy is the piece in the tweezers, and offering it as one of the copies to compare it with
+ * would be comparing the piece with itself.
+ *
+ * Loaded only when the comparison is opened, never beside the line: it is a photo read the
+ * collector asks for on some of the stamps, not a count every identification needs.
+ */
+export async function listHeldCopyPictures(
+  ownerId: string,
+  collectionId: string,
+  stampId: string,
+  excludeItemId: string | null
+): Promise<HeldCopyPicture[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.item.findMany({
+    where: {
+      ...heldCopiesWhere(collectionId, [stampId]),
+      ...(excludeItemId ? { id: { not: excludeItemId } } : {}),
+    },
+    select: {
+      id: true,
+      itemNo: true,
+      conditionId: true,
+      certificateStatusId: true,
+      deliveryState: true,
+      inCollection: true,
+      forSale: true,
+      forTrade: true,
+      photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+    },
+    orderBy: { itemNo: "asc" },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    itemNo: row.itemNo,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    deliveryState: row.deliveryState,
+    inCollection: row.inCollection,
+    forSale: row.forSale,
+    forTrade: row.forTrade,
+    // Narrowed as the copy list narrows them (`items.ts`): a copy's reserved slots are front and back.
+    photos: row.photos
+      .map((p) => ({
+        id: p.id,
+        role: (p.role === "front" || p.role === "back" ? p.role : null) as "front" | "back" | null,
+        title: p.title,
+        sortOrder: p.sortOrder,
+      }))
+      .sort(sortPhotos),
+  }));
 }
