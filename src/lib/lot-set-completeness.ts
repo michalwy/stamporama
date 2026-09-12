@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
+import { NOT_MULTI_STAMP } from "./multi-stamp";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
 import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
@@ -88,6 +89,10 @@ function forSaleStockWhere(collectionId: string, stampIds: string[]) {
     saleLineItems: { none: {} },
     // …nor one already given to a partner (#644): it is not stock, whatever its disposition says.
     ...NOT_TRADED_AWAY,
+    // …nor a multi-stamp carrier (#745, ADR-0044 §3). The claim the figure makes is that a series
+    // can go out as one offer set, and a cover bearing three of its stamps cannot supply a single
+    // position of it — it is one piece that is sold whole.
+    ...NOT_MULTI_STAMP,
     disposedAt: null,
     deliveryState: { in: [...IN_HAND_DELIVERY_STATES] },
   };

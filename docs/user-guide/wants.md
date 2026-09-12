@@ -48,6 +48,10 @@ what the collection has of the wanted stamp, **split by where it is**:
 
 Each is tinted differently, so a glance separates what you have from what is merely coming.
 
+A piece carrying **several** stamps is counted for none of them, here as everywhere else: it
+is not a copy of any one of its stamps. See
+[covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
+
 On a copy's own row — in the Copies list or on a purchase order — the figures leave **that
 copy out**. It is the one you are looking at, and a count meant to say "something else is
 already coming" must not be satisfied by the thing in front of you.
@@ -280,6 +284,11 @@ for each one:
 **Nothing is ever closed automatically.** Holding a copy is not the same as having what
 you wanted, and only you can say which. Closing the dialog without choosing leaves every
 want exactly as it was.
+
+**A piece carrying several stamps offers to close nothing.** A cover franked with Mi 200
+among others is not a copy of Mi 200 — you cannot supply it off the cover — so the want
+stays open and the review does not mention it. See
+[covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 
 ## Filling the list from a checklist
 

@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
+import { MULTI_STAMP, NOT_MULTI_STAMP } from "./multi-stamp";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
@@ -280,6 +281,10 @@ function countedCopiesWhere(collectionId: string, stampIds: string[]): Prisma.It
     // Given to a partner is a third way of no longer having it (#644), read off the trade rather
     // than written on the copy — so the want list and the copies list cannot disagree about it.
     ...NOT_TRADED_AWAY,
+    // A multi-stamp carrier answers no want (#745, ADR-0044 §3). A want for Mi 200 does not close
+    // because a cover *bearing* Mi 200 arrived: the stamp is glued to a piece that will be sold
+    // whole, so the gap the want names is still open.
+    ...NOT_MULTI_STAMP,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };
@@ -1377,18 +1382,46 @@ export interface WantMatchForCopy {
  *
  * Read, never write. Closing, narrowing or leaving each one open is the collector's decision, and
  * that is the whole reason this exists as a separate call rather than as a hook inside intake.
+ *
+ * A **multi-stamp carrier** is dropped before the question is asked (#745, ADR-0044 §3): a cover
+ * franked with Mi 200 among others satisfies no want for Mi 200, so offering to close one would be
+ * offering to record something false. This is the one place the rule cannot ride on a `where` — the
+ * caller describes the material rather than naming a query — so the copies it *does* name are looked
+ * up by id. {@link findWantsMatching} beneath it is deliberately left alone: it is asked about a
+ * counterparty's list too (#712), where there is no `Item` and nothing to look up.
  */
 export async function findWantsSatisfiedBy(
   ownerId: string,
   collectionId: string,
   copies: ArrivingCopy[]
 ): Promise<WantMatchForCopy[]> {
+  const eligible = await withoutCarriers(collectionId, copies);
+  if (eligible.length === 0) return [];
   const matches = await findWantsMatching(
     ownerId,
     collectionId,
-    copies.map((copy) => ({ ...copy, key: copy.itemId }))
+    eligible.map((copy) => ({ ...copy, key: copy.itemId }))
   );
   return matches.map(({ key, want }) => ({ itemId: key, want }));
+}
+
+/** The copies among these that are not multi-stamp carriers. Only the carriers are read back, so an
+ *  ordinary intake — where there are none, a copy never being *born* one — costs one narrow query
+ *  that returns nothing. A copy whose id names nothing in this collection is left in and refused by
+ *  `findWantsMatching`'s own authorization, rather than being silently dropped here. */
+async function withoutCarriers(
+  collectionId: string,
+  copies: readonly ArrivingCopy[]
+): Promise<ArrivingCopy[]> {
+  const ids = [...new Set(copies.map((copy) => copy.itemId))];
+  if (ids.length === 0) return [];
+  const carriers = await prisma.item.findMany({
+    where: { collectionId, id: { in: ids }, ...MULTI_STAMP },
+    select: { id: true },
+  });
+  if (carriers.length === 0) return [...copies];
+  const excluded = new Set(carriers.map((row) => row.id));
+  return copies.filter((copy) => !excluded.has(copy.itemId));
 }
 
 /** A key to ask about, with a handle the caller gets back so it can tell the answers apart. */

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../../src/lib/db";
+import { setItemStamps } from "../../src/lib/item-stamps";
 import { setColnectListMapping } from "../../src/lib/colnect-list-sync";
 import {
   ColnectListImportError,
@@ -118,13 +119,14 @@ async function stamp(colnectId: string | null, name: string): Promise<string> {
   return created.id;
 }
 
+/** One copy, in hand. Returns its id, for the cases that go on to say more about that very piece. */
 async function copy(
   stampId: string,
   conditionId: string,
   over: { forTrade?: boolean; forSale?: boolean } = {}
-) {
+): Promise<string> {
   itemNo += 1;
-  await prisma.item.create({
+  const created = await prisma.item.create({
     data: {
       collectionId: f.collectionId,
       itemNo,
@@ -136,6 +138,7 @@ async function copy(
       deliveryState: "delivered",
     },
   });
+  return created.id;
 }
 
 before(async () => {
@@ -477,6 +480,41 @@ describe("Colnect list discrepancy report (#686)", () => {
       false,
       "an accepted divergence stays accepted"
     );
+  });
+
+  it("leaves a multi-stamp carrier off the local side, and files it nowhere", async () => {
+    // #745 (ADR-0044 §3): a cover franked with several stamps is a copy of none of them, so it does
+    // not put any of them on this list's local side. It drops out the way a sold or disposed copy
+    // does, and deliberately **not** into `not-comparable` — that bucket means "no Colnect id here,
+    // go and backfill it", a to-do list, and a carrier is outside the question permanently.
+    const carried = await stamp("1008", "On a cover with others");
+    const alsoCarried = await stamp("1009", "The other stamp on it");
+    const carrierId = await copy(carried, f.mnhId);
+    await setItemStamps(f.userId, carrierId, [{ stampId: carried }, { stampId: alsoCarried }]);
+
+    // The control: an ordinary for-trade copy of a stamp the list does not name *is* a difference,
+    // which is what makes the absence above the exclusion rather than a quiet filter on new stamps.
+    const loose = await stamp("1010", "Loose, and not on the list");
+    await copy(loose, f.mnhId);
+
+    const rows = await listColnectReportRows(f.userId, f.collectionId, SWAP_LT, {
+      includeHidden: true,
+    });
+    const keys = rows.rows.map((row) => row.key);
+    assert.ok(keys.includes("1010"), "the loose copy is missing from the list, and says so");
+    assert.equal(keys.includes("1008"), false, "the carrier is not on the local side");
+    assert.equal(keys.includes("1009"), false, "nor is anything else it carries");
+    assert.equal(
+      rows.rows.filter((row) => row.bucket === "not-comparable").map((row) => row.stampId).includes(
+        carried
+      ),
+      false,
+      "and it is not filed as something to go and backfill either"
+    );
+
+    await prisma.item.deleteMany({ where: { id: carrierId } });
+    await prisma.item.deleteMany({ where: { stampId: loose } });
+    await prisma.stamp.deleteMany({ where: { id: { in: [carried, alsoCarried, loose] } } });
   });
 
   it("pages in a total order", async () => {

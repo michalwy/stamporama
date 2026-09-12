@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
+import { NOT_MULTI_STAMP } from "./multi-stamp";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
@@ -33,6 +34,11 @@ export interface StampCopyCounts {
  * Shared by every count in this module rather than restated per query. Three `groupBy` calls
  * answering "how many of this do I have" along three different axes must not be able to disagree
  * about which copies they are counting.
+ *
+ * A **multi-stamp copy** is not held *of this stamp* at all (#745, ADR-0044 §3): a cover franked
+ * with three positions is a copy of none of them, so the badge beside Mi 200 must not count it. That
+ * is one flat column rather than a join because `Item.stampCount` is materialised for exactly this
+ * spread.
  */
 function heldCopiesWhere(collectionId: string, stampIds: string[]) {
   return {
@@ -41,6 +47,7 @@ function heldCopiesWhere(collectionId: string, stampIds: string[]) {
     saleLineItems: { none: {} },
     // …and given to a partner, which is the third way (#644).
     ...NOT_TRADED_AWAY,
+    ...NOT_MULTI_STAMP,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS } from "./colnect-conditions";
+import { NOT_MULTI_STAMP } from "./multi-stamp";
 import {
   colnectListBucketLabel,
   colnectListSourceShape,
@@ -181,6 +182,10 @@ async function copiesToTouch(
       // and a list still naming it is the discrepancy rather than an input to it.
       deliveryState: "delivered",
       disposedAt: null,
+      // …and the report's exclusion of a multi-stamp carrier with it (#745, ADR-0044 §3). A fix must
+      // touch exactly the copies the figure beside it was counted from, or it acts on rows the
+      // screen never showed.
+      ...NOT_MULTI_STAMP,
     },
     orderBy: { itemNo: "asc" },
     select: {
