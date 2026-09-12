@@ -98,6 +98,31 @@ describe("tileSideViews, on a tile that has been worked through", () => {
   });
 });
 
+describe("tileSideViews, on a tile stood the right way up (#1006)", () => {
+  it("carries each side's own turn, and leaves the box on the card", () => {
+    const sides = tileSideViews({ ...TILE, frontTurn: 90, backTurn: 270 }, SHEETS);
+    assert.deepEqual(sides.map((s) => s.turn), [90, 270]);
+    // The box is still the sheet's: it is the picture that turned, never the coordinates.
+    assert.deepEqual(sides[0].box, TILE.frontBox);
+    assert.equal(sides[0].sheetId, "sheet-front");
+  });
+
+  it("reads a tile with no turn recorded as unturned", () => {
+    assert.deepEqual(tileSideViews(TILE, SHEETS).map((s) => s.turn), [0, 0]);
+  });
+
+  it("keeps the turn on a consumed tile, whose copy holds the very pictures that were cut turned", () => {
+    const consumed: TileViewSource = {
+      ...TILE,
+      frontTurn: 180,
+      frontPhotoId: null,
+      backPhotoId: null,
+      item: { frontPhotoId: "photo-front", backPhotoId: null },
+    };
+    assert.deepEqual(tileSideViews(consumed, SHEETS).map((s) => s.turn), [180]);
+  });
+});
+
 describe("tileSideViews, without a recorded box", () => {
   it("shows the picture and asks the card for nothing", () => {
     const sides = tileSideViews({ ...TILE, frontBox: null, backPhotoId: null }, SHEETS);

@@ -140,6 +140,32 @@ export function orientedSize(
 }
 
 /**
+ * Turn an already-processed derivative by a quarter (#1006) — a `full` or a `thumb` the app wrote
+ * itself, put the right way up.
+ *
+ * **Bytes, and only for a picture that addresses nothing.** An ordinary uploaded photo is its own
+ * frame of reference, so rewriting it is the cheap and safe answer and no reader has to learn a
+ * transform. A scan tile is the other case — its box addresses its sheet — and is turned where it
+ * is cut instead (`photos/sheet.ts`); this is only its fallback once the scan it was cut from has
+ * been swept.
+ *
+ * Re-encoded in the source format at the pipeline's own defaults, exactly as `processImage` encodes,
+ * so a turned derivative cannot be told from one uploaded the right way up. No resize: a turn neither
+ * adds pixels nor needs to lose any.
+ */
+export async function turnImage(
+  input: Buffer,
+  mime: AcceptedMime,
+  turn: 90 | 180 | 270
+): Promise<ProcessedVariant> {
+  const { data, info } = await sharp(input, { failOn: "error" })
+    .rotate(turn)
+    .toFormat(OUTPUT[mime].format)
+    .toBuffer({ resolveWithObject: true });
+  return { buffer: data, width: info.width, height: info.height, mime: OUTPUT[mime].mime };
+}
+
+/**
  * Thumbnail an image the app itself produced — a rendered offer collage (#311). Distinct from
  * `processImage`, which also re-encodes the `full` derivative: a collage's `full` bytes are the
  * renderer's own output, already sized and encoded to the platform's limits (#310), so re-encoding

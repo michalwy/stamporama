@@ -220,6 +220,15 @@ export interface IntakeConditionDialogProps {
      * copy at all, so offering it would be offering a refusal. */
     lots: { id: string; label: string; status: string }[];
   };
+  /**
+   * The stamps on the piece, worded, when it has been described as carrying several (#750) —
+   * absent for a piece that is simply the stamp picked. Drawn in the summary box that names the
+   * pick, since they are what the pick now describes.
+   */
+  carriedStamps?: string[];
+  /** Open the stamp editor over this step (#750). Present only in the scan-tile chain, where the
+   * piece is on screen to be read: nowhere else is there a single piece of paper being described. */
+  onEditStamps?: () => void;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -243,6 +252,8 @@ function IntakeConditionDialog({
   copyCount,
   prefill,
   lotChoice,
+  carriedStamps,
+  onEditStamps,
   onBack,
   onClose,
   onSubmit,
@@ -480,6 +491,43 @@ function IntakeConditionDialog({
             }}
           >
             {summary}
+            {/* The stamps on the piece (#750), when it carries more than the one picked. The chip
+                and its sentence are the Copies list's own (#748): a piece carrying several stamps
+                is a copy of none of them, and this is the last place to see that before it is. */}
+            {carriedStamps && carriedStamps.length > 0 && (
+              <div style={{ marginTop: "0.375rem" }}>
+                <div style={{ color: "var(--color-text-primary)" }}>
+                  <strong>Several stamps on this piece</strong> — one copy, counted towards none of
+                  them:
+                </div>
+                <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                  {carriedStamps.map((line, i) => (
+                    <li key={`${i}-${line}`}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {onEditStamps && selection.kind === "stamp" && (
+              <div style={{ marginTop: "0.375rem" }}>
+                <button
+                  type="button"
+                  onClick={onEditStamps}
+                  disabled={isPending}
+                  style={{
+                    padding: 0,
+                    border: "none",
+                    background: "none",
+                    font: "inherit",
+                    color: "var(--color-accent)",
+                    cursor: isPending ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {carriedStamps && carriedStamps.length > 0
+                    ? "Change the stamps on this piece…"
+                    : "Another stamp on this piece…"}
+                </button>
+              </div>
+            )}
             {/* What is about to exist, before anything is created (#596). It sits inside the box
                 that names the pick because it is a fact about *this* answer — one stamp, one
                 condition, one certificate, one format, one lot, and this many pieces of paper.
@@ -495,7 +543,9 @@ function IntakeConditionDialog({
                 rather than as a second heading. Single-stamp intake only: a whole-checklist intake
                 fans out across many stamps and has no one stamp to report on, exactly as photos
                 below are single-stamp only (#148). */}
-            {selection.kind === "stamp" && (
+            {/* Not for a piece carrying several (#750): it will count towards none of them, so what
+                the collection holds of the first is not a fact about this intake. */}
+            {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
               <IntakeHoldingsLine
                 collectionId={collectionId}
                 stampId={selection.stampId}

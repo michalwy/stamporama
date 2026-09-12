@@ -17,6 +17,7 @@ import {
   parkTilesAction,
   removeTileCandidateAction,
   returnTilesToQueueAction,
+  turnTileSideAction,
   unpairTileBackAction,
 } from "@/app/actions/scans";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -706,6 +707,16 @@ export function TileIdentifyDialog({
           pieces={pieces}
           scanDpi={scanDpi}
           onGauge={onGauge}
+          // Standing a sideways piece the right way up (#1006) — here, where the tile is still being
+          // worked, and on no step after it. Not on a consumed tile: its pictures went to the copy
+          // it became. The dialog stays open, since turning a piece is how looking at it starts.
+          onTurn={
+            tile?.state === "consumed"
+              ? undefined
+              : (tileId, side, turn) =>
+                  run(() => turnTileSideAction(tileId, side, turn), false, true)
+          }
+          turning={pending}
         />
 
         <div

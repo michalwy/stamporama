@@ -13,6 +13,7 @@ import {
   recutBatch,
   setBatchKind,
   setBatchLabel,
+  turnTileSide,
   unpairTileBack,
   type CutReport,
   type SheetKind,
@@ -29,6 +30,7 @@ import {
   returnTilesToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
+import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import type { ScanOwnerRef } from "@/lib/scan-sheets";
 
 // Scan sheet ingest actions (#566, ADR-0033). JSON-shaped, like everything else under
@@ -278,6 +280,9 @@ export async function identifyTilesAction(
       inCollection: formData.get("inCollection") === "true",
       forSale: formData.get("forSale") === "true",
       forTrade: formData.get("forTrade") === "true",
+      // Every stamp on the piece, when the tile was identified as one carrying several (#750). The
+      // copy dialog's own field and reading (#746): one list, one vocabulary.
+      stamps: parseItemStampEntries(formData.get("stamps")),
     });
     return { status: "success", outcomes: copies };
   } catch (e) {
@@ -345,6 +350,7 @@ export async function reidentifyTileAction(
       inCollection: formData.get("inCollection") === "true",
       forSale: formData.get("forSale") === "true",
       forTrade: formData.get("forTrade") === "true",
+      stamps: parseItemStampEntries(formData.get("stamps")),
     });
     return { status: "success" };
   } catch (e) {
@@ -408,6 +414,25 @@ export async function parkTilesAction(
           : tileIds.length === 1
             ? "Failed to park the tile. Please try again."
             : "Failed to park the tiles. Please try again.",
+    };
+  }
+}
+
+/** Stand one side of a tile the right way up (#1006). The side is cut again, turned; the tile's
+ * box on the card does not move, which is what keeps every measurement on it true. */
+export async function turnTileSideAction(
+  tileId: string,
+  side: "front" | "back",
+  turn: number
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await turnTileSide(session.user.id, tileId, side, turn);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to turn the tile. Please try again.",
     };
   }
 }

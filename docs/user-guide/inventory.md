@@ -805,8 +805,10 @@ sit on the piece, and give each one a **quantity** and a **format of its own** w
 a block of four *on* the cover is one entry with the format *Block of 4*, never four entries. The
 same stamp twice loose is one entry of quantity **2**.
 
-A copy starts as one stamp whatever route it came in by, and becomes a carrier when you say so here.
-Take the list back down to one row and it is an ordinary copy of that stamp again.
+A copy added by hand starts as one stamp, and becomes a carrier when you say so here. A tile cut from
+a card scan can be identified as a carrier straight away — **Another stamp on this piece…** in the
+identification's condition step, see [Card scans](purchases.md#working-through-the-tiles). Take the
+list back down to one row and it is an ordinary copy of that stamp again.
 
 ### What a piece carrying several stamps counts as
 
@@ -1434,6 +1436,13 @@ add-photos area.
 
 Accepted formats are **JPEG, PNG, and WebP**, up to **200 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
+
+**A scan that came out sideways is put right as you add it.** A photo you have just dropped carries
+a turn button beside its **✕**: each press turns it a quarter to the right, and the card shows it the
+way it will be saved. The turn is written into the photo when you **Save** — the photo and its
+thumbnail are stored the right way up, so it shows that way everywhere, in offers and listings
+included. A photo that is already saved has no turn button; remove it and add it again. (Tiles cut
+from a [card scan](purchases.md#working-through-the-tiles) are turned in the tile's own dialog.)
 
 Thumbnails everywhere in the app show the **whole** image, scaled to fit inside the thumbnail box by
 its longest edge — never cropped to fill the box. A tall stamp leaves a little space at the sides, a

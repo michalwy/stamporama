@@ -8,6 +8,7 @@
 // is a plain function call here and a browser session with a cron job in it anywhere else.
 
 import type { Box } from "./scan-boxes";
+import type { QuarterTurn } from "./tile-turn";
 
 export type TileSide = "front" | "back";
 
@@ -30,6 +31,9 @@ export interface TileViewSource {
   backPhotoId: string | null;
   frontBox: Box | null;
   backBox: Box | null;
+  /** Each side's quarter-turn (#1006), absent meaning unturned. */
+  frontTurn?: QuarterTurn;
+  backTurn?: QuarterTurn;
   item: { frontPhotoId: string | null; backPhotoId: string | null } | null;
 }
 
@@ -43,6 +47,13 @@ export interface TileSideView {
    * in and the space the region route validates. Null when the tile carries no box for this side,
    * which leaves the picture's own pixels as the only truth about it. */
   box: Box | null;
+  /**
+   * How far the picture is turned from the box it was cut from (#1006). The photo is already cut
+   * turned, so the viewer draws it as it is and needs this only to find its way back to the box: the
+   * picture's size in scan pixels is the box's **turned**, and a region of the sheet is asked for in
+   * the sheet's frame (`unturnBox`) and served turned.
+   */
+  turn: QuarterTurn;
   /** The retained scan to escalate to past the photo's own resolution, or null when there is none
    * to ask. */
   sheetId: string | null;
@@ -83,6 +94,10 @@ export function tileSideViews(
         label: side === "front" ? "Front" : "Back",
         photoId,
         box,
+        // The tile's turn, whoever owns the picture now. A consumed tile's sides are its copy's
+        // photos, which are the rows the tile handed over — cut turned — so the turn still describes
+        // them, exactly as the box does.
+        turn: (side === "front" ? tile.frontTurn : tile.backTurn) ?? 0,
         sheetId: deep ? sheet.id : null,
       } satisfies TileSideView;
     })

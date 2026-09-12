@@ -12,7 +12,14 @@ import {
   type SheetVariant,
 } from "./storage";
 import { deletePhotoVariants } from "./photos";
-import { MAX_UPLOAD_BYTES, UnsupportedImageError } from "./photos/process";
+import {
+  MAX_UPLOAD_BYTES,
+  UnsupportedImageError,
+  isAcceptedMime,
+  processImage,
+  turnImage,
+  type ProcessedImage,
+} from "./photos/process";
 import { cutSheet, extractSheetRegion, prepareSheet, type SheetSource } from "./photos/sheet";
 import {
   MAX_BATCH_LABEL_LENGTH,
@@ -30,6 +37,13 @@ import { detectSheetBoxes, pickBoxAt, recogniseSheetKind, type SheetKind } from 
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
+import {
+  asQuarterTurn,
+  isQuarterTurn,
+  turnBetween,
+  turnedSize,
+  type QuarterTurn,
+} from "./tile-turn";
 import { VARIANT_FLAG_SELECT } from "./variant-classification";
 
 /**
@@ -994,6 +1008,9 @@ export async function pairTilesManually(
         backY: backTile.backY,
         backW: backTile.backW,
         backH: backTile.backH,
+        // The turn is the back picture's (#1006) — its photo is cut turned — so it travels with the
+        // photo and the box, exactly as they do.
+        backTurn: backTile.backTurn,
       },
     });
     // Its photo has moved, so the cascade takes nothing with it.
@@ -1055,6 +1072,7 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
         backY: tile.backY,
         backW: tile.backW,
         backH: tile.backH,
+        backTurn: tile.backTurn,
       },
       select: { id: true },
     });
@@ -1070,7 +1088,14 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
     }
     await tx.scanTile.update({
       where: { id: tileId },
-      data: { backSheetId: null, backX: null, backY: null, backW: null, backH: null },
+      data: {
+        backSheetId: null,
+        backX: null,
+        backY: null,
+        backW: null,
+        backH: null,
+        backTurn: 0,
+      },
     });
   });
 
@@ -1098,10 +1123,144 @@ async function loadTile(tileId: string) {
       backY: true,
       backW: true,
       backH: true,
+      backTurn: true,
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
   return tile;
+}
+
+// ── Turning a tile the right way up (#1006) ───────────────────────────────────────────────────
+
+/**
+ * Stand one side of a tile the right way up — a quarter-turn, stored on the tile and applied by
+ * **cutting the side again, turned**.
+ *
+ * Why it is not a rewrite of any bytes the tile is measured against (ADR-0049 §6): the box addresses
+ * the **sheet**, and `1:1`, the region the viewer escalates to and every measurement stand on that.
+ * So the sheet is never touched and the box never moves; the turn is written beside the box, the
+ * crop is re-taken from the retained original with the turn applied as it is cut, and the viewer
+ * maps its turned picture back onto the box (`tile-turn.ts`). Re-cutting rather than turning the
+ * stored crop is also what keeps a side that is turned four times from being re-encoded four times.
+ *
+ * **Once the scan has been swept** (#578) there is no original to cut from, and the stored crop is
+ * turned instead — by the difference between the two turns, since it already stands at the old one.
+ * The picture is the same picture either way; what the sweep costs is one JPEG generation.
+ *
+ * **A new `Photo` row, never new bytes under the old one.** Every photo URL is served `immutable` per
+ * photo id, so bytes rewritten in place would stay sideways in every browser that had already seen
+ * them. The row is replaced and the old bytes deleted after the commit, which is the order
+ * `applyPhotoChangeSet` removes a photo in: a committed row never names bytes that are not there.
+ *
+ * **Not on a consumed tile.** Its pictures went to the copy it became (#567 re-owns the rows), and a
+ * copy's photographs are that copy's to change; turning them from here would be editing a copy from
+ * a screen that says it is looking at a tile. A discarded tile turns like a waiting one — its
+ * pictures are still its own, and they are the record of what the parcel held.
+ */
+export async function turnTileSide(
+  ownerId: string,
+  tileId: string,
+  side: SheetSide,
+  turn: number
+): Promise<void> {
+  if (!isQuarterTurn(turn)) {
+    throw new ScanValidationError("A tile turns by quarter-turns only.");
+  }
+  const sheetSelect = {
+    select: { storageBackend: true, storageKey: true, mime: true, purgedAt: true },
+  } as const;
+  const tile = await prisma.scanTile.findUnique({
+    where: { id: tileId },
+    select: {
+      id: true,
+      collectionId: true,
+      state: true,
+      frontX: true,
+      frontY: true,
+      frontW: true,
+      frontH: true,
+      backX: true,
+      backY: true,
+      backW: true,
+      backH: true,
+      frontTurn: true,
+      backTurn: true,
+      frontSheet: sheetSelect,
+      backSheet: sheetSelect,
+      photos: {
+        where: { role: side },
+        select: { id: true, storageBackend: true, storageKey: true, mime: true },
+      },
+    },
+  });
+  if (!tile) throw new ScanAuthError("Tile not found or access denied.");
+  await assertScanCollectionOwner(ownerId, tile.collectionId);
+
+  if (tile.state === "consumed") {
+    throw new ScanValidationError(
+      "This tile has become a copy and its pictures went with it — turn them on the copy."
+    );
+  }
+  const current = asQuarterTurn(side === "front" ? tile.frontTurn : tile.backTurn);
+  if (current === turn) return;
+  const photo = tile.photos[0];
+  if (!photo) throw new ScanValidationError(`This tile has no ${side} image to turn.`);
+
+  const box =
+    side === "front"
+      ? boxOrNull(tile.frontX, tile.frontY, tile.frontW, tile.frontH)
+      : boxOrNull(tile.backX, tile.backY, tile.backW, tile.backH);
+  const sheet = side === "front" ? tile.frontSheet : tile.backSheet;
+
+  let crop: ProcessedImage;
+  if (box && sheet && !sheet.purgedAt) {
+    const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
+    [crop] = await cutSheet(original, [box], turn);
+  } else {
+    if (!isAcceptedMime(photo.mime)) {
+      throw new ScanValidationError("This tile's picture is not in a format that can be turned.");
+    }
+    const stored = await readStoredBytes(
+      photo.storageBackend,
+      variantKey(photo.storageKey, "full", photo.mime),
+      photo.mime
+    );
+    const turned = await turnImage(stored, photo.mime, turnBetween(current, turn) as 90 | 180 | 270);
+    const processed = await processImage(turned.buffer, turned.mime);
+    // The size before any downscale is still the box's, turned — the stored crop may itself have been
+    // capped, and it is the scan's own pixels the collage's relative scaling is about.
+    crop = box
+      ? { ...processed, original: turnedSize({ width: box.w, height: box.h }, turn) }
+      : processed;
+  }
+
+  const photoId = randomUUID();
+  const written = await writeCropBytes(tile.collectionId, [{ photoId, crop }]);
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Deleted first: `(tileId, role)` is unique, and the new row takes the same slot.
+      await tx.photo.delete({ where: { id: photo.id } });
+      await tx.photo.create({ data: photoData({ tileId, photoId, crop }, tile.collectionId, side) });
+      await tx.scanTile.update({
+        where: { id: tileId },
+        data: side === "front" ? { frontTurn: turn } : { backTurn: turn },
+      });
+    });
+  } catch (err) {
+    await rollbackBytes(written);
+    throw err;
+  }
+  await deletePhotoVariants(photo.storageBackend, photo.storageKey, photo.mime);
+}
+
+/** A stored object's whole bytes. The photo route streams; the only server-side reader of a photo is
+ * the swept-scan fallback above, which needs the picture in hand to turn it. */
+async function readStoredBytes(backend: string, key: string, mime: string): Promise<Buffer> {
+  // `work`: a read the server makes to transform the bytes, not one it hands a browser (#591).
+  const object = await getStorage(backend).get(key, mime, "work");
+  const chunks: Buffer[] = [];
+  for await (const chunk of object.stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
 }
 
 // ── Re-cutting and discarding ─────────────────────────────────────────────────────────────────
@@ -1404,6 +1563,10 @@ export interface ScanTileData {
   backPhotoId: string | null;
   frontBox: Box | null;
   backBox: Box | null;
+  /** How far each side is turned to stand the right way up (#1006). The side's photo is already cut
+   * turned; the box is still the sheet's, and the viewer maps the one onto the other. */
+  frontTurn: QuarterTurn;
+  backTurn: QuarterTurn;
   note: string | null;
   /** The copy a `consumed` tile became (#567). Null on every other tile, and also on a consumed
    * one whose copy was deleted afterwards — the tile stays consumed either way, because its images
@@ -1468,6 +1631,25 @@ export interface ScanTileData {
     issueId: string | null;
     collectionAreaId: string | null;
     conditionAbbreviation: string;
+    /**
+     * **Every** stamp the piece carries, in the collector's order (#750, ADR-0044) — the leading one
+     * included, and exactly one entry for an ordinary copy.
+     *
+     * Read here for the two shortcuts that answer the identification again: *Identify again* opens
+     * on what the copy is, and a repeat off the history (#757) identifies the next tile the way this
+     * one was. Both have to carry the list, or a cover is the one piece a shortcut quietly turns into
+     * a loose stamp. Each entry travels with what names it — the numbers with their vendor, the issue
+     * and its area — for the same reason the leading stamp's fields above do.
+     */
+    stamps: {
+      stampId: string;
+      quantity: number;
+      formatId: string | null;
+      stampName: string | null;
+      catalogNumbers: { catalogVendorId: string; number: string }[];
+      issueId: string | null;
+      collectionAreaId: string | null;
+    }[];
   } | null;
   /** What this piece **could be** (#607) — the shortlist a parked tile carries, in the order it was
    * built. Empty on every other tile: a shortlist is the working state of a piece still to be
@@ -1578,6 +1760,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         backY: true,
         backW: true,
         backH: true,
+        frontTurn: true,
+        backTurn: true,
         photos: { select: { id: true, role: true } },
         // The shortlist a parked tile carries (#607), with everything the *use the parent instead*
         // correction needs to decide itself and then name the parent: the variant flags
@@ -1641,6 +1825,27 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             // tile's own dialog shows them at full size (#584) — the strip only ever wanted the
             // front.
             photos: { where: { role: { in: ["front", "back"] } }, select: { id: true, role: true } },
+            // The stamps on the piece (#750), in `item-stamps.ts`' own order — see
+            // `ScanTileData.item.stamps`.
+            stamps: {
+              orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+              select: {
+                stampId: true,
+                quantity: true,
+                formatId: true,
+                stamp: {
+                  select: {
+                    name: true,
+                    catalogNumbers: { select: { catalogVendorId: true, number: true } },
+                    issueMemberships: {
+                      orderBy: { issueId: "asc" },
+                      take: 1,
+                      select: { issue: { select: { id: true, collectionAreaId: true } } },
+                    },
+                  },
+                },
+              },
+            },
             condition: { select: { abbreviation: true } },
             stamp: {
               select: {
@@ -1714,6 +1919,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       backPhotoId: t.photos.find((p) => p.role === "back")?.id ?? null,
       frontBox: boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH),
       backBox: boxOrNull(t.backX, t.backY, t.backW, t.backH),
+      frontTurn: asQuarterTurn(t.frontTurn),
+      backTurn: asQuarterTurn(t.backTurn),
       note: t.note,
       candidates: t.candidates.map((c) => toTileCandidate(c.stamp)),
       item: t.item
@@ -1741,6 +1948,18 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             issueId: t.item.stamp.issueMemberships[0]?.issue.id ?? null,
             collectionAreaId: t.item.stamp.issueMemberships[0]?.issue.collectionAreaId ?? null,
             conditionAbbreviation: t.item.condition.abbreviation,
+            stamps: t.item.stamps.map((entry) => ({
+              stampId: entry.stampId,
+              quantity: entry.quantity,
+              formatId: entry.formatId,
+              stampName: entry.stamp.name,
+              catalogNumbers: entry.stamp.catalogNumbers.map((c) => ({
+                catalogVendorId: c.catalogVendorId,
+                number: c.number,
+              })),
+              issueId: entry.stamp.issueMemberships[0]?.issue.id ?? null,
+              collectionAreaId: entry.stamp.issueMemberships[0]?.issue.collectionAreaId ?? null,
+            })),
           }
         : null,
       // Only an order with an auction description can disagree with one. An order with no lines at
@@ -1877,13 +2096,19 @@ export async function renderSheetRegion(
     height: number;
   },
   box: Box,
-  renderWidth: number
+  renderWidth: number,
+  /** The tile's quarter-turn (#1006). The box stays the sheet's; the region is turned after it is
+   * taken, into the frame the tile is drawn in. */
+  turn: number = 0
 ): Promise<{ buffer: Buffer; mime: string }> {
   assertBoxesInSheet([box], sheet);
   if (!Number.isInteger(renderWidth) || renderWidth < 1) {
     throw new ScanValidationError("A render width must be a positive whole number of pixels.");
   }
+  if (!isQuarterTurn(turn)) {
+    throw new ScanValidationError("A region turns by quarter-turns only.");
+  }
   const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
-  const region = await extractSheetRegion(original, box, renderWidth);
+  const region = await extractSheetRegion(original, box, renderWidth, turn);
   return { buffer: region.buffer, mime: region.mime };
 }

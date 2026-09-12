@@ -13,6 +13,7 @@ import {
   type ProcessedVariant,
 } from "./process";
 import type { Box } from "../scan-boxes";
+import { isSideways, type QuarterTurn } from "../tile-turn";
 
 /**
  * Scan sheet handling (#566, ADR-0033) — the one place in the image pipeline where the **order** is
@@ -128,10 +129,15 @@ export async function prepareSheet(
  *
  * Returns one `ProcessedImage` per box, in the order given — the caller has already put them in
  * reading order and pairs its own bookkeeping to that order.
+ *
+ * `turn` stands every crop the right way up (#1006) — the tile's stored quarter-turn, applied **as it
+ * is cut** and in the same pipeline, so a turned tile costs no second decode and no second encode.
+ * The box stays in the sheet's own frame: it is the crop that turns, never the coordinates.
  */
 export async function cutSheet(
   original: Buffer,
-  boxes: readonly Box[]
+  boxes: readonly Box[],
+  turn: QuarterTurn = 0
 ): Promise<ProcessedImage[]> {
   if (boxes.length === 0) return [];
 
@@ -149,9 +155,11 @@ export async function cutSheet(
     // Encoded back to the source format and handed to `processImage` as if it had been uploaded on
     // its own. The extra decode is on an ~800 px crop and costs nothing next to the guarantee that
     // a tile is processed by exactly the code every other photo is.
-    const cropped = await base
-      .clone()
-      .extract({ left: b.x, top: b.y, width: b.w, height: b.h })
+    const extracted = base.clone().extract({ left: b.x, top: b.y, width: b.w, height: b.h });
+    // `sharp` takes an explicit angle after the EXIF `.rotate()` above and an `extract`, and applies
+    // them in that order — the orientation normalised, the box taken in the sheet's frame, the crop
+    // then turned.
+    const cropped = await (turn === 0 ? extracted : extracted.rotate(turn))
       .toFormat(formatFor(mime))
       .toBuffer();
     crops.push(await processImage(cropped, mime));
@@ -174,11 +182,16 @@ export async function cutSheet(
  * `.rotate()`, so a region and a crop of the same box are the same pixels. The one difference is
  * that this one **is** resized — to the pixels the screen has and no more, since the point is what
  * the collector can see, not what the file holds.
+ *
+ * `turn` is the tile's quarter-turn (#1006): the box is still the sheet's, and the region is turned
+ * after it is taken so it lands in the frame the viewer draws the tile in. `renderWidth` is the width
+ * of the **turned** region, which is the width the screen has room for.
  */
 export async function extractSheetRegion(
   original: Buffer,
   box: Box,
-  renderWidth: number
+  renderWidth: number,
+  turn: QuarterTurn = 0
 ): Promise<{ buffer: Buffer; mime: AcceptedMime; width: number; height: number }> {
   const base = sharp(original, { failOn: "error" }).rotate();
   const meta = await base.metadata();
@@ -189,9 +202,21 @@ export async function extractSheetRegion(
     );
   }
 
-  const out = await base
-    .extract({ left: box.x, top: box.y, width: box.w, height: box.h })
-    .resize(Math.min(renderWidth, box.w), null, { withoutEnlargement: true })
+  const extracted = base.extract({ left: box.x, top: box.y, width: box.w, height: box.h });
+  const turnedWidth = isSideways(turn) ? box.h : box.w;
+  // The turn is taken in a pipeline of its own and handed on raw. With a `resize` in the same
+  // pipeline `sharp` does not apply an explicit angle after the extract — the region came back
+  // unturned, and at the size of the box rather than of the picture drawn — so the two are kept
+  // apart rather than trusted to an ordering the cut (which never resizes) does not exercise.
+  let sized = extracted;
+  if (turn !== 0) {
+    const turned = await extracted.rotate(turn).raw().toBuffer({ resolveWithObject: true });
+    sized = sharp(turned.data, {
+      raw: { width: turned.info.width, height: turned.info.height, channels: turned.info.channels },
+    });
+  }
+  const out = await sized
+    .resize(Math.min(renderWidth, turnedWidth), null, { withoutEnlargement: true })
     .toFormat(formatFor(mime))
     .toBuffer({ resolveWithObject: true });
 

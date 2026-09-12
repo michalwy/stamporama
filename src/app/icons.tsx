@@ -193,6 +193,11 @@ const GLYPHS = {
   refresh: RotateCw,
   /** Puts a state back the way it was: reopen a lot, bring a disposed copy back. */
   restore: RotateCcw,
+  /** A picture turned a quarter to the left / right, to stand it the right way up (#1006). The same
+   *  two glyphs as `restore` and `refresh`, because a turn *is* the arrow going round — and never on
+   *  the same surface as either of them. */
+  turnLeft: RotateCcw,
+  turnRight: RotateCw,
   /** Steps a lifecycle *backwards* — an offer back to preparing. */
   revert: Undo2,
   /** Goes to this thing's own screen, inside the app. */

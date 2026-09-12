@@ -1,5 +1,6 @@
 import type { CatalogLabelSubject } from "./area-vendor";
 import type { ScanBatchData, ScanTileData } from "./scan-sheets";
+import { describesMoreThanTheStamp } from "./item-stamp-entries";
 
 /**
  * The identifications already made on a scans screen (#757) — the last few **distinct** ones,
@@ -35,6 +36,44 @@ export interface IdentifyHistoryAnswers {
   locationRef: string;
   disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean };
   lotId: string;
+  /**
+   * Every stamp the piece carries, the leading one first (#750) — or **empty** for a piece that is
+   * simply the stamp, which is nearly all of them.
+   *
+   * Empty rather than a list of one, because one entry of quantity 1 with no format is not something
+   * the collector described: it is what every ordinary copy carries. So a repeat of a loose stamp
+   * stays exactly the repeat it was, and only a cover brings its list along.
+   */
+  stamps: CarriedStampAnswer[];
+}
+
+/** One stamp on a piece, as the identification answers it (#750): what the stamp editor holds, plus
+ * what names the stamp — the label is built on the client, where the vendor maps are. */
+export interface CarriedStampAnswer {
+  stampId: string;
+  quantity: number;
+  /** The component's format, `""` for a single — the form's own blank, as `formatId` above. */
+  formatId: string;
+  subject: CatalogLabelSubject;
+}
+
+/** The stamps a copy carries, as identification answers — empty for a copy that is just its stamp.
+ * Shared by the history below and by *Identify again*, which opens on the same answers. */
+export function carriedStampAnswers(
+  item: Pick<NonNullable<ScanTileData["item"]>, "stamps">
+): CarriedStampAnswer[] {
+  if (!describesMoreThanTheStamp(item.stamps)) return [];
+  return item.stamps.map((entry) => ({
+    stampId: entry.stampId,
+    quantity: entry.quantity,
+    formatId: entry.formatId ?? "",
+    subject: {
+      areaId: entry.collectionAreaId,
+      issueId: entry.issueId,
+      catalogNumbers: entry.catalogNumbers,
+      name: entry.stampName,
+    },
+  }));
 }
 
 /** One row of the history: the picture, what is needed to name the decision, and the decision
@@ -96,6 +135,7 @@ function entryOf(tile: ScanTileData): IdentifyHistoryEntry | null {
         forTrade: item.forTrade,
       },
       lotId: item.lotId ?? "",
+      stamps: carriedStampAnswers(item),
     },
   };
 }
@@ -115,8 +155,11 @@ function entryOf(tile: ScanTileData): IdentifyHistoryEntry | null {
  * collector last decided was correct for this card.
  */
 function offerKey(entry: IdentifyHistoryEntry): string {
-  const { stampId, conditionId, formatId } = entry.answers;
-  return `${stampId}|${conditionId}|${formatId}`;
+  const { stampId, conditionId, formatId, stamps } = entry.answers;
+  // …and the stamps on the piece (#750), which the row also draws: a cover franked with Mi 200 and
+  // Mi 201 and a loose Mi 200 lead with the same stamp and are two different things to press.
+  const carried = stamps.map((s) => `${s.stampId}:${s.quantity}:${s.formatId}`).join(",");
+  return `${stampId}|${conditionId}|${formatId}|${carried}`;
 }
 
 /**

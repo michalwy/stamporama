@@ -13,8 +13,10 @@ import {
   MAX_UPLOAD_BYTES,
   isAcceptedMime,
   processImage,
+  turnImage,
   UnsupportedImageError,
 } from "./photos/process";
+import { asQuarterTurn, isSideways } from "./tile-turn";
 import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 
 // Server-side photo domain for inventory copies (#112) and catalog stamps (#137, ADR-0011).
@@ -97,6 +99,11 @@ export interface PhotoChangeSet {
     role: PhotoRole;
     title: string | null;
     sortOrder: number;
+    /** A quarter-turn clockwise to stand the picture the right way up as it is saved (#1006) —
+     * 0/90/180/270, absent meaning 0. Applied to the **bytes**: an uploaded photo addresses nothing
+     * outside itself, so no reader has to learn a transform (a scan tile is the other case, and is
+     * turned where it is cut). */
+    turn?: number;
   }[];
   update: {
     photoId: string;
@@ -380,23 +387,61 @@ async function applyPhotoChangeSetForOwner(
   const prepared = changeSet.add.map((a) => {
     const upload = uploadById.get(a.uploadId)!;
     const photoId = randomUUID();
+    const turn = asQuarterTurn(a.turn);
+    const sideways = isSideways(turn);
     return {
       add: a,
       upload,
       photoId,
       role: normalizeRole(a.role),
       toPrefix: permanentPrefix(collectionId, photoId),
+      turn,
+      // What the row records. The staged figures, swapped for a picture laid on its side — and
+      // measured off the turned bytes once they exist, which is what the loop below writes back.
+      width: sideways ? upload.height : upload.width,
+      height: sideways ? upload.width : upload.height,
+      originalWidth: sideways ? upload.originalHeight : upload.originalWidth,
+      originalHeight: sideways ? upload.originalWidth : upload.originalHeight,
+      sizeBytes: upload.sizeBytes,
     };
   });
 
   for (const p of prepared) {
     const storage = getStorage(p.upload.storageBackend);
-    for (const v of ["full", "thumb"] as PhotoVariant[]) {
-      await storage.move(
-        variantKey(p.upload.storageKey, v, p.upload.mime),
-        variantKey(p.toPrefix, v, p.upload.mime)
-      );
+    if (p.turn === 0) {
+      for (const v of ["full", "thumb"] as PhotoVariant[]) {
+        await storage.move(
+          variantKey(p.upload.storageKey, v, p.upload.mime),
+          variantKey(p.toPrefix, v, p.upload.mime)
+        );
+      }
+      continue;
     }
+    // A sideways photo put right as it is saved (#1006): both derivatives turned and written under
+    // the permanent prefix, the staged ones then dropped. Turned **here** rather than when staged,
+    // because the editor lets the collector turn it back and forth before Save, and a turn per
+    // press would re-encode the picture once per press. The new row's id is new, so no browser holds
+    // a sideways copy of it under that URL.
+    if (!isAcceptedMime(p.upload.mime)) {
+      throw new PhotoValidationError("This photo is not in a format that can be turned.");
+    }
+    for (const v of ["full", "thumb"] as PhotoVariant[]) {
+      const object = await storage.get(
+        variantKey(p.upload.storageKey, v, p.upload.mime),
+        p.upload.mime,
+        "work"
+      );
+      const chunks: Buffer[] = [];
+      for await (const chunk of object.stream) chunks.push(Buffer.from(chunk));
+      const turned = await turnImage(Buffer.concat(chunks), p.upload.mime, p.turn);
+      await storage.put(variantKey(p.toPrefix, v, turned.mime), turned.buffer, turned.mime, "delivery");
+      if (v === "full") {
+        p.width = turned.width;
+        p.height = turned.height;
+        p.sizeBytes = turned.buffer.byteLength;
+      }
+    }
+    await deleteVariants(storage.backend, p.upload.storageKey, p.upload.mime);
   }
 
   // Bytes of removed photos, deleted after a successful commit.
@@ -443,11 +488,11 @@ async function applyPhotoChangeSetForOwner(
           storageBackend: p.upload.storageBackend,
           storageKey: p.toPrefix,
           mime: p.upload.mime,
-          width: p.upload.width,
-          height: p.upload.height,
-          originalWidth: p.upload.originalWidth,
-          originalHeight: p.upload.originalHeight,
-          sizeBytes: p.upload.sizeBytes,
+          width: p.width,
+          height: p.height,
+          originalWidth: p.originalWidth,
+          originalHeight: p.originalHeight,
+          sizeBytes: p.sizeBytes,
           sortOrder: p.add.sortOrder,
         },
       });

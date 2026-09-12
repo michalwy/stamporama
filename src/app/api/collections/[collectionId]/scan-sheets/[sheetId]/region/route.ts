@@ -57,7 +57,18 @@ export async function GET(
   // Clamped rather than merely validated: `renderWidth` is the one number a client could use to ask
   // the server to encode something enormous, and the ceiling is the pipeline's own.
   const renderWidth = Math.min(intParam(q.get("rw")) ?? 0, FULL_MAX_EDGE);
-  if (box.x == null || box.y == null || box.w == null || box.h == null || renderWidth < 1) {
+  // The tile's quarter-turn (#1006), absent for every unturned picture and for the cut editor, which
+  // shows a whole card the way it was scanned. Part of the URL, so a turned and an unturned crop of
+  // the same box are two cache entries rather than one picture served for both.
+  const turn = q.has("t") ? intParam(q.get("t")) : 0;
+  if (
+    box.x == null ||
+    box.y == null ||
+    box.w == null ||
+    box.h == null ||
+    renderWidth < 1 ||
+    turn == null
+  ) {
     return NextResponse.json({ error: "Invalid region" }, { status: 400 });
   }
 
@@ -65,7 +76,8 @@ export async function GET(
     const region = await renderSheetRegion(
       sheet,
       { x: box.x, y: box.y, w: box.w, h: box.h },
-      renderWidth
+      renderWidth,
+      turn
     );
     return new Response(new Uint8Array(region.buffer), {
       status: 200,
