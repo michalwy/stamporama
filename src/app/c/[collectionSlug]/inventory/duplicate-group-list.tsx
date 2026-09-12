@@ -7,6 +7,8 @@ import type { CopyGroupAxes } from "@/lib/copy-groups";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { DuplicateGroupRow } from "./duplicate-group-row";
+import { MultiStampGroupRow } from "./multi-stamp-group-row";
+import type { MultiStampGroupRow as MultiStampGroupRowData } from "@/lib/multi-stamp";
 import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
 import type { GroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
@@ -31,6 +33,7 @@ export function DuplicateGroupList({
   expansion,
   selection,
   rowActions,
+  multiStampGroup,
 }: {
   collectionId: string;
   groups: CopyGroupRow[];
@@ -49,6 +52,9 @@ export function DuplicateGroupList({
   /** The member rows' own `⋮` menu (#125/#516), threaded down to every group's copies: a
    * grouping decides what a row is listed *under*, never what may be done to it. */
   rowActions?: CopyRowActions;
+  /** The multi-stamp bucket (#748), drawn after every duplicate group — none of which a carrier can
+   *  belong to — once the last page has said it exists. */
+  multiStampGroup?: MultiStampGroupRowData | null;
 }) {
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -68,7 +74,7 @@ export function DuplicateGroupList({
             baseCurrency={baseCurrency}
             primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
             vendorMap={vendorMapFor(areaId, group.issueId)}
-            isLast={idx === groups.length - 1 && !hasNextPage}
+            isLast={idx === groups.length - 1 && !hasNextPage && !multiStampGroup}
             open={expansion.isExpanded(group.key)}
             onToggle={() => expansion.toggle(group.key)}
             selection={selection}
@@ -76,6 +82,21 @@ export function DuplicateGroupList({
           />
         );
       })}
+      {multiStampGroup && (
+        <MultiStampGroupRow
+          collectionId={collectionId}
+          group={multiStampGroup}
+          baseFilters={baseFilters}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          isLast={!hasNextPage}
+          open={expansion.isExpanded(multiStampGroup.key)}
+          onToggle={() => expansion.toggle(multiStampGroup.key)}
+          selection={selection}
+          rowActions={rowActions}
+        />
+      )}
       <InfiniteScrollSentinel
         onLoadMore={onLoadMore}
         hasMore={hasNextPage}

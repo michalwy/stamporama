@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getHoldingsValuation } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
+import { asMultiStampFilter } from "@/lib/multi-stamp";
 
 /** Holdings valuation total over every copy matching the current filters (whole set,
  * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
@@ -50,6 +51,8 @@ export async function GET(
       // Match the list: copies that have left — sold (#207) or traded away (#644) — are excluded
       // unless includeGone=true, so the total tracks exactly what is shown.
       excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
+      // The multi-stamp filter (#748), so the total sums the carriers exactly when the list shows them.
+      multiStamp: asMultiStampFilter(sp.get("multiStamp")),
     });
     return NextResponse.json(total);
   } catch {

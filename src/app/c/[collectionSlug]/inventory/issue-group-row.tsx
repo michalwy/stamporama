@@ -306,5 +306,7 @@ export function issueGroupMemberFilters(
   group: IssueGroupRowData,
   baseFilters: InventoryItemFilters
 ): InventoryItemFilters {
-  return { ...baseFilters, issueId: group.issueId ?? NO_ISSUE };
+  // `exclude` for the reason the duplicate groups carry it (#748): the carriers were counted into a
+  // bucket of their own, and a cover whose leading stamp is in this series is not one of its rows.
+  return { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" };
 }

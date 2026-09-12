@@ -24,6 +24,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
+import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -33,6 +34,8 @@ interface InventoryItemsPage {
 interface CopyGroupsPage {
   groups: CopyGroupRow[];
   nextCursor: string | null;
+  /** The multi-stamp bucket (#748) — present on the last page only, when the filter holds a carrier. */
+  multiStampGroup: MultiStampGroupRow | null;
 }
 
 interface LocationGroupsPage {
@@ -43,6 +46,8 @@ interface LocationGroupsPage {
 interface IssueGroupsPage {
   groups: IssueGroupRow[];
   nextCursor: string | null;
+  /** The multi-stamp bucket (#748), after `No issue` — present on the last page only. */
+  multiStampGroup: MultiStampGroupRow | null;
 }
 
 export interface InventoryItemFilters extends TagFilterOpts {
@@ -103,6 +108,10 @@ export interface InventoryItemFilters extends TagFilterOpts {
   /** Show copies no longer held (#394/#395) — lost, damaged in storage, discarded. Hidden by
    * default, since the list answers "what do I have". */
   includeDisposed?: boolean;
+  /** For or against the multi-stamp copies (#748): `only` the carriers, `exclude` them, absent both.
+   *  A grouped list's multi-stamp bucket addresses its own members with `only`, and every other
+   *  group of a grouping that sets carriers apart with `exclude`. */
+  multiStamp?: MultiStampFilter;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -136,6 +145,8 @@ export interface InventoryYearFacetFilters extends TagFilterOpts {
   includeGone?: boolean;
   /** Include copies no longer held in the facet counts (#395); hidden by default. */
   includeDisposed?: boolean;
+  /** The multi-stamp filter (#748). */
+  multiStamp?: MultiStampFilter;
 }
 
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
@@ -208,6 +219,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("deliveryStates", filters.deliveryStates.join(","));
   if (filters.includeGone) params.set("includeGone", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
+  if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
   appendTagFilterParams(params, filters);
   return params;
 }
@@ -405,6 +417,7 @@ export function useHoldingsValuation(
       includeGone: filters.includeGone,
       tagIds: filters.tagIds,
       tagMode: filters.tagMode,
+      multiStamp: filters.multiStamp,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -435,6 +448,7 @@ export function useHoldingsValuation(
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeGone) params.set("includeGone", "true");
+      if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
@@ -484,6 +498,7 @@ export function useItemYears(
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.includeDisposed) params.set("includeDisposed", "true");
+      if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`

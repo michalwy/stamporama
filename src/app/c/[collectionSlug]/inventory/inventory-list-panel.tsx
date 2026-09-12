@@ -36,6 +36,7 @@ import {
   type SortOption,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { asMultiStampFilter, MULTI_STAMP_GROUP_KEY } from "@/lib/multi-stamp";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import {
@@ -216,6 +217,7 @@ const REMEMBERED_FILTER_KEYS = [
   "missingCatalogValue",
   "includeGone",
   "includeDisposed",
+  "multiStamp",
   ...DISPOSITION_FILTERS.map((f) => f.key),
 ] as const;
 
@@ -259,6 +261,9 @@ const FILTER_WIDTH = {
    *  rather than for its `All tags` default, which is much the shorter of the three. A single tag's
    *  own name is the collector's text and ellipsises. */
   tags: "10.5rem",
+  /** Sized for `Only several-stamp pieces`, the longest of its three options — a native `<select>`
+   *  takes its widest option's width anyway (#868), so this pins what it would have been. */
+  multiStamp: "12.5rem",
 } as const;
 
 /** What a `Tooltip` around a bar control needs to stop being the loose link: it renders an
@@ -434,6 +439,10 @@ export function InventoryListPanel({
   const includeGone = readFilterParam("includeGone") === "true";
   // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
   const includeDisposed = readFilterParam("includeDisposed") === "true";
+  // For or against the pieces carrying several stamps (#748; ADR-0044 §7). They live on this list
+  // rather than a screen of their own, so the list is where they are found — or set aside. Absent
+  // is both; an unrecognised value reads as absent rather than as a list that can never match.
+  const multiStamp = asMultiStampFilter(readFilterParam("multiStamp"));
   // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
   // changes *what the rows are*, not what is being looked at, and it is a way of working the
   // collector keeps. The modes answer different questions: what stock do I have in duplicate (#372),
@@ -559,10 +568,11 @@ export function InventoryListPanel({
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
+      multiStamp,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -589,8 +599,9 @@ export function InventoryListPanel({
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
+      multiStamp,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -683,6 +694,18 @@ export function InventoryListPanel({
     () => issueGroupsQuery.data?.pages.flatMap((p) => p.groups) ?? [],
     [issueGroupsQuery.data]
   );
+  // The multi-stamp bucket (#748) of whichever grouping sets the carriers apart — duplicates and
+  // issue, both of which would otherwise file a piece under its leading stamp. It rides on the last
+  // page, so it appears once the groups before it have all loaded, and only while that grouping is
+  // the one in force.
+  const multiStampGroup = useMemo(() => {
+    const pages = groupDuplicates
+      ? groupsQuery.data?.pages
+      : groupIssues
+        ? issueGroupsQuery.data?.pages
+        : undefined;
+    return pages?.find((p) => p.multiStampGroup)?.multiStampGroup ?? null;
+  }, [groupDuplicates, groupIssues, groupsQuery.data, issueGroupsQuery.data]);
   // The issues on screen, asked for in one go (#594). The issue-less group is left out: it is a
   // bucket of copies, not a set that can be complete.
   const issueGroupIds = useMemo(
@@ -709,8 +732,19 @@ export function InventoryListPanel({
           : groupIssues
             ? allIssueGroups
             : []
-      ).map((g) => g.key),
-    [groupDuplicates, locationGroupBy, groupIssues, allGroups, allLocationGroups, allIssueGroups]
+      )
+        .map((g) => g.key)
+        // The bucket is a group like any other to Expand all / Collapse all.
+        .concat(multiStampGroup ? [MULTI_STAMP_GROUP_KEY] : []),
+    [
+      groupDuplicates,
+      locationGroupBy,
+      groupIssues,
+      allGroups,
+      allLocationGroups,
+      allIssueGroups,
+      multiStampGroup,
+    ]
   );
   const groupExpansion = useGroupExpansion(groupKeys, groupMode);
 
@@ -978,11 +1012,11 @@ export function InventoryListPanel({
         ? issueGroupsQuery.isLoading
         : isLoading;
   const listEmpty = groupDuplicates
-    ? allGroups.length === 0
+    ? allGroups.length === 0 && !multiStampGroup
     : locationGroupBy
       ? allLocationGroups.length === 0
       : groupIssues
-        ? allIssueGroups.length === 0
+        ? allIssueGroups.length === 0 && !multiStampGroup
         : allCopies.length === 0;
 
   // **Every copy still held is selectable** (#682). It used to be the offer picker's own
@@ -1066,6 +1100,7 @@ export function InventoryListPanel({
     deliveryStates.length > 0 ||
     includeGone ||
     includeDisposed ||
+    !!multiStamp ||
     activeDispositions.size > 0;
 
   // The empty state asks a wider question — "is anything narrowing this list" — and the year is
@@ -1736,6 +1771,40 @@ export function InventoryListPanel({
                 </FilterSlot>
               )}
 
+              {/* Pieces carrying several stamps (#748; ADR-0044 §7) — covers, fragments, FDCs. They
+                  have no screen of their own, so this is how the list is narrowed to them or rid of
+                  them. **A one-of choice**, so a native `<select>` on the bar rather than two ticks
+                  in *More filters*, which could be ticked together into a list that matches nothing.
+                  Beside the format filter because a carrier's type *is* a format (ADR-0044 §5), and
+                  always drawn: every collection can have a cover, whether or not it has one yet. */}
+              <Tooltip
+                style={NO_SHRINK}
+                content="A cover or piece carrying several stamps is a copy of none of them. Show both kinds of copy, only those pieces, or everything else."
+              >
+                <select
+                  value={multiStamp ?? ""}
+                  onChange={(e) => updateParams({ multiStamp: e.target.value })}
+                  /* Colour and border say the filter is on, never the weight (#868): a native select
+                     is measured in its widest option, and bold text would re-measure it on a pick. */
+                  style={{
+                    ...FILTER_CONTROL_STYLE,
+                    width: FILTER_WIDTH.multiStamp,
+                    ...(multiStamp
+                      ? {
+                          color: "var(--color-accent)",
+                          border: "1px solid var(--color-accent)",
+                          background: "var(--color-accent-soft)",
+                        }
+                      : null),
+                  }}
+                  aria-label="Filter pieces carrying several stamps"
+                >
+                  <option value="">Any number of stamps</option>
+                  <option value="only">Only several-stamp pieces</option>
+                  <option value="exclude">No several-stamp pieces</option>
+                </select>
+              </Tooltip>
+
               {/* The collector's own labels (#1182). The **copy's** tags — nothing is inherited
                   (#1181), so this never reaches the tags on the stamp a copy is linked to, which is
                   the one thing a reader will look for given that every other stamp-facing axis on
@@ -2069,7 +2138,7 @@ export function InventoryListPanel({
             </div>
           )}
 
-          {groupDuplicates && allGroups.length > 0 && (
+          {groupDuplicates && (allGroups.length > 0 || multiStampGroup) && (
             <div style={{ flex: 1 }}>
               <DuplicateGroupList
                 collectionId={collectionId}
@@ -2085,6 +2154,7 @@ export function InventoryListPanel({
                 expansion={groupExpansion}
                 selection={copySelection}
                 rowActions={rowActions}
+                multiStampGroup={multiStampGroup}
               />
             </div>
           )}
@@ -2109,7 +2179,7 @@ export function InventoryListPanel({
             </div>
           )}
 
-          {groupIssues && allIssueGroups.length > 0 && (
+          {groupIssues && (allIssueGroups.length > 0 || multiStampGroup) && (
             <div style={{ flex: 1 }}>
               <IssueGroupList
                 collectionId={collectionId}
@@ -2125,6 +2195,7 @@ export function InventoryListPanel({
                 selection={copySelection}
                 rowActions={rowActions}
                 completeness={issueGroupCompleteness}
+                multiStampGroup={multiStampGroup}
               />
             </div>
           )}

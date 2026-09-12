@@ -1,6 +1,7 @@
 import type { ItemListFiltersPaginated } from "@/lib/items";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { asMultiStampFilter } from "@/lib/multi-stamp";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -84,5 +85,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
     // Copies no longer held are hidden the same way (#395) — the list answers "what do I have".
     includeDisposed: boolParam(sp.get("includeDisposed")),
+    // For or against the multi-stamp copies (#748). An unrecognised value is no filter, so a stale
+    // link shows the list rather than an empty screen.
+    multiStamp: asMultiStampFilter(sp.get("multiStamp")),
   };
 }

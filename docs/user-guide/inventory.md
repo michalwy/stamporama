@@ -63,7 +63,7 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 
 Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
 the way you left it — condition, format, certificate, delivery state, location, the disposition
-filter and all four **More filters** switches, alongside the grouping mode and sort that were
+filter, the several-stamps filter and all four **More filters** switches, alongside the grouping mode and sort that were
 already remembered. Switching a filter off is remembered too, so
 clearing one clears it for next time. A link that names a filter still wins over what is remembered,
 so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
@@ -101,7 +101,7 @@ storage locations there is no location filter or filing grouping.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, certificate,
-location, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
+location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It is only there to click while something is actually
 filtering, but its place on the row is held either way, so the first filter you switch on does not
 shunt the rest of the bar sideways.
@@ -179,6 +179,10 @@ right, from *which copies* to *how they are shown*.
   format filter it appears only once your collection defines certificate statuses.
 - **Format** — see [Filtering the list by format](#filtering-the-list-by-format). It appears only
   once your collection defines formats.
+- **Several stamps** — *Any number of stamps* (the default), *Only several-stamp pieces* or *No
+  several-stamp pieces*: narrow the list to the [covers and other pieces carrying several
+  stamps](#covers-fragments-and-other-pieces-carrying-several-stamps), or set them aside. It is
+  always on the bar, whether or not you have entered such a piece yet.
 - **Tags** — show only copies carrying the [tags](tags.md) you tick. Inside its panel is a **Must
   carry every ticked tag** switch: off (the default) the list shows copies carrying *any* of the
   ticked tags, on it shows only the copies carrying *all* of them, and the closed control says which
@@ -231,6 +235,9 @@ and format would satisfy one.
 Holding a copy never closes a want, so on this list the chip is usually the **upgrade** signal: you
 have one, and you are still after a better one. A grouped row carries it too — a group is one stamp
 at one condition, so the answer covers every copy in it.
+
+A piece carrying **several stamps** never carries the chip, even when one of its stamps is wanted: it
+would satisfy none of those wants, and you do not hold one of those stamps by holding it.
 
 ## Copy value and holdings total
 
@@ -821,6 +828,23 @@ Everything else about a copy is untouched. It keeps its internal number, its sto
 cost basis and its photos; it can be offered, sold, traded and disposed of exactly like any other
 copy, and it stays on the Copies list.
 
+### Finding them on the Copies list
+
+There is no separate screen for these pieces: they are ordinary rows on the Copies list, with the
+same checkboxes, **⋮** menu and endless scrolling as every other copy. What sets the row apart:
+
+- a **Several stamps** chip, with the same explanation the copy's own page gives;
+- the **catalog number of every stamp on it**, in your order, each followed by its format and
+  quantity where they are not a plain single, once — never a count standing in for them;
+- the names of all its stamps as the row's title, and no issue date or series, since those belong to
+  one stamp rather than to the piece;
+- no [want marker](#the-want-marker).
+
+The **search box** finds a piece by any stamp it carries, not only the first: type the third number
+on a cover and the cover comes up. The **Several stamps** filter on the toolbar narrows the list to
+these pieces or leaves them out, and grouping by duplicates or by issue collects them into one
+**Several stamps** row at the end ([Grouping the list](#grouping-the-list)).
+
 Its own page shows the stamps it carries in your order, under **Stamps on this piece**, and a
 **Several stamps** chip beside the state chips says why the counts leave it out.
 
@@ -1192,6 +1216,12 @@ The copies inside an expanded group are **ordinary copy rows**, and they carry t
 menu — Edit, Add to offer, No longer held and the rest, exactly as they do with no grouping on. A
 grouping decides what a copy is listed *under*; it never changes what you can do to it.
 
+**Pieces carrying several stamps** are listed under none of their stamps. Grouped by duplicates or
+by issue, they are collected into one **Several stamps** row at the very end of the list — a cover
+franked with three stamps is not a duplicate of the first one, nor a copy of the first one's series.
+It opens, ticks and expands like every other group row. Grouped by location or ref they are filed
+exactly like any other copy, since where a piece is kept is a fact about the piece.
+
 ## Grouping duplicates
 
 When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
@@ -1206,7 +1236,8 @@ than one that needs a warning.
 
 Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
 never optional: Colnect refuses more than one offer for the same stamp in the same condition and
-expects a quantity offer instead, so a group mixing conditions could not be posted.
+expects a quantity offer instead, so a group mixing conditions could not be posted. A piece carrying
+several stamps is never a duplicate of anything: it goes in the **Several stamps** row at the end.
 
 Two further switches, inside the grouping dropdown, each add an axis to that rule:
 
@@ -1309,7 +1340,8 @@ never split in half by scrolling.
 
 A stamp can belong to more than one issue. A copy is counted under **one** of them — the first issue
 its stamp was added to — so the counts add up to the list exactly rather than reporting one copy
-under two series.
+under two series. A piece carrying **several stamps** is counted under none of them, in the
+**Several stamps** row after *no issue*; with it, the counts still add up to the list.
 
 ### How complete each set is
 
@@ -1336,7 +1368,8 @@ A copy filed under a **variant** of a stamp on the checklist counts for that sta
 the same rule the issue's own [completeness grid](detail-pages.md#completeness) states in full.
 
 An issue whose checklists you hold nothing of shows no chips, and so does the **no issue** row: a
-bucket of copies is not a set that can be complete.
+bucket of copies is not a set that can be complete. A piece carrying several stamps ticks none of
+them off here either.
 
 ## Seeing what a stamp is worth
 
