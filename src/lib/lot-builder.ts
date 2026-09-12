@@ -20,6 +20,7 @@ import {
   checklistCoverage,
   duplicateKey,
   planLot,
+  type CoverageCopy,
   type LotCandidate,
   type LotChecklist,
   type LotPlan,
@@ -97,6 +98,27 @@ const POOL_ROW_SELECT = {
  * The per-copy catalog-value ceiling is **not** here: a catalog value is computed and never stored,
  * so it cannot be a `where`. It belongs to the rules, after the valuation pass (#758).
  */
+/**
+ * *Not offered on that platform yet*, as the lot reads it: `notOfferedPlatformId`'s four clauses,
+ * narrowed to copies in hand. Exported because the series-recombination screen (#1210) asks for
+ * exactly this reading of "available", and a second spelling of it would be a second place for the
+ * two screens to disagree about which copies are free.
+ */
+export function listableOnPlatformFilters(platformId: string): ItemListFiltersPaginated {
+  return {
+    notOfferedPlatformId: platformId,
+    // **In hand, and only in hand.** The shared `notOfferedPlatformId` branch keeps the in-flight
+    // states on purpose — "a copy still on its way is exactly what one plans a listing for" — and
+    // that is right for the Copies list's worklist, where the answer is a listing to *write*. A bulk
+    // lot is not that: it is a hundred pieces to count into one envelope, and a copy that has not
+    // arrived cannot be counted into anything. `LISTABLE_DELIVERY_STATES` is the list form of the
+    // very predicate the offer enforces before it will go live (#188), so the two cannot drift and a
+    // lot is never built that could not be posted. Narrowed here rather than in the shared clause,
+    // which every other caller still wants as it is.
+    deliveryStates: [...LISTABLE_DELIVERY_STATES],
+  };
+}
+
 async function poolFilters(
   collectionId: string,
   criteria: LotBuilderCriteria
@@ -111,16 +133,7 @@ async function poolFilters(
       : [criteria.areaId]
     : undefined;
   return {
-    notOfferedPlatformId: criteria.platformId,
-    // **In hand, and only in hand.** The shared `notOfferedPlatformId` branch keeps the in-flight
-    // states on purpose — "a copy still on its way is exactly what one plans a listing for" — and
-    // that is right for the Copies list's worklist, where the answer is a listing to *write*. A bulk
-    // lot is not that: it is a hundred pieces to count into one envelope, and a copy that has not
-    // arrived cannot be counted into anything. `LISTABLE_DELIVERY_STATES` is the list form of the
-    // very predicate the offer enforces before it will go live (#188), so the two cannot drift and a
-    // lot is never built that could not be posted. Narrowed here rather than in the shared clause,
-    // which every other caller still wants as it is.
-    deliveryStates: [...LISTABLE_DELIVERY_STATES],
+    ...listableOnPlatformFilters(criteria.platformId),
     ...(areaIds ? { areaIds } : {}),
     ...(criteria.yearFrom !== null ? { yearFrom: criteria.yearFrom } : {}),
     ...(criteria.yearTo !== null ? { yearTo: criteria.yearTo } : {}),
@@ -186,10 +199,13 @@ async function readLotPool(
  * checklist that names `226` (#661) and would otherwise pull in no checklist at all. Each one is
  * then loaded with its full membership: whether it is complete is measured over the pool, and a
  * membership read through the pool's own stamps could only ever look complete.
+ *
+ * Members come back in the checklist's own order (#764), so a caller drawing the slots draws them as
+ * the set reads. Exported for the series-recombination screen (#1210), whose pool is wider.
  */
-async function loadPoolChecklists(
+export async function loadPoolChecklists(
   collectionId: string,
-  candidates: readonly LotCandidate[]
+  candidates: readonly CoverageCopy[]
 ): Promise<LotChecklist[]> {
   const chainIds = new Set<string>();
   for (const candidate of candidates) for (const id of candidate.variantChain) chainIds.add(id);
@@ -205,6 +221,7 @@ async function loadPoolChecklists(
   const members = await prisma.checklistStamp.findMany({
     where: { checklistId: { in: touched.map((t) => t.checklistId) } },
     select: { checklistId: true, stampId: true },
+    orderBy: [{ checklistId: "asc" }, { sortOrder: "asc" }],
   });
   const byChecklist = new Map<string, string[]>();
   for (const row of members) {

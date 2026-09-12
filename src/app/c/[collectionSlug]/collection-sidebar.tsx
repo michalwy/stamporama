@@ -578,6 +578,7 @@ export function CollectionSidebar({
             // lit. Only the branches that became entries of their own are yielded.
             active={isActive(`${base}/offers`, false, [
               `${base}/offers/lot-builder`,
+              `${base}/offers/series-from-singles`,
               `${base}/offers/listing`,
               `${base}/offers/allegro`,
               `${base}/offers/delcampe`,
@@ -587,6 +588,15 @@ export function CollectionSidebar({
               href={`${base}/offers/lot-builder`}
               label="Lot Builder"
               active={isActive(`${base}/offers/lot-builder`)}
+              nested
+            />
+            {/* The other way a listing gets composed (#1210): series that the singles already up on
+                a platform, plus the copies not offered there yet, could now go out whole. Beside the
+                lot builder and ahead of Bulk Listing, since both compose and Bulk Listing posts. */}
+            <NavItem
+              href={`${base}/offers/series-from-singles`}
+              label="Series from Singles"
+              active={isActive(`${base}/offers/series-from-singles`)}
               nested
             />
             <NavItem

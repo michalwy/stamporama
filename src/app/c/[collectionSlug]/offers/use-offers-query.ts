@@ -22,6 +22,7 @@ import type { OfferState } from "@/lib/offer-rules";
 import type { LotPoolSummary, LotProposal } from "@/lib/lot-builder";
 import { lotBuilderSearchParams, type LotBuilderRequest } from "@/lib/lot-builder-criteria";
 import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
+import type { SeriesRecombinationResult } from "@/lib/series-recombination";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -504,6 +505,24 @@ export function useLotProposal(collectionId: string, request: LotBuilderRequest)
     // The pool moves under an open wizard — a copy sold, listed elsewhere, promised in a trade — and
     // the commit re-plans regardless (#717). Re-asking on focus is how the screen stops showing a
     // lot the commit would no longer build.
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** The series one platform's single offers plus its available copies could complete (#1210). In the
+ *  offers namespace, so anything that changes an offer or a copy's availability re-asks it. */
+export function useSeriesFromSingles(collectionId: string, platformId: string) {
+  return useQuery<SeriesRecombinationResult>({
+    queryKey: ["offers", collectionId, "series-from-singles", platformId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/series-from-singles?platformId=${encodeURIComponent(platformId)}`
+      );
+      if (!res.ok) throw new Error("Failed to read the series");
+      return res.json();
+    },
+    enabled: !!platformId,
+    // Offers and copies move while the screen sits open in another tab.
     refetchOnWindowFocus: true,
   });
 }

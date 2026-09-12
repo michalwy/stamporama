@@ -30,7 +30,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
   Purchases, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
   and selling alike). A subject read through more than one screen carries the extra ones indented
   under it: **Stamps**, **Inventory** and **Offers** are themselves the list you open every day,
-  with **Variant prices**, **Card scans** and the **Lot builder** / **Bulk listing** beneath them,
+  with **Variant prices**, **Card scans** and the **Lot builder** / **Series from singles** / **Bulk listing** beneath them,
   while **Auctions** and **Marketplaces** are names over their entries rather than screens of their
   own. Each section carries a quiet colour of its own — its heading, the icons of its entries, the
   line beside its indented ones, the entry names themselves in a quieter shade of it, a hairline
