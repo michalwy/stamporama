@@ -166,23 +166,36 @@ figure and no `≈` beside it. When it is in another currency and **no rate has 
 row says so instead of guessing: the total in the order's own currency is still exact, and there is
 simply no base-currency answer to give.
 
+The order total is drawn **larger than anything else on the bar**, because it is the one figure you
+should be able to read without reading anything else.
+
 Open the bar with **More** and the total splits into **Price** and **Shipping**, each with the same
-base-currency equivalent. *Price* covers every priced line of the order, so it includes any
-non-inventory **expenses**, and the row says how many there are when there are some.
+base-currency equivalent. They are **indented under the total**, behind a rule, because they are its
+breakdown rather than two further totals: they add up to the figure above them. *Price* covers every
+priced line of the order, so it includes any non-inventory **expenses**, and the row says how many
+there are when there are some.
 
 Each lot's own bar answers the same question for that lot: its **lot total** is its price plus its
 share of the order's shipping — the pool that gets split across its copies when you close it. The
 shipping row names the whole charge the share came out of, because a lot did not incur postage of
 its own: the order's shipping is spread across all its lines by price.
 
-**Catalog value vs. cost.** Under those rows, the same bar shows the **catalog value / purchase
-cost** figures the [inventory holdings summary](inventory.md) does — the summed catalog value (in
+**Catalog value vs. cost.** Under those rows, ruled off and labelled, the same bar shows the
+**catalog value / purchase cost** figures the [inventory holdings summary](inventory.md) does — the summed catalog value (in
 your base currency, using each copy's default display condition) next to what was actually paid, so
 you can compare paid-against-catalog at a glance. Both call out copies that don't fully count:
 *unpriced* copies (no catalog price for their condition) and *pending* cost (a copy whose lot is
 still open, so its cost-basis is not frozen yet). Note that **Purchase cost** is not the order
 total: it is the part of the order's money that has been frozen onto individual copies so far. The
 order-level bar totals every copy across all lots; each lot's bar totals just that lot.
+
+**The figures are grouped by what kind of thing they are.** What the order **cost** leads — the
+total, with price and shipping indented under it. Under a rule, *What it's worth* holds the catalog
+and market value; under another, *Cost accounted to copies* holds the purchase cost and the
+write-off; and where anything has sold, *What it has returned* holds the sale figures. Each figure
+still carries its own currency code, so grouping never leaves you guessing which currency a figure
+is stated in — the order is in its transaction currency with a base-currency approximation beside
+it, while the valuations are in your base currency outright.
 
 **A figure with nothing behind it says so instead of showing `0.00`** — see
 [the holdings summary](inventory.md#copy-value-and-holdings-total) for the rule, which is the same
