@@ -103,6 +103,7 @@ import {
   RotateCcw,
   RotateCw,
   Ruler,
+  RulerDimensionLine,
   Scale,
   ScanLine,
   Search,
@@ -217,6 +218,9 @@ const GLYPHS = {
   merge: Merge,
   /** Re-derives a declared range from what is inside it. */
   range: Ruler,
+  /** Puts a saved width and height onto stamps (#806; ADR-0048). Not `range` or `measure`, which
+   *  share the plain ruler: this names a figure already known, not one being taken. */
+  sizePreset: RulerDimensionLine,
   /** Hand-sorted order, and the way back to the derived one. */
   reorder: ArrowUpDown,
   /** Copies a figure into the field above it. */

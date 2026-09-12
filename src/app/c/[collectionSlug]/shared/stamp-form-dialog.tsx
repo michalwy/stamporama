@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,6 +35,11 @@ import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { computeIssueRangeExtension } from "@/lib/catalog-number";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
 import { SizeProposalScope, useSizeProposals, type SizeProposal } from "./measured-size";
+import { StampSizePresetPicker } from "./stamp-size-preset-picker";
+import { useInvalidateStampSizePresets } from "./use-stamp-size-presets";
+import { sizePairFromFields, stampSizePresetPair } from "@/lib/stamp-size-preset-rules";
+import { useToast } from "@/app/toast-provider";
+import { useParams } from "next/navigation";
 import { Tooltip } from "./tooltip";
 import { formatSizeMm, formatStampSize } from "@/lib/stamp-size";
 import { Segmented } from "./segmented";
@@ -219,6 +224,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [translations, setTranslations] = useState<TranslationValues | null>(null);
   // While the translations dialog is up, this dialog must not close on Esc / backdrop click.
   const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
+  // The size preset picker (#805) is a popover with its own Escape, not a layer (#361) — while it is
+  // open, this dialog steps out of the stack so one Escape closes the list and not the stamp.
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false);
 
   const vendors = Array.from(
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
@@ -720,7 +728,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
     <DialogShell
       title={title}
       onClose={onClose}
-      dismissable={!nestedDialogOpen}
+      dismissable={!nestedDialogOpen && !presetPickerOpen}
       minHeight="22rem"
       // Creating a stamp is the deepest point of identifying a piece, and the point the collector is
       // furthest from where they started — so the piece comes with it (#592). Absent for every
@@ -1233,12 +1241,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
           </div>
 
           <StampAttributesTab
+            collectionId={collectionId}
             shown={shownTab === "attributes"}
             loaded={attributesLoaded}
             lists={attributeLists}
             values={attributes}
             setValue={setAttribute}
             disabled={isPending}
+            onPresetPickerOpenChange={setPresetPickerOpen}
           />
 
           {/* ── Prices tab (overlays Details; own scroll if taller) ── */}
@@ -1305,13 +1315,16 @@ export function StampFormDialog(props: StampFormDialogProps) {
  * proposals are read exactly where they are offered.
  */
 function StampAttributesTab({
+  collectionId,
   shown,
   loaded,
   lists,
   values,
   setValue,
   disabled,
+  onPresetPickerOpenChange,
 }: {
+  collectionId: string;
   shown: boolean;
   /** The fields stay unrendered until the stored values arrive — the reason the section is gated at
    * all — so a save made before they land cannot submit blank fields over them. */
@@ -1320,6 +1333,7 @@ function StampAttributesTab({
   values: StampAttributeValues;
   setValue: (key: keyof StampAttributeValues, value: string) => void;
   disabled: boolean;
+  onPresetPickerOpenChange: (open: boolean) => void;
 }) {
   const proposals = useSizeProposals();
   return (
@@ -1364,29 +1378,6 @@ function StampAttributesTab({
                 />
               </div>
             ))}
-            {/* The size (#763), two fields beside the printed facts because that is what it is —
-                a figure the catalogue states about this stamp. Millimetres, to a tenth; the action
-                refuses a figure it cannot read rather than saving it as *no size*, since a stamp
-                with none borrows its neighbour's and a hawid gets cut to it. */}
-            {STAMP_SIZE_INPUT_FIELDS.map((field) => (
-              <div key={field} style={{ minWidth: 0 }}>
-                <LabelWithError htmlFor={`f-stamp-${field}`}>
-                  {STAMP_SIZE_LABELS[field].field}
-                </LabelWithError>
-                <input
-                  id={`f-stamp-${field}`}
-                  name={field}
-                  type="text"
-                  inputMode="decimal"
-                  disabled={disabled}
-                  value={values[field] ?? ""}
-                  onChange={(e) => setValue(field, e.target.value)}
-                  placeholder={STAMP_SIZE_LABELS[field].example}
-                  {...NO_AUTOFILL}
-                  style={INPUT_STYLE}
-                />
-              </div>
-            ))}
             {STAMP_ATTRIBUTE_KINDS.map((kind) => {
               const options = lists?.[kind] ?? [];
               if (options.length === 0) return null;
@@ -1415,6 +1406,49 @@ function StampAttributesTab({
                 </div>
               );
             })}
+          </div>
+
+          {/* The size (#763) — a figure the catalogue states about this stamp, like the printed
+              facts above. Millimetres, to a tenth; the action refuses a figure it cannot read rather
+              than saving it as *no size*, since a stamp with none borrows its neighbour's and a hawid
+              gets cut to it. Its own row since #805, so the preset controls can sit beside the two
+              fields they fill and read from. */}
+          <div
+            style={{
+              marginTop: "0.75rem",
+              display: "flex",
+              alignItems: "flex-end",
+              gap: "0.75rem 1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            {STAMP_SIZE_INPUT_FIELDS.map((field) => (
+              <div key={field} style={{ width: "9rem" }}>
+                <LabelWithError htmlFor={`f-stamp-${field}`}>
+                  {STAMP_SIZE_LABELS[field].field}
+                </LabelWithError>
+                <input
+                  id={`f-stamp-${field}`}
+                  name={field}
+                  type="text"
+                  inputMode="decimal"
+                  disabled={disabled}
+                  value={values[field] ?? ""}
+                  onChange={(e) => setValue(field, e.target.value)}
+                  placeholder={STAMP_SIZE_LABELS[field].example}
+                  {...NO_AUTOFILL}
+                  style={INPUT_STYLE}
+                />
+              </div>
+            ))}
+            <SizePresetControls
+              collectionId={collectionId}
+              widthText={values.widthMm}
+              heightText={values.heightMm}
+              setValue={setValue}
+              disabled={disabled}
+              onPickerOpenChange={onPresetPickerOpenChange}
+            />
           </div>
 
           {/* What the scan beside this form has to say about the size (#763). Present only when
@@ -1452,6 +1486,116 @@ function StampAttributesTab({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Both ends of a size preset, at the one place a size is entered (#805; ADR-0048 §5): put a saved
+ * pair into the fields, and save what is in the fields as a pair.
+ *
+ * **It sits beside the fields and not on the proposal rows below**, and that placement is the design.
+ * The crop estimate is the stamp plus whatever slack the cut carried — "a good first guess and a bad
+ * fact" (#763) — and a save button on its row would let that slack become a named figure and then be
+ * applied to forty stamps in one click. Routed through the fields, an estimate becomes a preset only
+ * after **Use as size** has made it this stamp's size, which is the click #763 made deliberate.
+ *
+ * - The picker **fills and does not save**: the form's own **Save** stores the size, like every
+ *   other field on the tab.
+ * - Saving **asks for no name** — the pair is the identity (ADR-0048 §3), naming is Settings' — and
+ *   is **enabled only for a whole, readable pair**, by the same parse the form stores through.
+ */
+function SizePresetControls({
+  collectionId,
+  widthText,
+  heightText,
+  setValue,
+  disabled,
+  onPickerOpenChange,
+}: {
+  collectionId: string;
+  widthText: string | null;
+  heightText: string | null;
+  setValue: (key: keyof StampAttributeValues, value: string) => void;
+  disabled: boolean;
+  onPickerOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
+  const invalidatePresets = useInvalidateStampSizePresets();
+  const [saving, startSaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const pair = sizePairFromFields(widthText, heightText);
+
+  function save() {
+    if (!pair) return;
+    setError(null);
+    startSaving(async () => {
+      const { saveStampSizePresetFromFieldsAction } = await import(
+        "@/app/actions/stamp-size-presets"
+      );
+      const result = await saveStampSizePresetFromFieldsAction(collectionId, widthText, heightText);
+      if (result.status === "saved") {
+        void invalidatePresets(collectionId);
+        toast({
+          message: `${stampSizePresetPair(result.preset)} saved as a size preset`,
+          href: `/c/${collectionSlug}/settings?tab=attributes`,
+          linkLabel: "Name it",
+        });
+      } else if (result.status === "exists") {
+        // Not a failure: the pair the collector reached for is already on the list.
+        toast({ message: result.message.replace(/\.$/, ""), tone: "info" });
+      } else {
+        setError(result.message);
+      }
+    });
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        flexWrap: "wrap",
+        fontSize: "0.8125rem",
+        minHeight: "2.25rem",
+      }}
+    >
+      <StampSizePresetPicker
+        collectionId={collectionId}
+        disabled={disabled}
+        width="14rem"
+        triggerLabel="Fill from a preset"
+        onOpenChange={onPickerOpenChange}
+        onPick={(preset) => {
+          setValue("widthMm", formatSizeMm(preset.widthMm));
+          setValue("heightMm", formatSizeMm(preset.heightMm));
+        }}
+      />
+      <Tooltip
+        content={
+          pair
+            ? `Save ${stampSizePresetPair(pair)} to the collection's size presets, with no name. The stamp itself is saved with the form.`
+            : "Fill in both the width and the height to save them as a preset."
+        }
+      >
+        <button
+          type="button"
+          onClick={save}
+          disabled={disabled || saving || !pair}
+          style={{
+            ...USE_SIZE_BTN,
+            padding: "0.375rem 0.625rem",
+            fontSize: "0.8125rem",
+            minHeight: "2rem",
+            ...(disabled || saving || !pair ? { opacity: 0.5, cursor: "default" } : null),
+          }}
+        >
+          {saving ? "Saving…" : "Save as preset"}
+        </button>
+      </Tooltip>
+      {error && <span style={{ color: "var(--color-error)" }}>{error}</span>}
     </div>
   );
 }

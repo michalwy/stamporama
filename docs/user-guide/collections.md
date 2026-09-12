@@ -727,6 +727,49 @@ Nothing is set up here to begin with, in a new collection or in the demo one. An
 collection that has not needed one — a preset is a millimetre somebody measured, and the app inventing
 one would be a figure you might cut a mount to.
 
+#### Using a preset on one stamp, and saving one from it
+
+Beside a stamp's **Width (mm)** and **Height (mm)** on its **Attributes** tab sit two controls.
+
+- **Fill from a preset** opens the collection's presets in your order, with a field on top to narrow
+  them — type part of a name (*germ*) or of the figures (*25*, *25x30*, *25 × 30*, *21,5*). Choosing
+  one **fills the two fields and nothing else**: the size is stored when you save the stamp, like
+  every other field on the tab, and you can still change it before you do.
+- **Save as preset** saves whatever is in the two fields at that moment as a new preset, with no
+  name, and says so in a note at the top of the screen — its **Name it** link goes to
+  **Settings → Attributes**. It is available only when both fields hold a whole, readable size; half
+  a size is something a stamp may state, never a preset. If that pair is already a preset you are
+  told so, and nothing is duplicated.
+
+That is the one place a preset is saved from on purpose. A figure measured on the scan or taken from
+the tile's crop becomes a preset by the same route — press **Use as size** first, so it is in the
+fields, then **Save as preset** — which means an estimate can only become a preset after you have
+accepted it as this stamp's size.
+
+#### Applying a preset to an issue or a checklist
+
+For a series already entered — forty overprints of one design — open **⋮ → Apply size preset…** on
+the issue's row in the Issues list, or on a checklist's row in that issue's **Checklists…** editor.
+
+1. Choose the preset, with the same filterable list.
+2. Read the counts before anything is written: *17 stamps have no size and will get 25 × 30 mm. 3
+   stamps already state a size and will be left as they are.* A stamp stating only a width or only a
+   height counts as stating a size, and the sentence says how many of those there are.
+3. Press **Apply to 17 stamps**. A note says what was written.
+
+What it reaches, and what it leaves alone:
+
+- **Every stamp in the issue or on the checklist, with all its variants and child stamps** at any
+  depth — `309`, `309A`, `309AP`, `309APa`, and a plate flaw under `309` too. A size is a fact about
+  the paper, so a child filed as its own entry takes it just as a variant does. The counts include
+  them.
+- **A stamp that already states a size is skipped.** Tick **Overwrite those too** to replace them as
+  well — for a series whose earlier figure was wrong. The box is **unticked every time the dialog
+  opens**, and the counts and the button change as you tick it. Overwriting cannot be undone.
+- **Cancel writes nothing.** Nor does choosing a preset: only the **Apply** button writes.
+- **The size is copied.** Correcting or deleting the preset later leaves these stamps as they are.
+- There is no way to *clear* sizes in bulk; a size is cleared on the stamp itself.
+
 ### Attributes on the lists
 
 Wherever stamps are listed — the **Stamps** list and the **Issues** list's stamp tree — the attributes a stamp states are printed on a muted line under its chips, in the order a catalogue prints them: `10 gr · 11½ · Carmine · Thin paper`. A stamp that states none shows nothing at all rather than a row of dashes. Rest the pointer on a value to be told which attribute it is.

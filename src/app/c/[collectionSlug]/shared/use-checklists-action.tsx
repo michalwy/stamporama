@@ -38,6 +38,7 @@ import {
   dragStyle,
 } from "./reorder-list";
 import { NO_AUTOFILL } from "./no-autofill";
+import { ApplySizePresetDialog } from "./apply-size-preset-dialog";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 
@@ -132,6 +133,8 @@ export function ChecklistsDialog({
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [deleting, setDeleting] = useState<ChecklistData | null>(null);
+  // The checklist a size preset is being applied to (#806), in its own dialog over this one.
+  const [applyingPreset, setApplyingPreset] = useState<ChecklistData | null>(null);
   const [error, setError] = useState<string | undefined>();
 
   const queryKey = ["checklists", collectionId, issueId] as const;
@@ -211,7 +214,7 @@ export function ChecklistsDialog({
         onClose={() => {
           if (!isPending) onClose();
         }}
-        dismissable={editing === null && deleting === null}
+        dismissable={editing === null && deleting === null && applyingPreset === null}
       >
         <DialogBody>
           <p
@@ -287,6 +290,12 @@ export function ChecklistsDialog({
                           label: "Order stamps…",
                           icon: "reorder",
                           onSelect: () => setEditing({ kind: "order", checklist }),
+                        },
+                        {
+                          key: "apply-size-preset",
+                          label: "Apply size preset…",
+                          icon: "sizePreset",
+                          onSelect: () => setApplyingPreset(checklist),
                         },
                         {
                           key: "rename",
@@ -457,6 +466,17 @@ export function ChecklistsDialog({
           onReorder={(stampIds) =>
             run(() => reorderChecklistStampsAction(editing.checklist.id, stampIds), () => {})
           }
+        />
+      )}
+
+      {applyingPreset && (
+        <ApplySizePresetDialog
+          scope={{
+            collectionId,
+            subject: { kind: "checklist", checklistId: applyingPreset.id },
+            subjectLabel: applyingPreset.name,
+          }}
+          onClose={() => setApplyingPreset(null)}
         />
       )}
 
