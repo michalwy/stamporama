@@ -288,6 +288,18 @@ occasionally.
 
 Comparing the lines shows list price, what the market pays and what you paid, side by side.
 
+**A figure with nothing behind it is not shown as an amount.** Every one of these figures is a sum
+over a set of copies, and where no copy contributes there is nothing to sum — so the line says *not
+worked out yet* rather than printing `0.00`, which would state that your copies are worth nothing
+and cost nothing. That happens more often than it sounds: a market value with no auction results
+recorded anywhere, a purchase cost where every lot is still open. The grey sentence beside the line
+still counts exactly what is missing.
+
+A figure built from **part** of the copies is still shown, and the sentence beside it says how much
+is missing — a partial answer is useful as long as it is not passed off as a complete one. And a
+figure that genuinely comes to nothing still reads `0.00`: copies that are all priced at zero are a
+different statement from copies nobody has valued, and the line makes both.
+
 All three lines cover the copies you **actually hold**. A copy you have marked as
 [no longer held](#copies-you-no-longer-hold), and one whose delivery state is *Not delivered /
 missing* or *Damaged*, is worth nothing to you however the catalog prices it, so it counts towards
