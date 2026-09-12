@@ -978,11 +978,13 @@ export function OfferPlatformItemsCard({
                       (#728) — a condition the collector recognises by colour on those screens is the
                       condition this row is about. It says the abbreviation, as a row chip does
                       everywhere else, and keeps the full name in its hover: this column sits between
-                      the stamp name and the links, and the long form widened it on every row. */}
+                      the stamp name and the links, and the long form widened it on every row.
+                      A condition with no abbreviation says its name instead: an empty frame is
+                      never the right rendering (#1200). */}
                   <ConditionChip
                     collectionId={collectionId}
                     conditionId={item.conditionId}
-                    label={item.conditionAbbreviation}
+                    label={item.conditionAbbreviation || item.conditionName}
                     tooltip={item.conditionName}
                   />
                   {item.copyCount > 1 && (

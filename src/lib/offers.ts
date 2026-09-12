@@ -3817,7 +3817,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                   conditionId: true,
                   certificateStatusId: true,
                   formatId: true,
-                  condition: { select: { name: true } },
+                  // The batch select's own object, not a copy of it (#1200): the copy said `name`
+                  // alone, so the Items card's condition chip was handed an abbreviation this read
+                  // never asked for, and every chip on the offer's screen drew as an empty frame.
+                  condition: LISTING_SETS_SELECT.items.select.item.select.condition,
                   stamp: {
                     select: {
                       ...STAMP_LABEL_SELECT.stamp.select,
