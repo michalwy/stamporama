@@ -166,11 +166,21 @@ const MIN_PIECE_MEDIAN_FRACTION = 0.05;
  * reports 72 for a JPEG with no JFIF density unit), and the physical rule would be nonsense. */
 const MIN_TRUSTED_DENSITY_DPI = 150;
 
-/** Grown outward on every side after scaling back, in **millimetres of card**. The mask stops at
- * the last pixel that differs from the card, and a perforation tooth's tip is the faintest part of
- * a stamp; a crop flush to the mask clips teeth. Small enough that two pieces a tooth apart still
- * come out as two boxes. */
-const BOX_PAD_MM = 0.6;
+/** How far past a piece's labelled region its **paper** is looked for, in **millimetres of card**.
+ *
+ * Until #1195's follow-up this was a pad, grown onto every stockbook box: the erosion that separates
+ * touching pieces eats perforation teeth — its radius is about half a tooth — so a region grown back
+ * by the same radius ends near the teeth's base, and 0.6 mm put the tips back. It put a strip of
+ * black card around every tile with them, on the sides where the teeth were shorter than the pad and
+ * along every straight edge. The album page never had one and the collector preferred its tiles.
+ *
+ * So the same distance is now a **reach**: {@link tightenToPaper} looks this far out from the region
+ * in the mask *before* the erosion, which still holds the teeth, and the box ends where the paper
+ * does. The box can never come out larger than the pad used to make it, and never smaller than the
+ * region the erosion left — so the worst it can do is the old box on one side, and the failure the
+ * pad existed to prevent cannot come back through here. Small enough that two pieces a tooth apart
+ * still come out as two boxes. */
+const EDGE_REACH_MM = 0.6;
 
 // The background estimator's own constants, carried over unchanged from the reference — these are
 // the ones that were validated over 1,429 photos, and the ones a change to must be re-measured.
@@ -308,9 +318,15 @@ export async function detectSheetBoxesReported(
   // On a stockbook card the regions **are** the pieces. On an album page they are the mounts, and
   // the piece is one level inside each of them — so the second separation runs here, over the very
   // buffer the first one read, and what comes back is already a stamp box in working pixels.
-  const pieces = kind === "album" ? stampsInsideMounts(data, w, h, kept, grow) : kept;
+  //
+  // On a stockbook card each region is then pulled in to where its paper ends — the album pass's
+  // boxes already end there, since nothing inside a mount is eroded.
+  const pieces =
+    kind === "album"
+      ? stampsInsideMounts(data, w, h, kept, grow)
+      : kept.map((r) => tightenToPaper(sep, r));
 
-  const scaled = pieces.map((r) => scaleBox(r, scale, paddingFor(kind, sep), sheet));
+  const scaled = pieces.map((r) => scaleBox(r, scale, sheet));
   const ordered = readingOrder(scaled).map((i) => scaled[i]);
 
   return {
@@ -420,14 +436,61 @@ async function separateSheet(original: Buffer, kind: SheetKind): Promise<Separat
   };
 }
 
-/** How far a box is grown outward on the way to the sheet's own pixels. **None on an album page**:
- * the stockbook pad exists because a mask stops at the last pixel that differs from the card and a
- * perforation tip is the faintest part of a stamp, so a crop flush to the mask clips teeth. Against
- * a black mount the selvedge is the strongest edge on the page and the mask reaches the paper
- * itself; growing the box there would put mount in the tile, which is precisely what that kind
- * exists to keep out of it. */
-function paddingFor(kind: SheetKind, sep: Separation): number {
-  return kind === "album" ? 0 : paddingPixels(sep.density, sep.scale, sep.erosionRadius);
+/**
+ * A stockbook region pulled in to where its **paper** ends — the box flush with the tips of its
+ * teeth, as an album page's already is, instead of carrying a strip of black card around it.
+ *
+ * The region handed in was labelled from the eroded mask and grown back by the erosion radius,
+ * which puts its edges near the base of the teeth: the erosion is about half a tooth, and a tooth
+ * is gone before its base is. The mask *before* the erosion still holds every tooth, so this reads
+ * that mask in a window {@link EDGE_REACH_MM} wider than the region and takes the extent of whatever
+ * in it touches the region.
+ *
+ * **Bounded on both sides by construction.** The answer starts from the region, so it is never
+ * smaller than what the erosion left; and it stops at the window, so it is never larger than the box
+ * the old 0.6 mm pad produced. What that buys is that nothing here can drop a piece or cut into one
+ * further than the pass already did — and that the two cases where the unbounded version would go
+ * wrong come out as the old box instead: a neighbour a tooth away whose teeth reach into the window
+ * does not touch the region and is left out, while two pieces the mask holds as one run to the
+ * window's edge on the side they meet.
+ */
+function tightenToPaper(sep: Separation, region: Box): Box {
+  // Rounded **down**: the bound this function promises is the old pad, and a window one working
+  // pixel wider than it would be a box a little larger than the pad ever made.
+  const reach = Math.max(1, Math.floor(reachPixels(sep.density, sep.scale, sep.erosionRadius)));
+  const win = grownBy(region, reach, sep.w, sep.h);
+  if (win.w === 0 || win.h === 0) return region;
+
+  const local = { x: region.x - win.x, y: region.y - win.y, w: region.w, h: region.h };
+  let x0 = local.x;
+  let y0 = local.y;
+  let x1 = local.x + local.w;
+  let y1 = local.y + local.h;
+  for (const c of labelComponents(cropMask(sep.mask, sep.w, win), win.w, win.h)) {
+    // Touching the region, not lying all but inside it: a tooth's tip is its own component once the
+    // window's edge has cut it from the rest of the piece, and it still belongs to this piece.
+    if (!touches(local, c)) continue;
+    x0 = Math.min(x0, c.x);
+    y0 = Math.min(y0, c.y);
+    x1 = Math.max(x1, c.x + c.w);
+    y1 = Math.max(y1, c.y + c.h);
+  }
+  return { x: win.x + x0, y: win.y + y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** Whether two boxes share at least one pixel. */
+function touches(a: Box, b: Box): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** A window of a working mask, copied out so it can be labelled on its own. */
+function cropMask(mask: Uint8Array, w: number, win: Box): Uint8Array {
+  const out = new Uint8Array(win.w * win.h);
+  for (let y = 0; y < win.h; y++) {
+    const from = (win.y + y) * w + win.x;
+    out.set(mask.subarray(from, from + win.w), y * win.w);
+  }
+  return out;
 }
 
 // ── The piece under one point (#1196) ──────────────────────────────────────────────────────────
@@ -448,7 +511,8 @@ function paddingFor(kind: SheetKind, sep: Separation): number {
  *
  * Everything else is the pass, deliberately: the same working resolution, the same ground, the same
  * threshold, the same morphology, the same erosion and the same grow-back, the same second
- * separation inside a mount, and the same padding rule. A box from here is a box from there.
+ * separation inside a mount, and the same rule for where a box's edge falls. A box from here is a
+ * box from there.
  *
  * ## What it refuses, and why refusing is the feature
  *
@@ -498,7 +562,7 @@ export async function pickBoxAt(
   // click landed in rather than for every one the mount holds. The stamp's own selvedge is what
   // comes back, for the reason {@link stampsInsideMounts} states: the edge being measured is white
   // paper against black film, and the printed design is never asked about.
-  let answer = piece;
+  let answer = kind === "album" ? piece : tightenToPaper(sep, piece);
   if (kind === "album") {
     const held = insideMount(data, w, h, piece, regionGrow);
     if (!held) return null;
@@ -516,7 +580,7 @@ export async function pickBoxAt(
   // assertion that something is there.
   if (answer.w * answer.h < minimumRegionArea(sep.density, scale, [])) return null;
 
-  return scaleBox(answer, scale, paddingFor(kind, sep), sheet);
+  return scaleBox(answer, scale, sheet);
 }
 
 /** Mask coverage at which the ground has plainly been mis-elected rather than the card being full.
@@ -761,16 +825,12 @@ function minimumRegionArea(
   return MIN_PIECE_MEDIAN_FRACTION * median;
 }
 
-function paddingPixels(
-  density: number | undefined,
-  scale: number,
-  erosionRadius: number
-): number {
+/** {@link EDGE_REACH_MM} in **working** pixels. */
+function reachPixels(density: number | undefined, scale: number, erosionRadius: number): number {
   const mm = mmPerWorkingPixel(density, scale);
   // Without a density, a tooth is still about the same share of a scan of a card: fall back to the
   // erosion radius, which is the one length here already tied to the working size.
-  const workingPad = mm != null ? BOX_PAD_MM / mm : erosionRadius;
-  return workingPad * scale;
+  return mm != null ? EDGE_REACH_MM / mm : erosionRadius;
 }
 
 /** How much of the smaller box has to lie inside a kept one for it to be part of it. */
@@ -784,12 +844,13 @@ function overlapShare(outer: Box, inner: Box): number {
   return (w * h) / (inner.w * inner.h);
 }
 
-/** A working-pixel box in the sheet's own pixels, grown by `pad` and clamped to the sheet. */
-function scaleBox(r: Box, scale: number, pad: number, sheet: { width: number; height: number }): Box {
-  const left = Math.max(0, Math.round(r.x * scale - pad));
-  const top = Math.max(0, Math.round(r.y * scale - pad));
-  const right = Math.min(sheet.width, Math.round((r.x + r.w) * scale + pad));
-  const bottom = Math.min(sheet.height, Math.round((r.y + r.h) * scale + pad));
+/** A working-pixel box in the sheet's own pixels, clamped to the sheet. Nothing is added on the way:
+ * both kinds' boxes already end where the paper does. */
+function scaleBox(r: Box, scale: number, sheet: { width: number; height: number }): Box {
+  const left = Math.max(0, Math.round(r.x * scale));
+  const top = Math.max(0, Math.round(r.y * scale));
+  const right = Math.min(sheet.width, Math.round((r.x + r.w) * scale));
+  const bottom = Math.min(sheet.height, Math.round((r.y + r.h) * scale));
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
