@@ -629,6 +629,19 @@ describe("offer listing kit (#405)", () => {
     assert.equal(row.searchUrl, null, "a matched entry has a page, so nothing to search for");
   });
 
+  it("hands the row's condition chip its abbreviation (#1200)", async () => {
+    // The offer's screen reads its sets through a select of its own, and that copy once asked for the
+    // condition's name alone — the chip was handed `undefined` and drew as an empty frame.
+    const base = await umbrella("PL card abbr", [
+      { number: "975a", colnectId: "2751", price: "30.00" },
+      { number: "975b", colnectId: "2752", price: "12.00" },
+    ]);
+    const detail = await getOfferDetail(userId, await offer([[await copy(base)]]));
+    const row = detail!.platformItems[0];
+    assert.equal(row.conditionAbbreviation, "MNH");
+    assert.equal(row.conditionName, "Mint Never Hinged");
+  });
+
   it("names the variant that has to be matched, and searches for **its** number", async () => {
     // The one case the card used to go silent on, and the one where knowing the target matters most:
     // the listing is blocked precisely because this variant carries no item-ID. Searching the
