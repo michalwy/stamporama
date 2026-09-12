@@ -184,6 +184,13 @@ still open, so its cost-basis is not frozen yet). Note that **Purchase cost** is
 total: it is the part of the order's money that has been frozen onto individual copies so far. The
 order-level bar totals every copy across all lots; each lot's bar totals just that lot.
 
+**A figure with nothing behind it says so instead of showing `0.00`** — see
+[the holdings summary](inventory.md#copy-value-and-holdings-total) for the rule, which is the same
+one here. On a parcel that has just arrived it is most of the bar: no lot is closed, so nothing is
+costed; no auction results are recorded, so there is no market value. Those lines read *not worked
+out yet*, which is what they mean, rather than stating that the parcel cost nothing and is worth
+nothing.
+
 Both bars are **collapsed to their total line by default**, with a **More** button for the rest —
 the same shape the [Offers](offers.md) summary has. The order's bar and the lot bars **remember
 their own choice separately**: opening the order's detail does not open every lot's, and every lot

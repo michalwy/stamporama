@@ -3,6 +3,14 @@
 import type { HoldingsSummary } from "@/lib/valuation";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { PurchaseSpend } from "@/lib/purchase-spend";
+import {
+  NOT_WORKED_OUT,
+  differenceFigure,
+  negatedAmount,
+  signedAmount,
+  stateFigure,
+  type StatedFigure,
+} from "@/lib/summary-figure";
 import { usePersistedFlag } from "./use-persisted-flag";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -113,22 +121,55 @@ function SkeletonRows({ rows }: { rows: number }) {
   );
 }
 
+/** The amount slot, in the one place that decides whether there is an amount to put in it (#1184).
+ * A figure with nothing behind it says so in the collector's terms instead of printing a sum of
+ * nothing; the grey sentence beside it, which counts what is missing, is unchanged either way. */
+function FigureAmount({
+  figure,
+  currency,
+  style,
+  format,
+}: {
+  figure: StatedFigure;
+  currency: string;
+  style: React.CSSProperties;
+  /** How the amount reads once there is one — signed, negated, or plain. */
+  format?: (amount: string) => string;
+}) {
+  if (figure.amount === null) {
+    return (
+      <span
+        style={{
+          ...style,
+          fontSize: "0.8125rem",
+          fontWeight: 500,
+          color: "var(--color-text-muted)",
+          fontVariantNumeric: "normal",
+        }}
+      >
+        {NOT_WORKED_OUT}
+      </span>
+    );
+  }
+  return (
+    <span style={style}>
+      {format ? format(figure.amount) : figure.amount} {currency}
+    </span>
+  );
+}
+
 /** A gain is stated in the accent-positive hue and a loss in the error one (#559). A bare figure in
  * the same colour as everything above it is one a collector has to read twice to tell which way it
- * went. */
-function signedStyle(amount: string): React.CSSProperties {
+ * went. An absence takes neither: it did not go any way. */
+function signedStyle(figure: StatedFigure): React.CSSProperties {
+  if (figure.amount === null) return AMOUNT_STYLE;
   return {
     ...AMOUNT_STYLE,
     color:
-      Number(amount) < 0 ? "var(--color-error)" : "var(--color-success, var(--color-text-primary))",
+      Number(figure.amount) < 0
+        ? "var(--color-error)"
+        : "var(--color-success, var(--color-text-primary))",
   };
-}
-
-/** `+120.00` / `−12.00` — the sign is always printed, the minus being the typographic one the
- * write-off row already uses. */
-function signed(amount: string): string {
-  const value = Number(amount);
-  return value < 0 ? `−${Math.abs(value).toFixed(2)}` : `+${value.toFixed(2)}`;
 }
 
 function percentNote(percent: number | null): string {
@@ -217,31 +258,57 @@ function SpendRow({
  * clothes — the cost side above already says what was spent.
  */
 function ReturnRows({ ret }: { ret: PurchaseReturn }) {
+  // A sold copy whose sale line mixed several purchases and could not be split (ADR-0012 §6.3)
+  // is behind nothing: it sold, and what it fetched is unknown. With *every* sold copy in that
+  // state there is no realized figure at all, and `0.00` would be the claimed loss the read model
+  // takes care never to state (#1184).
+  const realized = stateFigure(
+    ret.realized,
+    ret.soldCount - ret.unattributedCount,
+    ret.unattributedCount
+  );
+  const spent = stateFigure(
+    ret.spent.totalCostBasis,
+    ret.spent.knownCount,
+    ret.spent.pendingCount + ret.spent.noneCount
+  );
+  const soldCost = stateFigure(
+    ret.soldCost.totalCostBasis,
+    ret.soldCost.knownCount,
+    ret.soldCost.pendingCount + ret.soldCost.noneCount
+  );
+  // Both are differences, so both wait for both of their sides: against a spend nobody has costed
+  // yet, the whole of the proceeds would read as profit.
+  const netReturn = differenceFigure(ret.netReturn, [realized, spent]);
+  const soldMargin = differenceFigure(ret.soldMargin, [realized, soldCost]);
+
   return (
     <>
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>Realized</span>
-        <span style={AMOUNT_STYLE}>
-          {ret.realized} {ret.baseCurrency}
-        </span>
+        <FigureAmount figure={realized} currency={ret.baseCurrency} style={AMOUNT_STYLE} />
         <span style={NOTE_STYLE}>
           {ret.soldCount} of {ret.copyCount} {copiesWord(ret.copyCount)} sold
-          {/* A sold copy whose sale line mixed several purchases and could not be split (ADR-0012
-              §6.3) is stated rather than silently counted as nothing: the figure is short, and by
-              how many copies is the only honest thing to say about it. */}
+          {/* A sold copy whose proceeds could not be attributed is stated rather than silently
+              counted as nothing: the figure is short, and by how many copies is the only honest
+              thing to say about it. */}
           {ret.unattributedCount > 0 ? ` · ${ret.unattributedCount} not attributable here` : ""}
         </span>
       </div>
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>Net return</span>
-        <span style={signedStyle(ret.netReturn)}>
-          {signed(ret.netReturn)} {ret.baseCurrency}
-        </span>
+        <FigureAmount
+          figure={netReturn}
+          currency={ret.baseCurrency}
+          style={signedStyle(netReturn)}
+          format={signedAmount}
+        />
         {/* The spend is named rather than left to be read off the rows above: those split what was
             paid into what is still held and what was written off (#396), and this figure is both. */}
         <span style={NOTE_STYLE}>
-          against {ret.spent.totalCostBasis} {ret.spent.baseCurrency} spent on all {ret.copyCount}{" "}
-          {copiesWord(ret.copyCount)}
+          {spent.amount === null
+            ? `no cost worked out yet for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
+            : `against ${spent.amount} ${ret.spent.baseCurrency} spent on all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
           {percentNote(ret.netReturnPercent)}
         </span>
       </div>
@@ -250,12 +317,16 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
           that actually left. Both, because neither answers the other. */}
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>On sold</span>
-        <span style={signedStyle(ret.soldMargin)}>
-          {signed(ret.soldMargin)} {ret.baseCurrency}
-        </span>
+        <FigureAmount
+          figure={soldMargin}
+          currency={ret.baseCurrency}
+          style={signedStyle(soldMargin)}
+          format={signedAmount}
+        />
         <span style={NOTE_STYLE}>
-          against {ret.soldCost.totalCostBasis} {ret.soldCost.baseCurrency} spent on the{" "}
-          {ret.soldCount} sold {copiesWord(ret.soldCount)}
+          {soldCost.amount === null
+            ? `no cost worked out yet for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
+            : `against ${soldCost.amount} ${ret.soldCost.baseCurrency} spent on the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
           {percentNote(ret.soldMarginPercent)}
         </span>
       </div>
@@ -276,6 +347,11 @@ function CatalogValueRow({
   itemCount?: number;
   children?: React.ReactNode;
 }) {
+  const figure = stateFigure(
+    total.totalBaseAmount,
+    total.pricedCount,
+    total.unpricedCount + total.unconvertibleCount
+  );
   const valuationNotes: string[] = [];
   if (total.uncertainCount > 0) {
     valuationNotes.push(
@@ -291,9 +367,7 @@ function CatalogValueRow({
   return (
     <div style={ROW_STYLE}>
       <span style={LABEL_STYLE}>Catalog value</span>
-      <span style={AMOUNT_STYLE}>
-        {total.totalBaseAmount} {total.baseCurrency}
-      </span>
+      <FigureAmount figure={figure} currency={total.baseCurrency} style={AMOUNT_STYLE} />
       <span style={NOTE_STYLE}>
         {/* How many copies are in scope, first in the note because it is the plainest thing the
             row can say and the one the toolbar above it cannot (#845). */}
@@ -314,8 +388,18 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
   // the figure — and the count it could say nothing about — is part of the figure.
   const market = total.market;
   const marketCovered = market.valuedCount + market.noEvidenceCount;
+  const marketFigure = stateFigure(
+    market.totalBaseAmount,
+    market.valuedCount,
+    market.noEvidenceCount
+  );
 
   const cost = total.cost;
+  const costFigure = stateFigure(
+    cost.totalCostBasis,
+    cost.knownCount,
+    cost.pendingCount + cost.noneCount
+  );
   const costNotes: string[] = [];
   if (cost.pendingCount > 0) {
     costNotes.push(`${cost.pendingCount} pending`);
@@ -328,6 +412,11 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
   // the purchase total: what was spent on the collection and what was spent on copies that are
   // gone are two different questions, and adding them answers neither.
   const writeOff = total.writeOff;
+  const writeOffFigure = stateFigure(
+    writeOff.cost.totalCostBasis,
+    writeOff.cost.knownCount,
+    writeOff.cost.pendingCount + writeOff.cost.noneCount
+  );
   const writeOffNotes: string[] = [];
   if (writeOff.cost.pendingCount > 0) {
     writeOffNotes.push(`${writeOff.cost.pendingCount} cost pending`);
@@ -345,9 +434,11 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
       {marketCovered > 0 && (
         <div style={ROW_STYLE}>
           <span style={LABEL_STYLE}>Market value</span>
-          <span style={AMOUNT_STYLE}>
-            {market.totalBaseAmount} {market.baseCurrency}
-          </span>
+          <FigureAmount
+            figure={marketFigure}
+            currency={market.baseCurrency}
+            style={AMOUNT_STYLE}
+          />
           <span style={NOTE_STYLE}>
             from {market.valuedCount} of {marketCovered} cop{marketCovered === 1 ? "y" : "ies"}
             {market.noEvidenceCount > 0
@@ -358,9 +449,7 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
       )}
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>Purchase cost</span>
-        <span style={AMOUNT_STYLE}>
-          {cost.totalCostBasis} {cost.baseCurrency}
-        </span>
+        <FigureAmount figure={costFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
         <span style={NOTE_STYLE}>
           {cost.knownCount} costed
           {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
@@ -374,9 +463,14 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
       {writeOff.count > 0 && (
         <div style={ROW_STYLE}>
           <span style={{ ...LABEL_STYLE, color: "var(--color-error)" }}>Written off</span>
-          <span style={{ ...AMOUNT_STYLE, color: "var(--color-error)" }}>
-            −{writeOff.cost.totalCostBasis} {writeOff.cost.baseCurrency}
-          </span>
+          <FigureAmount
+            figure={writeOffFigure}
+            currency={writeOff.cost.baseCurrency}
+            // The minus is drawn by `negatedAmount`, which is also what keeps `−0.00` off the
+            // screen when the copies that are gone did have a cost and it came to nothing (#1184).
+            style={{ ...AMOUNT_STYLE, color: "var(--color-error)" }}
+            format={negatedAmount}
+          />
           <span style={NOTE_STYLE}>
             {writeOff.count} no longer held
             {writeOffNotes.length > 0 ? ` · ${writeOffNotes.join(" · ")}` : ""}
@@ -401,6 +495,13 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
  *
  * `spend` (#852) adds what the scope **cost**, in both currencies, at the top. See its prop doc
  * for which figure then leads and why that reverses #845's choice rather than contradicting it.
+ *
+ * **A figure with nothing behind it is not stated as an amount** (#1184): every figure here except
+ * the spend rows is a sum over a set of copies, and where no copy contributed the row says it has
+ * not been worked out rather than printing `0.00 PLN` — which read as *this parcel is worth nothing
+ * and cost nothing*, the most alarming of the available readings and none of them true. The
+ * decision is `@/lib/summary-figure`, pure and unit-tested, and a genuinely-zero figure still reads
+ * zero.
  *
  * **Collapsed by default (#845)**, to the headline row alone, on `offers-summary-bar.tsx`'s model:
  * a bar that shows every figure it can, always, is a block of numbers between the collector and the
