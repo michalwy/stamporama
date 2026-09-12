@@ -9,7 +9,7 @@ import {
 } from "@/app/dialog-shell";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import { useCollectionFormats, useCollectionItemNoPad } from "./use-inventory-query";
+import { useCollectionFormats, useCollectionItemNoPad, useItemStamps } from "./use-inventory-query";
 import type { ItemListItem } from "@/lib/items";
 import { formatItemNo } from "@/lib/item-number";
 import { DELIVERY_STATES, deliveryStateLabel } from "@/lib/delivery-state";
@@ -21,7 +21,9 @@ import {
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import type { LocationData } from "@/lib/locations";
 import { StampSelect } from "./stamp-select";
+import { ItemStampsField, type ItemStampRow } from "./item-stamps-field";
 import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
+import type { ItemStampSummary } from "@/lib/items";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
@@ -213,32 +215,102 @@ export function InventoryItemFormDialog({
           addDefaults?.disposition ?? { inCollection: true, forSale: false, forTrade: false })
   );
 
-  // Prefill the picker summary. In edit mode it is derived from the item; in add mode a
-  // caller may pass one (adding a copy from a stamp list row, #111). Catalog numbers on the
-  // item are raw (vendor id + number), so they are prefix-formatted here against the copy's own
-  // area — the same labels a fresh pick produces (#357).
-  const pickerInitial: PickedStamp | undefined =
-    mode === "edit" && item
-      ? {
-          stampId: item.stampId,
-          // An area-less copy keeps the bare numbers: there is no vendor context to prefix with.
-          catalogLabels: orderedCatalogLabels(
-            item.catalogNumbers,
-            item.areaId
-              ? new Map(
-                  effectiveVendorsForArea(areas, item.areaId).map((v) => [v.catalogVendorId, v])
-                )
-              : undefined,
-            item.areaId ? effectivePrimaryVendorId(areas, item.areaId) : null
-          ),
-          name: item.stampName,
-          secondary:
-            item.issueName || item.issueYear
-              ? issueLabel(item.issueName, item.issueYear)
-              : null,
-          unknownVariant: item.unknownVariant,
-        }
-      : initialStamp;
+  // A stamp as a picker summary. Catalog numbers are stored raw (vendor id + number), so they are
+  // prefix-formatted against **that stamp's own** area — the same labels a fresh pick produces
+  // (#357). One builder, because the copy's leading stamp and every other stamp on the piece are the
+  // same kind of summary and a second spelling would print two different labels for one stamp.
+  const pickedFor = useCallback(
+    (stamp: {
+      stampId: string;
+      catalogNumbers: { catalogVendorId: string; number: string }[];
+      areaId: string | null;
+      name: string | null;
+      issueName: string | null;
+      issueYear: number | null;
+      unknownVariant: boolean;
+    }): PickedStamp => ({
+      stampId: stamp.stampId,
+      // An area-less stamp keeps the bare numbers: there is no vendor context to prefix with.
+      catalogLabels: orderedCatalogLabels(
+        stamp.catalogNumbers,
+        stamp.areaId
+          ? new Map(effectiveVendorsForArea(areas, stamp.areaId).map((v) => [v.catalogVendorId, v]))
+          : undefined,
+        stamp.areaId ? effectivePrimaryVendorId(areas, stamp.areaId) : null
+      ),
+      name: stamp.name,
+      secondary:
+        stamp.issueName || stamp.issueYear ? issueLabel(stamp.issueName, stamp.issueYear) : null,
+      unknownVariant: stamp.unknownVariant,
+    }),
+    [areas]
+  );
+
+  /** One stored entry as the editor's row. The entry's id is the row key: it is stable across a
+   *  reorder, which is what keeps React from re-mounting a row the collector is typing in. */
+  const rowFromEntry = useCallback(
+    (entry: ItemStampSummary): ItemStampRow => ({
+      key: entry.id,
+      stampId: entry.stampId,
+      quantity: entry.quantity,
+      formatId: entry.formatId ?? "",
+      picked: pickedFor({
+        stampId: entry.stampId,
+        catalogNumbers: entry.catalogNumbers,
+        areaId: entry.areaId,
+        name: entry.stampName,
+        issueName: entry.issueName,
+        issueYear: entry.issueYear,
+        unknownVariant: entry.unknownVariant,
+      }),
+    }),
+    [pickedFor]
+  );
+
+  // Add mode only: a caller may pre-select the stamp (adding a copy from a stamp list row, #111).
+  // Edit mode has no single stamp to prefill — the stamps a copy carries are a list, and
+  // `ItemStampsField` below is what draws them.
+  const pickerInitial: PickedStamp | undefined = initialStamp;
+
+  // The stamps this copy carries (#746, ADR-0044), in edit mode only: a copy is not *born* a
+  // carrier, so the add dialog keeps its single Stamp field and a cover is made by editing the copy
+  // that was recorded when the piece arrived.
+  const { data: itemStamps } = useItemStamps(collectionId, item?.id ?? null, mode === "edit");
+  const [stampRows, setStampRows] = useState<ItemStampRow[] | null>(null);
+  // Seeded once per copy, not on every settle of the query: the collector may already have added a
+  // stamp and reordered the list, and a refetch (a window focus, a sibling invalidation) must not
+  // take that back. The ref is the copy the rows were seeded from.
+  const seededFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!itemStamps || !item || seededFor.current === item.id) return;
+    seededFor.current = item.id;
+    setStampRows(
+      itemStamps.entries.length > 0
+        ? itemStamps.entries.map(rowFromEntry)
+        : // A copy with no entry at all is not a state this app can produce any more (#744), but one
+          // recorded by an older build could be: it is a copy whose stamps are *unknown* rather than
+          // a copy of none. So the row is seeded from the copy's own pointer, which is the repair
+          // `repointLeadingStampTx` makes on the same evidence — and saving writes the entry that
+          // should have been there, rather than leaving the dialog with no stamp to submit.
+          [
+            {
+              key: item.stampId,
+              stampId: item.stampId,
+              quantity: 1,
+              formatId: "",
+              picked: pickedFor({
+                stampId: item.stampId,
+                catalogNumbers: item.catalogNumbers,
+                areaId: item.areaId,
+                name: item.stampName,
+                issueName: item.issueName,
+                issueYear: item.issueYear,
+                unknownVariant: item.unknownVariant,
+              }),
+            },
+          ]
+    );
+  }, [itemStamps, item, rowFromEntry, pickedFor]);
 
   // Pending photo change-set (#112): staged uploads to add + removals/reorders/retitles of
   // already-committed photos. Held in a ref so the derive-on-change loop in PhotoEditor never
@@ -283,7 +355,10 @@ export function InventoryItemFormDialog({
     : photosUploading
       ? "Uploading photos…"
       : mode === "add" ? (addActionLabel ?? "Add copy") : "Save changes";
-  const actionDisabled = isPending || !stampId || photosUploading;
+  // In edit mode the stamp comes from the entry list (or, while it loads, from the copy itself), so
+  // the add-mode picker's own state says nothing about whether there is one.
+  const haveStamp = mode === "edit" ? true : !!stampId;
+  const actionDisabled = isPending || !haveStamp || photosUploading;
 
   return (
     <DialogShell title={title} onClose={onClose} maxWidth="52rem" dismissable={!pickerOpen}>
@@ -293,20 +368,77 @@ export function InventoryItemFormDialog({
       >
         <DialogBody>
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Row 1: stamp — full width. Its picker is taller than a plain select, so it gets
-                its own row instead of leaving a ragged gap beside short controls. */}
+            {/* Row 1: the stamp, or the stamps. Full width — the picker is taller than a plain
+                select, so it gets its own row instead of leaving a ragged gap beside short controls.
+
+                In **edit** mode it is the list of stamps the piece carries (#746): one row on an
+                ordinary copy, several on a cover, in the collector's own order. Add mode keeps the
+                single picker, because a copy is not born a carrier (ADR-0044). */}
             <div>
-              <GroupLabel>Stamp</GroupLabel>
-              <StampSelect
-                collectionId={collectionId}
-                areas={areas}
-                selectedStampId={stampId}
-                onSelectedStampIdChange={setStampId}
-                initial={pickerInitial}
-                scopeIssue={scopeIssue}
-                disabled={isPending}
-                onPickerOpenChange={setPickerOpen}
-              />
+              <GroupLabel>
+                {stampRows && stampRows.length > 1 ? "Stamps on this piece" : "Stamp"}
+              </GroupLabel>
+              {mode === "edit" ? (
+                stampRows ? (
+                  <ItemStampsField
+                    collectionId={collectionId}
+                    areas={areas}
+                    formats={formats}
+                    rows={stampRows}
+                    onRowsChange={setStampRows}
+                    disabled={isPending}
+                    onPickerOpenChange={setPickerOpen}
+                  />
+                ) : (
+                  // Until they arrive the field submits nothing for them, which the domain reads as
+                  // *leave the entries alone* — so a save made in this moment still saves every
+                  // other field and touches no stamp.
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-muted)",
+                    }}
+                  >
+                    Loading the stamps on this copy…
+                  </p>
+                )
+              ) : (
+                <StampSelect
+                  collectionId={collectionId}
+                  areas={areas}
+                  selectedStampId={stampId}
+                  onSelectedStampIdChange={setStampId}
+                  initial={pickerInitial}
+                  scopeIssue={scopeIssue}
+                  disabled={isPending}
+                  onPickerOpenChange={setPickerOpen}
+                />
+              )}
+              {/* In edit mode `StampSelect` is not there to carry these, and both are read by the
+                  save: `stampId` is the copy's denormalised pointer — the first entry, which is what
+                  re-points the copy and records a refinement when it names a stamp the piece was not
+                  carrying — and `itemStamps` is the whole list. Absent while the list is still
+                  loading, which is what leaves the entries alone. */}
+              {mode === "edit" && stampRows && stampRows.length > 0 && (
+                <>
+                  <input type="hidden" name="stampId" value={stampRows[0].stampId} />
+                  <input
+                    type="hidden"
+                    name="itemStamps"
+                    value={JSON.stringify(
+                      stampRows.map((row) => ({
+                        stampId: row.stampId,
+                        quantity: row.quantity,
+                        formatId: row.formatId || null,
+                      }))
+                    )}
+                  />
+                </>
+              )}
+              {mode === "edit" && !stampRows && item && (
+                <input type="hidden" name="stampId" value={item.stampId} />
+              )}
             </div>
 
             {/* Row 2: condition · certificate · format — the three axes a copy is described by,

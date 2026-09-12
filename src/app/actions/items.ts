@@ -12,9 +12,11 @@ import {
   restoreItem,
   resolveItemVariant,
   getItemListItem,
+  getItemStamps,
   setItemPlatformExclusion,
 } from "@/lib/items";
-import type { ItemListItem } from "@/lib/items";
+import type { ItemListItem, ItemStampsRead } from "@/lib/items";
+import type { ItemStampEntryInput } from "@/lib/item-stamps";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -108,6 +110,48 @@ function parseItemFields(formData: FormData): ParsedItemFields {
   return { data };
 }
 
+/**
+ * The stamps a copy carries, as the edit dialog's one hidden JSON field (#746).
+ *
+ * JSON rather than indexed form fields because the answer is a **list of records in an order**, and
+ * three parallel `stamps[2][quantity]` families reconstructed by index is how an order gets lost.
+ * The same reason the photo change-set rides as JSON.
+ *
+ * `undefined` means *the field was not submitted* — add mode, and every other caller of
+ * `updateItem` — and leaves the entries alone; that is a different answer from an empty list, which
+ * the domain refuses. Malformed JSON is also `undefined`: a copy edit is no place to fail over a
+ * field the collector cannot see, and every value the domain actually writes is re-validated there.
+ */
+function parseItemStamps(formData: FormData): ItemStampEntryInput[] | undefined {
+  const raw = formData.get("itemStamps");
+  if (typeof raw !== "string" || !raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  const entries: ItemStampEntryInput[] = [];
+  for (const row of parsed) {
+    if (!row || typeof row !== "object") continue;
+    const { stampId, quantity, formatId } = row as Record<string, unknown>;
+    if (typeof stampId !== "string" || !stampId) continue;
+    entries.push({
+      stampId,
+      quantity: typeof quantity === "number" ? quantity : 1,
+      formatId: typeof formatId === "string" && formatId ? formatId : null,
+    });
+  }
+  return entries;
+}
+
+/** The stamps a copy carries, for the dialog that edits them and the copy's own screen (#746). */
+export async function getItemStampsAction(itemId: string): Promise<ItemStampsRead> {
+  const session = await getSession();
+  return getItemStamps(session.user.id, itemId);
+}
+
 export async function createItemAction(
   collectionId: string,
   formData: FormData
@@ -184,6 +228,10 @@ export async function updateItemAction(
     const { item, becameDelivered } = await updateItem(session.user.id, itemId, {
       ...data,
       variantChangeNote: str(formData, "variantChangeNote") || null,
+      // The whole list of stamps on the piece, when the dialog submitted one (#746). It rides in the
+      // same call as every other field: one save, one transaction, and the copy cannot come out of
+      // it carrying the old cover's stamps and the new one's condition.
+      stamps: parseItemStamps(formData),
     });
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, itemId, changeSet);

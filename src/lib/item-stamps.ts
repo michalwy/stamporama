@@ -89,8 +89,12 @@ async function assertItemOwner(ownerId: string, itemId: string): Promise<string>
  * enforces in the database. The index stays the authority — two concurrent saves cannot both pass
  * this check — but a raw constraint violation names a constraint, where what went wrong is "that
  * stamp is already on this piece, in that format".
+ *
+ * Exported for {@link setItemStampsTx}, whose caller opens the transaction and so has to do this
+ * first: every check here is a **read**, and reading it inside the write would turn a sentence the
+ * collector can act on into a rolled-back save.
  */
-async function validateEntries(
+export async function validateItemStampEntries(
   collectionId: string,
   entries: readonly ItemStampEntryInput[]
 ): Promise<void> {
@@ -318,21 +322,39 @@ export async function setItemStamps(
   entries: readonly ItemStampEntryInput[]
 ): Promise<ItemStampEntry[]> {
   const collectionId = await assertItemOwner(ownerId, itemId);
-  await validateEntries(collectionId, entries);
+  await validateItemStampEntries(collectionId, entries);
 
-  return prisma.$transaction(async (tx) => {
-    await tx.itemStamp.deleteMany({ where: { itemId } });
-    await tx.itemStamp.createMany({
-      data: entries.map((entry, index) => ({
-        itemId,
-        stampId: entry.stampId,
-        quantity: entry.quantity ?? 1,
-        formatId: entry.formatId ?? null,
-        sortOrder: index,
-      })),
-    });
-    return syncItemFromEntriesTx(tx, itemId);
+  return prisma.$transaction((tx) => setItemStampsTx(tx, itemId, entries));
+}
+
+/**
+ * {@link setItemStamps}' write, inside a transaction the caller already holds — for the copy edit
+ * (#746), which saves the copy's own columns and the stamps on it as **one** save. Splitting them
+ * into two transactions would let a copy come out of one save carrying the old cover's stamps and
+ * the new one's condition, and nothing would say which half had landed.
+ *
+ * The **validation is the caller's**, through {@link validateItemStampEntries}, and it belongs
+ * before the transaction opens: it reads the stamps and formats to check them against the copy's own
+ * collection, and a refusal has to reach the collector as a sentence rather than as a rolled-back
+ * write. `syncItemFromEntriesTx` still re-derives the two columns here, so the invariant this module
+ * owns cannot be got round by using the Tx form.
+ */
+export async function setItemStampsTx(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+  entries: readonly ItemStampEntryInput[]
+): Promise<ItemStampEntry[]> {
+  await tx.itemStamp.deleteMany({ where: { itemId } });
+  await tx.itemStamp.createMany({
+    data: entries.map((entry, index) => ({
+      itemId,
+      stampId: entry.stampId,
+      quantity: entry.quantity ?? 1,
+      formatId: entry.formatId ?? null,
+      sortOrder: index,
+    })),
   });
+  return syncItemFromEntriesTx(tx, itemId);
 }
 
 /** Add one stamp to the end of a copy's list — the single-entry shorthand for {@link setItemStamps}.
@@ -348,7 +370,7 @@ export async function addItemStamp(
     orderBy: ENTRY_ORDER,
     select: ENTRY_SELECT,
   });
-  await validateEntries(collectionId, [...existing, entry]);
+  await validateItemStampEntries(collectionId, [...existing, entry]);
 
   return prisma.$transaction(async (tx) => {
     await tx.itemStamp.create({

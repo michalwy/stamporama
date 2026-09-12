@@ -33,6 +33,7 @@ import {
   useCollectionCertificateStatuses,
   useCollectionItemNoPad,
   useInvalidateInventory,
+  useItemStamps,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
@@ -143,6 +144,12 @@ export function CopyDetailPanel({
     void invalidateInventory(collectionId);
   };
 
+  // The stamps this piece carries (#746). Read here rather than on the server beside the copy for
+  // the same reason the dictionaries are: it is the dialog's own query, so opening the editor from
+  // this page costs nothing more, and a save re-reads both.
+  const { data: itemStamps } = useItemStamps(collectionId, item.id);
+  const carried = itemStamps?.entries ?? [];
+
   const areaPath = buildAreaPath(areas, item.areaId);
   const locationPath = item.locationId ? buildLocationPath(locations, item.locationId) : null;
 
@@ -197,6 +204,17 @@ export function CopyDetailPanel({
         </DetailFullRow>
 
         <DetailFullRow style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+          {/* Several catalogue positions on one indivisible piece (#745, ADR-0044 §3). Stated on the
+              copy's own screen because it is what takes the piece out of every copy count, checklist
+              and want for the stamps above — a fact the collector has to be able to see where they
+              are reading the copy, not only infer from a number that failed to move. */}
+          {itemStamps?.multiStamp && (
+            <Tooltip content="This piece carries more than one stamp, so it is a copy of none of them: it counts towards no stamp and closes no want. It is still an ordinary copy for offers, sales, trades and storage.">
+              <span>
+                <StateChip label="Several stamps" token="accent" />
+              </span>
+            </Tooltip>
+          )}
           {item.inCollection && <StateChip label="In collection" />}
           {item.forSale && <StateChip label="For sale" />}
           {item.forTrade && <StateChip label="For trade" />}
@@ -315,6 +333,58 @@ export function CopyDetailPanel({
                 )}
               </FieldGrid>
             </DetailCard>
+
+            {/* Every stamp on the piece, in the collector's own order — which is the order they
+                sit on it, and the order `{catalog}` enumerates them in (ADR-0044 §8). Drawn only for
+                a carrier: on an ordinary copy the identity band above already says which stamp it is,
+                and a card repeating it would be a second answer to one question. Read-only, like
+                everything else here — the copy dialog is the editor.
+
+                Drawn on the same test as the chip, never on the number of rows: a piece bearing one
+                stamp **twice** is a carrier with a single entry, and a chip saying *Several stamps*
+                over no card at all would be the one place this screen could not explain itself. */}
+            {itemStamps?.multiStamp && (
+              <DetailCard title="Stamps on this piece" count={carried.length}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {carried.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <StampIdentity
+                        stamp={{
+                          name: entry.stampName,
+                          catalogNumbers: entry.catalogNumbers,
+                          colnectId: entry.colnectId,
+                          subtype: entry.subtype,
+                        }}
+                        vendorMap={maps.vendorMapFor(entry.areaId, entry.issueId)}
+                        primaryVendorId={maps.primaryVendorByArea.get(entry.areaId ?? "") ?? null}
+                        size="small"
+                        href={`/c/${collectionSlug}/stamps/${entry.stampId}`}
+                      />
+                      {/* The component's own format — a block of four *on* this piece — and how many
+                          of it there are. Both stay quiet at their defaults: a single, once. */}
+                      {entry.formatName && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                          {entry.formatName}
+                        </span>
+                      )}
+                      {entry.quantity > 1 && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                          ×{entry.quantity}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </DetailCard>
+            )}
 
             <DetailCard title="Notes" empty={!item.notes}>
               <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>

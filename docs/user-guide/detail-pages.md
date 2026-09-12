@@ -80,6 +80,12 @@ Only Details and Tags are always there; the rest appear when the copy has them.
   draws.
 - **Details** — condition, certificate status, physical format, area, issue, storage location and
   in-location ref, cost-basis, catalog value, and the date it was added.
+- **Stamps on this piece** — only on a copy carrying more than one: every stamp on it in your own
+  order, with each component's format and quantity where they are not the plain default. A **Several
+  stamps** chip sits with the state chips, because that is what takes the piece out of every count
+  for its stamps. Read-only, like the rest of the page: the list is edited in the copy dialog **Edit**
+  opens. See
+  [covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Photos** — the full gallery, not just the first photo. Click any thumbnail to view it
   full-size.
 - **Catalog prices** — the cross-catalog averages for the copy's stamp, with **Full breakdown**
@@ -188,6 +194,10 @@ than as one owned/not-owned figure. It is a grid:
 - **Columns** are *Any condition* plus one per stamp condition.
 - Each cell reads **owned / required**, and after a **×**, how many **complete sets** those copies
   make.
+
+A **piece carrying several stamps** ticks none of its stamps off, here or anywhere else: you cannot
+supply one of them off a cover that will be sold whole. See
+[covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 
 A complete set is limited by the thinnest stamp on the checklist: if every stamp on it has three copies
 but one has only one, you have one complete set, not three. A single missing stamp makes it zero,

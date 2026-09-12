@@ -8,6 +8,7 @@ import type {
   IssueGroupRow,
   ItemListItem,
   ItemSortBy,
+  ItemStampsRead,
   ItemVariantHistoryData,
   ItemYearFacet,
 } from "@/lib/items";
@@ -556,6 +557,28 @@ export function useItemVariantHistory(
       if (!res.ok) throw new Error("Failed to fetch variant history");
       const data = await res.json();
       return data.history;
+    },
+    enabled: enabled && !!itemId,
+  });
+}
+
+/**
+ * The stamps one copy carries (#746), for the copy dialog's stamp list.
+ *
+ * Fetched when the dialog opens rather than carried on the list row: a carrier is a small minority
+ * of copies and its entries are needed by the one screen that edits them, so paying for a second
+ * read per page of rows would be paying for every copy to answer a question about a few.
+ *
+ * Keyed under the inventory prefix, so a save's `invalidateList` re-reads it — the dialog can be
+ * reopened on the same copy straight after a save, and a stale list of stamps there would be a list
+ * of what the piece carried a moment ago.
+ */
+export function useItemStamps(collectionId: string, itemId: string | null, enabled = true) {
+  return useQuery<ItemStampsRead>({
+    queryKey: ["inventory", collectionId, "itemStamps", itemId] as const,
+    queryFn: async () => {
+      const { getItemStampsAction } = await import("@/app/actions/items");
+      return getItemStampsAction(itemId!);
     },
     enabled: enabled && !!itemId,
   });
