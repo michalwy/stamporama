@@ -886,8 +886,9 @@ model IssueTag {
   tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([issueId, tagId])
-  // *What carries this tag* — the direction the delete confirmation's count and any later filter
-  // (#1182) read it in.
+  // *What carries this tag* — the direction the delete confirmation's count and the list filter
+  // (#1182, `src/lib/tag-filter.ts`) both read it in. Under that filter's *all* reading one list
+  // query is one `some` per ticked tag, so this index is on the hot path rather than beside it.
   @@index([tagId])
   @@map("issue_tag")
 }

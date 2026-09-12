@@ -36,6 +36,7 @@ import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
+import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import {
   loadStampCopyCounts,
   NO_COPIES,
@@ -686,6 +687,12 @@ export interface StampListFilterOpts {
   watermarkIds?: string[];
   paperIds?: string[];
   printingIds?: string[];
+  /** Narrow to the stamps carrying these tags (#1182), under `tagMode`'s reading — *any of them* by
+   *  default, *all of them* on request. Empty or omitted is *every tag*. The stamp's **own** tags:
+   *  nothing is inherited, so a variant matches on what is hung on the variant and never on its
+   *  parent's labels or its issue's (ADR-0010's rule, one feature over). */
+  tagIds?: string[];
+  tagMode?: TagFilterMode;
 }
 
 
@@ -748,6 +755,11 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
   if (opts.year !== undefined) {
     conditions.push({ issuedYear: opts.year === "none" ? null : opts.year });
   }
+
+  // The collector's own labels (#1182) — `buildIssueListWhere`'s clause exactly, one level down, and
+  // in the `AND` list for the same reason: under *all* it is itself an `AND`.
+  const tags = tagFilterWhere(opts);
+  if (tags) conditions.push(tags);
 
   return {
     collectionId,

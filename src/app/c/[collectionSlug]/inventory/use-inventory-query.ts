@@ -22,6 +22,7 @@ import type { StampHoldings } from "@/lib/stamp-holdings";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
+import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -43,7 +44,7 @@ interface IssueGroupsPage {
   nextCursor: string | null;
 }
 
-export interface InventoryItemFilters {
+export interface InventoryItemFilters extends TagFilterOpts {
   /** The conditions in scope (#425) — an OR, absent meaning every condition. A list because the
    * filter is a multi-select; a duplicate group addressing its members passes the single condition
    * it grouped on through the same field. */
@@ -106,7 +107,7 @@ export interface InventoryItemFilters {
 }
 
 /** Filters that affect the year facet counts (everything except year itself). */
-export interface InventoryYearFacetFilters {
+export interface InventoryYearFacetFilters extends TagFilterOpts {
   conditionIds?: string[];
   certificateStatusIds?: string[];
   formatIds?: string[];
@@ -206,6 +207,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("deliveryStates", filters.deliveryStates.join(","));
   if (filters.includeGone) params.set("includeGone", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
+  appendTagFilterParams(params, filters);
   return params;
 }
 
@@ -400,6 +402,8 @@ export function useHoldingsValuation(
       excludedPlatformId: filters.excludedPlatformId,
       deliveryStates: filters.deliveryStates,
       includeGone: filters.includeGone,
+      tagIds: filters.tagIds,
+      tagMode: filters.tagMode,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -430,6 +434,7 @@ export function useHoldingsValuation(
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeGone) params.set("includeGone", "true");
+      appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -478,6 +483,7 @@ export function useItemYears(
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.includeDisposed) params.set("includeDisposed", "true");
+      appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );

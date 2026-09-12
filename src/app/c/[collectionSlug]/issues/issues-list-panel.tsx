@@ -63,6 +63,8 @@ import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-s
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { tagFilterFromParams, DEFAULT_TAG_FILTER_MODE, type TagFilterOpts } from "@/lib/tag-filter";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
@@ -196,6 +198,10 @@ export function IssuesListPanel({
     : (storedCatalogVendor ?? "");
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
 
+  // The tag filter (#1182) — the issue's **own** labels, nothing inherited from its stamps, which is
+  // why it does not join `stampFilter` below.
+  const tagFilter: TagFilterOpts = useMemo(() => tagFilterFromParams(searchParams), [searchParams]);
+
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
   const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
@@ -242,13 +248,14 @@ export function IssuesListPanel({
       searchCatalogNumber: parsedSearch.number || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      ...tagFilter,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       displayFormatId: displayFormatId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   // The half of the filter set a stamp *inside* an issue can satisfy (#631). Handed to every row so
@@ -271,8 +278,9 @@ export function IssuesListPanel({
       searchCatalogNumber: parsedSearch.number || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      ...tagFilter,
     }),
-    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber]
+    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(
@@ -289,9 +297,10 @@ export function IssuesListPanel({
       searchCatalogNumber: parsedSearch.number || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      ...tagFilter,
       year: year || undefined,
     }),
-    [search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, year]
+    [search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -574,6 +583,23 @@ export function IssuesListPanel({
             value={displayFormatId}
             onChange={setDisplayFormatId}
           />
+          {/* The collector's own labels (#1182). The **issue's** tags: nothing is inherited, so an
+              issue matches on what is hung on it and never on what is hung on the stamps inside
+              it — and the expanded tree under a matching row is left exactly as it was, because a
+              filter about issues has nothing to say about which variants are worth showing. */}
+          <TagFilterControl
+            collectionId={collectionId}
+            tagIds={tagFilter.tagIds ?? []}
+            mode={tagFilter.tagMode ?? DEFAULT_TAG_FILTER_MODE}
+            onChange={({ tagIds, mode }) =>
+              updateParams({
+                tagIds: tagIds.join(","),
+                // The mode rides only with the ids: a cleared filter leaves no stale word behind,
+                // and *any* — the default — is never spelled out.
+                tagMode: tagIds.length > 0 && mode === "all" ? "all" : "",
+              })
+            }
+          />
         </ListToolbar>
 
         {/* Issues list */}
@@ -597,7 +623,7 @@ export function IssuesListPanel({
               fontSize: "0.9375rem",
             }}
           >
-            {search || catalogNumber || year
+            {search || catalogNumber || year || (tagFilter.tagIds?.length ?? 0) > 0
               ? "No issues match your search."
               : filterAreaId
                 ? "No issues in this area."

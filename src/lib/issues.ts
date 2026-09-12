@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
+import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
 import {
@@ -933,6 +934,12 @@ export interface IssueListFilterOpts {
   /** Physical format whose price fills the list price column / issue totals (#343). Null or
    *  omitted is the single — the default, and the only value a collection with no formats has. */
   displayFormatId?: string | null;
+  /** Narrow to the issues carrying these tags (#1182), under `tagMode`'s reading — *any of them*
+   *  by default, *all of them* on request. Empty or omitted is *every tag*, the absence of the
+   *  filter. The issue's **own** tags: nothing is inherited, so an issue matches on what is hung on
+   *  it and never on what is hung on its stamps. */
+  tagIds?: string[];
+  tagMode?: TagFilterMode;
 }
 
 /** Build the Prisma `where` for the issue list from the active filters.
@@ -1002,6 +1009,12 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
   if (opts.year !== undefined) {
     conditions.push({ year: opts.year === "none" ? null : opts.year });
   }
+
+  // The collector's own labels (#1182). Goes in the `AND` list rather than at the top level: under
+  // *all* it is itself an `AND`, and the search's own `OR` already sits here — two clauses on one
+  // key would have the second spread silently replacing the first.
+  const tags = tagFilterWhere(opts);
+  if (tags) conditions.push(tags);
 
   return {
     collectionId,

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 const VALID_SORT_BY = new Set<StampSortBy>(["issueDate", "catalogNumber", "name", "issueName"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -50,6 +51,9 @@ export async function GET(
       catalogNumber,
       issueId,
       ...attributeFilters,
+      // The collector's own labels (#1182) — a filter like any other, so the list and both
+      // facet rails narrow by it and their counts answer for it.
+      ...tagFilterFromParams(sp),
       year,
       displayConditionId,
       displayFormatId,

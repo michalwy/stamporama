@@ -8,8 +8,10 @@ import { isTagColor, type TagColor } from "./tag-colors";
  * *to check*, *for expertising*, *birds*, *from the box grandfather left*.
  *
  * This module is the dictionary and the three places a tag hangs: an **issue**, a **stamp** and a
- * **copy** (#1181). The tag filter is #1182 and is not anticipated here beyond the join tables'
- * `tagId` indexes, which a filter reads in the direction it needs.
+ * **copy** (#1181). Narrowing a list *by* tag is not here at all: it is `tag-filter.ts` (#1182),
+ * which is pure because the panel, the route and the three list modules all have to agree about one
+ * spelling of it — what this module left for it was the join tables' `tagId` indexes, which it reads
+ * in the direction they were added for.
  *
  * **Nothing is inherited.** A tag on an issue is not on its stamps, a tag on a parent stamp is not
  * on its variants, a tag on a variant is not on its parent, and a tag on a stamp is not on the

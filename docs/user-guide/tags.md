@@ -85,6 +85,38 @@ A tag is drawn as a chip in its own colour **wherever the thing carrying it is d
 
 A thing with no tags shows nothing at all — no empty marker.
 
+## Finding things by tag
+
+The **Issues list**, the **Stamps list** and the **Copies list** each have an **All tags** filter on
+their toolbar, offering your whole dictionary. Tick the tags you are after and the list narrows to
+what carries them. The filter appears only once the collection has at least one tag — there is
+nothing to filter by before that.
+
+With two or more tags ticked there are two questions you might be asking, and the filter carries
+both. Inside its panel is a switch, **Must carry every ticked tag**:
+
+| The switch | What you get |
+| --- | --- |
+| **off** (the default) | anything carrying **at least one** of the ticked tags |
+| **on** | only the things carrying **all** of them |
+
+So *birds* and *to check* together show you everything in either pile by default, and with the
+switch on only the ones that are in both. The closed control says which reading is in force — *Any
+of 2 tags* or *All of 2 tags* — because the list alone cannot tell you. With a single tag ticked the
+switch has nothing to say and is greyed out: *any of it* and *all of it* are the same question.
+
+The selection and the switch are part of the **address**, like every other filter on these lists, so
+a reload brings back what you were looking at and a copied link shows somebody else the same thing.
+On the Copies list the filter is also remembered between visits, as the filters beside it are.
+
+**Ticking rows and filtering are independent.** Changing the tag filter on the Copies list unticks
+nothing — whatever you had selected stays selected, even the rows the new filter has hidden, and an
+action still reaches only the ticked rows you can see.
+
+The filter narrows by the tags on **the row's own thing**, which follows from the rule below: a tag
+on an issue will not bring its stamps into a filtered Stamps list, and a tag on a stamp will not
+bring its copies into a filtered Copies list.
+
 ## Nothing is inherited
 
 This is the rule worth knowing before you start:

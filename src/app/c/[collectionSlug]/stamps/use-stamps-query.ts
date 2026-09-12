@@ -8,6 +8,7 @@ import {
   STAMP_ATTRIBUTE_FILTER_KEYS,
   type StampAttributeFilters,
 } from "@/lib/stamp-attribute-kinds";
+import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 
 interface StampsPage {
   items: StampListItem[];
@@ -16,7 +17,7 @@ interface StampsPage {
 
 /** The catalogue-attribute narrowing both stamp queries carry (#737) — one id set per dictionary,
  *  absent or empty meaning every value. */
-export interface StampListFilters extends StampAttributeFilters {
+export interface StampListFilters extends StampAttributeFilters, TagFilterOpts {
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -35,7 +36,7 @@ export interface StampListFilters extends StampAttributeFilters {
 /** Filters that affect the year facet counts (everything except year itself). The attribute
  *  filters are among them: they narrow the list, so the counts have to answer for them — unlike the
  *  condition and format switchers, which only choose which price a row shows. */
-export interface StampYearFacetFilters extends StampAttributeFilters {
+export interface StampYearFacetFilters extends StampAttributeFilters, TagFilterOpts {
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -45,7 +46,7 @@ export interface StampYearFacetFilters extends StampAttributeFilters {
 
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
  *  which is why `year` is in here and out of {@link StampYearFacetFilters}. */
-export interface StampAreaFacetFilters extends StampAttributeFilters {
+export interface StampAreaFacetFilters extends StampAttributeFilters, TagFilterOpts {
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
@@ -91,6 +92,7 @@ export function useStampsInfinite(
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
       appendAttributeFilters(params, filters);
+      appendTagFilterParams(params, filters);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
@@ -122,6 +124,7 @@ export function useStampYears(
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
       appendAttributeFilters(params, filters);
+      appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/stamps/years?${params.toString()}`
       );
@@ -146,6 +149,7 @@ export function useStampAreaFacets(
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.year) params.set("year", filters.year);
       appendAttributeFilters(params, filters);
+      appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/stamps/areas?${params.toString()}`
       );

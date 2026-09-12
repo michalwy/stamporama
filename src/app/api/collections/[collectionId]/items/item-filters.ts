@@ -1,5 +1,6 @@
 import type { ItemListFiltersPaginated } from "@/lib/items";
 import { isDeliveryState } from "@/lib/delivery-state";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -44,6 +45,10 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
   const areaIdsParam = sp.get("areaIds");
   const yearParam = sp.get("year");
   return {
+    // The collector's own labels (#1182), with the mode the link carries. Read through the one
+    // parser the panel and the other two lists' routes use, so *any* and *all* cannot come to mean
+    // different things on different screens.
+    ...tagFilterFromParams(sp),
     conditionIds: readConditionIds(sp),
     certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
     formatIds: readCsvParam(sp, "formatIds"),
