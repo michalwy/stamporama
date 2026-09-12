@@ -12,6 +12,8 @@ then a **Marketplaces** group holding one screen per platform, named for the pla
 - **Offers** — the list itself, and the screen you spend the day on.
 - **Lot builder** — where a job lot of a hundred copies is put together and turned into an offer.
   See [Building a bulk lot](#building-a-bulk-lot).
+- **Series from singles** — the series you listed stamp by stamp that could now go out whole. See
+  [Series from singles](#series-from-singles).
 - **Bulk listing** — where you post a batch that is prepared and ready to go live. See
   [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
   list's toolbar as well, which carries the platform filter across.
@@ -1334,6 +1336,61 @@ no token for it. It is the number a buyer decides on, so it is worth stating del
 by default — and the figures bar has the true figure the moment you want to type it.
 
 Everything after that is an ordinary offer: pricing, photos, the ready gate, publishing.
+
+## Series from singles
+
+A series is often listed **stamp by stamp** while it is still incomplete: three of a five-stamp set,
+three single offers. When the two missing stamps arrive a week later, only those two show up as *not
+offered* — nothing tells you that together with the three singles already up, the whole series could
+now go out as one offer. **Series from singles** tells you.
+
+### Choosing the platform
+
+Pick the **platform** first. The question only makes sense for one marketplace at a time: a series and
+its singles compete for the same buyers, so a single offer on another platform is not counted. The
+platform is written into the address, so a refresh or a link lands on the same answer.
+
+### What is listed
+
+A series here is a **checklist** — one of an issue's sets. It is listed when two kinds of copy on that
+platform, taken together, cover every stamp of it:
+
+- **Available copies** — the same *not offered there yet* the [Lot builder](#building-a-bulk-lot)
+  draws from: marked for sale, arrived and sorted, not already in an open offer on that platform, not
+  under bid anywhere, and not set aside as never-on-that-platform.
+- **Singles** — a copy that is the **only copy in its set**, in an offer on that platform that is
+  **Preparing**, **Ready**, **Active** or **Paused**.
+
+"Covers" means what it means in the lot builder: a copy of a **variant** covers its parent's place,
+and the conditions and formats do not have to match across the series.
+
+Three things are deliberately **not** listed:
+
+- A series the **available copies complete on their own**. Nothing has to be taken out of an offer for
+  that one; the lot builder offers it whole already.
+- A series **still missing a stamp** even after the singles are counted.
+- Anything resting on a copy that is **not really a single**: a copy in an offer that is **in active
+  bidding** (a bid commits the copy, on whichever platform it is), a copy inside a set with other
+  copies (a pair, or a partial series — it is already part of something else), or a copy in a **Sold**
+  or **Withdrawn** offer.
+
+### Reading a series
+
+Each series is a card headed by its issue and checklist name, with one row per stamp in the
+checklist's own order. Beside each stamp is **every copy that could fill its place**: the copy number,
+its condition, and either *not offered here yet* or the single offer holding it — its number, its
+name and its state, each a link. A copy that is a variant of the listed stamp says which variant.
+
+A copy **promised in an agreed trade** still fills its place and is chipped **Promised · #N**, as on the Copies list.
+It is not left out: a draft competes for nothing, but an offer holding it cannot go live while the
+trade stands.
+
+The card's heading says **how many offers would change** — *at least N, M of them live* (Active or
+Paused). Where more than one copy could fill a place, the figure assumes the cheapest choice in
+offers: an available copy first, since it changes no offer at all, then the fewest offers, and among
+those the fewest live ones. Choose differently and more offers change.
+
+This screen only lists. Putting a listed series together as one offer is a separate step.
 
 ## Bulk listing — posting a prepared batch
 

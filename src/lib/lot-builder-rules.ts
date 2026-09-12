@@ -226,6 +226,11 @@ export function capBoundedCapacity(
 
 // Checklist coverage ---------------------------------------------------------
 
+/** What coverage asks of a copy: only the slot it fills, which its variant chain answers. Narrower
+ *  than {@link LotCandidate} so the series-recombination screen (#1210) can ask the same question
+ *  of copies that carry no catalog value and no pick attribution. */
+export type CoverageCopy = Pick<LotCandidate, "variantChain">;
+
 /** How far one checklist gets **within a pool** — coverage, not one cell of the
  *  `checklist-completeness-rules.ts` grid. */
 export interface ChecklistCoverage {
@@ -255,11 +260,11 @@ export interface ChecklistCoverage {
  * wants it over a wider one: the three must not grow separate completeness derivations.
  */
 export function checklistCoverage(
-  pool: readonly LotCandidate[],
+  pool: readonly CoverageCopy[],
   checklists: readonly LotChecklist[]
 ): ChecklistCoverage[] {
   return checklists.map((checklist) => {
-    const slots = coveredSlots(pool, checklist);
+    const slots = checklistSlots(pool, checklist);
     const requiredCount = new Set(checklist.stampIds).size;
     let coveredCount = 0;
     for (const candidates of slots.values()) if (candidates.length > 0) coveredCount += 1;
@@ -274,13 +279,14 @@ export function checklistCoverage(
 
 /** One slot per member, holding the pool copies that cover it. An empty checklist yields an empty
  *  map, and {@link checklistCoverage} calls it incomplete: a set of nothing is not an achievement,
- *  the same rule the completeness grid keeps. */
-function coveredSlots(
-  pool: readonly LotCandidate[],
+ *  the same rule the completeness grid keeps. Exported so a caller that has to *show* the slots —
+ *  the series-recombination screen (#1210) — reads them off the same resolution coverage counts. */
+export function checklistSlots<T extends CoverageCopy>(
+  pool: readonly T[],
   checklist: LotChecklist
-): Map<string, LotCandidate[]> {
+): Map<string, T[]> {
   const members = new Set(checklist.stampIds);
-  const slots = new Map<string, LotCandidate[]>();
+  const slots = new Map<string, T[]>();
   for (const stampId of members) slots.set(stampId, []);
   for (const candidate of pool) {
     const member = satisfiedMember(candidate.variantChain, members);
@@ -524,7 +530,7 @@ function takeSeries(
   depthOf: (c: LotCandidate) => number,
   orderOf: (c: LotCandidate) => number
 ): RefusedChecklist | null {
-  const slots = coveredSlots(pool, checklist);
+  const slots = checklistSlots(pool, checklist);
   const additions: LotCandidate[] = [];
   const wouldAdd = new Map<string, number>();
 
