@@ -15,20 +15,53 @@ import { usePersistedFlag } from "./use-persisted-flag";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 
-const LABEL_STYLE: React.CSSProperties = {
-  fontSize: "0.6875rem",
+/* The bar is **three kinds of figure and a rule between each** (#1183), not one column of seven.
+ *
+ * Every row of it arrived on its own — the order total with shipping (#852), catalogue value
+ * (#179), market value (#458), purchase cost (#119), the write-off (#396) — each right by itself,
+ * and the flat list of identically-weighted amounts is what they added up to. Asked what he should
+ * see without reading anything else, the collector answered *how much this cost me*, so:
+ *
+ *   what it cost         the order total, in the one size no other figure on the bar is drawn at,
+ *                        with price and shipping **indented under it** as its breakdown rather
+ *                        than set beside it as two more totals
+ *   what it's worth      catalogue and market value
+ *   accounted to copies  how much of the money has been frozen onto copies, and written off
+ *   what it returned     the sale side (#559), where there is one
+ *
+ * The leading group takes no heading: its own first row names it, and a heading there would cost
+ * the **collapsed** bar — which is the headline row alone — a line it does not need. The groups
+ * inside the expander take one each, because that is where "is this the same kind of thing as the
+ * row above" is actually asked.
+ *
+ * Currency is per amount and stays per amount. The order is stated in its transaction currency with
+ * a base-currency approximation beside it while the valuations are in the base currency outright,
+ * so nothing is hoisted onto a group heading (#1183) — grouping must not be what blurs that. */
+
+const LABEL_BASE: React.CSSProperties = {
   fontWeight: 600,
   color: "var(--color-text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  // Fixed width so both rows' amounts line up in a column.
-  width: "6.5rem",
+  fontSize: "0.6875rem",
   flexShrink: 0,
 };
 
-const AMOUNT_STYLE: React.CSSProperties = {
-  fontSize: "1.0625rem",
-  fontWeight: 700,
+/** Fixed width so every amount on the bar starts in one column. */
+const LABEL_STYLE: React.CSSProperties = { ...LABEL_BASE, width: "6.5rem" };
+
+/** The leading row's own label, a shade darker than the rest so the row it names reads as the one
+ * the bar is about. */
+const HEADLINE_LABEL_STYLE: React.CSSProperties = {
+  ...LABEL_STYLE,
+  color: "var(--color-text-secondary)",
+};
+
+/** Narrower by exactly the indent the breakdown block adds, so the indented rows' amounts stay in
+ * the same column as everything above and below them. */
+const BREAKDOWN_LABEL_STYLE: React.CSSProperties = { ...LABEL_BASE, width: "5.75rem" };
+
+const AMOUNT_BASE: React.CSSProperties = {
   color: "var(--color-text-primary)",
   fontVariantNumeric: "tabular-nums",
   // Fixed width + right-align so the currency codes align and digits share a column.
@@ -36,9 +69,34 @@ const AMOUNT_STYLE: React.CSSProperties = {
   textAlign: "right",
 };
 
+/** The one figure the collector came for, in the one size nothing else on the bar uses (#1183). */
+const HEADLINE_AMOUNT_STYLE: React.CSSProperties = {
+  ...AMOUNT_BASE,
+  fontSize: "1.4375rem",
+  fontWeight: 700,
+  letterSpacing: "-0.01em",
+};
+
+const AMOUNT_STYLE: React.CSSProperties = { ...AMOUNT_BASE, fontSize: "1rem", fontWeight: 600 };
+
+/** Price and shipping: lighter than the figure they add up to, because that is what they are. */
+const BREAKDOWN_AMOUNT_STYLE: React.CSSProperties = {
+  ...AMOUNT_BASE,
+  fontSize: "0.9375rem",
+  fontWeight: 500,
+  color: "var(--color-text-secondary)",
+};
+
+/** The supporting sentence. It is a **column**, not a trailing run of text: `flex: 1` with a
+ * `min-width` keeps a long note wrapping inside its own lane to the right of the amount, instead
+ * of spilling back to the left edge and alternating with the figures down the bar — which is most
+ * of why the column did not resolve (#1183). */
 const NOTE_STYLE: React.CSSProperties = {
-  fontSize: "0.8125rem",
+  fontSize: "0.75rem",
   color: "var(--color-text-muted)",
+  lineHeight: 1.4,
+  flex: "1 1 12rem",
+  minWidth: 0,
 };
 
 /** A caveat about a figure, rather than a fact beside it — the missing exchange rate (#852).
@@ -66,6 +124,30 @@ const ROW_STYLE: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+/** The breakdown of the row above it: indented behind a rule, which is the whole of how price and
+ * shipping are told apart from the totals they are part of. */
+const BREAKDOWN_STYLE: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.25rem",
+  paddingLeft: "0.625rem",
+  borderLeft: "2px solid var(--color-border)",
+};
+
+const GROUP_RULE_STYLE: React.CSSProperties = {
+  margin: "0.375rem 0 0",
+  border: 0,
+  borderTop: "1px solid var(--color-border)",
+};
+
+const GROUP_LABEL_STYLE: React.CSSProperties = {
+  fontSize: "0.625rem",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "var(--color-text-placeholder)",
+};
+
 /** The expander, `offers-summary-bar.tsx`'s exactly — the bar this one was told to follow. */
 const TOGGLE_STYLE: React.CSSProperties = {
   marginLeft: "auto",
@@ -83,6 +165,21 @@ const TOGGLE_STYLE: React.CSSProperties = {
   fontWeight: 600,
   color: "var(--color-text-muted)",
 };
+
+const WORTH_LABEL = "What it's worth";
+const ACCOUNTED_LABEL = "Cost accounted to copies";
+const RETURNED_LABEL = "What it has returned";
+
+/** One kind of figure, ruled off from the kind above it and named (#1183). */
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <hr style={GROUP_RULE_STYLE} />
+      <div style={GROUP_LABEL_STYLE}>{label}</div>
+      {children}
+    </>
+  );
+}
 
 /** A shimmering placeholder block. ` ` keeps the span on the text baseline so its line box
  * matches the loaded row; the amount block carries the row height via {@link AMOUNT_STYLE}. */
@@ -103,20 +200,34 @@ function SkeletonBlock({ style }: { style: React.CSSProperties }) {
   );
 }
 
-/** Placeholder rows for the figures that need a valuation pass. Mirrors the loaded structure —
- * same frame, same per-span font sizes — so the bar reserves its final height and surrounding
- * content does not shift when the figures arrive (#151). The write-off row is not among them,
- * being the exception rather than the shape. */
-function SkeletonRows({ rows }: { rows: number }) {
+function SkeletonRow() {
+  return (
+    <div style={ROW_STYLE} aria-hidden>
+      <SkeletonBlock style={LABEL_STYLE} />
+      <SkeletonBlock style={AMOUNT_STYLE} />
+      <SkeletonBlock style={{ ...NOTE_STYLE, flex: "0 0 5rem" }} />
+    </div>
+  );
+}
+
+/** Placeholder rows for the figures that need a valuation pass, **in their groups** — same rules,
+ * same headings, same per-span font sizes — so the bar reserves its final height and surrounding
+ * content does not shift when the figures arrive (#151). The write-off and return rows are not
+ * among them, being the exceptions rather than the shape. */
+function SkeletonRows({ withCatalog }: { withCatalog: boolean }) {
   return (
     <>
-      {Array.from({ length: rows }, (_, row) => (
-        <div key={row} style={ROW_STYLE} aria-hidden>
-          <SkeletonBlock style={LABEL_STYLE} />
-          <SkeletonBlock style={AMOUNT_STYLE} />
-          <SkeletonBlock style={{ ...NOTE_STYLE, width: "5rem" }} />
-        </div>
-      ))}
+      {withCatalog ? (
+        <Group label={WORTH_LABEL}>
+          <SkeletonRow />
+          <SkeletonRow />
+        </Group>
+      ) : (
+        <SkeletonRow />
+      )}
+      <Group label={ACCOUNTED_LABEL}>
+        <SkeletonRow />
+      </Group>
     </>
   );
 }
@@ -145,6 +256,7 @@ function FigureAmount({
           fontWeight: 500,
           color: "var(--color-text-muted)",
           fontVariantNumeric: "normal",
+          letterSpacing: "normal",
         }}
       >
         {NOT_WORKED_OUT}
@@ -212,13 +324,19 @@ function baseNote(
 }
 
 /** One spend row: label, the transaction-currency amount, then the base-currency equivalent and
- * whatever else the row has to say about where its figure came from. */
+ * whatever else the row has to say about where its figure came from.
+ *
+ * These are the bar's only **recorded** figures rather than aggregates over copies: a price is what
+ * the collector typed on the order, so a zero here is a zero that was entered, and #1184's absence
+ * treatment — which is about a sum with no copies behind it — has nothing to apply to. It is also
+ * why the breakdown can be trusted to reconcile with the row above it; a part shown as *not worked
+ * out* would leave a total that no longer adds up on screen. */
 function SpendRow({
   label,
   amount,
   spend,
   part,
-  full,
+  emphasis,
   prefix,
   children,
 }: {
@@ -226,15 +344,16 @@ function SpendRow({
   amount: string;
   spend: PurchaseSpend;
   part: "total" | "price" | "shipping";
-  full?: boolean;
+  emphasis: "headline" | "breakdown";
   prefix?: string;
   children?: React.ReactNode;
 }) {
-  const note = baseNote(spend, part, full ?? false);
+  const headline = emphasis === "headline";
+  const note = baseNote(spend, part, headline);
   return (
     <div style={ROW_STYLE}>
-      <span style={LABEL_STYLE}>{label}</span>
-      <span style={AMOUNT_STYLE}>
+      <span style={headline ? HEADLINE_LABEL_STYLE : BREAKDOWN_LABEL_STYLE}>{label}</span>
+      <span style={headline ? HEADLINE_AMOUNT_STYLE : BREAKDOWN_AMOUNT_STYLE}>
         {amount} {spend.tx.currency}
       </span>
       {(prefix || note) && (
@@ -341,10 +460,12 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
 function CatalogValueRow({
   total,
   itemCount,
+  headline,
   children,
 }: {
   total: HoldingsSummary;
   itemCount?: number;
+  headline: boolean;
   children?: React.ReactNode;
 }) {
   const figure = stateFigure(
@@ -366,8 +487,12 @@ function CatalogValueRow({
   }
   return (
     <div style={ROW_STYLE}>
-      <span style={LABEL_STYLE}>Catalog value</span>
-      <FigureAmount figure={figure} currency={total.baseCurrency} style={AMOUNT_STYLE} />
+      <span style={headline ? HEADLINE_LABEL_STYLE : LABEL_STYLE}>Catalog value</span>
+      <FigureAmount
+        figure={figure}
+        currency={total.baseCurrency}
+        style={headline ? HEADLINE_AMOUNT_STYLE : AMOUNT_STYLE}
+      />
       <span style={NOTE_STYLE}>
         {/* How many copies are in scope, first in the note because it is the plainest thing the
             row can say and the one the toolbar above it cannot (#845). */}
@@ -380,20 +505,33 @@ function CatalogValueRow({
   );
 }
 
-/** The figures that need a valuation pass: market value, the actual purchase cost of the copies
- * in scope, and the write-off of the ones that are gone. Always inside the expander. */
-function ValuationRows({ total }: { total: HoldingsSummary }) {
-  // What the market paid for copies like these (#458; ADR-0022 §8). Coverage is stated, never
-  // implied: market value exists only where lots have been recorded, so the count of copies behind
-  // the figure — and the count it could say nothing about — is part of the figure.
+/** What the market paid for copies like these (#458; ADR-0022 §8). Coverage is stated, never
+ * implied: market value exists only where lots have been recorded, so the count of copies behind
+ * the figure — and the count it could say nothing about — is part of the figure.
+ *
+ * Drawn only when there are copies to have covered at all; an empty scope has no market answer to
+ * give, whereas a scope with copies and no evidence has one and says so. */
+function MarketValueRow({ total }: { total: HoldingsSummary }) {
   const market = total.market;
-  const marketCovered = market.valuedCount + market.noEvidenceCount;
-  const marketFigure = stateFigure(
-    market.totalBaseAmount,
-    market.valuedCount,
-    market.noEvidenceCount
+  const covered = market.valuedCount + market.noEvidenceCount;
+  if (covered === 0) return null;
+  const figure = stateFigure(market.totalBaseAmount, market.valuedCount, market.noEvidenceCount);
+  return (
+    <div style={ROW_STYLE}>
+      <span style={LABEL_STYLE}>Market value</span>
+      <FigureAmount figure={figure} currency={market.baseCurrency} style={AMOUNT_STYLE} />
+      <span style={NOTE_STYLE}>
+        from {market.valuedCount} of {covered} {copiesWord(covered)}
+        {market.noEvidenceCount > 0 ? ` · ${market.noEvidenceCount} with no auction results` : ""}
+      </span>
+    </div>
   );
+}
 
+/** How much of the money has actually been frozen onto the copies in scope, and what it cost to
+ * lose the ones that are gone. One group, because both are the same question — how far the spend
+ * has been accounted for — and neither is what the scope is worth. */
+function AccountedRows({ total }: { total: HoldingsSummary }) {
   const cost = total.cost;
   const costFigure = stateFigure(
     cost.totalCostBasis,
@@ -427,26 +565,6 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
 
   return (
     <>
-      {/* Market value (#458). Only drawn when there are copies to have covered at all — an empty
-          scope's 0.00 would state a market answer about nothing. A scope with copies but no
-          evidence still draws, saying so: "0 of 84 copies" is the answer, and hiding the row would
-          leave the collector to guess whether the figure is missing or the evidence is. */}
-      {marketCovered > 0 && (
-        <div style={ROW_STYLE}>
-          <span style={LABEL_STYLE}>Market value</span>
-          <FigureAmount
-            figure={marketFigure}
-            currency={market.baseCurrency}
-            style={AMOUNT_STYLE}
-          />
-          <span style={NOTE_STYLE}>
-            from {market.valuedCount} of {marketCovered} cop{marketCovered === 1 ? "y" : "ies"}
-            {market.noEvidenceCount > 0
-              ? ` · ${market.noEvidenceCount} with no auction results`
-              : ""}
-          </span>
-        </div>
-      )}
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>Purchase cost</span>
         <FigureAmount figure={costFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
@@ -503,6 +621,8 @@ function ValuationRows({ total }: { total: HoldingsSummary }) {
  * decision is `@/lib/summary-figure`, pure and unit-tested, and a genuinely-zero figure still reads
  * zero.
  *
+ * The figures are **grouped by what kind of thing they are** (#1183); see the file header.
+ *
  * **Collapsed by default (#845)**, to the headline row alone, on `offers-summary-bar.tsx`'s model:
  * a bar that shows every figure it can, always, is a block of numbers between the collector and the
  * list they came for. Everything below the headline is a question asked occasionally rather than
@@ -553,7 +673,8 @@ export function HoldingsSummaryBar({
    *
    * The price/shipping breakdown stays **inside** the expander, because those two are the figures
    * the collector said he already had ("mam osobno cenę, którą zapłaciłem, koszty dostawy") — which
-   * is #845's own test for what belongs behind it.
+   * is #845's own test for what belongs behind it. #1183 then indented them under the total they
+   * add up to, which is what they are.
    */
   spend?: PurchaseSpend;
 }) {
@@ -602,35 +723,37 @@ export function HoldingsSummaryBar({
           amount={spend.tx.total}
           spend={spend}
           part="total"
-          full
+          emphasis="headline"
         >
           {toggle}
         </SpendRow>
       ) : total ? (
-        <CatalogValueRow total={total} itemCount={itemCount}>
+        <CatalogValueRow total={total} itemCount={itemCount} headline>
           {toggle}
         </CatalogValueRow>
       ) : (
         <div style={ROW_STYLE}>
-          <SkeletonBlock style={LABEL_STYLE} />
-          <SkeletonBlock style={AMOUNT_STYLE} />
-          <SkeletonBlock style={{ ...NOTE_STYLE, width: "5rem" }} />
+          <SkeletonBlock style={HEADLINE_LABEL_STYLE} />
+          <SkeletonBlock style={HEADLINE_AMOUNT_STYLE} />
+          <SkeletonBlock style={{ ...NOTE_STYLE, flex: "0 0 5rem" }} />
           {toggle}
         </div>
       )}
 
       {expanded && (
         <>
-          {/* The two halves of the total (#852). Drawn even when shipping is zero, so the
+          {/* The two halves of the total (#852), indented under it as its breakdown rather than
+              set beside it as two more totals (#1183). Drawn even when shipping is zero, so the
               breakdown always visibly reconciles with the row above it rather than going missing
               on exactly the orders where price and total happen to agree. */}
           {spend && (
-            <>
+            <div style={BREAKDOWN_STYLE}>
               <SpendRow
                 label="Price"
                 amount={spend.tx.price}
                 spend={spend}
                 part="price"
+                emphasis="breakdown"
                 prefix={
                   spend.lines && spend.lines.expenses > 0
                     ? `includes ${spend.lines.expenses} non-inventory expense${spend.lines.expenses === 1 ? "" : "s"}`
@@ -642,6 +765,7 @@ export function HoldingsSummaryBar({
                 amount={spend.tx.shipping}
                 spend={spend}
                 part="shipping"
+                emphasis="breakdown"
                 // On a lot this is not a charge the lot incurred: the order's shared cost is
                 // apportioned across every line by price (ADR-0009 §3.1). Naming the whole beside
                 // the share is what keeps the apportionment from happening invisibly.
@@ -651,32 +775,39 @@ export function HoldingsSummaryBar({
                     : undefined
                 }
               />
-            </>
+            </div>
           )}
           {total ? (
             <>
-              {/* Displaced from the headline by the spend rows above, and only then. */}
-              {spend && <CatalogValueRow total={total} itemCount={itemCount} />}
-              <ValuationRows total={total} />
-              {/* What the same copies have since fetched (#559) — a rule under them, because the
-                  rows above are what this scope *is worth* and the rows below what it has *made*. */}
+              {/* What the copies are worth. With a spend above, that is a group of its own and
+                  catalog value is displaced into it; without one, catalog value already leads the
+                  bar and market value simply continues its group, so a heading here would rule a
+                  figure off from the one it belongs with. */}
+              {spend ? (
+                <Group label={WORTH_LABEL}>
+                  <CatalogValueRow total={total} itemCount={itemCount} headline={false} />
+                  <MarketValueRow total={total} />
+                </Group>
+              ) : (
+                <MarketValueRow total={total} />
+              )}
+              <Group label={ACCOUNTED_LABEL}>
+                <AccountedRows total={total} />
+              </Group>
+              {/* What the same copies have since fetched (#559) — its own group, because the rows
+                  above are what this scope *is worth* and what it *cost*, and these are what it
+                  has *made*. */}
               {ret && ret.soldCount > 0 && (
-                <>
-                  <hr
-                    style={{
-                      margin: "0.25rem 0",
-                      border: 0,
-                      borderTop: "1px solid var(--color-border)",
-                    }}
-                  />
+                <Group label={RETURNED_LABEL}>
                   <ReturnRows ret={ret} />
-                </>
+                </Group>
               )}
             </>
           ) : (
             // Catalogue value, market value and copy cost — the three a loaded bar all but always
-            // draws — held open at their final height while the valuation pass runs.
-            <SkeletonRows rows={spend ? 3 : 2} />
+            // draws — held open at their final height, in their final groups, while the valuation
+            // pass runs.
+            <SkeletonRows withCatalog={spend !== undefined} />
           )}
         </>
       )}

@@ -286,7 +286,10 @@ occasionally.
   by hand, or dropped from a lot) — those contribute nothing to the total, the same way the
   per-copy cost-basis distinguishes them.
 
-Comparing the lines shows list price, what the market pays and what you paid, side by side.
+Comparing the lines shows list price, what the market pays and what you paid, side by side. What
+you **paid** is ruled off from what the copies are **worth** and labelled *Cost accounted to
+copies*, because the two answer different questions and reading them as one list means working that
+out afresh each time.
 
 **A figure with nothing behind it is not shown as an amount.** Every one of these figures is a sum
 over a set of copies, and where no copy contributes there is nothing to sum — so the line says *not
