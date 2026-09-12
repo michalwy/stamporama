@@ -884,9 +884,8 @@ describe("scan sheet ingest (#566)", () => {
     assert.equal(proposed.length, FRONT_BOXES.length);
     proposed.forEach((box, i) => {
       const drawn = FRONT_BOXES[i];
-      // Reading order, and each proposal holds the piece it is for — with a margin, because the
-      // mask stops at the last pixel that differs from the card and a crop flush to it clips
-      // perforation.
+      // Reading order, and each proposal holds the piece it is for — the whole of it, flush with its
+      // edges rather than carrying a strip of card around it, but never cutting into it.
       assert.ok(
         box.x <= drawn.x &&
           box.y <= drawn.y &&
@@ -1006,7 +1005,7 @@ describe("scan sheet ingest (#566)", () => {
         y: drawn.y + drawn.h / 2,
       });
       assert.ok(picked, `no box came back for a point inside ${JSON.stringify(drawn)}`);
-      // Holds the piece it was clicked on, with the same margin the proposal has, and measured on
+      // Holds the piece it was clicked on, edge for edge as the proposal does, and measured on
       // the original rather than on the view — a box measured on the view would put the crop wrong
       // on every card wider than the pipeline's cap.
       assert.ok(

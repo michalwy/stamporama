@@ -362,6 +362,10 @@ proposal is where a cut starts, not where it ends: look down the card, correct w
 draw anything that was missed. On a card laid out with a tooth of gap between the stamps that is
 usually a box or two.
 
+On both kinds of card a box **ends where the paper does** — at the tips of the perforation teeth, or
+at the edge of a slip, an envelope corner or a souvenir sheet — so a tile is the piece and nothing
+around it: no strip of black card, and no mount.
+
 Two mistakes are worth looking for by name, because they are the ones the detection makes:
 
 - **Two stamps in one box** — they were touching. Select the box and **Split** it.

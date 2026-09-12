@@ -545,6 +545,40 @@ empty card, because a failed proposal costs the collector a saving and nothing e
 quietly does nothing is indistinguishable from a click that never registered, and the collector goes
 on clicking — so the refusal is a message on the editor's own notice strip.
 
+## After #1195: a stockbook tile ends where its paper does
+
+Side by side, the two kinds produced different tiles. An album-page tile ended at the tips of the
+stamp's teeth; a stockbook tile carried a strip of black card around the stamp. The collector
+preferred the album's, and the difference turned out to be one constant from #574 rather than
+anything about the cards.
+
+**The pad was doing real work.** #574 grew every stockbook box by 0.6 mm because the erosion that
+separates touching pieces has a radius of about half a perforation tooth: a region labelled after it
+and grown back by the same radius ends near the base of the teeth, and the pad put the tips back. It
+put a strip of card on every side where the teeth were shorter than the pad as well, and along every
+straight edge. The album pass never needed one — nothing inside a mount is eroded.
+
+**So the pad became a reach, not a margin.** `tightenToPaper` looks the same 0.6 mm out from the
+region in the mask *before* the erosion, which still holds every tooth, and the box ends at the
+extent of whatever there touches the region. It is **bounded on both sides by construction**: it
+starts from the region, so it is never smaller than what the erosion left, and it stops at the
+window, so it is never larger than the old padded box. That bound is why a constant #574 fitted
+could change without refitting anything — the worst any side can do is come out as it did before.
+Two pieces the mask holds as one run to the window on the side they meet, which is the old box on
+that side; a neighbour a tooth away does not touch the region and is left out.
+
+**Measured against the untouched module on the eight cards**: piece counts identical, every new box
+inside its old one, 0.04–0.61 mm taken off each side with a median of about 0.5 mm, and the edge
+crops checked by eye — the teeth are in the tile and the card is not. A click (#1196) reads the same
+function, so a click and a proposal still agree box for box.
+
+**One side effect, recorded rather than absorbed.** `readingOrder` groups rows by top edge within half
+the median box height. On `2026-08-14-0009.jpg` a stockbook strip holds bottom-aligned pieces with a
+tall block's top edge 674 px above its neighbours', and the slightly smaller boxes moved the
+tolerance from 695 to 672.5 px — enough to put three pieces of that row in a different order. The
+boxes are not what is wrong there. The row rule sits on a knife edge for bottom-aligned strips, and
+changing it is a decision about #566's reading order, not about edges.
+
 ## What #585 added: the same viewport over a tile, which is where the detail was all along
 
 #579 justified zoom by the *cut*. The larger prize was one step later. Deciding **which variant** a
