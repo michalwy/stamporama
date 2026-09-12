@@ -801,7 +801,8 @@ The four list ones use the language of the platform being listed on, and the tit
 
 The six attributes above are what the *catalogue* says about a stamp. A **tag** is what **you** say
 about it — *to check*, *for expertising*, *birds*, *from the box grandfather left* — a short label
-you define once in **Settings → Tags** and hang on an issue or a stamp from its own screen.
+you type into the issue's, the stamp's or the copy's edit dialog, where a name you have not used yet
+becomes a new tag when you save.
 
 Tags are their own subject and have their own page: see [Tags](tags.md).
 

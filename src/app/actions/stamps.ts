@@ -52,6 +52,8 @@ import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import { parseTranslationValues } from "@/lib/translations";
 import { parseStampAttributes, parseStampSizeInput } from "@/lib/stamp-attribute-kinds";
+import { setStampTagEntries } from "@/lib/tags";
+import { parseTagEntries } from "@/lib/tag-entry";
 
 export type StampActionState =
   | { status: "idle" }
@@ -437,6 +439,10 @@ export async function updateStampWithCatalogAction(
     if (photoChangeSet) {
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
     }
+    // The whole set of tags, when the dialog submitted one (#1192). The dialog submits nothing until
+    // the stamp's stored tags have loaded, so a quick save cannot take them off.
+    const tagEntries = parseTagEntries(formData.get("stampTags"));
+    if (tagEntries) await setStampTagEntries(session.user.id, stampId, tagEntries);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update stamp. Please try again." };

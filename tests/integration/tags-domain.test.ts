@@ -394,7 +394,7 @@ describe("tags on copies (#1181)", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("puts tags on one copy from its own screen, and replaces the set on the next write", async () => {
+  it("puts tags on one copy, and replaces the set on the next write", async () => {
     const [itemId] = await addCopies(1);
     await setItemTags(userId, itemId, [checkId, swapId]);
     // Alphabetical, the dictionary's own order — so the chips on the row and in Settings agree.

@@ -49,6 +49,8 @@ import {
   type CatalogNumberSpec,
 } from "@/lib/catalog-number";
 import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
+import { setIssueTagEntries, setStampTagEntries } from "@/lib/tags";
+import { parseTagEntries } from "@/lib/tag-entry";
 
 export async function getChecklistPriceDetailsAction(
   collectionId: string,
@@ -306,6 +308,20 @@ export async function createIssueAction(
       translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
       autoCreateStamps,
     });
+    // The tags typed into the dialog (#1192), created and attached once the issue exists. Its own
+    // failure is said in its own words: the issue is already there, and *failed to create* would
+    // send the collector back to Save and a second issue.
+    const tagEntries = parseTagEntries(formData.get("issueTags"));
+    if (tagEntries && tagEntries.length > 0) {
+      try {
+        await setIssueTagEntries(session.user.id, result.id, tagEntries);
+      } catch {
+        return {
+          status: "error",
+          message: "The issue was created, but its tags could not be saved. Add them from Edit.",
+        };
+      }
+    }
     return { status: "success", issueId: result.id };
   } catch {
     return { status: "error", message: "Failed to create issue. Please try again." };
@@ -333,6 +349,9 @@ export async function updateIssueAction(
       catalogPrefixes: parseCatalogPrefixes(formData),
       translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
     });
+    // The whole set of tags, when the dialog submitted one (#1192) — absent leaves them alone.
+    const tagEntries = parseTagEntries(formData.get("issueTags"));
+    if (tagEntries) await setIssueTagEntries(session.user.id, issueId, tagEntries);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update issue. Please try again." };
@@ -483,6 +502,11 @@ export async function addStampToIssueAction(
     const photoChangeSet = parsePhotoChangeSet(formData);
     if (photoChangeSet) {
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
+    }
+    // The tags typed into the dialog (#1192), created and attached once the stamp exists.
+    const tagEntries = parseTagEntries(formData.get("stampTags"));
+    if (tagEntries && tagEntries.length > 0) {
+      await setStampTagEntries(session.user.id, stampId, tagEntries);
     }
     // The user chose to widen the issue's declared range to cover this stamp
     // (checklist stamps only; see the add-stamp dialog). Recompute

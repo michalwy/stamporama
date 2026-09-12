@@ -1,7 +1,8 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { isTagColor, type TagColor } from "./tag-colors";
+import { isTagColor, nextTagColor, type TagColor } from "./tag-colors";
+import { findTagByName, type TagEntry } from "./tag-entry";
 
 /**
  * User-defined tags (#152) — the collector's own labels for what the fixed schema does not name:
@@ -19,8 +20,8 @@ import { isTagColor, type TagColor } from "./tag-colors";
  * stamp and a copy is a physical object rather than a catalogue entry. So there is no resolution to
  * write: every read here is the rows literally stored against the thing asked about.
  *
- * **A copy is written two ways, and that is the one asymmetry in the module.** The thing's own
- * screen replaces the set ({@link setItemTags}, the issue's and the stamp's rule), while the Copies
+ * **A copy is written two ways, and that is the one asymmetry in the module.** The copy's edit
+ * dialog replaces the set ({@link setItemTagEntries}, the issue's and the stamp's rule), while the Copies
  * list's bulk edit **adds** named tags and **removes** named tags ({@link applyItemTagChanges}),
  * leaving every tag it did not name alone. Copies arrive by the drawerful and a selection is
  * routinely mixed, so a replace over one would flatten forty copies onto whatever the dialog
@@ -185,18 +186,73 @@ export async function getTagUsage(
 }
 
 /**
- * Replace the set of tags on one issue.
+ * The tag ids a dialog's chips stand for, creating the tags that do not exist yet (#1192) — inside
+ * the caller's transaction, so a tag is only ever born together with the thing that carries it.
  *
- * A **replace** rather than an add and a remove, because the editor is a picker showing the whole
- * dictionary with the current set ticked: what it has is the answer, and two verbs over one control
- * would be two ways for the screen and the row to disagree. Tags from other collections are dropped
- * rather than refused — the picker cannot offer one, so a request naming it is not something the
- * collector did.
+ * A chip naming an existing tag by id attaches it. A chip with no id, or with an id that is no
+ * longer this collection's tag (deleted in Settings while the dialog was open), is resolved by
+ * **name, ignoring case** — the rule the field already applied while it was typed, re-applied here
+ * against the dictionary as it is now, so a tag somebody created in the meantime is attached rather
+ * than duplicated. What is still unmatched is created in the colour its chip was showing, or in
+ * `nextTagColor`'s free hue when the request carried none.
+ *
+ * Ids from another collection are dropped rather than refused, as they always were: the field
+ * cannot offer one, so a request naming it is not something the collector did.
  */
-export async function setIssueTags(
+async function resolveTagEntries(
+  tx: Prisma.TransactionClient,
+  collectionId: string,
+  entries: readonly TagEntry[]
+): Promise<string[]> {
+  if (entries.length === 0) return [];
+  const dictionary = await tx.tag.findMany({
+    where: { collectionId },
+    select: { id: true, name: true, color: true },
+  });
+  const ids: string[] = [];
+  for (const entry of entries) {
+    if (entry.id && dictionary.some((t) => t.id === entry.id)) {
+      ids.push(entry.id);
+      continue;
+    }
+    if (!entry.name) continue;
+    const match = findTagByName(dictionary, entry.name);
+    if (match) {
+      ids.push(match.id);
+      continue;
+    }
+    const created = await tx.tag.create({
+      data: {
+        collectionId,
+        name: entry.name,
+        color: entry.color ?? nextTagColor(dictionary.map((t) => t.color)),
+      },
+      select: { id: true, name: true, color: true },
+    });
+    dictionary.push(created);
+    ids.push(created.id);
+  }
+  return [...new Set(ids)];
+}
+
+/** Tag ids as entries, for the callers that name only tags that already exist. */
+function idEntries(tagIds: string[]): TagEntry[] {
+  return tagIds.map((id) => ({ id, name: "", color: null }));
+}
+
+/**
+ * Replace the set of tags on one issue with what its edit dialog's chips say (#1192), creating the
+ * tags among them that do not exist yet.
+ *
+ * A **replace** rather than an add and a remove, because the field shows the whole set: what it
+ * holds is the answer, and two verbs over one control would be two ways for the dialog and the row
+ * to disagree. Resolving and writing are one transaction — a new tag the join rows then fail to
+ * reach is a tag nothing carries.
+ */
+export async function setIssueTagEntries(
   ownerId: string,
   issueId: string,
-  tagIds: string[]
+  entries: readonly TagEntry[]
 ): Promise<void> {
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
@@ -204,22 +260,27 @@ export async function setIssueTags(
   });
   if (!issue) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, issue.collectionId);
-  const valid = await validTagIds(issue.collectionId, tagIds);
-  await prisma.$transaction([
-    prisma.issueTag.deleteMany({ where: { issueId, tagId: { notIn: valid } } }),
-    prisma.issueTag.createMany({
+  await prisma.$transaction(async (tx) => {
+    const valid = await resolveTagEntries(tx, issue.collectionId, entries);
+    await tx.issueTag.deleteMany({ where: { issueId, tagId: { notIn: valid } } });
+    await tx.issueTag.createMany({
       data: valid.map((tagId) => ({ issueId, tagId })),
       skipDuplicates: true,
-    }),
-  ]);
+    });
+  });
 }
 
-/** Replace the set of tags on one stamp — {@link setIssueTags}'s rules exactly, one level down.
- *  Nothing propagates to the stamp's parent, its variants or its issue. */
-export async function setStampTags(
+/** {@link setIssueTagEntries} for tags that already exist, named by id. */
+export async function setIssueTags(ownerId: string, issueId: string, tagIds: string[]): Promise<void> {
+  await setIssueTagEntries(ownerId, issueId, idEntries(tagIds));
+}
+
+/** Replace the set of tags on one stamp — {@link setIssueTagEntries}'s rules exactly, one level
+ *  down. Nothing propagates to the stamp's parent, its variants or its issue. */
+export async function setStampTagEntries(
   ownerId: string,
   stampId: string,
-  tagIds: string[]
+  entries: readonly TagEntry[]
 ): Promise<void> {
   const stamp = await prisma.stamp.findUnique({
     where: { id: stampId },
@@ -227,30 +288,33 @@ export async function setStampTags(
   });
   if (!stamp) throw new Error("Stamp not found.");
   await assertCollectionOwner(ownerId, stamp.collectionId);
-  const valid = await validTagIds(stamp.collectionId, tagIds);
-  await prisma.$transaction([
-    prisma.stampTag.deleteMany({ where: { stampId, tagId: { notIn: valid } } }),
-    prisma.stampTag.createMany({
+  await prisma.$transaction(async (tx) => {
+    const valid = await resolveTagEntries(tx, stamp.collectionId, entries);
+    await tx.stampTag.deleteMany({ where: { stampId, tagId: { notIn: valid } } });
+    await tx.stampTag.createMany({
       data: valid.map((tagId) => ({ stampId, tagId })),
       skipDuplicates: true,
-    }),
-  ]);
+    });
+  });
+}
+
+/** {@link setStampTagEntries} for tags that already exist, named by id. */
+export async function setStampTags(ownerId: string, stampId: string, tagIds: string[]): Promise<void> {
+  await setStampTagEntries(ownerId, stampId, idEntries(tagIds));
 }
 
 /**
- * Replace the set of tags on one copy (#1181) — {@link setIssueTags}'s rules, on the physical piece.
- *
- * The copy's **own screen** writes this way, because its editor is the same `TagsCard` picker: what
- * is ticked is the answer. The Copies list's bulk edit does not — see {@link applyItemTagChanges}
- * for why a selection is never replaced wholesale.
+ * Replace the set of tags on one copy (#1181) — {@link setIssueTagEntries}'s rules, on the physical
+ * piece, from the copy's edit dialog. The Copies list's bulk edit does not write this way — see
+ * {@link applyItemTagChanges} for why a selection is never replaced wholesale.
  *
  * Nothing propagates to the stamp this copy is linked to, and a copy carrying several stamps
  * (ADR-0044) takes its own tags rather than any of theirs.
  */
-export async function setItemTags(
+export async function setItemTagEntries(
   ownerId: string,
   itemId: string,
-  tagIds: string[]
+  entries: readonly TagEntry[]
 ): Promise<void> {
   const item = await prisma.item.findUnique({
     where: { id: itemId },
@@ -258,14 +322,32 @@ export async function setItemTags(
   });
   if (!item) throw new Error("Copy not found.");
   if (item.collection.ownerId !== ownerId) throw new Error("Copy not found or access denied.");
-  const valid = await validTagIds(item.collectionId, tagIds);
-  await prisma.$transaction([
-    prisma.itemTag.deleteMany({ where: { itemId, tagId: { notIn: valid } } }),
-    prisma.itemTag.createMany({
+  await prisma.$transaction(async (tx) => {
+    const valid = await resolveTagEntries(tx, item.collectionId, entries);
+    await tx.itemTag.deleteMany({ where: { itemId, tagId: { notIn: valid } } });
+    await tx.itemTag.createMany({
       data: valid.map((tagId) => ({ itemId, tagId })),
       skipDuplicates: true,
-    }),
-  ]);
+    });
+  });
+}
+
+/** {@link setItemTagEntries} for tags that already exist, named by id. */
+export async function setItemTags(ownerId: string, itemId: string, tagIds: string[]): Promise<void> {
+  await setItemTagEntries(ownerId, itemId, idEntries(tagIds));
+}
+
+/** The tags on one stamp, for the stamp dialog to seed its field with. Fetched by id, the way that
+ *  dialog loads a stamp's attributes, translations and photos, so none of its callers' row shapes
+ *  has to carry them. */
+export async function getStampTags(ownerId: string, stampId: string): Promise<TagSummary[]> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { collectionId: true, tags: TAG_SUMMARY_SELECT },
+  });
+  if (!stamp) throw new Error("Stamp not found.");
+  await assertCollectionOwner(ownerId, stamp.collectionId);
+  return orderTagSummaries(stamp.tags);
 }
 
 /** What a bulk pass does to the tags on a set of copies (#1181). Both sides are optional and an
@@ -297,7 +379,7 @@ export function hasItemTagChanges(changes: ItemTagChanges): boolean {
  * the write total rather than to be relied on: an order, not a feature.
  *
  * Tag ids that are not this collection's are dropped rather than refused, exactly as
- * {@link setIssueTags} drops them: the picker cannot offer one, so a request naming it is not
+ * {@link setIssueTagEntries} drops them: the picker cannot offer one, so a request naming it is not
  * something the collector did.
  */
 export async function applyItemTagChanges(
@@ -325,14 +407,10 @@ export async function applyItemTagChanges(
   }
 }
 
-/** The submitted ids that really are this collection's tags, deduplicated. `collectionId` scopes
- *  every read here as it does everywhere else — a tag id from another collection is not a tag. */
-async function validTagIds(collectionId: string, tagIds: string[]): Promise<string[]> {
-  return validTagIdsWith(prisma, collectionId, tagIds);
-}
-
-/** {@link validTagIds} against a caller's client, so the bulk write can check the ids **inside**
- *  the transaction it is about to write in rather than against the state before it. */
+/** The submitted ids that really are this collection's tags, deduplicated, read through the bulk
+ *  write's own client so they are checked **inside** the transaction it is about to write in rather
+ *  than against the state before it. `collectionId` scopes every read here as it does everywhere
+ *  else — a tag id from another collection is not a tag. */
 async function validTagIdsWith(
   client: Prisma.TransactionClient | typeof prisma,
   collectionId: string,

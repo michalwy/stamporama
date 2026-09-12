@@ -41,8 +41,6 @@ import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dial
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
-import { TagsCard } from "@/app/c/[collectionSlug]/shared/tags-card";
-import { setStampTagsAction } from "@/app/actions/tags";
 import { StampVariantsCard } from "./stamp-variants-card";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
@@ -149,7 +147,7 @@ export function StampDetailPanel({
           {/* What this screen can start (#751), at the end of the line that says which stamp it is
               about — the Issues list's own dialog, over this stamp. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
-            <Tooltip content="Edit this stamp — name, issued date, catalog numbers, attributes and checklists.">
+            <Tooltip content="Edit this stamp — name, issued date, catalog numbers, attributes, checklists and tags.">
               <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
                 <Icon name="edit" size="sm" /> Edit
               </button>
@@ -211,21 +209,6 @@ export function StampDetailPanel({
               </FieldGrid>
             </DetailCard>
 
-            {/* Where a tag is put on and taken off (#152) — this stamp's own, and nothing is
-                inherited from its parent or from its issue. */}
-            <TagsCard
-              collectionId={collectionId}
-              collectionSlug={collectionSlug}
-              tags={stamp.tags}
-              onSave={async (tagIds) => {
-                const result = await setStampTagsAction(stamp.id, tagIds);
-                if (result.status === "success") {
-                  router.refresh();
-                  void invalidateStampsAndIssues(collectionId);
-                }
-                return result;
-              }}
-            />
 
             <DetailCard
               title="Issues"

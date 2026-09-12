@@ -182,9 +182,9 @@ export function BulkEditCopiesDialog({
   const [conditionChoice, setConditionChoice] = useState(KEEP);
   const [certificateChoice, setCertificateChoice] = useState(KEEP);
   const [formatChoice, setFormatChoice] = useState(KEEP);
-  // The two tag lists (#1181). Their own hook rather than a prop, exactly as the `TagsCard` picker
-  // reads the dictionary: it is small, per-collection and cached, and this dialog is opened from a
-  // list that has no other reason to hold it.
+  // The two tag lists (#1181). Their own hook rather than a prop, exactly as the edit dialogs' tag
+  // field reads the dictionary: it is small, per-collection and cached, and this dialog is opened
+  // from a list that has no other reason to hold it.
   const { data: tags } = useCollectionTags(collectionId);
   const [addTagIds, setAddTagIds] = useState<string[]>([]);
   const [removeTagIds, setRemoveTagIds] = useState<string[]>([]);
@@ -474,8 +474,9 @@ export function BulkEditCopiesDialog({
             {/* The collector's own labels (#1181). Two controls, never one: a copy carries any
                 number of tags, so *what these copies are tagged* has no single answer a picker
                 could show — the pass says what to put on and what to take off, and everything it
-                does not name stays. Shown even with an empty dictionary, because nothing is seeded
-                and the link is where the first tag is made (the `TagsCard` picker's rule). */}
+                does not name stays. Shown even with an empty dictionary, because nothing is seeded;
+                the link is where a first tag can be made from here, since this pass picks existing
+                tags rather than typing new ones (#1192 left the bulk edit as it was). */}
             <div>
               <LabelWithError>Tags</LabelWithError>
               {(tags?.length ?? 0) === 0 ? (

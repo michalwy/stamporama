@@ -29,6 +29,7 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import {
   readAddCopyDefaults,
@@ -625,6 +626,19 @@ export function InventoryItemFormDialog({
                 defaultValue={item?.notes ?? ""}
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, resize: "vertical" }}
+              />
+            </div>
+
+            {/* The collector's own labels on this copy (#1192), saved with the rest of it. The
+                copy's own: nothing comes from the stamp it is linked to. */}
+            <div>
+              <GroupLabel htmlFor="copy-tags">Tags</GroupLabel>
+              <TagEntryField
+                collectionId={collectionId}
+                name="copyTags"
+                inputId="copy-tags"
+                initialTags={item?.tags ?? []}
+                disabled={isPending}
               />
             </div>
 
