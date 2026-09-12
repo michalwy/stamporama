@@ -525,12 +525,13 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 If you have a lot of stamps to enter — a shelf of stockbooks, a collection you inherited, a gift —
 typing them in one at a time is the slow way. **Card scans** (**Collection → Inventory → Card
 scans** in the sidebar, or
-**Scan a card** beside **Add copy**) does it the other way round: scan a whole stockbook card, cut
-the scan into one piece per stamp, and identify each piece on screen afterwards. Each stamp is
-handled physically once — laid out and scanned — and everything after that happens at the keyboard.
+**Scan a card** beside **Add copy**) does it the other way round: scan a whole stockbook card — or a
+whole album page, mounts and all — cut the scan into one piece per stamp, and identify each piece on
+screen afterwards. Each stamp is handled physically once, and everything after that happens at the
+keyboard. An album page is not even handled once: it is scanned as it stands.
 
 It is the same flow orders use, and the [Card scans section of the purchases
-guide](purchases.md#card-scans) describes all of it: how to lay a card out, how the cut editor
+guide](purchases.md#card-scans) describes all of it: the two kinds of card, how to lay one out, how the cut editor
 works, how a second scan of the backs pairs onto the fronts, and what you can do with each piece —
 identify it as a new copy, give its pictures to a copy you already have, set it aside to check, or
 discard it with a note.

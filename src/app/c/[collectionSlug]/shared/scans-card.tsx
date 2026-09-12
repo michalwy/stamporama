@@ -13,6 +13,7 @@ import {
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
+  setBatchKindAction,
   setBatchLabelAction,
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
@@ -27,6 +28,7 @@ import type {
   ScanBatchData,
   ScanSheetData,
   ScanTileData,
+  SheetKind,
 } from "@/lib/scan-sheets";
 import { tileSideViews } from "@/lib/scan-tile-view";
 import {
@@ -329,6 +331,12 @@ export function ScansCard({
   const [confirm, setConfirm] = useState<
     | { kind: "recut"; batchNo: number; reopen: EditorTarget | null }
     | { kind: "delete"; batchNo: number }
+    /** Changing what kind of card a batch is, on a batch that has already been cut (#1195). The
+     * kind decides how the pieces are found, so the tiles standing there were found the other way
+     * and every one of them has to go — which is the ordinary re-cut, reached from here. What it
+     * carries is the **sheet**, not the previous boxes: the boxes are what is being thrown away, so
+     * this is the one re-cut that reopens on a fresh proposal. */
+    | { kind: "sheetKind"; batchNo: number; to: SheetKind; sheet: ScanCutEditorSheet | null }
     | null
   >(null);
   const [pending, startTransition] = useTransition();
@@ -558,16 +566,55 @@ export function ScansCard({
     });
   };
 
+  /**
+   * Say what kind of card this batch is (#1195).
+   *
+   * Two paths, and which one it takes is decided by whether anything has been cut yet — not by the
+   * collector, who is answering one question either way. On an **uncut** batch the kind is a fact
+   * and nothing else: the next review proposes under it. On a **cut** batch the tiles standing
+   * there were found under the old kind, so this goes through the confirm dialog and out through
+   * the ordinary re-cut. Either way nothing is uploaded again.
+   */
+  const changeKind = (batch: ScanBatchData, to: SheetKind) => {
+    if (batch.kind === to) return;
+    const sheet = batch.front;
+    if (batch.tiles.length > 0 && !(batch.front?.purged ?? batch.back?.purged ?? false)) {
+      setConfirm({
+        kind: "sheetKind",
+        batchNo: batch.batchNo,
+        to,
+        sheet: sheet ? editorSheetOf(batch, sheet) : null,
+      });
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await setBatchKindAction(ownerRef, batch.batchNo, to);
+      if (result.status === "error") setError(result.message);
+      else refresh();
+    });
+  };
+
   const runConfirmed = () => {
     if (!confirm) return;
     const target = confirm;
     setConfirm(null);
     setError(null);
     startTransition(async () => {
+      // The kind first, then the re-cut: the re-cut is what throws the old tiles away, and a
+      // re-cut that ran before the kind landed would draw the card again under the very kind that
+      // was wrong.
+      if (target.kind === "sheetKind") {
+        const set = await setBatchKindAction(ownerRef, target.batchNo, target.to);
+        if (set.status === "error") {
+          setError(set.message);
+          return;
+        }
+      }
       const result =
-        target.kind === "recut"
-          ? await recutBatchAction(ownerRef, target.batchNo)
-          : await deleteBatchAction(ownerRef, target.batchNo);
+        target.kind === "delete"
+          ? await deleteBatchAction(ownerRef, target.batchNo)
+          : await recutBatchAction(ownerRef, target.batchNo);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -576,6 +623,9 @@ export function ScansCard({
       // Straight back into the editor on the cut that was just thrown away, so the correction is
       // one box moved rather than a card redrawn.
       if (target.kind === "recut" && target.reopen) setEditor(target.reopen);
+      // A kind change reopens on a **fresh proposal** instead, which is the whole point of it: the
+      // previous boxes are the ones that were found the wrong way round.
+      if (target.kind === "sheetKind" && target.sheet) void openProposed(target.sheet, null);
     });
   };
 
@@ -886,6 +936,7 @@ export function ScansCard({
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
           onRename={(label) => rename(batch.batchNo, label)}
+          onSetKind={(kind) => changeKind(batch, kind)}
           onPair={pair}
         />
       ))}
@@ -980,11 +1031,39 @@ export function ScansCard({
 
       {confirm && (
         <ConfirmDialog
-          title={confirm.kind === "recut" ? "Re-cut this batch?" : "Delete this batch?"}
-          actionLabel={confirm.kind === "recut" ? "Re-cut" : "Delete"}
+          title={
+            confirm.kind === "sheetKind"
+              ? `Cut this batch as ${confirm.to === "album" ? "an album page" : "a stockbook card"}?`
+              : confirm.kind === "recut"
+                ? "Re-cut this batch?"
+                : "Delete this batch?"
+          }
+          actionLabel={
+            confirm.kind === "sheetKind"
+              ? "Change and re-cut"
+              : confirm.kind === "recut"
+                ? "Re-cut"
+                : "Delete"
+          }
           isPending={pending}
           message={
-            confirm.kind === "recut" ? (
+            confirm.kind === "sheetKind" ? (
+              <>
+                The stamps are found a different way on the two kinds of card, so this batch&rsquo;s
+                tiles and their images are thrown away and the scan is cut again. The scans
+                themselves are kept — nothing has to be scanned a second time.
+                {discardedInBatch(batches, confirm.batchNo) > 0 && (
+                  <>
+                    {" "}
+                    <strong>
+                      {discardedInBatch(batches, confirm.batchNo)} discarded tile
+                      {discardedInBatch(batches, confirm.batchNo) === 1 ? "" : "s"}
+                    </strong>{" "}
+                    and their notes go with them — the only record of what the parcel held.
+                  </>
+                )}
+              </>
+            ) : confirm.kind === "recut" ? (
               <>
                 The batch&rsquo;s tiles and their images are thrown away. The scans themselves are
                 kept, so the cut can be drawn again over the same card.
@@ -1110,6 +1189,28 @@ function SetAsideToggle({
   );
 }
 
+/** What the cut editor needs to know about one sheet: the sheet's own dimensions, plus which batch
+ * and side it is. Module-level because two places build it — the batch's own buttons, and a kind
+ * change, which reopens the editor from outside the batch it is about (#1195). */
+function editorSheetOf(batch: ScanBatchData, sheet: ScanSheetData): ScanCutEditorSheet {
+  return {
+    id: sheet.id,
+    side: sheet.side,
+    batchNo: batch.batchNo,
+    width: sheet.width,
+    height: sheet.height,
+    viewWidth: sheet.viewWidth,
+    viewHeight: sheet.viewHeight,
+  };
+}
+
+/** What a kind of card is called on screen. One place, because it is said on the batch line, in the
+ * chip that changes it and in the dialog that warns what changing it costs. */
+const KIND_LABEL: Record<SheetKind, string> = {
+  stockbook: "Stockbook card",
+  album: "Album page",
+};
+
 /** How many of a batch's tiles were discarded — what a re-cut is about to take with it. */
 function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
   return (
@@ -1138,6 +1239,7 @@ function BatchSection({
   onRecut,
   onDelete,
   onRename,
+  onSetKind,
   onPair,
 }: {
   batch: ScanBatchData;
@@ -1175,6 +1277,9 @@ function BatchSection({
   onDelete: () => void;
   /** Name this card, or clear its name (#587). */
   onRename: (label: string) => void;
+  /** Say what kind of card this is (#1195). On a batch already cut, the parent confirms and re-cuts;
+   * this only reports the press. */
+  onSetKind: (kind: SheetKind) => void;
   onPair: (backTileId: string, frontTileId: string) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
@@ -1213,15 +1318,8 @@ function BatchSection({
   // from reaching for a button that cannot work.
   const scansPurged = (batch.front?.purged ?? false) || (batch.back?.purged ?? false);
 
-  const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet => ({
-    id: sheet.id,
-    side: sheet.side,
-    batchNo: batch.batchNo,
-    width: sheet.width,
-    height: sheet.height,
-    viewWidth: sheet.viewWidth,
-    viewHeight: sheet.viewHeight,
-  });
+  const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet =>
+    editorSheetOf(batch, sheet);
 
   return (
     <div
@@ -1288,6 +1386,13 @@ function BatchSection({
             if (value !== (batch.label ?? "")) onRename(value);
           }}
         />
+        {/* **What kind of card this is** (#1195), and the way to correct it. On the batch line
+            rather than behind the Re-cut confirmation, because it decides how the pieces are found
+            and a card cut under the wrong kind comes out visibly wrong — the collector needs to see
+            what the app believed before they can tell it otherwise. Shown whether the batch is
+            folded or not, for the same reason the name is: on a collapsed batch this line is the
+            whole of it. */}
+        <BatchKind kind={batch.kind} busy={busy} onSet={onSetKind} />
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           {held} {held === 1 ? "tile" : "tiles"}
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
@@ -1459,6 +1564,50 @@ function BatchSection({
  * Clearing it is simply saving an empty field, so *un-naming* needs no control of its own; the
  * write stores blank as no name rather than as an empty string.
  */
+/**
+ * What kind of card this batch is, and the one press that corrects it (#1195).
+ *
+ * There are two kinds and a scan is one of them, so the control is the **answer itself**, pressed to
+ * become the other — not a menu, which would be a list of two with one already chosen. The kind is
+ * guessed from the scan's own border when it is uploaded, so what this chip usually does is confirm
+ * silently; it exists for the times the guess was wrong, and its whole job is to make that cheap.
+ *
+ * It is drawn on every batch, including one whose scan has been swept. The kind is a fact about the
+ * card either way, and a chip that disappeared once the bytes were gone would take the record of how
+ * the card was cut with it — the press is what is refused there, by the re-cut the parent reaches
+ * for.
+ */
+function BatchKind({
+  kind,
+  busy,
+  onSet,
+}: {
+  kind: SheetKind;
+  busy: boolean;
+  onSet: (kind: SheetKind) => void;
+}) {
+  const other: SheetKind = kind === "album" ? "stockbook" : "album";
+  return (
+    <Tooltip
+      content={
+        kind === "album"
+          ? `A light page with the stamps in mounts. Press to cut this card as a ${KIND_LABEL[other].toLowerCase()} instead.`
+          : `A black card with the stamps laid on it. Press to cut this card as ${"an " + KIND_LABEL[other].toLowerCase()} instead.`
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSet(other)}
+        disabled={busy}
+        style={{ ...PRESSABLE_CHIP, cursor: busy ? "default" : "pointer" }}
+      >
+        <Icon name={kind === "album" ? "albums" : "scan"} size="sm" />
+        {KIND_LABEL[kind]}
+      </button>
+    </Tooltip>
+  );
+}
+
 function BatchName({
   label,
   naming,

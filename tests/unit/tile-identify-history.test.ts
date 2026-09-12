@@ -54,7 +54,7 @@ function tile(id: string, overrides: Partial<ScanTileData> = {}): ScanTileData {
 }
 
 function batch(batchNo: number, tiles: ScanTileData[]): ScanBatchData {
-  return { batchNo, label: null, front: null, back: null, tiles, doneAt: null };
+  return { batchNo, label: null, kind: "stockbook", front: null, back: null, tiles, doneAt: null };
 }
 
 describe("identifyHistory", () => {

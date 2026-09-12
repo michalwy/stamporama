@@ -17,6 +17,7 @@ import {
   deleteBatch,
   getSheetForServing,
   listScans,
+  setBatchKind,
   setBatchLabel,
   pairTilesManually,
   unpairTileBack,
@@ -67,10 +68,20 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 async function card(
   width: number,
   height: number,
-  stamps: { box: Box; colour: [number, number, number] }[]
+  stamps: { box: Box; colour: [number, number, number] }[],
+  /** The ground the pieces are laid on. Black is a stockbook card and the default; a light one is
+   * what an album page's border looks like, which is the one thing `recogniseSheetKind` reads
+   * (#1195). It is a *page-coloured rectangle* and not an album page — what is on it says nothing
+   * about mounts, and no constant is fitted to it. */
+  background: [number, number, number] = [0, 0, 0]
 ): Promise<Buffer> {
   return sharp({
-    create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: background[0], g: background[1], b: background[2] },
+    },
   })
     .composite(
       await Promise.all(
@@ -151,6 +162,8 @@ async function sheetBytesExist(sheet: {
 const RED: [number, number, number] = [220, 30, 30];
 const GREEN: [number, number, number] = [30, 200, 30];
 const BLUE: [number, number, number] = [30, 30, 220];
+/** An album page's own colour (#1195) — cream paper, which is what the border of one looks like. */
+const PAGE: [number, number, number] = [238, 235, 226];
 
 describe("scan sheet ingest (#566)", () => {
   let userId: string;
@@ -888,6 +901,88 @@ describe("scan sheet ingest (#566)", () => {
     // What the editor then does with them is the ordinary path — the commit cannot tell.
     const report = await commitCut(userId, sheet.id, proposed);
     assert.equal(report.created, FRONT_BOXES.length);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  // ── What kind of card a scan is (#1195) ──────────────────────────────────────────────────────
+  //
+  // The **wiring** again, and deliberately so: that the kind is read at upload, written to both
+  // sheets of a batch when it is corrected, and reaches the pass from the sheet rather than being
+  // guessed again. Whether an album page's stamps come out right is measured against the
+  // collector's own pages in `tests/unit/scan-detect.test.ts`.
+
+  it("records what kind of card a scan is, read from its own border", async () => {
+    const purchaseId = await newOrder();
+
+    const black = await uploadFront(purchaseId);
+    assert.equal(
+      (await prisma.scanSheet.findUniqueOrThrow({ where: { id: black.id } })).kind,
+      "stockbook"
+    );
+
+    const page = await uploadSheet(
+      userId,
+      { purchaseId },
+      {
+        source: await card(SHEET_W, SHEET_H, FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] })), PAGE),
+        mime: "image/png",
+        side: "front",
+      }
+    );
+    assert.equal(
+      (await prisma.scanSheet.findUniqueOrThrow({ where: { id: page.id } })).kind,
+      "album",
+      "a light border is an album page"
+    );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("changes the kind on both sheets of a batch, and the proposal follows it", async () => {
+    const purchaseId = await newOrder();
+    const front = await uploadFront(purchaseId);
+    await commitCut(userId, front.id, FRONT_BOXES);
+    const back = await uploadSheet(
+      userId,
+      { purchaseId },
+      {
+        source: await card(SHEET_W, SHEET_H, FRONT_BOXES.map((box, i) => ({ box, colour: COLOURS[i] }))),
+        mime: "image/png",
+        side: "back",
+        batchNo: front.batchNo,
+      }
+    );
+
+    assert.equal((await listScans(userId, { purchaseId })).batches[0].kind, "stockbook");
+
+    await setBatchKind(userId, { purchaseId }, front.batchNo, "album");
+
+    // **Both sheets**, as the name and `batchDoneAt` are: a front and a back are one card, and a
+    // kind that answered differently depending on which side was asked would have no symptom until
+    // a re-cut.
+    for (const id of [front.id, back.id]) {
+      assert.equal((await prisma.scanSheet.findUniqueOrThrow({ where: { id } })).kind, "album");
+    }
+    assert.equal((await listScans(userId, { purchaseId })).batches[0].kind, "album");
+
+    // And the pass is run under what the sheet says rather than under a guess made afresh. The
+    // proof is that the answer changes: three solid rectangles on a black ground are three pieces
+    // on a stockbook card and nothing at all on an album page, where a region is a mount and a
+    // mount with nothing lighter enclosed inside it is not one.
+    assert.deepEqual(await proposeCut(userId, back.id), []);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("refuses to change the kind on someone else's batch", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
+
+    await assert.rejects(
+      () => setBatchKind("someone-else", { purchaseId }, sheet.batchNo, "album"),
+      ScanAuthError
+    );
 
     await deletePurchase(userId, purchaseId);
   });

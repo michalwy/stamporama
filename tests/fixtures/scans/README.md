@@ -1,6 +1,6 @@
-# Detection regression scans (#574, ADR-0033)
+# Detection regression scans (#574, #1195, ADR-0033)
 
-This folder holds **real stockbook card scans**. It is gitignored except for this file: the scans
+This folder holds **real card scans** — black stockbook cards, and since #1195 album pages too. It is gitignored except for this file: the scans
 are tens of megabytes each, and a repository is the wrong place for them. `pnpm test:unit` reads the
 folder when it is there and the whole `scan-detect` suite **skips when it is not**, so a clone
 without them still runs green.
@@ -14,6 +14,12 @@ One scan per card, exactly as `uploadSheet` receives it — the scanner's own fi
 re-encoded copy. The detection constants are fitted to what a real scan looks like, so a
 recompressed stand-in measures something else.
 
+Every entry records a `kind` (#1195): `stockbook` for a black card with the stamps laid on it,
+`album` for a light page with the stamps in black hawid mounts. Omitted means `stockbook`, which is
+what every scan taken before #1195 is. **It is checked twice over** — the pass is run under it, and
+`recogniseSheetKind` is asked to arrive at it from the scan's own border, which is the guess the
+upload records on the sheet and the collector corrects.
+
 The set is what says whether a constant is right, so it must cover what **breaks**, not what is
 convenient:
 
@@ -26,6 +32,9 @@ convenient:
 | Joined pairs, blocks, strips | What is joined stays **one** region, one tile, one copy with a format. |
 | Stamps on cut envelope paper | The **paper** is the piece, not the stamp on it. |
 | Reference slips | Deliberately not filtered — detection returns them and the collector discards them. |
+| An album page of stamps in mounts | The second kind (#1195). Every box must be the **stamp**, out to its perforated selvedge and the mount's inner edge — no page around it and no part of the mount — and the page's printed position numerals must not be boxes. |
+| A close crop of two mounts | The same answer at four times the pixels per stamp, which is what says the second separation is not fitted to one working resolution. |
+| An album page's **backs**, each stamp turned in place | A back's gum side is pale and near-featureless against the same black mount, and this is also the front/back pair the set never had. |
 
 `pieces` in the expectations file counts **physical pieces, not stamps**: a pair, a block or a
 se-tenant strip is one.

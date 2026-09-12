@@ -1,0 +1,28 @@
+-- What kind of card a scan is (#1195).
+--
+-- #574 built detection on the scan's background being black — "a constant of the routine
+-- rather than a happy accident". It is not one: an album page is light, with a black hawid
+-- mount glued to it and the stamp inside the mount, so the light and the dark run the other
+-- way round and they alternate three deep. The kind is now a fact about the sheet, which is
+-- what lets a scan tiled under the wrong one be re-cut under the right one instead of being
+-- scanned again.
+--
+-- `stockbook` is the default and every existing row takes it: every scan taken before this
+-- migration is a black stockbook card, because that is the only kind the flow could handle.
+-- So this is a widening with no data question in it — no existing row is being guessed at.
+--
+-- Unconstrained text, like `scan_sheet.side`, `Offer.state` and `PurchaseLot.status`: this
+-- project keeps small closed vocabularies in the application (`SheetKind` in
+-- `src/lib/scan-detect.ts`) rather than in a CHECK or an enum, so that adding a third kind
+-- of card — which #1195 says is conceivable — is a code change and not a migration that has
+-- to be coordinated with a deploy.
+--
+-- Written to the SHEET and not to the batch, which has no row of its own: a batch is a front
+-- sheet and an optional back sheet, and every other per-batch fact (`label`, `batchDoneAt`)
+-- is likewise written to both sides. The application writes both together; the database has
+-- no way to say so, exactly as it has none for `label`.
+--
+-- No index. The column is read alongside the sheet it belongs to — the detection pass reads
+-- it by the sheet's own primary key — and is never a search term.
+
+ALTER TABLE "scan_sheet" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'stockbook';

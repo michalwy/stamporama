@@ -3280,6 +3280,14 @@ model ScanSheet {
   label          String?
   /** front | back. Unconstrained in the DB, matching `Offer.state` and `PurchaseLot.status`. */
   side           String
+  /** stockbook | album (#1195) — what kind of card this scan is, which is the one thing the
+   * detection pass has to be told. A **stockbook card** is black with the stamps laid on it; an
+   * **album page** is light, with a black hawid mount glued to it and the stamp inside the mount,
+   * so the light and the dark run the other way round and alternate three deep. Guessed from the
+   * scan's own border when it is uploaded (`recogniseSheetKind`) and changeable afterwards, which
+   * re-cuts the batch rather than asking for the card again. Written to **both** sheets of a batch,
+   * as `label` and `batchDoneAt` are. Unconstrained here for the reason `side` is. */
+  kind           String   @default("stockbook")
   storageBackend String   @default("filesystem")
   /** Key **prefix**, exactly as `Photo.storageKey` is. */
   storageKey     String

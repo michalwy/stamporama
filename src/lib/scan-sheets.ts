@@ -26,7 +26,7 @@ import {
   type Box,
   type PairingMode,
 } from "./scan-boxes";
-import { detectSheetBoxes } from "./scan-detect";
+import { detectSheetBoxes, recogniseSheetKind, type SheetKind } from "./scan-detect";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
@@ -86,6 +86,16 @@ export function isOpenTileState(state: string): boolean {
 }
 
 export type SheetSide = "front" | "back";
+
+/** What kind of card a scan is (#1195) — owned by `scan-detect.ts`, since it is detection the kind
+ * is *for*, and re-exported here because this module is what every caller talks to about sheets. */
+export type { SheetKind };
+
+/** Whether a string off the wire names a kind of card. The vocabulary is closed in the application
+ * rather than in the database (see the migration), so this is the one place that closes it. */
+export function isSheetKind(value: string): value is SheetKind {
+  return value === "stockbook" || value === "album";
+}
 
 // ── What a card hangs off ─────────────────────────────────────────────────────────────────────
 
@@ -259,6 +269,18 @@ export async function uploadSheet(
     existing?.label ??
     (await readBatchLabel(owner, batchNo));
 
+  // **What kind of card this is** (#1195), read off the scan's own border rather than asked: a
+  // stockbook card's border is the black card and an album page's is the page, and the two are two
+  // hundred levels apart. A guess, and it is recorded as one — it is shown on the batch and the
+  // collector changes it in one press, which re-cuts. A back scan takes the same reading of its own
+  // bytes rather than inheriting the front's: the two sheets are the same card and will agree, and
+  // a back that disagrees is a back of something else, which is worth seeing.
+  //
+  // Read from the `view` derivative, which is already decoded and in hand: the answer is a median
+  // over the border of a few hundred pixels and a downscale cannot move it, while decoding a 200 MB
+  // card a second time to learn one bit would buy nothing.
+  const kind = await recogniseSheetKind(prepared.view.buffer);
+
   const id = randomUUID();
   const prefix = sheetPrefix(collectionId, id);
   const storage = getActiveStorage();
@@ -301,6 +323,7 @@ export async function uploadSheet(
           batchNo,
           side: input.side,
           label,
+          kind,
           storageBackend: storage.backend,
           storageKey: prefix,
           mime,
@@ -427,6 +450,35 @@ export async function setBatchLabel(
   });
   if (count === 0) throw new ScanValidationError("That batch has no scans to name.");
   return { label: value };
+}
+
+/**
+ * Say what kind of card a batch is (#1195), or correct what the upload guessed.
+ *
+ * The kind decides how the pieces are found, so changing it is only half an act: the tiles that are
+ * already there were cut the other way. This function does the half that is a fact about the card,
+ * and the caller re-cuts — the **existing** re-cut path, from the retained scan, with nothing
+ * uploaded again. That is the shape the decision asked for, and it is also why this is not folded
+ * into `recutBatch`: a batch with nothing cut from it yet has a kind and no tiles, and setting it
+ * there must not be a re-cut of nothing.
+ *
+ * Written to every sheet of the batch, exactly as {@link setBatchLabel} is and for the same reason:
+ * a front and a back are one card, and a kind that answered differently depending on which side was
+ * asked would be a bug with no symptom until a re-cut.
+ */
+export async function setBatchKind(
+  ownerId: string,
+  ref: ScanOwnerRef,
+  batchNo: number,
+  kind: SheetKind
+): Promise<{ kind: SheetKind }> {
+  const owner = await assertScanOwner(ownerId, ref);
+  const { count } = await prisma.scanSheet.updateMany({
+    where: { ...scanOwnerWhere(owner), batchNo },
+    data: { kind },
+  });
+  if (count === 0) throw new ScanValidationError("That batch has no scans.");
+  return { kind };
 }
 
 // ── Committing a cut ──────────────────────────────────────────────────────────────────────────
@@ -815,13 +867,20 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
       mime: true,
       width: true,
       height: true,
+      kind: true,
       purgedAt: true,
     },
   });
   assertSheetNotPurged(sheet);
 
   const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
-  const detected = await detectSheetBoxes(original);
+  // The kind is read from the sheet and never re-derived here (#1195). A re-cut must propose under
+  // the kind the collector settled on — including one they corrected — and a guess made afresh on
+  // every pass could answer differently from the one shown on the batch beside it.
+  const detected = await detectSheetBoxes(
+    original,
+    isSheetKind(sheet.kind) ? sheet.kind : "stockbook"
+  );
   return detected
     .map((b) => normalizeBox(b, { width: sheet.width, height: sheet.height }))
     .filter((b): b is Box => b != null);
@@ -1378,6 +1437,11 @@ export interface ScanTileData {
 
 export interface ScanBatchData {
   batchNo: number;
+  /** What kind of card this is (#1195) — `stockbook` or `album`. Read off the batch's sheets, which
+   * is where it is written, exactly as the name and `doneAt` are. Drawn on the batch's own line
+   * because the likeliest mistake here is a card cut under the wrong kind, and a fact that decides
+   * the cut and is nowhere on screen is one nobody can correct. */
+  kind: SheetKind;
   /** The card's own name (#587), or null. A gloss on the number, never a replacement for it: the
    * number is assigned rather than chosen and is what makes a batch findable, so both are drawn
    * wherever the batch is named, including on a collapsed batch's one summary line (#583). */
@@ -1444,6 +1508,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         height: true,
         viewWidth: true,
         viewHeight: true,
+        kind: true,
         batchDoneAt: true,
         purgedAt: true,
         _count: { select: { frontTiles: true, backTiles: true } },
@@ -1554,7 +1619,17 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
   const batchOf = (batchNo: number): ScanBatchData => {
     let b = batches.get(batchNo);
     if (!b) {
-      b = { batchNo, label: null, front: null, back: null, tiles: [], doneAt: null };
+      b = {
+        batchNo,
+        label: null,
+        // Until a sheet says otherwise. A batch with no sheets at all cannot arise on this screen —
+        // the tiles hang off one — and the default is the kind every scan taken before #1195 is.
+        kind: "stockbook",
+        front: null,
+        back: null,
+        tiles: [],
+        doneAt: null,
+      };
       batches.set(batchNo, b);
     }
     return b;
@@ -1578,6 +1653,9 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
     // (#587) is written the same way and read the same way.
     if (s.batchDoneAt) batch.doneAt = s.batchDoneAt.toISOString();
     if (s.label) batch.label = s.label;
+    // The front's reading wins where a batch somehow holds two: the front is the sheet the cut is
+    // proposed on and the one the collector is looking at when they correct the kind.
+    if (isSheetKind(s.kind) && (data.side === "front" || batch.front == null)) batch.kind = s.kind;
   }
 
   for (const t of tiles) {
