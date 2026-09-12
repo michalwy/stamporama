@@ -8,6 +8,7 @@ import {
   commitCut,
   deleteBatch,
   pairTilesManually,
+  pickBox,
   proposeCut,
   recutBatch,
   setBatchKind,
@@ -113,6 +114,43 @@ export async function proposeCutAction(sheetId: string): Promise<{ boxes: Box[] 
     return { boxes: await proposeCut(session.user.id, sheetId) };
   } catch {
     return { boxes: [] };
+  }
+}
+
+/**
+ * What one **click** on a scan proposes (#1196): the box around the piece under that point.
+ *
+ * Unlike `proposeCutAction` this one **answers when it cannot**. A proposal that quietly fails costs
+ * the collector a saving and nothing else, so it swallows its failure into an empty card; a click
+ * that quietly fails is indistinguishable from a click that never registered, and the collector
+ * would go on clicking. So *no edges found* comes back as a message, and the one thing it must
+ * never do is guess: a wrong box looks exactly like a right one and is discovered long after the
+ * card has been broken up.
+ */
+export type PickBoxActionState =
+  | { status: "success"; box: Box }
+  | { status: "error"; message: string };
+
+export async function pickBoxAction(
+  sheetId: string,
+  point: { x: number; y: number }
+): Promise<PickBoxActionState> {
+  const session = await getSession();
+  try {
+    const box = await pickBox(session.user.id, sheetId, point);
+    return box
+      ? { status: "success", box }
+      : {
+          status: "error",
+          message:
+            "Could not work out where this stamp ends. Draw the box by hand, or click further " +
+            "inside it.",
+        };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to read the scan. Please try again.",
+    };
   }
 }
 

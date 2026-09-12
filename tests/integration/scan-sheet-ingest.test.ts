@@ -21,6 +21,7 @@ import {
   setBatchLabel,
   pairTilesManually,
   unpairTileBack,
+  pickBox,
   proposeCut,
   recutBatch,
   renderSheetRegion,
@@ -981,6 +982,78 @@ describe("scan sheet ingest (#566)", () => {
 
     await assert.rejects(
       () => setBatchKind("someone-else", { purchaseId }, sheet.batchNo, "album"),
+      ScanAuthError
+    );
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  // ── Picking a piece by clicking it (#1196) ───────────────────────────────────────────────────
+  //
+  // The **wiring** once more: that `pickBox` authorizes, reads the retained original rather than
+  // the view, answers in the sheet's own pixels, and says nothing rather than guessing when the
+  // point is not on a piece. Whether a click lands on the right edges of a real stamp is measured
+  // against real scans in `tests/unit/scan-detect.test.ts`, where it is checked against the very
+  // boxes the pass proposes.
+
+  it("picks the piece under a point, in the sheet's own pixels", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
+
+    for (const drawn of FRONT_BOXES) {
+      const picked = await pickBox(userId, sheet.id, {
+        x: drawn.x + drawn.w / 2,
+        y: drawn.y + drawn.h / 2,
+      });
+      assert.ok(picked, `no box came back for a point inside ${JSON.stringify(drawn)}`);
+      // Holds the piece it was clicked on, with the same margin the proposal has, and measured on
+      // the original rather than on the view — a box measured on the view would put the crop wrong
+      // on every card wider than the pipeline's cap.
+      assert.ok(
+        picked.x <= drawn.x &&
+          picked.y <= drawn.y &&
+          picked.x + picked.w >= drawn.x + drawn.w &&
+          picked.y + picked.h >= drawn.y + drawn.h,
+        `${JSON.stringify(picked)} does not contain ${JSON.stringify(drawn)}`
+      );
+      assert.ok(picked.x + picked.w <= SHEET_W && picked.y + picked.h <= SHEET_H);
+    }
+
+    // And it is an ordinary box afterwards: the commit cannot tell one from a drawn or a proposed
+    // one, which is the whole of what "a box from a click is an ordinary box" means.
+    const boxes: Box[] = [];
+    for (const drawn of FRONT_BOXES) {
+      const picked = await pickBox(userId, sheet.id, {
+        x: drawn.x + drawn.w / 2,
+        y: drawn.y + drawn.h / 2,
+      });
+      if (picked) boxes.push(picked);
+    }
+    const report = await commitCut(userId, sheet.id, boxes);
+    assert.equal(report.created, FRONT_BOXES.length);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("answers with nothing when the point is on the bare card", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
+
+    // Between the first two rectangles, and in a corner — both bare ground, and a box at either
+    // would be the failure this refuses over: one that looks right and is found after the card has
+    // been cut up.
+    assert.equal(await pickBox(userId, sheet.id, { x: 1200, y: 700 }), null);
+    assert.equal(await pickBox(userId, sheet.id, { x: 40, y: 40 }), null);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
+  it("refuses to pick on someone else's scan", async () => {
+    const purchaseId = await newOrder();
+    const sheet = await uploadFront(purchaseId);
+
+    await assert.rejects(
+      () => pickBox("someone-else", sheet.id, { x: 500, y: 700 }),
       ScanAuthError
     );
 

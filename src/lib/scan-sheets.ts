@@ -26,7 +26,7 @@ import {
   type Box,
   type PairingMode,
 } from "./scan-boxes";
-import { detectSheetBoxes, recogniseSheetKind, type SheetKind } from "./scan-detect";
+import { detectSheetBoxes, pickBoxAt, recogniseSheetKind, type SheetKind } from "./scan-detect";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
@@ -884,6 +884,53 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
   return detected
     .map((b) => normalizeBox(b, { width: sheet.width, height: sheet.height }))
     .filter((b): b is Box => b != null);
+}
+
+/**
+ * The box around the piece the collector **clicked** on a stored scan (#1196), or null when its
+ * edges cannot be determined.
+ *
+ * The other half of `proposeCut`, and deliberately the same shape: read from the retained original,
+ * under the kind recorded on the sheet rather than one guessed afresh, and clamped through
+ * `normalizeBox` before it leaves, because the editor and `commitCut` are both entitled to assume a
+ * box lies inside its sheet. What comes back is an ordinary box with nothing marking where it came
+ * from — which is the point of it, since everything downstream treats a proposed, a drawn and a
+ * clicked box identically.
+ *
+ * **Null is an answer, not a failure**, and unlike `proposeCut` it is one the caller must say out
+ * loud: a proposal that fails costs the collector a saving, while a click that fails and stays
+ * silent looks exactly like a click that did not register.
+ */
+export async function pickBox(
+  ownerId: string,
+  sheetId: string,
+  point: { x: number; y: number }
+): Promise<Box | null> {
+  await assertSheetOwner(ownerId, sheetId);
+
+  const sheet = await prisma.scanSheet.findUniqueOrThrow({
+    where: { id: sheetId },
+    select: {
+      storageBackend: true,
+      storageKey: true,
+      mime: true,
+      width: true,
+      height: true,
+      kind: true,
+      purgedAt: true,
+    },
+  });
+  assertSheetNotPurged(sheet);
+
+  const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
+  const box = await pickBoxAt(
+    original,
+    isSheetKind(sheet.kind) ? sheet.kind : "stockbook",
+    point
+  );
+  return box == null
+    ? null
+    : normalizeBox(box, { width: sheet.width, height: sheet.height });
 }
 
 // ── Manual pairing ────────────────────────────────────────────────────────────────────────────

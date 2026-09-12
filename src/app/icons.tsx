@@ -109,6 +109,7 @@ import {
   Settings,
   ShoppingBag,
   ShoppingCart,
+  SquareDashedMousePointer,
   SquarePlus,
   Stamp,
   Star,
@@ -329,6 +330,10 @@ const GLYPHS = {
   // halved one stamp is the same act as merging anything else, so it does not get a second name.
   /** A retained card scan, and the act of adding one. */
   scan: ScanLine,
+  /** Point at a stamp and the box works out its own edges (#1196) — the pointer inside the dashed
+   * box is the whole act: the click is what the collector knows, the rectangle is what the app
+   * measures. */
+  pick: SquareDashedMousePointer,
   /** Cut one box into a left and a right — two touching stamps taken for one, side by side. */
   splitColumns: Columns2,
   /** …and into a top and a bottom. */
