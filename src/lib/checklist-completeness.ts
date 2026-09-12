@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
+import { NOT_MULTI_STAMP } from "./multi-stamp";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import {
   computeChecklistCompleteness,
@@ -86,6 +87,10 @@ export async function getIssueCompleteness(
             saleLineItems: { none: {} },
             // …nor one given to a partner (#644).
             ...NOT_TRADED_AWAY,
+            // …nor a carrier of several catalogue positions, which is a copy of none of them
+            // (#745, ADR-0044 §3): a cover franked with three of an issue's stamps completes no
+            // square of its grid, because the collector cannot supply any one of them off it.
+            ...NOT_MULTI_STAMP,
             disposedAt: null,
             deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
           },

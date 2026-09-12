@@ -1,6 +1,7 @@
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
+import { setItemStamps } from "../../src/lib/item-stamps";
 import { setColnectListMapping } from "../../src/lib/colnect-list-sync";
 import {
   ColnectLocalFixError,
@@ -203,6 +204,43 @@ describe("Clearing a predicate that no longer holds (#687)", () => {
     assert.equal(flags.get(b), false);
     assert.equal(flags.get(disposed), true, "a disposed copy was never on the list's local side");
     assert.equal(flags.get(ordered), true, "nor was one that has not arrived");
+  });
+
+  it("leaves a multi-stamp carrier alone, as the report left it out", async () => {
+    // #745 (ADR-0044 §3): a cover franked with several stamps is a copy of none of them, so it is
+    // not on the list's local side — and a fix must touch exactly the copies the figure beside it was
+    // counted from, or it acts on rows the screen never showed.
+    const stampId = await stamp("2011", "On a cover with others");
+    const other = await stamp("2012", "The other stamp on it");
+    const loose = await copy(stampId, { forTrade: true });
+    const carrier = await copy(stampId, { forTrade: true });
+    await setItemStamps(f.userId, carrier, [{ stampId }, { stampId: other }]);
+
+    const preview = await previewColnectLocalFix(
+      f.userId,
+      f.collectionId,
+      SWAP_LT,
+      "2011",
+      "only-local",
+      "clear"
+    );
+    assert.deepEqual(
+      preview.copies.map((c) => c.id),
+      [loose],
+      "only the loose copy is offered"
+    );
+
+    await applyColnectLocalFix(f.userId, f.collectionId, SWAP_LT, "2011", "only-local", "clear");
+    const flags = new Map(
+      (
+        await prisma.item.findMany({
+          where: { id: { in: [loose, carrier] } },
+          select: { id: true, forTrade: true },
+        })
+      ).map((row) => [row.id, row.forTrade])
+    );
+    assert.equal(flags.get(loose), false);
+    assert.equal(flags.get(carrier), true, "the carrier's own flag is not this list's business");
   });
 
   it("closes the open wants of a want-backed list, and leaves a closed one alone", async () => {

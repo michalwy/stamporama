@@ -71,7 +71,7 @@ immediately, and only a change on Colnect's side needs a fresh export.
 | **Grade** | on both sides, but the grade differs |
 | **Not comparable** | your stamp has no [Colnect ID](collections.md#colnect-id), so nothing was checked |
 
-Two silences are deliberate.
+Three silences are deliberate.
 
 **Grade is only reported where your copies agree on one.** Colnect holds a single grade per list
 entry; you may hold three copies of the stamp, two mint and one used. There is no honest single
@@ -82,6 +82,12 @@ does.
 **Not comparable is not "missing".** A stamp with no Colnect ID was never checked against anything —
 filing it under *missing on Colnect* would claim something the report never verified. Filling those
 IDs in is the [Assistant](assistant.md)'s job.
+
+**A piece carrying several stamps is left out altogether.** A cover franked with three stamps is not
+a copy of any of them, so it puts none of them on your side of the comparison — and it is not filed
+under *not comparable* either, because that bucket is a list of IDs to go and fill in, and this piece
+will never be comparable however many IDs it carries. See
+[covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 
 A row differing in **both** quantity and grade is filed under **Quantity**, and both sides' numbers
 and grades are printed on it either way, so nothing is hidden. Fix the quantity, load a fresh export,
