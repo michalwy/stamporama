@@ -58,8 +58,6 @@ import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
-import { TagsCard } from "@/app/c/[collectionSlug]/shared/tags-card";
-import { setIssueTagsAction } from "@/app/actions/tags";
 
 // The issue detail screen (#519). Two things the list row cannot give: the stamp tree with enough
 // room to read it, and the completeness question answered from the copies actually held rather
@@ -183,7 +181,7 @@ export function IssueDetailPanel({
           {/* What this screen can start (#751), at the end of the line that says which issue it is
               about. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
-            <Tooltip content="Edit this issue — name, year, area, catalog numbers and checklists.">
+            <Tooltip content="Edit this issue — name, year, area, catalog numbers, checklists and tags.">
               <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
                 <Icon name="edit" size="sm" /> Edit
               </button>
@@ -214,22 +212,6 @@ export function IssueDetailPanel({
                 <Field label="Auto-created">{issue.isAutoCreated ? "Yes" : "No"}</Field>
               </FieldGrid>
             </DetailCard>
-
-            {/* Where a tag is put on and taken off (#152). It sits above the tree because it is
-                about the issue itself, as the Details card above it is. */}
-            <TagsCard
-              collectionId={collectionId}
-              collectionSlug={collectionSlug}
-              tags={issue.tags}
-              onSave={async (tagIds) => {
-                const result = await setIssueTagsAction(issue.id, tagIds);
-                if (result.status === "success") {
-                  router.refresh();
-                  void invalidateStampsAndIssues(collectionId);
-                }
-                return result;
-              }}
-            />
 
             <DetailCard
               title="Stamps"

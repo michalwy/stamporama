@@ -14,8 +14,11 @@ entry.
 
 ## Making tags
 
-Tags live in **Settings → Tags**. Nothing is there to begin with: a collection with no use for tags
-has an empty list, and no screen asks you to set anything up before it will work.
+You do not have to make a tag before you use it: type a new name where you put tags on something
+(see below) and it is created when you save. **Settings → Tags** is where your tags are listed and
+looked after, and where you can also make one ahead of time. Nothing is there to begin with: a
+collection with no use for tags has an empty list, and no screen asks you to set anything up before
+it will work.
 
 A tag has two things:
 
@@ -48,17 +51,31 @@ being deleted: taking the label off is exactly what deleting it means.
 
 ## Putting a tag on something
 
-Tags are put on **from the thing's own screen**, one thing at a time:
+Tags are set in the **same dialog as everything else about the thing** — the one **Edit** opens, and
+the one you add it with:
 
-- an **issue** — open it from the Issues list and use the **Tags** card
-- a **stamp** — open it from the Issues tree or the Stamps list and use the **Tags** card
-- a **copy** — open it from the Copies list and use the **Tags** card
+- an **issue** — the issue dialog, from the Issues list or the issue's own page
+- a **stamp** — the stamp dialog, on its **Details** tab
+- a **copy** — the copy dialog, under **Notes**
 
-The card's **Tags** button opens your whole dictionary with the current tags ticked. A tick applies
-immediately — the chips beside it say what it did, so there is nothing to confirm. To take one off,
-press the `×` on its chip.
+The **Tags** field is a text field. Type a name and press **space** (or **Enter**): the name becomes a
+chip, and you carry on typing the next one. To take a tag off, press the `×` on its chip, or
+**Backspace** in the empty field to take off the last one.
 
-If you have no tags yet, the picker says so and links to Settings.
+- **An existing tag is offered as you type.** Pick it from the list, or type its name — in any
+  capitals — and the chip is that tag: *birds* attaches your *Birds*, and nothing new is made.
+- **A name you have not used yet becomes a new tag.** Its chip is coloured straight away, from the
+  same palette as in Settings — you are not asked to pick one. Hovering the chip says it is new.
+- **A space ends a name**, so a tag typed here is a single word (*to-check*, *swap-box*). Tags you
+  already have with a space in their name still work: type part of the name and pick it from the
+  list.
+
+**Nothing is saved until you save the dialog.** Cancel it and nothing changes — no new tag is left
+behind. A tag made this way is an ordinary tag from then on: it is listed in **Settings → Tags**,
+where you can rename, recolour or delete it, and the tag filters find it.
+
+The thing's own page shows its tags as chips on the line that names it; they are changed from
+**Edit**.
 
 ## Tagging a drawerful at once
 

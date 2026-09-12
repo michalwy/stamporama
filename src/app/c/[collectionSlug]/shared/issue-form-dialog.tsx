@@ -43,6 +43,7 @@ import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-lan
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { Icon } from "@/app/icons";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -980,6 +981,18 @@ export function IssueDialog(props: IssueDialogProps) {
               disabled={isPending}
             />
           )}
+          {/* The collector's own labels on the issue (#1192), saved with the rest of it. The
+              issue's own: they say nothing about its stamps. */}
+          <div style={{ marginTop: "1.25rem" }}>
+            <LabelWithError htmlFor="f-issue-tags">Tags (optional)</LabelWithError>
+            <TagEntryField
+              collectionId={collectionId}
+              name="issueTags"
+              inputId="f-issue-tags"
+              initialTags={isCreate ? [] : props.issue.tags}
+              disabled={isPending}
+            />
+          </div>
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}

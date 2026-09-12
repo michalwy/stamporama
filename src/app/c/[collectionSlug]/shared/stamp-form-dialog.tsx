@@ -55,6 +55,8 @@ import {
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
 import { NO_AUTOFILL } from "./no-autofill";
+import { TagEntryField } from "./tag-entry-field";
+import type { TagSummary } from "@/lib/tags";
 import { DEFAULT_CHECKLIST } from "@/lib/checklist-vocabulary";
 import { Icon } from "@/app/icons";
 
@@ -455,6 +457,24 @@ export function StampFormDialog(props: StampFormDialogProps) {
   function setAttribute(key: keyof StampAttributeValues, value: string) {
     setAttributes((prev) => ({ ...prev, [key]: value }));
   }
+
+  // ── Tags (#1192) ──
+  // The stamp's own, fetched by stampId like the attributes, so no caller's row shape has to carry
+  // them. `undefined` until they arrive, and the field submits nothing meanwhile, so a Save pressed
+  // before then leaves the stored tags alone rather than taking them off.
+  const [stampTags, setStampTags] = useState<TagSummary[] | undefined>(
+    editStampId ? undefined : []
+  );
+  useEffect(() => {
+    if (!editStampId) return;
+    let cancelled = false;
+    import("@/app/actions/tags")
+      .then((m) => m.getStampTagsAction(editStampId))
+      .then((tags) => {
+        if (!cancelled) setStampTags(tags);
+      });
+    return () => { cancelled = true; };
+  }, [editStampId]);
 
   // Load the stamp's stored per-language names (#296), by id — the same way the subtype assignment
   // and the photos are, so no caller's row shape has to carry them. Add mode has nothing to load.
@@ -1206,6 +1226,19 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 />
               </div>
             )}
+
+            {/* The collector's own labels on this stamp (#1192), saved with the rest of it. Nothing
+                is inherited: the issue's tags and the parent's are not here. */}
+            <div style={{ marginTop: "1.25rem" }}>
+              <LabelWithError htmlFor="f-stamp-tags">Tags (optional)</LabelWithError>
+              <TagEntryField
+                collectionId={collectionId}
+                name="stampTags"
+                inputId="f-stamp-tags"
+                initialTags={stampTags}
+                disabled={isPending}
+              />
+            </div>
 
             {/* Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted
                 only once the stamp's existing photos have loaded (edit mode); PhotoEditor seeds

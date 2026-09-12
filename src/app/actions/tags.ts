@@ -11,9 +11,7 @@ import {
   getTags,
   getTagUsage,
   listTags,
-  setIssueTags,
-  setItemTags,
-  setStampTags,
+  getStampTags,
   TagNameTakenError,
   type TagData,
   type TagSummary,
@@ -36,8 +34,8 @@ export async function getTagsAction(collectionId: string): Promise<TagData[]> {
   return getTags(session.user.id, collectionId);
 }
 
-/** The dictionary the two tag pickers offer, without Settings' usage counts — a count per tag is a
- *  query per tag and nothing on those screens says anything about it. */
+/** The dictionary the tag fields suggest from and the tag filters offer, without Settings' usage
+ *  counts — a count per tag is a query per tag and nothing on those surfaces says anything about it. */
 export async function listTagsAction(collectionId: string): Promise<TagSummary[]> {
   const session = await getSession();
   return listTags(session.user.id, collectionId);
@@ -108,44 +106,10 @@ export async function deleteTagAction(tagId: string): Promise<TagActionState> {
   }
 }
 
-export async function setIssueTagsAction(
-  issueId: string,
-  tagIds: string[]
-): Promise<TagActionState> {
+/** The tags on one stamp, for the stamp dialog's tag field (#1192). There is no write here: a
+ *  thing's tags are saved by the save action of the dialog they are typed into, together with the
+ *  rest of its fields. */
+export async function getStampTagsAction(stampId: string): Promise<TagSummary[]> {
   const session = await getSession();
-  try {
-    await setIssueTags(session.user.id, issueId, tagIds);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save tags. Please try again." };
-  }
-}
-
-export async function setStampTagsAction(
-  stampId: string,
-  tagIds: string[]
-): Promise<TagActionState> {
-  const session = await getSession();
-  try {
-    await setStampTags(session.user.id, stampId, tagIds);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save tags. Please try again." };
-  }
-}
-
-/** The whole set of tags on one **copy** (#1181), from the copy's own screen. The Copies list's
- *  bulk edit does not come through here: it adds and removes named tags over a selection, and
- *  rides on the bulk write the rest of that dialog already uses. */
-export async function setItemTagsAction(
-  itemId: string,
-  tagIds: string[]
-): Promise<TagActionState> {
-  const session = await getSession();
-  try {
-    await setItemTags(session.user.id, itemId, tagIds);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save tags. Please try again." };
-  }
+  return getStampTags(session.user.id, stampId);
 }

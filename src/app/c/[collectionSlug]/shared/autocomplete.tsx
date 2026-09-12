@@ -105,6 +105,9 @@ export interface AutocompleteProps<T> {
   zIndex?: number;
   /** Whether the dropdown may open for a query (default: non-empty when trimmed). */
   canOpen?: (value: string) => boolean;
+  /** A key the dropdown did not consume — Enter with no row highlighted, Backspace, … — for a call
+   *  site whose input means more than a search (the tag field commits a chip on Enter, #1192). */
+  onKeyDown?: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
 }
 
 export function Autocomplete<T>({
@@ -121,6 +124,7 @@ export function Autocomplete<T>({
   disabled,
   zIndex = 30,
   canOpen = (v) => v.trim().length > 0,
+  onKeyDown,
 }: AutocompleteProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -219,6 +223,7 @@ export function Autocomplete<T>({
         setIsOpen(false);
       }
     }
+    if (!e.defaultPrevented) onKeyDown?.(e);
   }
 
   function renderRow(key: string, content: ReactNode, extraStyle?: CSSProperties) {

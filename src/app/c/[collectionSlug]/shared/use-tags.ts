@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { TagSummary } from "@/lib/tags";
 
 /**
- * The collection's tag dictionary (#152), for the pickers that hang one on an issue or a stamp.
+ * The collection's tag dictionary (#152) — what the edit dialogs' tag field suggests (#1192), and
+ * what the tag filters and the Copies list's bulk edit offer.
  *
  * Its own hook rather than a prop, for the reason `useCollectionConditions` is one: the dictionary
  * is small, per-collection and rarely changes, and the screens that need it are rendered from

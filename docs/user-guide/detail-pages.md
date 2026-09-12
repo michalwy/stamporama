@@ -67,8 +67,8 @@ records you were last on are listed under it; see
 
 ## The copy page
 
-*Left column:* Details, Notes, Tags, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers.
-Only Details and Tags are always there; the rest appear when the copy has them.
+*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers.
+Only Details is always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
   page), and its catalog numbers. At the end of the line, **Edit** opens the copy form — the same one
@@ -76,8 +76,8 @@ Only Details and Tags are always there; the rest appear when the copy has them.
   here instead of back on the list. A copy whose variant is not identified also carries **Identify
   variant** beside it, opening the same picker the list's row menu does.
 - **State chips** — disposition (*In collection*, *For sale*, *For trade*), delivery state, *Sold*
-  and any disposal. Your own tags sit on the identity line above, the same chips the Copies list
-  draws.
+  and any disposal. Your own [tags](tags.md) sit on the identity line above, the same chips the
+  Copies list draws; they are changed in the copy form **Edit** opens.
 - **Details** — condition, certificate status, physical format, area, issue, storage location and
   in-location ref, cost-basis, catalog value, and the date it was added.
 - **Stamps on this piece** — only on a copy carrying more than one: every stamp on it in your own
@@ -91,11 +91,6 @@ Only Details and Tags are always there; the rest appear when the copy has them.
 - **Catalog prices** — the cross-catalog averages for the copy's stamp, with **Full breakdown**
   opening the same per-edition dialog the row menu opens.
 - **Notes** — the copy's own text.
-- **Tags** — your own labels on this copy, and the one card on this page that is an **editor**, for
-  the stamp page's reason below: a tag is not a field of the copy but a label you hang on it.
-  Nothing is inherited — the stamp's tags are not here, and a copy carrying several stamps takes
-  tags of its own. Tagging a whole drawer at once is the Copies list's **Bulk edit…**. See
-  [Tags](tags.md).
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
   the line price, the offer it went out through, and whether it has been packed.
@@ -103,14 +98,15 @@ Only Details and Tags are always there; the rest appear when the copy has them.
 
 ## The stamp page
 
-*Left column:* Details, Attributes, Tags, Issues, Photos, Catalog prices, Variants. *Right column:*
-Wants, Copies, Offers. Only Details and Tags are always there.
+*Left column:* Details, Attributes, Issues, Photos, Catalog prices, Variants. *Right column:*
+Wants, Copies, Offers. Only Details is always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
   stamp's variants when there are any, and opening its disposition breakdown on click — and the
   headline catalog price. At the end of the line, **Edit** opens the stamp form — the same one the
-  Issues list opens, over this stamp — for its name, issued date, catalog numbers, attributes and checklists.
+  Issues list opens, over this stamp — for its name, issued date, catalog numbers, attributes,
+  checklists and [tags](tags.md). The stamp's tags sit on this line as chips.
   (The **Variants** card below edits the stamps *under* this one; this button is for the stamp the
   page is about.)
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
@@ -123,11 +119,6 @@ Wants, Copies, Offers. Only Details and Tags are always there.
   visible too. The size shown is the stamp's own — nothing borrowed from a neighbour on its
   checklist. Read-only here, as everything on this page is — the values are edited from **Edit**
   above.
-- **Tags** — your own labels on this stamp, and the one card on this page that is an **editor**:
-  **Tags** opens your whole dictionary with the current ones ticked, and a `×` on a chip takes one
-  off. A tag is not a field of the stamp — it is a label you hang on it — which is why it is worked
-  here rather than in the form above. Nothing is inherited: the issue's tags and the parent stamp's
-  tags are not here. See [Tags](tags.md).
 - **Issues** — which issues the stamp belongs to, and which of each issue's
   [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
   counts it.
@@ -160,16 +151,16 @@ Wants, Copies, Offers. Only Details and Tags are always there.
 
 ## The issue page
 
-*Left column:* Details, Tags, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers.
-Only Details and Tags are always there.
+*Left column:* Details, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers.
+Only Details is always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
   required/total stamp count. At the end of the line, **Edit** opens the issue dialog — the same one
-  the Issues list opens, over this issue — for its name, year, area, catalog numbers and checklists.
+  the Issues list opens, over this issue — for its name, year, area, catalog numbers, checklists and
+  [tags](tags.md). The issue's tags sit on this line as chips; they say nothing about the stamps
+  inside the issue, which carry their own.
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
   many of them are actually priced.
-- **Tags** — your own labels on the issue, put on and taken off here exactly as on the stamp page.
-  They say nothing about the stamps inside the issue, which carry their own. See [Tags](tags.md).
 - **Completeness** — the breakdown described below.
 - **Catalog value** — averages across catalogs for the stamps on one
   [checklist](collections.md#checklists), full breakdown behind the button. An issue collected more
