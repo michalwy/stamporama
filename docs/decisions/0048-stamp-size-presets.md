@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, not yet implemented. Designed 2026-09-06 with the collector. The work is tracked in #803
+Accepted, partly implemented: #803–#806 have landed, #807–#809 have not. Designed 2026-09-06 with the collector. The work is tracked in #803
 (the dictionary, the migration and the write module), #804 (the Settings panel), #805 (the row beside
 the stamp's width and height), #806 (applying to an issue or a checklist), #807 (choosing one while
 creating a stamp range), #808 (multi-select on the stamp tree) and #809 (applying to a tree

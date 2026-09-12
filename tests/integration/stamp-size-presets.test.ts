@@ -11,6 +11,7 @@ import {
   StampSizePresetFigureError,
   StampSizePresetPairTakenError,
 } from "../../src/lib/stamp-size-presets";
+import { describeStampSizePresetApply } from "../../src/lib/stamp-size-preset-rules";
 
 // Stamp size presets (#803; ADR-0048) — the dictionary, and the write that copies a pair onto stamps.
 //
@@ -509,6 +510,48 @@ describe("stamp size presets (#803)", () => {
     });
     // Overwriting writes *both* columns, so the half-stated stamp ends up with a whole size.
     assert.deepEqual(await sizeOf(a), { widthMm: 25, heightMm: 30 });
+  });
+
+  // --- the apply dialog (#806) ------------------------------------------------------------------
+
+  it("writes exactly what the dialog's preview said it would, with the box clear and ticked", async () => {
+    // #806's *Done when*: the preview counts match what the write then does, on a tree with variants
+    // and a mix of stated and absent sizes. The number compared is the dialog's own — the one on its
+    // button — so a dialog that counted one way and a write that wrote another cannot both pass.
+    const { id: presetId } = await preset();
+    const mix = async () => {
+      await clearSizes();
+      await prisma.stamp.update({ where: { id: a }, data: { widthMm: 22, heightMm: 26 } });
+      await prisma.stamp.update({ where: { id: flawChild }, data: { widthMm: 19, heightMm: null } });
+    };
+
+    for (const subject of [
+      { kind: "issue", issueId },
+      { kind: "checklist", checklistId },
+    ] as const) {
+      for (const overwriteStated of [false, true]) {
+        await mix();
+        const preview = await applyStampSizePreset(userId, { presetId, subject, preview: true });
+        const { willWrite } = describeStampSizePresetApply(preview, overwriteStated);
+        const label = `${subject.kind}, overwrite ${overwriteStated}`;
+
+        const written = await applyStampSizePreset(userId, { presetId, subject, overwriteStated });
+        assert.equal(written.written, willWrite, label);
+        assert.equal(written.total, preview.total, label);
+
+        const sizes = await prisma.stamp.findMany({
+          where: { collectionId, widthMm: 25, heightMm: 30 },
+          select: { id: true },
+        });
+        assert.equal(sizes.length, willWrite, label);
+        if (!overwriteStated) {
+          // With the box clear, neither stamp that states a size — whole or half — was touched.
+          assert.deepEqual(await sizeOf(a), { widthMm: 22, heightMm: 26 }, label);
+          assert.deepEqual(await sizeOf(flawChild), { widthMm: 19, heightMm: null }, label);
+        }
+        assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null }, label);
+      }
+    }
   });
 
   it("leaves no reference behind: deleting the preset does not touch the stamps", async () => {

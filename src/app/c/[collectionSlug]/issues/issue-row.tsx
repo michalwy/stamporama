@@ -47,6 +47,7 @@ import {
   useChecklistPriceActions,
 } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useChecklistsAction } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
+import { useApplySizePresetAction } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import type { AddVariantRangeParent } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
@@ -631,6 +632,13 @@ export function IssueRow({
     vendorMap,
     primaryVendorId,
   });
+  // A size preset onto the whole issue (#806; ADR-0048 §4) — the Germania case for a series already
+  // entered. The tree under this row draws no sizes, so nothing here needs refreshing after it.
+  const sizePreset = useApplySizePresetAction({
+    collectionId,
+    subject: { kind: "issue", issueId: issue.id },
+    subjectLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
+  });
   // An issue's format multipliers are edited here rather than in Settings: the issue is the
   // narrowest anchor a factor can take, and it is the one a catalog actually prints them against.
   const formatFactors = useFormatFactorsAction({
@@ -669,6 +677,7 @@ export function IssueRow({
     ...prices.actions,
     variantPrices.action,
     checklists.action,
+    sizePreset.action,
     formatFactors.action,
     {
       key: "recompute-range",
@@ -790,6 +799,7 @@ export function IssueRow({
           {prices.dialog}
           {variantPrices.dialog}
           {checklists.dialog}
+          {sizePreset.dialog}
           {formatFactors.dialog}
           {recomputeOpen && (
             <RecomputeRangeDialog
