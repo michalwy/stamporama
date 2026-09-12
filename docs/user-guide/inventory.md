@@ -676,7 +676,11 @@ first.
 
 Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the copy's
 current values. Changing the stamp to a more specific variant re-points the copy and
-records the change in its refinement history. The dialog also carries the **Never list on**
+records the change in its refinement history. The **Stamp** field is also where you say a
+piece carries more than one stamp — see
+[covers and other pieces carrying several stamps](#covers-fragments-and-other-pieces-carrying-several-stamps);
+reordering that list, or striking a stamp off it, records no refinement, because neither says the
+copy was identified as something else. The dialog also carries the **Never list on**
 control — see [copies you never list on a platform](#copies-you-never-list-on-a-platform).
 
 To edit the **stamp** a copy points to — its name, catalog numbers, or catalog prices — choose
@@ -778,6 +782,46 @@ The **+ catalog value** link always records the **single's** value, even while a
 showing — see [Adding a catalog value](#adding-a-catalog-value) below. What the switcher changes is
 what the dialog *tells* you: it works the block's value out from the single you are typing and shows
 it under the input.
+
+## Covers, fragments and other pieces carrying several stamps
+
+A cover franked with three different stamps, a fragment cut from a parcel card, an FDC — one piece of
+paper you cannot take apart, carrying catalog numbers the catalog never numbered as a whole. It is
+**one copy**, like a block of four, and its **Format** says what the piece is: *Cover*, *Piece*,
+*FDC* — ordinary format entries you add under **Settings → Conditions & formats**, beside *Block of
+4*.
+
+What is new is the list of stamps on it. Open the copy's **Edit** dialog and the **Stamp** field is
+that list: add a stamp with the same picker you always used, drag the rows into the order the stamps
+sit on the piece, and give each one a **quantity** and a **format of its own** where it needs them —
+a block of four *on* the cover is one entry with the format *Block of 4*, never four entries. The
+same stamp twice loose is one entry of quantity **2**.
+
+A copy starts as one stamp whatever route it came in by, and becomes a carrier when you say so here.
+Take the list back down to one row and it is an ordinary copy of that stamp again.
+
+### What a piece carrying several stamps counts as
+
+**Nothing — for any of its stamps.** This is the one thing worth reading twice:
+
+- the copy-count badges beside its stamps on the Issues and Stamps lists do not count it;
+- an issue's **Completeness** card does not tick those stamps off, and a lot's set figure does not
+  treat them as stock;
+- a **want** for one of them does not close, and the arrival review does not offer to close it;
+- a **Colnect list** comparison leaves it out entirely, on both the collection and swap/sell lists.
+
+The reason is not that the piece is indivisible — a cover bearing **one** stamp is just as
+indivisible, and that one *is* counted, as a copy of its stamp "on cover", which is exactly what
+catalogs price. It is that a piece carrying three numbers is not a copy of any one of them: you
+cannot supply Mi 200 off it, because it will be sold whole. Its stamps are a **description** of the
+piece — searchable, listed, printed in listing texts — never a claim that you hold them.
+
+Everything else about a copy is untouched. It keeps its internal number, its storage location, its
+cost basis and its photos; it can be offered, sold, traded and disposed of exactly like any other
+copy, and it stays on the Copies list.
+
+Its own page shows the stamps it carries in your order, under **Stamps on this piece**, and a
+**Several stamps** chip beside the state chips says why the counts leave it out.
 
 ## Adding a catalog value
 

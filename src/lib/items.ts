@@ -29,7 +29,15 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
-import { createLeadingEntriesTx, repointLeadingStampTx } from "./item-stamps";
+import {
+  createLeadingEntriesTx,
+  listItemStamps,
+  repointLeadingStampTx,
+  setItemStampsTx,
+  validateItemStampEntries,
+  type ItemStampEntryInput,
+} from "./item-stamps";
+import { isMultiStampCount } from "./multi-stamp";
 import {
   loadItemWantSummaries,
   loadStampWantSummaries,
@@ -504,6 +512,16 @@ export interface ItemUpdateInput {
   excludedPlatformIds?: string[];
   /** Optional reason recorded on the ItemVariantHistory row when `stampId` changes. */
   variantChangeNote?: string | null;
+  /**
+   * The stamps this copy carries, in the collector's order (#746) — **the whole list**, the leading
+   * one included, or absent to leave the entries alone. Every other caller of this function has no
+   * opinion on them, and the copy edit dialog is the one surface that owns the whole answer.
+   *
+   * A list of one takes a carrier back down to an ordinary copy of that stamp, and it re-enters
+   * every count it had dropped out of (#745). That is an ordinary edit with no confirmation of its
+   * own: the counts follow the facts.
+   */
+  stamps?: readonly ItemStampEntryInput[];
 }
 
 export interface ItemListFilters {
@@ -665,6 +683,12 @@ export async function updateItem(
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
+  if (data.stamps) {
+    // Read-only checks, and so before the transaction: a stamp from another collection or a
+    // duplicated `(stamp, format)` has to reach the collector as a sentence rather than as a
+    // rolled-back save. `item-stamps.ts` owns them, as it owns the write.
+    await validateItemStampEntries(collectionId, data.stamps);
+  }
 
   const repointing =
     data.stampId !== undefined && data.stampId !== current.stampId;
@@ -722,19 +746,42 @@ export async function updateItem(
         });
       }
     }
+    // The whole list of stamps on the piece, when the caller owns that answer (#746). It replaces
+    // the entries and re-derives the pointer and the count through the one module allowed to write
+    // them, so `repointLeadingStampTx` below would be doing the same job twice — and doing it to a
+    // list that is about to be thrown away.
+    const priorStampIds = data.stamps
+      ? (
+          await tx.itemStamp.findMany({ where: { itemId }, select: { stampId: true } })
+        ).map((row) => row.stampId)
+      : [];
     if (repointing) {
       // `Item.stampId` is a denormalised pointer at the first entry (ADR-0044 §2), so re-pointing
       // the copy means moving that entry — and only that one. The other stamps on a carrier are
       // facts about the piece that this edit says nothing about.
-      await repointLeadingStampTx(tx, itemId, data.stampId!);
-      await tx.itemVariantHistory.create({
-        data: {
-          itemId,
-          fromStampId: current.stampId,
-          toStampId: data.stampId!,
-          note: variantChangeNote ?? null,
-        },
-      });
+      if (!data.stamps) await repointLeadingStampTx(tx, itemId, data.stampId!);
+      // **A re-identification, not a reorder.** Refinement history is the record of this copy being
+      // decided to be a *different* stamp (ADR-0007 §6), so it is written when the stamp now leading
+      // was not on the piece before. Dragging Mi 205 to the front of a cover, or striking the
+      // leading entry off it, also moves the pointer — and neither says the copy was mis-identified,
+      // so neither leaves a history row claiming it was.
+      if (!priorStampIds.includes(data.stampId!)) {
+        await tx.itemVariantHistory.create({
+          data: {
+            itemId,
+            fromStampId: current.stampId,
+            toStampId: data.stampId!,
+            note: variantChangeNote ?? null,
+          },
+        });
+      }
+    }
+    if (data.stamps) {
+      await setItemStampsTx(tx, itemId, data.stamps);
+      // Read the copy back: `stampId` and `stampCount` were just re-derived from the entries, and a
+      // caller handed the row as it stood before that would be holding the pointer the request
+      // proposed rather than the one the piece now carries.
+      return tx.item.findUniqueOrThrow({ where: { id: itemId }, select: ITEM_SELECT });
     }
     return updated;
   });
@@ -3218,6 +3265,127 @@ export async function getItemVariantHistory(
     changedAt: row.changedAt,
     note: row.note,
   }));
+}
+
+/** One stamp on a copy, with everything a screen needs to name it (#746) — the entry's own facts
+ *  plus the stamp identity every list already draws: the catalog numbers **raw**, prefix-formatted
+ *  by the caller against the stamp's own area, exactly as a copy row's are. */
+export interface ItemStampSummary {
+  /** The entry's id — what a remove or a reorder addresses. */
+  id: string;
+  stampId: string;
+  /** Described components, not sheets of paper (ADR-0044 §4): a block of four is 1. */
+  quantity: number;
+  /** The **component's** own format — a block of four *on* this cover. Null = single, which is what
+   *  it is for every entry of an ordinary copy, whose own `formatId` already describes it. */
+  formatId: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
+  /** The collector's order, `0..n-1` (ADR-0044 §8: it is what `{catalog}` enumerates). */
+  sortOrder: number;
+  stampName: string | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  colnectId: string | null;
+  unknownVariant: boolean;
+  subtype: SubtypeLabel | null;
+  /** The stamp's primary area and first issue — the context a copy row shows, and what the catalog
+   *  numbers are prefix-formatted against. */
+  areaId: string | null;
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+}
+
+/** The stamps one copy carries, and whether carrying them puts it outside the catalogue counts. */
+export interface ItemStampsRead {
+  /** `Item.stampCount` **as stored** — the summed quantity, derived by `item-stamps.ts` and read
+   *  here rather than added up again: re-deriving it on a screen is how the column and the rows it
+   *  is summed from start to disagree. */
+  stampCount: number;
+  /** More than one catalogue position on one indivisible piece, so a copy of none of them (#745). */
+  multiStamp: boolean;
+  entries: ItemStampSummary[];
+}
+
+/**
+ * The stamps a copy carries, labelled — for the copy dialog that edits them (#746) and the copy's
+ * own screen that shows them.
+ *
+ * The entries themselves come from `item-stamps.ts`, which owns their order, and are hydrated here
+ * with the stamp identity, because that identity is a **copy read model**: `ItemListItem` builds the
+ * same fields from the same columns, and a second spelling of "which issue is this stamp under" would
+ * let the dialog and the row it was opened from name different issues for one stamp.
+ */
+export async function getItemStamps(ownerId: string, itemId: string): Promise<ItemStampsRead> {
+  const collectionId = await resolveItemCollection(itemId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const [{ stampCount }, entries] = await Promise.all([
+    prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { stampCount: true } }),
+    listItemStamps(ownerId, itemId),
+  ]);
+
+  const stampIds = [...new Set(entries.map((entry) => entry.stampId))];
+  const formatIds = [
+    ...new Set(entries.map((entry) => entry.formatId).filter((id): id is string => !!id)),
+  ];
+  const [stamps, formats] = await Promise.all([
+    stampIds.length === 0
+      ? Promise.resolve([])
+      : prisma.stamp.findMany({
+          where: { id: { in: stampIds } },
+          select: {
+            id: true,
+            name: true,
+            catalogNumbers: { select: { catalogVendorId: true, number: true } },
+            colnectId: true,
+            stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+            variants: { select: VARIANT_FLAG_SELECT },
+            subtype: { select: { name: true, isDefault: true } },
+            issueMemberships: {
+              ...FIRST_ISSUE_MEMBERSHIP,
+              select: { issue: { select: { id: true, name: true, year: true } } },
+            },
+          },
+        }),
+    formatIds.length === 0
+      ? Promise.resolve([])
+      : prisma.stampFormat.findMany({
+          where: { id: { in: formatIds } },
+          select: { id: true, name: true, abbreviation: true },
+        }),
+  ]);
+  const byStamp = new Map(stamps.map((stamp) => [stamp.id, stamp]));
+  const byFormat = new Map(formats.map((format) => [format.id, format]));
+
+  return {
+    stampCount,
+    multiStamp: isMultiStampCount(stampCount),
+    entries: entries.map((entry) => {
+      const stamp = byStamp.get(entry.stampId);
+      const format = entry.formatId ? byFormat.get(entry.formatId) : undefined;
+      const firstIssue = stamp?.issueMemberships[0]?.issue ?? null;
+      const primaryLink = stamp?.stampAreaLinks.find((link) => link.isPrimary);
+      return {
+        id: entry.id,
+        stampId: entry.stampId,
+        quantity: entry.quantity,
+        formatId: entry.formatId,
+        formatName: format?.name ?? null,
+        formatAbbreviation: format?.abbreviation ?? null,
+        sortOrder: entry.sortOrder,
+        stampName: stamp?.name ?? null,
+        catalogNumbers: stamp?.catalogNumbers ?? [],
+        colnectId: stamp?.colnectId ?? null,
+        unknownVariant: stamp ? isUnknownVariantStamp(stamp) : false,
+        subtype: stamp ? subtypeLabel(stamp) : null,
+        areaId:
+          primaryLink?.collectionAreaId ?? stamp?.stampAreaLinks[0]?.collectionAreaId ?? null,
+        issueId: firstIssue?.id ?? null,
+        issueName: firstIssue?.name ?? null,
+        issueYear: firstIssue?.year ?? null,
+      };
+    }),
+  };
 }
 
 /** First-class variant refinement (ADR-0007 §6): re-point an unknown-variant copy from

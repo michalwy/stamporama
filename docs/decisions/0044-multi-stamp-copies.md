@@ -2,9 +2,23 @@
 
 ## Status
 
-Accepted. The schema, the migration and the write module are in (#744); the rest is tracked in
-#745 (the exclusion rule), #746 (the editor), #747 (valuation), #748 (the list), #749 (listing
-tokens) and #750 (intake).
+Accepted. The schema, the migration and the write module are in (#744), the exclusion rule of §3 is
+enforced (#745) and a copy's stamps are editable (#746); the rest is tracked in #747 (valuation),
+#748 (the list), #749 (listing tokens) and #750 (intake).
+
+**§3 is one predicate, `NOT_MULTI_STAMP` in `src/lib/multi-stamp.ts`** (#745), spread wherever the
+sold, traded-away and disposed guards are — `copy-counts.ts`, the checklist grid, the lot's for-sale
+set figure, the wants, and the Colnect source predicates, which take it as the same sentence in SQL.
+Two of the places the exclusion issue named turned out to read no copies at all:
+`duplicate-catalog.ts` compares **stamps** sharing a catalogue identity and `auction-duplicates.ts`
+compares **auction lot lines**, so neither could report a carrier and neither needed changing.
+
+**The editor is the copy dialog's stamp field** (#746), which in edit mode is the whole list rather
+than one picker — the leading entry included, because §3 is symmetric and a control that filed one
+stamp above the others would draw the asymmetry the rule removes. Refinement history follows from
+that: the pointer moves whenever the first entry changes, but a history row is written only when the
+stamp now leading was **not** on the piece before, since a reorder and a struck-off entry are
+statements about the piece rather than re-identifications of it.
 
 ## Context
 
@@ -76,7 +90,8 @@ particular.
 Consequently the copy drops out of copy counts, checklists, completeness, wants, duplicate-catalogue
 detection (#85) and auction duplicates, and out of the Colnect list-sync source predicates. It stays
 fully a copy for everything that is about the object rather than the catalogue position: offers,
-sales, trades, location, disposal, delivery, cost basis, photos, `itemNo`.
+sales, trades, location, disposal, delivery, cost basis, photos, `itemNo`. (Two of those turned out to
+need nothing: the last paragraph of *Status* says which, and why.)
 
 **Colnect files it nowhere rather than under `not-comparable`.** That bucket means "carries no
 `colnectId` yet" — a backfill to-do (#250). A multi-stamp copy is outside the question permanently
