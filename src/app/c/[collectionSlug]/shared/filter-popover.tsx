@@ -192,6 +192,32 @@ export function filterTriggerStyle({
 }
 
 /**
+ * One fixed-width slot on a filter bar (#868).
+ *
+ * **A control sized to its own label is a control that moves the bar when it is used**: every
+ * dropdown here reads differently once something is picked — `All conditions` becomes `Mint` becomes
+ * `3 conditions` — and each of those is a different width, so a tick shifts everything to its right
+ * at the moment the collector is working the row. Counting several values instead of listing them
+ * (#425) bounds that growth; it does not stop it. The slot does, and `flexShrink: 0` is half of what
+ * makes it fixed: without it the row shrinks its controls before it wraps, so their widths would
+ * still depend on what else is on the bar.
+ *
+ * A caller sizes each slot for the widest thing the control normally shows (its `All …` label,
+ * usually) and lets anything longer — a collection's own condition names are the collector's text,
+ * and unbounded — ellipsise inside the box. Lives here rather than on the one screen that started
+ * with it, because the second bar to need the rule should not get a second spelling of it.
+ */
+export function FilterSlot({
+  width,
+  children,
+}: {
+  width: string;
+  children: React.ReactNode;
+}) {
+  return <div style={{ width, flexShrink: 0 }}>{children}</div>;
+}
+
+/**
  * One on/off switch in a filter dropdown's {@link FILTER_MENU_HEADING_STYLE heading}ed footer — a
  * control that **qualifies** the choice above it rather than being one of the choices (#868).
  *

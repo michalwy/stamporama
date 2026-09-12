@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueYearFacets } from "@/lib/issues";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 export async function GET(
   request: NextRequest,
@@ -30,6 +31,9 @@ export async function GET(
       searchCatalogNumber,
       catalogVendorId,
       catalogNumber,
+      // The collector's own labels (#1182) — a filter like any other, so the list and both
+      // facet rails narrow by it and their counts answer for it.
+      ...tagFilterFromParams(sp),
     });
     return NextResponse.json({ years });
   } catch {

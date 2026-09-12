@@ -41,7 +41,10 @@ import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chi
 import {
   FILTER_MENU_HEADING_STYLE,
   FilterFooterToggle,
+  FilterSlot,
 } from "@/app/c/[collectionSlug]/shared/filter-popover";
+import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { DEFAULT_TAG_FILTER_MODE, isTagFilterMode } from "@/lib/tag-filter";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -200,6 +203,10 @@ const SPARE_FILTERS = [
  * own — and its *review* half (#506) is deliberately never remembered, so it is not here either.
  * Grouping mode and its axes are a client preference of their own and never travel in the URL. */
 const REMEMBERED_FILTER_KEYS = [
+  // The tag filter's two halves (#1182), remembered together: the mode alone says nothing, and a
+  // remembered set of ids read back under the other reading would be a list nobody asked for.
+  "tagIds",
+  "tagMode",
   "conditionIds",
   "formatIds",
   "certificateStatusIds",
@@ -248,19 +255,16 @@ const FILTER_WIDTH = {
   /** Wider than the rest: it holds `Group by location ref` and the summary of the two splits it
    *  carries inside (`COPY_GROUPING_LABEL_BUDGET`, pinned by a unit test). */
   grouping: "14rem",
+  /** Sized for `Any of 2 tags` and `All of 2 tags` — the two readings the trigger names (#1182) —
+   *  rather than for its `All tags` default, which is much the shorter of the three. A single tag's
+   *  own name is the collector's text and ellipsises. */
+  tags: "10.5rem",
 } as const;
 
 /** What a `Tooltip` around a bar control needs to stop being the loose link: it renders an
  *  `inline-flex` span, and **that span** is the row's flex child rather than the fixed-width slot
  *  inside it, so without this the width holds only until the row runs out of room. */
 const NO_SHRINK: React.CSSProperties = { flexShrink: 0 };
-
-/** One fixed-width slot on the filter bar — see {@link FILTER_WIDTH}. `flexShrink: 0` is half of
- *  what makes it fixed: without it the row shrinks its controls before it wraps, so their widths
- *  would still depend on what else is on the bar. */
-function FilterSlot({ width, children }: { width: string; children: React.ReactNode }) {
-  return <div style={{ width, flexShrink: 0 }}>{children}</div>;
-}
 
 /**
  * The listing buttons while the selection **collides** with a live offer (#660).
@@ -369,6 +373,13 @@ export function InventoryListPanel({
   // no filter at all. `"none"` is a tickable value, not the absence of the filter: null *is* a value
   // here (ADR-0006 §2), exactly as `"single"` is for format.
   const certificateStatusIds = useCsvValue(readFilterParam("certificateStatusIds"));
+  // The collector's own labels (#1182), and the **reading** to apply to them. The ids are a
+  // comma-joined list like every other multi-select here; the mode is its own word, and an
+  // unrecognised one falls back to *any* rather than showing nothing — a stale or hand-edited link
+  // should narrow, not break.
+  const tagIds = useCsvValue(readFilterParam("tagIds"));
+  const rawTagMode = readFilterParam("tagMode");
+  const tagMode = isTagFilterMode(rawTagMode) ? rawTagMode : DEFAULT_TAG_FILTER_MODE;
   const locationId = readFilterParam("locationId") ?? "";
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
@@ -531,6 +542,10 @@ export function InventoryListPanel({
       certificateStatusIds:
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
+      // The mode rides only with the ids, so an untouched filter keys the same cache entry whichever
+      // reading was last left in the control.
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
+      tagMode: tagIds.length > 0 ? tagMode : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       year: year || undefined,
@@ -547,7 +562,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -560,6 +575,8 @@ export function InventoryListPanel({
       certificateStatusIds:
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
+      tagMode: tagIds.length > 0 ? tagMode : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
@@ -573,7 +590,7 @@ export function InventoryListPanel({
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1040,6 +1057,7 @@ export function InventoryListPanel({
     conditionIds.length > 0 ||
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
+    tagIds.length > 0 ||
     !!locationId ||
     noPhotos ||
     missingCatalogValue ||
@@ -1717,6 +1735,28 @@ export function InventoryListPanel({
                   />
                 </FilterSlot>
               )}
+
+              {/* The collector's own labels (#1182). The **copy's** tags — nothing is inherited
+                  (#1181), so this never reaches the tags on the stamp a copy is linked to, which is
+                  the one thing a reader will look for given that every other stamp-facing axis on
+                  this bar does read through `Item.stamp`. The any/all switch is inside the panel, not
+                  beside it, for #846's and #868's reason: a control that only ever qualifies the
+                  picks above it costs the bar nothing in there and cannot be found out here. */}
+              <TagFilterControl
+                collectionId={collectionId}
+                tagIds={tagIds}
+                mode={tagMode}
+                width={FILTER_WIDTH.tags}
+                onChange={({ tagIds: ids, mode }) =>
+                  updateParams({
+                    tagIds: ids.join(","),
+                    // One write through the one funnel (#693), naming both keys with `""` where they
+                    // are off so clearing the filter sticks instead of being read back from the
+                    // remembered set on the next render.
+                    tagMode: ids.length > 0 && mode === "all" ? "all" : "",
+                  })
+                }
+              />
 
               {locations.length > 0 && (
                 <FilterSlot width={FILTER_WIDTH.location}>

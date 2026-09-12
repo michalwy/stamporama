@@ -36,6 +36,7 @@ import {
   type StampWantSummary,
 } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
+import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
@@ -1049,6 +1050,16 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * exclusion and **nothing else**: no `forSale` implication, because a copy taken out of the
    * worklist and then taken off sale would otherwise vanish from both readings at once. */
   excludedPlatformId?: string;
+  /** Narrow to the copies carrying these tags (#1182), under `tagMode`'s reading — *any of them* by
+   *  default, *all of them* on request. Empty or omitted is *every tag*, the absence of the filter.
+   *
+   *  The **copy's own** tags. Nothing is inherited (#1181), so this never reaches the tags on the
+   *  stamp a copy is linked to — which is the one thing a reader will look for here, because every
+   *  other axis on this filter set that mentions a stamp (`areaIds`, `year`, `search`) deliberately
+   *  reads *through* `Item.stamp`. A label like *for expertising* is a statement about the piece in
+   *  hand and was never a statement about the catalogue entry. */
+  tagIds?: string[];
+  tagMode?: TagFilterMode;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -1206,6 +1217,11 @@ function buildItemWhere(
   if (filters.locationRef === NO_LOCATION_REF) {
     and.push({ OR: [{ locationRef: null }, { locationRef: "" }] });
   }
+  // The collector's own labels (#1182), on the **copy** rather than through `stamp` — the one axis
+  // here that does not read the linked stamp. In the `and` list because under *all* the clause is
+  // itself an `AND`, and because the search's `OR` is already here.
+  const tags = tagFilterWhere(filters);
+  if (tags) and.push(tags);
   if (filters.attachableToLotId) {
     // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
     // inequality is not a reliable way to say that about a nullable column.

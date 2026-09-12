@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listStampAreaFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
  *  keeps `year` and drops the area selection, so each row says what selecting it would list. */
@@ -41,6 +42,9 @@ export async function GET(
       // The attribute filters narrow these counts too (#737), for the same reason they narrow the
       // year ones: they are filters, not display axes.
       ...stampAttributeFiltersFromParams(sp),
+      // The collector's own labels (#1182) — a filter like any other, so the list and both
+      // facet rails narrow by it and their counts answer for it.
+      ...tagFilterFromParams(sp),
     });
     return NextResponse.json({ areas });
   } catch {

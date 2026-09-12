@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listStampYearFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 export async function GET(
   request: NextRequest,
@@ -32,6 +33,9 @@ export async function GET(
       // The attribute filters narrow the year counts too (#737): they are filters, not display
       // axes like the condition and format switchers, so the counts have to answer for them.
       ...stampAttributeFiltersFromParams(sp),
+      // The collector's own labels (#1182) — a filter like any other, so the list and both
+      // facet rails narrow by it and their counts answer for it.
+      ...tagFilterFromParams(sp),
     });
     return NextResponse.json({ years });
   } catch {

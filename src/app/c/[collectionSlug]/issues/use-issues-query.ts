@@ -7,13 +7,14 @@ import {
 } from "@tanstack/react-query";
 import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
 import type { AreaFacet } from "@/lib/area-facets";
+import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 
 interface IssuesPage {
   items: IssueListItem[];
   nextCursor: string | null;
 }
 
-export interface IssueListFilters {
+export interface IssueListFilters extends TagFilterOpts {
   areaIds?: string[];
   search?: string;
   /** Vendor + bare number parsed out of the quick search text (#289), so a prefixed
@@ -33,7 +34,7 @@ export interface IssueListFilters {
 }
 
 /** Filters that affect the year facet counts (everything except year itself). */
-export interface IssueYearFacetFilters {
+export interface IssueYearFacetFilters extends TagFilterOpts {
   areaIds?: string[];
   search?: string;
   searchCatalogVendorId?: string;
@@ -44,7 +45,7 @@ export interface IssueYearFacetFilters {
 
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
  *  which is why `year` is in here and out of {@link IssueYearFacetFilters}. */
-export interface IssueAreaFacetFilters {
+export interface IssueAreaFacetFilters extends TagFilterOpts {
   search?: string;
   searchCatalogVendorId?: string;
   searchCatalogNumber?: string;
@@ -96,6 +97,7 @@ export function useIssuesInfinite(
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      appendTagFilterParams(params, filters);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
@@ -129,6 +131,7 @@ export function useIssueYears(
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      appendTagFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/issues/years?${params.toString()}`
       );
@@ -154,6 +157,7 @@ export function useIssueAreaFacets(
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      appendTagFilterParams(params, filters);
       if (filters.year) params.set("year", filters.year);
       const res = await fetch(
         `/api/collections/${collectionId}/issues/areas?${params.toString()}`

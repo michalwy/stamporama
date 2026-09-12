@@ -28,6 +28,8 @@ import {
   type StampAreaFacetFilters,
 } from "./use-stamps-query";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { tagFilterFromParams, DEFAULT_TAG_FILTER_MODE, type TagFilterOpts } from "@/lib/tag-filter";
 import { useCollectionStampAttributes } from "@/app/c/[collectionSlug]/shared/use-stamp-attributes";
 import {
   STAMP_ATTRIBUTE_KINDS,
@@ -114,6 +116,10 @@ export function StampsListPanel({
   );
   const { data: attributeLists } = useCollectionStampAttributes(collectionId);
 
+  // The tag filter (#1182), URL-backed like the attribute ones beside it: the ids and the mode
+  // together, read through the one parser the route reads them back with.
+  const tagFilter: TagFilterOpts = useMemo(() => tagFilterFromParams(searchParams), [searchParams]);
+
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
   const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
@@ -152,13 +158,14 @@ export function StampsListPanel({
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
       ...attributeFilters,
+      ...tagFilter,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       displayFormatId: displayFormatId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
@@ -169,8 +176,9 @@ export function StampsListPanel({
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
       ...attributeFilters,
+      ...tagFilter,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
@@ -188,8 +196,9 @@ export function StampsListPanel({
       issueId: issueId || undefined,
       year: year || undefined,
       ...attributeFilters,
+      ...tagFilter,
     }),
-    [search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters]
+    [search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters, tagFilter]
   );
 
   const { data: areaFacets } = useStampAreaFacets(collectionId, areaFacetFilters);
@@ -254,7 +263,8 @@ export function StampsListPanel({
     catalogNumber ||
     issueId ||
     year ||
-    Object.keys(attributeFilters).length > 0
+    Object.keys(attributeFilters).length > 0 ||
+    (tagFilter.tagIds?.length ?? 0) > 0
   );
 
   return (
@@ -358,6 +368,21 @@ export function StampsListPanel({
                 />
               );
             })}
+            {/* The collector's own labels (#1182), last on the line: an invented vocabulary rather
+                than a catalogue fact, so it reads after the four dictionaries that are. */}
+            <TagFilterControl
+              collectionId={collectionId}
+              tagIds={tagFilter.tagIds ?? []}
+              mode={tagFilter.tagMode ?? DEFAULT_TAG_FILTER_MODE}
+              onChange={({ tagIds, mode }) =>
+                updateParams({
+                  tagIds: tagIds.join(","),
+                  // The mode rides only with the ids, so a cleared filter leaves no stale word in
+                  // the URL, and *any* — the default — is never spelled out.
+                  tagMode: tagIds.length > 0 && mode === "all" ? "all" : "",
+                })
+              }
+            />
           </div>
         </ListToolbar>
 

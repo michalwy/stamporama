@@ -179,6 +179,13 @@ right, from *which copies* to *how they are shown*.
   format filter it appears only once your collection defines certificate statuses.
 - **Format** — see [Filtering the list by format](#filtering-the-list-by-format). It appears only
   once your collection defines formats.
+- **Tags** — show only copies carrying the [tags](tags.md) you tick. Inside its panel is a **Must
+  carry every ticked tag** switch: off (the default) the list shows copies carrying *any* of the
+  ticked tags, on it shows only the copies carrying *all* of them, and the closed control says which
+  reading is in force — *Any of 2 tags* or *All of 2 tags*. With one tag ticked the switch has
+  nothing to say and is greyed out. These are the **copy's own** tags: a tag on the stamp a copy is
+  linked to is not on the copy, so it will not bring the copy into this list. The filter appears only
+  once your collection defines tags, and it is remembered between visits like the ones beside it.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once. A **+ sub-locations / this location only**
