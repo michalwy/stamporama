@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
@@ -6,6 +6,9 @@ import { createAssistantToken, revokeAssistantToken } from "../../src/lib/api-to
 import { DELETE, GET, POST } from "../../src/app/api/mcp/route";
 import {
   JSON_RPC,
+  LATEST_LEGACY_MCP_PROTOCOL_VERSION,
+  LEGACY_MCP_PROTOCOL_VERSIONS,
+  MCP_META,
   MCP_PROTOCOL_VERSION,
   SUPPORTED_MCP_PROTOCOL_VERSIONS,
   handleMcpMessage,
@@ -191,12 +194,12 @@ describe("the remote MCP endpoint", () => {
       id: 1,
       method: "initialize",
       params: {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        protocolVersion: LATEST_LEGACY_MCP_PROTOCOL_VERSION,
         capabilities: {},
         clientInfo: { name: "test-client", version: "0" },
       },
     });
-    assert.equal(result.protocolVersion, MCP_PROTOCOL_VERSION);
+    assert.equal(result.protocolVersion, LATEST_LEGACY_MCP_PROTOCOL_VERSION);
     assert.deepEqual(result.capabilities, { tools: { listChanged: false } });
     assert.equal((result.serverInfo as { name: string }).name, "stamporama");
   });
@@ -366,10 +369,11 @@ describe("the remote MCP endpoint", () => {
     assert.equal(body.error?.code, JSON_RPC.parseError);
   });
 
-  it("accepts the protocol-version header for a revision it speaks", async () => {
+  it("accepts the protocol-version header for every legacy revision it speaks", async () => {
     // The control for the refusal below, and it runs first: a header check that refused everything
-    // would make the next test pass for a reason unrelated to the revision in it.
-    for (const revision of SUPPORTED_MCP_PROTOCOL_VERSIONS) {
+    // would make the next test pass for a reason unrelated to the revision in it. 2026-07-28 is not in
+    // this loop because it has no `ping`; the modern flow below is its control.
+    for (const revision of LEGACY_MCP_PROTOCOL_VERSIONS) {
       const response = await POST(
         mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 9, method: "ping" }, {
           "MCP-Protocol-Version": revision,
@@ -377,6 +381,121 @@ describe("the remote MCP endpoint", () => {
       );
       assert.equal(response.status, 200, `revision ${revision} is accepted`);
     }
+  });
+
+  it("serves a legacy client on each revision it spoke before: connect, list, call (#1222)", async () => {
+    // #1222's *Done when*, one revision at a time, over the real route and the real registry.
+    for (const revision of LEGACY_MCP_PROTOCOL_VERSIONS) {
+      const handshake = await resultOf(readWriteToken, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: revision, capabilities: {}, clientInfo: { name: "legacy", version: "0" } },
+      });
+      assert.equal(handshake.protocolVersion, revision);
+
+      const header = { "MCP-Protocol-Version": revision };
+      const list = await POST(mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 2, method: "tools/list" }, header));
+      assert.equal(list.status, 200, revision);
+      const listBody = (await list.json()) as JsonRpcBody;
+      assert.equal((listBody.result?.tools as unknown[]).length, OPERATIONS.length, revision);
+      assert.equal(listBody.result?.resultType, undefined, `${revision} sees no 2026-07-28 fields`);
+
+      const call = await POST(
+        mcpRequest(
+          readWriteToken,
+          {
+            jsonrpc: "2.0",
+            id: 3,
+            method: "tools/call",
+            params: { name: "get_collection_vocabulary", arguments: {} },
+          },
+          header
+        )
+      );
+      assert.equal(call.status, 200, revision);
+      const callBody = (await call.json()) as JsonRpcBody;
+      assert.ok(callBody.result, revision);
+      assert.equal(JSON.parse(toolText(callBody.result)).baseCurrency, "PLN", revision);
+    }
+  });
+
+  describe("a 2026-07-28 client, which has no handshake (#1222)", () => {
+    /** A modern request exactly as the transport page spells it: body `_meta` and mirrored headers. */
+    function modernRequest(method: string, params: Record<string, unknown> = {}, id = 1, name?: string) {
+      return mcpRequest(
+        readWriteToken,
+        {
+          jsonrpc: "2.0",
+          id,
+          method,
+          params: {
+            ...params,
+            _meta: {
+              [MCP_META.protocolVersion]: MCP_PROTOCOL_VERSION,
+              "io.modelcontextprotocol/clientInfo": { name: "modern-client", version: "0" },
+              [MCP_META.clientCapabilities]: {},
+            },
+          },
+        },
+        {
+          "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+          "Mcp-Method": method,
+          ...(name === undefined ? {} : { "Mcp-Name": name }),
+        }
+      );
+    }
+
+    it("discovers, lists and calls end to end, answering out of this collection's rows, and logs nothing", async () => {
+      const warn = mock.method(console, "warn", () => {});
+      try {
+        const discover = await POST(modernRequest("server/discover"));
+        assert.equal(discover.status, 200);
+        const discovered = ((await discover.json()) as JsonRpcBody).result;
+        assert.equal(discovered?.resultType, "complete");
+        assert.deepEqual(discovered?.supportedVersions, [...SUPPORTED_MCP_PROTOCOL_VERSIONS]);
+
+        const list = await POST(modernRequest("tools/list", {}, 2));
+        assert.equal(list.status, 200);
+        const listed = ((await list.json()) as JsonRpcBody).result;
+        assert.equal(listed?.resultType, "complete");
+        assert.deepEqual(
+          (listed?.tools as { name: string }[]).map((tool) => tool.name).sort(),
+          OPERATIONS.map((operation) => operation.name).sort()
+        );
+        assert.equal(listed?.cacheScope, "private");
+
+        const call = await POST(
+          modernRequest("tools/call", { name: "get_collection_vocabulary", arguments: {} }, 3, "get_collection_vocabulary")
+        );
+        assert.equal(call.status, 200);
+        const called = ((await call.json()) as JsonRpcBody).result;
+        assert.ok(called);
+        assert.equal(called.resultType, "complete");
+        const answer = JSON.parse(toolText(called)) as { baseCurrency: string; conditions: { name: string }[] };
+        assert.equal(answer.baseCurrency, "PLN");
+        assert.deepEqual(answer.conditions.map((condition) => condition.name), ["Mint Never Hinged", "Used"]);
+
+        // #1222's first *Done when*: the alarm no longer fires for this revision.
+        assert.equal(warn.mock.callCount(), 0, "no staleness alarm for a revision this build speaks");
+      } finally {
+        warn.mock.restore();
+      }
+    });
+
+    it("answers a method the revision removed with 404, the status the transport names", async () => {
+      const response = await POST(modernRequest("ping"));
+      assert.equal(response.status, 404);
+      assert.equal(((await response.json()) as JsonRpcBody).error?.code, JSON_RPC.methodNotFound);
+    });
+
+    it("refuses a tools/call whose Mcp-Name disagrees with the body, with 400", async () => {
+      const response = await POST(
+        modernRequest("tools/call", { name: "get_collection_vocabulary", arguments: {} }, 4, "search_collection")
+      );
+      assert.equal(response.status, 400);
+      assert.equal(((await response.json()) as JsonRpcBody).error?.code, JSON_RPC.headerMismatch);
+    });
   });
 
   it("accepts a request with no protocol-version header at all", async () => {
@@ -392,18 +511,31 @@ describe("the remote MCP endpoint", () => {
     // **This is the specification's own `MUST` and this build's staleness alarm** (ADR-0051): the
     // first client newer than this implementation is the thing that notices the drift, so the
     // refusal names what it speaks rather than failing opaquely.
-    const response = await POST(
-      mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 11, method: "ping" }, {
-        "MCP-Protocol-Version": "2027-01-01",
-      })
-    );
-    assert.equal(response.status, 400);
-    const body = (await response.json()) as JsonRpcBody;
-    assert.match(String(body.error?.message), /2027-01-01/);
-    assert.deepEqual(
-      (body.error?.data as { supported: string[] }).supported,
-      [...SUPPORTED_MCP_PROTOCOL_VERSIONS]
-    );
+    const warn = mock.method(console, "warn", () => {});
+    try {
+      const response = await POST(
+        mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 11, method: "ping" }, {
+          "MCP-Protocol-Version": "2027-01-01",
+        })
+      );
+      assert.equal(response.status, 400);
+      const body = (await response.json()) as JsonRpcBody;
+      assert.equal(body.error?.code, JSON_RPC.unsupportedProtocolVersion);
+      assert.equal(body.id, 11);
+      assert.match(String(body.error?.message), /2027-01-01/);
+      assert.deepEqual(body.error?.data, {
+        supported: [...SUPPORTED_MCP_PROTOCOL_VERSIONS],
+        requested: "2027-01-01",
+      });
+
+      // #1222: *still refused and logged, naming ADR-0051*.
+      assert.equal(warn.mock.callCount(), 1);
+      const logged = String(warn.mock.calls[0].arguments[0]);
+      assert.match(logged, /2027-01-01/);
+      assert.match(logged, /ADR-0051/);
+    } finally {
+      warn.mock.restore();
+    }
   });
 
   it("refuses GET and DELETE, saying what this endpoint does offer", async () => {

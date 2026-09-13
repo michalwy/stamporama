@@ -1322,28 +1322,60 @@ below the operation.
 
 ### What it implements, and what it refuses
 
-`initialize`, `tools/list`, `tools/call` and `ping`, over JSON-RPC 2.0. **Streamable HTTP,
-stateless**: no `Mcp-Session-Id`, because the tool list is compiled into the build and every call is
-authorised from its own `Authorization` header, so there is no session state to key. A notification
-— `notifications/initialized` is the one every client sends — is answered with `202` and no body,
-because a message carrying no id has nothing to answer.
+**Two eras on one endpoint, chosen per request** (#1222). Revision 2026-07-28 removed the
+handshake, and a server that answers it and the revisions before it is what the specification calls
+*dual-era*:
+
+- **A 2026-07-28 client** gets `server/discover`, `tools/list` and `tools/call`. There is no
+  `initialize` and no `ping` — both are answered `404` with `-32601`, the status that revision names
+  for an unknown method. Every request carries its revision and the client's capabilities in
+  `params._meta`, and mirrors its method into `Mcp-Method` and, on `tools/call`, the tool name into
+  `Mcp-Name`; a missing or disagreeing header is `400` with `HeaderMismatch` (`-32020`), a missing
+  `_meta` field `400` with `-32602`. Every result carries `resultType: "complete"` and the server's
+  identity in `_meta`, and `server/discover` and `tools/list` carry `ttlMs: 0` and
+  `cacheScope: "private"`.
+- **A client on 2025-06-18, 2025-03-26 or 2024-11-05** gets exactly what #709 built: `initialize`,
+  `tools/list`, `tools/call` and `ping`, with results carrying none of 2026-07-28's fields. The unit
+  suite pins that by asserting the keys of a legacy result, so a modern field leaking into every
+  result fails a test rather than a client.
+
+**A request is modern when its `MCP-Protocol-Version` header names 2026-07-28 or its body declares a
+revision in `_meta`.** The second half is not decoration: without it, a body declaring 2026-07-28 with
+no header would read as a header-less legacy client and be served under rules it never asked for.
+
+**The cache hints are two decisions, not defaults.** `private` for the reason
+`/api/v1/openapi.json` requires a token (*The document*, below): the list carries no collection data,
+but it is the list of things a valid token could do, and `public` would let a shared cache hand it to
+a caller without one. `ttlMs: 0` because the list changes only with a deploy and this build cannot
+know when the next one is — a positive TTL would be a promise about a deploy nobody has scheduled,
+and zero costs one `POST`.
+
+**A legacy `initialize` is never answered with 2026-07-28**, even by a client that asks for it: a
+client that sent `initialize` is speaking a revision with a handshake, so it is answered with the
+newest one that has one (`LATEST_LEGACY_MCP_PROTOCOL_VERSION`).
+
+**Streamable HTTP, stateless, in both eras**: no `Mcp-Session-Id`, because the tool list is compiled
+into the build and every call is authorised from its own `Authorization` header, so there is no
+session state to key. A notification — `notifications/initialized` is the one every legacy client
+sends — is answered with `202` and no body, because a message carrying no id has nothing to answer.
 
 `GET` and `DELETE` are refused with `405` and an `Allow: POST`: there is no server-initiated stream
-to open and no session to terminate, and a client that would like one should be told rather than
-left waiting on a channel that never sends anything.
+to open and no session to terminate, and 2026-07-28 names `405` for exactly that traffic from an older
+client.
 
-**Batching is refused**, which is the current specification rather than a shortcut — in this
-revision the body of a POST must be a single JSON-RPC message. **Protocol-version negotiation at
-`initialize` is an echo**: a client asking for a revision this server knows gets that one back, and
-anything else is answered with the newest one it speaks, which is what the specification asks a
-server to do — it is a negotiation rather than an error.
+**Batching is refused**, which is the current specification rather than a shortcut — since 2025-06-18
+the body of a POST must be a single JSON-RPC message.
 
-**The `MCP-Protocol-Version` *header* is a different thing and is refused rather than negotiated.**
-A request carrying one for a revision this build does not speak gets `400`, which the specification
-requires — and **that one line is also this build's staleness alarm** (ADR-0051 §4), because it logs
-the mismatch naming the ADR. **The revision is pinned at `2025-06-18`** in `MCP_PROTOCOL_VERSION`;
-a header-less request is not refused, because the specification says to assume `2025-03-26` for one
-and this build speaks it.
+**The `MCP-Protocol-Version` header is refused rather than negotiated when it names a revision this
+build does not speak**: `400` with `UnsupportedProtocolVersion` (`-32022`) and `data` carrying
+`supported` and `requested`, answered to every era because 2026-07-28 fixes that shape and a dual-era
+client reads it to tell a modern server from a legacy one. **That one refusal is also this build's
+staleness alarm** (ADR-0051 §4): the route logs it naming the ADR, and it fired on 2026-09-13 when the
+collector's client first asked for 2026-07-28, which is what #1222 is. **The revision is pinned at
+`2026-07-28`** in `MCP_PROTOCOL_VERSION` (`2025-06-18` from #709 until #1222). The decision of what a
+request is refused for lives in the pure `mcp.ts` and the route only reads the headers and writes the
+log, so `pnpm test:unit` holds the header rules as well as the handshake. A header-less request is not
+refused, because the specification lets a server assume `2025-03-26` for one and this build speaks it.
 
 **MCP resources and prompts are deliberately absent — and this is a different kind of absence from
 the section above.** *What is deliberately absent* is about boundaries that must stay, enforced by
@@ -1353,7 +1385,7 @@ moment a concrete need shows up, and are missing only because none has.
 ### There is no SDK, and the reason is the Prisma-free split
 
 **[ADR-0051](../decisions/0051-hand-rolled-mcp-transport.md) is the decision and carries the whole
-argument**, including the two places this implementation deviates from the specification and why.
+argument**, including where this implementation deviates from the specification and why — re-read against 2026-07-28 in #1222.
 What follows is the summary; where the two differ, the ADR is right.
 
 `@modelcontextprotocol/sdk` writes its HTTP transport against Node's `IncomingMessage` and

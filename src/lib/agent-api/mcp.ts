@@ -17,7 +17,25 @@
 // `IncomingMessage`/`ServerResponse`, and an App Router route handler is handed a Web `Request` and
 // must return a Web `Response`; bridging the two is more code than what is below, with a failure
 // mode no suite here can see. Streamable HTTP for a stateless server is one `POST` carrying
-// JSON-RPC 2.0 and four methods, which is a pure function from a message to a message.
+// JSON-RPC 2.0 and a handful of methods, which is a pure function from a message to a message.
+//
+// ## Two eras on one endpoint (#1222)
+//
+// **Revision 2026-07-28 removed the handshake**, so this endpoint serves two shapes of client and
+// picks between them per request, which is what the specification calls a *dual-era* server:
+//
+// - **Modern** (2026-07-28): no `initialize` and no `ping`. Every request carries its revision and
+//   the client's capabilities in `params._meta`, mirrors its method and tool name into
+//   `Mcp-Method` / `Mcp-Name` headers, and gets a result carrying `resultType`. `server/discover`
+//   is the one new method, and the specification makes it a `MUST`.
+// - **Legacy** (2025-06-18, 2025-03-26, 2024-11-05): exactly what #709 built — `initialize`,
+//   `tools/list`, `tools/call` and `ping`, answered byte for byte as before, so a client that works
+//   today keeps working.
+//
+// A request is modern when its `MCP-Protocol-Version` header names a modern revision **or** its body
+// declares a revision in `_meta`. The second half matters: a body that declares 2026-07-28 while its
+// header says something else, or says nothing, is refused as a header mismatch rather than quietly
+// served under legacy rules it did not ask for.
 //
 // ## Which failures are protocol errors and which are tool errors
 //
@@ -40,21 +58,15 @@
 // Nothing runs in either case, so this is a choice about who reads the refusal and not about
 // whether it is enforced.
 //
-// **On one half of that, the specification divides it differently, and the deviation is deliberate
-// rather than a misreading** (checked against the published text rather than remembered — ADR-0051
-// records why that check was run at all). *Tools* §Error Handling lists **invalid arguments** under
-// protocol errors and **invalid input data** under tool execution errors. A missing required
-// parameter and a wrong type land on its protocol side; here they come back as tool errors, with
-// only an unknown tool, an unknown method and a malformed message kept as JSON-RPC.
-//
-// **The reason is `accepted`.** #706's error carries the values that would have worked, and it is
-// the field that turns a refusal into a correction the agent makes in one turn. In a tool error it
-// reaches the model inside the text it reads; in a JSON-RPC error it lives in `error.data`, which
-// is the client transport's to render and which many clients drop. Following the division exactly
-// would put the most common recoverable mistake an agent makes — a guessed parameter name — in the
-// one channel where the list of real names may never be seen. The spec's own wording is
-// descriptive ("Tools use two error reporting mechanisms") rather than a MUST, so this is a choice
-// it leaves open.
+// **The specification has since come round to this division** (#1222, read against the published
+// 2026-07-28 text). This paragraph used to record a deliberate deviation: 2025-06-18's *Tools*
+// §Error Handling lists **invalid arguments** under protocol errors, so a missing required parameter
+// or a wrong type landed on its protocol side, and here they came back as tool errors because
+// #706's `accepted` reaches the model inside a tool error and may never reach it from `error.data`.
+// Revision 2025-11-25 (SEP-1303) moved **input validation errors** to the tool-execution side for
+// exactly that reason, and 2026-07-28 keeps it there — so for a modern client this is the
+// specification's own split, and it stays a deviation only towards a client still on 2025-06-18.
+// ADR-0051 §5 carries both halves.
 
 import { isApiError } from "./errors";
 import { LIST_PARAMETERS } from "./list";
@@ -70,7 +82,10 @@ import type { Operation, OperationContext, ParameterSpec } from "./types";
  * **silent**: a client stops connecting months from now with nothing in this repository having
  * changed. So the revision is named here, in the ADR and in the user guide, and it is the one to
  * check a new revision's changelog against:
- * <https://modelcontextprotocol.io/specification/2025-06-18/>
+ * <https://modelcontextprotocol.io/specification/2026-07-28/>
+ *
+ * It was `2025-06-18` from #709 until #1222, when the collector's own client began asking for
+ * 2026-07-28 and the alarm below fired exactly as designed.
  *
  * **What would say it has gone stale**, in the order it will actually be noticed:
  *
@@ -79,24 +94,42 @@ import type { Operation, OperationContext, ParameterSpec } from "./types";
  *    this build announces the drift in the server log rather than as an unexplained failure. That
  *    refusal is the specification's own requirement, and it doubles as the alarm.
  * 2. A revision appears at the URL above whose changelog touches the Streamable HTTP transport,
- *    `tools/list`, `tools/call` or the `initialize` handshake — the four things implemented here.
- * 3. A client negotiates down: `initialize` answered with this constant rather than with what the
- *    client asked for means the client is older, which is fine, and repeated across clients means
- *    this build is the old one.
+ *    `server/discover`, `tools/list`, `tools/call` or the per-request `_meta` fields — the things
+ *    implemented here.
+ * 3. A legacy client negotiates down: `initialize` answered with `LATEST_LEGACY_MCP_PROTOCOL_VERSION`
+ *    rather than with what the client asked for means the client is older, which is fine.
  */
-export const MCP_PROTOCOL_VERSION = "2025-06-18";
+export const MCP_PROTOCOL_VERSION = "2026-07-28";
 
-/**
- * Revisions this server will echo back to a client that asks for them, newest first.
- *
- * `2025-03-26` is on the list for a second reason beyond politeness: the specification says that a
- * server receiving **no** `MCP-Protocol-Version` header should assume that revision, so it has to
- * be one this build accepts or every header-less request would be refused.
- */
-export const SUPPORTED_MCP_PROTOCOL_VERSIONS: readonly string[] = [
+/** Revisions with no handshake: version, identity and capabilities ride in every request's `_meta`. */
+export const MODERN_MCP_PROTOCOL_VERSIONS: readonly string[] = ["2026-07-28"];
+
+/** Revisions that open with `initialize`. Still answered, so a client that works today keeps working. */
+export const LEGACY_MCP_PROTOCOL_VERSIONS: readonly string[] = [
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
+];
+
+/**
+ * The newest revision that has an `initialize` handshake, and so the one a legacy client is answered
+ * with when it asks for a revision this build does not know. **Never `MCP_PROTOCOL_VERSION`**:
+ * telling a client mid-handshake to proceed in a revision that has no handshake would be an answer
+ * it cannot act on.
+ */
+export const LATEST_LEGACY_MCP_PROTOCOL_VERSION = "2025-06-18";
+
+/**
+ * Every revision this server answers, newest first — what `server/discover` advertises and what a
+ * refused request is told.
+ *
+ * `2025-03-26` is on the list for a second reason beyond politeness: the specification says that a
+ * server receiving **no** `MCP-Protocol-Version` header may assume that revision, so it has to be
+ * one this build accepts or every header-less request would be refused.
+ */
+export const SUPPORTED_MCP_PROTOCOL_VERSIONS: readonly string[] = [
+  ...MODERN_MCP_PROTOCOL_VERSIONS,
+  ...LEGACY_MCP_PROTOCOL_VERSIONS,
 ];
 
 /**
@@ -105,10 +138,35 @@ export const SUPPORTED_MCP_PROTOCOL_VERSIONS: readonly string[] = [
  */
 export const ASSUMED_MCP_PROTOCOL_VERSION = "2025-03-26";
 
-/** Whether this build speaks a revision. Used by the handshake and by the route's header check. */
+/** Whether this build speaks a revision. Used by the handshake and by the header check. */
 export function isSupportedProtocolVersion(value: unknown): value is string {
   return typeof value === "string" && SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(value);
 }
+
+/** Whether a revision is one of the handshake-free ones. */
+export function isModernProtocolVersion(value: unknown): value is string {
+  return typeof value === "string" && MODERN_MCP_PROTOCOL_VERSIONS.includes(value);
+}
+
+/** The `_meta` keys a modern request carries. Spelled once, because a typo here refuses every call. */
+export const MCP_META = {
+  protocolVersion: "io.modelcontextprotocol/protocolVersion",
+  clientCapabilities: "io.modelcontextprotocol/clientCapabilities",
+  serverInfo: "io.modelcontextprotocol/serverInfo",
+} as const;
+
+/**
+ * The caching hints 2026-07-28 requires on `server/discover` and `tools/list`.
+ *
+ * **`private`, for the reason `/api/v1/openapi.json` requires a token** (`agent-api.md`, *The
+ * document*): the tool list carries no collection data, but it is the list of things a valid token
+ * could do, and `public` would let a shared cache hand it to a caller without one.
+ *
+ * **`ttlMs: 0`, because this build cannot know when the next one replaces it.** The list is compiled
+ * in and changes only with a deploy, and a positive TTL would be a promise about a deploy nobody has
+ * scheduled. Zero tells the client to fetch again when it needs the list, which costs one `POST`.
+ */
+export const MCP_CACHE_HINTS = { ttlMs: 0, cacheScope: "private" } as const;
 
 /** The server's own identity in the handshake. */
 export const MCP_SERVER_NAME = "stamporama";
@@ -157,6 +215,10 @@ export const JSON_RPC = {
   methodNotFound: -32601,
   invalidParams: -32602,
   internalError: -32603,
+  /** 2026-07-28: a mirrored header is missing or disagrees with the body. Always HTTP `400`. */
+  headerMismatch: -32020,
+  /** 2026-07-28: a revision this build does not speak. Always HTTP `400`, answered to every era. */
+  unsupportedProtocolVersion: -32022,
 } as const;
 
 /**
@@ -165,10 +227,32 @@ export const JSON_RPC = {
  * A JSON-RPC **notification** carries no `id` and gets no reply at all — `accepted` is the
  * transport's cue to answer `202` with an empty body, which is what the specification asks for and
  * what `notifications/initialized` needs.
+ *
+ * `status` is the HTTP status, because 2026-07-28 names one for several refusals (`400` for a header
+ * or `_meta` fault, `404` for an unknown method). Everything else stays `200`: the transport worked.
+ * `refusedRevision` is set only on the unsupported-revision refusal, so the route can log it — that
+ * log line is the staleness alarm (ADR-0051 §4).
  */
 export type McpOutcome =
-  | { readonly kind: "response"; readonly body: JsonRpcResponse }
+  | {
+      readonly kind: "response";
+      readonly status: number;
+      readonly body: JsonRpcResponse;
+      readonly refusedRevision?: string;
+    }
   | { readonly kind: "accepted" };
+
+/**
+ * The request headers the protocol reads. The route copies them off the `Request`; a test writes
+ * them by hand. `null` is an absent header.
+ */
+export interface McpRequestHeaders {
+  readonly protocolVersion: string | null;
+  readonly method: string | null;
+  readonly name: string | null;
+}
+
+const NO_HEADERS: McpRequestHeaders = { protocolVersion: null, method: null, name: null };
 
 /** One tool, as `tools/list` renders it. */
 export interface McpTool {
@@ -257,17 +341,21 @@ export function buildToolList(operations: readonly Operation[]): readonly McpToo
   return operations.map(operationTool);
 }
 
-/** The `initialize` result: what this server is and what it can do. */
+/** The legacy `initialize` result: what this server is and what it can do. */
 export function buildInitializeResult(options: {
   readonly appVersion: string;
   readonly requestedProtocolVersion?: unknown;
 }): Record<string, unknown> {
-  // The specification's own rule: answer with the requested revision where it is supported, and
+  // The legacy revisions' own rule: answer with the requested revision where it is supported, and
   // otherwise with another one this server supports — which should be the latest. It is not an
-  // error; the client reads the answer and decides whether it can proceed.
-  const protocolVersion = isSupportedProtocolVersion(options.requestedProtocolVersion)
-    ? options.requestedProtocolVersion
-    : MCP_PROTOCOL_VERSION;
+  // error; the client reads the answer and decides whether it can proceed. **Only a legacy revision
+  // can be the answer**: a client that sent `initialize` is speaking a revision with a handshake, so
+  // one that asks for 2026-07-28 here is answered with the newest revision that has one.
+  const protocolVersion =
+    typeof options.requestedProtocolVersion === "string" &&
+    LEGACY_MCP_PROTOCOL_VERSIONS.includes(options.requestedProtocolVersion)
+      ? options.requestedProtocolVersion
+      : LATEST_LEGACY_MCP_PROTOCOL_VERSION;
 
   return {
     protocolVersion,
@@ -410,7 +498,17 @@ function jsonRpcFailure(code: number, message: string, data?: unknown): JsonRpcF
 }
 
 function respond(id: JsonRpcId, result: unknown): McpOutcome {
-  return { kind: "response", body: { jsonrpc: "2.0", id, result } };
+  return { kind: "response", status: 200, body: { jsonrpc: "2.0", id, result } };
+}
+
+function refuse(
+  status: number,
+  id: JsonRpcId,
+  code: number,
+  message: string,
+  data?: unknown
+): McpOutcome {
+  return { kind: "response", status, body: jsonRpcErrorResponse(id, code, message, data) };
 }
 
 export function jsonRpcErrorResponse(
@@ -449,83 +547,267 @@ export function readRequestId(message: unknown): JsonRpcId {
 }
 
 /**
- * Handle one JSON-RPC message.
+ * Handle one JSON-RPC message, in whichever era it arrived in.
  *
  * **Batching is not supported, and that is the current specification rather than a shortcut**: the
- * 2025-06-18 revision removed JSON-RPC batching from MCP. An array arrives with a sentence saying
- * so, rather than being half-handled.
+ * 2025-06-18 revision removed JSON-RPC batching from MCP, and 2026-07-28 keeps the body of a POST to
+ * a single message. An array arrives with a sentence saying so, rather than being half-handled.
+ *
+ * `headers` defaults to none, which is a legacy client that sent no `MCP-Protocol-Version` — the
+ * shape every call made before #1222 had.
  */
 export async function handleMcpMessage(
   message: unknown,
-  options: McpDispatchOptions
+  options: McpDispatchOptions,
+  headers: McpRequestHeaders = NO_HEADERS
 ): Promise<McpOutcome> {
-  if (Array.isArray(message)) {
+  const declared = headers.protocolVersion;
+  if (declared !== null && !isSupportedProtocolVersion(declared)) {
+    // **The specification requires this `400`, and it is also this build's staleness alarm**
+    // (ADR-0051 §4). 2026-07-28 fixes the code and the shape of `data`, and a dual-era client
+    // reads exactly that to tell a modern server that wants another revision from a legacy one —
+    // so every era is answered with it, which the legacy revisions (a `400`, code unspecified) allow.
     return {
       kind: "response",
+      status: 400,
       body: jsonRpcErrorResponse(
-        null,
-        JSON_RPC.invalidRequest,
-        "This server does not accept batched JSON-RPC. Send one message per request."
+        readRequestId(message),
+        JSON_RPC.unsupportedProtocolVersion,
+        `This instance does not speak MCP revision ${declared}; it speaks ${SUPPORTED_MCP_PROTOCOL_VERSIONS.join(", ")}.`,
+        { supported: [...SUPPORTED_MCP_PROTOCOL_VERSIONS], requested: declared }
       ),
-    };
-  }
-  if (!isRecord(message) || typeof message.method !== "string") {
-    return {
-      kind: "response",
-      body: jsonRpcErrorResponse(
-        null,
-        JSON_RPC.invalidRequest,
-        'Send one JSON-RPC 2.0 message: an object with "jsonrpc", "method" and, for a request, "id".'
-      ),
+      refusedRevision: declared,
     };
   }
 
+  if (Array.isArray(message)) {
+    return refuse(
+      200,
+      null,
+      JSON_RPC.invalidRequest,
+      "This server does not accept batched JSON-RPC. Send one message per request."
+    );
+  }
+  if (!isRecord(message) || typeof message.method !== "string") {
+    return refuse(
+      200,
+      null,
+      JSON_RPC.invalidRequest,
+      'Send one JSON-RPC 2.0 message: an object with "jsonrpc", "method" and, for a request, "id".'
+    );
+  }
+
+  const params = isRecord(message.params) ? message.params : {};
+  const meta = isRecord(params._meta) ? params._meta : {};
+  const modern = isModernProtocolVersion(declared) || meta[MCP_META.protocolVersion] !== undefined;
+
+  try {
+    return modern
+      ? await handleModernMessage(message, message.method, params, meta, options, headers)
+      : await handleLegacyMessage(message, message.method, params, options);
+  } catch (error) {
+    if (error instanceof JsonRpcFailure) {
+      return refuse(200, readId(message) ?? null, error.code, error.message, error.data);
+    }
+    throw error;
+  }
+}
+
+/** The dispatch #709 built, unchanged: `initialize`, `ping`, and results without `resultType`. */
+async function handleLegacyMessage(
+  message: Record<string, unknown>,
+  method: string,
+  params: Record<string, unknown>,
+  options: McpDispatchOptions
+): Promise<McpOutcome> {
   const id = readId(message);
-  const method = message.method;
 
   // A notification carries no id and is answered with nothing at all. `notifications/initialized`
   // is the one every client sends; the rest are accepted and dropped rather than refused, because
   // a notification a server does not act on is not an error.
   if (id === undefined) return { kind: "accepted" };
 
-  const params = isRecord(message.params) ? message.params : {};
-
-  try {
-    switch (method) {
-      case "initialize":
-        return respond(
-          id,
-          buildInitializeResult({
-            appVersion: options.appVersion,
-            requestedProtocolVersion: params.protocolVersion,
-          })
-        );
-      case "ping":
-        return respond(id, {});
-      case "tools/list":
-        // Every tool, in one page. The registry is a compiled-in array of a size a person maintains,
-        // so paging it would be machinery with nothing behind it — and a client that receives no
-        // `nextCursor` knows it has the whole list.
-        return respond(id, { tools: buildToolList(options.operations) });
-      case "tools/call":
-        return respond(id, await callOperationTool(options, params.name, params.arguments));
-      default:
-        return {
-          kind: "response",
-          body: jsonRpcErrorResponse(
-            id,
-            JSON_RPC.methodNotFound,
-            `This server does not implement "${method}". It offers tools only: initialize, tools/list, tools/call and ping.`
-          ),
-        };
-    }
-  } catch (error) {
-    if (error instanceof JsonRpcFailure) {
-      return {
-        kind: "response",
-        body: jsonRpcErrorResponse(id, error.code, error.message, error.data),
-      };
-    }
-    throw error;
+  switch (method) {
+    case "initialize":
+      return respond(
+        id,
+        buildInitializeResult({
+          appVersion: options.appVersion,
+          requestedProtocolVersion: params.protocolVersion,
+        })
+      );
+    case "ping":
+      return respond(id, {});
+    case "tools/list":
+      // Every tool, in one page. The registry is a compiled-in array of a size a person maintains,
+      // so paging it would be machinery with nothing behind it — and a client that receives no
+      // `nextCursor` knows it has the whole list.
+      return respond(id, { tools: buildToolList(options.operations) });
+    case "tools/call":
+      return respond(id, await callOperationTool(options, params.name, params.arguments));
+    default:
+      return refuse(
+        200,
+        id,
+        JSON_RPC.methodNotFound,
+        `This server does not implement "${method}". It offers tools only: initialize, tools/list, tools/call and ping.`
+      );
   }
+}
+
+/**
+ * The methods that mirror a body value into `Mcp-Name`, and which value. Only the one this server
+ * implements is checked; the other two are answered `404` before a header would matter.
+ */
+const MCP_NAME_SOURCE: Readonly<Record<string, string>> = { "tools/call": "name" };
+
+/**
+ * An `Mcp-Name` value as the client meant it. A value that is not plain header-safe ASCII arrives as
+ * `=?base64?…?=`, and the specification makes the server decode it before comparing. `null` for a
+ * sentinel that does not decode — which can match no body value, and so is refused as a mismatch.
+ */
+export function decodeMcpHeaderValue(value: string): string | null {
+  const sentinel = /^=\?base64\?([A-Za-z0-9+/]*={0,2})\?=$/.exec(value);
+  if (!sentinel) return value.startsWith("=?base64?") && value.endsWith("?=") ? null : value;
+  try {
+    const bytes = Uint8Array.from(atob(sentinel[1]), (char) => char.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Revision 2026-07-28: every request self-describing, no handshake, no `ping`.
+ *
+ * **The order of the checks is the order a client can act on them**: first the revision, which
+ * decides whether anything else in the request means what it seems to; then the `_meta` fields the
+ * specification makes required; then the mirrored headers, which only mean anything once the body
+ * they mirror is known to be well-formed.
+ */
+async function handleModernMessage(
+  message: Record<string, unknown>,
+  method: string,
+  params: Record<string, unknown>,
+  meta: Record<string, unknown>,
+  options: McpDispatchOptions,
+  headers: McpRequestHeaders
+): Promise<McpOutcome> {
+  const id = readId(message);
+
+  // 2026-07-28 defines no client-to-server notification over Streamable HTTP and no header rules for
+  // one, so a notification is accepted and dropped exactly as a legacy one is.
+  if (id === undefined) return { kind: "accepted" };
+
+  const bodyRevision = meta[MCP_META.protocolVersion];
+  if (headers.protocolVersion === null) {
+    return refuse(
+      400,
+      id,
+      JSON_RPC.headerMismatch,
+      `A request declaring MCP revision ${String(bodyRevision)} in _meta must send the same revision in the MCP-Protocol-Version header.`
+    );
+  }
+  if (typeof bodyRevision !== "string") {
+    return refuse(
+      400,
+      id,
+      JSON_RPC.invalidParams,
+      `A request in MCP revision ${headers.protocolVersion} must carry params._meta["${MCP_META.protocolVersion}"].`
+    );
+  }
+  if (bodyRevision !== headers.protocolVersion) {
+    return refuse(
+      400,
+      id,
+      JSON_RPC.headerMismatch,
+      `The MCP-Protocol-Version header says ${headers.protocolVersion} and params._meta says ${bodyRevision}; send the same revision in both.`
+    );
+  }
+  if (!isRecord(meta[MCP_META.clientCapabilities])) {
+    return refuse(
+      400,
+      id,
+      JSON_RPC.invalidParams,
+      `A request in MCP revision ${bodyRevision} must carry params._meta["${MCP_META.clientCapabilities}"], an object ({} when the client offers none).`
+    );
+  }
+  if (headers.method !== method) {
+    return refuse(
+      400,
+      id,
+      JSON_RPC.headerMismatch,
+      headers.method === null
+        ? `A request in MCP revision ${bodyRevision} must send its method in the Mcp-Method header.`
+        : `The Mcp-Method header says "${headers.method}" and the body says "${method}"; send the same method in both.`
+    );
+  }
+  const nameSource = MCP_NAME_SOURCE[method];
+  if (nameSource !== undefined) {
+    const bodyName = params[nameSource];
+    const headerName = headers.name === null ? null : decodeMcpHeaderValue(headers.name);
+    if (headerName === null || headerName !== bodyName) {
+      return refuse(
+        400,
+        id,
+        JSON_RPC.headerMismatch,
+        headers.name === null
+          ? `A ${method} in MCP revision ${bodyRevision} must send params.${nameSource} in the Mcp-Name header.`
+          : `The Mcp-Name header does not match params.${nameSource}; send the same value in both.`
+      );
+    }
+  }
+
+  switch (method) {
+    case "server/discover":
+      return respond(id, complete(options, buildDiscoverResult()));
+    case "tools/list":
+      return respond(
+        id,
+        complete(options, { tools: buildToolList(options.operations), ...MCP_CACHE_HINTS })
+      );
+    case "tools/call":
+      return respond(
+        id,
+        complete(options, await callOperationTool(options, params.name, params.arguments))
+      );
+    default:
+      // `404` is the specification's own status for an unknown method in this revision, and the
+      // JSON-RPC body is what tells it apart from a server that has no MCP endpoint here at all.
+      // `initialize` and `ping` land here on purpose: neither exists in 2026-07-28.
+      return refuse(
+        404,
+        id,
+        JSON_RPC.methodNotFound,
+        `This server does not implement "${method}" in MCP revision ${bodyRevision}. It offers server/discover, tools/list and tools/call.`
+      );
+  }
+}
+
+/**
+ * The `server/discover` result, less what every modern result carries (`complete` adds those).
+ * What `initialize` said once per session, said on request instead: the revisions, the capability,
+ * and the instructions an agent is meant to read once.
+ */
+export function buildDiscoverResult(): Record<string, unknown> {
+  return {
+    supportedVersions: [...SUPPORTED_MCP_PROTOCOL_VERSIONS],
+    // `listChanged: false` for the reason the handshake gives it: the list is compiled into the build.
+    capabilities: { tools: { listChanged: false } },
+    instructions: MCP_INSTRUCTIONS,
+    ...MCP_CACHE_HINTS,
+  };
+}
+
+/**
+ * A modern result: `resultType` first, which 2026-07-28 makes required on every result, and the
+ * server's identity in `_meta`, which it asks for on every result because there is no longer a
+ * handshake to have said it in.
+ */
+function complete(options: McpDispatchOptions, result: Record<string, unknown>): Record<string, unknown> {
+  return {
+    resultType: "complete",
+    ...result,
+    _meta: { [MCP_META.serverInfo]: { name: MCP_SERVER_NAME, version: options.appVersion } },
+  };
 }
