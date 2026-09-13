@@ -46,6 +46,9 @@ export interface CertificateStatusData {
   sortOrder: number;
   /** The chip colour (#728), or null for the neutral chip — read exactly as a condition's is. */
   color: TagColor | null;
+  /** Whole percent of the plain price a copy with this certificate is worth (#1242), or null when
+   * none is set — the catalogue value grids' fill action then leaves this status's cells empty. */
+  pricePercent: number | null;
 }
 
 // Certificate status is optional: a stamp with no status selected is treated as
@@ -65,6 +68,7 @@ export async function getCertificateStatuses(
       name: true,
       abbreviation: true,
       color: true,
+      pricePercent: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
@@ -77,6 +81,7 @@ export async function getCertificateStatuses(
     abbreviationByLanguage: translationsByLanguage(s.translations, (t) => t.abbreviation),
     sortOrder: s.sortOrder,
     color: isTagColor(s.color) ? s.color : null,
+    pricePercent: s.pricePercent,
   }));
 }
 
@@ -110,6 +115,7 @@ export async function createCertificateStatus(
     name: string;
     abbreviation: string;
     color?: TagColor | null;
+    pricePercent?: number | null;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
@@ -126,6 +132,7 @@ export async function createCertificateStatus(
       name: data.name,
       abbreviation: data.abbreviation,
       color: data.color ?? null,
+      pricePercent: data.pricePercent ?? null,
       sortOrder,
     },
     select: { id: true },
@@ -140,6 +147,7 @@ export async function updateCertificateStatus(
     name: string;
     abbreviation: string;
     color?: TagColor | null;
+    pricePercent?: number | null;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
@@ -147,7 +155,12 @@ export async function updateCertificateStatus(
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.certificateStatus.update({
     where: { id: statusId },
-    data: { name: data.name, abbreviation: data.abbreviation, color: data.color ?? null },
+    data: {
+      name: data.name,
+      abbreviation: data.abbreviation,
+      color: data.color ?? null,
+      pricePercent: data.pricePercent ?? null,
+    },
   });
   await syncCertificateStatusTranslations(statusId, data.translations);
 }

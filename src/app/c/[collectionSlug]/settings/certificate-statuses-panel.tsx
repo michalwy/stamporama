@@ -29,6 +29,8 @@ import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-
 import { Icon } from "@/app/icons";
 import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { formatPricePercent } from "@/lib/certificate-price-fill";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -76,6 +78,7 @@ function CertificateStatusForm({
   defaultName,
   defaultAbbreviation,
   defaultColor,
+  defaultPricePercent,
   defaultTranslations,
   titleLanguages,
   defaultLanguage,
@@ -86,6 +89,8 @@ function CertificateStatusForm({
   defaultAbbreviation?: string;
   /** The chip colour (#728); mirrors the conditions panel, down to offering a free hue on add. */
   defaultColor?: TagColor | null;
+  /** The percentage of the plain price (#1242); null or absent when none is set. */
+  defaultPricePercent?: number | null;
   /** Stored per-language values, field-major (#294); absent when adding. */
   defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
   titleLanguages: string[];
@@ -185,6 +190,28 @@ function CertificateStatusForm({
         <TagColorPicker value={color} onChange={setColor} disabled={isPending} />
         <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
           Tints this status&rsquo;s chip wherever copies, lines and lots are listed.
+        </p>
+      </div>
+      <div style={{ marginTop: "1rem" }}>
+        <LabelWithError htmlFor="f-cert-percent">Price against no certificate</LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          {/* Uncontrolled and read back from FormData: nothing else on the form reads it while typed. */}
+          <NumericInput
+            kind="number"
+            id="f-cert-percent"
+            name="pricePercent"
+            inputMode="numeric"
+            defaultValue={defaultPricePercent == null ? "" : String(defaultPricePercent)}
+            disabled={isPending}
+            placeholder="e.g. 120"
+            style={{ ...INPUT_STYLE, maxWidth: "6rem", textAlign: "right" }}
+          />
+          <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>%</span>
+        </div>
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          What a copy with this certificate is worth against the plain catalogue price, as a whole
+          percentage. The catalogue value grids use it to fill this status&rsquo;s empty prices from the
+          <em> None</em> price in one press. Leave it empty and the fill leaves this status alone.
         </p>
       </div>
     </>
@@ -362,6 +389,17 @@ export function CertificateStatusesPanel({
             <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
               {status.name}
             </span>
+            {status.pricePercent != null && (
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {formatPricePercent(status.pricePercent)}
+              </span>
+            )}
             <span style={abbrBadgeStyle(status.color)}>{status.abbreviation}</span>
             <RowActionsMenu
               ariaLabel="Certificate status actions"
@@ -408,6 +446,7 @@ export function CertificateStatusesPanel({
                 defaultName={dialog.status.name}
                 defaultAbbreviation={dialog.status.abbreviation}
                 defaultColor={dialog.status.color}
+                defaultPricePercent={dialog.status.pricePercent}
                 defaultTranslations={{
                   name: dialog.status.nameByLanguage,
                   abbreviation: dialog.status.abbreviationByLanguage,

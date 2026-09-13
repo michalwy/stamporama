@@ -10,6 +10,7 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import { deriveFormatPrice, formatFactorKey } from "@/lib/format-factor";
+import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
 import { Icon } from "@/app/icons";
 
 const CELL_INPUT: React.CSSProperties = {
@@ -113,11 +114,20 @@ export function StampCatalogPricesTab({
     return result;
   }, [catalogTree, relevantNameIds]);
 
-  // Column set: the "no certificate" column first, then each configured status.
+  // Column set: the "no certificate" column first, then each configured status, carrying the
+  // percentage of the plain price the fill action applies to it (#1242).
   const certColumns = useMemo(
-    () => [{ id: null as string | null, label: "None" }, ...certificateStatuses.map((c) => ({ id: c.id as string | null, label: c.abbreviation }))],
+    () => [
+      { id: null as string | null, label: "None", pricePercent: null as number | null },
+      ...certificateStatuses.map((c) => ({
+        id: c.id as string | null,
+        label: c.abbreviation,
+        pricePercent: c.pricePercent,
+      })),
+    ],
     [certificateStatuses]
   );
+  const anyPercent = certificateStatuses.some((c) => c.pricePercent != null);
 
   // Which (edition, condition-rows) to show, decided per (condition, certificate)
   // cell:
@@ -220,6 +230,34 @@ export function StampCatalogPricesTab({
     return deriveFormatPrice(amount, factor).toFixed(2);
   }
 
+  /**
+   * The cells one press of *Fill certificates* writes in an edition's section (#1242): every empty
+   * certificate cell of every condition row, on the format tab that is open, from that row's own
+   * *None* figure at the status's percentage. The rule — empty cells only, no percentage no fill, no
+   * plain price no fill — is `fillCertificateCell`'s. A derived placeholder is not a plain price: it is
+   * a figure nothing stored, and the certificate cells on a format tab derive from the single anyway.
+   */
+  function certificateFills(
+    editionId: string,
+    rowConditions: StampConditionData[]
+  ): { key: string; value: string }[] {
+    const fills: { key: string; value: string }[] = [];
+    for (const cond of rowConditions) {
+      const plain = priceEdits.get(priceCellKey(editionId, cond.id, null, activeFormatId)) ?? "";
+      for (const col of certColumns) {
+        if (col.id === null) continue;
+        const key = priceCellKey(editionId, cond.id, col.id, activeFormatId);
+        const value = fillCertificateCell({
+          plain,
+          current: priceEdits.get(key) ?? "",
+          percent: col.pricePercent,
+        });
+        if (value !== null) fills.push({ key, value });
+      }
+    }
+    return fills;
+  }
+
   function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>, key: string) {
     if (e.key !== "Tab") return;
     const idx = navOrder.indexOf(key);
@@ -315,130 +353,167 @@ export function StampCatalogPricesTab({
           )}
         </div>
       )}
-      {visibleBlocks.map(({ row, conditions: rowConditions, isNewest, newestEditionId }) => (
-        <div key={row.editionId}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: "0.5rem",
-              marginBottom: "0.375rem",
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            <span>
-              {row.vendorName} · {row.catalogName} · {row.year}
-            </span>
-            <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
-              {row.currency}
-            </span>
-            {!isNewest && (
-              <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontStyle: "italic" }}>
-                (older edition — read only)
+      {visibleBlocks.map(({ row, conditions: rowConditions, isNewest, newestEditionId }) => {
+        // Only the newest edition is editable, so only its section offers the fill — and only once a
+        // status carries a percentage, since until then the button could never do anything.
+        const fills = isNewest && anyPercent ? certificateFills(row.editionId, rowConditions) : null;
+        return (
+          <div key={row.editionId}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: "0.5rem",
+                marginBottom: "0.375rem",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              <span>
+                {row.vendorName} · {row.catalogName} · {row.year}
               </span>
-            )}
-          </div>
+              <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
+                {row.currency}
+              </span>
+              {!isNewest && (
+                <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                  (older edition — read only)
+                </span>
+              )}
+              {fills && (
+                <Tooltip
+                  style={{ marginLeft: "auto" }}
+                  content={
+                    fills.length > 0
+                      ? `Fill ${fills.length === 1 ? "1 empty certificate price" : `${fills.length} empty certificate prices`} from each condition's None price, at the percentage shown under each column. Prices already entered stay as they are.`
+                      : "Nothing to fill: every certificate price with a percentage is already entered, or its condition has no None price."
+                  }
+                >
+                  <button
+                    type="button"
+                    disabled={disabled || fills.length === 0}
+                    onClick={() => {
+                      for (const fill of fills) onPriceChange(fill.key, fill.value);
+                    }}
+                    // Auxiliary to the price inputs, as the copy-up button is (#446).
+                    tabIndex={-1}
+                    style={{
+                      ...fillBtnStyle,
+                      opacity: disabled || fills.length === 0 ? 0.5 : 1,
+                      cursor: disabled || fills.length === 0 ? "default" : "pointer",
+                    }}
+                  >
+                    <Icon name="factors" size="xs" /> Fill certificates
+                  </button>
+                </Tooltip>
+              )}
+            </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-              <thead>
-                <tr>
-                  <th style={thCondStyle}>Condition</th>
-                  {certColumns.map((col) => (
-                    <th key={col.id ?? "none"} style={thCertStyle}>
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rowConditions.map((cond) => (
-                  <tr key={cond.id}>
-                    <td style={tdCondStyle}>
-                      <span style={{ fontWeight: 500 }}>{cond.abbreviation}</span>
-                      <span style={{ color: "var(--color-text-muted)", marginLeft: "0.4rem" }}>
-                        {cond.name}
-                      </span>
-                    </td>
-                    {certColumns.map((col) => {
-                      const key = priceCellKey(row.editionId, cond.id, col.id, activeFormatId);
-                      const price = priceEdits.get(key) ?? "";
-                      // What this cell would show if left empty: the single's price for the same
-                      // edition/condition/certificate, times the format's multiplier. Recomputed
-                      // as the single is typed, so a derived value is never stale on screen.
-                      const derived = derivedFor(row.editionId, cond.id, col.id);
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", fontSize: "0.8125rem" }}>
+                <thead>
+                  <tr>
+                    <th style={thCondStyle}>Condition</th>
+                    {certColumns.map((col) => (
+                      <th key={col.id ?? "none"} style={thCertStyle}>
+                        {col.label}
+                        {col.pricePercent != null && (
+                          // The status's percentage (#1242), so what *Fill certificates* will write
+                          // can be read before it is pressed.
+                          <span style={thPercentStyle}>{formatPricePercent(col.pricePercent)}</span>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rowConditions.map((cond) => (
+                    <tr key={cond.id}>
+                      <td style={tdCondStyle}>
+                        <span style={{ fontWeight: 500 }}>{cond.abbreviation}</span>
+                        <span style={{ color: "var(--color-text-muted)", marginLeft: "0.4rem" }}>
+                          {cond.name}
+                        </span>
+                      </td>
+                      {certColumns.map((col) => {
+                        const key = priceCellKey(row.editionId, cond.id, col.id, activeFormatId);
+                        const price = priceEdits.get(key) ?? "";
+                        // What this cell would show if left empty: the single's price for the same
+                        // edition/condition/certificate, times the format's multiplier. Recomputed
+                        // as the single is typed, so a derived value is never stale on screen.
+                        const derived = derivedFor(row.editionId, cond.id, col.id);
 
-                      if (isNewest) {
+                        if (isNewest) {
+                          return (
+                            <td key={col.id ?? "none"} style={tdCellStyle}>
+                              <NumericInput
+                                kind="amount"
+                                ref={(el) => {
+                                  inputRefs.current.set(key, el);
+                                }}
+                                value={price}
+                                onChange={(e) => onPriceChange(key, e.target.value)}
+                                onKeyDown={(e) => handleCellKeyDown(e, key)}
+                                disabled={disabled}
+                                placeholder={derived ?? "—"}
+                                style={derived && price.trim() === "" ? CELL_INPUT_DERIVED : CELL_INPUT}
+                                title={
+                                  derived && price.trim() === ""
+                                    ? "Derived from the single's price. Type a value to record this format's own price."
+                                    : undefined
+                                }
+                              />
+                            </td>
+                          );
+                        }
+
+                        // Older edition: read-only value, with a button to copy the
+                        // price up to the (editable) newest edition when it's empty there.
+                        const newestKey = priceCellKey(newestEditionId, cond.id, col.id, activeFormatId);
+                        const canCopy =
+                          price.trim() !== "" && (priceEdits.get(newestKey) ?? "").trim() === "";
                         return (
                           <td key={col.id ?? "none"} style={tdCellStyle}>
-                            <NumericInput
-                              kind="amount"
-                              ref={(el) => {
-                                inputRefs.current.set(key, el);
-                              }}
-                              value={price}
-                              onChange={(e) => onPriceChange(key, e.target.value)}
-                              onKeyDown={(e) => handleCellKeyDown(e, key)}
-                              disabled={disabled}
-                              placeholder={derived ?? "—"}
-                              style={derived && price.trim() === "" ? CELL_INPUT_DERIVED : CELL_INPUT}
-                              title={
-                                derived && price.trim() === ""
-                                  ? "Derived from the single's price. Type a value to record this format's own price."
-                                  : undefined
-                              }
-                            />
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
+                              <span
+                                style={{
+                                  color: price.trim() === "" ? "var(--color-text-muted)" : "var(--color-text-secondary)",
+                                  fontVariantNumeric: "tabular-nums",
+                                  minWidth: "3.5rem",
+                                  textAlign: "right",
+                                }}
+                              >
+                                {price.trim() === "" ? "—" : price}
+                              </span>
+                              {canCopy && (
+                                <Tooltip content="Copy this price into the newest edition to update it." align="end">
+                                  <button
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() => onPriceChange(newestKey, formatAmountInput(price))}
+                                    aria-label="Copy this price into the newest edition"
+                                    // Auxiliary to the grid's price inputs (#446): tabbing a price
+                                    // table should walk the figures, not the shortcuts beside them.
+                                    tabIndex={-1}
+                                    style={warnBtnStyle}
+                                  >
+                                    <Icon name="copyUpwards" size="sm" />
+                                  </button>
+                                </Tooltip>
+                              )}
+                            </div>
                           </td>
                         );
-                      }
-
-                      // Older edition: read-only value, with a button to copy the
-                      // price up to the (editable) newest edition when it's empty there.
-                      const newestKey = priceCellKey(newestEditionId, cond.id, col.id, activeFormatId);
-                      const canCopy =
-                        price.trim() !== "" && (priceEdits.get(newestKey) ?? "").trim() === "";
-                      return (
-                        <td key={col.id ?? "none"} style={tdCellStyle}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
-                            <span
-                              style={{
-                                color: price.trim() === "" ? "var(--color-text-muted)" : "var(--color-text-secondary)",
-                                fontVariantNumeric: "tabular-nums",
-                                minWidth: "3.5rem",
-                                textAlign: "right",
-                              }}
-                            >
-                              {price.trim() === "" ? "—" : price}
-                            </span>
-                            {canCopy && (
-                              <Tooltip content="Copy this price into the newest edition to update it." align="end">
-                                <button
-                                  type="button"
-                                  disabled={disabled}
-                                  onClick={() => onPriceChange(newestKey, formatAmountInput(price))}
-                                  aria-label="Copy this price into the newest edition"
-                                  // Auxiliary to the grid's price inputs (#446): tabbing a price
-                                  // table should walk the figures, not the shortcuts beside them.
-                                  tabIndex={-1}
-                                  style={warnBtnStyle}
-                                >
-                                  <Icon name="copyUpwards" size="sm" />
-                                </button>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -465,6 +540,27 @@ const thCertStyle: React.CSSProperties = {
   fontWeight: 500,
   fontFamily: "monospace",
   whiteSpace: "nowrap",
+};
+
+const thPercentStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.6875rem",
+  fontWeight: 400,
+  fontVariantNumeric: "tabular-nums",
+};
+
+/** The section's *Fill certificates* shortcut: small and quiet, a heading's companion rather than a
+ *  form action. */
+const fillBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0.15rem 0.5rem",
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-elevated)",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.25rem",
 };
 
 const tdCondStyle: React.CSSProperties = {

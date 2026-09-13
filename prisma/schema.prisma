@@ -346,6 +346,11 @@ model CertificateStatus {
   sortOrder    Int
   /** Chip colour (#728), read exactly as {@link StampCondition.color} is. */
   color        String?
+  /** What a copy with this certificate is worth against the plain (no-certificate) catalogue price,
+   *  in whole percent (#1242): 120 means 120%. Null is *not set* — the grids' fill action leaves the
+   *  status's column empty rather than assuming 100%. Read only by that action: a one-time copy into
+   *  ordinary price cells, never a live factor behind a valuation. */
+  pricePercent Int?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
