@@ -16,6 +16,9 @@ import { StampSizePresetPicker } from "./stamp-size-preset-picker";
 // case for a series already entered: dozens of stamps, one size, one click, with the counts on screen
 // before anything is written.
 //
+// The subject is an issue or a checklist from their rows (#806), or the stamps ticked on the Issues
+// list's tree (#809) — nothing below depends on which.
+//
 // ## Preview before write, skipping stated sizes by default
 //
 // This is the only irreversible act in the whole track. A stated size is a ruler measurement at a
@@ -44,7 +47,7 @@ import { StampSizePresetPicker } from "./stamp-size-preset-picker";
 export interface ApplySizePresetScope {
   collectionId: string;
   subject: StampSizePresetSubject;
-  /** Names the subject in the title — the issue's name, or the checklist's. */
+  /** Names the subject in the title — the issue's name, the checklist's, or `3 selected stamps`. */
   subjectLabel: string;
   /** Called after a write, for a caller whose screen draws a stamp's size. */
   onApplied?: () => void;
