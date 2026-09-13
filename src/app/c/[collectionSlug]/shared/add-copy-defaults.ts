@@ -35,6 +35,12 @@ export const LS_LAST_SUBTYPE = "stamporama:stamp:subtypeId";
 // entry, and the screens have nothing else in common.
 export const LS_LAST_ACCEPTANCE_PROFILE = "stamporama:want:acceptanceProfileId";
 
+// The depth the last bulk *add missing to want list* run went after a set at (#1240) — main stamps
+// or variants. A collector who works at one depth works at it on every issue, so the dialog opens on
+// the last answer instead of asking it each time. Beside the profile, in the same namespace: both are
+// the shape of what a run of wants is looking for.
+export const LS_LAST_WANT_DEPTH = "stamporama:want:depth";
+
 // The ref-card format last printed (#569), remembered per collection so the collector's stationery
 // leads the next strip instead of being re-picked every time a box needs cards. Its own `refCards`
 // namespace for the reason the two above have one: this is a property of the *paper*, and the sheet

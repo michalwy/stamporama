@@ -306,13 +306,14 @@ stays open and the review does not mention it. See
 
 ## Filling the list from a checklist
 
-On an issue's detail page, each **Completeness** card has an **Add missing to want list**
-button. It creates one open want for every stamp on that checklist you do not hold and do
-not already have an open want for.
+On an issue's detail page, each **Completeness** card has an **Add missing to want list…**
+button. It opens the same dialog as the Issue list below, over that one checklist: it creates
+one open want for every stamp on that checklist you do not hold and do not already have an
+open want for, and it says how many before it writes anything.
 
-The wants it creates accept **anything** — a gap only says the stamp is absent, and it
-cannot know on what terms you would buy it. Edit each one afterwards to say what you would
-accept, and set a priority where one matters.
+Left on its defaults, the wants it creates accept **anything** — a gap only says the stamp is
+absent, and it cannot know on what terms you would buy it. State the terms and the priority in
+the dialog, or edit each want afterwards.
 
 This runs **once, when you press it**. Changing the checklist afterwards does not touch
 the want list, and pressing the button again adds nothing for stamps that already have an
@@ -328,7 +329,8 @@ The same thing, without opening the issue: an Issue row's ⋮ menu carries **Add
 want list…**, and the want-list icon beside the row's other quick actions opens it too.
 
 If the issue has one checklist, the dialog simply states how many wants it is about to
-create. If it has several, it lists them with a tick each — every checklist with something
+create — naming what each one is for, *one per missing main stamp* or *one per missing
+variant*; see [Main stamps or variants](#main-stamps-or-variants). If it has several, it lists them with a tick each — every checklist with something
 to add starts ticked — so you can go after one goal without accepting the others. A stamp
 on two of the ticked checklists is one want, not two.
 
@@ -356,9 +358,34 @@ same issue meaningful:
 So the way to end up with two wants on one stamp is to run it twice with different terms —
 and running it twice with the *same* terms still adds nothing.
 
-The counts are read fresh when the dialog opens, and again whenever you change the terms.
+The counts are read fresh when the dialog opens, and again whenever you change the terms or
+the depth.
 The entry is unavailable on an issue with no checklists — nothing is required of it yet, so
 there is nothing to want.
+
+### Main stamps or variants
+
+A set is wanted at one of two depths, and the dialog asks which at the top, under **Want**:
+
+- **Main stamps** — one of each stamp, whichever variant. A variant on the checklist is wanted
+  as the stamp it is a variant of, once; no variant gets a want of its own.
+- **Variants** — every variant. A stamp that has variants gets **no** want: each of its
+  variants gets one instead, **including variants the checklist does not list**. Where variants
+  have variants of their own, only the ones with none below them are wanted, so a run at this
+  depth always ends in wants on concrete variants.
+
+A stamp with no variants is wanted in either mode — it is the main stamp and the concrete thing
+at once. An error, a plate flaw, an overprint or a forgery is a stamp in its own right, not a
+variant: it is wanted only when a checklist lists it, and never pulled in by either mode.
+
+Every count in the dialog, and every rule above, is read at the chosen depth. *You hold it*
+under **Variants** means a copy of that variant (a copy filed under the stamp above it, with
+the variant not yet identified, holds none of them); under **Main stamps** a copy of any of its
+variants holds it.
+
+The dialog remembers the depth you last added wants at, so if you always work at one depth you
+pick it once. Each run looks only at its own depth: running **Variants** and then **Main
+stamps** over the same set leaves a want on the stamp beside the wants on its variants.
 
 ## Closing versus deleting
 

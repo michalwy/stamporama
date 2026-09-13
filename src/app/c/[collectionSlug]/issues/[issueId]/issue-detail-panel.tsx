@@ -54,6 +54,7 @@ import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chi
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
+import { AddIssueWantsDialog } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon } from "@/app/icons";
@@ -312,6 +313,7 @@ export function IssueDetailPanel({
                 />
                 <AddMissingToWantList
                   collectionId={collectionId}
+                  issueId={issue.id}
                   checklistId={checklist.checklistId}
                   requiredCount={checklist.requiredCount}
                 />
@@ -555,66 +557,37 @@ function ChecklistCompletenessGrid({
 }
 
 /**
- * "Add missing to want list" (#532; ADR-0032 §6).
+ * "Add missing to want list…" (#532; ADR-0032 §6).
  *
- * A **generator, not a live source**: it writes explicit, editable want rows once, for the
- * checklist stamps with no held copy and no open want, and a checklist edited afterwards touches
- * nothing. Every want it creates is wide open — "anything will do" — because a gap says only that
- * the stamp is absent, and inventing acceptance criteria from that is the derivation this design
- * refuses.
+ * A **generator, not a live source**: it writes explicit, editable want rows once, and a checklist
+ * edited afterwards touches nothing.
  *
- * Pressing it a second time is a no-op rather than a pile of duplicates, which is why it can stay
- * a plain button with no confirmation: the worst it does is nothing.
+ * It used to write on the press, because a run over the checklist in front of the collector had
+ * nothing to ask. Since #1240 it has: at what depth the set is wanted, main stamps or variants — so
+ * it opens the Issues list's own dialog (#548) over this one checklist, with the terms, the priority
+ * and the count before anything is written. Two doors onto one generator asking in two shapes is how
+ * they drifted before (#695).
  */
 function AddMissingToWantList({
   collectionId,
+  issueId,
   checklistId,
   requiredCount,
 }: {
   collectionId: string;
+  issueId: string;
   checklistId: string;
   requiredCount: number;
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   if (requiredCount === 0) return null;
 
   return (
-    <div
-      style={{
-        marginTop: "0.75rem",
-        display: "flex",
-        alignItems: "center",
-        gap: "0.625rem",
-        flexWrap: "wrap",
-      }}
-    >
+    <div style={{ marginTop: "0.75rem" }}>
       <button
         type="button"
-        disabled={isPending}
-        onClick={() =>
-          startTransition(async () => {
-            setMessage(null);
-            const { addMissingToWantListAction } = await import("@/app/actions/wants");
-            const result = await addMissingToWantListAction(collectionId, checklistId);
-            if (result.status === "error") {
-              setMessage(result.message);
-              return;
-            }
-            if (result.missing === 0) {
-              setMessage("Nothing is missing from this checklist.");
-            } else if (result.created === 0) {
-              setMessage(
-                `All ${result.missing} missing ${result.missing === 1 ? "stamp is" : "stamps are"} already on the want list.`
-              );
-            } else {
-              setMessage(
-                `Added ${result.created} ${result.created === 1 ? "want" : "wants"}, one per missing stamp. Edit what would satisfy each on the want list.`
-              );
-            }
-          })
-        }
+        onClick={() => setOpen(true)}
         style={{
           padding: "0.3125rem 0.625rem",
           border: "1px solid var(--color-border-strong)",
@@ -622,14 +595,18 @@ function AddMissingToWantList({
           fontSize: "0.8125rem",
           background: "var(--color-bg-elevated)",
           color: "var(--color-text-primary)",
-          cursor: isPending ? "not-allowed" : "pointer",
-          opacity: isPending ? 0.6 : 1,
+          cursor: "pointer",
         }}
       >
-        {isPending ? "Adding…" : "Add missing to want list"}
+        Add missing to want list…
       </button>
-      {message && (
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{message}</span>
+      {open && (
+        <AddIssueWantsDialog
+          collectionId={collectionId}
+          issueId={issueId}
+          checklistId={checklistId}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );

@@ -14,7 +14,7 @@ import {
 import { getIssueCompleteness } from "../../src/lib/checklist-completeness";
 import { getLotSetCompleteness } from "../../src/lib/lot-set-completeness";
 import {
-  createWantsForMissing,
+  createWantsForIssue,
   findWantsSatisfiedBy,
   loadWantCopyCounts,
   listWantsPaginated,
@@ -303,7 +303,7 @@ describe("a multi-stamp copy is a copy of none of its stamps (#745)", () => {
   });
 
   it("still generates the want the carrier looks like it should have closed", async () => {
-    const result = await createWantsForMissing(userId, collectionId, checklistId);
+    const result = await createWantsForIssue(userId, collectionId, issueId, [checklistId]);
     assert.equal(result.missing, 1, "Mi 1 and Mi 2 are held; Mi 3 is not");
     assert.equal(result.created, 1);
     const wants = await prisma.want.findMany({

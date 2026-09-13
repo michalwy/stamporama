@@ -228,10 +228,12 @@ after it — an issue collected basic and specialized shows both, side by side. 
 checklist at all has no set to be complete against, so it has no Completeness card either; add a
 checklist from the issue's **⋮ → Checklists…** and the card appears.
 
-Each card also carries **Add missing to want list**. It creates one open entry on your
-[want list](wants.md) for every stamp on that checklist you do not hold and do not already have
-an open want for. The entries it creates accept **anything** — a gap says only that the stamp is
-missing, not on what terms you would buy it — so edit them afterwards to say what you would take.
-It runs once, when you press it: changing the checklist later does not touch the want list, and
-pressing it again adds nothing that is already there. *Do not hold* means what the grid above it
+Each card also carries **Add missing to want list…**. It opens a dialog that creates one open
+entry on your [want list](wants.md) for every stamp on that checklist you do not hold and do not
+already have an open want for, after saying how many. It asks whether you want the set as **main
+stamps** or as **variants**, and on what terms and at what priority; left on its defaults, the
+entries accept **anything**. See
+[Main stamps or variants](wants.md#main-stamps-or-variants). It runs once, when you confirm it:
+changing the checklist later does not touch the want list, and running it again adds nothing that
+is already there. *Do not hold* means what the grid above it
 means, variant children and all — a stamp the card counts as held is not wanted again.

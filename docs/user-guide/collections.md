@@ -504,14 +504,16 @@ Leave every box clear for an extra the issue holds but no set counts.
 ### Turning a checklist's gaps into wants
 
 A checklist says what belongs to a set; it does not say what you would buy or on what terms. The
-issue detail page's **Completeness** card carries **Add missing to want list**, which creates one
-open entry on your [want list](wants.md) per checklist stamp you do not hold. It is a one-shot
+issue detail page's **Completeness** card carries **Add missing to want list…**, which creates one
+open entry on your [want list](wants.md) per checklist stamp you do not hold — at the depth you
+choose, main stamps or variants. It is a one-shot
 action, not a live link: changing the checklist afterwards leaves the want list alone. See
 [Filling the list from a checklist](wants.md#filling-the-list-from-a-checklist).
 
 The **Issue list** offers the same thing without opening the issue: **Add missing to want list…**
 in the row's ⋮ menu, or the want-list icon among its quick actions. On an issue with several
-checklists the dialog asks which of them you are shopping for, it lets you state the **terms** and
+checklists the dialog asks which of them you are shopping for, it asks whether you want **main
+stamps** or **variants**, it lets you state the **terms** and
 the **priority** the whole run is wanted on (MNH only, no certificate needed, high …), and it
 always says how many wants it will create before it writes anything. See
 [Straight from the Issue list](wants.md#straight-from-the-issue-list).

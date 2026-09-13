@@ -8,7 +8,12 @@ import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 import { sortPhotos, type PhotoSummary } from "./photos";
-import { buildEffectivePrimaryCatalogMap, getCollectionBaseCurrency, safeRateMap } from "./pricing";
+import {
+  buildDescendantMap,
+  buildEffectivePrimaryCatalogMap,
+  getCollectionBaseCurrency,
+  safeRateMap,
+} from "./pricing";
 import { makeFormatFactorLookup } from "./format-pricing";
 import { wantCatalogRange, type WantCatalogRange } from "./want-valuation";
 import {
@@ -17,8 +22,9 @@ import {
   NO_ISSUE,
   type SortableIssueGroup,
 } from "./issue-groups";
-import { isUnknownVariantStamp } from "./variant-classification";
-import { loadChecklistVariantRollup } from "./checklist-variant-rollup";
+import { childIsVariant, isUnknownVariantStamp } from "./variant-classification";
+import { loadChecklistVariantRollup, loadVariantChains } from "./checklist-variant-rollup";
+import { wantDepthTargets, type WantDepth, type WantDepthTree } from "./want-depth-rules";
 import {
   wantMatchesCopy,
   acceptanceSetsEqual,
@@ -1485,39 +1491,6 @@ export async function findWantsMatching(
 // ── The completeness generator ─────────────────────────────────────────────
 
 /**
- * Materialise wants for the stamps a checklist is missing (ADR-0032 §6).
- *
- * A **generator, not a source**: it writes explicit, editable rows once, and a checklist edited
- * afterwards touches nothing. Every created want has empty acceptance sets — "anything will do" —
- * because a gap says only that the stamp is absent, and inventing acceptance criteria from it is
- * exactly the derivation this design refuses.
- *
- * Skips a stamp with any held copy, and a stamp that already carries an **open** want. A closed
- * want is not a reason to skip: the collector closed it, and if the stamp is missing again the gap
- * is real. That pair of rules is what makes pressing the button twice a no-op rather than a pile of
- * duplicates.
- */
-export async function createWantsForMissing(
-  ownerId: string,
-  collectionId: string,
-  checklistId: string
-): Promise<{ created: number; missing: number }> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const checklist = await prisma.checklist.findFirst({
-    where: { id: checklistId, collectionId },
-    select: { stamps: { select: { stampId: true } } },
-  });
-  if (!checklist) throw new Error("Checklist not found in this collection.");
-
-  const gap = await wantGapForStamps(
-    collectionId,
-    checklist.stamps.map((s) => s.stampId),
-    ANY_ACCEPTANCE
-  );
-  return writeGeneratedWants(collectionId, gap, ANY_ACCEPTANCE);
-}
-
-/**
  * Write one want per stamp, each on its own terms, skipping every stamp that already carries an
  * **open** want. Owner-authorized. Returns what it wrote and what it stepped over.
  *
@@ -1526,7 +1499,7 @@ export async function createWantsForMissing(
  * the same transaction as the wants, `createWant`'s own shape, so a failure halfway cannot leave a
  * batch of wants quietly meaning "anything".
  *
- * **Already wanted is any open want, not one on matching terms.** The generator above compares terms
+ * **Already wanted is any open want, not one on matching terms.** The generator below compares terms
  * because it is filling a *gap the collector defined*; this one is importing somebody else's list,
  * and a second want for a stamp already being looked for says nothing the first does not.
  *
@@ -1712,13 +1685,61 @@ async function writeGeneratedWants(
   return { created: gap.toCreate.length, missing: gap.missing.length };
 }
 
+/**
+ * Maps each checklist's stamps to the depth a run wants them at (#1240), batched over every
+ * checklist of the issue — one tree read for the lot, whichever mode.
+ *
+ * `null` is **the checklist as listed**: no mapping at all. No dialog offers it; it is what the
+ * agent's `find_checklist_gaps` reads, since a checklist's gap reported against its own size is a
+ * statement about the checklist rather than a run of wants.
+ *
+ * *Main stamps* climbs the variant chains the completeness rollup already walks. *Variants* reads
+ * the whole subtree below the listed stamps — `buildDescendantMap`, the price rollup's walk — and
+ * keeps only the variant edges, so an umbrella is expanded into variants the checklist does not name
+ * while a distinct entry under it is left alone. Which stamps come out is `wantDepthTargets`.
+ */
+async function mapChecklistsToDepth<T extends { stamps: { stampId: string }[] }>(
+  collectionId: string,
+  checklists: T[],
+  depth: WantDepth | null
+): Promise<Map<T, string[]>> {
+  const listed = new Map(checklists.map((c) => [c, c.stamps.map((s) => s.stampId)] as const));
+  if (depth === null) return listed;
+  const ids = [...new Set([...listed.values()].flat())];
+  if (ids.length === 0) return listed;
+
+  let tree: WantDepthTree;
+  if (depth === "main") {
+    tree = { chains: await loadVariantChains(collectionId, ids), variantChildren: new Map() };
+  } else {
+    const descendants = await buildDescendantMap(collectionId, new Set(ids));
+    const subtree = new Set(ids);
+    for (const set of descendants.values()) for (const id of set) subtree.add(id);
+    const rows = await prisma.stamp.findMany({
+      where: { id: { in: [...subtree] }, collectionId },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+      orderBy: [{ primaryCatalogSortKey: { sort: "asc", nulls: "last" } }, { name: "asc" }, { id: "asc" }],
+    });
+    const variantChildren = new Map<string, string[]>();
+    for (const row of rows) {
+      if (row.parentId === null || !childIsVariant(row)) continue;
+      const children = variantChildren.get(row.parentId);
+      if (children) children.push(row.id);
+      else variantChildren.set(row.parentId, [row.id]);
+    }
+    tree = { chains: new Map(), variantChildren };
+  }
+  return new Map(checklists.map((c) => [c, wantDepthTargets(listed.get(c)!, depth, tree)] as const));
+}
+
 /** One checklist of an issue as the bulk-add dialog needs it (#548): named, and carrying the stamp
  *  ids behind its two numbers so the client can union a *selection* of checklists — a stamp on two
  *  of them is one want, and counts alone cannot say that. */
 export interface IssueWantGapChecklist {
   checklistId: string;
   name: string;
-  /** Stamps of this checklist with no counted copy. */
+  /** Stamps of this checklist with no counted copy — at the run's depth (#1240), so under *variants*
+   *  an umbrella's variants rather than the umbrella the checklist names. */
   missingStampIds: string[];
   /** The subset of {@link missingStampIds} carrying no open want — what pressing Add would write. */
   toCreateStampIds: string[];
@@ -1730,12 +1751,16 @@ export interface IssueWantGapChecklist {
  * Read per checklist rather than over the issue's whole membership, because the collector chooses
  * *which goals* to shop for when an issue holds several (#531) — and an issue's optional extras are
  * on no checklist at all, so "every stamp of the issue" was never the right set to want.
+ *
+ * `depth` is the run's *main stamps* or *variants* (#1240); left out, each checklist is read as
+ * listed (see {@link mapChecklistsToDepth}).
  */
 export async function previewIssueMissingWants(
   ownerId: string,
   collectionId: string,
   issueId: string,
-  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
+  depth: WantDepth | null = null
 ): Promise<IssueWantGapChecklist[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const terms = await validateAcceptance(collectionId, acceptance);
@@ -1745,11 +1770,12 @@ export async function previewIssueMissingWants(
     select: { id: true, name: true, stamps: { select: { stampId: true } } },
   });
 
+  const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
   // One gap query per checklist: an issue carries a handful of them, and the alternative — one
   // query over the union, split afterwards — is the same rows read once and attributed twice.
   return Promise.all(
     checklists.map(async (c) => {
-      const gap = await wantGapForStamps(collectionId, c.stamps.map((s) => s.stampId), terms);
+      const gap = await wantGapForStamps(collectionId, targets.get(c)!, terms);
       return {
         checklistId: c.id,
         name: c.name,
@@ -1778,6 +1804,12 @@ export async function previewIssueMissingWants(
  * `priority` is stated by the collector too (#695) and applies to every want the run writes: going
  * after a set is one decision about urgency, not twelve, and leaving it out meant a bulk run landed
  * a dozen rows that then had to be re-prioritised one at a time on the list.
+ *
+ * `depth` is the depth the set is wanted at (#1240) and is mapped **per checklist, before the gap**,
+ * so every rule above — held, already wanted on these terms, the union — is read over the stamps the
+ * mode selects rather than the ones the checklist names. Under *variants* no stamp that has variants
+ * is wanted; under *main stamps* no variant is. Left out, the checklists are read as listed, which
+ * is what the preview does by default too, so a caller naming neither cannot see the two disagree.
  */
 export async function createWantsForIssue(
   ownerId: string,
@@ -1785,7 +1817,8 @@ export async function createWantsForIssue(
   issueId: string,
   checklistIds: string[],
   acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
-  priority: WantPriority = "normal"
+  priority: WantPriority = "normal",
+  depth: WantDepth | null = null
 ): Promise<{ created: number; missing: number }> {
   await assertCollectionOwner(ownerId, collectionId);
   const terms = await validateAcceptance(collectionId, acceptance);
@@ -1797,8 +1830,9 @@ export async function createWantsForIssue(
   });
   if (checklists.length === 0) throw new Error("No checklist of this issue was selected.");
 
+  const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
   const gaps = await Promise.all(
-    checklists.map((c) => wantGapForStamps(collectionId, c.stamps.map((s) => s.stampId), terms))
+    checklists.map((c) => wantGapForStamps(collectionId, targets.get(c)!, terms))
   );
   const gap = {
     missing: [...new Set(gaps.flatMap((g) => g.missing))],

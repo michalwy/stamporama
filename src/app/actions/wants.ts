@@ -12,7 +12,6 @@ import {
   reopenWant,
   deleteWant,
   findWantsSatisfiedBy,
-  createWantsForMissing,
   createWantsForIssue,
   previewIssueMissingWants,
   isWantPriority,
@@ -24,6 +23,7 @@ import {
   type WantMatchForCopy,
   type WantPriority,
 } from "@/lib/wants";
+import { isWantDepth, type WantDepth } from "@/lib/want-depth-rules";
 
 // Server actions for the want list (#532; ADR-0032).
 //
@@ -38,7 +38,7 @@ export type WantActionState =
   | { status: "success"; created?: number; skipped?: number }
   | { status: "error"; message: string };
 
-/** What the generator did, so the completeness card can say it in words (ADR-0032 §6). */
+/** What the generator did, so the dialog can say it in words (ADR-0032 §6). */
 export type AddMissingWantsState =
   | { status: "success"; created: number; missing: number }
   | { status: "error"; message: string };
@@ -150,27 +150,36 @@ export async function findWantsSatisfiedByAction(
   return findWantsSatisfiedBy(session.user.id, collectionId, copies);
 }
 
-/** What an issue's checklists are each missing **on the stated terms**, for the bulk-add
- *  confirmation (#548). Both halves of the gap move with the terms, so the preview is re-read
- *  whenever they change rather than filtered in the browser. */
+/** What an issue's checklists are each missing **on the stated terms and at the stated depth**, for
+ *  the bulk-add confirmation (#548, #1240). Both halves of the gap move with either, so the preview
+ *  is re-read whenever they change rather than filtered in the browser. */
 export async function previewIssueMissingWantsAction(
   collectionId: string,
   issueId: string,
-  acceptance: WantAcceptanceInput
+  acceptance: WantAcceptanceInput,
+  depth: WantDepth
 ): Promise<IssueWantGapChecklist[]> {
   const session = await getSession();
-  return previewIssueMissingWants(session.user.id, collectionId, issueId, acceptance);
+  return previewIssueMissingWants(
+    session.user.id,
+    collectionId,
+    issueId,
+    acceptance,
+    isWantDepth(depth) ? depth : "main"
+  );
 }
 
 /** "Add missing to want list" for a whole issue (#548) — the checklists the collector ticked, on
- *  the terms and at the priority they chose (#695). An unknown priority falls back to `normal`, the
- *  way the want form's own does, rather than failing the run over a word. */
+ *  the terms and at the priority they chose (#695), at the depth they chose (#1240). An unknown
+ *  priority falls back to `normal`, the way the want form's own does, and an unknown depth to
+ *  `main`, the dialog's own cold start, rather than failing the run over a word. */
 export async function addIssueMissingToWantListAction(
   collectionId: string,
   issueId: string,
   checklistIds: string[],
   acceptance: WantAcceptanceInput,
-  priority: WantPriority = "normal"
+  priority: WantPriority,
+  depth: WantDepth
 ): Promise<AddMissingWantsState> {
   const session = await getSession();
   try {
@@ -180,25 +189,9 @@ export async function addIssueMissingToWantListAction(
       issueId,
       checklistIds,
       acceptance,
-      isWantPriority(priority) ? priority : "normal"
+      isWantPriority(priority) ? priority : "normal",
+      isWantDepth(depth) ? depth : "main"
     );
-    return { status: "success", ...result };
-  } catch (err) {
-    return {
-      status: "error",
-      message: err instanceof Error ? err.message : "Failed to add the missing stamps.",
-    };
-  }
-}
-
-/** "Add missing to want list" from a checklist's completeness card (ADR-0032 §6). */
-export async function addMissingToWantListAction(
-  collectionId: string,
-  checklistId: string
-): Promise<AddMissingWantsState> {
-  const session = await getSession();
-  try {
-    const result = await createWantsForMissing(session.user.id, collectionId, checklistId);
     return { status: "success", ...result };
   } catch (err) {
     return {
