@@ -17,7 +17,7 @@ interface ListFilterSidebarProps {
   areaFacets?: AreaFacet[];
   /**
    * Turn on the area tree's quick-add shortcut (#776) by naming the collection. The four list
-   * screens (issues, stamps, copies, wants) pass it; the copy pickers and the composition
+   * screens (issues, stamps, copies, wants) and the four pickers (#977) pass it; the composition
    * workbenches do not — see `AreaFilterSidebar`.
    */
   quickAddCollectionId?: string;

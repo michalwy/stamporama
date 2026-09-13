@@ -118,6 +118,7 @@ export function TradeCopyPickerDialog({
     collectionId,
     tradeId,
     areaIds,
+    { areaId, includeSubAreas },
     forTradeOnly
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -226,6 +227,7 @@ export function TradeCopyPickerDialog({
           yearsLoading={isLoading}
           selectedYear={year}
           onSelectYear={setYear}
+          quickAddCollectionId={collectionId}
         />
         <div
           style={{

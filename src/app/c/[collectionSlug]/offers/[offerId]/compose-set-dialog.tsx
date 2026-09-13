@@ -110,7 +110,13 @@ export function ComposeSetDialog({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: copies = [], isLoading } = useComposableCopies(collectionId, offerId, areaIds, true);
+  const { data: copies = [], isLoading } = useComposableCopies(
+    collectionId,
+    offerId,
+    areaIds,
+    { areaId, includeSubAreas },
+    true
+  );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const yearFacets = useMemo(() => {
@@ -272,6 +278,7 @@ export function ComposeSetDialog({
           yearsLoading={isLoading}
           selectedYear={year}
           onSelectYear={setYear}
+          quickAddCollectionId={collectionId}
         />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0, borderLeft: "1px solid var(--color-border)" }}>
           <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.75rem" }}>

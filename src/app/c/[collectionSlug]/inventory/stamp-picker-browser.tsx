@@ -313,7 +313,8 @@ export function StampPickerBrowser({
 
   const { data: yearFacets = [], isLoading: yearsLoading } = useIssueYears(
     collectionId,
-    yearFacetFilters
+    yearFacetFilters,
+    { areaId, includeSubAreas }
   );
 
   // The same rule one axis over (#843): the area counts drop the area and keep the year, so a row
@@ -331,7 +332,7 @@ export function StampPickerBrowser({
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
 
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useIssuesInfinite(collectionId, filters);
+    useIssuesInfinite(collectionId, filters, { areaId, includeSubAreas });
   const issues = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   const selectedYearNumber = year && year !== "none" ? Number(year) : undefined;
@@ -441,6 +442,7 @@ export function StampPickerBrowser({
             yearsLoading={yearsLoading}
             selectedYear={year}
             onSelectYear={setYear}
+            quickAddCollectionId={collectionId}
           />
           <div
             style={{
