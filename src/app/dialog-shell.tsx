@@ -7,6 +7,7 @@ import {
   type ButtonHTMLAttributes,
   type ComponentPropsWithRef,
   type ReactNode,
+  type Ref,
 } from "react";
 
 import { useEscapeLayer } from "@/app/escape-stack";
@@ -363,7 +364,7 @@ export function DialogDestructiveButton({
   type = "button",
   style,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ComponentPropsWithRef<"button">) {
   return (
     <button
       type={type}
@@ -403,6 +404,8 @@ type DialogActionsProps = {
    *  form. And the **other ways out**: a step back, or an alternative outcome (#567's *Discard*),
    *  which are neither the action nor cancelling and would otherwise crowd them. */
   leading?: ReactNode;
+  /** The action button, for a dialog whose Tab walk ends on it rather than on Cancel (#726, #1223). */
+  actionRef?: Ref<HTMLButtonElement>;
 };
 
 export function DialogActions({
@@ -415,13 +418,14 @@ export function DialogActions({
   onCancel,
   onAction,
   leading,
+  actionRef,
 }: DialogActionsProps) {
-  const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
   // Two groups, by role: the other ways out on the left, cancel and the action on the right. Each
   // group is spaced tightly within itself and pushed apart by the gap between them, so a footer of
   // four buttons reads as two decisions rather than as four unrelated ones. Grouping this way is
   // also what stops `leading` from setting the spacing by accident, which is what it did when it
   // was a bare `margin-right: auto` and its content sat in the same run as the buttons.
+  const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
   return (
     <DialogFooter>
       {leading != null && (
@@ -444,6 +448,7 @@ export function DialogActions({
         <div style={{ position: "relative" }}>
           <ErrorBubble>{error}</ErrorBubble>
           <ActionButton
+            ref={actionRef}
             type={onAction ? "button" : "submit"}
             onClick={onAction}
             disabled={disabled}
