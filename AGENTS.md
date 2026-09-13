@@ -31,8 +31,9 @@ not restate that reasoning here; add it to the topic file instead.
 - Favor boring tools over novelty. Preserve existing user changes.
 - GitHub Issues are the backlog: Conventional Commits titles, always labelled (`backlog` + type +
   priority when known), no local `TODO.md`. **All GitHub content is in English.**
-- Do not commit unless the user asks, and **a commit you were asked to make is pushed in the same
-  breath** — until it is pushed, CI cannot see it and the worktree can take it away.
+- **Once a task is verified, commit it, push it and open the pull request without asking** — the
+  user settled this on 2026-09-13. **Only the merge waits for his say-so.** A commit is pushed in the
+  same breath: until it is pushed, CI cannot see it and the worktree can take it away.
 - **`main` takes no direct pushes**: pull request only, rebase merge, linear history, five required
   checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main`; **the session that
   opens the pull request owns it to the end** and merges it on the user's say-so.

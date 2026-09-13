@@ -71,9 +71,13 @@ rebase merge only, linear history, force-push and deletion blocked, and five req
 The ruleset itself is checked in — see
 [`.github/rulesets/README.md`](../../.github/rulesets/README.md).
 
-Work happens on `task/<issue>-<slug>`, branched from `main`. **The session that opens the pull
-request owns it to the end**: it keeps the branch up to date, re-runs the checks after every rebase,
-and merges it — on the user's say-so and never before.
+Work happens on `task/<issue>-<slug>`, branched from `main`. **Once the task is verified, the
+session commits, pushes and opens the pull request on its own**, with no question to the user first —
+he asked for that on 2026-09-13, because asking cost him a round trip for a step he always approves.
+**The session that opens the pull request owns it to the end**: it keeps the branch up to date,
+re-runs the checks after every rebase, and merges it — on the user's say-so and never before. The
+merge is the one step that waits for him; an approval given for a specific pull request ("merge it
+once CI passes") is that say-so and is not asked again.
 
 **Rebase, then re-verify, in that order.** Fetch, rebase onto `main`, run the checks again, force-push
 with `--force-with-lease` — never bare `--force`. The re-run is the half that is easy to drop
