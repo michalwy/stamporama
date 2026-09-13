@@ -765,3 +765,68 @@ describe("titleFallbacks — the entity gaps a template surfaces (#299)", () => 
     ]);
   });
 });
+
+// A multi-stamp copy (ADR-0044 §8, #749): a cover franked with several stamps is a copy of none of
+// them in particular, so `{catalog}` names every one of them — through the same grouping and range
+// collapsing it already applies across the copies of a batch offer, which is the precedent the ADR
+// cites. `carriedCatalogNumbers` is how `toTitleCopy` hands a carrier over: one list per stamp, in
+// the collector's order, the leading stamp included and also still sitting in `catalogNumbers`.
+describe("renderTitleTemplate — {catalog} on a multi-stamp copy (#749)", () => {
+  const pl = (number: string) => cn("Mi", number, { areaPrefix: "PL", isPrimary: true });
+
+  /** A carrier bearing `stamps` in that order, shaped the way `toTitleCopy` builds one. */
+  function cover(...stamps: TitleCatalogNumber[][]): TitleTemplateCopy {
+    return copy({ catalogNumbers: stamps[0], carriedCatalogNumbers: stamps });
+  }
+
+  it("enumerates every stamp the piece carries, not only the leading one", () => {
+    assert.equal(renderTitleTemplate("{catalog}", [cover([pl("200")], [pl("205")], [pl("201")])]), "Mi·PL 200-01,205");
+    assert.equal(renderTitleTemplate("{catalog}", [cover([pl("200")], [pl("300")])]), "Mi·PL 200,300");
+  });
+
+  it("names the leading stamp once, although it is also the copy's own catalogNumbers", () => {
+    assert.equal(renderTitleTemplate("{catalog}", [cover([pl("200")])]), "Mi·PL 200");
+  });
+
+  it("orders the catalogues by the collector's order of the stamps on the piece", () => {
+    const dr = cn("Mi", "5", { areaPrefix: "DR", isPrimary: true });
+    assert.equal(renderTitleTemplate("{catalog}", [cover([dr], [pl("200")])]), "Mi·DR 5 / Mi·PL 200");
+    assert.equal(renderTitleTemplate("{catalog}", [cover([pl("200")], [dr])]), "Mi·PL 200 / Mi·DR 5");
+  });
+
+  it("picks each stamp's own primary vendor", () => {
+    // Two stamps from areas whose primary catalogues differ: a single pick over the whole piece
+    // would name one stamp in a catalogue its area does not lead with.
+    const piece = cover(
+      [pl("200"), cn("Sc", "150")],
+      [cn("Mi", "7"), cn("Sc", "88", { isPrimary: true })]
+    );
+    assert.equal(renderTitleTemplate("{catalog}", [piece]), "Mi·PL 200 / Sc 88");
+  });
+
+  it("applies the vendor and flag arguments to every stamp on the piece", () => {
+    const piece = cover([pl("200"), cn("Sc", "150")], [pl("201"), cn("Sc", "151")]);
+    assert.equal(renderTitleTemplate("{catalog:Sc:vendor}", [piece]), "Sc 150-51");
+    assert.equal(renderTitleTemplate("{catalog:Mi:}", [piece]), "200-01");
+    assert.equal(renderTitleTemplate("{catalog:*:vendor}", [piece]), "Mi 200-01 / Sc 150-51");
+  });
+
+  it("leaves a copy of one stamp exactly as it rendered before", () => {
+    assert.equal(renderTitleTemplate("{catalog}", [michelScott()]), "Mi·PL 200");
+    assert.equal(renderTitleTemplate("{catalog:*:vendor}", [michelScott()]), "Mi 200 / Sc 150");
+  });
+
+  it("joins a carrier's numbers with the other copies of a batch offer into one run", () => {
+    const copies = [
+      cover([pl("200")], [pl("201")]),
+      copy({ catalogNumbers: [pl("202")] }),
+      cover([pl("205")], [pl("204")]),
+    ];
+    assert.equal(renderTitleTemplate("{catalog}", copies), "Mi·PL 200-02,204-05");
+    // A loose copy of a stamp a cover also bears is one number, as two loose copies of it would be.
+    assert.equal(
+      renderTitleTemplate("{catalog}", [cover([pl("200")], [pl("201")]), copy({ catalogNumbers: [pl("201")] })]),
+      "Mi·PL 200-01"
+    );
+  });
+});

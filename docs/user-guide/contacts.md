@@ -357,6 +357,15 @@ When several copies are listed together, their numbers are grouped per vendor an
 collapse into ranges** — `Mi·DR 1` + `Mi·DR 2` becomes `Mi·DR 1-2`, and a gapped set reads
 `Mi·DR 1-2,4,6-10`. Different vendors are shown separately, joined with ` / `.
 
+A **piece carrying several stamps** — a cover, a fragment, an FDC (see
+[Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps))
+— gets the catalog number of **every** stamp on it, not just the first, exactly as if those stamps
+were listed loose: a cover franked with `Mi·PL 200`, `201` and `205` reads `Mi·PL 200-01,205`. The
+catalogs come in the order you put the stamps in on the piece, each stamp keeps its own area prefix
+(`Mi·PL 200 / Mi·DR 5`), and listed together with other copies its numbers join theirs into one
+range. The other tokens — `{name}`, `{year}` and the rest — still describe the first stamp on the
+piece.
+
 Numbers that share a prefix or suffix collapse too, with the shared part written **once** around the
 span: `BL31`, `BL32`, `BL33` reads `BL31-33`, and `40A`, `41A`, `42A` reads `40-42A`. Numbers whose
 prefix/suffix differ belong to different numbering families and are folded separately — Michel

@@ -467,3 +467,35 @@ describe("listingFallbacks (#299)", () => {
     assert.deepEqual(listingFallbacks("{name} {year}", [{ title: null, copies: [fallen] }]), []);
   });
 });
+
+// A multi-stamp copy in a listing text (ADR-0044 §8, #749). The title-side rules are pinned in
+// `offer-title-template.test.ts`; what is pinned here is that the blocks keep their scope — inside
+// `{#copy}` the cover names its own stamps and nothing of its neighbours', and a legend narrowed to
+// one condition names every stamp on the pieces in it.
+describe("renderListingTemplate — {catalog} on a multi-stamp copy (#749)", () => {
+  const cover = copy({
+    name: "Cover",
+    catalogNumbers: [cn("Mi", "12")],
+    carriedCatalogNumbers: [[cn("Mi", "12")], [cn("Mi", "14")]],
+    conditionAbbr: "U",
+  });
+  const loose = copy({ name: "Venus", catalogNumbers: [cn("Mi", "13")], conditionAbbr: "MNH" });
+
+  it("names every stamp of the piece inside its own {#copy} block, and only those", () => {
+    const out = renderListingTemplate("{#copy}{catalog} {name}\n{/copy}", [{ title: null, copies: [cover, loose] }]);
+    assert.equal(out, "Mi 12,14 Cover\nMi 13 Venus");
+  });
+
+  it("joins the piece with its set's other copies at set level", () => {
+    const out = renderListingTemplate("{#set}{catalog}\n{/set}", [{ title: null, copies: [cover, loose] }]);
+    assert.equal(out, "Mi 12-14");
+  });
+
+  it("names every stamp of the pieces a legend entry narrows to", () => {
+    const out = renderListingTemplate(
+      "{#conditionLegend}{conditionAbbr}: {catalog}\n{/conditionLegend}",
+      [{ title: null, copies: [cover, loose] }]
+    );
+    assert.equal(out, "U: Mi 12,14\nMNH: Mi 13");
+  });
+});

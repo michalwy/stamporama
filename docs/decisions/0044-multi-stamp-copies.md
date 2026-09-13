@@ -4,8 +4,17 @@
 
 Accepted. The schema, the migration and the write module are in (#744), the exclusion rule of §3 is
 enforced (#745), a copy's stamps are editable (#746), §7's list is in place (#748) and a scan tile
-can be identified as a carrier (#750) and a carrier has a value of its own (#747); the rest is tracked
-in #749 (listing tokens).
+can be identified as a carrier (#750), a carrier has a value of its own (#747) and `{catalog}`
+enumerates (#749).
+
+**`{catalog}`** (#749): §8 as written, and enumerating means exactly what it means across the copies
+of a batch offer — the carrier's numbers go through the same grouping by catalogue and area prefix and
+the same range collapsing, so a cover bearing Mi·PL 200, 201 and 205 reads `Mi·PL 200-01,205`, as
+those three loose stamps would, and joins the other copies of its offer into one run. `sortOrder`
+decides which catalogue group comes first; within a group the numbers ascend. That was settled with
+the user over a literal, uncollapsed `sortOrder` list, which would have given a cover a notation no
+other listing uses. Each stamp resolves its **own** area prefix and primary vendor, and only
+`{catalog}` changed: `{name}`, `{year}` and the other stamp facts still read the leading stamp.
 
 **Valuation** (#747): §6 as written, on `Item.explicitValue` + `Item.explicitValueCurrency` (both or
 neither, a CHECK), read **only while `stampCount` > 1** — a copy edited back to one stamp is valued
