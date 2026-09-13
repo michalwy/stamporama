@@ -171,8 +171,8 @@ interface Props {
    * chain at the condition step instead of the picker, the picker's question having been answered.
    * Everything after that is identical, confirm included. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
-  /** *As the stamps of one issue* (#1220): the ticked run handed up **in the order it was ticked**,
-   * which is the order the pieces take the issue's stamps in. */
+  /** *As the stamps of a checklist* (#1220, #1225): the ticked run handed up **in the order it was
+   * ticked**, which is the order the pieces take the checklist's stamps in. */
   onIdentifyIssueRun: (pieces: IdentifiedPiece[]) => void;
   /** A row of the identification history, pressed (#757): the same handover as `onIdentifyTiles`,
    * for a tile that is to be identified the way an earlier one of this screen was. The answers come
@@ -999,7 +999,7 @@ export function ScansCard({
             onReidentifyTile(piece, copy);
           }}
           // A set, not a run of duplicates (#1220): the pieces go up **in the order they were
-          // ticked**, since that is the order they take the issue's stamps in — the dialog is handed
+          // ticked**, since that is the order they take the checklist's stamps in — the dialog is handed
           // them in card order, which is #596's numbering and not this sequence.
           onIdentifyIssueRun={(pieces) => {
             closeDialog();
@@ -2278,7 +2278,7 @@ function TileSelectionBar({
           // together is what ticking is for, and the other two are why they are named here at all.
           // Omitted with nothing in view, where there is no pass on offer to describe.
           count > 0
-            ? "Identify them as one stamp or as the stamps of one issue, set them aside to check, or discard them — together."
+            ? "Identify them as one stamp or as the stamps of a checklist, set them aside to check, or discard them — together."
             : null,
           // And where the chip is hiding some, what became of them — in the two terms that stop the
           // number reading as a loss: still ticked, and back when the chip goes.

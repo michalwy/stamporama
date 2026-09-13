@@ -1,4 +1,3 @@
-import { computeCatalogSortKey, compareCatalogSortKeys } from "./catalog-sort-key";
 import {
   catalogValueEntry,
   catalogValueSubjectKey,
@@ -6,22 +5,50 @@ import {
 } from "./intake-catalog-value";
 
 /**
- * *Identify ticked tiles as the stamps of one issue, in turn* (#1220) — the pure half.
+ * *Identify ticked tiles as the stamps of a checklist, in turn* (#1220, #1225) — the pure half.
  *
- * A card often holds a set: several, or all, of one issue's stamps. #596 identifies a selection as
- * **one** stamp, which is the wrong answer for a set; walking each tile through the picker is right
- * but says the same thing — *this issue, the next value* — once per stamp. So the collector ticks
- * the tiles in catalogue order, picks the issue once, and the tiles take its stamps **in turn**.
- * What remains is correcting the ones that skip a value.
+ * A card often holds a set: several, or all, of one checklist's stamps. #596 identifies a selection
+ * as **one** stamp, which is the wrong answer for a set; walking each tile through the picker is
+ * right but says the same thing — *this set, the next value* — once per stamp. So the collector
+ * ticks the tiles in the order the set reads, picks the checklist once, and the tiles take its
+ * stamps **in turn**. What remains is correcting the ones that skip a value.
+ *
+ * **The unit is a checklist, not an issue** (#1225). #1220 built the run on an issue's main stamps in
+ * catalogue order, and both halves were wrong for how a collection is organised: an issue often has
+ * several checklists (imperforate beside perforated, collected and so identified independently), and
+ * a checklist's order is set by hand (#764). The checklist is what picks the right set, so there is
+ * no *main stamps only* rule left to stand in for it.
  *
  * Everything that decides *which tile gets which stamp* and *which answer a copy is created with*
  * lives here, because both are read by two sides: the dialog draws them while the collector works,
  * and the write reads the very same resolution so the copy is what the screen said it would be.
  */
 
-// ── The sequence ─────────────────────────────────────────────────────────────────────────────────
+// ── The checklist ────────────────────────────────────────────────────────────────────────────────
 
-/** An issue member as the sequence reads it — the fields `StampNodeData` already carries. */
+/**
+ * The checklist a run is built on, as the run reads it.
+ *
+ * `stampIds` **is the sequence**: every stamp the checklist holds, variants included, in the order
+ * its own screen shows (#764's `sortOrder`, the stamp id behind it) — so a checklist whose order was
+ * never dragged into shape reads in the order it was backfilled or appended in, exactly as it is
+ * drawn there. There is never a separate order just for the run.
+ *
+ * `issues` are the issues it covers: its own issue, or — for a checklist that spans issues — every
+ * issue one of its stamps is on. A tile can be corrected to any stamp of those.
+ */
+export interface RunChecklist {
+  id: string;
+  name: string;
+  /** Null for a checklist that spans issues. */
+  issueId: string | null;
+  stampIds: string[];
+  issues: { id: string; name: string | null; year: number | null; collectionAreaId: string }[];
+}
+
+// ── The choices ──────────────────────────────────────────────────────────────────────────────────
+
+/** An issue member as the run reads it — the fields `StampNodeData` already carries. */
 export interface RunMember {
   stampId: string;
   parentId: string | null;
@@ -57,50 +84,67 @@ export function treeOrder<T extends RunMember>(members: readonly T[]): T[] {
   return out;
 }
 
-/**
- * The stamps tiles take **in turn**: the issue's main stamps, in catalogue order.
- *
- * **Main stamps rather than their variants.** A variant is chosen by correcting that tile, so a
- * sequence that walked into `200a`, `200b` would hand the next tile a variant of the stamp before it
- * instead of the next value. *Main* is ADR-0010's reading and not the tree's depth: a child that does
- * not act as a variant — an overprint filed under its base — is a catalogue entry of its own and
- * takes its turn.
- *
- * **Catalogue order** is the primary catalogue's number (`computeCatalogSortKey`, the key every
- * catalogue ordering in the app compares); a stamp with no number keeps its place in the tree's own
- * order after the numbered ones, which is also the whole order of a new issue whose stamps were added
- * without numbers.
- */
-export function issueRunSequence(
-  members: readonly RunMember[],
-  primaryVendorId: string | null
-): string[] {
-  const inIssue = new Set(members.map((m) => m.stampId));
-  return catalogueOrder(members, primaryVendorId)
-    .filter((m) => !(m.parentId && inIssue.has(m.parentId) && m.actsAsVariant))
-    .map((m) => m.stampId);
+/** The stamps a tile can be corrected to, in the order they are offered. */
+export interface RunChoices<T extends RunMember> {
+  /** The checklist's own stamps, in the sequence's order — offered first. Flat, as a checklist is. */
+  onChecklist: T[];
+  /** Every other stamp of the issues the checklist covers, one group per issue in the order given,
+   * as that issue's tree draws them. `depth` counts only the ancestors drawn in the same group, so a
+   * variant whose base is on the checklist is not indented under a row that is not there. */
+  others: { issueId: string; nodes: { node: T; depth: number }[] }[];
 }
 
 /**
- * Every member — variants included — in **catalogue order**: the primary catalogue's number, and
- * the tree's own order for the stamps with none (after the numbered ones) and between equal numbers.
- * The one ordering both the sequence and the run's price list (#1223) read.
+ * **Correcting a tile still reaches any stamp** (#1225): a tile that turns out to be the perforated
+ * one in an imperforate run must have somewhere to go. The checklist's stamps come first, because
+ * they are what the tile most likely is; then the rest of each issue the checklist covers.
+ *
+ * A stamp is offered once — a stamp on two covered issues stays in the first group it appears in —
+ * and a sequence id no issue carries (a stamp still being read) is simply not offered yet.
  */
-export function catalogueOrder<T extends RunMember>(
-  members: readonly T[],
-  primaryVendorId: string | null
-): T[] {
-  return treeOrder(members)
-    .map((m, index) => ({
-      m,
-      index,
-      key: computeCatalogSortKey(
-        m.catalogNumbers.map((n) => ({ catalogVendorId: n.catalogVendorId, value: n.number })),
-        primaryVendorId
-      ),
-    }))
-    .sort((a, b) => compareCatalogSortKeys(a.key, b.key) || a.index - b.index)
-    .map(({ m }) => m);
+export function runChoices<T extends RunMember>(
+  sequence: readonly string[],
+  issues: readonly { issueId: string; members: readonly T[] }[]
+): RunChoices<T> {
+  const byId = new Map<string, T>();
+  for (const issue of issues) {
+    for (const m of issue.members) if (!byId.has(m.stampId)) byId.set(m.stampId, m);
+  }
+  const offered = new Set<string>();
+  const onChecklist: T[] = [];
+  for (const id of sequence) {
+    const node = byId.get(id);
+    if (!node || offered.has(id)) continue;
+    offered.add(id);
+    onChecklist.push(node);
+  }
+  const others = issues.map((issue) => {
+    const rest = treeOrder(issue.members).filter((m) => !offered.has(m.stampId));
+    for (const m of rest) offered.add(m.stampId);
+    const shown = new Map(rest.map((m) => [m.stampId, m]));
+    const nodes = rest.map((node) => {
+      let depth = 0;
+      let parentId = node.parentId;
+      const seen = new Set<string>();
+      while (parentId && shown.has(parentId) && !seen.has(parentId)) {
+        seen.add(parentId);
+        depth += 1;
+        parentId = shown.get(parentId)?.parentId ?? null;
+      }
+      return { node, depth };
+    });
+    return { issueId: issue.issueId, nodes };
+  });
+  return { onChecklist, others };
+}
+
+/** Every offered stamp's id, in the order {@link runChoices} offers them — the order the run's price
+ * list reads in (#1223), so the list follows the checklist exactly as the tiles do. */
+export function runStampOrder(choices: RunChoices<RunMember>): string[] {
+  return [
+    ...choices.onChecklist.map((m) => m.stampId),
+    ...choices.others.flatMap((group) => group.nodes.map((n) => n.node.stampId)),
+  ];
 }
 
 // ── Assigning ────────────────────────────────────────────────────────────────────────────────────
@@ -128,7 +172,7 @@ export interface RunAssignment {
  * stamps. **More tiles than stamps** leaves the extra ones with no stamp, and nothing is created
  * until each is given one or taken out ({@link runBlockers}).
  *
- * Re-derived rather than stored, so a stamp added to the issue in the middle of the pass reaches
+ * Re-derived rather than stored, so a stamp added to the checklist in the middle of the pass reaches
  * the tiles still taking their turn.
  */
 export function assignInTurn(
@@ -243,7 +287,8 @@ export interface IssueRunTile {
 }
 
 export interface IssueRunIdentification {
-  issueId: string;
+  /** The checklist the run is built on (#1225). */
+  checklistId: string;
   /** The answers given once for every tile. */
   shared: RunCopyDetails;
   /** The run, in the order the tiles were ticked — the order the copies are created and numbered in. */
@@ -299,18 +344,18 @@ export interface RunPriceLine extends RunPriceSubject {
 
 /**
  * The run's catalogue values as **one list, typed down** (#1223): a line per subject — never per
- * tile, so Tab never visits one figure twice — in the order the collector reads the catalogue.
+ * tile, so Tab never visits one figure twice — in the order the set reads.
  *
- * **Catalogue order** is the stamp's place in {@link catalogueOrder}; the lines of one stamp follow
+ * **The set's order** is `stampOrder` — {@link runStampOrder}: the checklist's own order, then the
+ * other stamps a tile was corrected to, as they are offered (#1225). The lines of one stamp follow
  * the order the collection lists its conditions in, and within a condition *no certificate* comes
- * before the certificates, in theirs. A stamp not among `members` (the issue still being read) and a
- * condition or certificate not in its list keep the order of the run, after the ones that are.
+ * before the certificates, in theirs. A stamp not in `stampOrder` (still being read) and a condition
+ * or certificate not in its list keep the order of the run, after the ones that are.
  */
 export function runPriceLines(
   assignments: readonly RunAssignment[],
   resolved: readonly RunCopyDetails[],
-  members: readonly RunMember[],
-  primaryVendorId: string | null,
+  stampOrder: readonly string[],
   conditionOrder: readonly string[],
   certificateOrder: readonly string[]
 ): RunPriceLine[] {
@@ -324,7 +369,7 @@ export function runPriceLines(
   }
   const rankIn = (order: ReadonlyMap<string, number>, id: string) =>
     order.get(id) ?? Number.MAX_SAFE_INTEGER;
-  const stampRank = new Map(catalogueOrder(members, primaryVendorId).map((m, i) => [m.stampId, i]));
+  const stampRank = new Map(stampOrder.map((id, i) => [id, i]));
   const conditionRank = new Map(conditionOrder.map((id, i) => [id, i]));
   // No certificate first, then the certificates in the collection's own order.
   const certificateRank = new Map(certificateOrder.map((id, i) => [id, i + 1]));

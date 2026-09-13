@@ -178,8 +178,8 @@ export function selectedInView<T extends SelectableTile>(
 /**
  * The ticked tiles in the order they were **ticked** (#1220) — not the order of the card.
  *
- * Identifying a run as the stamps of one issue hands the first ticked tile the issue's first stamp,
- * the second the second, so the collector who clicks the pieces in catalogue order gets the right
+ * Identifying a run as the stamps of a checklist hands the first ticked tile the checklist's first
+ * stamp, the second the second, so the collector who clicks the pieces in the set's order gets the right
  * assignment even when the set lies scattered across the card. The order needs no state of its own:
  * a `Set` iterates in insertion order, `toggleTile` appends a tick and drops an untick, and
  * `pruneSelection` keeps what survives in the order it was ticked — so the selection already *is*

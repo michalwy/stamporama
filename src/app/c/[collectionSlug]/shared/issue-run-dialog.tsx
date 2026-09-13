@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogActions,
@@ -21,15 +21,15 @@ import { perforationMatches } from "@/lib/perforation";
 import {
   assignInTurn,
   changedRunPrices,
-  issueRunSequence,
   overriddenFields,
   priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
+  runChoices,
   runPriceLines,
   runPriceSubjects,
-  treeOrder,
+  runStampOrder,
   RUN_DETAIL_FIELDS,
   type IssueRunIdentification,
   type RunCopyDetails,
@@ -39,7 +39,7 @@ import {
 import {
   useCollectionFormats,
   useInvalidateInventory,
-  useIssueMembers,
+  useIssuesMembers,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
   issueLabel,
@@ -77,20 +77,20 @@ import {
 } from "./add-copy-defaults";
 
 /**
- * A ticked run of scan tiles identified **as the stamps of one issue, in turn** (#1220).
+ * A ticked run of scan tiles identified **as the stamps of a checklist, in turn** (#1220, #1225).
  *
- * The step after the issue is picked, and the whole of what is new: the tiles have already taken the
- * issue's main stamps in the order they were ticked (`issue-run.ts` decides which), so what the
- * collector does here is **correct** — the tile that skips a value, the one that is a variant, the
- * stray ticked by mistake — and answer the copy details once, overriding them on the pieces that
- * differ.
+ * The step after the checklist is picked, and the whole of what is new: the tiles have already taken
+ * the checklist's stamps, in its own order, in the order they were ticked (`issue-run.ts` decides
+ * which), so what the collector does here is **correct** — the tile that skips a value, the one that
+ * is another stamp of the issue, the stray ticked by mistake — and answer the copy details once,
+ * overriding them on the pieces that differ.
  *
  * **Three columns, because three things are looked at together.** The piece, at the size and with
  * the tools a single tile has (#585's viewer, #598's measuring, #625's watermark) — never a reduced
  * version for the bulk case, since telling `240a` from `240b` is the same act on the fifth tile of a
  * set as on a tile alone. The run, which is the sequence and every answer in it at a glance. And the
- * tile in hand: its stamp among the issue's, marked by what was read off it (#740), and its own copy
- * details.
+ * tile in hand: its stamp — the checklist's first, then the rest of its issues' — marked by what was
+ * read off it (#740), and its own copy details.
  *
  * **Nothing is created until every tile in the run has a stamp**, and the count is stated before
  * anything is. The write re-checks all of it and refuses the whole pass rather than half of it.
@@ -103,7 +103,10 @@ export interface IssueRunDialogProps {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   locations: LocationData[];
-  /** The issue the run takes its stamps from. */
+  /** The checklist the run takes its stamps from (#1225). */
+  checklistId: string;
+  /** The issue row the checklist was picked from — where a stamp added during the run goes, when the
+   * checklist is that issue's own. */
   issue: IssueListItem;
   /** The run, in the order the tiles were ticked. */
   pieces: IdentifiedPiece[];
@@ -111,7 +114,7 @@ export interface IssueRunDialogProps {
   lotChoice?: IntakeConditionDialogProps["lotChoice"];
   isPending: boolean;
   error?: string;
-  /** Back to the issue picker. */
+  /** Back to the checklist picker. */
   onBack: () => void;
   onClose: () => void;
   onSubmit: (input: IssueRunIdentification) => void;
@@ -150,6 +153,7 @@ export function IssueRunDialog({
   conditions,
   certificateStatuses,
   locations,
+  checklistId,
   issue,
   pieces,
   lotChoice,
@@ -160,40 +164,56 @@ export function IssueRunDialog({
   onSubmit,
 }: IssueRunDialogProps) {
   const maps = useAreaVendorMaps(areas, collectionId);
-  const vendorMap = maps.vendorMapFor(issue.collectionAreaId, issue.id);
-  const primaryVendorId = maps.primaryVendorByArea.get(issue.collectionAreaId) ?? null;
-  const { data: members = [], isLoading: membersLoading } = useIssueMembers(
+  /** The checklist as the run reads it: its stamps in its own order, and the issues it covers. */
+  const runChecklist = useQuery({
+    queryKey: ["checklists", collectionId, "run", checklistId] as const,
+    queryFn: async () => {
+      const { getRunChecklistAction } = await import("@/app/actions/checklists");
+      return getRunChecklistAction(collectionId, checklistId);
+    },
+  });
+  const checklist = runChecklist.data ?? null;
+  const coveredIssues = useMemo(() => checklist?.issues ?? [], [checklist]);
+  const coveredIssueIds = useMemo(() => coveredIssues.map((i) => i.id), [coveredIssues]);
+  const { members: membersByIssue, isLoading: issuesLoading } = useIssuesMembers(
     collectionId,
-    issue.id
+    coveredIssueIds
   );
+  const membersLoading = runChecklist.isLoading || issuesLoading;
+  const checklistGone = !runChecklist.isLoading && !runChecklist.isError && checklist === null;
   const { data: formats = [] } = useCollectionFormats(collectionId);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
-  const memberById = useMemo(() => new Map(members.map((m) => [m.stampId, m])), [members]);
-  /** The stamps tiles take in turn — the issue's main stamps, in catalogue order. */
-  const sequence = useMemo(
-    () => issueRunSequence(members, primaryVendorId),
-    [members, primaryVendorId]
-  );
-  /** Every stamp a tile can be corrected to — variants included — as the issue's tree draws them. */
-  const choices = useMemo(() => {
-    const ids = new Set(members.map((m) => m.stampId));
-    const byId = new Map(members.map((m) => [m.stampId, m]));
-    return treeOrder(members).map((node) => {
-      let depth = 0;
-      let parentId = node.parentId;
-      const seen = new Set<string>();
-      while (parentId && ids.has(parentId) && !seen.has(parentId)) {
-        seen.add(parentId);
-        depth += 1;
-        parentId = byId.get(parentId)?.parentId ?? null;
-      }
-      return { node, depth };
-    });
-  }, [members]);
+  /** Every stamp of the covered issues, once, with the issue it is read under. */
+  const members: StampNodeData[] = [];
+  const issueOfStamp = new Map<string, (typeof coveredIssues)[number]>();
+  for (const group of membersByIssue) {
+    const owner = coveredIssues.find((i) => i.id === group.issueId);
+    for (const m of group.members) {
+      if (issueOfStamp.has(m.stampId) || !owner) continue;
+      issueOfStamp.set(m.stampId, owner);
+      members.push(m);
+    }
+  }
+  const memberById = new Map(members.map((m) => [m.stampId, m]));
+  /** A stamp's catalogue labels read through its own issue's area and prefix (#377) — a checklist
+   * spanning issues may span areas too. */
+  const vendorsOf = (stampId: string | null) => {
+    const owner = (stampId ? issueOfStamp.get(stampId) : undefined) ?? coveredIssues[0];
+    const areaId = owner?.collectionAreaId ?? issue.collectionAreaId;
+    return {
+      vendorMap: maps.vendorMapFor(areaId, owner?.id ?? issue.id),
+      primaryVendorId: maps.primaryVendorByArea.get(areaId) ?? null,
+    };
+  };
+  /** The stamps tiles take in turn — the checklist's own, in its own order, variants included. */
+  const sequence = checklist?.stampIds ?? [];
+  /** Every stamp a tile can be corrected to: the checklist's first, then the rest of its issues'. */
+  const choices = runChoices(sequence, membersByIssue);
   const labelOf = (stampId: string | null): string | null => {
     const node = stampId ? memberById.get(stampId) : undefined;
     if (!node) return null;
+    const { vendorMap, primaryVendorId } = vendorsOf(node.stampId);
     return pickedStampText({
       stampId: node.stampId,
       catalogLabels: orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId),
@@ -202,6 +222,14 @@ export function IssueRunDialog({
       unknownVariant: false,
     });
   };
+  const ownIssue = coveredIssues[0] ?? issue;
+  const runTitle = !checklist
+    ? "a checklist"
+    : checklist.issueId
+      ? `“${checklist.name}” — ${issueLabel(ownIssue.name, ownIssue.year)}`
+      : `“${checklist.name}” — spanning ${coveredIssues.length} ${coveredIssues.length === 1 ? "issue" : "issues"}`;
+  /** A stamp added during the run joins the checklist, which only the checklist's own issue can do. */
+  const canAddStamp = checklist?.issueId != null && checklist.issueId === issue.id;
 
   // ── The run ──────────────────────────────────────────────────────────────────────────────────
   /** Tiles taken out of the run — kept in hand so one can be put back. */
@@ -345,6 +373,7 @@ export function IssueRunDialog({
   };
 
   const canConfirm =
+    checklist !== null &&
     inRun.length > 0 &&
     blockers.length === 0 &&
     withoutCondition.length === 0 &&
@@ -352,15 +381,14 @@ export function IssueRunDialog({
     !savingPrices;
 
   /**
-   * The same values as **one list, typed down** (#1223): a line per subject in catalogue order, each
-   * field the field — no row to select first. It edits `typedPrices` exactly as the tile's own field
+   * The same values as **one list, typed down** (#1223): a line per subject in the checklist's order,
+   * each field the field — no row to select first. It edits `typedPrices` exactly as the tile's own field
    * does, so the two always show the same figure.
    */
   const priceLines = runPriceLines(
     assignments,
     resolved,
-    members,
-    primaryVendorId,
+    runStampOrder(choices),
     conditions.map((c) => c.id),
     certificateStatuses.map((c) => c.id)
   ).flatMap((line) => {
@@ -488,7 +516,7 @@ export function IssueRunDialog({
       writeLast(LS_LAST_SCAN_LOT, `${collectionId}:${lotChoice.purchaseId}`, lotId);
     }
     onSubmit({
-      issueId: issue.id,
+      checklistId,
       shared,
       tiles: assignments.map((a) => ({
         tileId: a.tileId,
@@ -498,7 +526,7 @@ export function IssueRunDialog({
     });
   }
 
-  // ── Adding a stamp to the issue without leaving the pass ─────────────────────────────────────
+  // ── Adding a stamp to the checklist without leaving the pass ─────────────────────────────────
   const [addingStamp, setAddingStamp] = useState(false);
   const [stampError, setStampError] = useState<string | undefined>();
   const [creatingStamp, startCreatingStamp] = useTransition();
@@ -508,9 +536,11 @@ export function IssueRunDialog({
     startCreatingStamp(async () => {
       const result = await addStampToIssueAction(collectionId, issueId, fd);
       if (result.status === "success") {
-        // The members re-read, and a tile still waiting for its turn takes the new stamp.
+        // The checklist and the members re-read, and a tile still waiting for its turn takes the new
+        // stamp.
         setAddingStamp(false);
         setStampError(undefined);
+        void runChecklist.refetch();
         invalidatePickerData(collectionId);
         void invalidateStampsAndIssues(collectionId);
       } else if (result.status === "error") {
@@ -523,11 +553,12 @@ export function IssueRunDialog({
     const piece = pieces.find((p) => p.tileId === tileId);
     return `#${turnOf.get(tileId) ?? "?"} (tile ${(piece?.position ?? 0) + 1})`;
   };
-  const summary =
-    inRun.length === 0
+  const summary = checklistGone
+    ? "That checklist no longer exists. Go back and pick another."
+    : inRun.length === 0
       ? "Every tile has been taken out of the run."
       : membersLoading
-        ? "Reading the issue's stamps…"
+        ? "Reading the checklist's stamps…"
         : blockers.length > 0
           ? `${blockers.map(tileName).join(", ")} ${blockers.length === 1 ? "has" : "have"} no stamp — give ${blockers.length === 1 ? "it one" : "each one"}, or take ${blockers.length === 1 ? "it" : "them"} out of the run.`
           : withoutCondition.length > 0
@@ -539,7 +570,7 @@ export function IssueRunDialog({
   return (
     <>
       <DialogShell
-        title={`Identify as the stamps of ${issueLabel(issue.name, issue.year)}`}
+        title={`Identify as the stamps of ${runTitle}`}
         onClose={onClose}
         maxWidth="min(98vw, 110rem)"
         height="92vh"
@@ -611,8 +642,8 @@ export function IssueRunDialog({
             }}
           >
             <p style={{ ...MUTED, fontSize: "0.8125rem" }}>
-              The tiles take this issue&rsquo;s stamps in catalogue order, in the order you ticked
-              them. Correct a tile that skips a value, or is a variant, on the right.
+              The tiles take this checklist&rsquo;s stamps in its own order, in the order you ticked
+              them. Correct a tile that skips a value, or is another stamp, on the right.
             </p>
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
@@ -714,13 +745,13 @@ export function IssueRunDialog({
                   </p>
                 ) : priceLines.length === 0 ? (
                   <p style={MUTED}>
-                    This issue&rsquo;s area has no primary catalog with an edition to record a value
-                    on.
+                    This checklist&rsquo;s area has no primary catalog with an edition to record a
+                    value on.
                   </p>
                 ) : (
                   <>
                     <p style={MUTED}>
-                      One line per stamp in a condition, in catalogue order. Type a value and press
+                      One line per stamp in a condition, in the checklist&rsquo;s order. Type a value and press
                       Tab for the next; Tab from the last goes to <em>Identify</em>.
                       {priceListMissing > 0 && (
                         <span style={{ color: "var(--color-warning)" }}>
@@ -738,8 +769,13 @@ export function IssueRunDialog({
                       const certificate = certificateStatuses.find(
                         (c) => c.id === line.certificateStatusId
                       );
+                      const lineVendors = vendorsOf(line.stampId);
                       const number = node
-                        ? (orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId)[0] ||
+                        ? (orderedCatalogLabels(
+                            node.catalogNumbers,
+                            lineVendors.vendorMap,
+                            lineVendors.primaryVendorId
+                          )[0] ||
                           node.name ||
                           "No catalog number")
                         : "…";
@@ -772,9 +808,14 @@ export function IssueRunDialog({
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
               <h3 style={SECTION_HEADING}>The run</h3>
-              {!membersLoading && members.length === 0 && (
+              {!membersLoading && checklist && sequence.length === 0 && (
                 <p style={{ ...MUTED, color: "var(--color-warning)" }}>
-                  This issue has no stamps yet. Add them, and the tiles take them in turn.
+                  This checklist has no stamps yet. Add them, and the tiles take them in turn.
+                </p>
+              )}
+              {checklistGone && (
+                <p style={{ ...MUTED, color: "var(--color-error)" }}>
+                  This checklist no longer exists.
                 </p>
               )}
               {assignments.map((a, i) => {
@@ -893,16 +934,18 @@ export function IssueRunDialog({
                     ))}
                 </div>
               )}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setAddingStamp(true)}
-                  disabled={isPending}
-                  style={CREATE_LINK_STYLE}
-                >
-                  + New stamp in this issue
-                </button>
-              </div>
+              {canAddStamp && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setAddingStamp(true)}
+                    disabled={isPending}
+                    style={CREATE_LINK_STYLE}
+                  >
+                    + New stamp on this checklist
+                  </button>
+                </div>
+              )}
             </section>
           </div>
 
@@ -944,31 +987,58 @@ export function IssueRunDialog({
                       onWatermark={setWatermarkPick}
                     />
                   )}
-                  {membersLoading && <p style={MUTED}>Loading the issue&rsquo;s stamps…</p>}
-                  {choices.map(({ node, depth }) => (
-                    <StampChoice
-                      key={node.stampId}
-                      collectionId={collectionId}
-                      node={node}
-                      depth={depth}
-                      chosen={node.stampId === activeAssignment.stampId}
-                      alsoOn={assignments
-                        .filter((b) => b.tileId !== active.tileId && b.stampId === node.stampId)
-                        .map((b) => `#${turnOf.get(b.tileId)}`)}
-                      perforation={perforationMatches(gauge, node.attributes.perforation)}
-                      watermark={
-                        !watermarkSeen || !node.attributes.watermark
-                          ? "unknown"
-                          : node.attributes.watermark === watermarkSeen
-                            ? "fits"
-                            : "differs"
-                      }
-                      vendorMap={vendorMap}
-                      primaryVendorId={primaryVendorId}
-                      disabled={isPending}
-                      onChoose={() => correct(active.tileId, node.stampId)}
-                    />
-                  ))}
+                  {membersLoading && <p style={MUTED}>Loading the checklist&rsquo;s stamps…</p>}
+                  {(() => {
+                    const choice = (node: StampNodeData, depth: number) => {
+                      const { vendorMap, primaryVendorId } = vendorsOf(node.stampId);
+                      return (
+                        <StampChoice
+                          key={node.stampId}
+                          collectionId={collectionId}
+                          node={node}
+                          depth={depth}
+                          chosen={node.stampId === activeAssignment.stampId}
+                          alsoOn={assignments
+                            .filter((b) => b.tileId !== active.tileId && b.stampId === node.stampId)
+                            .map((b) => `#${turnOf.get(b.tileId)}`)}
+                          perforation={perforationMatches(gauge, node.attributes.perforation)}
+                          watermark={
+                            !watermarkSeen || !node.attributes.watermark
+                              ? "unknown"
+                              : node.attributes.watermark === watermarkSeen
+                                ? "fits"
+                                : "differs"
+                          }
+                          vendorMap={vendorMap}
+                          primaryVendorId={primaryVendorId}
+                          disabled={isPending}
+                          onChoose={() => correct(active.tileId, node.stampId)}
+                        />
+                      );
+                    };
+                    // The checklist's stamps first, then every other stamp of the issues it covers
+                    // (#1225): a tile that is not on the checklist still has somewhere to go.
+                    return (
+                      <>
+                        {choices.onChecklist.length > 0 && <p style={MUTED}>On the checklist</p>}
+                        {choices.onChecklist.map((node) => choice(node, 0))}
+                        {choices.others
+                          .filter((group) => group.nodes.length > 0)
+                          .map((group) => {
+                            const owner = coveredIssues.find((i) => i.id === group.issueId);
+                            return (
+                              <Fragment key={group.issueId}>
+                                <p style={{ ...MUTED, marginTop: "0.5rem" }}>
+                                  Other stamps of{" "}
+                                  {owner ? issueLabel(owner.name, owner.year) : "the issue"}
+                                </p>
+                                {group.nodes.map(({ node, depth }) => choice(node, depth))}
+                              </Fragment>
+                            );
+                          })}
+                      </>
+                    );
+                  })()}
                 </section>
 
                 {(() => {
@@ -1138,9 +1208,10 @@ export function IssueRunDialog({
           mode="add"
           collectionId={collectionId}
           issues={[issue]}
-          areaVendors={[...vendorMap.values()]}
+          areaVendors={[...maps.vendorMapFor(issue.collectionAreaId, issue.id).values()]}
           prefilledIssueId={issue.id}
           prefilledParentStampId={null}
+          prefilledChecklistIds={[checklistId]}
           prefilledParentIssuedYear={null}
           isPending={creatingStamp}
           error={stampError}

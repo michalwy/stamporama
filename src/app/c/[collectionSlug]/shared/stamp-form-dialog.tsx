@@ -164,6 +164,9 @@ type StampFormDialogProps = DialogAsideProps & {
        *  node it hangs under, not from the issue. Passed in because the members query is skipped
        *  when a parent is prefilled, so the dialog cannot look the parent up itself. */
       prefilledParentIssuedYear?: number | null;
+      /** The checklists of the prefilled issue the new stamp starts on, in place of the issue's
+       *  first — a run of scan tiles adds the stamp to the checklist it is built on (#1225). */
+      prefilledChecklistIds?: string[];
       defaultCatalogNumbers?: { catalogVendorId: string; number: string }[];
       onSubmit: (issueId: string, formData: FormData) => void;
     }
@@ -362,9 +365,11 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [checklistIds, setChecklistIds] = useState<Set<string>>(() =>
     editedMembership
       ? new Set(editedMembership.checklists.filter((c) => c.on).map((c) => c.id))
-      : addProps?.prefilledParentStampId
-        ? new Set<string>()
-        : new Set<string>([DEFAULT_CHECKLIST])
+      : addProps?.prefilledChecklistIds
+        ? new Set(addProps.prefilledChecklistIds)
+        : addProps?.prefilledParentStampId
+          ? new Set<string>()
+          : new Set<string>([DEFAULT_CHECKLIST])
   );
   const onAnyChecklist = checklistIds.size > 0;
 

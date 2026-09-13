@@ -126,9 +126,15 @@ function pickedFromLabel(stampId: string, label: string): PickedStamp {
 }
 
 /** Which dialog of the chain is up. The first three are one piece's — or one stamp's for a run
- * (#596); the last two are a run identified as the stamps of one issue (#1220): the picker browsed
- * for an issue, then the run itself. */
+ * (#596); the last two are a run identified as the stamps of a checklist (#1220, #1225): the picker
+ * browsed for a checklist, then the run itself. */
 export type TileStep = "none" | "picker" | "condition" | "issue-picker" | "issue-run";
+
+/** The checklist a run is built on (#1225), and the issue row it was picked from. */
+export interface TileRunChecklist {
+  checklistId: string;
+  issue: IssueListItem;
+}
 
 /** Where the chain is and what it is carrying. Held by {@link useTileIdentifyChain} and handed
  * straight to {@link TileIdentifyChainDialogs}; the three fields a screen actually reads are the
@@ -151,9 +157,10 @@ export interface TileIdentifyChainState {
    * worded it. Null on every route that skipped the picker. */
   tileLeadPick: PickedStamp | null;
   setTileLeadPick: (picked: PickedStamp | null) => void;
-  /** The issue a run is being identified as (#1220), once picked. */
-  tileRunIssue: IssueListItem | null;
-  setTileRunIssue: (issue: IssueListItem | null) => void;
+  /** The checklist a run is being identified as (#1225), once picked, and the issue row it was
+   * picked from. */
+  tileRunChecklist: TileRunChecklist | null;
+  setTileRunChecklist: (picked: TileRunChecklist | null) => void;
   resetTileIntake: () => void;
   /** What `ScansCard.onIdentifyTiles` is given. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
@@ -231,11 +238,11 @@ export function useTileIdentifyChain(input: {
   const [tileStamps, setTileStamps] = useState<PieceStampDraft[] | null>(null);
   const [tileLeadPick, setTileLeadPick] = useState<PickedStamp | null>(null);
   /**
-   * The issue a ticked run takes its stamps from (#1220). Held here rather than in the run's dialog so
-   * *Back* to the picker and a second pick land on the same chain; what the dialog holds — the
-   * corrections, the overrides — is about one issue and is rightly lost when the issue changes.
+   * The checklist a ticked run takes its stamps from (#1225). Held here rather than in the run's
+   * dialog so *Back* to the picker and a second pick land on the same chain; what the dialog holds —
+   * the corrections, the overrides — is about one checklist and is rightly lost when it changes.
    */
-  const [tileRunIssue, setTileRunIssue] = useState<IssueListItem | null>(null);
+  const [tileRunChecklist, setTileRunChecklist] = useState<TileRunChecklist | null>(null);
   function resetTileIntake() {
     setTileStep("none");
     setTileIntake([]);
@@ -244,7 +251,7 @@ export function useTileIdentifyChain(input: {
     setTileCorrection(null);
     setTileStamps(null);
     setTileLeadPick(null);
-    setTileRunIssue(null);
+    setTileRunChecklist(null);
     setError(undefined);
   }
   return {
@@ -262,11 +269,11 @@ export function useTileIdentifyChain(input: {
     setTileStamps,
     tileLeadPick,
     setTileLeadPick,
-    tileRunIssue,
-    setTileRunIssue,
+    tileRunChecklist,
+    setTileRunChecklist,
     resetTileIntake,
-    // A ticked run as the stamps of one issue (#1220): the issue is asked first, through the picker
-    // that can create one, and the run's own dialog follows. Nothing an ordinary identification
+    // A ticked run as the stamps of a checklist (#1220, #1225): the checklist is asked first, through
+    // the picker that can create its issue, and the run's own dialog follows. Nothing an ordinary identification
     // carries rides along — no repeat, no cover, no correction — since each tile gets its own stamp.
     onIdentifyIssueRun: (pieces) => {
       setTileIntake(pieces);
@@ -275,7 +282,7 @@ export function useTileIdentifyChain(input: {
       setTileCorrection(null);
       setTileStamps(null);
       setTileLeadPick(null);
-      setTileRunIssue(null);
+      setTileRunChecklist(null);
       setError(undefined);
       setTileStep("issue-picker");
     },
@@ -408,8 +415,8 @@ export function TileIdentifyChainDialogs({
     setTileStamps,
     tileLeadPick,
     setTileLeadPick,
-    tileRunIssue,
-    setTileRunIssue,
+    tileRunChecklist,
+    setTileRunChecklist,
     resetTileIntake,
   } = chain;
   // What names a stamp the chain holds only as numbers — a cover's other stamps, come off a copy —
@@ -638,12 +645,12 @@ export function TileIdentifyChainDialogs({
         />
       )}
 
-      {/* A run as the stamps of one issue (#1220): pick the issue… */}
+      {/* A run as the stamps of a checklist (#1220, #1225): pick the checklist… */}
       {tileStep === "issue-picker" && tileIntake.length > 0 && (
         <StampPickerBrowser
           collectionId={collectionId}
           areas={areas}
-          title={`Pick the issue — its stamps go onto the ${tileIntake.length} ticked tiles in turn`}
+          title={`Pick the checklist — its stamps go onto the ${tileIntake.length} ticked tiles in turn`}
           // The pieces, in the order they will take the stamps (#592's rule, for the run).
           aside={
             <IdentifiedPieceAside
@@ -654,12 +661,12 @@ export function TileIdentifyChainDialogs({
             />
           }
           asideWidth="26rem"
-          // Never reached while browsing for an issue — a stamp pressed names its issue instead.
+          // Never reached while browsing for a checklist — a stamp pressed names one instead.
           onPick={() => undefined}
           issueRun={{
             tileCount: tileIntake.length,
-            onPick: (issue) => {
-              setTileRunIssue(issue);
+            onPick: (checklistId, issue) => {
+              setTileRunChecklist({ checklistId, issue });
               setError(undefined);
               setTileStep("issue-run");
             },
@@ -669,7 +676,7 @@ export function TileIdentifyChainDialogs({
       )}
 
       {/* …then give each tile its stamp, and the copies their details */}
-      {tileStep === "issue-run" && tileIntake.length > 0 && tileRunIssue && (
+      {tileStep === "issue-run" && tileIntake.length > 0 && tileRunChecklist && (
         <IssueRunDialog
           collectionId={collectionId}
           areas={areas}
@@ -677,7 +684,8 @@ export function TileIdentifyChainDialogs({
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
-          issue={tileRunIssue}
+          checklistId={tileRunChecklist.checklistId}
+          issue={tileRunChecklist.issue}
           pieces={tileIntake}
           lotChoice={lotChoice}
           isPending={isPending}
@@ -685,7 +693,7 @@ export function TileIdentifyChainDialogs({
           onBack={() => {
             if (!isPending) {
               setError(undefined);
-              setTileRunIssue(null);
+              setTileRunChecklist(null);
               setTileStep("issue-picker");
             }
           }}
@@ -695,7 +703,7 @@ export function TileIdentifyChainDialogs({
             run(
               async () => {
                 const scans = await import("@/app/actions/scans");
-                const r = await scans.identifyTilesAsIssueStampsAction(input);
+                const r = await scans.identifyTilesAsChecklistStampsAction(input);
                 if (r.status === "error") setError(r.message);
                 // Both namespaces, for `identifyTilesAction`'s reason: copies were created and
                 // tiles consumed.

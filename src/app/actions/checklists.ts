@@ -12,8 +12,12 @@ import {
   reorderChecklistStamps,
   setChecklistStamps,
   getChecklistsForIssue,
+  getRunChecklist,
+  listSpanningChecklists,
   type ChecklistData,
+  type SpanningChecklistSummary,
 } from "@/lib/checklists";
+import type { RunChecklist } from "@/lib/issue-run";
 
 // Server actions for the checklists editor (#531). Scoped to one issue, because that is the only
 // place a checklist is edited from — ADR-0020 §7's rule, and the reason none of these take an
@@ -37,6 +41,25 @@ export async function getChecklistsForIssueAction(
 ): Promise<ChecklistData[]> {
   const session = await getSession();
   return getChecklistsForIssue(session.user.id, collectionId, issueId);
+}
+
+/** One checklist as a run of scan tiles reads it (#1225) — its stamps in its own order and the
+ *  issues it covers. Null when it is gone. */
+export async function getRunChecklistAction(
+  collectionId: string,
+  checklistId: string
+): Promise<RunChecklist | null> {
+  const session = await getSession();
+  return getRunChecklist(session.user.id, collectionId, checklistId);
+}
+
+/** The collection's checklists that span issues — what the run picker offers beside an issue's own
+ *  (#1225). */
+export async function listSpanningChecklistsAction(
+  collectionId: string
+): Promise<SpanningChecklistSummary[]> {
+  const session = await getSession();
+  return listSpanningChecklists(session.user.id, collectionId);
 }
 
 export async function createChecklistAction(

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -15,6 +16,7 @@ import type {
   IssueChecklistSummary,
   StampNodeData,
 } from "@/lib/issues";
+import type { SpanningChecklistSummary } from "@/lib/checklists";
 import {
   createIssueAction,
   addStampToIssueAction,
@@ -25,6 +27,7 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { ChecklistsDialog } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -113,6 +116,37 @@ export interface PickedIssue {
   requiredCount: number;
 }
 
+/**
+ * Browsing for the checklist a ticked run of scan tiles is built on (#1220, #1225). `onPick` is handed
+ * the checklist and the row it was picked from — the row is where a stamp added during the run goes.
+ */
+export interface IssueRunPick {
+  tileCount: number;
+  onPick: (checklistId: string, issue: IssueListItem) => void;
+}
+
+/** A checklist a run can be built on, as an issue row offers it. */
+interface RunChecklistOption {
+  id: string;
+  name: string;
+  stampCount: number;
+  /** A checklist that spans issues, offered on each issue it covers. */
+  spans: boolean;
+}
+
+/** What a row offers a run: the issue's own checklists, then the ones spanning issues that reach it. */
+function runChecklistOptions(
+  issue: IssueListItem,
+  spanning: readonly SpanningChecklistSummary[]
+): RunChecklistOption[] {
+  return [
+    ...issue.checklists.map((c) => ({ id: c.id, name: c.name, stampCount: c.stampCount, spans: false })),
+    ...spanning
+      .filter((c) => c.issueIds.includes(issue.id))
+      .map((c) => ({ id: c.id, name: c.name, stampCount: c.stampIds.length, spans: true })),
+  ];
+}
+
 export function StampPickerBrowser({
   collectionId,
   areas,
@@ -134,16 +168,19 @@ export function StampPickerBrowser({
    *  (lot intake, #121; #531). */
   onPickIssue?: (picked: PickedIssue) => void;
   /**
-   * Identifying a ticked run of scan tiles **as the stamps of one issue** (#1220): the picker is
-   * browsed for an issue rather than a stamp, and every issue row offers to take the run.
+   * Identifying a ticked run of scan tiles **as the stamps of a checklist** (#1220, #1225): the picker
+   * is browsed for a checklist rather than a stamp, and every issue row offers its checklists — one
+   * button when the issue has one, since there is then no choice to make, and one per checklist when
+   * it has several (the #531 row's own answer). A checklist spanning issues is offered on every issue
+   * it covers. An issue with none offers the checklist editor, so the run is not a dead end.
    *
-   * It is this picker rather than an issue picker of its own because this is where an issue is
-   * **created** in the middle of an identification (#105) and where its stamps are added right after
-   * — a set met on a card whose issue is not in the catalogue yet is exactly the case, and a second
-   * chooser would have to grow both. A stamp pressed on a row picks **its issue**: the tree is open
-   * to be read and added to, and a press on it meaning nothing would read as a press that failed.
+   * It is this picker rather than a chooser of its own because this is where an issue is **created**
+   * in the middle of an identification (#105) and where its stamps are added right after — a set met
+   * on a card whose issue is not in the catalogue yet is exactly the case, and a second chooser would
+   * have to grow both. A stamp pressed on a row picks the checklist it names without doubt: the
+   * row's only one, or the only one of the row's that holds the stamp.
    */
-  issueRun?: { tileCount: number; onPick: (issue: IssueListItem) => void };
+  issueRun?: IssueRunPick;
   /**
    * Stamps the caller has **already taken**, marked on their rows (#607) — see
    * `SelectableStampNode`. Only a picker that does not close on the pick needs it: the tile
@@ -171,6 +208,19 @@ export function StampPickerBrowser({
   );
   const [create, setCreate] = useState<CreateState | null>(null);
   const [createError, setCreateError] = useState<string>();
+  /** The issue whose checklists are being edited over the picker, so a run has one to be built on
+   *  (#1225). */
+  const [checklistsFor, setChecklistsFor] = useState<IssueListItem | null>(null);
+  // Checklists spanning issues, offered beside each covered issue's own (#1225). One read per open,
+  // and only when a run is what the picker is for.
+  const { data: spanningChecklists = [] } = useQuery({
+    queryKey: ["checklists", collectionId, "spanning"] as const,
+    queryFn: async () => {
+      const { listSpanningChecklistsAction } = await import("@/app/actions/checklists");
+      return listSpanningChecklistsAction(collectionId);
+    },
+    enabled: !!issueRun,
+  });
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { invalidatePickerData } = useInvalidateInventory();
@@ -369,7 +419,7 @@ export function StampPickerBrowser({
         onClose={onClose}
         // A create dialog stacks above this one; while it is up this dialog must stop dismissing
         // itself, or one Esc would close both.
-        dismissable={!create}
+        dismissable={!create && !checklistsFor}
         maxWidth="min(96vw, 110rem)"
         height="min(90vh, 60rem)"
         // Which stamp a piece *is* is read off the piece, so when this picker is one step of
@@ -418,6 +468,8 @@ export function StampPickerBrowser({
               onPick={onPick}
               onPickIssue={onPickIssue}
               issueRun={issueRun}
+              spanningChecklists={spanningChecklists}
+              onNewChecklist={setChecklistsFor}
               marked={marked}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
@@ -512,6 +564,21 @@ export function StampPickerBrowser({
             })()}
         </div>
       )}
+
+      {/* A run's issue with no checklist yet (#1225): the issue's own checklist editor, over the
+          picker. Closing it leaves the row offering whatever was made. */}
+      {checklistsFor && (
+        <ChecklistsDialog
+          scope={{
+            collectionId,
+            issueId: checklistsFor.id,
+            issueLabel: issueLabel(checklistsFor.name, checklistsFor.year),
+            vendorMap: vendorMapFor(checklistsFor.collectionAreaId, checklistsFor.id),
+            primaryVendorId: primaryVendorByArea.get(checklistsFor.collectionAreaId) ?? null,
+          }}
+          onClose={() => setChecklistsFor(null)}
+        />
+      )}
     </>,
     document.body
   );
@@ -533,6 +600,8 @@ function IssueBrowser({
   onPick,
   onPickIssue,
   issueRun,
+  spanningChecklists,
+  onNewChecklist,
   marked,
   onNewIssue,
   onNewStamp,
@@ -557,8 +626,12 @@ function IssueBrowser({
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
-  /** Browsing for an issue to identify a run of tiles as (#1220). */
-  issueRun?: { tileCount: number; onPick: (issue: IssueListItem) => void };
+  /** Browsing for the checklist a run of tiles is identified as (#1220, #1225). */
+  issueRun?: IssueRunPick;
+  /** Checklists spanning issues, offered on the rows of the issues they cover. */
+  spanningChecklists: readonly SpanningChecklistSummary[];
+  /** Open the checklist editor for an issue that has none to build a run on. */
+  onNewChecklist: (issue: IssueListItem) => void;
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewIssue: (areaId: string | null) => void;
@@ -574,9 +647,18 @@ function IssueBrowser({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
-    // Browsing for an issue (#1220): the stamp pressed names the issue it is on.
+    // Browsing for a checklist (#1225): the stamp pressed picks one only where that says which — the
+    // row's only checklist, or the only one of the row's that holds this stamp. Otherwise the press
+    // leaves the choice to the row's own buttons.
     if (issueRun) {
-      issueRun.onPick(issue);
+      const options = runChecklistOptions(issue, spanningChecklists);
+      const holding = options.filter((c) =>
+        c.spans
+          ? spanningChecklists.some((s) => s.id === c.id && s.stampIds.includes(node.stampId))
+          : node.checklistIds.includes(c.id)
+      );
+      const picked = options.length === 1 ? options[0] : holding.length === 1 ? holding[0] : null;
+      if (picked) issueRun.onPick(picked.id, issue);
       return;
     }
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
@@ -655,7 +737,12 @@ function IssueBrowser({
               marked={marked}
               issueRun={
                 issueRun
-                  ? { tileCount: issueRun.tileCount, onPick: () => issueRun.onPick(issue) }
+                  ? {
+                      tileCount: issueRun.tileCount,
+                      checklists: runChecklistOptions(issue, spanningChecklists),
+                      onPick: (checklistId) => issueRun.onPick(checklistId, issue),
+                      onNewChecklist: () => onNewChecklist(issue),
+                    }
                   : undefined
               }
               onPickIssue={
@@ -687,6 +774,20 @@ function IssueBrowser({
     </>
   );
 }
+
+/** A run's checklist button: accented, since it is the one press the picker is open for. */
+const RUN_BUTTON_STYLE: React.CSSProperties = {
+  flexShrink: 0,
+  padding: "0.25rem 0.5rem",
+  background: "var(--color-accent-soft)",
+  color: "var(--color-accent)",
+  border: "1px solid var(--color-accent)",
+  borderRadius: "0.375rem",
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
 
 function PickIssueRow({
   collectionId,
@@ -724,8 +825,13 @@ function PickIssueRow({
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   /** Called with the checklist whose button was pressed (#531). */
   onPickIssue?: (checklist: IssueChecklistSummary) => void;
-  /** Take this issue for a run of tiles (#1220). */
-  issueRun?: { tileCount: number; onPick: () => void };
+  /** Take one of this issue's checklists for a run of tiles (#1220, #1225). */
+  issueRun?: {
+    tileCount: number;
+    checklists: RunChecklistOption[];
+    onPick: (checklistId: string) => void;
+    onNewChecklist: () => void;
+  };
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewStamp: () => void;
@@ -842,37 +948,48 @@ function PickIssueRow({
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
-          {/* The one press this picker is open for when a run of tiles is being identified (#1220).
-              On every row, a new issue with no stamps yet included: its stamps are added from the
-              tree under it, and the step that follows says so if there are still none. */}
-          {issueRun && (
-            <Tooltip
-              content={`Give the ${issueRun.tileCount} ticked tiles this issue's stamps, in the order you ticked them`}
-              align="end"
-            >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  issueRun.onPick();
-                }}
-                style={{
-                  flexShrink: 0,
-                  padding: "0.25rem 0.5rem",
-                  background: "var(--color-accent-soft)",
-                  color: "var(--color-accent)",
-                  border: "1px solid var(--color-accent)",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
+          {/* The press this picker is open for when a run of tiles is being identified (#1220):
+              the checklist it is built on (#1225). On every row, a new issue included — one with no
+              checklist yet offers the editor to make one, since there is nothing else to build on. */}
+          {issueRun &&
+            (issueRun.checklists.length === 0 ? (
+              <Tooltip
+                content="This issue has no checklist to build the run on. Make one, then pick it here"
+                align="end"
               >
-                Its stamps, in turn
-              </button>
-            </Tooltip>
-          )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    issueRun.onNewChecklist();
+                  }}
+                  style={RUN_BUTTON_STYLE}
+                >
+                  New checklist…
+                </button>
+              </Tooltip>
+            ) : (
+              issueRun.checklists.map((checklist) => (
+                <Tooltip
+                  key={checklist.id}
+                  content={`Give the ${issueRun.tileCount} ticked tiles the stamps of “${checklist.name}” (${checklist.stampCount}), in its own order${checklist.spans ? " — it spans issues" : ""}`}
+                  align="end"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      issueRun.onPick(checklist.id);
+                    }}
+                    style={RUN_BUTTON_STYLE}
+                  >
+                    {issueRun.checklists.length === 1
+                      ? "Its stamps, in turn"
+                      : `${checklist.name}, in turn`}
+                  </button>
+                </Tooltip>
+              ))
+            ))}
 
           {/* One button per checklist (#531). With one it reads as it always did; with several
               each names its own set, which is better than a chooser the collector has to open to

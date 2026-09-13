@@ -30,7 +30,7 @@ import {
   discardTile,
   discardTiles,
   identifyTileAsNewCopy,
-  identifyTilesAsIssueStamps,
+  identifyTilesAsChecklistStamps,
   identifyTilesAsNewCopies,
   noteTile,
   parkTile,
@@ -40,7 +40,13 @@ import {
   returnTilesToQueue,
 } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
-import type { RunCopyDetails } from "../../src/lib/issue-run";
+import { assignInTurn, type RunCopyDetails } from "../../src/lib/issue-run";
+import {
+  getChecklistsForIssue,
+  getRunChecklist,
+  listSpanningChecklists,
+  setChecklistStamps,
+} from "../../src/lib/checklists";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-tiles-"));
 process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
@@ -77,6 +83,8 @@ describe("identifying scan tiles into copies (#567)", () => {
   let variantAId: string;
   let variantBId: string;
   let foreignStampId: string;
+  /** Michel — the catalogue a checklist's hand-set order is compared against (#1225). */
+  let vendorId: string;
 
   const SHEET_W = 1200;
   const SHEET_H = 600;
@@ -194,7 +202,7 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // *It is Mi 200, but watermark A or B?* — the case #607's correction is about. The subtype is
     // what makes the children **effective** variants (ADR-0010), which is the whole condition.
-    const vendorId = (
+    vendorId = (
       await prisma.catalogVendor.create({
         data: { collectionId, name: "Michel", abbreviation: "Mi" },
       })
@@ -1319,10 +1327,14 @@ describe("identifying scan tiles into copies (#567)", () => {
     ]);
   });
 
-  // ── A run as the stamps of one issue (#1220) ──────────────────────────────────────────────────
+  // ── A run as the stamps of a checklist (#1220, #1225) ─────────────────────────────────────────
 
-  /** An issue of its own with these stamps on it, in this order. */
-  async function issueWithStamps(names: string[]): Promise<{ issueId: string; stampIds: string[] }> {
+  /** An issue of its own with these stamps on it, in this order — each with its Michel number where
+   * one is given — and one checklist holding all of them in that order. */
+  async function issueWithStamps(
+    names: string[],
+    numbers: string[] = []
+  ): Promise<{ issueId: string; stampIds: string[]; checklistId: string }> {
     const area = await prisma.collectionArea.create({
       data: { collectionId, name: `Run area ${names.join("-")}-${Math.random()}` },
     });
@@ -1337,11 +1349,45 @@ describe("identifying scan tiles into copies (#567)", () => {
     const stampIds: string[] = [];
     for (const [i, name] of names.entries()) {
       const stamp = await prisma.stamp.create({
-        data: { collectionId, name, issueMemberships: { create: { issueId: issue.id, sortOrder: i } } },
+        data: {
+          collectionId,
+          name,
+          issueMemberships: { create: { issueId: issue.id, sortOrder: i } },
+          ...(numbers[i]
+            ? { catalogNumbers: { create: { catalogVendorId: vendorId, number: numbers[i] } } }
+            : {}),
+        },
       });
       stampIds.push(stamp.id);
     }
-    return { issueId: issue.id, stampIds };
+    const checklistId = await checklistOn(issue.id, "Run", stampIds);
+    return { issueId: issue.id, stampIds, checklistId };
+  }
+
+  /** A checklist of these stamps in this order — `issueId` null spans issues. `sortOrders` sets the
+   * stored numbers outright, for a checklist whose order was never set by hand. */
+  async function checklistOn(
+    issueId: string | null,
+    name: string,
+    stampIds: string[],
+    sortOrders: number[] = stampIds.map((_, i) => i)
+  ): Promise<string> {
+    const last = await prisma.checklist.findFirst({
+      where: { collectionId, issueId },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+    return (
+      await prisma.checklist.create({
+        data: {
+          collectionId,
+          issueId,
+          name,
+          sortOrder: (last?.sortOrder ?? -1) + 1,
+          stamps: { create: stampIds.map((stampId, i) => ({ stampId, sortOrder: sortOrders[i] })) },
+        },
+      })
+    ).id;
   }
 
   const runShared = (over: Partial<RunCopyDetails> = {}): RunCopyDetails => ({
@@ -1354,9 +1400,9 @@ describe("identifying scan tiles into copies (#567)", () => {
     ...over,
   });
 
-  it("identifies a run as the stamps of one issue: each tile its own stamp, its own pictures, its own overrides (#1220)", async () => {
+  it("identifies a run as the stamps of a checklist: each tile its own stamp, its own pictures, its own overrides (#1220)", async () => {
     const { tileIds, lotId } = await orderWithTiles();
-    const { issueId, stampIds } = await issueWithStamps(["Run 1", "Run 2"]);
+    const { checklistId, stampIds } = await issueWithStamps(["Run 1", "Run 2"]);
     const photosBefore = await prisma.photo.findMany({
       where: { tileId: { in: tileIds } },
       select: { id: true, tileId: true },
@@ -1364,8 +1410,8 @@ describe("identifying scan tiles into copies (#567)", () => {
 
     // Ticked the other way round from the card — the second square first — and the first square
     // holding a condition and a certificate of its own.
-    const outcomes = await identifyTilesAsIssueStamps(userId, {
-      issueId,
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId,
       shared: runShared(),
       tiles: [
         { tileId: tileIds[1], stampId: stampIds[0] },
@@ -1428,7 +1474,7 @@ describe("identifying scan tiles into copies (#567)", () => {
 
   it("refuses the whole run before creating anything when any tile cannot be worked (#1220)", async () => {
     const { tileIds } = await orderWithTiles();
-    const { issueId, stampIds } = await issueWithStamps(["Only"]);
+    const { checklistId, stampIds } = await issueWithStamps(["Only"]);
     const copiesBefore = await prisma.item.count({ where: { collectionId } });
     const refused = (pattern: RegExp) => (e: unknown) =>
       e instanceof ScanValidationError && pattern.test(e.message);
@@ -1436,8 +1482,8 @@ describe("identifying scan tiles into copies (#567)", () => {
     // More tiles than stamps: the second is left with none.
     await assert.rejects(
       () =>
-        identifyTilesAsIssueStamps(userId, {
-          issueId,
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId,
           shared: runShared(),
           tiles: [
             { tileId: tileIds[0], stampId: stampIds[0] },
@@ -1446,24 +1492,34 @@ describe("identifying scan tiles into copies (#567)", () => {
         }),
       refused(/Tile 2 has no stamp/)
     );
-    // A stamp that is not on the issue.
+    // A checklist this collection does not hold.
     await assert.rejects(
       () =>
-        identifyTilesAsIssueStamps(userId, {
-          issueId,
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId: "no-such-checklist",
+          shared: runShared(),
+          tiles: [{ tileId: tileIds[0], stampId: stampIds[0] }],
+        }),
+      refused(/checklist is not in this collection/)
+    );
+    // A stamp that is neither on the checklist nor on its issue.
+    await assert.rejects(
+      () =>
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId,
           shared: runShared(),
           tiles: [
             { tileId: tileIds[0], stampId: stampIds[0] },
             { tileId: tileIds[1], stampId },
           ],
         }),
-      refused(/not one of this issue's stamps/)
+      refused(/Tile 2's stamp is not on this checklist or any of its issues/)
     );
     // An answer that only the last tile carries, and that the collection does not hold.
     await assert.rejects(
       () =>
-        identifyTilesAsIssueStamps(userId, {
-          issueId,
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId,
           shared: runShared(),
           tiles: [
             { tileId: tileIds[0], stampId: stampIds[0] },
@@ -1475,8 +1531,8 @@ describe("identifying scan tiles into copies (#567)", () => {
     // No condition for all, and none of its own on one tile.
     await assert.rejects(
       () =>
-        identifyTilesAsIssueStamps(userId, {
-          issueId,
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId,
           shared: runShared({ conditionId: "" }),
           tiles: [
             { tileId: tileIds[0], stampId: stampIds[0], overrides: { conditionId } },
@@ -1506,9 +1562,9 @@ describe("identifying scan tiles into copies (#567)", () => {
       orderBy: { position: "asc" },
       select: { id: true },
     });
-    const { issueId, stampIds } = await issueWithStamps(["Shelf 1", "Shelf 2"]);
-    const outcomes = await identifyTilesAsIssueStamps(userId, {
-      issueId,
+    const { checklistId, stampIds } = await issueWithStamps(["Shelf 1", "Shelf 2"]);
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId,
       // A lot named on a card with no order is not a question, and is ignored.
       shared: runShared({ lotId: "ignored" }),
       tiles: tiles.map((t, i) => ({ tileId: t.id, stampId: stampIds[i] })),
@@ -1524,6 +1580,119 @@ describe("identifying scan tiles into copies (#567)", () => {
         [null, "delivered"],
       ]
     );
+  });
+
+  it("builds a run on one of an issue's two checklists, in its own hand-set order, and corrects a tile to the other's stamp (#1225)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const { issueId, stampIds, checklistId: perforatedId } = await issueWithStamps(
+      ["Perforated 301", "Perforated 302", "Imperforate 301B", "Imperforate 302B"],
+      ["301", "302", "301B", "302B"]
+    );
+    const [p301, p302, i301, i302] = stampIds;
+    // Two checklists collected independently: the first keeps the perforated stamps, and the
+    // imperforate one is set by hand to read 302B before 301B — the reverse of catalogue order.
+    await setChecklistStamps(userId, perforatedId, [p301, p302]);
+    const imperforateId = await checklistOn(issueId, "Imperforate", [i302, i301]);
+
+    const run = await getRunChecklist(userId, collectionId, imperforateId);
+    assert.ok(run);
+    assert.equal(run.issueId, issueId);
+    assert.deepEqual(run.stampIds, [i302, i301]);
+    assert.deepEqual(run.issues.map((i) => i.id), [issueId]);
+    // The checklist's own screen reads the same order, and the other checklist is not in the run.
+    const screen = await getChecklistsForIssue(userId, collectionId, issueId);
+    assert.deepEqual(
+      screen.map((c) => [c.id, c.stampIds]),
+      [
+        [perforatedId, [p301, p302]],
+        [imperforateId, [i302, i301]],
+      ]
+    );
+    // The tiles take the checklist's stamps in its order.
+    assert.deepEqual(
+      assignInTurn(tileIds, run.stampIds).map((a) => a.stampId),
+      [i302, i301]
+    );
+
+    // The second piece turns out to be perforated: corrected to the other checklist's stamp, which
+    // is on the issue and so still somewhere to go.
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId: imperforateId,
+      shared: runShared(),
+      tiles: [
+        { tileId: tileIds[0], stampId: i302 },
+        { tileId: tileIds[1], stampId: p301 },
+      ],
+    });
+    const copies = await prisma.item.findMany({
+      where: { id: { in: outcomes.map((o) => o.itemId) } },
+      orderBy: { itemNo: "asc" },
+      select: { stampId: true },
+    });
+    assert.deepEqual(
+      copies.map((c) => c.stampId),
+      [i302, p301]
+    );
+  });
+
+  it("reads a checklist whose order was never set by hand as its own screen does (#1225)", async () => {
+    const { issueId, stampIds } = await issueWithStamps(["Tie 1", "Tie 2", "Tie 3"], ["1", "2", "3"]);
+    // Rows written before the column existed all hold 0; the stamp id behind it decides, twice alike.
+    const untouchedId = await checklistOn(issueId, "Untouched", [...stampIds].reverse(), [0, 0, 0]);
+    const run = await getRunChecklist(userId, collectionId, untouchedId);
+    const screen = (await getChecklistsForIssue(userId, collectionId, issueId)).find(
+      (c) => c.id === untouchedId
+    );
+    assert.ok(run && screen);
+    assert.deepEqual(run.stampIds, screen.stampIds);
+    assert.deepEqual(run.stampIds, [...stampIds].sort());
+  });
+
+  it("builds a run on a checklist spanning issues, and refuses a stamp of an issue it does not cover (#1225)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const first = await issueWithStamps(["Across A1", "Across A2"]);
+    const second = await issueWithStamps(["Across B1", "Across B2"]);
+    const outside = await issueWithStamps(["Elsewhere"]);
+    const acrossId = await checklistOn(null, "Across", [second.stampIds[0], first.stampIds[0]]);
+
+    const run = await getRunChecklist(userId, collectionId, acrossId);
+    assert.ok(run);
+    assert.equal(run.issueId, null);
+    assert.deepEqual(run.stampIds, [second.stampIds[0], first.stampIds[0]]);
+    assert.deepEqual(
+      run.issues.map((i) => i.id).sort(),
+      [first.issueId, second.issueId].sort()
+    );
+    // Offered on the rows of the issues it covers.
+    const listed = (await listSpanningChecklists(userId, collectionId)).find((c) => c.id === acrossId);
+    assert.ok(listed);
+    assert.deepEqual(listed.issueIds.sort(), [first.issueId, second.issueId].sort());
+    assert.deepEqual(listed.stampIds, run.stampIds);
+
+    await assert.rejects(
+      () =>
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId: acrossId,
+          shared: runShared(),
+          tiles: [
+            { tileId: tileIds[0], stampId: second.stampIds[0] },
+            { tileId: tileIds[1], stampId: outside.stampIds[0] },
+          ],
+        }),
+      (e: unknown) =>
+        e instanceof ScanValidationError &&
+        /Tile 2's stamp is not on this checklist or any of its issues/.test(e.message)
+    );
+    // A stamp of a covered issue that is not on the checklist is a correction, and allowed.
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId: acrossId,
+      shared: runShared(),
+      tiles: [
+        { tileId: tileIds[0], stampId: second.stampIds[0] },
+        { tileId: tileIds[1], stampId: first.stampIds[1] },
+      ],
+    });
+    assert.equal(outcomes.length, 2);
   });
 
   it("corrects a cover as a cover, and takes it back down to a single stamp (#750)", async () => {

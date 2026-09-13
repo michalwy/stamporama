@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import {
   assignInTurn,
   changedRunPrices,
-  issueRunSequence,
   overriddenFields,
   priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
+  runChoices,
   runPriceLines,
   runPriceSubjects,
+  runStampOrder,
   treeOrder,
   type RunCopyDetails,
   type RunMember,
 } from "../../src/lib/issue-run";
 
-// Identifying ticked tiles as the stamps of one issue, in turn (#1220): which stamp each tile takes,
-// and which answer each copy is created with.
+// Identifying ticked tiles as the stamps of a checklist, in turn (#1220, #1225): which stamp each tile
+// takes, which stamps it can be corrected to, and which answer each copy is created with.
 
 const MI = "vendor-mi";
-const SC = "vendor-sc";
 
 const member = (
   stampId: string,
@@ -34,53 +34,65 @@ const member = (
   ...extra,
 });
 
-describe("the issue's stamps, in turn (#1220)", () => {
-  describe("the sequence", () => {
-    it("is the main stamps in catalogue order, whatever order the tree was arranged in", () => {
-      const members = [
-        member("s3", "203"),
-        member("s1", "201"),
-        member("s1a", "201a", { parentId: "s1", actsAsVariant: true }),
-        member("s2", "202"),
-      ];
-      assert.deepEqual(issueRunSequence(members, MI), ["s1", "s2", "s3"]);
+const ids = (nodes: readonly RunMember[]) => nodes.map((m) => m.stampId);
+
+describe("a checklist's stamps, in turn (#1220, #1225)", () => {
+  describe("the choices a tile is corrected among", () => {
+    const members = [
+      member("s1", "201"),
+      member("s1a", "201a", { parentId: "s1", actsAsVariant: true }),
+      member("s2", "202"),
+      member("s3", "203"),
+    ];
+
+    it("offers the checklist's stamps first, in its own order and variants included, not catalogue order", () => {
+      // The checklist's hand-set order (#764): 203 before 201a before 201.
+      const choices = runChoices(["s3", "s1a", "s1"], [{ issueId: "i1", members }]);
+      assert.deepEqual(ids(choices.onChecklist), ["s3", "s1a", "s1"]);
+      // …then every other stamp of the issue, so a tile off the checklist still has somewhere to go.
+      assert.deepEqual(
+        choices.others.map((g) => [g.issueId, g.nodes.map((n) => [n.node.stampId, n.depth])]),
+        [["i1", [["s2", 0]]]]
+      );
+      // The price list reads in the same order.
+      assert.deepEqual(runStampOrder(choices), ["s3", "s1a", "s1", "s2"]);
     });
 
-    it("leaves variants out but keeps a child that is a catalogue entry of its own", () => {
-      const members = [
-        member("s1", "201"),
-        member("s1a", "201a", { parentId: "s1", actsAsVariant: true }),
-        member("s1b", "201b", { parentId: "s1", actsAsVariant: true }),
-        // An overprint filed under its base: a child, but not a variant (ADR-0010).
-        member("s1o", "205", { parentId: "s1", actsAsVariant: false }),
-        member("s2", "202"),
+    it("indents another stamp only under an ancestor drawn in the same group", () => {
+      const tree = [
+        member("b", null),
+        member("b1", null, { parentId: "b" }),
+        member("c", null),
+        member("c1", null, { parentId: "c", actsAsVariant: true }),
       ];
-      assert.deepEqual(issueRunSequence(members, MI), ["s1", "s2", "s1o"]);
+      // `c` is on the checklist, so its variant is not indented under a row that is not there.
+      const choices = runChoices(["c"], [{ issueId: "i1", members: tree }]);
+      assert.deepEqual(
+        choices.others[0].nodes.map((n) => [n.node.stampId, n.depth]),
+        [
+          ["b", 0],
+          ["b1", 1],
+          ["c1", 0],
+        ]
+      );
     });
 
-    it("treats a variant whose base is on no issue here as a main stamp", () => {
-      const members = [member("v", "300a", { parentId: "elsewhere", actsAsVariant: true })];
-      assert.deepEqual(issueRunSequence(members, MI), ["v"]);
-    });
-
-    it("reads the primary catalogue, and puts the stamps without a number after, in tree order", () => {
-      const members: RunMember[] = [
-        member("none-b", null),
-        {
-          stampId: "s2",
-          parentId: null,
-          actsAsVariant: false,
-          catalogNumbers: [
-            { catalogVendorId: SC, number: "1" },
-            { catalogVendorId: MI, number: "20" },
-          ],
-        },
-        member("none-a", null),
-        member("s1", "10"),
-      ];
-      assert.deepEqual(issueRunSequence(members, MI), ["s1", "s2", "none-b", "none-a"]);
-      // With Scott as the primary the order follows Scott's numbers instead.
-      assert.deepEqual(issueRunSequence(members, SC)[0], "s2");
+    it("groups a checklist spanning issues by issue, offers a shared stamp once, and skips what is not read yet", () => {
+      const choices = runChoices(
+        ["not-loaded", "a1", "b1"],
+        [
+          { issueId: "ia", members: [member("a1", "1"), member("shared", "2")] },
+          { issueId: "ib", members: [member("shared", "2"), member("b1", "3"), member("b2", "4")] },
+        ]
+      );
+      assert.deepEqual(ids(choices.onChecklist), ["a1", "b1"]);
+      assert.deepEqual(
+        choices.others.map((g) => [g.issueId, g.nodes.map((n) => n.node.stampId)]),
+        [
+          ["ia", ["shared"]],
+          ["ib", ["b2"]],
+        ]
+      );
     });
 
     it("walks the tree depth first in the order the members arrived", () => {
@@ -143,7 +155,7 @@ describe("the issue's stamps, in turn (#1220)", () => {
       );
     });
 
-    it("hands a stamp added to the issue mid-pass to the tile still waiting for one", () => {
+    it("hands a stamp added to the checklist mid-pass to the tile still waiting for one", () => {
       const before = assignInTurn(["t1", "t2"], ["s1"]);
       assert.deepEqual(runBlockers(before), ["t2"]);
       const after = assignInTurn(["t1", "t2"], ["s1", "s2"]);
@@ -264,20 +276,15 @@ describe("the issue's stamps, in turn (#1220)", () => {
       location: { locationId: "", locationRef: "" },
       disposition: { inCollection: false, forSale: false, forTrade: false },
     });
-    const members = [
-      member("s2", "202"),
-      member("s1", "201"),
-      member("s1a", "201a", { parentId: "s1", actsAsVariant: true }),
-      member("s3", "203"),
-    ];
+    /** The checklist's stamps in its own order, then the other stamps — `runStampOrder`'s answer. */
+    const order = ["s1", "s1a", "s2", "s3"];
 
     it("is one line per stamp × condition × certificate, holding its tiles in tick order", () => {
       const run = assignInTurn(["t9", "t4", "t6", "t2"], ["s1", "s1", "s2", "s1"]);
       const lines = runPriceLines(
         run,
         [details("used"), details("used"), details("used"), details("used")],
-        members,
-        MI,
+        order,
         ["used"],
         []
       );
@@ -297,12 +304,13 @@ describe("the issue's stamps, in turn (#1220)", () => {
       );
     });
 
-    it("reads in catalogue order whatever order the tiles were ticked in, variants in their place", () => {
-      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s3", "s1a", "s2", "s1"]);
+    it("reads in the checklist's own order whatever order the tiles were ticked in (#1225)", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s2", "s3", "s1a"]);
       const resolved = [details("used"), details("used"), details("used"), details("used")];
+      // A hand-set order that is not catalogue order: 203, 201, 201a, 202.
       assert.deepEqual(
-        runPriceLines(run, resolved, members, MI, ["used"], []).map((l) => l.stampId),
-        ["s1", "s1a", "s2", "s3"]
+        runPriceLines(run, resolved, ["s3", "s1", "s1a", "s2"], ["used"], []).map((l) => l.stampId),
+        ["s3", "s1", "s1a", "s2"]
       );
     });
 
@@ -315,7 +323,7 @@ describe("the issue's stamps, in turn (#1220)", () => {
         details("used", "cert-a"),
       ];
       assert.deepEqual(
-        runPriceLines(run, resolved, members, MI, ["mint", "used"], ["cert-a", "cert-b"]).map(
+        runPriceLines(run, resolved, order, ["mint", "used"], ["cert-a", "cert-b"]).map(
           (l) => [l.conditionId, l.certificateStatusId]
         ),
         [
@@ -331,7 +339,7 @@ describe("the issue's stamps, in turn (#1220)", () => {
       const run = assignInTurn(["t1", "t2", "t3"], ["unknown-b", "s2", "unknown-a"]);
       const resolved = [details("used"), details("used"), details("used")];
       assert.deepEqual(
-        runPriceLines(run, resolved, members, MI, ["used"], []).map((l) => l.stampId),
+        runPriceLines(run, resolved, order, ["used"], []).map((l) => l.stampId),
         ["s2", "unknown-b", "unknown-a"]
       );
     });
@@ -339,7 +347,7 @@ describe("the issue's stamps, in turn (#1220)", () => {
     it("has no line for a tile without a stamp or a condition", () => {
       const run = assignInTurn(["t1", "t2", "t3"], ["s1", "s2"]);
       assert.deepEqual(
-        runPriceLines(run, [details(""), details("used"), details("used")], members, MI, [], []).map(
+        runPriceLines(run, [details(""), details("used"), details("used")], order, [], []).map(
           (l) => l.tileIds
         ),
         [["t2"]]

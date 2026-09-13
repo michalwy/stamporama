@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CopyGroupRow,
   IssueGroupCompleteness,
@@ -555,6 +555,29 @@ export function useIssueMembers(collectionId: string, issueId: string, enabled =
       return data.members;
     },
     enabled: enabled && !!issueId,
+  });
+}
+
+/**
+ * {@link useIssueMembers} for several issues at once — a run built on a checklist that spans issues
+ * (#1225) reads every issue it covers. The same query key per issue, so a stamp added to one of them
+ * is re-read by whatever invalidates that issue's tree.
+ */
+export function useIssuesMembers(collectionId: string, issueIds: readonly string[]) {
+  return useQueries({
+    queries: issueIds.map((issueId) => ({
+      queryKey: ["inventory", collectionId, "issueMembers", issueId] as const,
+      queryFn: async (): Promise<StampNodeData[]> => {
+        const res = await fetch(`/api/collections/${collectionId}/issues/${issueId}/members`);
+        if (!res.ok) throw new Error("Failed to fetch issue members");
+        const data = await res.json();
+        return data.members;
+      },
+    })),
+    combine: (results) => ({
+      members: issueIds.map((issueId, i) => ({ issueId, members: results[i]?.data ?? [] })),
+      isLoading: results.some((r) => r.isLoading),
+    }),
   });
 }
 

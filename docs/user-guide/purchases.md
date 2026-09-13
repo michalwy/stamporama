@@ -798,33 +798,53 @@ against. Hover a row to see that piece at full size, the way hovering a tile on 
 It is the companion of ticking, not a lesser version of it: tick the tiles when you can see the run
 on the strip before you start, and use the list when you only discover the duplicate on reaching it.
 
-**A set rather than duplicates: identify the tiles as the stamps of one issue.** A card often holds
-several — or all — of one issue's stamps, and walking each through the browse popup says *this issue,
-the next value* once per stamp. Instead, **tick the tiles in catalogue order**: while you tick, each
-box shows the tile's **turn** — *1*, *2*, *3* — in the order you clicked, so the pieces can lie
-anywhere on the card. Press **Work through N tiles**, then **As the stamps of one issue…**.
+**A set rather than duplicates: identify the tiles as the stamps of a checklist.** A card often holds
+several — or all — of one set's stamps, and walking each through the browse popup says *this set, the
+next value* once per stamp. Instead, **tick the tiles in the order the set reads**: while you tick,
+each box shows the tile's **turn** — *1*, *2*, *3* — in the order you clicked, so the pieces can lie
+anywhere on the card. Press **Work through N tiles**, then **As the stamps of a checklist…**.
 
-The browse popup opens to pick the **issue**: each issue row has an **Its stamps, in turn** button
-(pressing any stamp in a row picks that row's issue too). A set whose issue is not in the catalogue
-yet is no detour — **+ New issue** works here as it always does, and so does **+ New stamp** under it.
+**A run is built on a checklist, not on an issue.** An issue often has several checklists —
+imperforate and perforated stamps collected separately, say — and each is identified separately too.
+The browse popup opens to pick the **checklist**:
+
+- **An issue with one checklist** has an **Its stamps, in turn** button, and that checklist is used
+  without asking.
+- **An issue with several checklists** has one button per checklist — **Imperforate, in turn**,
+  **Perforated, in turn** — and you press the one the card holds.
+- **A checklist that spans issues** is offered on the row of every issue it covers.
+- **An issue with no checklist yet** has a **New checklist…** button instead, which opens that issue's
+  checklist editor: make the checklist, tick its stamps, and close the editor — the row then offers it.
+- Pressing a stamp in a row picks the checklist too, where that says which: the row's only checklist,
+  or the only one of the row's checklists holding that stamp.
+
+A set whose issue is not in the catalogue yet is no detour — **+ New issue** works here as it always
+does, and so does **+ New stamp** under it (a new issue's numbers start its checklist).
 
 The next step has three columns. On the left is the tile in hand, in the usual viewer with every tool
 a single tile has — zoom, front and back, the ruler, the perforation gauge and the watermark view —
 and *Previous* / *Next* to step along the run. In the middle is **For all N tiles** (condition,
 certificate, format, lot, location with its ref, disposition) and **the run**: every tile in turn with
-the stamp it has taken. On the right is the tile in hand again: **its stamp**, among all of the
-issue's stamps, and **its own details**.
+the stamp it has taken. On the right is the tile in hand again: **its stamp** — the checklist's
+stamps first, then the other stamps of its issue — and **its own details**.
 
-- **The tiles take the issue's main stamps in catalogue order** — the first tile you ticked the first
-  stamp, the second the second. Variants are not in the sequence; a variant is chosen on the tile.
+- **The tiles take the checklist's stamps in the checklist's own order** — the order its **Order
+  stamps…** screen shows, whether or not you ever rearranged it — the first tile you ticked the first
+  stamp, the second the second. Whatever the checklist holds is the sequence, **variants included**:
+  a checklist of imperforate variants is a run of imperforate variants.
 - **Fewer tiles than stamps is normal** — you have several of the set, so the tiles take the first
-  stamps. Click the tile that skips a value and press the stamp it really is, **variants included**.
-  *Back to its turn* undoes that. A correction does not move the tiles after it.
+  stamps. Click the tile that skips a value and press the stamp it really is. **Any stamp of the
+  issue can be chosen**, not only the checklist's: under *On the checklist* come the checklist's
+  stamps, and under *Other stamps of …* the rest — so the perforated piece in an imperforate run still
+  has somewhere to go. *Back to its turn* undoes a correction. A correction does not move the tiles
+  after it.
 - **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
   #3* so a slip is noticed.
 - **More tiles than stamps leaves the extra tiles with no stamp.** Give each one a stamp, take it out
   of the run with the **−** button (it stays ticked on the card, and *Taken out* puts it back), or add
-  the missing stamp with **+ New stamp in this issue** — a tile still waiting for its turn takes it.
+  the missing stamp with **+ New stamp on this checklist** — it joins the checklist at the end, and a
+  tile still waiting for its turn takes it. (A checklist spanning issues has no such link: add the
+  stamp from its issue first.)
   Nothing can be confirmed while a tile in the run has no stamp.
 - **Copy details are set once and overridden per tile.** Tick a field under *its own details* and that
   tile keeps its own value — its row says *own condition*, for instance — and changing the shared
@@ -853,7 +873,8 @@ catalogue page without selecting any tile first:
 
 - **One line per stamp in a condition and certificate**, not per tile — three tiles of the same stamp
   in the same condition are one line, saying *+2 more tiles*.
-- **In catalogue order**, the order you read the catalogue in, whatever order you ticked the tiles.
+- **In the checklist's own order**, the same order the tiles take its stamps in, whatever order you
+  ticked the tiles; a tile corrected to a stamp off the checklist comes after.
 - Each line shows the **tile's picture** (the first of its tiles, in the order you ticked them), the
   **primary catalogue number**, the **condition** and the **certificate**. Rest the pointer on the
   picture to see it enlarged; doing so, or even clicking it, leaves the cursor where you are typing.
