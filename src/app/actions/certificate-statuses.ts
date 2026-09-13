@@ -16,6 +16,7 @@ import {
 } from "@/lib/certificate-statuses";
 import { parseTranslationValues } from "@/lib/translations";
 import { isTagColor, type TagColor } from "@/lib/tag-colors";
+import { parsePricePercent } from "@/lib/certificate-price-fill";
 
 export type CertificateStatusActionState =
   | { status: "idle" }
@@ -35,18 +36,26 @@ export async function getCertificateStatusesAction(
   return getCertificateStatuses(session.user.id, collectionId);
 }
 
-function parseFields(formData: FormData): {
-  name: string;
-  abbreviation: string;
-  color: TagColor | null;
-} {
+function parseFields(formData: FormData):
+  | {
+      name: string;
+      abbreviation: string;
+      color: TagColor | null;
+      pricePercent: number | null;
+      percentError?: undefined;
+    }
+  | { percentError: string } {
   // An unset or unrecognised colour (#728) is *no colour* — the neutral chip — rather than an
   // error: the field is a row of swatches with a None among them, so there is nothing to correct.
   const color = (formData.get("color") as string | null) ?? "";
+  // A blank percentage (#1242) is *none set*, an answer of its own; anything else typed must be one.
+  const percent = parsePricePercent((formData.get("pricePercent") as string | null) ?? "");
+  if (!percent.ok) return { percentError: percent.message };
   return {
     name: ((formData.get("name") as string | null) ?? "").trim(),
     abbreviation: ((formData.get("abbreviation") as string | null) ?? "").trim(),
     color: isTagColor(color) ? color : null,
+    pricePercent: percent.value,
   };
 }
 
@@ -55,7 +64,9 @@ export async function createCertificateStatusAction(
   formData: FormData
 ): Promise<CertificateStatusActionState> {
   const session = await getSession();
-  const { name, abbreviation, color } = parseFields(formData);
+  const fields = parseFields(formData);
+  if (fields.percentError !== undefined) return { status: "error", message: fields.percentError };
+  const { name, abbreviation, color, pricePercent } = fields;
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -63,6 +74,7 @@ export async function createCertificateStatusAction(
       name,
       abbreviation,
       color,
+      pricePercent,
       translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
     });
     return { status: "success" };
@@ -76,7 +88,9 @@ export async function updateCertificateStatusAction(
   formData: FormData
 ): Promise<CertificateStatusActionState> {
   const session = await getSession();
-  const { name, abbreviation, color } = parseFields(formData);
+  const fields = parseFields(formData);
+  if (fields.percentError !== undefined) return { status: "error", message: fields.percentError };
+  const { name, abbreviation, color, pricePercent } = fields;
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -84,6 +98,7 @@ export async function updateCertificateStatusAction(
       name,
       abbreviation,
       color,
+      pricePercent,
       translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
     });
     return { status: "success" };

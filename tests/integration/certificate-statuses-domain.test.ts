@@ -56,6 +56,17 @@ describe("createCertificateStatus", () => {
     assert.equal(statuses[1].sortOrder, 1);
   });
 
+  it("stores a percentage of the plain price, and none when it is not given (#1242)", async () => {
+    await createCertificateStatus(userId, collectionId, {
+      name: "Guarantee",
+      abbreviation: "Gu",
+      pricePercent: 120,
+    });
+    const statuses = await getCertificateStatuses(userId, collectionId);
+    assert.equal(statuses.find((s) => s.abbreviation === "Gu")?.pricePercent, 120);
+    assert.equal(statuses.find((s) => s.abbreviation === "Cert")?.pricePercent, null);
+  });
+
   it("throws when collection is not owned by user", async () => {
     await assert.rejects(
       () => createCertificateStatus("wrong-user", collectionId, { name: "X", abbreviation: "X" }),
@@ -90,6 +101,23 @@ describe("updateCertificateStatus", () => {
     assert.equal(s.name, "Guarantee");
     assert.equal(s.abbreviation, "Gu");
     assert.equal(s.sortOrder, 0);
+  });
+
+  it("sets a percentage and clears it again (#1242)", async () => {
+    await updateCertificateStatus(userId, statusId, {
+      name: "Guarantee",
+      abbreviation: "Gu",
+      pricePercent: 150,
+    });
+    let s = await prisma.certificateStatus.findUniqueOrThrow({ where: { id: statusId } });
+    assert.equal(s.pricePercent, 150);
+    await updateCertificateStatus(userId, statusId, {
+      name: "Guarantee",
+      abbreviation: "Gu",
+      pricePercent: null,
+    });
+    s = await prisma.certificateStatus.findUniqueOrThrow({ where: { id: statusId } });
+    assert.equal(s.pricePercent, null);
   });
 
   it("throws when status does not belong to user", async () => {

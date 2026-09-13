@@ -568,6 +568,7 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 - Certificate status is **optional**: leaving no status selected means the stamp has none, so there is no "None" entry to manage. New collections start with an empty list — add the statuses you use.
 - **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
 - Give each status a **colour**, exactly as a condition takes one — see [Condition and certificate colours](#condition-and-certificate-colours).
+- Give each status a **price against no certificate** — a whole percentage such as 110 for a signature, 120 for a guarantee or 150 for a photo attest. It is what a copy with that certificate is worth against the plain catalogue price, and the catalogue value grids use it to [fill certificate prices from the None price](#filling-certificate-prices-from-the-none-price). It is optional: a status without one is simply left out of that fill. The list shows the percentage beside the status's abbreviation.
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
 
@@ -1144,6 +1145,18 @@ Worth knowing before you pick a number: the mistake this protects against is a b
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).
 
 Open a stamp's **Edit** dialog and switch to the **Prices** tab. For each catalog edition you get a small grid: **conditions are rows**, and **certificate statuses are columns** (with a **None** column for "no certificate"). Fill in a price in whichever cells you have data for — for example MNH / None and MNH / Certificate can hold different prices for the same edition. The currency is fixed by the catalog and shown next to each edition. **Tab** moves down the current certificate column through every condition, then jumps to the top of the next column, so you can key in a whole column of prices without reaching for the mouse (**Shift+Tab** goes back).
+
+### Filling certificate prices from the None price
+
+A catalogue often prints only one price per condition, which goes into the **None** column. When your certificate statuses carry a [percentage](#certificate-statuses), each certificate column shows it under its heading (`Gu 120%`), and each editable edition has a **Fill certificates** button beside its name. One press fills every **empty** certificate price of that edition, on the format tab that is open, from the same condition's **None** price at that status's percentage — `1600.00` with a guarantee at 120% gives `1920.00`.
+
+- A price **already entered stays as it is** — it may be the catalogue's own printed certificate price.
+- A status **without a percentage** stays empty; the fill never assumes 100%.
+- A condition **without a None price** is left alone.
+- Results are rounded to **two decimal places**, half up.
+- The filled prices are **ordinary prices**: edit them like any other, and they are saved with the stamp. Changing the None price later does not change them.
+
+The [variant price grid](variant-prices.md#filling-a-certificate-from-none) has the same fill, for the certificate chosen above it.
 
 If the collection has no conditions yet, the Prices tab prompts you to add some first (in **Settings → Conditions**), since every price belongs to a condition.
 

@@ -40,6 +40,23 @@ On a format tab, a greyed, dashed cell shows what that format would be worth fro
 single's price and this issue's multiplier. Nothing is stored until you type over it;
 clearing it again goes back to the derived figure.
 
+### Filling a certificate from None
+
+When the **Certificate** you have chosen carries a percentage (set on the status in
+[Settings → Conditions](collections.md#certificate-statuses), and shown beside its name in the
+select), a **Fill from None at 120%** button appears next to the select. One press fills every
+**empty** cell on screen — this edition, this format tab, every row you can type in — with the
+same stamp and condition's **None** price at that percentage, and saves each one as typing it
+would.
+
+- A cell **already priced** for that certificate stays as it is.
+- A cell whose **None** price is empty stays empty.
+- Locked **umbrella** rows are skipped, as Tab skips them.
+- Results are rounded to two decimal places, and they are ordinary prices: changing the None
+  price afterwards does not change them.
+
+It fills one certificate at a time — choose the next one in the select and press again.
+
 ### Umbrella rows
 
 A row marked *umbrella* has variants of its own, so its value **is** the lowest of theirs.

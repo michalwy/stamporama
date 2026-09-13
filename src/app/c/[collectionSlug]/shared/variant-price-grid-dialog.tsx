@@ -9,6 +9,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatAmountInput, normalizeDecimalInput } from "@/lib/decimal-input";
 import { deriveFormatPrice } from "@/lib/format-factor";
+import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
 import type {
   VariantPriceGridData,
   VariantPriceRestriction,
@@ -70,6 +71,12 @@ import type {
  * inputs, because an umbrella's own price does outrank the rollup (#616) and recording one is a
  * legitimate act. Read-only, never removed: the lock is about which act is the default, not about
  * forbidding the other one.
+ *
+ * **A certificate with a percentage can be filled from None** (#1242). The certificate is not a
+ * column here but the select above the grid, so the fill is for the certificate chosen in it: every
+ * empty cell on screen — this edition, this format, every row that can be typed in — from the same
+ * cell's *None* figure at the status's percentage, written cell by cell exactly as typing them would
+ * be. One status at a time, and nothing off screen: what it wrote is what the grid then shows.
  *
  * The three axes a cell is keyed on beyond stamp × condition are chosen **once above the grid**:
  * the catalog edition (which fixes the vendor and the currency), the certificate (defaulting to
@@ -234,6 +241,9 @@ function VariantPriceGrid({
    *  be a dozen of them to click through for one such act. Reset by nothing: an unlocked row stays
    *  unlocked for the life of the dialog, since re-locking it under the typing hand is a surprise. */
   const [unlocked, setUnlocked] = useState<Set<string>>(() => new Set());
+  /** While the fill's writes are going out (#1242) — one press must not start a second pass over the
+   *  same cells. */
+  const [filling, setFilling] = useState(false);
 
   const factorFor = useMemo(() => {
     const map = new Map<string, number>();
@@ -398,6 +408,49 @@ function VariantPriceGrid({
     target.select();
   }
 
+  const certStatus = certId ? (grid.certificateStatuses.find((c) => c.id === certId) ?? null) : null;
+
+  /**
+   * The cells *Fill from None* writes (#1242): every empty cell of the chosen certificate that can be
+   * typed in — a locked umbrella row is not, just as Tab skips it — from the same stamp × condition's
+   * *None* figure on this edition and format tab, at the status's percentage. The rule is
+   * `fillCertificateCell`'s; a derived placeholder is not a figure, so it fills nothing.
+   */
+  const certificateFills = (() => {
+    if (!editionId || !certId || certStatus?.pricePercent == null) return [];
+    const fills: { stampId: string; conditionId: string; value: string }[] = [];
+    for (const cond of conditions) {
+      for (const row of grid.rows) {
+        if (isLocked(row)) continue;
+        const value = fillCertificateCell({
+          plain: values.get(cellKey(row.stampId, editionId, cond.id, null, formatId)) ?? "",
+          current: values.get(cellKey(row.stampId, editionId, cond.id, certId, formatId)) ?? "",
+          percent: certStatus.pricePercent,
+        });
+        if (value !== null) fills.push({ stampId: row.stampId, conditionId: cond.id, value });
+      }
+    }
+    return fills;
+  })();
+
+  /** Puts every fill on screen at once, then writes them one after another through the cell's own
+   *  commit — so a refused one keeps its figure and its message exactly as a typed one would. */
+  async function fillFromNone() {
+    if (!editionId || certificateFills.length === 0) return;
+    setFilling(true);
+    setValues((prev) => {
+      const next = new Map(prev);
+      for (const f of certificateFills) {
+        next.set(cellKey(f.stampId, editionId, f.conditionId, certId, formatId), f.value);
+      }
+      return next;
+    });
+    for (const f of certificateFills) {
+      await commit(f.stampId, f.conditionId, f.value);
+    }
+    setFilling(false);
+  }
+
   /** What an empty cell would be worth on this format tab: the single's figure times the stamp's
    *  multiplier. Null on the Single tab (there is nothing to derive from), with no multiplier, and
    *  with no single price — a derived figure is an inference from two facts and says nothing
@@ -546,10 +599,36 @@ function VariantPriceGrid({
               {grid.certificateStatuses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {/* The status's percentage (#1242) — this grid's certificate "column" is this
+                      select, so it is read here before the fill is pressed. */}
+                  {c.pricePercent != null ? ` · ${formatPricePercent(c.pricePercent)}` : ""}
                 </option>
               ))}
             </select>
           </label>
+        )}
+        {certStatus?.pricePercent != null && (
+          <Tooltip
+            content={
+              certificateFills.length > 0
+                ? `Fill ${certificateFills.length === 1 ? "1 empty cell" : `${certificateFills.length} empty cells`} with the None price at ${formatPricePercent(certStatus.pricePercent)}, on this edition and format. Cells already priced stay as they are.`
+                : `Nothing to fill: every cell is already priced for ${certStatus.name}, or has no None price.`
+            }
+          >
+            <button
+              type="button"
+              onClick={() => void fillFromNone()}
+              disabled={filling || certificateFills.length === 0}
+              style={{
+                ...FILL_BTN,
+                opacity: filling || certificateFills.length === 0 ? 0.5 : 1,
+                cursor: filling || certificateFills.length === 0 ? "default" : "pointer",
+              }}
+            >
+              <Icon name="factors" size="xs" /> Fill from None at{" "}
+              {formatPricePercent(certStatus.pricePercent)}
+            </button>
+          </Tooltip>
         )}
       </div>
 
@@ -793,6 +872,19 @@ const SELECT_STYLE: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   cursor: "pointer",
+};
+
+/** *Fill from None* (#1242): sits on the controls row, so it takes the select's height. */
+const FILL_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0.375rem 0.625rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  fontWeight: 500,
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-elevated)",
 };
 
 const CELL_INPUT: React.CSSProperties = {
