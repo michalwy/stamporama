@@ -191,7 +191,26 @@ describe("a copy a search matched", () => {
   });
 });
 
-const COUNTS = { total: 3, inCollection: 2, forSale: 2, forTrade: 0, unmarked: 0 };
+// The app's own counts carry a per-combination breakdown for the copy count chip's panel (#1243);
+// it is here so the projection is seen to leave it behind.
+const COUNTS = {
+  total: 3,
+  inCollection: 2,
+  forSale: 2,
+  forTrade: 0,
+  unmarked: 0,
+  lines: [
+    {
+      conditionId: "c1",
+      certificateStatusId: null,
+      formatId: null,
+      inCollection: true,
+      forSale: true,
+      forTrade: false,
+      count: 2,
+    },
+  ],
+};
 
 const STAMP_DETAIL: StampDetailRow = {
   id: "s1",
@@ -294,6 +313,17 @@ describe("one stamp in full", () => {
       "/api/collections/col1/photos/p1/full",
       "/api/collections/col1/photos/p2/full",
     ]);
+  });
+
+  it("publishes the five copy figures and not the chip's breakdown", () => {
+    // A structural type lets extra keys through; the breakdown is the hover panel's, not the agent's.
+    assert.deepEqual(row.copies, {
+      total: 3,
+      inCollection: 2,
+      forSale: 2,
+      forTrade: 0,
+      unmarked: 0,
+    });
   });
 });
 

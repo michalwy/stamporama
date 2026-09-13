@@ -15,12 +15,18 @@ import {
 
 const ts = Date.now();
 
+/** The groupBy's row order is the database's; the assertions compare the lines as a set. */
+function byMarkers(a: { forSale: boolean }, b: { forSale: boolean }) {
+  return Number(a.forSale) - Number(b.forSale);
+}
+
 describe("stamp copy counts", () => {
   let userId: string;
   let collectionId: string;
   let otherCollectionId: string;
   let conditionId: string;
   let otherConditionId: string;
+  let otherConditionHereId: string;
   let baseStampId: string;
   let variantStampId: string;
   let soldStampId: string;
@@ -52,6 +58,11 @@ describe("stamp copy counts", () => {
     conditionId = (
       await prisma.stampCondition.create({
         data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    otherConditionHereId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint", abbreviation: "MNH", sortOrder: 1 },
       })
     ).id;
     otherConditionId = (
@@ -141,7 +152,9 @@ describe("stamp copy counts", () => {
 
   it("counts a stamp's own copies and its disposition markers", async () => {
     const counts = await countCopiesByStamp(collectionId, [baseStampId]);
-    assert.deepEqual(counts.get(baseStampId), {
+    const got = counts.get(baseStampId);
+    assert.ok(got);
+    assert.deepEqual({ ...got, lines: [...got.lines].sort(byMarkers) }, {
       total: 2,
       // Both copies are in the collection (the default), one of them also for sale — markers
       // overlap by design, so they are counted independently rather than partitioned.
@@ -151,7 +164,67 @@ describe("stamp copy counts", () => {
       // Every copy carries a marker here, so nothing is left unmarked — the figure that lets the
       // badge's breakdown account for the whole total without stating it.
       unmarked: 0,
+      // The same copies as the panel lists them (#1243): one row per combination of axes *and*
+      // markers, so the copy that is also for sale is its own row rather than a second count.
+      lines: [
+        {
+          conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          inCollection: true,
+          forSale: false,
+          forTrade: false,
+          count: 1,
+        },
+        {
+          conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          inCollection: true,
+          forSale: true,
+          forTrade: false,
+          count: 1,
+        },
+      ].sort(byMarkers),
     });
+  });
+
+  it("breaks the copies down by condition, certificate and format", async () => {
+    const stampId = (await prisma.stamp.create({ data: { collectionId, name: "Axes" } })).id;
+    const certId = (
+      await prisma.certificateStatus.create({
+        data: { collectionId, name: "Signed", abbreviation: "Sig.", sortOrder: 0 },
+      })
+    ).id;
+    const formatId = (
+      await prisma.stampFormat.create({
+        data: { collectionId, name: "Horizontal pair", abbreviation: "HPair", sortOrder: 0 },
+      })
+    ).id;
+    await createItem(userId, collectionId, { stampId, conditionId });
+    await createItem(userId, collectionId, { stampId, conditionId });
+    await createItem(userId, collectionId, {
+      stampId,
+      conditionId,
+      certificateStatusId: certId,
+      formatId,
+    });
+    await createItem(userId, collectionId, { stampId, conditionId: otherConditionHereId });
+
+    const counts = await countCopiesByStamp(collectionId, [stampId]);
+    const lines = counts.get(stampId)?.lines ?? [];
+    assert.deepEqual(
+      lines
+        .map((l) => [l.conditionId, l.certificateStatusId, l.formatId, l.count])
+        .sort((a, b) => String(a).localeCompare(String(b))),
+      [
+        [conditionId, null, null, 2],
+        [conditionId, certId, formatId, 1],
+        [otherConditionHereId, null, null, 1],
+      ].sort((a, b) => String(a).localeCompare(String(b)))
+    );
+    // The figures are the lines' sums, off the one query.
+    assert.equal(counts.get(stampId)?.total, lines.reduce((n, l) => n + l.count, 0));
   });
 
   it("does not roll a variant's copies up into its parent", async () => {
@@ -163,6 +236,17 @@ describe("stamp copy counts", () => {
       forSale: 0,
       forTrade: 1,
       unmarked: 0,
+      lines: [
+        {
+          conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          inCollection: false,
+          forSale: false,
+          forTrade: true,
+          count: 1,
+        },
+      ],
     });
   });
 
@@ -182,6 +266,17 @@ describe("stamp copy counts", () => {
       forSale: 0,
       forTrade: 0,
       unmarked: 1,
+      lines: [
+        {
+          conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          inCollection: false,
+          forSale: false,
+          forTrade: false,
+          count: 1,
+        },
+      ],
     });
   });
 
@@ -314,6 +409,18 @@ describe("variant-descendant copy counts", () => {
       forSale: 0,
       forTrade: 0,
       unmarked: 0,
+      // Merged across the four counting descendants into the one combination they share (#1243).
+      lines: [
+        {
+          conditionId,
+          certificateStatusId: null,
+          formatId: null,
+          inCollection: true,
+          forSale: false,
+          forTrade: false,
+          count: 5,
+        },
+      ],
     });
   });
 

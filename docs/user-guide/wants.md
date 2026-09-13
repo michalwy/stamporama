@@ -38,7 +38,7 @@ there is no separate "upgrade" concept to keep track of.
 
 ## What you already have of it
 
-The popover behind the crosshair chip — on every catalogue, copy and auction list — shows
+The panel behind the crosshair chip — on every catalogue, copy and auction list — shows
 what the collection has of the wanted stamp, **split by where it is**:
 
 - **held** — sorted and in the collection, drawn plainly: having it is the expected case;
@@ -65,13 +65,13 @@ is yes.
 
 ### Of the stamp, or of this want
 
-The popover shows **two** figures, ruled apart, because they answer different questions:
+The panel shows **two** figures, ruled apart, because they answer different questions:
 
 - **Of this stamp**, at the top — everything you have of it, whichever want it does or does
   not answer. This is the upgrade context: a mint-only want shows `1 held` here when the
   copy on your desk is a used one.
-- **For this want**, inside each want's own block — only copies that would actually satisfy
-  it.
+- **For this want**, on the line under that want's row — only copies that would actually
+  satisfy it.
 
 Only the second is ever used to say something is already coming to you, and the difference
 matters exactly when it is easy to get wrong: a **used** copy in the post satisfies a want
@@ -248,9 +248,17 @@ Copies, auction and trade screens follow either action straight away.
 You do not have to come here to record a want. On the **Stamps** list and inside any issue's
 stamp tree:
 
-- A stamp already on your want list carries a **crosshair chip**. Click it for a popover
-  listing every open want on that stamp — the same four chips the want list draws, one row
-  each. The chip's colour is the most urgent of them, and it is absent entirely when the
+- A stamp already on your want list carries a **crosshair chip**. Rest the pointer on it for
+  a table of every open want on that stamp: one row per want, with columns for the
+  **condition**, **certificate**, **format** and **priority** it accepts. Conditions and
+  certificates are shown by their abbreviations and colours (*Sig.*, *Guar.*, *Cert.*,
+  *Photo*), formats by theirs (*Single*, *HPair*). A column reads *any* when the want takes
+  anything on it, which is not the same as *No cert.* — a want for a stamp without a
+  certificate. Whether a copy would satisfy the want, the copies you already have that
+  would, and the want's note go on a line under its row. **Click the chip** to open the want
+  list narrowed to that stamp, in a new tab, so whatever you were doing stays where it was;
+  the pill at the top of the list shows the narrowing, and its × brings the whole list back.
+  The chip's colour is the most urgent of the wants, and it is absent entirely when the
   stamp is wanted no more; a marker on a few rows is a signal, one on every row saying "0"
   is a column.
 - **Add to want list** sits in the row's **⋮** menu and, for how often it is used, as a
@@ -263,7 +271,7 @@ Closed wants do not light the chip: it answers what is still being chased.
 The same chip is on **auction lot lines**, on **copies** — the Copies list and a purchase
 order's intake — on grouped copy rows, and on both sides of a **trade**. Everywhere a
 *concrete* condition, certificate and format is named, the chip can say more than "this
-stamp is wanted": when those would satisfy one of the wants it is **ringed** and the popover
+stamp is wanted": when those would satisfy one of the wants it is **ringed** and the panel
 marks which one. On copies you already hold, that ring is the upgrade signal — and on a
 trade's **receive** side, where the line names material coming *to* you, it is the plain
 one: this is a stamp you have been looking for, in the colour of the want's priority.

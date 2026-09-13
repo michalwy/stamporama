@@ -883,6 +883,7 @@ export function InventoryItemRow({
                   purchase order being sorted that is the question the row exists to answer; on the
                   Copies list it is the upgrade signal, since holding a copy never closes a want. */}
               <WantChip
+                collectionId={collectionId}
                 wants={item.wants}
                 copy={{
                   stampId: item.stampId,

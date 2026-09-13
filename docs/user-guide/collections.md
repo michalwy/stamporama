@@ -84,7 +84,13 @@ trade*. The dots say only *that* a disposition is there, never how many copies c
 no disposition at all get no dot.
 
 **Rest the pointer on the badge for the breakdown.** A small panel opens listing each disposition
-with its figure, and the variants' share of it in a column of its own. The dispositions are markers,
+with its figure, and the variants' share of it in a column of its own. Under each disposition it
+lists **which copies** those are — one line per combination of condition, certificate and format you
+hold, with how many: *MNH · Sig. · HPair 1*. A plain single copy with no certificate shows only its
+condition, so *MNH 2* means two ordinary MNH singles; a certificate or a format is named only when
+there is one. Conditions and certificates carry their usual abbreviations and colours, the lines
+follow the order your conditions, certificates and formats have in **Settings**, and the copies held
+under variants stay in their own *+N* beside each line rather than being added in. The dispositions are markers,
 not slices — one copy can be both in the collection and for sale — so they are listed under the
 total rather than dividing it, and they will often add up to more (or, for copies carrying none,
 less) than the number of copies. That is exactly why they are not printed next to the total on the

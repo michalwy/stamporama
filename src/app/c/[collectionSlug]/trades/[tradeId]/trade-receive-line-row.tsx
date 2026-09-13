@@ -245,6 +245,7 @@ export function TradeReceiveLineRow({
               else: holding a copy never closes a want, so on material about to leave the collection
               it reads as an upgrade hint. This adds; it does not move. */}
           <WantChip
+            collectionId={collectionId}
             wants={line.wants}
             copy={{
               stampId: line.stampId,

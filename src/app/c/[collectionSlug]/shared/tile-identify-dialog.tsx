@@ -1608,7 +1608,7 @@ function CandidateRow({
                     <span style={{ color: "var(--color-text-muted)" }}> — {partial}</span>
                   )}
                 </span>
-                <StampDetailLine
+                <StampDetailLine collectionId={collectionId}
                   node={node}
                   vendorMap={vendorMap}
                   primaryVendorId={primaryVendorId}

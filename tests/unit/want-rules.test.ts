@@ -4,6 +4,7 @@ import {
   wantMatchesCopy,
   narrowConditionSeed,
   acceptanceSetsEqual,
+  acceptanceAxisView,
   type AcceptanceSets,
   type WantAcceptance,
   type WantCandidateCopy,
@@ -182,5 +183,29 @@ describe("acceptanceSetsEqual", () => {
       ),
       false
     );
+  });
+});
+
+describe("acceptanceAxisView", () => {
+  // The want chip's table (#1244): a cell reads *any*, or its members in the settings' order.
+  const ORDER = [MNH, MH, MNG, U];
+
+  it("reads an empty set as any, never as no members", () => {
+    assert.deepEqual(acceptanceAxisView([], ORDER), { any: true });
+  });
+
+  it("keeps the null member apart from any, and leads with it", () => {
+    // "No certificate" is a real want since #532, and it must not read like "any certificate".
+    assert.deepEqual(acceptanceAxisView([CERT_PHOTO, null], [CERT_PHOTO]), {
+      any: false,
+      members: [null, CERT_PHOTO],
+    });
+  });
+
+  it("lists the members in the dictionary's order, unknown ids last", () => {
+    assert.deepEqual(acceptanceAxisView([U, "cond-gone", MNH, MH], ORDER), {
+      any: false,
+      members: [MNH, MH, U, "cond-gone"],
+    });
   });
 });

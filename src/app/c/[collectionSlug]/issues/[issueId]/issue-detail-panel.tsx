@@ -683,7 +683,7 @@ function TreeNode({
           >
             <StampTitle node={node.node} />
           </Link>
-          <StampDetailLine
+          <StampDetailLine collectionId={collectionId}
             node={node.node}
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}

@@ -74,14 +74,12 @@ const CHIP: React.CSSProperties = {
  * hint could never fire inside one. A button that cannot be pressed claims an affordance it does not
  * have; these are a read-only list, which is what the popover is for.
  *
- * **Hover, and why that is not `WantChip` being inconsistent.** `WantChip` opens on *click*, as a
- * popover, and says why: behind it sit up to a dozen wants with three axes and a priority each,
- * which flattened into a bubble was unreadable. That rule is about how rich the content is, not a
- * house preference for click — here it is a short, read-only list of numbers, and the two chips sit
- * on different screens. Hover is also what the work wants: a sorting pass scans many issue groups in
- * a row, and a click per group, each leaving a popover to dismiss, is friction on the one screen
- * where speed is the point. If this ever grows long or interactive it moves to click for
- * `WantChip`'s reason.
+ * **Hover**, because the work wants it: a sorting pass scans many issue groups in a row, and a click
+ * per group, each leaving a popover to dismiss, is friction on the one screen where speed is the
+ * point. `WantChip` opened on click once, for its richer content, and moved to a hover table in
+ * #1244 — how long a panel is turned out to be a layout question, not a reason to click. Only
+ * something the collector must *act on* inside the panel would move this to click, since a bubble
+ * cannot be pressed.
  */
 function SetCompletenessLine({
   entry,

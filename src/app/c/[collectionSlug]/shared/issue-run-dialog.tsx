@@ -1516,7 +1516,7 @@ function StampChoice({
               <span style={{ color: "var(--color-text-muted)" }}> — also on {alsoOn.join(", ")}</span>
             )}
           </span>
-          <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
+          <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
           {(perforation !== "unknown" || watermark !== "unknown") && (
             <span style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}>
               {perforation !== "unknown" && node.attributes.perforation && (

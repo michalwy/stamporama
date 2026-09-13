@@ -1,8 +1,20 @@
 "use client";
 
+import { Fragment, useMemo } from "react";
 import type { StampCopyCounts } from "@/lib/copy-counts";
-import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import {
+  breakDownCopies,
+  copyLineParts,
+  type CopyBreakdownGroup,
+  type CopyBreakdownGroupKey,
+  type CopyBreakdownLine,
+} from "@/lib/copy-breakdown";
+import { ROW_CHIP, STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { CertificateStatusChip, ConditionChip } from "./dictionary-chip";
 import { Tooltip } from "./tooltip";
+import { useCollectionConditions } from "./use-display-condition";
+import { useCollectionCertificateStatuses } from "./use-certificate-statuses";
+import { useCollectionFormats } from "./use-display-format";
 
 // How many copies of a stamp you hold, shown beside its catalog numbers wherever stamps are
 // listed (#348): the issue tree, the flat stamp list, and the stamp pickers that reuse the tree.
@@ -31,11 +43,21 @@ import { Tooltip } from "./tooltip";
 // listener and the stopped Escape this chip used to carry, all of which existed only to make a
 // click-opened surface behave inside a dialog.
 //
+// **Under each disposition the panel says which copies** (#1243): one line per condition ×
+// certificate × format held, with its count — *MNH · Sig. · HPair — 1*. That is what decides
+// whether another copy is worth having, and a total split only by disposition could not say it.
+// Combinations rather than three tallies, because separate tallies cannot say which condition
+// carries the certificate. The defaults — no certificate, single — are left off a line, so *MNH — 2*
+// is two plain single copies; conditions and certificates are the dictionary's own chips (#728),
+// resolved here from the cached dictionaries rather than carried on the row; and the lines follow
+// the settings' order. The rolling up is `breakDownCopies`, pure, over the `lines` the count query
+// already grouped, so each group's figure is the sum of its lines by construction.
+//
 // Where there is **no copies view to open** — the stamp pickers, the identify dialog, the detail
 // pages — no `onOpenCopies` is passed and the chip is a plain `<span>` rather than a dead button:
 // the panel still previews on hover, and a chip that looks pressable and does nothing is worse than
-// one that never claimed to be. This is why `WantChip` beside it is *not* being changed to match:
-// its popover is still the only place its wants are listed, so its click is still the way in.
+// one that never claimed to be. `WantChip` beside it took the same shape in #1244: hover for the
+// wants, click for the want list.
 //
 // What the chip does carry is a **dot per marker present** — green in collection, blue for sale,
 // violet for trade, the copy rows' own vocabulary. Presence, never quantity: an unnumbered dot is
@@ -53,7 +75,9 @@ import { Tooltip } from "./tooltip";
 // readable as anything but more noise. The parenthesised half is drawn muted, and appears against
 // a **zero** — "0 (+2) copies" — when the stamp has no copies of its own, which is the ordinary
 // shape of an unknown-variant umbrella whose copies are all filed under specific variants; that is
-// the one case where the badge shows a 0, and it is showing it *about* something you hold.
+// the one case where the badge shows a 0, and it is showing it *about* something you hold. The
+// panel's lines keep the same split: a line is not divided by variant, but its variants' copies are
+// their own `+N` beside its own figure, never added into it.
 
 const CHIP: React.CSSProperties = {
   ...STAMP_SECONDARY_CHIP,
@@ -99,6 +123,14 @@ const NOTE: React.CSSProperties = {
   lineHeight: 1.4,
 };
 
+/** A line's chips, a size down from a list row's: a panel of them is read as a column, not as one
+ * row of six. The tint is the dictionary chip's own and is not touched here. */
+const LINE_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  padding: "0 0.3rem",
+  borderRadius: "0.25rem",
+};
+
 /** Local zero, since `copy-counts` is server-only and this badge is a client component. */
 const NO_COPY_COUNTS: StampCopyCounts = {
   total: 0,
@@ -106,18 +138,22 @@ const NO_COPY_COUNTS: StampCopyCounts = {
   forSale: 0,
   forTrade: 0,
   unmarked: 0,
+  lines: [],
 };
 
-/** The disposition markers, in the order the copy rows list them, followed by the copies carrying
- * no disposition at all — which are held all the same and are the one figure that would otherwise
- * have nothing in the breakdown to account for it. `token` is the disposition colour vocabulary the copy
- * rows use; the unmarked figure has no disposition to be coloured by and is drawn muted. */
-const MARKERS = [
-  { key: "inCollection", token: "collection", label: "In collection" },
-  { key: "forSale", token: "sale", label: "For sale" },
-  { key: "forTrade", token: "trade", label: "For trade" },
-  { key: "unmarked", token: null, label: "No disposition" },
-] as const;
+/** How each disposition group is named and tinted, in the order the copy rows list the markers,
+ * followed by the copies carrying no disposition at all — which are held all the same and are the
+ * one figure that would otherwise have nothing in the breakdown to account for it. `token` is the
+ * disposition colour vocabulary the copy rows use; the unmarked figure has no disposition to be
+ * coloured by and is drawn muted. */
+const MARKERS: Record<CopyBreakdownGroupKey, { token: string | null; label: string }> = {
+  inCollection: { token: "collection", label: "In collection" },
+  forSale: { token: "sale", label: "For sale" },
+  forTrade: { token: "trade", label: "For trade" },
+  unmarked: { token: null, label: "No disposition" },
+};
+
+const MARKER_KEYS = ["inCollection", "forSale", "forTrade", "unmarked"] as const;
 
 /** The markers spelled out in full — "2 in collection", "1 for sale" — for the stamp page's
  * *Copies held* field, which says in one line what the hover panel lays out in rows. A marker no copy
@@ -137,39 +173,10 @@ function summarize(total: number, variantTotal: number): string {
   return variantTotal ? `${held}, ${variantTotal} more under its variants` : held;
 }
 
-/** One marker's row inside the hover panel: the name, tinted as the copy rows tint it, and its figure
- * — with the variants' own figure kept in its own column rather than folded into the number. */
-function MarkerRow({
-  label,
-  token,
-  own,
-  variant,
-}: {
-  label: string;
-  token: string | null;
-  own: number;
-  variant: number;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", fontSize: "0.75rem" }}>
-      <span
-        style={{
-          flex: 1,
-          color: token ? `var(--color-disposition-${token})` : "var(--color-text-muted)",
-          fontWeight: 500,
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{own}</span>
-      {variant > 0 && (
-        <span style={{ ...NOTE, fontVariantNumeric: "tabular-nums" }}>+{variant} in variants</span>
-      )}
-    </div>
-  );
-}
-
 export function CopyCountBadge({
+  /** Resolves the panel's condition, certificate and format chips against the collection's
+   * dictionaries (#1243). */
+  collectionId,
   copies,
   /** Copies held under this stamp's variant-kind descendants (#528). Drawn as a muted `(+2)` in
    * the same chip, and broken down beside the stamp's own figures in the hover panel. */
@@ -183,6 +190,7 @@ export function CopyCountBadge({
    * is then not a control at all and only previews on hover. */
   onOpenCopies,
 }: {
+  collectionId: string;
   copies: StampCopyCounts | null | undefined;
   variantCopies?: StampCopyCounts | null;
   size?: "small" | "medium";
@@ -190,22 +198,62 @@ export function CopyCountBadge({
 }) {
   const counts = copies ?? NO_COPY_COUNTS;
   const variants = variantCopies ?? NO_COPY_COUNTS;
-  const total = counts.total;
-  if (total === 0 && variants.total === 0) return null;
-  const medium = size === "medium";
-  const rows = MARKERS.map((m) => ({ ...m, own: counts[m.key], variant: variants[m.key] })).filter(
-    (m) => m.own > 0 || m.variant > 0
+  if (counts.total === 0 && variants.total === 0) return null;
+  // A component of its own below the zero rule, so the dictionary reads it holds are made only by
+  // rows that have a panel to draw — and made when the row renders, not on the first hover, which
+  // would open a panel of blank chips.
+  return (
+    <HeldCopiesChip
+      collectionId={collectionId}
+      counts={counts}
+      variants={variants}
+      size={size}
+      onOpenCopies={onOpenCopies}
+    />
   );
+}
+
+function HeldCopiesChip({
+  collectionId,
+  counts,
+  variants,
+  size,
+  onOpenCopies,
+}: {
+  collectionId: string;
+  counts: StampCopyCounts;
+  variants: StampCopyCounts;
+  size: "small" | "medium";
+  onOpenCopies?: () => void;
+}) {
+  const { data: conditions } = useCollectionConditions(collectionId);
+  const { data: certificateStatuses } = useCollectionCertificateStatuses(collectionId);
+  const { data: formats } = useCollectionFormats(collectionId);
+
+  const total = counts.total;
+  const medium = size === "medium";
   // Presence, not quantity: a dot says *there is at least one copy marked this way*, which is the
   // one thing about the breakdown that can be said beside a total without inviting the eye to add
   // it up. The figures are a hover away in the panel. The unmarked copies get no dot — they have
   // no disposition to be coloured by, and "no disposition" is what the *absence* of dots already says.
-  const dots = rows.filter((m) => m.token !== null);
+  const dots = MARKER_KEYS.filter(
+    (key) => MARKERS[key].token !== null && (counts[key] > 0 || variants[key] > 0)
+  );
+
+  const groups = useMemo(
+    () =>
+      breakDownCopies(counts.lines, variants.lines, {
+        conditionIds: (conditions ?? []).map((c) => c.id),
+        certificateStatusIds: (certificateStatuses ?? []).map((c) => c.id),
+        formatIds: (formats ?? []).map((f) => f.id),
+      }),
+    [counts.lines, variants.lines, conditions, certificateStatuses, formats]
+  );
 
   const label = [
     summarize(total, variants.total),
     // What the dots convey, in words: which markers are present, not how many carry them.
-    dots.length ? dots.map((m) => m.label.toLowerCase()).join(", ") : null,
+    dots.length ? dots.map((key) => MARKERS[key].label.toLowerCase()).join(", ") : null,
     onOpenCopies ? "view the copies" : null,
   ]
     .filter(Boolean)
@@ -220,13 +268,13 @@ export function CopyCountBadge({
       {variants.total > 0 && <span style={VARIANT_PART}>&nbsp;(+{variants.total})</span>}&nbsp;
       {total === 1 && variants.total === 0 ? "copy" : "copies"}
       {/* Decorative for a screen reader: the label above says the same in words. */}
-      {dots.map((m) => (
+      {dots.map((key) => (
         <span
-          key={m.key}
+          key={key}
           aria-hidden
           style={{
             ...DOT,
-            color: `var(--color-disposition-${m.token})`,
+            color: `var(--color-disposition-${MARKERS[key].token})`,
             marginLeft: "0.3em",
           }}
         />
@@ -241,12 +289,35 @@ export function CopyCountBadge({
     cursor: onOpenCopies ? "pointer" : "default",
   };
 
+  const names = {
+    condition: (id: string) => {
+      const c = conditions?.find((x) => x.id === id);
+      return c ? c.abbreviation || c.name : "…";
+    },
+    certificate: (id: string) => {
+      const c = certificateStatuses?.find((x) => x.id === id);
+      return c ? c.abbreviation || c.name : "…";
+    },
+    format: (id: string) => {
+      const f = formats?.find((x) => x.id === id);
+      return f ? f.abbreviation || f.name : "…";
+    },
+  };
+
   return (
     <Tooltip
-      content={<CopiesPanel total={total} variants={variants} rows={rows} />}
-      // Wide enough for a labelled figure grid and the two sentences under it — sentence width
-      // wraps the rows into a block nobody can read (`Tooltip`'s own `maxWidth` note).
-      maxWidth="22rem"
+      content={
+        <CopiesPanel
+          collectionId={collectionId}
+          total={total}
+          variants={variants}
+          groups={groups}
+          names={names}
+        />
+      }
+      // Wide enough for the chip lines, their figures and the two sentences under them — sentence
+      // width wraps the rows into a block nobody can read (`Tooltip`'s own `maxWidth` note).
+      maxWidth="26rem"
       align="start"
       // The chip's own `flexShrink: 0` (from `STAMP_SECONDARY_CHIP`) has to sit on the wrapper the
       // tooltip inserts, or the chip line squeezes it as the row narrows.
@@ -279,41 +350,75 @@ export function CopyCountBadge({
   );
 }
 
-/** The breakdown itself, as it reads inside the hover panel: the total, then the markers ruled off
- * below it, then what the figures do and do not cover. */
+type LineNames = Record<"condition" | "certificate" | "format", (id: string) => string>;
+
+/** The breakdown itself, as it reads inside the hover panel: the total, then each disposition ruled
+ * off below it with the combinations held under it, then what the figures do and do not cover. */
 function CopiesPanel({
+  collectionId,
   total,
   variants,
-  rows,
+  groups,
+  names,
 }: {
+  collectionId: string;
   total: number;
   variants: StampCopyCounts;
-  rows: { key: string; token: string | null; label: string; own: number; variant: number }[];
+  groups: CopyBreakdownGroup[];
+  names: LineNames;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
       <span style={PANEL_HEADING}>{summarize(total, variants.total)}</span>
 
       {/* Ruled off from the total above: the figures below describe those copies, they do not
-          divide them. */}
+          divide them. One grid for every group, so the figures line up down the whole panel. */}
       <div
         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.25rem",
+          display: "grid",
+          gridTemplateColumns: "1fr auto auto",
+          columnGap: "0.5rem",
+          rowGap: "0.2rem",
+          alignItems: "center",
           paddingTop: "0.375rem",
           borderTop: "1px solid var(--color-border)",
+          fontSize: "0.75rem",
         }}
       >
-        {rows.map((m) => (
-          <MarkerRow key={m.key} label={m.label} token={m.token} own={m.own} variant={m.variant} />
-        ))}
+        {groups.map((group, i) => {
+          const marker = MARKERS[group.key];
+          return (
+            <Fragment key={group.key}>
+              <span
+                style={{
+                  color: marker.token
+                    ? `var(--color-disposition-${marker.token})`
+                    : "var(--color-text-muted)",
+                  fontWeight: 500,
+                  paddingTop: i === 0 ? 0 : "0.25rem",
+                }}
+              >
+                {marker.label}
+              </span>
+              <Figure value={group.own} strong top={i > 0} />
+              <VariantFigure value={group.variant} wording="in variants" top={i > 0} />
+              {group.lines.map((line) => (
+                <CopyLineRow
+                  key={`${line.conditionId}~${line.certificateStatusId}~${line.formatId}`}
+                  collectionId={collectionId}
+                  line={line}
+                  names={names}
+                />
+              ))}
+            </Fragment>
+          );
+        })}
       </div>
 
       {/* The sentence the chip could not carry, and the reason the breakdown lives here at all.
           Only worth saying when two markers are actually in play — with one marker there is
           nothing to add up wrongly. */}
-      {rows.length > 1 && (
+      {groups.length > 1 && (
         <span style={NOTE}>
           A copy can carry more than one disposition, so these do not add up to the total.
         </span>
@@ -326,5 +431,76 @@ function CopiesPanel({
           : ""}
       </span>
     </div>
+  );
+}
+
+function Figure({ value, strong = false, top = false }: { value: number; strong?: boolean; top?: boolean }) {
+  return (
+    <span
+      style={{
+        fontWeight: strong ? 600 : 500,
+        fontVariantNumeric: "tabular-nums",
+        textAlign: "right",
+        paddingTop: top ? "0.25rem" : 0,
+      }}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** The variants' own figure, kept in a column of its own rather than folded into the number (#528).
+ * An empty cell when there is none, so the grid keeps its shape. */
+function VariantFigure({ value, wording, top = false }: { value: number; wording?: string; top?: boolean }) {
+  return (
+    <span style={{ ...NOTE, fontVariantNumeric: "tabular-nums", paddingTop: top ? "0.25rem" : 0 }}>
+      {value > 0 ? `+${value}${wording ? ` ${wording}` : ""}` : ""}
+    </span>
+  );
+}
+
+/** One combination under a disposition: its chips — the condition always, the certificate and the
+ * format only when they are not the default — and its count. */
+function CopyLineRow({
+  collectionId,
+  line,
+  names,
+}: {
+  collectionId: string;
+  line: CopyBreakdownLine;
+  names: LineNames;
+}) {
+  return (
+    <>
+      <span style={{ display: "inline-flex", gap: "0.2rem", paddingLeft: "0.75rem", flexWrap: "wrap" }}>
+        {copyLineParts(line).map((part) =>
+          part.axis === "condition" ? (
+            <ConditionChip
+              key={part.axis}
+              collectionId={collectionId}
+              conditionId={part.id}
+              label={names.condition(part.id)}
+              style={LINE_CHIP}
+            />
+          ) : part.axis === "certificate" ? (
+            <CertificateStatusChip
+              key={part.axis}
+              collectionId={collectionId}
+              certificateStatusId={part.id}
+              label={names.certificate(part.id)}
+              style={LINE_CHIP}
+            />
+          ) : (
+            // Formats carry no colour of their own (#728 coloured conditions and certificates), so
+            // the format is the neutral chip a list row draws one with.
+            <span key={part.axis} style={{ ...ROW_CHIP, ...LINE_CHIP }}>
+              {names.format(part.id)}
+            </span>
+          )
+        )}
+      </span>
+      <Figure value={line.own} />
+      <VariantFigure value={line.variant} />
+    </>
   );
 }

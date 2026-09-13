@@ -285,6 +285,7 @@ export function DuplicateGroupRow({
             {/* A group is one stamp at one condition, so the marker answers for every copy in it at
                 once (#532) — including whether they would satisfy a want. */}
             <WantChip
+              collectionId={collectionId}
               wants={group.wants}
               copy={{
                 stampId: group.stampId,

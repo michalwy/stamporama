@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -74,6 +75,17 @@ export function WantsListPanel({
   const [priorities, setPriorities] = useState<WantPriority[]>([]);
   const [conditionIds, setConditionIds] = useState<string[]>([]);
   /**
+   * One stamp's wants, when the list was opened from a want chip (#1244) — the chip's click lands
+   * here in a new tab with `?stampId=`. In the address bar, unlike every other filter on this screen,
+   * because it is where the screen was *sent*, not a narrowing chosen on it: a link that forgot its
+   * stamp on reload would be a different page from the one it opened. Cleared, it leaves the URL and
+   * the list is the whole list again; nothing remembers it.
+   */
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const stampId = searchParams.get("stampId") || undefined;
+  /**
    * Flat by default, one row per series on request (#532).
    *
    * A *view* of the list, not its shape. A want's subject is a stamp and its terms are per stamp,
@@ -143,8 +155,9 @@ export function WantsListPanel({
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       areaIds: filterAreaIds ?? undefined,
       search: debouncedQuery.trim() || undefined,
+      stampId,
     }),
-    [status, priorities, conditionIds, filterAreaIds, debouncedQuery]
+    [status, priorities, conditionIds, filterAreaIds, debouncedQuery, stampId]
   );
   const listFilters: WantListFilters = useMemo(
     () => ({ ...facetFilters, year: year || undefined }),
@@ -166,8 +179,9 @@ export function WantsListPanel({
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       year: year || undefined,
       search: debouncedQuery.trim() || undefined,
+      stampId,
     }),
-    [status, priorities, conditionIds, year, debouncedQuery]
+    [status, priorities, conditionIds, year, debouncedQuery, stampId]
   );
   const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
 
@@ -216,7 +230,8 @@ export function WantsListPanel({
     conditionIds.length > 0 ||
     query.trim().length > 0 ||
     !!filterAreaId ||
-    !!year;
+    !!year ||
+    !!stampId;
 
   // Confirmation toasts (#541), on exactly the three actions that make the row **disappear** from
   // the list the collector is looking at: the panel opens on `status: open`, so closing a want, and
@@ -301,6 +316,42 @@ export function WantsListPanel({
           borderBottom: "1px solid var(--color-border)",
         }}
       >
+        {stampId && (
+          // What the chip narrowed the list to, and the one way back out of it. Named from the rows
+          // themselves — every one of them is that stamp — rather than from a read of its own.
+          <span
+            style={{
+              ...FILTER_CONTROL_STYLE,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              fontWeight: 600,
+              color: "var(--color-accent)",
+              borderColor: "var(--color-accent)",
+              background: "var(--color-accent-soft)",
+            }}
+          >
+            {rows[0]?.stampId === stampId && rows[0].stampName
+              ? `Only ${rows[0].stampName}`
+              : "Only one stamp"}
+            <button
+              type="button"
+              aria-label="Show every stamp's wants"
+              onClick={() => router.replace(pathname)}
+              style={{
+                display: "inline-flex",
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                color: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="close" size="xs" />
+            </button>
+          </span>
+        )}
+
         <input
           type="search"
           value={query}
