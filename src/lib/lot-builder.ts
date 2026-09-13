@@ -7,6 +7,7 @@ import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { CARRIER_VALUATION_SELECT, carrierValuationOf } from "./item-valuation";
 import {
   buildItemFilterWhere,
   valuateItemRows,
@@ -74,6 +75,7 @@ const POOL_ROW_SELECT = {
   conditionId: true,
   certificateStatusId: true,
   formatId: true,
+  ...CARRIER_VALUATION_SELECT,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
@@ -174,6 +176,7 @@ async function readLotPool(
     certificateStatusId: row.certificateStatusId,
     formatId: row.formatId,
     unknownVariant: isUnknownVariantStamp(row.stamp),
+    carrier: carrierValuationOf(row),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
 

@@ -112,6 +112,56 @@ export interface CopyValuation {
    * The asymmetry is deliberate: an estimate may be marked as one, a sale may not.
    */
   unpricedVariantIds: string[];
+  /**
+   * True when the figure is the collector's own **recorded value** for a multi-stamp copy (#747;
+   * ADR-0044 §6) rather than a catalogue price. Such a copy is a copy of none of its stamps (#745), so
+   * the catalogue has nothing to resolve for it and this is the only figure it can have. False for
+   * every catalogue valuation, and for an unpriced carrier — there is no figure to attribute.
+   *
+   * Carried so a surface can say which of the two it is showing: *Catalog value* over a figure the
+   * collector typed would be the app putting words in a catalogue's mouth.
+   */
+  explicit: boolean;
+}
+
+/** An amount and the currency it was stated in — a multi-stamp copy's recorded value (#747). */
+export interface ExplicitValue {
+  /** 2-dp string, as stored. */
+  amount: string;
+  currency: string;
+}
+
+/**
+ * Value a **multi-stamp copy** (#747; ADR-0044 §6). Pure.
+ *
+ * The figure is the recorded one, converted to base exactly as a catalogue price is, and nothing
+ * else: with none recorded the copy is **unpriced**, never zero and never the sum of its stamps. The
+ * sum is a suggestion the Valuation dialog offers ({@link sumCarrierComponents} in `carrier-value.ts`)
+ * and enters no total until the collector accepts it — a figure nobody judged would be a claim the
+ * app invented. Nor is it ever flagged `uncertain`: that word means *the variant is not identified*
+ * (#238), which says nothing about a value somebody stated.
+ */
+export function valuateExplicitValue(
+  value: ExplicitValue | null,
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): CopyValuation {
+  if (!value) return toValuation(null, false, baseCurrency, rates);
+  const amount = Number(value.amount);
+  const baseAmount = baseValueOf(amount, value.currency, baseCurrency, rates);
+  return {
+    amount: amount.toFixed(2),
+    currency: value.currency,
+    baseAmount,
+    baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    catalogNameId: null,
+    editionYear: null,
+    uncertain: false,
+    unpriced: false,
+    sourceStampId: null,
+    unpricedVariantIds: [],
+    explicit: true,
+  };
 }
 
 /** Value a single physical copy from the catalog. Pure; see module header for the rule. */
@@ -184,6 +234,7 @@ function toValuation(
       unpriced: true,
       sourceStampId: null,
       unpricedVariantIds,
+      explicit: false,
     };
   }
   const baseAmount = baseValueOf(picked.amount, picked.currency, baseCurrency, rates);
@@ -198,6 +249,7 @@ function toValuation(
     unpriced: false,
     sourceStampId,
     unpricedVariantIds,
+    explicit: false,
   };
 }
 

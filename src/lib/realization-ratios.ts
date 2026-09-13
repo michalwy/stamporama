@@ -189,6 +189,7 @@ export async function loadRealizationRatios(
         certificateStatusId: line.certificateStatusId,
         formatId: line.formatId,
         unknownVariant: isUnknownVariantStamp(line.stamp),
+        carrier: null,
       }))
     )
   );

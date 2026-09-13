@@ -503,6 +503,10 @@ export interface AgentCopyValue {
   /** The copy links to a base stamp with variants, so the figure is the **lowest** of its priced
    *  variants rather than a price for this piece (#238/#616) — an estimate, and marked as one. */
   readonly uncertain?: boolean;
+  /** The copy carries several stamps, so no catalogue prices it (#745): the figure is the value the
+   *  collector **recorded** on the piece (#747), not a catalogue's. Absent on every catalogue figure,
+   *  and on a carrier with nothing recorded, which is `unpriced`. */
+  readonly recorded?: boolean;
 }
 
 export interface CopyValueRow {
@@ -511,6 +515,8 @@ export interface CopyValueRow {
   readonly baseAmountDisplay: string | null;
   readonly unpriced: boolean;
   readonly uncertain: boolean;
+  /** Optional because a trade's frozen figure is shaped like this too and records no such flag. */
+  readonly explicit?: boolean;
 }
 
 export function copyValue(row: CopyValueRow): AgentCopyValue {
@@ -520,6 +526,7 @@ export function copyValue(row: CopyValueRow): AgentCopyValue {
     baseAmount: row.baseAmountDisplay ?? undefined,
     unpriced: row.unpriced || undefined,
     uncertain: row.uncertain || undefined,
+    recorded: row.explicit || undefined,
   });
 }
 

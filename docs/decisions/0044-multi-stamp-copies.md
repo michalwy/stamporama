@@ -4,8 +4,20 @@
 
 Accepted. The schema, the migration and the write module are in (#744), the exclusion rule of §3 is
 enforced (#745), a copy's stamps are editable (#746), §7's list is in place (#748) and a scan tile
-can be identified as a carrier (#750); the rest is tracked in #747 (valuation) and #749 (listing
-tokens).
+can be identified as a carrier (#750) and a carrier has a value of its own (#747); the rest is tracked
+in #749 (listing tokens).
+
+**Valuation** (#747): §6 as written, on `Item.explicitValue` + `Item.explicitValueCurrency` (both or
+neither, a CHECK), read **only while `stampCount` > 1** — a copy edited back to one stamp is valued
+from the catalogue again and the figure stays in its row unread, so a stamp struck off by mistake
+loses nothing. `ValuationRow.carrier` is a **required** field, so every reader of `valuateItemRows`
+has to state whether its row is a copy and whether that copy is a carrier; a carrier never reaches
+the catalogue (`valuateExplicitValue`), and with nothing recorded it is unpriced. The suggestion is
+offered in the Valuation dialog alone, which a carrier's row opens on **the piece** rather than on its
+leading stamp. One question the ADR did not answer was settled with the user: in a trade the recorded
+figure is the **own** valuation only. The agreed catalogue prices nothing on a carrier — the
+collector's judgement of a cover is not a figure the partner can look up in the book they agreed on —
+and a line needing an agreed figure gets one the way any unpriced line does, from its manual value.
 
 **Intake** (#750): the identification chain's condition step opens the copy dialog's own editor over
 itself, and the list rides to `intakeStamps`, which writes it through `setItemStampsTx` in the very

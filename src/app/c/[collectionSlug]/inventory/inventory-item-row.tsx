@@ -255,10 +255,14 @@ const META_INLINE: React.CSSProperties = {
 export function CopyValue({
   value: v,
   baseCurrency,
+  carrier = false,
   onSetPrice,
 }: {
   value: CopyValuation;
   baseCurrency: string;
+  /** The copy carries several stamps (#745), so its figure is the value recorded on it rather than a
+   *  catalogue price (#747) — and an unpriced one is asked for a value, not a catalog price. */
+  carrier?: boolean;
   /** When provided, the value area becomes an inline catalog-price editor (#121): a
    * "+ price" link when unpriced, and a click-to-edit affordance when priced. */
   onSetPrice?: () => void;
@@ -266,7 +270,13 @@ export function CopyValue({
   if (v.unpriced) {
     if (onSetPrice) {
       return (
-        <Tooltip content="Set the catalog value for this condition on the primary catalog">
+        <Tooltip
+          content={
+            carrier
+              ? "Record what this piece is worth — it carries several stamps, so no catalog prices it"
+              : "Set the catalog value for this condition on the primary catalog"
+          }
+        >
           <button
             type="button"
             onClick={onSetPrice}
@@ -281,13 +291,19 @@ export function CopyValue({
               whiteSpace: "nowrap",
             }}
           >
-            + catalog value
+            {carrier ? "+ value" : "+ catalog value"}
           </button>
         </Tooltip>
       );
     }
     return (
-      <Tooltip content="No catalog price recorded for this condition.">
+      <Tooltip
+        content={
+          carrier
+            ? "No value recorded for this piece."
+            : "No catalog price recorded for this condition."
+        }
+      >
         <span style={{ ...META, fontVariantNumeric: "tabular-nums" }}>—</span>
       </Tooltip>
     );
@@ -305,11 +321,15 @@ export function CopyValue({
   const primaryText = moneyPrimaryText(money);
   const secondaryText = moneySecondaryText(money);
   const noRate = v.currency !== baseCurrency && v.baseAmountDisplay == null;
-  const title = v.uncertain
-    ? "Estimated from the lowest child-variant price — the specific variant isn't identified yet."
-    : noRate
-      ? `Catalog value (no ${baseCurrency} rate available)`
-      : "Catalog value";
+  const title = v.explicit
+    ? noRate
+      ? `Value recorded on this piece (no ${baseCurrency} rate available)`
+      : "Value recorded on this piece — it carries several stamps, so no catalog prices it"
+    : v.uncertain
+      ? "Estimated from the lowest child-variant price — the specific variant isn't identified yet."
+      : noRate
+        ? `Catalog value (no ${baseCurrency} rate available)`
+        : "Catalog value";
   const inner = (
     <span
       style={{
@@ -571,7 +591,14 @@ export function InventoryItemRow({
   // questions now, and two of them — what the market paid (#457) and what this collector paid
   // (#560) — stand on their own, the second of them always having something to say about a row
   // that *is* a copy.
-  const prices = usePriceDetailsAction({ kind: "stamp", stampId: item.stampId });
+  // …except on a **multi-stamp copy**, which is a copy of none of its stamps (#745) and so opens a
+  // window of its own: the value recorded on the piece and the sum of its stamps (#747). Opening the
+  // leading stamp's would price the cover as that stamp, which is the claim the rule removes.
+  const prices = usePriceDetailsAction(
+    item.multiStamp
+      ? { kind: "copy", collectionId, itemId: item.id, areas }
+      : { kind: "stamp", stampId: item.stampId }
+  );
 
   const menuActions: RowAction[] = [
     detailPage,
@@ -871,7 +898,14 @@ export function InventoryItemRow({
             </>
           )}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
-            <CopyValue value={item.value} baseCurrency={baseCurrency} onSetPrice={onSetCatalogPrice} />
+            {/* A carrier's value is not a catalogue price, so clicking it records a value on the piece
+                in its Valuation window rather than opening the leading stamp's price editor (#747). */}
+            <CopyValue
+              value={item.value}
+              baseCurrency={baseCurrency}
+              carrier={item.multiStamp}
+              onSetPrice={item.multiStamp ? prices.action.onSelect : onSetCatalogPrice}
+            />
           </span>
         </div>
 

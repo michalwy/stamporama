@@ -2,7 +2,12 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { assertContentEditable, assertTradeOwner } from "./trade-access";
-import { valuateItemRows, type ValuationRow } from "./item-valuation";
+import {
+  CARRIER_VALUATION_SELECT,
+  carrierValuationOf,
+  valuateItemRows,
+  type ValuationRow,
+} from "./item-valuation";
 import type { CopyValuation } from "./valuation";
 import { buildVendorCatalogMap, getCollectionBaseCurrency } from "./pricing";
 import { getOrFetchRate } from "./exchange-rates";
@@ -172,6 +177,7 @@ const LINE_SELECT = {
       conditionId: true,
       certificateStatusId: true,
       formatId: true,
+      ...CARRIER_VALUATION_SELECT,
       condition: { select: { name: true, abbreviation: true } },
       stamp: { select: LABEL_STAMP_SELECT },
     },
@@ -209,6 +215,9 @@ function valuationKeyOf(row: LineRow): ValuationRow | null {
     certificateStatusId: source.certificateStatusId,
     formatId: source.formatId,
     unknownVariant: stamp ? isUnknownVariantStamp(stamp) : false,
+    // A give line on a multi-stamp copy is valued at the figure the collector recorded (#747); a
+    // receive line names a stamp, never a carrier.
+    carrier: row.item ? carrierValuationOf(row.item) : null,
   };
 }
 
@@ -322,9 +331,14 @@ async function computeCatalogFigures(
       const key = keys.get(row.id);
       if (!key) continue;
       const vendorId = row.catalogVendorId ?? agreedVendorId;
+      // A carrier's recorded value is the collector's own judgement, not a figure the partner can
+      // look up in the agreed book, so it stays out of the agreed valuation (#747): the carrier is
+      // still a carrier there — never priced as its leading stamp — and simply has no catalogue
+      // figure, which a line's manual value answers as it does for any other unpriced line.
+      const agreedKey = key.carrier ? { ...key, carrier: { explicitValue: null } } : key;
       const bucket = byVendor.get(vendorId);
-      if (bucket) bucket.push(key);
-      else byVendor.set(vendorId, [key]);
+      if (bucket) bucket.push(agreedKey);
+      else byVendor.set(vendorId, [agreedKey]);
     }
     for (const [vendorId, vendorRows] of byVendor) {
       const catalogNameByArea = await buildVendorCatalogMap(collectionId, vendorId);

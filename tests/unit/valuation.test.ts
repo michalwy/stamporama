@@ -342,6 +342,7 @@ describe("aggregateHoldings", () => {
     unpriced,
     sourceStampId: null,
     unpricedVariantIds: [],
+    explicit: false,
   });
   const uncertain = (baseAmount: number): CopyValuation => ({
     ...certain(baseAmount),
