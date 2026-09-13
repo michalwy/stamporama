@@ -81,6 +81,11 @@ import { useGroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-exp
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { InventoryCopyList, type CopyRowActions } from "./inventory-copy-list";
+import {
+  buildSelectionActions,
+  selectionMenuActions,
+  type SelectionAction,
+} from "./selection-actions";
 import { DuplicateGroupList } from "./duplicate-group-list";
 import { LocationGroupList } from "./location-group-list";
 import { IssueGroupList } from "./issue-group-list";
@@ -137,34 +142,6 @@ type DialogState =
  * since #682 widened who gets one. */
 function isListableCopy(item: ItemListItem): boolean {
   return item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null;
-}
-
-/** The bulk bar's new-offer shortcuts (#497), for a selection of `count` copies. One copy has no
- * packaging to decide, so it gets a single button; several get one per composition. */
-function newOfferShortcuts(
-  count: number
-): { packaging: "one-set" | "per-copy"; label: string; hint: string }[] {
-  if (count === 1) {
-    return [
-      {
-        packaging: "one-set",
-        label: "New offer",
-        hint: "Create a new offer from this copy, skipping the picker.",
-      },
-    ];
-  }
-  return [
-    {
-      packaging: "one-set",
-      label: "New offer · one set",
-      hint: "Create a new offer holding all of them as one set — a series or a lot sold together.",
-    },
-    {
-      packaging: "per-copy",
-      label: `New offer · ${count} sets`,
-      hint: "Create a new offer with each copy as its own single-copy set — a quantity of interchangeable singles.",
-    },
-  ];
 }
 
 /** Marks the *set aside* half of the platform select (#506). The two readings share one control and
@@ -298,6 +275,55 @@ const COLLIDING_FILLED: React.CSSProperties = {
   color: "#fff",
   background: "var(--color-warning)",
 };
+
+/** How the selection bar draws one of its buttons (#991) — the shapes #497 and #660 settled, keyed
+ * by the entry's `tone` now that the buttons are drawn from `selection-actions.ts`. */
+function selectionButtonStyle(action: SelectionAction): React.CSSProperties {
+  const base: React.CSSProperties = {
+    ...FILTER_CONTROL_STYLE,
+    cursor: action.disabled ? "default" : "pointer",
+    fontWeight: 600,
+  };
+  switch (action.tone) {
+    case "filled":
+      return {
+        ...base,
+        color: "#fff",
+        background: "var(--color-action-primary)",
+        border: "none",
+        padding: "0.375rem 0.875rem",
+        ...(action.colliding ? COLLIDING_FILLED : {}),
+      };
+    case "outline":
+      return {
+        ...base,
+        color: "var(--color-accent)",
+        borderColor: "var(--color-accent)",
+        background: "var(--color-bg-elevated)",
+        padding: "0.375rem 0.75rem",
+        ...(action.colliding ? COLLIDING_OUTLINE : {}),
+      };
+    case "link":
+      return {
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontSize: "0.8125rem",
+        fontWeight: 600,
+        color: "var(--color-accent)",
+        textDecoration: "underline",
+      };
+    default:
+      return {
+        ...base,
+        color: "var(--color-text-secondary)",
+        borderColor: "var(--color-border-strong)",
+        background: "var(--color-bg-elevated)",
+        padding: "0.375rem 0.75rem",
+      };
+  }
+}
 
 /** A comma-separated multi-select filter (#425, #427), memoised so the filter objects it feeds stay
  * referentially stable and do not refetch every render. Takes the value *in force* — which since
@@ -852,13 +878,6 @@ export function InventoryListPanel({
   // carry — because blurring them into one number would leave the collector unable to tell which
   // of the two took a copy out.
   const listableCopies = useMemo(() => selectedInView.filter(isListableCopy), [selectedInView]);
-  /** Said on the listing buttons themselves, never in the bar's count: the bar counts what is in
-   * view, and only those buttons ask the second question. Empty while everything in view
-   * qualifies. */
-  const partialListingHint =
-    listableCopies.length < selectedInView.length
-      ? ` Applies to the ${listableCopies.length} of the ${selectedInView.length} copies in view that are for sale and in hand.`
-      : "";
 
   // Setting a copy aside from a platform, or bringing it back (#506). No dialog on either path: it
   // is one reversible flag, and a confirmation for something the very next click can undo is noise.
@@ -1040,6 +1059,76 @@ export function InventoryListPanel({
   // test excludes, and a checkbox that appears only on stock would have put the collection's own
   // copies out of reach of the two actions written for them. A **disposed** copy still gets none
   // (#394): it is not there to be moved or re-flagged, and its row says so.
+  /**
+   * What the selection can be told to do, as **one array** (#991): the bar draws it as buttons and a
+   * ticked row's gutter draws it as a menu, so a bulk action added to `buildSelectionActions` is on
+   * both without a second edit — and on every grouping, since the menu rides on `copySelection`.
+   */
+  const selectionActions = useMemo(
+    () =>
+      buildSelectionActions({
+        inView: selectedInView.length,
+        listable: listableCopies.length,
+        collision: collisionOffer
+          ? {
+              offerRef: formatEntityNo(collisionOffer.offerNo),
+              offerLabel: collisionOffer.offerLabel,
+              platformName: collisionOffer.platformName,
+            }
+          : null,
+        exclusion: scopedPlatform
+          ? { platformName: scopedPlatform.name, excluded: selectionExcluded }
+          : null,
+        quickOffer:
+          quickOfferActive && quickPlatform
+            ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
+            : null,
+        isPending,
+        on: {
+          bulkEdit: () => setDialog({ kind: "bulkEdit", items: selectedInView }),
+          setExclusion: (excluded) => {
+            if (scopedPlatform)
+              applyPlatformExclusion(selectedInView, scopedPlatform.id, excluded, true);
+          },
+          newOffer: (packaging) =>
+            quickOfferActive
+              ? createQuickOffer(listableCopies, packaging === "per-copy")
+              : setDialog({ kind: "addToNewOffer", items: listableCopies, packaging }),
+          addToOffer: () => setDialog({ kind: "addToOffer", items: listableCopies }),
+          addToCollisionOffer: () => {
+            if (collisionOffer)
+              setDialog({
+                kind: "addToOffer",
+                items: listableCopies,
+                targetOfferId: collisionOffer.offerId,
+              });
+          },
+        },
+      }),
+    [
+      selectedInView,
+      listableCopies,
+      collisionOffer,
+      scopedPlatform,
+      selectionExcluded,
+      quickOfferActive,
+      quickPlatform,
+      quickState,
+      isPending,
+      applyPlatformExclusion,
+      createQuickOffer,
+    ]
+  );
+  const selectionMenu = useMemo(
+    () => ({
+      label: `Actions for the ${selectedInView.length} selected cop${
+        selectedInView.length === 1 ? "y" : "ies"
+      }`,
+      actions: selectionMenuActions(selectionActions),
+    }),
+    [selectionActions, selectedInView.length]
+  );
+
   const copySelection = useMemo(
     () => ({
       selected: selectedIds,
@@ -1050,8 +1139,10 @@ export function InventoryListPanel({
       // in view. Rides on the selection because that is the prop already reaching all three
       // grouped branches; the flat list needs none.
       onRowsInView: registerRowsInView,
+      // The gutter shortcut to the bar (#991), on the same prop for the same reason.
+      menu: selectionMenu,
     }),
-    [selectedIds, toggleSelected, setManySelected, registerRowsInView]
+    [selectedIds, toggleSelected, setManySelected, registerRowsInView, selectionMenu]
   );
 
   // The row `⋮` menu (#125), built once and given to **every** branch below — the flat list and all
@@ -1409,183 +1500,39 @@ export function InventoryListPanel({
                         </span>
                       </Tooltip>
                     )}
-                    {collisionOffer && (
-                      <Tooltip
-                        content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of making a second listing of the same thing.`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDialog({
-                              kind: "addToOffer",
-                              items: listableCopies,
-                              targetOfferId: collisionOffer.offerId,
-                            })
-                          }
-                          style={{
-                            background: "none",
-                            border: "none",
-                            padding: 0,
-                            cursor: "pointer",
-                            fontSize: "0.8125rem",
-                            fontWeight: 600,
-                            color: "var(--color-accent)",
-                            textDecoration: "underline",
-                          }}
-                        >
-                          Add to {formatEntityNo(collisionOffer.offerNo)} instead
-                        </button>
-                      </Tooltip>
-                    )}
-                    {/* The bulk actions, in one group pushed to the right of the bar — and every
-                        one of them acts on the copies **in view**, which is why the whole group is
-                        absent when none of the ticked copies are. There is nothing here that could
-                        honestly be offered over a selection the collector cannot see, and a row of
-                        buttons acting on nothing is worse than no row (#1021). */}
-                    {selectedInView.length > 0 && (
+                    {/* The bar's actions, drawn from the array the gutter menu is drawn from (#991).
+                        The collision shortcut is prose beside the warning above; the rest are one
+                        group pushed to the bar's right end. Every one of them acts on the copies
+                        **in view**, which is why the array is empty when none of the ticked copies
+                        are — a row of buttons acting on nothing is worse than no row (#1021). What
+                        each action is and when it is offered is written in `selection-actions.ts`. */}
+                    {selectionActions
+                      .filter((a) => a.tone === "link")
+                      .map((a) => (
+                        <Tooltip key={a.key} content={a.description}>
+                          <button type="button" onClick={a.onSelect} style={selectionButtonStyle(a)}>
+                            {a.barLabel}
+                          </button>
+                        </Tooltip>
+                      ))}
+                    {selectionActions.some((a) => a.tone !== "link") && (
                     <div
                       style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                     >
-                      {/* Where these copies are kept, what they are kept for (#682) and what they
-                          are (#723). One dialog for all of it, and the only bar action that acts on
-                          the *whole* selection: the listing ones beside it can only speak for the
-                          copies that are for sale and in hand. */}
-                      <Tooltip content="Move the selected copies to a storage location, turn any of their disposition flags on or off, restate their condition, certificate or format, and add or remove your own tags — all in one pass.">
-                        <button
-                          type="button"
-                          onClick={() => setDialog({ kind: "bulkEdit", items: selectedInView })}
-                          style={{
-                            ...FILTER_CONTROL_STYLE,
-                            cursor: "pointer",
-                            fontWeight: 600,
-                            color: "var(--color-text-secondary)",
-                            borderColor: "var(--color-border-strong)",
-                            background: "var(--color-bg-elevated)",
-                            padding: "0.375rem 0.75rem",
-                          }}
-                        >
-                          <Icon name="edit" size="sm" /> Bulk edit…
-                        </button>
-                      </Tooltip>
-                      {/* Clearing the worklist in one go (#506) — the reason the flag exists: a
-                          thousand copies deliberately kept off a platform are set aside in one
-                          press. Only offered while a platform is in scope, since the decision names
-                          one; without the filter, the copy form owns the whole set. */}
-                      {scopedPlatform && (
-                        <Tooltip
-                          content={
-                            selectionExcluded
-                              ? `Bring these copies back into the "not offered on ${scopedPlatform.name}" worklist.`
-                              : `Keep these copies out of the "not offered on ${scopedPlatform.name}" worklist for good. Nothing about the copies themselves changes.`
-                          }
-                        >
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() =>
-                              applyPlatformExclusion(
-                                selectedInView,
-                                scopedPlatform.id,
-                                !selectionExcluded,
-                                true
-                              )
-                            }
-                            style={{
-                              ...FILTER_CONTROL_STYLE,
-                              cursor: isPending ? "default" : "pointer",
-                              fontWeight: 600,
-                              color: "var(--color-text-secondary)",
-                              borderColor: "var(--color-border-strong)",
-                              background: "var(--color-bg-elevated)",
-                              padding: "0.375rem 0.75rem",
-                            }}
-                          >
-                            <Icon name={selectionExcluded ? "check" : "excluded"} size="sm" />{" "}
-                            {selectionExcluded
-                              ? `List on ${scopedPlatform.name} again`
-                              : `Never list on ${scopedPlatform.name}`}
-                          </button>
-                        </Tooltip>
-                      )}
-                      {/* The listing half of the bar: the picker flow, and beside it the shortcuts
-                          that skip it (#497) — a new offer is the common quick start, so the only
-                          decision left, one set or one each, is made by which button is pressed.
-                          Secondary next to the primary, since they are narrower paths through the
-                          same flow; with a single copy there is no packaging to choose, so the pair
-                          collapses into one ＋ New offer button. All of it acts on the copies that
-                          can actually be listed (#682) — absent rather than disabled when the
-                          selection holds none, a selection of album copies being a perfectly good
-                          target for the actions beside these, and a dead button among live ones
-                          reading as a fault. Where only some qualify, the labels carry the number: a
-                          count that differs from the bar's own is the plainest way to say which
-                          copies are meant. */}
-                      {listableCopies.length > 0 && (
-                        <>
-                          {newOfferShortcuts(listableCopies.length).map(({ packaging, label, hint }) => (
-                            <Tooltip
-                              key={packaging}
-                              content={
-                                (quickOfferActive && quickPlatform
-                                  ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
-                                  : hint) + partialListingHint
-                              }
-                            >
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  quickOfferActive
-                                    ? createQuickOffer(listableCopies, packaging === "per-copy")
-                                    : setDialog({
-                                        kind: "addToNewOffer",
-                                        items: listableCopies,
-                                        packaging,
-                                      })
-                                }
-                                style={{
-                                  ...FILTER_CONTROL_STYLE,
-                                  cursor: "pointer",
-                                  fontWeight: 600,
-                                  color: "var(--color-accent)",
-                                  borderColor: "var(--color-accent)",
-                                  background: "var(--color-bg-elevated)",
-                                  padding: "0.375rem 0.75rem",
-                                  // Amber while this selection already has a live offer (#660).
-                                  ...(collisionOffer ? COLLIDING_OUTLINE : {}),
-                                }}
-                              >
-                                <Icon name="add" size="sm" /> {label}
-                              </button>
-                            </Tooltip>
-                          ))}
-                          <Tooltip
-                            content={
-                              "Put these copies into an offer — an existing one, or a new one." +
-                              partialListingHint
-                            }
-                          >
+                      {selectionActions
+                        .filter((a) => a.tone !== "link")
+                        .map((a) => (
+                          <Tooltip key={a.key} content={a.description}>
                             <button
                               type="button"
-                              onClick={() => setDialog({ kind: "addToOffer", items: listableCopies })}
-                              style={{
-                                ...FILTER_CONTROL_STYLE,
-                                cursor: "pointer",
-                                fontWeight: 600,
-                                color: "#fff",
-                                background: "var(--color-action-primary)",
-                                border: "none",
-                                padding: "0.375rem 0.875rem",
-                                // Amber while this selection already has a live offer (#660).
-                                ...(collisionOffer ? COLLIDING_FILLED : {}),
-                              }}
+                              disabled={a.disabled}
+                              onClick={a.onSelect}
+                              style={selectionButtonStyle(a)}
                             >
-                              <Icon name="addToOffer" size="sm" />{" "}
-                              {listableCopies.length < selectedInView.length
-                                ? `Add ${listableCopies.length} to offer`
-                                : "Add selected to offer"}
+                              {a.icon && <Icon name={a.icon} size="sm" />} {a.barLabel}
                             </button>
                           </Tooltip>
-                        </>
-                      )}
+                        ))}
                     </div>
                     )}
                   </div>

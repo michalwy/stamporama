@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { InventoryItemRow } from "./inventory-item-row";
 import type { RowsInView } from "./use-rows-in-view";
 
@@ -133,6 +135,115 @@ export interface CopySelection {
    * pages itself.
    */
   onRowsInView: RowsInView["register"];
+  /**
+   * The **selection's** actions as a menu, opened from the gutter of a ticked row under the cursor
+   * (#991) — the shortcut to the bar's buttons, drawn from the same array they are
+   * (`selection-actions.ts`), so nothing can be on one and missing from the other.
+   *
+   * On this prop for the reason `onRowsInView` is: it is what reaches every grouped branch, so
+   * member rows inside a group get the trigger without a prop threaded through each of them. Absent
+   * on surfaces with no selection bar to shortcut — the pickers and purchase intake.
+   */
+  menu?: { label: string; actions: RowAction[] };
+}
+
+/** Where the selection menu's trigger sits: centred in the gutter, just under the checkbox. */
+const SELECTION_MENU_SLOT: React.CSSProperties = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  top: "calc(50% + 0.75rem)",
+  display: "flex",
+  justifyContent: "center",
+};
+
+/**
+ * A copy row with its selection gutter.
+ *
+ * While the row is ticked and under the cursor, the gutter also carries the **selection menu**
+ * (#991): the bar's actions, twenty pixels from the checkbox the hand is already on, instead of the
+ * width of the list away. It is the shortcut and the bar stays the statement — the relation a row's
+ * promoted icons have to its `⋮`.
+ *
+ * Three things keep it from costing the row anything:
+ *  - **It reserves nothing.** It is placed over the gutter, which already has its width and height,
+ *    so the checkbox does not move when it appears and nothing shifts with zero selected (#885).
+ *  - **It is an ordinary element in the row**, not an overlay tracking one — only the opened menu is
+ *    portaled, and that closes on scroll like every other menu here.
+ *  - **Nothing animates** in or out (#877). Hovering a ticked row shows it; leaving hides it — unless
+ *    its menu is open, since the pointer leaves the row on its way into the portaled menu and hiding
+ *    the trigger would take the menu with it.
+ *
+ * It sits beside the `<label>` rather than inside it, so pressing it never toggles the box.
+ */
+function SelectableCopyRow({
+  item,
+  selection,
+  checked,
+  differs,
+  children,
+}: {
+  item: ItemListItem;
+  selection: CopySelection;
+  checked: boolean;
+  differs: boolean;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const eligible = selection.isEligible(item);
+  const menu = selection.menu;
+  const showMenu = eligible && checked && !!menu && menu.actions.length > 0 && (hovered || menuOpen);
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex",
+        // Stretch, so the checkbox strip runs the full height of the row it belongs to and
+        // can centre the box in it — a row is four lines tall and a top-aligned box reads as
+        // belonging to the first of them.
+        alignItems: "stretch",
+        // A ticked copy leads: what is selected is what the bulk action is about to act on,
+        // while differing from the group is a caution about one of them.
+        background: checked
+          ? "var(--color-accent-soft)"
+          : differs
+            ? "var(--color-warning-soft, var(--color-bg-page))"
+            : undefined,
+      }}
+    >
+      {eligible ? (
+        <div style={{ position: "relative", display: "flex" }}>
+          {/* A `<label>`, so the whole strip is the hit area rather than the 13px box in it. */}
+          <label style={SELECT_STRIP}>
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => selection.onToggle(item)}
+              aria-label="Select this copy"
+              style={{ cursor: "pointer" }}
+            />
+          </label>
+          {showMenu && (
+            <div style={SELECTION_MENU_SLOT}>
+              <RowActionsMenu
+                actions={menu.actions}
+                ariaLabel={menu.label}
+                trigger={{ icon: "selectionActions", accent: true, size: "1.5rem" }}
+                align="start"
+                onOpenChange={setMenuOpen}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <span style={{ ...SELECT_STRIP, cursor: "default" }} />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
 }
 
 /**
@@ -221,39 +332,15 @@ export function InventoryCopyList({
         );
         if (!selection) return row;
         return (
-          <div
+          <SelectableCopyRow
             key={item.id}
-            style={{
-              display: "flex",
-              // Stretch, so the checkbox strip runs the full height of the row it belongs to and
-              // can centre the box in it — a row is four lines tall and a top-aligned box reads as
-              // belonging to the first of them.
-              alignItems: "stretch",
-              // A ticked copy leads: what is selected is what the bulk action is about to act on,
-              // while differing from the group is a caution about one of them.
-              background: checked
-                ? "var(--color-accent-soft)"
-                : differs
-                  ? "var(--color-warning-soft, var(--color-bg-page))"
-                  : undefined,
-            }}
+            item={item}
+            selection={selection}
+            checked={checked}
+            differs={differs}
           >
-            {selection.isEligible(item) ? (
-              // A `<label>`, so the whole strip is the hit area rather than the 13px box in it.
-              <label style={SELECT_STRIP}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => selection.onToggle(item)}
-                  aria-label="Select this copy"
-                  style={{ cursor: "pointer" }}
-                />
-              </label>
-            ) : (
-              <span style={{ ...SELECT_STRIP, cursor: "default" }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
-          </div>
+            {row}
+          </SelectableCopyRow>
         );
       })}
       <InfiniteScrollSentinel

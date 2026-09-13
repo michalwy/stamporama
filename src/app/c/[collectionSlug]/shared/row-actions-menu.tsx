@@ -95,10 +95,8 @@ const iconStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-interface MenuPosition {
-  top: number;
-  right: number;
-}
+/** The menu is pinned by whichever side it hangs from — see `align`. */
+type MenuPosition = { top: number } & ({ right: number } | { left: number });
 
 /** Where the portaled menu ranks by default — above the app's own chrome, below a dialog. */
 const DEFAULT_MENU_Z_INDEX = 200;
@@ -112,6 +110,8 @@ export function RowActionsMenu({
   ariaLabel = "Row actions",
   zIndex = DEFAULT_MENU_Z_INDEX,
   onOpenChange,
+  trigger,
+  align = "end",
 }: {
   actions: RowAction[];
   ariaLabel?: string;
@@ -123,6 +123,16 @@ export function RowActionsMenu({
    * from it: the menu has its own Escape listener and is not an escape layer, so one Escape would
    * otherwise close the menu *and* the dialog under it (#361). */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * A trigger that is **not** the row's own `⋮` (#991): a different glyph, an accent tint, and a
+   * smaller box for the checkbox gutter it sits in. A `⋮` acting on rows other than its own would be
+   * the one ambiguity this menu must never carry, so a second kind of menu says so on its face.
+   */
+  trigger?: { icon: IconName; accent?: boolean; size?: string };
+  /** Which edge of the trigger the menu hangs from. `end` (the default) extends it leftwards from a
+   * trigger at a row's right end; `start` extends it rightwards from one at the left edge, which
+   * would otherwise open off screen. */
+  align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPosition | null>(null);
@@ -138,10 +148,12 @@ export function RowActionsMenu({
     const estHeight = actions.reduce((h, a) => h + (a.hint ? 50 : 34), 12);
     const below = rect.bottom + gap;
     const flip = below + estHeight > window.innerHeight && rect.top - gap - estHeight > 0;
-    setPos({
-      top: flip ? Math.max(gap, rect.top - gap - estHeight) : below,
-      right: Math.max(gap, window.innerWidth - rect.right),
-    });
+    const top = flip ? Math.max(gap, rect.top - gap - estHeight) : below;
+    setPos(
+      align === "start"
+        ? { top, left: Math.max(gap, rect.left) }
+        : { top, right: Math.max(gap, window.innerWidth - rect.right) }
+    );
   }
 
   useEffect(() => {
@@ -178,9 +190,12 @@ export function RowActionsMenu({
 
   if (actions.length === 0) return null;
 
+  const restBorder = trigger?.accent ? "var(--color-accent)" : "var(--color-border-strong)";
+  const restBackground = trigger?.accent ? "var(--color-bg-elevated)" : "var(--color-bg-page)";
+
   return (
     <>
-      <Tooltip content={ariaLabel} align="end">
+      <Tooltip content={ariaLabel} align={align}>
         <button
           ref={triggerRef}
           type="button"
@@ -199,17 +214,19 @@ export function RowActionsMenu({
           }}
           onMouseLeave={(e) => {
             if (!open) {
-              e.currentTarget.style.background = "var(--color-bg-page)";
-              e.currentTarget.style.borderColor = "var(--color-border-strong)";
+              e.currentTarget.style.background = restBackground;
+              e.currentTarget.style.borderColor = restBorder;
             }
           }}
           style={{
             ...triggerStyle,
-            background: open ? "var(--color-bg-row-hover)" : "var(--color-bg-page)",
-            borderColor: open ? "var(--color-border-hover)" : "var(--color-border-strong)",
+            ...(trigger?.size ? { width: trigger.size, height: trigger.size } : {}),
+            ...(trigger?.accent ? { color: "var(--color-accent)" } : {}),
+            background: open ? "var(--color-bg-row-hover)" : restBackground,
+            borderColor: open ? "var(--color-border-hover)" : restBorder,
           }}
         >
-          <Icon name="rowActions" size="lg" />
+          <Icon name={trigger?.icon ?? "rowActions"} size={trigger ? "sm" : "lg"} />
         </button>
       </Tooltip>
       {open &&
@@ -219,7 +236,7 @@ export function RowActionsMenu({
           <div
             ref={menuRef}
             role="menu"
-            style={{ ...menuStyle, zIndex, top: pos.top, right: pos.right }}
+            style={{ ...menuStyle, zIndex, ...pos }}
             onClick={(e) => e.stopPropagation()}
           >
             {actions.map((a) => {
