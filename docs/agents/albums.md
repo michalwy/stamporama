@@ -932,3 +932,43 @@ more here than anywhere: editing a template must not reach back into a page that
 binder. The hawid stock is the deliberate exception and is read live — it is a statement about a
 drawer, and a drawer changes; what must not change under a printed page is the album's own frozen
 plan (#767).
+
+### The album's copy is edited in place (#1215)
+
+**Page template…** on the album screen edits every one of the album's preset columns, for that album
+only. Reseeding stays, and is the other act: it overwrites all forty values at once, which is exactly
+what a one-margin correction must not do. `updateAlbumPreset` writes `albumRenderPreset(...)` to the
+album row and reads, names and touches no template — ADR-0045 §4 in the other direction.
+
+What is worth not re-deriving:
+
+- **One form, two owners.** `AlbumPresetForm` (`settings/album-templates-panel.tsx`) is the template
+  dialog's field set; the album dialog passes `name={null}` and `previewAlbumId`. A second list of
+  thirty-odd fields would be the drift `AlbumRenderPreset` exists to prevent, so the form's field
+  list also moved into the pure module (`readAlbumPresetFields`) and the parser split in two:
+  `parseAlbumTemplateInput` is now the name plus `parseAlbumRenderPreset`. An album cannot be given a
+  figure its template would refuse, and its preview draws only what a save would store.
+- **The preview is pinned to the album**, with no sample and no picker: the values in the form belong
+  to that album. It goes through `albumTemplateAlbumPreview` unchanged — live sheets only, printed
+  ones stepped over and counted — and the preview action's name fallback covers the missing name
+  field, which it was written for.
+- **The count before a save is sheets that match *today* and would not afterwards**, decided with the
+  collector on 2026-09-13. A sheet already reporting something (a picture, an earlier change) is not
+  counted: this change does not mark it out of date for the first time, and a figure including it
+  would say *this change* about cards it has nothing to do with. A change back to the printed values
+  counts nothing either. The rule is `countNewlyDivergingSheets`, pure and unit-tested; *matches* is
+  the screen's own *Still matches* — no divergences and not awaiting a reprint.
+- **It is two full reports, not a comparison of presets.** `countAlbumPresetDivergence` runs
+  `getAlbumPrintedReport` as the album stands and again with the new values substituted through
+  `albumPlanContext`'s override. A clearance changes a card through its box sizes and strips as well
+  as through the preset itself, and only the report knows which — a preset diff would be a second
+  answer to the question the report already answers.
+- **The acknowledgement is enforced on the server.** `updateAlbumPresetAction` takes the figure the
+  collector confirmed, counts again, and answers `confirm` with the current figure unless it is zero
+  or equal. A dialog forgetting to ask cannot save silently, and a card marked printed in another tab
+  between the question and the answer is asked about again.
+- **Reseeding gives no such warning.** It predates this and was left as it is; the count is this
+  issue's, attached to this dialog.
+- **#836 is not absorbed.** It puts the two box gaps in the page editor, judged by looking at the
+  page. Both places write the same two columns on the album; when #836 lands it should go through
+  the same count, or say why a gap is different.

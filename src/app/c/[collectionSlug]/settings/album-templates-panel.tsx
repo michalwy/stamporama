@@ -103,7 +103,10 @@ const SECTION_STYLE: React.CSSProperties = {
  *  the right-hand column is a piece of A4 at about 40%, and the three-column field grid beside it
  *  still has to be legible. 52rem, which this dialog was before the preview, leaves the sheet at
  *  postage-stamp size — which is the one thing a preview of a printed page must not be. */
-const DIALOG_WIDTH = "76rem";
+export const ALBUM_PRESET_DIALOG_WIDTH = "76rem";
+
+/** The preview panel's own scroll height is written against this, so the two stay one figure. */
+export const ALBUM_PRESET_DIALOG_HEIGHT = "min(85vh, 52rem)";
 
 const GRID_STYLE: React.CSSProperties = {
   display: "grid",
@@ -266,18 +269,39 @@ function TypeRow({
   );
 }
 
-function TemplateForm({
+/**
+ * Every value a preset holds, as fields, with the live page beside them.
+ *
+ * Two dialogs use it, and they write to two different places: a **template** in Settings (#766) and
+ * an **album's own copy** of those values (#1215). One form rather than two because a second list of
+ * thirty-odd fields is exactly the drift `AlbumRenderPreset` exists to prevent — and because the
+ * preview's reasoning (#795) does not change with who owns the numbers.
+ *
+ * What differs is small and stated in the props: an album's name is not a template value (it is
+ * edited beside its language), and an album's preview draws that album rather than offering a
+ * sample.
+ */
+export function AlbumPresetForm({
   collectionId,
-  template,
+  preset,
+  name,
   isPending,
   formRef,
+  previewAlbumId,
+  sampleLanguage,
 }: {
   collectionId: string;
-  template?: AlbumTemplateData;
+  preset: AlbumRenderPreset;
+  /** The template's name as it stands, or null for a form with no name field — an album's own. */
+  name: string | null;
   isPending: boolean;
   formRef: React.RefObject<HTMLFormElement | null>;
+  /** Draw this album and offer no other source (#1215). */
+  previewAlbumId?: string;
+  /** The language the text builders' sample stamps resolve in: the collection's own for a template,
+   *  which has none, and the album's for an album. */
+  sampleLanguage: string | null;
 }) {
-  const preset: AlbumRenderPreset = template ?? DEFAULT_ALBUM_PRESET;
   // The four texts are controlled, so their builders can preview as they are typed; everything else
   // is an ordinary uncontrolled field read straight off the `FormData`.
   const [texts, setTexts] = useState({
@@ -287,9 +311,10 @@ function TemplateForm({
     footerTemplate: preset.footerTemplate,
   });
   const [openText, setOpenText] = useState<string | null>("checklistTemplate");
-  // One set of sample stamps for all four previews, as the listing-templates dialog does. The
-  // language is the collection's own: an album's language is the album's (#767), not the template's.
-  const samples = useTemplateSamples(collectionId, null, 3);
+  // One set of sample stamps for all four previews, as the listing-templates dialog does. For a
+  // template the language is the collection's own: an album's language is the album's (#767), not
+  // the template's — which is also why an album's own form passes it.
+  const samples = useTemplateSamples(collectionId, sampleLanguage, 3);
   /** How many times anything in the form has changed. The page preview redraws off this rather than
    *  off the values themselves, because the values it draws are read from the form's own
    *  `FormData` — one source, and no second copy of the preset to fall out of step with a save.
@@ -312,24 +337,26 @@ function TemplateForm({
           the preview wants, and why `onInput` is not also attached: both would bump twice a
           keystroke and re-render this whole form for nothing. */}
       <div style={{ flex: 1, minWidth: 0 }} onChange={bump}>
-        <div>
-          <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
-          <input
-            id="f-album-name"
-            name="name"
-            type="text"
-            defaultValue={preset === DEFAULT_ALBUM_PRESET ? "" : template?.name}
-            disabled={isPending}
-            placeholder="e.g. Polska A4"
-            style={INPUT_STYLE}
-          />
-          <span style={HINT_STYLE}>
-            What you pick it by when you start an album. Copied onto the album, never linked to it — so
-            editing this template later cannot change a page already in a binder.
-          </span>
-        </div>
+        {name !== null && (
+          <div>
+            <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
+            <input
+              id="f-album-name"
+              name="name"
+              type="text"
+              defaultValue={name}
+              disabled={isPending}
+              placeholder="e.g. Polska A4"
+              style={INPUT_STYLE}
+            />
+            <span style={HINT_STYLE}>
+              What you pick it by when you start an album. Copied onto the album, never linked to it —
+              so editing this template later cannot change a page already in a binder.
+            </span>
+          </div>
+        )}
 
-        <h3 style={SECTION_STYLE}>Page</h3>
+        <h3 style={name === null ? { ...SECTION_STYLE, marginTop: 0 } : SECTION_STYLE}>Page</h3>
         <div style={GRID_STYLE}>
           <MmField name="pageWidthMm" label="Width (mm)" value={preset.pageWidthMm} disabled={isPending} />
           <MmField name="pageHeightMm" label="Height (mm)" value={preset.pageHeightMm} disabled={isPending} />
@@ -569,6 +596,7 @@ function TemplateForm({
           collectionId={collectionId}
           formRef={formRef}
           revision={revision}
+          albumId={previewAlbumId}
         />
       </div>
     </div>
@@ -722,17 +750,20 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add" && (
-        <DialogShell title="Add album template" onClose={closeDialog} maxWidth={DIALOG_WIDTH} height="min(85vh, 52rem)">
+        <DialogShell title="Add album template" onClose={closeDialog} maxWidth={ALBUM_PRESET_DIALOG_WIDTH} height={ALBUM_PRESET_DIALOG_HEIGHT}>
           <form
             ref={formRef}
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => createAlbumTemplateAction(collectionId, fd), e)}
           >
             <DialogBody>
-              <TemplateForm
+              <AlbumPresetForm
                 collectionId={collectionId}
+                preset={DEFAULT_ALBUM_PRESET}
+                name=""
                 isPending={isPending}
                 formRef={formRef}
+                sampleLanguage={null}
               />
             </DialogBody>
             <DialogActions
@@ -746,18 +777,20 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
       )}
 
       {dialog.kind === "edit" && (
-        <DialogShell title="Edit album template" onClose={closeDialog} maxWidth={DIALOG_WIDTH} height="min(85vh, 52rem)">
+        <DialogShell title="Edit album template" onClose={closeDialog} maxWidth={ALBUM_PRESET_DIALOG_WIDTH} height={ALBUM_PRESET_DIALOG_HEIGHT}>
           <form
             ref={formRef}
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => updateAlbumTemplateAction(dialog.template.id, fd), e)}
           >
             <DialogBody>
-              <TemplateForm
+              <AlbumPresetForm
                 collectionId={collectionId}
-                template={dialog.template}
+                preset={dialog.template}
+                name={dialog.template.name}
                 isPending={isPending}
                 formRef={formRef}
+                sampleLanguage={null}
               />
             </DialogBody>
             <DialogActions

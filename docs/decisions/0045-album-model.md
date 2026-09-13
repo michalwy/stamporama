@@ -119,6 +119,12 @@ The duplicated column list is the design, not a normalisation waiting to be tidi
 `AlbumRenderPreset` in `src/lib/album-template-rules.ts` is what keeps the two lists in step, and it
 stays a shared **type** — never a shared row, never a foreign key.
 
+The copy is the album's own data, so it is **editable in place** (#1215): the album's values dialog
+writes the album's columns and nothing else. That is this decision holding in the other direction —
+the album does not reach back into the template any more than the template reaches into the album —
+and it needs no link to either. A printed page keeps the preset it was set under (ADR-0047), so the
+edit re-plans live pages and is reported against paper like any other change.
+
 The hawid stock (#765) is the deliberate exception and is read live. It is a statement about a
 drawer, and a drawer changes; what must not change under a printed page is the page.
 

@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ConfirmDialog } from "@/app/dialog-shell";
+import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
+import {
+  ALBUM_PRESET_DIALOG_HEIGHT,
+  ALBUM_PRESET_DIALOG_WIDTH,
+  AlbumPresetForm,
+} from "@/app/c/[collectionSlug]/settings/album-templates-panel";
 import {
   cancelAlbumReprintAction,
   clearAlbumEntryStampOrderAction,
@@ -16,6 +21,7 @@ import {
   reorderAlbumEntriesAction,
   reprintAlbumPageAction,
   unprintAlbumPageAction,
+  updateAlbumPresetAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
 import type { AlbumData, AlbumEntryData } from "@/lib/albums";
@@ -72,6 +78,14 @@ const DOWNLOAD_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const FORM_STYLE: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
+};
+
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
   padding: "0.0625rem 0.375rem",
@@ -121,6 +135,12 @@ export function AlbumScreen({
   // away is what *that* card kept, and a stale account of a different one is exactly the sentence a
   // collector would act on without reading.
   const [unprintSays, setUnprintSays] = useState<{ id: string; says: string[] } | null>(null);
+  // The album's own template values (#1215). The form stays uncontrolled, as the template's does, so
+  // the save and the preview read one `FormData`; `presetConfirm` is the count the server asked about.
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [presetConfirm, setPresetConfirm] = useState<number | null>(null);
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const presetFormRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
 
   if (syncedFrom !== entries) {
@@ -233,6 +253,39 @@ export function AlbumScreen({
     });
   }
 
+  /**
+   * Save the album's own values. The first press sends no acknowledgement; if printed sheets that
+   * match today would stop matching, the server answers with how many and nothing is written until
+   * that exact figure is confirmed. The count is the server's, not worked out here.
+   */
+  function savePreset(acknowledged: number | null) {
+    const form = presetFormRef.current;
+    if (!form) return;
+    setPresetError(null);
+    startTransition(async () => {
+      const result = await updateAlbumPresetAction(album.id, new FormData(form), acknowledged);
+      if (result.status === "confirm") {
+        setPresetConfirm(result.diverging);
+        return;
+      }
+      setPresetConfirm(null);
+      if (result.status === "error") {
+        setPresetError(result.message);
+        return;
+      }
+      setPresetOpen(false);
+      setNotice(result.status === "success" ? (result.message ?? null) : null);
+      router.refresh();
+    });
+  }
+
+  function closePreset() {
+    if (isPending) return;
+    setPresetOpen(false);
+    setPresetConfirm(null);
+    setPresetError(null);
+  }
+
   function handleDrop(targetId: string) {
     const sourceId = draggingId;
     setDraggingId(null);
@@ -278,12 +331,35 @@ export function AlbumScreen({
       >
         {album.name}
       </h2>
-      <p style={{ ...MUTED, margin: "0 0 1.5rem" }}>
-        Printed in {languageLabel(album.language)} · {album.pageWidthMm} × {album.pageHeightMm} mm ·{" "}
-        {album.blocksPerBand === 1
-          ? "one checklist per band"
-          : `up to ${album.blocksPerBand} checklists per band`}
-      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: "1rem",
+          margin: "0 0 1.5rem",
+        }}
+      >
+        <p style={{ ...MUTED, margin: 0 }}>
+          Printed in {languageLabel(album.language)} · {album.pageWidthMm} × {album.pageHeightMm} mm ·{" "}
+          {album.blocksPerBand === 1
+            ? "one checklist per band"
+            : `up to ${album.blocksPerBand} checklists per band`}
+        </p>
+        <Tooltip content="This album's own page, spacing, hawid, type and text values, with its pages drawn beside them. Changes apply to this album only — the template it started from is not touched.">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              setPresetError(null);
+              setPresetOpen(true);
+            }}
+            style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
+          >
+            Page template…
+          </button>
+        </Tooltip>
+      </div>
 
       {error && (
         <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
@@ -733,6 +809,68 @@ export function AlbumScreen({
             ))}
           </div>
         </>
+      )}
+
+      {presetOpen && (
+        <DialogShell
+          title={`Page template — ${album.name}`}
+          onClose={closePreset}
+          maxWidth={ALBUM_PRESET_DIALOG_WIDTH}
+          height={ALBUM_PRESET_DIALOG_HEIGHT}
+        >
+          <form
+            ref={presetFormRef}
+            style={FORM_STYLE}
+            onSubmit={(e) => {
+              e.preventDefault();
+              savePreset(null);
+            }}
+          >
+            <DialogBody>
+              <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "48rem" }}>
+                These are <strong>this album&apos;s own</strong> values, copied from a template when
+                it was made. Changing them here changes this album only: the template in Settings is
+                not touched, and no other album is. Unprinted sheets are re-planned under the new
+                values; printed cards stay exactly as printed and report the difference — you are
+                told how many before anything is saved.
+              </p>
+              <AlbumPresetForm
+                collectionId={album.collectionId}
+                preset={album}
+                name={null}
+                isPending={isPending}
+                formRef={presetFormRef}
+                previewAlbumId={album.id}
+                sampleLanguage={album.language}
+              />
+            </DialogBody>
+            <DialogActions
+              actionLabel={isPending ? "Saving…" : "Save"}
+              onCancel={closePreset}
+              disabled={isPending}
+              error={presetError ?? undefined}
+            />
+          </form>
+        </DialogShell>
+      )}
+
+      {/* After the values dialog, so it paints over it. */}
+      {presetOpen && presetConfirm !== null && (
+        <ConfirmDialog
+          title="Printed cards will report a difference"
+          message={
+            presetConfirm === 1
+              ? "One printed card that matches this album today will stop matching: it stays exactly as printed, and Printed cards will say what differs. Save these values anyway?"
+              : `${presetConfirm} printed cards that match this album today will stop matching: they stay exactly as printed, and Printed cards will say what differs on each. Save these values anyway?`
+          }
+          actionLabel="Save anyway"
+          pendingLabel="Saving…"
+          variant="primary"
+          isPending={isPending}
+          error={presetError ?? undefined}
+          onClose={() => !isPending && setPresetConfirm(null)}
+          onConfirm={() => savePreset(presetConfirm)}
+        />
       )}
 
       {markPrinted && (

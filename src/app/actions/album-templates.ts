@@ -15,8 +15,8 @@ import {
 import {
   parseAlbumTemplateInput,
   albumRenderPreset,
+  readAlbumPresetFields,
   type AlbumTemplateRawInput,
-  type AlbumTemplateInput,
 } from "@/lib/album-template-rules";
 import {
   albumTemplateSamplePreview,
@@ -39,55 +39,17 @@ async function getSession() {
   return session;
 }
 
-/** Every field the form submits, as typed. Listed rather than looped so a field added to the preset
- *  without being added here is a type error instead of a value that silently stops being saved.
+/** Every field the form submits, as typed — the preset's own list is `readAlbumPresetFields`.
  *
  *  `nameFallback` is for the **preview** (#795) and for nothing else: a template being written has no
  *  name yet, and refusing to draw its page until it is given one would put the one field that
  *  changes nothing on the sheet in front of every field that does. A save still requires a real
- *  name — {@link createAlbumTemplateAction} passes no fallback. */
+ *  name — {@link createAlbumTemplateAction} passes no fallback. The album's own values dialog
+ *  (#1215) has no name field at all and previews through the same fallback. */
 function readForm(formData: FormData, nameFallback: string | null = null) {
-  const str = (key: keyof AlbumTemplateInput) =>
-    ((formData.get(key) as string | null) ?? "").trim();
   const raw: AlbumTemplateRawInput = {
-    name: str("name") || (nameFallback ?? ""),
-    pageWidthMm: str("pageWidthMm"),
-    pageHeightMm: str("pageHeightMm"),
-    marginTopMm: str("marginTopMm"),
-    marginRightMm: str("marginRightMm"),
-    marginBottomMm: str("marginBottomMm"),
-    marginLeftMm: str("marginLeftMm"),
-    blocksPerBand: str("blocksPerBand"),
-    blockGapMm: str("blockGapMm"),
-    borderStyle: str("borderStyle"),
-    borderWidthMm: str("borderWidthMm"),
-    borderInsetMm: str("borderInsetMm"),
-    boxGapXMm: str("boxGapXMm"),
-    boxGapYMm: str("boxGapYMm"),
-    headingSpaceAboveMm: str("headingSpaceAboveMm"),
-    headingSpaceBelowMm: str("headingSpaceBelowMm"),
-    verticalClearanceMm: str("verticalClearanceMm"),
-    horizontalMarginMm: str("horizontalMarginMm"),
-    titleFace: str("titleFace"),
-    titleSizePt: str("titleSizePt"),
-    chapterFace: str("chapterFace"),
-    chapterSizePt: str("chapterSizePt"),
-    headingFace: str("headingFace"),
-    headingSizePt: str("headingSizePt"),
-    labelFace: str("labelFace"),
-    labelSizePt: str("labelSizePt"),
-    footerFace: str("footerFace"),
-    footerSizePt: str("footerSizePt"),
-    boxBorderStyle: str("boxBorderStyle"),
-    boxBorderWidthMm: str("boxBorderWidthMm"),
-    labelPosition: str("labelPosition"),
-    printTitle: str("printTitle"),
-    printPhotos: str("printPhotos"),
-    photoOpacityPercent: str("photoOpacityPercent"),
-    chapterTemplate: str("chapterTemplate"),
-    checklistTemplate: str("checklistTemplate"),
-    boxLabelTemplate: str("boxLabelTemplate"),
-    footerTemplate: str("footerTemplate"),
+    name: ((formData.get("name") as string | null) ?? "").trim() || (nameFallback ?? ""),
+    ...readAlbumPresetFields(formData),
   };
   return parseAlbumTemplateInput(raw);
 }

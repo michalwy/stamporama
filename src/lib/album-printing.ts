@@ -14,7 +14,7 @@ import {
 import { planAlbumPages, type AlbumBlockSpec, type AlbumPlacedBox } from "./album-layout";
 import { albumTextMetrics } from "./album-metrics";
 import { albumPlanFingerprint } from "./album-print-rules";
-import { albumRenderPreset } from "./album-template-rules";
+import { albumRenderPreset, type AlbumRenderPreset } from "./album-template-rules";
 import { languageLabel } from "./languages";
 import { getAlbumPageSnapshots, type AlbumPrintedPageRow } from "./album-printed-pages";
 import { resolveAlbumPhotos } from "./album-photos";
@@ -26,6 +26,7 @@ import {
   type AlbumSnapshotBox,
 } from "./album-snapshot";
 import {
+  countNewlyDivergingSheets,
   diffAlbumPlans,
   type AlbumComparablePage,
   type AlbumDivergence,
@@ -504,9 +505,12 @@ export interface AlbumPrintedReport {
  */
 export async function getAlbumPrintedReport(
   ownerId: string,
-  albumId: string
+  albumId: string,
+  /** The report the album *would* give under these values, for the count shown before an album's
+   *  own template values are saved (#1215). Nothing is written; see `albumPlanContext`. */
+  presetOverride: AlbumRenderPreset | null = null
 ): Promise<AlbumPrintedReport> {
-  const context = await albumPlanContext(ownerId, albumId);
+  const context = await albumPlanContext(ownerId, albumId, presetOverride);
   if (!context) throw new AlbumPrintError("Album not found.");
   const { printed, entries } = context;
   if (printed.pages.size === 0) return { sheets: [] };
@@ -588,6 +592,26 @@ export async function getAlbumPrintedReport(
   return {
     sheets: [...sheets.values()].sort((a, b) => a.printedAt.localeCompare(b.printedAt) || a.id.localeCompare(b.id)),
   };
+}
+
+/**
+ * How many printed sheets that match today would report a difference if the album's own template
+ * values became `preset` (#1215) — said before the save, never after it.
+ *
+ * Two full reports rather than a comparison of presets: a value can change a card through its box
+ * sizes or its strips as well as through the template itself, and only the report knows which. A
+ * sheet already out of date is not counted — `countNewlyDivergingSheets` says why.
+ */
+export async function countAlbumPresetDivergence(
+  ownerId: string,
+  albumId: string,
+  preset: AlbumRenderPreset
+): Promise<number> {
+  const [now, after] = await Promise.all([
+    getAlbumPrintedReport(ownerId, albumId),
+    getAlbumPrintedReport(ownerId, albumId, preset),
+  ]);
+  return countNewlyDivergingSheets(now.sheets, after.sheets);
 }
 
 /** A printed **card**: the sheets one run of checklists is on, and the checklists on them. A card is

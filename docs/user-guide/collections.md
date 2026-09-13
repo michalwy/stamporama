@@ -971,6 +971,11 @@ is not an evening of retyping page sizes and font names. One template covers:
   prints the photo it has, at what opacity.
 - **Texts** — the chapter heading, the checklist heading, the box label and the footer.
 
+A template is **copied** onto an album when the album is made. To change one album's values
+afterwards, edit them from that album — **Page template…** on its screen
+([Albums](albums.md#the-albums-own-page-template)) — rather than here: that changes the album alone,
+and editing a template here never reaches an album that already exists.
+
 ### The page beside the fields
 
 The dialog draws the page those numbers produce, next to the fields, and redraws it as you type.

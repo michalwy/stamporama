@@ -23,6 +23,7 @@ import {
   setAlbumEntryStampOrder,
   setAlbumRowBreak,
   updateAlbum,
+  updateAlbumPreset,
   updateAlbumTextBlock,
   AlbumNameTakenError,
   type AlbumBlockLayoutInput,
@@ -38,9 +39,11 @@ import {
   ALBUM_SPACE_MAX_MM,
   ALBUM_SPACE_MIN_MM,
 } from "@/lib/album-corrections";
+import { parseAlbumRenderPreset, readAlbumPresetFields } from "@/lib/album-template-rules";
 import {
   cancelAlbumReprint,
   closeAlbumContinuation,
+  countAlbumPresetDivergence,
   describeAlbumUnprint,
   markAlbumPagesPrinted,
   openAlbumContinuation,
@@ -122,6 +125,53 @@ export async function updateAlbumAction(
     return { status: "success" };
   } catch (err) {
     return toErrorState(err, "Failed to save the album. Please try again.");
+  }
+}
+
+/** What saving an album's own template values can come back with (#1215). `confirm` is not an error:
+ *  the values are valid and nothing was written, because the collector has not yet been told how many
+ *  printed sheets that match today the change will make diverge. */
+export type AlbumPresetActionState =
+  | AlbumActionState
+  | { status: "confirm"; diverging: number };
+
+/**
+ * Change this album's own template values — the album's copy, never the template's (#1215).
+ *
+ * **Nothing is saved until the collector has seen the count.** `acknowledgedDiverging` is the figure
+ * they confirmed, and the count is taken again here rather than trusted: if it is zero the save goes
+ * through, and if it is anything other than the figure confirmed the action answers `confirm` with
+ * the current one. Checked on the server, so the rule does not depend on a dialog remembering to ask
+ * — and a card printed in another tab between the question and the answer is asked about again.
+ *
+ * The values go through the template's own parser, so an album cannot be given a figure its template
+ * would have refused.
+ */
+export async function updateAlbumPresetAction(
+  albumId: string,
+  formData: FormData,
+  acknowledgedDiverging: number | null
+): Promise<AlbumPresetActionState> {
+  const session = await getSession();
+  const parsed = parseAlbumRenderPreset(readAlbumPresetFields(formData));
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const diverging = await countAlbumPresetDivergence(session.user.id, albumId, parsed.value);
+    if (diverging > 0 && acknowledgedDiverging !== diverging) {
+      return { status: "confirm", diverging };
+    }
+    await updateAlbumPreset(session.user.id, albumId, parsed.value);
+    return {
+      status: "success",
+      message:
+        diverging === 0
+          ? "Saved to this album. Its live sheets are re-planned under the new values."
+          : `Saved to this album. ${
+              diverging === 1 ? "One printed card now reports" : `${diverging} printed cards now report`
+            } the difference under Printed cards.`,
+    };
+  } catch (err) {
+    return toErrorState(err, "Failed to save the album's values. Please try again.");
   }
 }
 

@@ -9,6 +9,7 @@ import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
   asAlbumLabelPosition,
+  albumRenderPreset,
   DEFAULT_ALBUM_PRESET,
   type AlbumRenderPreset,
 } from "./album-template-rules";
@@ -298,6 +299,29 @@ export async function reseedAlbumFromTemplate(
   });
   if (!template) throw new Error("Album template not found in this collection.");
   await prisma.album.update({ where: { id: albumId }, data: template });
+}
+
+/**
+ * Change the album's **own** template values (#1215) — every one of them, for this album only.
+ *
+ * The write goes to the album's copy and nowhere else. The template it was seeded from is not read,
+ * not named and not touched, and the album gains no link back to it: #766's copy-not-reference rule
+ * (ADR-0045 §4) holds in both directions.
+ *
+ * No rule of its own for paper, like a language change: the live pages re-plan on the next read, and
+ * a printed sheet keeps the preset it was set under in its snapshot, where #778 reports the
+ * difference. Telling the collector how many sheets that will be is the action's job, before this
+ * runs — see `countAlbumPresetDivergence`.
+ */
+export async function updateAlbumPreset(
+  ownerId: string,
+  albumId: string,
+  preset: AlbumRenderPreset
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  // `albumRenderPreset` so a caller holding a whole album row cannot write its id or its name.
+  await prisma.album.update({ where: { id: albumId }, data: albumRenderPreset(preset) });
 }
 
 export async function deleteAlbum(ownerId: string, albumId: string): Promise<void> {

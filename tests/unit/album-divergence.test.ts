@@ -4,6 +4,7 @@ import {
   ALBUM_DIVERGENCE_KINDS,
   albumPresetFieldLabel,
   compareAlbumPages,
+  countNewlyDivergingSheets,
   diffAlbumPlans,
   pairAlbumPages,
   type AlbumComparableBox,
@@ -267,5 +268,47 @@ describe("albumPresetFieldLabel", () => {
     assert.equal(albumPresetFieldLabel("headingSpaceAboveMm"), "Heading space above (mm)");
     assert.equal(albumPresetFieldLabel("chapterSizePt"), "Chapter size (pt)");
     assert.equal(albumPresetFieldLabel("printTitle"), "Print title");
+  });
+});
+
+// ── Before an album's own values are saved (#1215) ───────────────────────────
+//
+// The collector is told how many printed sheets a change will make diverge, and it was decided with
+// them that **only sheets matching today count**: a sheet already out of date is not marked out of
+// date for the first time by this change. The shapes that separate that rule from the obvious
+// alternatives are a sheet already diverging that gains a second divergence, a sheet that would stop
+// diverging, and a sheet awaiting a reprint.
+
+describe("countNewlyDivergingSheets", () => {
+  const template = { kind: "template" as const, detail: "The album's Box gap x (mm) has changed." };
+  const photo = { kind: "photo" as const, detail: "1 stamp now has a picture." };
+  const sheet = (id: string, divergences: { kind: "template" | "photo"; detail: string }[] = [], reprinting = false) => ({
+    id,
+    reprinting,
+    divergences,
+  });
+
+  it("counts a sheet that matches today and would not afterwards", () => {
+    assert.equal(countNewlyDivergingSheets([sheet("a"), sheet("b")], [sheet("a", [template]), sheet("b")]), 1);
+  });
+
+  it("does not count a sheet already out of date, even when the change adds to what it reports", () => {
+    assert.equal(countNewlyDivergingSheets([sheet("a", [photo])], [sheet("a", [photo, template])]), 0);
+  });
+
+  it("does not count a sheet the change would bring back into line", () => {
+    assert.equal(countNewlyDivergingSheets([sheet("a", [template])], [sheet("a")]), 0);
+  });
+
+  it("does not count a sheet awaiting a reprint — it is not the card the album compares", () => {
+    assert.equal(
+      countNewlyDivergingSheets([sheet("a", [], true)], [sheet("a", [template], true)]),
+      0
+    );
+  });
+
+  it("is zero when nothing changes", () => {
+    const now = [sheet("a"), sheet("b", [photo])];
+    assert.equal(countNewlyDivergingSheets(now, now), 0);
   });
 });

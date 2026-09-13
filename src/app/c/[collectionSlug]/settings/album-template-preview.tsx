@@ -94,14 +94,23 @@ interface AlbumTemplatePreviewPanelProps {
   /** Bumped by the dialog whenever any field changes — including the four texts, which are React
    *  state written into hidden inputs and therefore fire no `input` event of their own. */
   revision: number;
+  /** The album whose **own** values are being edited (#1215). The preview then draws that album and
+   *  nothing else: there is no sample to offer and no other album to point at, because the values
+   *  in the form belong to this one. Absent — the template dialog — the source is chosen. */
+  albumId?: string;
 }
 
 export function AlbumTemplatePreviewPanel({
   collectionId,
   formRef,
   revision,
+  albumId,
 }: AlbumTemplatePreviewPanelProps) {
-  const [source, setSource] = useState<AlbumPreviewSource>({ kind: "sample" });
+  const [chosen, setChosen] = useState<AlbumPreviewSource>({ kind: "sample" });
+  const source: AlbumPreviewSource = albumId ? { kind: "album", albumId } : chosen;
+  // Keyed on the id rather than on `source`, which is a new object every render and would re-plan
+  // the page on every keystroke's re-render as well as on its debounce.
+  const sourceKey = source.kind === "album" ? source.albumId : "";
   const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [preview, setPreview] = useState<AlbumTemplatePreview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -115,6 +124,8 @@ export function AlbumTemplatePreviewPanel({
   // The albums the preview may be pointed at, read once. A collection with none still previews: the
   // sample is the default and the whole reason it exists (#795).
   useEffect(() => {
+    // An album's own dialog offers no choice, so it has no list to read.
+    if (albumId) return;
     let alive = true;
     (async () => {
       const { albumPreviewAlbumsAction } = await import("@/app/actions/album-templates");
@@ -127,7 +138,7 @@ export function AlbumTemplatePreviewPanel({
     return () => {
       alive = false;
     };
-  }, [collectionId]);
+  }, [collectionId, albumId]);
 
   // How wide the sheet may be drawn. A scale factor off the rendered frame — see the module header.
   useEffect(() => {
@@ -150,7 +161,11 @@ export function AlbumTemplatePreviewPanel({
     setPending(true);
     try {
       const { albumTemplatePreviewAction } = await import("@/app/actions/album-templates");
-      const result = await albumTemplatePreviewAction(collectionId, new FormData(form), source);
+      const result = await albumTemplatePreviewAction(
+        collectionId,
+        new FormData(form),
+        sourceKey ? { kind: "album", albumId: sourceKey } : { kind: "sample" }
+      );
       if (latest.current !== ticket) return;
       setPending(false);
       if (result.status === "invalid") {
@@ -169,7 +184,7 @@ export function AlbumTemplatePreviewPanel({
       setPending(false);
       setProblem("the page could not be drawn just now.");
     }
-  }, [collectionId, formRef, source]);
+  }, [collectionId, formRef, sourceKey]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -187,21 +202,23 @@ export function AlbumTemplatePreviewPanel({
 
   return (
     <div style={PANEL_STYLE}>
-      <select
-        aria-label="What the preview draws"
-        value={source.kind === "sample" ? "" : source.albumId}
-        onChange={(e) =>
-          setSource(e.target.value ? { kind: "album", albumId: e.target.value } : { kind: "sample" })
-        }
-        style={CONTROL_STYLE}
-      >
-        <option value="">Sample page</option>
-        {albums.map((album) => (
-          <option key={album.id} value={album.id}>
-            {album.name}
-          </option>
-        ))}
-      </select>
+      {!albumId && (
+        <select
+          aria-label="What the preview draws"
+          value={sourceKey}
+          onChange={(e) =>
+            setChosen(e.target.value ? { kind: "album", albumId: e.target.value } : { kind: "sample" })
+          }
+          style={CONTROL_STYLE}
+        >
+          <option value="">Sample page</option>
+          {albums.map((album) => (
+            <option key={album.id} value={album.id}>
+              {album.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div
         ref={frameRef}
@@ -253,7 +270,9 @@ export function AlbumTemplatePreviewPanel({
         <p style={NOTE_STYLE}>
           {source.kind === "sample"
             ? "A sample page, built from your own AlbumEasy files: four mount heights, a run that fills a row and starts a second, two short checklists sharing a band, a heading that wraps, and a souvenir sheet no strip fits."
-            : `${preview.albumName}, drawn under this template. Nothing is saved to it.`}
+            : albumId
+              ? `${preview.albumName}, drawn under the values beside it. Nothing changes on the album until you save.`
+              : `${preview.albumName}, drawn under this template. Nothing is saved to it.`}
         </p>
       )}
       {preview && preview.totalSheets > sheets.length + preview.printedSheets && (
