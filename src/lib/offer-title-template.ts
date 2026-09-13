@@ -68,6 +68,16 @@ export interface TitleTemplateCopy {
   name: string | null;
   /** Every catalog number recorded for the copy, primary vendor first (drives `{catalog[:…]}`). */
   catalogNumbers: TitleCatalogNumber[];
+  /** For a **multi-stamp copy** (ADR-0044 §8, #749): every stamp the piece carries, one list of
+   * catalog numbers per stamp in the collector's `sortOrder` — the leading stamp included and on
+   * the same terms as the rest, each resolved against its own area and issue and primary vendor
+   * first like `catalogNumbers`. `{catalog}` then enumerates all of them instead of the leading
+   * stamp's numbers alone, since a cover franked with three stamps is a copy of none of them in
+   * particular and a buyer searching the third number has to find it.
+   *
+   * Absent on a copy of one stamp — which is every copy but a carrier, and every album box — where
+   * `catalogNumbers` is already the whole answer. */
+  carriedCatalogNumbers?: readonly (readonly TitleCatalogNumber[])[];
   year: number | null;
   condition: string | null;
   /** Condition abbreviation (e.g. `MNH`). */
@@ -443,20 +453,25 @@ function yearSpan(
   return min === max ? String(min) : `${min}–${max}`;
 }
 
-/** Select which of a copy's catalog numbers a `{catalog:VENDORS}` argument asks for: `*` → all;
+/** Select which of one stamp's catalog numbers a `{catalog:VENDORS}` argument asks for: `*` → all;
  * empty → the area primary only (else the first recorded); otherwise the vendors whose abbreviation
- * matches one of the comma-listed ones, in the order listed. */
-function selectCatalogNumbers(copy: TitleTemplateCopy, vendorsArg: string): TitleCatalogNumber[] {
+ * matches one of the comma-listed ones, in the order listed. Per **stamp** rather than per copy, so
+ * each stamp a carrier bears picks its own primary (#749) — two stamps of one cover can sit in areas
+ * whose primary catalogues differ. */
+function selectCatalogNumbers(
+  numbers: readonly TitleCatalogNumber[],
+  vendorsArg: string
+): readonly TitleCatalogNumber[] {
   const arg = vendorsArg.trim();
-  if (arg === "*") return copy.catalogNumbers;
+  if (arg === "*") return numbers;
   if (arg === "") {
-    const primary = copy.catalogNumbers.find((c) => c.isPrimary) ?? copy.catalogNumbers[0];
+    const primary = numbers.find((c) => c.isPrimary) ?? numbers[0];
     return primary ? [primary] : [];
   }
   const wanted = arg.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const out: TitleCatalogNumber[] = [];
   for (const w of wanted) {
-    for (const cn of copy.catalogNumbers) {
+    for (const cn of numbers) {
       if (cn.vendorAbbr.toLowerCase() === w) out.push(cn);
     }
   }
@@ -755,7 +770,12 @@ function canonicalFlag(flag: string): string {
  * appear (see {@link selectCatalogNumbers}); FLAGS (`vendor`/`v`, `area`/`a`) pick which prefixes
  * show. When the FLAGS segment is **omitted**, both prefixes are shown (the configured default); an
  * **empty** FLAGS segment (`{catalog:Mi:}`) means the bare number. Numbers of the same vendor (+area
- * prefix) are grouped and **compacted into ranges** (`Mi·DR 1-2,4,6-10`); groups join with ` / `. */
+ * prefix) are grouped and **compacted into ranges** (`Mi·DR 1-2,4,6-10`); groups join with ` / `.
+ *
+ * A **multi-stamp copy** contributes every stamp it carries, in its own order (ADR-0044 §8, #749) —
+ * the same enumeration `{catalog}` already does across the copies of a batch offer, so a cover
+ * bearing Mi·PL 200, 201 and 205 reads exactly as those three loose stamps would, `Mi·PL 200-01,205`,
+ * and joins the other copies' numbers into one run. */
 function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]): string {
   const vendorsArg = params[0] ?? "";
   const flags =
@@ -764,7 +784,11 @@ function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]):
       : new Set(["vendor", "area"]); // FLAGS omitted → both prefixes (the default)
 
   return compactCatalogNumberGroups(
-    copies.flatMap((copy) => selectCatalogNumbers(copy, vendorsArg)),
+    copies.flatMap((copy) =>
+      (copy.carriedCatalogNumbers ?? [copy.catalogNumbers]).flatMap((numbers) =>
+        selectCatalogNumbers(numbers, vendorsArg)
+      )
+    ),
     flags
   );
 }

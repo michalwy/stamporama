@@ -836,7 +836,8 @@ piece — searchable, listed, printed in listing texts — never a claim that yo
 
 Everything else about a copy is untouched. It keeps its internal number, its storage location, its
 cost basis and its photos; it can be offered, sold, traded and disposed of exactly like any other
-copy, and it stays on the Copies list.
+copy, and it stays on the Copies list. When you offer it, the `{catalog}` token in the listing's title
+and description names **every** stamp on it — see [Catalog numbers](contacts.md#catalog-numbers).
 
 ### Finding them on the Copies list
 

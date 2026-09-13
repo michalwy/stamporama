@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import type {
   TitleTemplateCopy,
   TitleCatalogNumber,
@@ -21,6 +22,7 @@ import { resolveTranslationWithFallback } from "./translations";
 import { compactCatalogNumbers } from "./offer-title-template";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
+import { isMultiStampCount } from "./multi-stamp";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -109,6 +111,14 @@ export const TITLE_COPY_STAMP_SELECT = {
   },
 } as const;
 
+/** The order a carrier's stamps are named in — `item-stamps.ts`' own: the collector's `sortOrder`, with
+ * the id keeping it total so two reads of a stored text cannot name them differently. Typed rather
+ * than written inline because `TITLE_COPY_SELECT` is `as const`, which Prisma refuses as an order. */
+const CARRIED_STAMP_ORDER: Prisma.ItemStampOrderByWithRelationInput[] = [
+  { sortOrder: "asc" },
+  { id: "asc" },
+];
+
 /** Copy fields the title template resolves over: stamp name / **all** catalog numbers (with vendor
  * abbreviation, for `{catalog:Mi…}`) / year / condition / certificate / primary area + its id (to
  * resolve per-area catalog prefixes and the primary vendor) / issue. */
@@ -149,6 +159,24 @@ export const TITLE_COPY_SELECT = {
   },
   location: { select: { name: true } },
   locationRef: true,
+  // Every stamp the copy carries, behind `{catalog}` on a **multi-stamp copy** (ADR-0044 §8, #749).
+  // Only what a catalog number is resolved from — the numbers, the primary area and the first issue,
+  // in the very shapes the leading stamp's are selected in above, so a stamp named on a cover reads
+  // exactly as it does on a copy of its own. `stampCount` decides whether they are read at all; the
+  // order is `CARRIED_STAMP_ORDER`.
+  stampCount: true,
+  stamps: {
+    orderBy: CARRIED_STAMP_ORDER,
+    select: {
+      stamp: {
+        select: {
+          catalogNumbers: TITLE_COPY_STAMP_SELECT.catalogNumbers,
+          stampAreaLinks: { select: { isPrimary: true, collectionAreaId: true } },
+          issueMemberships: { select: { issue: { select: { id: true } } }, take: 1 },
+        },
+      },
+    },
+  },
 } as const;
 
 /** A translation row for a single-`name` entity (stamp, issue). */
@@ -215,7 +243,47 @@ export type TitleCopyRow = {
   } | null;
   location: { name: string } | null;
   locationRef: string | null;
+  /** The summed quantity of the stamps the copy carries (ADR-0044 §4). 1 for an ordinary copy — and
+   *  for an album box, which is one catalogue slot and carries nothing else. */
+  stampCount: number;
+  /** Every stamp the copy carries, in `sortOrder` (#749). Read only while `stampCount` makes the
+   *  copy a carrier, so a row that is not a copy passes an empty list. */
+  stamps: { stamp: CatalogIdentityRow }[];
 };
+
+/** What one stamp's catalog numbers are resolved from: the numbers themselves, the area whose
+ * prefixes and primary vendor apply, and the issue that may override a prefix (#377). The leading
+ * stamp's full row satisfies it, and so does each entry of a carrier. */
+type CatalogIdentityRow = {
+  catalogNumbers: TitleCopyStampRow["catalogNumbers"];
+  stampAreaLinks: readonly { isPrimary: boolean; collectionAreaId: string }[];
+  issueMemberships: readonly { issue: { id: string } }[];
+};
+
+/** One stamp's catalog numbers as `{catalog}` renders them: each with its per-area prefix, and the
+ * area's primary vendor first (drives the default selection and a stable render order), the rest in
+ * their recorded order. The area is the stamp's primary link, else its first. */
+function titleCatalogNumbers(stamp: CatalogIdentityRow, maps: AreaVendorMaps): TitleCatalogNumber[] {
+  const areas = stamp.stampAreaLinks;
+  const areaId = (areas.find((a) => a.isPrimary) ?? areas[0])?.collectionAreaId ?? null;
+  // The issue may override its area's catalog prefix (#377), so the vendor lookup is resolved from
+  // the pair, not from the area alone.
+  const vendorMap = maps.vendorMapFor(areaId, stamp.issueMemberships[0]?.issue.id ?? null);
+  const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
+  const numbers: TitleCatalogNumber[] = stamp.catalogNumbers.map((cn) => {
+    const entry = vendorMap.get(cn.catalogVendorId);
+    return {
+      vendorId: cn.catalogVendorId,
+      // Prefer the area-vendor entry's abbreviation; fall back to the vendor relation.
+      vendorAbbr: entry?.vendorAbbreviation ?? cn.catalogVendor.abbreviation,
+      areaPrefix: entry?.prefix ?? null,
+      number: cn.number,
+      isPrimary: cn.catalogVendorId === primaryVendorId,
+    };
+  });
+  numbers.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  return numbers;
+}
 
 /** Normalise a fetched `Item` row (selected with {@link TITLE_COPY_SELECT}) into the pure
  * `TitleTemplateCopy` the engine renders, using the collection's area-vendor `maps` to resolve each
@@ -241,30 +309,22 @@ export function toTitleCopy(
   const primaryLink = areas.find((a) => a.isPrimary) ?? areas[0];
   const areaId = primaryLink?.collectionAreaId ?? null;
   const issue = row.stamp.issueMemberships[0]?.issue ?? null;
-  // The issue may override its area's catalog prefix (#377), so the vendor lookup is resolved from
-  // the pair, not from the area alone.
-  const vendorMap = maps.vendorMapFor(areaId, issue?.id ?? null);
-  const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
   const subtype = row.stamp.subtype;
   // The area shown in the title rolls up per its `titleName` config (#210); falls back to the leaf
   // area's own name when nothing is configured up the chain.
   const areaEntry = areaId ? areaTitleById.get(areaId) : undefined;
   const areaTitle = areaId ? (areaEntry?.title ?? primaryLink?.collectionArea.name ?? null) : null;
 
-  const catalogNumbers: TitleCatalogNumber[] = row.stamp.catalogNumbers.map((cn) => {
-    const entry = vendorMap.get(cn.catalogVendorId);
-    return {
-      vendorId: cn.catalogVendorId,
-      // Prefer the area-vendor entry's abbreviation; fall back to the vendor relation.
-      vendorAbbr: entry?.vendorAbbreviation ?? cn.catalogVendor.abbreviation,
-      areaPrefix: entry?.prefix ?? null,
-      number: cn.number,
-      isPrimary: cn.catalogVendorId === primaryVendorId,
-    };
-  });
-  // Primary vendor first (drives the default `{catalog}` selection + a stable render order); the
-  // rest keep their recorded order.
-  catalogNumbers.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  const catalogNumbers = titleCatalogNumbers(row.stamp, maps);
+  // A carrier's `{catalog}` names every stamp on it rather than the one `Item.stampId` happens to
+  // point at (ADR-0044 §8, #749), each through the same resolution as the leading stamp above. An
+  // ordinary copy leaves the field absent — its one stamp *is* `catalogNumbers` — and so does a
+  // carrier somehow read with no entries, which falls back to the leading stamp rather than to
+  // nothing.
+  const carriedCatalogNumbers =
+    isMultiStampCount(row.stampCount) && row.stamps.length > 0
+      ? row.stamps.map((entry) => titleCatalogNumbers(entry.stamp, maps))
+      : null;
 
   // What the piece might be, when its variant was never identified (#619). Only children that
   // actually *act* as variants count (ADR-0010 §3) — a distinct-entry child is another stamp, not
@@ -345,6 +405,7 @@ export function toTitleCopy(
       row.stamp.name
     ),
     catalogNumbers,
+    ...(carriedCatalogNumbers ? { carriedCatalogNumbers } : {}),
     year: row.stamp.issuedYear,
     // No year, no date: a month without one is not something any caller could order or print.
     issuedDate:
