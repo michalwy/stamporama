@@ -1140,3 +1140,129 @@ describe("planAlbumPages and the collector's corrections", () => {
     assert.equal(after[0].headings[1].yMm - before[0].headings[1].yMm, 42);
   });
 });
+
+describe("planAlbumPages and a row broken by hand (#1214)", () => {
+  /** One block per band, so a row is a row of one block and nothing else moves. */
+  const stacked = preset({ blocksPerBand: 1 });
+
+  /** A box the collector has started a new row at. A fresh object each call, so a test can find the
+   *  placement by reference — the layout hands the caller's own row straight back. */
+  const breaking = (widthMm: number, heightMm: number): AlbumBoxSpec => ({
+    ...box(widthMm, heightMm),
+    rowBreakBefore: true,
+  });
+
+  /** The rows one live page holds, as the caller's own box objects grouped by where they landed. */
+  const rowsOf = (boxes: readonly AlbumBoxSpec[], preset_ = stacked): AlbumBoxSpec[][] => {
+    const [page] = live(
+      planAlbumPages([chapter("y", "", [block("a", "A", [...boxes])])], preset_, "Album", metrics)
+        .pages
+    );
+    const rows = new Map<number, AlbumBoxSpec[]>();
+    for (const placed of page.boxes) {
+      // Mounts are centred in their row's band, so a row is found by the band's top: every box in
+      // these tests is one height, which makes the box's own top that band.
+      rows.set(placed.yMm, [...(rows.get(placed.yMm) ?? []), placed.box]);
+    }
+    return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+  };
+
+  it("starts a new row at the box the collector broke before", () => {
+    const [a, b, d] = [box(30, 36), box(30, 36), box(30, 36)];
+    const c = breaking(30, 36);
+    // 4 × 30 + 3 = 123 mm: one row of a 190 mm page, until he says otherwise.
+    assert.deepEqual(rowsOf([a, b, { ...c, rowBreakBefore: false }, d]).map((r) => r.length), [4]);
+    assert.deepEqual(rowsOf([a, b, c, d]), [
+      [a, b],
+      [c, d],
+    ]);
+  });
+
+  it("places the broken row below, centred like any other row", () => {
+    const boxes = [box(30, 36), box(30, 36), breaking(30, 36), box(30, 36)];
+    const [page] = live(
+      planAlbumPages([chapter("y", "", [block("a", "A", boxes)])], stacked, "Album", metrics).pages
+    );
+    const [first, , third] = page.boxes;
+    // Two 30 mm boxes and a 1 mm gap is a 61 mm row, centred in 190 mm from x 10: 74.5 — for both
+    // rows, since both are the same width.
+    assert.equal(first.xMm, 74.5);
+    assert.equal(third.xMm, 74.5);
+    // One 36 mm row and the 6 mm row gap under it.
+    assert.equal(third.yMm, first.yMm + 42);
+  });
+
+  it("keeps the break in front of its stamp when another stamp is added or taken away", () => {
+    // Anchored to the box, not to a position in the block: that is the whole reason a correction on
+    // this track survives the next stamp bought (ADR-0045 §3).
+    const [x, a, b, d] = [box(30, 36), box(30, 36), box(30, 36), box(30, 36)];
+    const c = breaking(30, 36);
+    assert.deepEqual(rowsOf([x, a, b, c, d]), [
+      [x, a, b],
+      [c, d],
+    ]);
+    assert.deepEqual(rowsOf([a, c, d]), [[a], [c, d]]);
+  });
+
+  it("wraps the row after a break as usual when it is still wider than the page", () => {
+    // A break only adds a row; it never forces an overflow. After it, 3 × 60 + 2 = 182 mm fits the
+    // 190 mm page and a fourth 60 mm box would make 243, so that one wraps as it always has.
+    const a = box(30, 36);
+    const c = breaking(60, 36);
+    const [d, e, f] = [box(60, 36), box(60, 36), box(60, 36)];
+    assert.deepEqual(rowsOf([a, c, d, e, f]), [[a], [c, d, e], [f]]);
+  });
+
+  it("changes nothing when the break is on a block's first box", () => {
+    // There is no row to close in front of the first box, so the block is the block it would be.
+    const plain = [box(30, 36), box(30, 36)];
+    const flagged = [breaking(30, 36), box(30, 36)];
+    const place = (boxes: AlbumBoxSpec[]) =>
+      live(
+        planAlbumPages([chapter("y", "", [block("a", "A", boxes)])], stacked, "Album", metrics)
+          .pages
+      )[0].boxes.map((b) => [b.xMm, b.yMm]);
+    assert.deepEqual(place(flagged), place(plain));
+  });
+
+  it("carries the break across a split, onto the sheet the row lands on", () => {
+    // Twelve 190 mm rows split over two sheets; the row the collector broke in front of is still
+    // its own row on whichever sheet it falls, because rows are measured for the whole block before
+    // any sheet is filled.
+    const rows = Array.from({ length: 12 }, () => box(90, 30));
+    rows[9] = breaking(90, 30);
+    const pages = live(
+      planAlbumPages([chapter("y", "", [block("a", "A", rows)])], stacked, "Album", metrics).pages
+    );
+    // Two 90 mm boxes share a row: 0-1, 2-3, 4-5, 6-7, then 8 alone because 9 breaks, 9-10, 11.
+    const all = pages.flatMap((p) => p.boxes);
+    const ys = all.map((b) => `${pages.findIndex((p) => p.boxes.includes(b))}:${b.yMm}`);
+    assert.notEqual(ys[8], ys[9]);
+    assert.equal(ys[9], ys[10]);
+    assert.notEqual(ys[10], ys[11]);
+  });
+
+  it("lets a block the collector broke into short rows share a band", () => {
+    // Paired at a ceiling of two, each block gets (190 − 10) / 2 = 90 mm. Six 28 mm boxes on one line
+    // are 173 mm, so A cannot pair — it would have to wrap, and a pairing that makes a block wrap has
+    // made it worse. Broken three and three by hand, its widest row is 86 mm and nothing wraps.
+    const blocks = (boxes: AlbumBoxSpec[]) => [
+      block("a", "A", boxes),
+      block("b", "B", [box(30, 36)]),
+    ];
+    const six = () => Array.from({ length: 6 }, () => box(28, 36));
+
+    const [loose] = live(
+      planAlbumPages([chapter("y", "", blocks(six()))], preset(), "Album", metrics).pages
+    );
+    assert.notEqual(loose.headings[0].yMm, loose.headings[1].yMm);
+
+    const broken = six();
+    broken[3] = breaking(28, 36);
+    const [paired] = live(
+      planAlbumPages([chapter("y", "", blocks(broken))], preset(), "Album", metrics).pages
+    );
+    assert.equal(paired.headings[0].yMm, paired.headings[1].yMm);
+    assert.ok(paired.headings[1].xMm > paired.headings[0].xMm);
+  });
+});

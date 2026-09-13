@@ -356,9 +356,9 @@ export function albumPreviewCopies(): Map<string, TitleTemplateCopy> {
 /**
  * The sample checklists as album entries.
  *
- * No corrections on any of them — no extra space, no forced break, no box adjustment — because a
- * correction is a fact about one collector's page (#769) and the preview is judging a preset. A
- * sample that carried one would show a gap the template does not produce.
+ * No corrections on any of them — no extra space, no forced break, no box adjustment, no row break
+ * (#1214) — because a correction is a fact about one collector's page (#769) and the preview is
+ * judging a preset. A sample that carried one would show a gap the template does not produce.
  */
 export function albumPreviewEntries(): AlbumEntryData[] {
   return ALBUM_PREVIEW_CHECKLISTS.map((checklist, i) => ({
@@ -373,6 +373,7 @@ export function albumPreviewEntries(): AlbumEntryData[] {
     spaceAfterMm: 0,
     breakBefore: "auto",
     boxAdjustments: {},
+    rowBreaks: [],
     stampIds: checklist.stamps.map((s) => albumPreviewStampId(s.number)),
     ordersItsOwn: false,
     continuesPrintedPageId: null,

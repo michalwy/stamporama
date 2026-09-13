@@ -126,6 +126,13 @@ export interface AlbumEditorBox extends AlbumRect {
   sizeFromCatalogNumber: string | null;
   /** The collector's own correction on this box, or null where the box rule's answer stands. */
   adjustment: AlbumBoxAdjustmentValue | null;
+  /** True when the collector has started a new row of boxes at this one (#1214). */
+  rowBreakBefore: boolean;
+  /** Whether a break here could mean anything: false for the **first box of its block**, which
+   *  already starts a row, and on a printed sheet, where nothing is set. The canvas offers the
+   *  toggle and the panel the checkbox only where this is true, so neither promises a break that
+   *  the layout would ignore. */
+  rowBreakable: boolean;
   /** The picture the mount prints, by `Photo.id`. On a printed sheet this is the picture the **card**
    *  printed, not the one the stamp has now — which is what makes a photo arriving afterwards a
    *  divergence to report rather than a silent substitution. */
@@ -317,7 +324,7 @@ export function liveSheet(
       );
     }
 
-    for (const placed of slice) {
+    for (const [n, placed] of slice.entries()) {
       const box = placed.box;
       boxes.push({
         entryId: block.entryId,
@@ -342,6 +349,10 @@ export function liveSheet(
                 .catalogNumber ?? null)
             : null,
         adjustment: entry?.boxAdjustments[box.stampId] ?? null,
+        rowBreakBefore: box.rowBreakBefore === true,
+        // Indexed into the **block's own** boxes, not the sheet's: the second sheet of a split
+        // checklist opens on a box that is not the block's first, and a break there is real.
+        rowBreakable: !!entry && block.firstBoxIndex + n > 0,
         photoId: album.printPhotos ? photoIdFor(box.stampId) : null,
       });
     }
@@ -448,6 +459,8 @@ function printedSheet(
       sizeSource: box.sizeSource,
       sizeFromCatalogNumber: null,
       adjustment: null,
+      rowBreakBefore: false,
+      rowBreakable: false,
       photoId: box.photoId,
     };
   });

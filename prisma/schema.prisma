@@ -1230,7 +1230,8 @@ model AlbumEntry {
   checklist         Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   stampOrder        AlbumEntryStampOrder[]
   boxAdjustments    AlbumBoxAdjustment[]
-  textBlocks        AlbumTextBlock[]       @relation("AlbumTextBlockAnchor")
+  rowBreaks         AlbumRowBreak[]
+  textBlocks       AlbumTextBlock[]       @relation("AlbumTextBlockAnchor")
   continuesPrintedPage AlbumPrintedPage? @relation("AlbumEntryContinuation", fields: [continuesPrintedPageId], references: [id], onDelete: SetNull)
   printedStamps     AlbumPrintedPageStamp[]
 
@@ -1294,6 +1295,32 @@ model AlbumBoxAdjustment {
   @@id([albumEntryId, stampId])
   @@index([stampId])
   @@map("album_box_adjustment")
+}
+
+// A row of boxes the collector has broken by hand (#1214): *a new row starts at this stamp*.
+//
+// **Anchored to the box, never to a place on the page**, for the reason every other correction on
+// this track is (ADR-0045 §3): a stamp added or removed elsewhere in the checklist re-flows the rows,
+// and the break is still in front of the stamp it was put in front of. Keyed `(entry, stamp)` like
+// `AlbumBoxAdjustment`, because a box is a slot and one stamp can have two of them (ADR-0047 §2).
+//
+// A row of its own rather than a column on `album_box_adjustment`. That table is *this box is a
+// different size*, and both zeroes there deletes the row; a break is a statement about the row, not
+// the piece of hawid, and *undo every box correction* must not quietly take the breaks with it.
+//
+// Presence is the whole statement — nothing to backfill, and a block nobody has broken keeps no rows.
+// A stamp that leaves the checklist leaves its row behind, inert: the plan only reads breaks for the
+// stamps a block actually holds, exactly as it only reads size corrections for them.
+model AlbumRowBreak {
+  albumEntryId String
+  stampId      String
+
+  albumEntry AlbumEntry @relation(fields: [albumEntryId], references: [id], onDelete: Cascade)
+  stamp      Stamp      @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([albumEntryId, stampId])
+  @@index([stampId])
+  @@map("album_row_break")
 }
 
 // A block of the collector's own words on a page (#769), set in one of the template's five roles.
@@ -2726,6 +2753,8 @@ model Stamp {
   albumStampOrders  AlbumEntryStampOrder[]
   /** Per-box size corrections the collector has made by hand on an album page (#769). */
   albumBoxAdjustments AlbumBoxAdjustment[]
+  /** Rows of boxes the collector has broken by hand in front of this stamp on an album page (#1214). */
+  albumRowBreaks    AlbumRowBreak[]
   /** The album sheets already in a binder that carry this stamp (#778). */
   albumPrintedPages AlbumPrintedPageStamp[]
   wants             Want[]                @relation("WantStamp")

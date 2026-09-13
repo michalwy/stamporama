@@ -120,7 +120,7 @@ left and the panel of numbers on the right stay where they are while you move do
 you are working on and what you are working with are never both off screen at once.
 
 Everything you set there is a **correction**, not a position: *this box 2 mm wider*, *5 mm more
-before this series*, *break here*, these stamps in this order. That distinction is the whole reason
+before this series*, *break here*, *a new row from this stamp*, these stamps in this order. That distinction is the whole reason
 the automatic layout goes on running underneath — add a stamp to a checklist and the page re-flows
 with every one of your corrections still in place. Nothing has to be re-done after an acquisition.
 
@@ -143,6 +143,14 @@ What you can set:
   move at all: two more millimetres might change nothing, or might take a box off the 24 mm packet
   and onto the 29 mm one. Raise it past your tallest strip and the box becomes a pocket, and the
   cutting list says so.
+- **Where a row of boxes ends.** A checklist's boxes run left to right and wrap when the page runs
+  out of width; to end a row earlier — a sub-series on a line of its own, ten stamps as five and five —
+  select the box the new row should start at and tick *Start a new row at this box*, or click the small
+  square on its top-left corner. A box a row starts at by hand carries a blue bracket round that
+  corner. The break belongs to **that stamp**, so adding or removing other stamps in the checklist
+  leaves it where you put it. It only ever **adds** a row: if what follows is still wider than the page,
+  it wraps as usual. The first box of a checklist already starts a row, so it offers nothing. A
+  checklist broken into short rows is also narrower, so it may now sit side by side with the next one.
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
   order for the whole checklist; *Follow the checklist's order* puts it back.
 - **A note of your own**, set in one of the template's five voices and **filed before or after a

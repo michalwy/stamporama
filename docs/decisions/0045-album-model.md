@@ -245,5 +245,12 @@ is a block the pairing has made worse.
   is one the collector meets with the card already in his hand. `docs/agents/albums.md` carries the rest, including the counts that decided
   the space rails and the fact that the free text block is an invention rather than something read
   off the sources.
+- #1214 added the one correction inside a block: **a new row of boxes starts at this stamp**. It is an
+  `album_row_break` row keyed `(entry, stamp)` like a box correction, and for this decision's reason —
+  a break stored at a position in the block would move to another stamp the first time one is added
+  in front of it. Its own table rather than a column on `album_box_adjustment`, because that row is
+  about the piece of hawid and is deleted and cleared by rules a break must not share. A break only
+  adds a row — the row after it still wraps where the width runs out — and a block's natural width,
+  which decides band pairing, is its widest hand-broken row.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.

@@ -10,6 +10,7 @@ import {
   getAlbumEntries,
   reorderAlbumEntries,
   setAlbumEntryStampOrder,
+  setAlbumRowBreak,
   AlbumNameTakenError,
 } from "../../src/lib/albums";
 import { planAlbum } from "../../src/lib/album-plan";
@@ -351,6 +352,56 @@ describe("album plan (#767)", () => {
     )!;
     assert.equal(reset.ordersItsOwn, false);
     assert.deepEqual(reset.stampIds, [s303, s304, s309]);
+  });
+
+  it("starts a new row at a stamp by hand, and keeps it there when the checklist changes (#1214)", async () => {
+    const entry = (await getAlbumEntries(userId, albumId)).find(
+      (e) => e.checklistId === checklist1938
+    )!;
+    /** Each stamp's row on the plan, as the top of the band it landed in. */
+    const rowOf = async () => {
+      const plan = await planAlbum(userId, albumId);
+      const tops = new Map<string, number>();
+      for (const page of plan!.pages) {
+        if (page.layout.kind !== "live") continue;
+        for (const placed of page.layout.boxes) tops.set(placed.box.stampId, placed.yMm);
+      }
+      return tops;
+    };
+
+    // Three 30 mm boxes fit one row of the page.
+    let rows = await rowOf();
+    assert.equal(rows.get(s303), rows.get(s309));
+
+    await setAlbumRowBreak(userId, entry.id, s309, true);
+    // Twice is still one break: presence is the statement.
+    await setAlbumRowBreak(userId, entry.id, s309, true);
+    assert.deepEqual(
+      (await getAlbumEntries(userId, albumId)).find((e) => e.id === entry.id)!.rowBreaks,
+      [s309]
+    );
+    rows = await rowOf();
+    assert.equal(rows.get(s303), rows.get(s304));
+    assert.ok(rows.get(s309)! > rows.get(s303)!, "309 starts a row of its own");
+
+    // Take 304 off the checklist: the break is on 309's box, not at the third position, so it is
+    // still in front of 309 — which is now the second box rather than the third.
+    await prisma.checklistStamp.delete({
+      where: { checklistId_stampId: { checklistId: checklist1938, stampId: s304 } },
+    });
+    rows = await rowOf();
+    assert.ok(rows.get(s309)! > rows.get(s303)!, "still in front of 309 with 304 gone");
+    await prisma.checklistStamp.create({
+      data: { checklistId: checklist1938, stampId: s304, sortOrder: 1 },
+    });
+
+    // A stamp on another checklist has no box on this entry to break in front of.
+    await assert.rejects(setAlbumRowBreak(userId, entry.id, s400, true));
+
+    await setAlbumRowBreak(userId, entry.id, s309, false);
+    rows = await rowOf();
+    assert.equal(rows.get(s303), rows.get(s309));
+    assert.equal(await prisma.albumRowBreak.count({ where: { albumEntryId: entry.id } }), 0);
   });
 
   it("re-plans from current data, so a stamp joining a checklist lands on its page", async () => {

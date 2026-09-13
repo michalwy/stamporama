@@ -21,6 +21,7 @@ import {
   setAlbumBoxAdjustment,
   setAlbumEntryLayout,
   setAlbumEntryStampOrder,
+  setAlbumRowBreak,
   updateAlbum,
   updateAlbumTextBlock,
   AlbumNameTakenError,
@@ -448,6 +449,22 @@ export async function setAlbumBoxAdjustmentAction(
     return { status: "success" };
   } catch (err) {
     return toErrorState(err, "Could not correct that box.");
+  }
+}
+
+/** Start a new row of boxes at one stamp, or take the break back (#1214). A break is on the box, so
+ *  it stays in front of this stamp however the rest of the checklist changes. */
+export async function setAlbumRowBreakAction(
+  entryId: string,
+  stampId: string,
+  on: boolean
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await setAlbumRowBreak(session.user.id, entryId, stampId, on);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not change where that row breaks.");
   }
 }
 

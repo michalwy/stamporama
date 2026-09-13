@@ -341,6 +341,10 @@ export async function albumPlanContext(
           catalogNumber: number,
           catalogSortKey: stamp.primaryCatalogSortKey,
           sizeAdjusted: adjustment !== null,
+          // The collector's own row break (#1214). On a continuation block whose first box this is,
+          // there is no row to close and the layout ignores it — which is right: the sheet already
+          // starts a row there.
+          ...(entry.rowBreaks.includes(stampId) ? { rowBreakBefore: true } : {}),
         },
       ];
     });

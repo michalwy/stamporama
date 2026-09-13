@@ -328,6 +328,9 @@ export interface AlbumEntryData {
    *  rather than a stamp** (ADR-0047 §2): one stamp on two checklists of one issue is two boxes, and
    *  correcting one must not correct the other. Absent means the box rule's own answer stands. */
   boxAdjustments: Record<string, AlbumBoxAdjustmentValue>;
+  /** The stamps a new row of boxes starts at, by hand (#1214). On the box rather than at a position,
+   *  so adding or removing another stamp leaves each break in front of the stamp it was set on. */
+  rowBreaks: string[];
   /** The stamps of the entry, in the order this album prints them: the checklist's own order (#764)
    *  unless the album overrides it. */
   stampIds: string[];
@@ -351,6 +354,7 @@ const ENTRY_SELECT = {
   breakBefore: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
   boxAdjustments: { select: { stampId: true, widthDeltaMm: true, heightDeltaMm: true } },
+  rowBreaks: { select: { stampId: true } },
   checklist: {
     select: {
       name: true,
@@ -404,6 +408,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
         { widthDeltaMm: a.widthDeltaMm, heightDeltaMm: a.heightDeltaMm },
       ])
     ),
+    rowBreaks: row.rowBreaks.map((b) => b.stampId),
     stampIds,
     ordersItsOwn,
     continuesPrintedPageId: row.continuesPrintedPageId,
@@ -669,6 +674,44 @@ export async function setAlbumBoxAdjustment(
     where: { albumEntryId_stampId: { albumEntryId: entryId, stampId } },
     create: { albumEntryId: entryId, stampId, ...value },
     update: value,
+  });
+}
+
+/**
+ * Start a new row of boxes at one stamp of an entry, or take that break back (#1214).
+ *
+ * Presence is the statement, so taking it back deletes the row — the same rule as a box correction of
+ * two zeroes. Checked against the entry's own checklist for the same reason too: `(entry, stamp)` is
+ * the pair that names exactly one box.
+ *
+ * Deliberately not refused for a stamp whose card is printed. It changes nothing on that card — the
+ * plan steps over a printed block before it measures a row — and it is waiting there if the card is
+ * reprinted, exactly as a box correction is.
+ */
+export async function setAlbumRowBreak(
+  ownerId: string,
+  entryId: string,
+  stampId: string,
+  on: boolean
+): Promise<void> {
+  const { collectionId } = await resolveEntryAlbum(entryId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const entry = await prisma.albumEntry.findUnique({
+    where: { id: entryId },
+    select: { checklist: { select: { stamps: { select: { stampId: true } } } } },
+  });
+  if (!entry) throw new Error("Album entry not found.");
+  if (!entry.checklist.stamps.some((s) => s.stampId === stampId)) {
+    throw new Error("That stamp is not on this entry's checklist.");
+  }
+
+  if (!on) {
+    await prisma.albumRowBreak.deleteMany({ where: { albumEntryId: entryId, stampId } });
+    return;
+  }
+  await prisma.albumRowBreak.createMany({
+    data: [{ albumEntryId: entryId, stampId }],
+    skipDuplicates: true,
   });
 }
 

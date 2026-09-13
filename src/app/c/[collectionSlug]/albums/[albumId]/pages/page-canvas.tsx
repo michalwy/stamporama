@@ -147,6 +147,7 @@ const NO_DRAG: (drag: CanvasDrag | null) => void = () => {};
 const NO_DRAG_END: (drag: CanvasDrag) => void = () => {};
 const NO_REORDER: (blockId: string, from: string, to: string) => void = () => {};
 const NO_REORDER_BLOCKS: (from: string, to: string) => void = () => {};
+const NO_ROW_BREAK: (entryId: string, stampId: string, on: boolean) => void = () => {};
 const NO_OPEN_GAPS: (
   text: AlbumEditorText,
   at: { left: number; bottom: number }
@@ -175,6 +176,9 @@ interface AlbumPageCanvasInteractive extends AlbumPageCanvasBase {
   /** Called when a block's heading is dropped onto another block's — the order the album prints its
    *  blocks in, which is the one override on this canvas that is not a millimetre. */
   onReorderBlocks: (fromBlockId: string, toBlockId: string) => void;
+  /** Called when the selected box's row-break tab is clicked (#1214): start a new row at this box,
+   *  or stop doing so. The panel's checkbox writes the same thing. */
+  onToggleRowBreak: (entryId: string, stampId: string, on: boolean) => void;
   /** Opens the translation editor for a text that fell back to the default language (#298/#300). */
   onOpenGaps: (text: AlbumEditorText, at: { left: number; bottom: number }) => void;
 }
@@ -209,6 +213,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
   const onDragEnd = props.interactive === false ? NO_DRAG_END : props.onDragEnd;
   const onReorder = props.interactive === false ? NO_REORDER : props.onReorder;
   const onReorderBlocks = props.interactive === false ? NO_REORDER_BLOCKS : props.onReorderBlocks;
+  const onToggleRowBreak = props.interactive === false ? NO_ROW_BREAK : props.onToggleRowBreak;
   const onOpenGaps = props.interactive === false ? NO_OPEN_GAPS : props.onOpenGaps;
   /** A printed sheet may be looked at and selected but not changed (#778); a preview may only be
    *  looked at. Everything that writes reads this; everything that only highlights reads
@@ -669,6 +674,40 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
                 fill={HANDLE}
                 style={{ cursor: "nwse-resize" }}
                 onPointerDown={(e) => startDrag(e, "size", blockId, box.stampId)}
+              />
+            )}
+            {box.rowBreakable && box.rowBreakBefore && !chosen && (
+              // **A row starts here by hand** (#1214): a bracket round the box's top-left corner,
+              // outside it. Not a bar beside the box — that is the reorder kit's insertion mark and
+              // would read as *something will be put here* — and not a ring, which says *selected*
+              // or *flagged*. A drawing aid in the handle colour, like every other: on no card.
+              <path
+                d={`M ${box.xMm - 1.2} ${box.yMm + dy + 4} V ${box.yMm + dy - 1.2} H ${box.xMm + 4}`}
+                fill="none"
+                stroke={HANDLE}
+                strokeWidth={0.5 * MM}
+                pointerEvents="none"
+              />
+            )}
+            {chosen && !readOnly && box.rowBreakable && (
+              // The row-break tab, on the corner opposite the size handle: filled when a new row
+              // starts at this box, hollow when it does not, and a click turns it over. Offered only
+              // where a break could mean anything — never on a block's first box, which already
+              // starts a row, so the tab cannot promise a break the layout would ignore.
+              <rect
+                x={box.xMm - 1.6}
+                y={box.yMm + dy - 1.6}
+                width={3.2}
+                height={3.2}
+                fill={box.rowBreakBefore ? HANDLE : PAPER}
+                stroke={HANDLE}
+                strokeWidth={0.4 * MM}
+                style={{ cursor: "pointer" }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleRowBreak(box.entryId, box.stampId, !box.rowBreakBefore);
+                }}
               />
             )}
             {box.label && drawText(box.label, `l${i}`, dy, box.label.gaps.length > 0)}
