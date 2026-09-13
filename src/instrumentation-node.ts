@@ -38,6 +38,9 @@
 //     is what makes a bid on one of your auctions, and an order landing, visible within minutes.
 //     Its own timer rather than a faster sync: it reads what *changed* and so costs two requests
 //     when nothing did, where a sync re-reads the whole account.
+//   - the daily value snapshots (#652) — an hourly pass recording each collection's value for the
+//     day, one row per collection and per area, updated rather than appended on a later pass. The
+//     one figure the Overview cannot compute after the fact, so it is written down as it happens.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -57,6 +60,7 @@ import {
   refreshDelcampeCategoriesIfStale,
 } from "@/lib/delcampe-category-catalog";
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
+import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -300,6 +304,10 @@ export async function start(): Promise<void> {
   const delcampeInterval = setInterval(delcampeCategories, DELCAMPE_CATEGORY_INTERVAL_MS);
   delcampeInitial.unref?.();
   delcampeInterval.unref?.();
+
+  // The daily value snapshots (#652). Its timers and its in-flight flag live on `globalThis` inside
+  // the module, so a hot reload re-running boot cannot stack a second interval.
+  startValueSnapshotSweep();
 
   // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.

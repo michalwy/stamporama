@@ -179,6 +179,7 @@ model Collection {
   delcampeImportState DelcampeImportState?
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
+  valueSnapshots  CollectionValueSnapshot[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -2651,6 +2652,7 @@ model CollectionArea {
   albums                 Album[]
   formatFactors          StampFormatFactor[]
   platformCategoryLessons PlatformCategoryLesson[]
+  valueSnapshots         CollectionAreaValueSnapshot[]
 
   @@index([primaryCatalogVendorId])
   @@map("collection_area")
@@ -5977,6 +5979,98 @@ model ExchangeRate {
 
   @@unique([collectionId, fromCurrency, toCurrency])
   @@map("exchange_rate")
+}
+
+// One day's value of a collection (#652; ADR-0053) — the one figure the Overview cannot compute after
+// the fact. Growth in copies and spend falls out of event dates; what the holdings were worth on a
+// past day does not, because catalogue prices, holdings and rates have all moved since.
+//
+// Written by the hourly sweep (`value-snapshots.ts`), **one row per collection per UTC day**: a later
+// pass the same day replaces the day's figures rather than appending, and a day the app was down is
+// left as a gap — nothing is back-filled from state that cannot say what that day looked like.
+//
+// Every figure is the Overview's own read at its own default scope, in `baseCurrency`, with the
+// honesty counts beside each sum (unpriced, unconvertible, no evidence, pending cost) so a point on a
+// curve can say what it left out. `rates` is the exchange-rate table the pass converted with,
+// restated into the base currency, dated by `ratesFetchedAt`.
+model CollectionValueSnapshot {
+  id             String    @id @default(cuid())
+  collectionId   String
+  /// The UTC calendar day this row stands for.
+  day            DateTime  @db.Date
+  /// When the day's figures were last written — the last pass of that day.
+  takenAt        DateTime
+  baseCurrency   String
+  /// `{ currency: rate into baseCurrency }` — the collection's rate table at the pass. `{}` when it
+  /// held none.
+  rates          Json
+  ratesFetchedAt DateTime?
+
+  catalogueValue              Decimal @db.Decimal(14, 2)
+  catalogueUncertainValue     Decimal @db.Decimal(14, 2)
+  cataloguePricedCount        Int
+  catalogueUnpricedCount      Int
+  catalogueUnconvertibleCount Int
+  catalogueUncertainCount     Int
+  marketValue                 Decimal @db.Decimal(14, 2)
+  marketValuedCount           Int
+  marketNoEvidenceCount       Int
+  acquisitionCost             Decimal @db.Decimal(14, 2)
+  costKnownCount              Int
+  costPendingCount            Int
+  costNoneCount               Int
+  copiesHeld                  Int
+  /// Active listings' asking value (the Overview's `state=active`). Collection-level only: an offer
+  /// can mix copies of several areas, so it does not split by area.
+  askingValue              Decimal @db.Decimal(14, 2)
+  askingOfferCount         Int
+  askingUnpricedCount      Int
+  askingUnconvertibleCount Int
+
+  /// Open auction bids (the watchlist's default scope). Collection-level only, for the same reason.
+  exposureCommitted          Decimal @db.Decimal(14, 2)
+  exposureCeiling            Decimal @db.Decimal(14, 2)
+  exposurePayableCount       Int
+  exposureUncappedCount      Int
+  exposureUnconvertibleCount Int
+
+  collection Collection                    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  areas      CollectionAreaValueSnapshot[]
+
+  @@unique([collectionId, day])
+  @@map("collection_value_snapshot")
+}
+
+// The same day's holdings figures for one area's **subtree** (#652) — exactly what the Copies screen
+// sums with that area selected: every copy whose stamp is linked into the area or anything under it.
+// A stamp filed in two areas counts under both, so area rows need not add up to the collection row.
+// Stored per subtree rather than rolled up on read so that a later reparenting cannot rewrite the
+// history. An area deleted takes its own history with it; the collection row is untouched.
+model CollectionAreaValueSnapshot {
+  id               String @id @default(cuid())
+  snapshotId       String
+  collectionAreaId String
+
+  catalogueValue              Decimal @db.Decimal(14, 2)
+  catalogueUncertainValue     Decimal @db.Decimal(14, 2)
+  cataloguePricedCount        Int
+  catalogueUnpricedCount      Int
+  catalogueUnconvertibleCount Int
+  catalogueUncertainCount     Int
+  marketValue                 Decimal @db.Decimal(14, 2)
+  marketValuedCount           Int
+  marketNoEvidenceCount       Int
+  acquisitionCost             Decimal @db.Decimal(14, 2)
+  costKnownCount              Int
+  costPendingCount            Int
+  costNoneCount               Int
+  copiesHeld                  Int
+  snapshot       CollectionValueSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea          @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, collectionAreaId])
+  @@index([collectionAreaId])
+  @@map("collection_area_value_snapshot")
 }
 
 model Session {

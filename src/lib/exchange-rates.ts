@@ -52,7 +52,7 @@ type Snapshot = { rates: Map<string, number>; fetchedAt: Date };
  * normally uniform; taking the minimum means a snapshot that somehow ends up mixed ages is treated
  * as being as old as its oldest part rather than as current.
  */
-async function readSnapshot(collectionId: string): Promise<Snapshot | null> {
+export async function readSnapshot(collectionId: string): Promise<Snapshot | null> {
   const rows = await prisma.exchangeRate.findMany({
     where: { collectionId, fromCurrency: ANCHOR },
     select: { toCurrency: true, rate: true, fetchedAt: true },
