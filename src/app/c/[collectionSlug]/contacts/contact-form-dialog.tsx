@@ -446,6 +446,7 @@ export function ContactFormDialog({
                     <div style={{ flex: 1 }}>
                       <LabelWithError htmlFor="contact-default-shipping">Shipping</LabelWithError>
                       <NumericInput
+                        kind="amount"
                         id="contact-default-shipping"
                         name="defaultShippingCost"
                         defaultValue={contact?.defaultShippingCost ?? ""}
@@ -457,6 +458,7 @@ export function ContactFormDialog({
                     <div style={{ flex: 1 }}>
                       <LabelWithError htmlFor="contact-premium-percent">Premium %</LabelWithError>
                       <NumericInput
+                        kind="number"
                         id="contact-premium-percent"
                         name="buyerPremiumPercent"
                         defaultValue={contact?.buyerPremiumPercent ?? ""}
@@ -468,6 +470,7 @@ export function ContactFormDialog({
                     <div style={{ flex: 1 }}>
                       <LabelWithError htmlFor="contact-premium-fixed">Premium fixed</LabelWithError>
                       <NumericInput
+                        kind="amount"
                         id="contact-premium-fixed"
                         name="buyerPremiumFixed"
                         defaultValue={contact?.buyerPremiumFixed ?? ""}
@@ -582,6 +585,7 @@ export function ContactFormDialog({
                         Default starting price (optional)
                       </LabelWithError>
                       <NumericInput
+                        kind="amount"
                         id="contact-default-starting-price"
                         name="defaultStartingPrice"
                         defaultValue={contact?.defaultStartingPrice ?? ""}
@@ -609,6 +613,7 @@ export function ContactFormDialog({
                     Minimum price (optional)
                   </LabelWithError>
                   <NumericInput
+                    kind="amount"
                     id="contact-minimum-price"
                     name="minimumPrice"
                     defaultValue={contact?.minimumPrice ?? ""}

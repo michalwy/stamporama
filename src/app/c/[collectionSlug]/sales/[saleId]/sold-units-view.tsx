@@ -797,6 +797,7 @@ function EditableLinePrice({
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
         <NumericInput
+          kind="amount"
           ref={inputRef}
           placeholder="0.00"
           autoFocus

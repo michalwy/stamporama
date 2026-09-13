@@ -3539,6 +3539,7 @@ function LotDialog({
           </div>
           <LabelWithError htmlFor="lot-price">Lot price</LabelWithError>
           <NumericInput
+            kind="amount"
             id="lot-price"
             name="price"
             required

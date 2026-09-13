@@ -17,7 +17,7 @@ import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { formatAmountInput } from "@/lib/decimal-input";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
 import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
@@ -265,7 +265,7 @@ function CatalogValuesGrid({
       const key = rowKey(row.copy);
       const typed = (values.get(key) ?? "").trim();
       if (typed === "") continue;
-      if (formatAmount(typed) === (saved.get(key) ?? "")) continue;
+      if (formatAmountInput(typed) === (saved.get(key) ?? "")) continue;
       out.push({
         stampId: row.copy.stampId,
         conditionId: row.copy.conditionId,
@@ -291,7 +291,7 @@ function CatalogValuesGrid({
       setSaved((prev) => {
         const next = new Map(prev);
         for (const row of changed.slice(0, r.savedRows)) {
-          next.set(rowKey(row), formatAmount(row.entries[0].amount));
+          next.set(rowKey(row), formatAmountInput(row.entries[0].amount));
         }
         return next;
       });
@@ -538,6 +538,7 @@ function CatalogValuesGrid({
                         style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
                       >
                         <NumericInput
+                          kind="amount"
                           ref={(el) => {
                             inputRefs.current.set(key, el);
                           }}
@@ -546,10 +547,6 @@ function CatalogValuesGrid({
                           } catalog value`}
                           value={values.get(key) ?? ""}
                           onChange={(e) => setValue(key, e.target.value)}
-                          onBlur={(e) => {
-                            const normalized = formatAmount(e.currentTarget.value.trim());
-                            if (normalized !== e.currentTarget.value) setValue(key, normalized);
-                          }}
                           onKeyDown={(e) => handleKeyDown(e, key)}
                           disabled={isSaving}
                           placeholder="—"
@@ -593,16 +590,6 @@ function CatalogValuesGrid({
       </DialogFooter>
     </form>
   );
-}
-
-/** Two decimals, the shape every recorded price is stored in. An unparseable entry is left exactly
- *  as typed and refused by the server, rather than being silently turned into something else. */
-function formatAmount(value: string): string {
-  const trimmed = normalizeDecimalInput(value.trim());
-  if (trimmed === "") return "";
-  const n = Number(trimmed);
-  if (Number.isNaN(n)) return trimmed;
-  return n.toFixed(2);
 }
 
 const MUTED: React.CSSProperties = {

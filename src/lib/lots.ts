@@ -34,6 +34,7 @@ import {
 import { resolvePurchaseSpend, type PurchaseSpend } from "./purchase-spend";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { roundAmount } from "./decimal-input";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -94,14 +95,14 @@ async function assertPurchaseOwner(
 }
 
 function money(n: number): Prisma.Decimal {
-  return new Prisma.Decimal(n.toFixed(2));
+  return new Prisma.Decimal(roundAmount(n));
 }
 
 function parsePrice(price: number): number {
   if (!Number.isFinite(price) || price < 0) {
     throw new Error("A lot price must be a non-negative number.");
   }
-  return Math.round(price * 100) / 100;
+  return Number(roundAmount(price));
 }
 
 // ---------------------------------------------------------------------------

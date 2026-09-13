@@ -181,6 +181,7 @@ export function PurchaseFormDialog({
           <div>
             <LabelWithError htmlFor="purchase-shipping">Shipping / shared cost</LabelWithError>
             <NumericInput
+              kind="amount"
               id="purchase-shipping"
               name="shippingCost"
               placeholder="0.00"

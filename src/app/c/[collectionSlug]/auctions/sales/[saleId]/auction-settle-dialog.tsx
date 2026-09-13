@@ -166,6 +166,7 @@ export function AuctionSettleDialog({
                 Shipping ({sale.currency})
               </label>
               <NumericInput
+                kind="amount"
                 id="settle-shipping"
                 value={shippingCost}
                 onChange={(e) => setShippingCost(e.currentTarget.value)}
@@ -222,6 +223,7 @@ export function AuctionSettleDialog({
                     </Td>
                     <Td align="right">
                       <NumericInput
+                        kind="amount"
                         value={prices[lot.id] ?? ""}
                         disabled={!on}
                         aria-label={`Line price for ${lotLabel(lot)}`}

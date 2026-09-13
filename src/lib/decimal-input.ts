@@ -155,3 +155,39 @@ export function evaluateAmountExpression(raw: string): number | null {
 export function formatAmountResult(value: number): string {
   return String(Number(value.toFixed(RESULT_DECIMALS)));
 }
+
+/**
+ * An amount of money to the cent, rounded **half up** (#1231): `1.555` → `1.56`, `1.005` → `1.01`.
+ *
+ * Not `toFixed(2)`, which rounds the binary double rather than the decimal that was typed and so
+ * turns `1.555` into `1.55` — a field would show one figure and the database hold another. The
+ * rounding is done on the number's shortest decimal spelling (`String(1.555)` is `"1.555"`), which is
+ * exactly the decimal the collector wrote. A negative rounds away from zero, as Postgres does.
+ */
+export function roundAmount(value: number): string {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(String(Math.abs(value)));
+  // Exponent notation: below a millionth or beyond 1e21, neither of which is a price.
+  if (!match) return value.toFixed(2);
+  const [, whole, fraction = ""] = match;
+  const digits = fraction.padEnd(3, "0");
+  let cents = Number(whole) * 100 + Number(digits.slice(0, 2));
+  if (digits[2] >= "5") cents += 1;
+  const text = String(cents).padStart(3, "0");
+  const sign = value < 0 && cents > 0 ? "-" : "";
+  return `${sign}${text.slice(0, -2)}.${text.slice(-2)}`;
+}
+
+/**
+ * What an amount field shows once the collector leaves it (#1231): the amount at exactly two
+ * decimal places. `1.5` → `1.50`, `.7` → `0.70`, `1,5` → `1.50`, `1+2.5` → `3.50`, `1.555` → `1.56`.
+ *
+ * A blank stays blank — no value and zero are different statements (#1184). Anything that is not an
+ * amount — an unparseable sum, a stray separator, a negative — comes back as
+ * {@link normalizeDecimalInput} leaves it, so the caller refuses what was typed with its own message
+ * rather than a figure the collector never wrote.
+ */
+export function formatAmountInput(raw: string): string {
+  const normalized = normalizeDecimalInput(raw);
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(normalized)) return normalized;
+  return roundAmount(Number(normalized));
+}

@@ -159,6 +159,9 @@ describe("parseAuctionAmount", () => {
     assert.deepEqual(parseAuctionAmount("12", "Bid"), { ok: true, value: "12.00" });
     assert.deepEqual(parseAuctionAmount(" 3,5 ", "Bid"), { ok: true, value: "3.50" });
   });
+  it("rounds a third decimal half up, as the field shows it (#1231)", () => {
+    assert.deepEqual(parseAuctionAmount("2.675", "Bid"), { ok: true, value: "2.68" });
+  });
   it("treats blank as not recorded rather than zero", () => {
     assert.deepEqual(parseAuctionAmount("", "Bid"), { ok: true, value: null });
     assert.deepEqual(parseAuctionAmount("   ", "Bid"), { ok: true, value: null });

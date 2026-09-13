@@ -5,7 +5,7 @@
 // unit-tested without a DB. No side effects.
 
 import type { OfferState } from "./offer-rules";
-import { normalizeDecimalInput } from "./decimal-input";
+import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 
 /** Offer states a sale can be recorded against: an offer must still be live (`active`) or merely
  * `paused` on the platform — a `sold` offer is already spent and a `withdrawn` one was taken
@@ -32,7 +32,7 @@ export function parsePrice(
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: "Sale price must be a number." };
   if (n < 0) return { ok: false, message: "Sale price cannot be negative." };
-  return { ok: true, value: n.toFixed(2) };
+  return { ok: true, value: roundAmount(n) };
 }
 
 /** Validate and normalise an **optional** non-negative shared amount (buyer handling, my
@@ -47,7 +47,7 @@ export function parseAmount(
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: `${label} must be a number.` };
   if (n < 0) return { ok: false, message: `${label} cannot be negative.` };
-  return { ok: true, value: n.toFixed(2) };
+  return { ok: true, value: roundAmount(n) };
 }
 
 /** Parse a `YYYY-MM-DD` sale date into a UTC `Date` (the FX-freeze date). Returns `null` on a

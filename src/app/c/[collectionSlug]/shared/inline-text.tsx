@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { NumericInput } from "./numeric-input";
 
 const INLINE_INPUT: React.CSSProperties = {
   padding: "0.125rem 0.375rem",
@@ -49,7 +50,9 @@ export function InlineText({
   display: React.ReactNode;
   editable: boolean;
   isPending: boolean;
-  inputType: "url" | "number" | "text";
+  /** `"amount"` is money: the shared amount field, so a comma, a small sum and two decimals once the
+   *  field is left all behave as they do in every other amount field (#233, #580, #1231). */
+  inputType: "url" | "amount" | "text";
   suffix?: string;
   editControl?: boolean;
   editAriaLabel?: string;
@@ -119,38 +122,44 @@ export function InlineText({
     );
   }
 
-  function commit() {
+  // Read off the element rather than off `draft`: an amount field settles its figure into the input on
+  // blur and only then calls this, so the state from this render still holds the keystrokes.
+  function commit(e: React.FocusEvent<HTMLInputElement>) {
+    const next = e.currentTarget.value;
     setEditing(false);
-    if (draft !== value) onSave(draft);
+    if (next !== value) onSave(next);
   }
+
+  const fieldProps = {
+    ref: inputRef,
+    autoFocus: true,
+    value: draft,
+    placeholder,
+    disabled: isPending,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") e.currentTarget.blur();
+      else if (e.key === "Escape") {
+        setDraft(value);
+        setEditing(false);
+      }
+    },
+    style: {
+      ...INLINE_INPUT,
+      width: inputType === "url" ? "16rem" : inputType === "text" ? "20rem" : "6rem",
+      textAlign: inputType === "amount" ? "right" : "left",
+      ...inputStyle,
+    } satisfies React.CSSProperties,
+  };
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-      <input
-        ref={inputRef}
-        autoFocus
-        type={inputType}
-        value={draft}
-        placeholder={placeholder}
-        disabled={isPending}
-        min={inputType === "number" ? "0" : undefined}
-        step={inputType === "number" ? "0.01" : undefined}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          else if (e.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        style={{
-          ...INLINE_INPUT,
-          width: inputType === "url" ? "16rem" : inputType === "text" ? "20rem" : "6rem",
-          textAlign: inputType === "number" ? "right" : "left",
-          ...inputStyle,
-        }}
-      />
+      {inputType === "amount" ? (
+        <NumericInput kind="amount" {...fieldProps} />
+      ) : (
+        <input type={inputType} {...fieldProps} />
+      )}
       {suffix && <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{suffix}</span>}
     </span>
   );

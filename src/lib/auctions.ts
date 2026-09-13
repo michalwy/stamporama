@@ -49,6 +49,7 @@ import {
   type AuctionSaleStatus,
 } from "./auction-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { roundAmount } from "./decimal-input";
 
 // Server-side domain logic for **auction tracking** (ADR-0021, #350–#352): a bidding watchlist with
 // a fork at the end. `AuctionSale` ⊃ `AuctionLot` ⊃ `AuctionLotLine`, where the sale is one
@@ -3148,7 +3149,7 @@ export async function settleAuctionSale(
         currency: sale.currency,
         fxRateToBase,
         shippingCost:
-          input.shippingCost != null ? new Prisma.Decimal(input.shippingCost.toFixed(2)) : null,
+          input.shippingCost != null ? new Prisma.Decimal(roundAmount(input.shippingCost)) : null,
         // The parcel has been paid for, not received — the collector marks it arrived when it lands,
         // exactly as with any other order.
         status: "preparing",
@@ -3166,7 +3167,7 @@ export async function settleAuctionSale(
         data: {
           purchaseId: purchase.id,
           title: auctionLotName({ ...lot, derivedTitle: labels.get(lot.id) ?? null }),
-          price: new Prisma.Decimal(price.toFixed(2)),
+          price: new Prisma.Decimal(roundAmount(price)),
           status: "open",
         },
         select: { id: true },

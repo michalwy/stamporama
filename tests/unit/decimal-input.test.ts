@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   evaluateAmountExpression,
+  formatAmountInput,
   normalizeDecimalInput,
+  roundAmount,
   sanitizeDecimalInput,
 } from "../../src/lib/decimal-input";
 
@@ -113,6 +115,77 @@ describe("sanitizeDecimalInput", () => {
 
   it("returns empty for a value with no digits or separators", () => {
     assert.equal(sanitizeDecimalInput("abc"), "");
+  });
+});
+
+// An amount field shows two decimal places once it is left (#1231), and what it shows is what is
+// saved — so the rounding is half up on the decimal that was typed, never `toFixed`'s binary one.
+
+describe("roundAmount (#1231)", () => {
+  it("rounds half up on the decimal, where toFixed would round the double down", () => {
+    assert.equal((1.555).toFixed(2), "1.55", "the trap this exists for");
+    assert.equal(roundAmount(1.555), "1.56");
+    assert.equal(roundAmount(1.005), "1.01");
+    assert.equal(roundAmount(2.675), "2.68");
+  });
+
+  it("pads to exactly two places", () => {
+    assert.equal(roundAmount(3), "3.00");
+    assert.equal(roundAmount(1.5), "1.50");
+    assert.equal(roundAmount(0.7), "0.70");
+    assert.equal(roundAmount(0), "0.00");
+  });
+
+  it("rounds below the half down and carries into the whole part", () => {
+    assert.equal(roundAmount(1.554), "1.55");
+    assert.equal(roundAmount(9.995), "10.00");
+    assert.equal(roundAmount(0.005), "0.01");
+  });
+
+  it("rounds a negative away from zero, and never writes a negative zero", () => {
+    assert.equal(roundAmount(-1.555), "-1.56");
+    assert.equal(roundAmount(-0.001), "0.00");
+  });
+});
+
+describe("formatAmountInput (#1231)", () => {
+  it("shows an amount with two decimal places", () => {
+    assert.equal(formatAmountInput("1.5"), "1.50");
+    assert.equal(formatAmountInput(".7"), "0.70");
+    assert.equal(formatAmountInput("3"), "3.00");
+    assert.equal(formatAmountInput("1."), "1.00");
+  });
+
+  it("accepts either decimal separator (#233)", () => {
+    assert.equal(formatAmountInput("1,5"), "1.50");
+  });
+
+  it("rounds more than two places half up", () => {
+    assert.equal(formatAmountInput("1.555"), "1.56");
+    assert.equal(formatAmountInput("1,005"), "1.01");
+  });
+
+  it("formats an arithmetic expression by its result (#580)", () => {
+    assert.equal(formatAmountInput("1+2.5"), "3.50");
+    assert.equal(formatAmountInput("0,1+0,2"), "0.30");
+    assert.equal(formatAmountInput("10/3"), "3.33");
+  });
+
+  it("leaves a blank field blank rather than writing zero (#1184)", () => {
+    assert.equal(formatAmountInput(""), "");
+    assert.equal(formatAmountInput("   "), "");
+  });
+
+  it("leaves what is not an amount as typed", () => {
+    assert.equal(formatAmountInput("1+"), "1+");
+    assert.equal(formatAmountInput("."), ".");
+    assert.equal(formatAmountInput("1 2"), "1 2");
+    assert.equal(formatAmountInput("abc"), "abc");
+    assert.equal(formatAmountInput("-5"), "-5", "a negative is refused by the caller, as typed");
+  });
+
+  it("is stable: a formatted amount formats to itself", () => {
+    assert.equal(formatAmountInput("12.50"), "12.50");
   });
 });
 

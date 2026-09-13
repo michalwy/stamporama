@@ -115,7 +115,7 @@ export function AmountWithBase({
             <InlineText
               value={baseValue(amount, rate)}
               placeholder="0.00"
-              inputType="number"
+              inputType="amount"
               selectOnEdit
               editable
               isPending={isPending}

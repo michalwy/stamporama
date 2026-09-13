@@ -8,7 +8,7 @@
 // *relative to how soon the lot closes*. A lot last checked three days ago that closes tonight is
 // the one to open; the same lot closing in a month is fine.
 
-import { normalizeDecimalInput } from "./decimal-input";
+import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 import { compactCatalogNumbers } from "./offer-title-template";
 
 // ── Lot lifecycle and outcome (ADR-0021 §4) ─────────────────────────────────
@@ -208,7 +208,7 @@ export function parseAuctionAmount(
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: `${label} must be a number.` };
   if (n < 0) return { ok: false, message: `${label} cannot be negative.` };
-  return { ok: true, value: n.toFixed(2) };
+  return { ok: true, value: roundAmount(n) };
 }
 
 /** Same, for the buyer's premium percentage. Capped at 100: a premium above the hammer price is a

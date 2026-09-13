@@ -802,7 +802,7 @@ function SetPickRow({
           </Tooltip>
         ) : checked ? (
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
-            <NumericInput placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
+            <NumericInput kind="amount" placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
             <span style={{ fontSize: "0.75rem", color: MUTED }}>{currency}</span>
           </div>
         ) : (

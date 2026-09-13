@@ -33,7 +33,8 @@ import {
 } from "@/lib/stamp-attribute-kinds";
 import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { computeIssueRangeExtension } from "@/lib/catalog-number";
-import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
+import { StampCatalogPricesTab, priceCellKey } from "./stamp-catalog-prices-tab";
+import { formatAmountInput } from "@/lib/decimal-input";
 import { SizeProposalScope, useSizeProposals, type SizeProposal } from "./measured-size";
 import { StampSizePresetPicker } from "./stamp-size-preset-picker";
 import { useInvalidateStampSizePresets } from "./use-stamp-size-presets";
@@ -325,7 +326,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
           p.certificateStatusId,
           p.formatId
         );
-        edits.set(key, formatPrice(p.price));
+        edits.set(key, formatAmountInput(p.price));
         priced.add(key);
       }
       setPriceEdits(edits);

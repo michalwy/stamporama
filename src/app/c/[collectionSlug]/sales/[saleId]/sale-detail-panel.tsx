@@ -1047,6 +1047,7 @@ function EditableAmountRow({
       <div style={ORIG_CELL}>
         {editing ? (
           <NumericInput
+            kind="amount"
             placeholder="0.00"
             autoFocus
             value={draft}
@@ -1240,6 +1241,7 @@ function EditableShippingRow({
               />
             )}
             <NumericInput
+              kind="amount"
               placeholder="0.00"
               autoFocus
               value={draftAmount}

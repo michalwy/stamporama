@@ -3,7 +3,7 @@
 // small validation helpers, so they can be unit-tested without a DB and reused verbatim by the
 // server domain module (`offers.ts`). No side effects.
 
-import { normalizeDecimalInput } from "./decimal-input";
+import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 
 export type OfferState = "preparing" | "ready" | "active" | "paused" | "sold" | "withdrawn";
 
@@ -145,7 +145,7 @@ export function parsePrice(raw: string): { ok: true; value: string } | { ok: fal
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: "Asking price must be a number." };
   if (n < 0) return { ok: false, message: "Asking price cannot be negative." };
-  return { ok: true, value: n.toFixed(2) };
+  return { ok: true, value: roundAmount(n) };
 }
 
 /**
@@ -240,7 +240,7 @@ export function parseStartingPrice(
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: "Starting price must be a number." };
   if (n < 0) return { ok: false, message: "Starting price cannot be negative." };
-  return { ok: true, value: n.toFixed(2) };
+  return { ok: true, value: roundAmount(n) };
 }
 
 /** Normalise a listing URL: trim, drop when blank. Not validated beyond non-empty — collectors

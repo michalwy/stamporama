@@ -80,6 +80,7 @@ export function PaidTotalDialog({
         <DialogBody>
           <LabelWithError htmlFor="sale-paid-total">Total paid by buyer</LabelWithError>
           <NumericInput
+            kind="amount"
             id="sale-paid-total"
             data-autofocus-select
             placeholder="0.00"

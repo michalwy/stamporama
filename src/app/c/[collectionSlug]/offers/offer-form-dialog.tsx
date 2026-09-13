@@ -381,6 +381,7 @@ export function OfferFormDialog({
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="offer-price">{priceLabel(listingType)}</LabelWithError>
                 <NumericInput
+                  kind="amount"
                   ref={priceRef}
                   id="offer-price"
                   name="price"
@@ -404,6 +405,7 @@ export function OfferFormDialog({
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="offer-starting-price">Starting price</LabelWithError>
                   <NumericInput
+                    kind="amount"
                     ref={startingPriceRef}
                     id="offer-starting-price"
                     name="startingPrice"

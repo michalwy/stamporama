@@ -7,6 +7,7 @@ import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
 import { summarizePurchaseReturn, type PurchaseReturn } from "./purchase-return";
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
+import { roundAmount } from "./decimal-input";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -187,7 +188,7 @@ async function freezeFxRate(
 }
 
 function money(n: number): Prisma.Decimal {
-  return new Prisma.Decimal(n.toFixed(2));
+  return new Prisma.Decimal(roundAmount(n));
 }
 
 /** Paginated purchases for a collection (offset-based, mirroring `listItemsPaginated`).

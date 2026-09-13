@@ -339,6 +339,7 @@ export function TradeReceiveLineDialog({
             <div style={{ width: "7rem", flexShrink: 0 }}>
               <LabelWithError htmlFor="trade-line-quantity">Quantity</LabelWithError>
               <NumericInput
+                kind="number"
                 id="trade-line-quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}

@@ -5,6 +5,7 @@ import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/di
 import type { TradeLineValueRead } from "@/lib/trade-valuation";
 import { setTradeLineValueAction } from "@/app/actions/trades";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { TradeCatalogVendor } from "../trade-form-dialog";
 
 // **What this one line is worth** (#638; ADR-0039 §7) — the two escape hatches, and nothing else.
@@ -207,11 +208,11 @@ export function TradeLineValueDialog({
               <LabelWithError htmlFor="trade-line-manual-value">
                 My own value ({baseCurrency})
               </LabelWithError>
-              <input
+              <NumericInput
+                kind="amount"
                 id="trade-line-manual-value"
                 value={manualValue}
                 onChange={(e) => setManualValue(e.target.value)}
-                inputMode="decimal"
                 autoFocus
                 disabled={isPending}
                 placeholder="Leave blank to use the catalogues"

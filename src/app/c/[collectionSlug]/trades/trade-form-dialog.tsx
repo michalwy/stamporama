@@ -237,6 +237,7 @@ export function TradeFormDialog({
                 {balanceByValue ? (
                   <>
                     <NumericInput
+                      kind="number"
                       id="trade-count-tolerance"
                       name="valueTolerancePct"
                       placeholder="0"
@@ -274,6 +275,7 @@ export function TradeFormDialog({
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="trade-own-warn">Warn on skew (%)</LabelWithError>
                 <NumericInput
+                  kind="number"
                   id="trade-own-warn"
                   name="ownValueWarnPct"
                   placeholder="25"

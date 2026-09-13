@@ -7,7 +7,7 @@ import { DialogShell, DialogBody, DialogFooter, DialogPrimaryButton } from "@/ap
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { formatAmountInput, normalizeDecimalInput } from "@/lib/decimal-input";
 import { deriveFormatPrice } from "@/lib/format-factor";
 import type {
   VariantPriceGridData,
@@ -315,7 +315,7 @@ function VariantPriceGrid({
     if (!editionId) return false;
     const key = cellKey(stampId, editionId, conditionId, certId, formatId);
     const typed = raw.trim();
-    const normalized = typed === "" ? "" : formatAmount(typed);
+    const normalized = typed === "" ? "" : formatAmountInput(typed);
     if (normalized !== typed) setIn(setValues, key, normalized);
     if (normalized === (saved.get(key) ?? "")) return true;
 
@@ -730,6 +730,7 @@ function VariantPriceGrid({
                     <td key={cond.id} style={tdCellStyle}>
                       <Tooltip content={cellError ?? ""}>
                         <NumericInput
+                          kind="amount"
                           ref={(el) => {
                             inputRefs.current.set(key, el);
                           }}
@@ -763,16 +764,6 @@ function VariantPriceGrid({
       )}
     </div>
   );
-}
-
-/** Two decimals, the shape every recorded price is stored in. An unparseable entry is left exactly
- *  as typed and refused by the server, rather than being silently turned into something else. */
-function formatAmount(value: string): string {
-  const trimmed = normalizeDecimalInput(value.trim());
-  if (trimmed === "") return "";
-  const n = Number(trimmed);
-  if (Number.isNaN(n)) return trimmed;
-  return n.toFixed(2);
 }
 
 const MUTED: React.CSSProperties = {

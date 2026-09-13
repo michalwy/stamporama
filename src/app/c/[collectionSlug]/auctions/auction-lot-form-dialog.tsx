@@ -25,7 +25,6 @@ import {
 import { AuctionDuplicateWarning } from "./auction-duplicate-warning";
 import type { ComposedLine } from "@/lib/auction-duplicates";
 import {
-  formatAmountInput,
   formatDay,
   fromLocalInputValue,
   toLocalInputValue,
@@ -612,11 +611,10 @@ export function AuctionLotFormDialog({
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-start">Starting price</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="auction-start"
                 value={startingPrice}
                 onChange={(e) => setStartingPrice(e.target.value)}
-                // Committing the field is committing the amount: show it the way it will be stored.
-                onBlur={(e) => setStartingPrice(formatAmountInput(e.target.value))}
                 placeholder="—"
                 style={INPUT_STYLE}
               />
@@ -624,10 +622,10 @@ export function AuctionLotFormDialog({
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-bid">Current bid</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="auction-bid"
                 value={currentBid}
                 onChange={(e) => setCurrentBid(e.target.value)}
-                onBlur={(e) => setCurrentBid(formatAmountInput(e.target.value))}
                 placeholder="—"
                 style={INPUT_STYLE}
               />
@@ -635,10 +633,10 @@ export function AuctionLotFormDialog({
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-my-bid">My bid</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="auction-my-bid"
                 value={myBid}
                 onChange={(e) => setMyBid(e.target.value)}
-                onBlur={(e) => setMyBid(formatAmountInput(e.target.value))}
                 placeholder="—"
                 style={INPUT_STYLE}
               />
@@ -646,10 +644,10 @@ export function AuctionLotFormDialog({
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-max">My ceiling</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="auction-max"
                 value={maxBid}
                 onChange={(e) => setMaxBid(e.target.value)}
-                onBlur={(e) => setMaxBid(formatAmountInput(e.target.value))}
                 placeholder="—"
                 style={INPUT_STYLE}
               />
