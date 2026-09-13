@@ -3,13 +3,20 @@ import assert from "node:assert/strict";
 import {
   ASSUMED_MCP_PROTOCOL_VERSION,
   JSON_RPC,
+  LATEST_LEGACY_MCP_PROTOCOL_VERSION,
+  LEGACY_MCP_PROTOCOL_VERSIONS,
+  MCP_META,
   MCP_PROTOCOL_VERSION,
+  MODERN_MCP_PROTOCOL_VERSIONS,
   SUPPORTED_MCP_PROTOCOL_VERSIONS,
   buildToolList,
+  decodeMcpHeaderValue,
   handleMcpMessage,
+  isModernProtocolVersion,
   isSupportedProtocolVersion,
   operationTool,
   readRequestId,
+  type McpRequestHeaders,
 } from "../../src/lib/agent-api/mcp";
 import { assertOperationScope } from "../../src/lib/agent-api/scope";
 import {
@@ -214,22 +221,42 @@ describe("registry-to-tool generation", () => {
   });
 });
 
-describe("the MCP handshake", () => {
+describe("the legacy MCP handshake", () => {
   it("answers initialize with the tools capability and the running build", async () => {
-    const result = await resultOf(request("initialize", { protocolVersion: MCP_PROTOCOL_VERSION }));
-    assert.equal(result.protocolVersion, MCP_PROTOCOL_VERSION);
+    const result = await resultOf(
+      request("initialize", { protocolVersion: LATEST_LEGACY_MCP_PROTOCOL_VERSION })
+    );
+    assert.equal(result.protocolVersion, LATEST_LEGACY_MCP_PROTOCOL_VERSION);
     assert.deepEqual(result.capabilities, { tools: { listChanged: false } });
     assert.deepEqual(result.serverInfo, { name: "stamporama", version: "1.2.3" });
     assert.match(String(result.instructions), /get_collection_vocabulary/);
   });
 
-  it("echoes an older revision it supports, and answers an unknown one with its own", async () => {
+  it("echoes an older revision it supports, and answers an unknown one with its newest legacy one", async () => {
     const older = await resultOf(request("initialize", { protocolVersion: "2024-11-05" }));
     assert.equal(older.protocolVersion, "2024-11-05");
     const unknown = await resultOf(request("initialize", { protocolVersion: "1999-01-01" }));
-    assert.equal(unknown.protocolVersion, MCP_PROTOCOL_VERSION);
+    assert.equal(unknown.protocolVersion, LATEST_LEGACY_MCP_PROTOCOL_VERSION);
     const absent = await resultOf(request("initialize", {}));
-    assert.equal(absent.protocolVersion, MCP_PROTOCOL_VERSION);
+    assert.equal(absent.protocolVersion, LATEST_LEGACY_MCP_PROTOCOL_VERSION);
+  });
+
+  it("never tells a client mid-handshake to proceed in a revision that has no handshake", async () => {
+    // A client that sent `initialize` is speaking a legacy revision whatever it wrote in it, and
+    // 2026-07-28 has no `initialize` to have negotiated. Echoing it back would be an answer the client
+    // cannot act on.
+    const result = await resultOf(request("initialize", { protocolVersion: MCP_PROTOCOL_VERSION }));
+    assert.equal(result.protocolVersion, LATEST_LEGACY_MCP_PROTOCOL_VERSION);
+  });
+
+  it("answers a legacy client exactly as before, with none of 2026-07-28's result fields", async () => {
+    // The control for the modern block below: `resultType` and the cache hints must come from the
+    // era a request arrived in, not from every result. A legacy client that works today must see
+    // the same bytes tomorrow.
+    const list = await resultOf(request("tools/list"));
+    assert.deepEqual(Object.keys(list), ["tools"]);
+    const call = await resultOf(request("tools/call", { name: READING.name, arguments: {} }));
+    assert.deepEqual(Object.keys(call), ["content"]);
   });
 
   it("answers a notification with nothing at all", async () => {
@@ -500,8 +527,20 @@ describe("the pinned protocol revision", () => {
   it("speaks the revision it was written against, newest first", () => {
     // Pinned deliberately: this is hand-rolled against a moving specification, and the drift is
     // silent (ADR-0051). If this constant is edited, the ADR and the user guide say so too.
-    assert.equal(MCP_PROTOCOL_VERSION, "2025-06-18");
+    // `2025-06-18` from #709 until #1222.
+    assert.equal(MCP_PROTOCOL_VERSION, "2026-07-28");
     assert.equal(SUPPORTED_MCP_PROTOCOL_VERSIONS[0], MCP_PROTOCOL_VERSION);
+  });
+
+  it("still answers every revision it answered before 2026-07-28", () => {
+    // #1222's *Done when*: a client on any of these keeps working.
+    assert.deepEqual([...LEGACY_MCP_PROTOCOL_VERSIONS], ["2025-06-18", "2025-03-26", "2024-11-05"]);
+    assert.deepEqual([...MODERN_MCP_PROTOCOL_VERSIONS], ["2026-07-28"]);
+    assert.equal(LATEST_LEGACY_MCP_PROTOCOL_VERSION, LEGACY_MCP_PROTOCOL_VERSIONS[0]);
+    for (const revision of LEGACY_MCP_PROTOCOL_VERSIONS) {
+      assert.equal(isModernProtocolVersion(revision), false, revision);
+    }
+    assert.equal(isModernProtocolVersion(MCP_PROTOCOL_VERSION), true);
   });
 
   it("speaks the revision a client with no version header is assumed to be on", () => {
@@ -522,6 +561,243 @@ describe("the pinned protocol revision", () => {
     assert.equal(isSupportedProtocolVersion(""), false);
     assert.equal(isSupportedProtocolVersion(undefined), false);
     assert.equal(isSupportedProtocolVersion(20250618), false);
+  });
+});
+
+describe("revision 2026-07-28: no handshake, every request self-describing (#1222)", () => {
+  /** A modern request body: the method, its params, and the `_meta` 2026-07-28 makes required. */
+  function modern(method: string, params: Record<string, unknown> = {}, id: string | number = 1) {
+    return {
+      jsonrpc: "2.0",
+      id,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          [MCP_META.protocolVersion]: MCP_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": { name: "test-client", version: "0" },
+          [MCP_META.clientCapabilities]: {},
+        },
+      },
+    };
+  }
+
+  /** The headers a conforming client sends with that body. */
+  function headersFor(method: string, name: string | null = null): McpRequestHeaders {
+    return { protocolVersion: MCP_PROTOCOL_VERSION, method, name };
+  }
+
+  async function modernOutcome(
+    message: unknown,
+    headers: McpRequestHeaders,
+    opts = options()
+  ) {
+    const outcome = await handleMcpMessage(message, opts, headers);
+    assert.ok(outcome.kind === "response");
+    return outcome;
+  }
+
+  async function modernResult(message: unknown, headers: McpRequestHeaders, opts = options()) {
+    const outcome = await modernOutcome(message, headers, opts);
+    assert.equal(outcome.status, 200);
+    assert.equal(outcome.body.error, undefined, `expected a result, got ${JSON.stringify(outcome.body.error)}`);
+    return outcome.body.result as Record<string, unknown>;
+  }
+
+  /** A refusal, with the HTTP status the specification names for it. */
+  async function modernRefusal(message: unknown, headers: McpRequestHeaders, status: number, code: number) {
+    const outcome = await modernOutcome(message, headers);
+    assert.equal(outcome.status, status, JSON.stringify(outcome.body));
+    assert.ok(outcome.body.error, "expected a JSON-RPC error");
+    assert.equal(outcome.body.error.code, code, outcome.body.error.message);
+    return outcome.body.error;
+  }
+
+  const SERVER_INFO = { [MCP_META.serverInfo]: { name: "stamporama", version: "1.2.3" } };
+
+  it("answers server/discover, which the revision makes a MUST, with what initialize used to say", async () => {
+    const result = await modernResult(modern("server/discover"), headersFor("server/discover"));
+    assert.equal(result.resultType, "complete");
+    assert.deepEqual(result.supportedVersions, [...SUPPORTED_MCP_PROTOCOL_VERSIONS]);
+    assert.deepEqual(result.capabilities, { tools: { listChanged: false } });
+    assert.match(String(result.instructions), /get_collection_vocabulary/);
+    assert.equal(result.ttlMs, 0);
+    assert.equal(result.cacheScope, "private");
+    assert.deepEqual(result._meta, SERVER_INFO);
+  });
+
+  it("lists the same tools as a legacy client sees, with resultType and the required cache hints", async () => {
+    const result = await modernResult(modern("tools/list"), headersFor("tools/list"));
+    assert.equal(result.resultType, "complete");
+    assert.deepEqual(result.tools, buildToolList([READING, WRITING]));
+    assert.equal(result.nextCursor, undefined);
+    assert.equal(result.ttlMs, 0);
+    assert.equal(result.cacheScope, "private");
+    assert.deepEqual(result._meta, SERVER_INFO);
+  });
+
+  it("calls a tool and marks the result complete, a refusal included", async () => {
+    const answer = await modernResult(
+      modern("tools/call", { name: READING.name, arguments: {} }),
+      headersFor("tools/call", READING.name)
+    );
+    assert.equal(answer.resultType, "complete");
+    assert.equal(answer.isError, undefined);
+    assert.deepEqual(answer._meta, SERVER_INFO);
+    assert.deepEqual(JSON.parse(toolText(answer)), { items: [], total: 0, nextCursor: null });
+
+    // An input validation error is a tool execution error in this revision by the specification's
+    // own division, not only by #706's choice (ADR-0051 §5).
+    const refusal = await modernResult(
+      modern("tools/call", { name: READING.name, arguments: { conditon: "MNH" } }),
+      headersFor("tools/call", READING.name)
+    );
+    assert.equal(refusal.resultType, "complete");
+    assert.equal(refusal.isError, true);
+    assert.match(toolText(refusal), /conditon/);
+  });
+
+  it("does not offer initialize or ping, which the revision removed, and says what it does offer", async () => {
+    for (const method of ["initialize", "ping", "resources/list"]) {
+      const error = await modernRefusal(modern(method), headersFor(method), 404, JSON_RPC.methodNotFound);
+      assert.match(error.message, /server\/discover, tools\/list and tools\/call/);
+    }
+  });
+
+  it("answers an unknown tool with a JSON-RPC error, as before", async () => {
+    const error = await modernRefusal(
+      modern("tools/call", { name: "find_the_cheese", arguments: {} }),
+      headersFor("tools/call", "find_the_cheese"),
+      200,
+      JSON_RPC.invalidParams
+    );
+    assert.deepEqual((error.data as { accepted: string[] }).accepted, [READING.name, WRITING.name]);
+  });
+
+  it("accepts a notification and answers nothing", async () => {
+    const outcome = await handleMcpMessage(
+      { jsonrpc: "2.0", method: "notifications/cancelled", params: {} },
+      options(),
+      headersFor("notifications/cancelled")
+    );
+    assert.equal(outcome.kind, "accepted");
+  });
+
+  describe("the per-request _meta fields", () => {
+    it("refuses a request that declares the revision in its header but not in _meta", async () => {
+      const message = { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} };
+      const error = await modernRefusal(message, headersFor("tools/list"), 400, JSON_RPC.invalidParams);
+      assert.match(error.message, /io\.modelcontextprotocol\/protocolVersion/);
+    });
+
+    it("refuses a request with no clientCapabilities, which the revision requires even when empty", async () => {
+      const message = modern("tools/list");
+      delete (message.params._meta as Record<string, unknown>)[MCP_META.clientCapabilities];
+      const error = await modernRefusal(message, headersFor("tools/list"), 400, JSON_RPC.invalidParams);
+      assert.match(error.message, /clientCapabilities/);
+    });
+  });
+
+  describe("the mirrored headers", () => {
+    it("refuses a body declaring 2026-07-28 that sent no MCP-Protocol-Version header", async () => {
+      // Without this, the missing header would read as a header-less legacy client and the request
+      // would be served under rules it never asked for.
+      await modernRefusal(
+        modern("tools/list"),
+        { protocolVersion: null, method: "tools/list", name: null },
+        400,
+        JSON_RPC.headerMismatch
+      );
+    });
+
+    it("refuses a header and a body that name different revisions", async () => {
+      const error = await modernRefusal(
+        modern("tools/list"),
+        { ...headersFor("tools/list"), protocolVersion: LATEST_LEGACY_MCP_PROTOCOL_VERSION },
+        400,
+        JSON_RPC.headerMismatch
+      );
+      assert.match(error.message, /2025-06-18/);
+    });
+
+    it("refuses a missing or mismatched Mcp-Method", async () => {
+      await modernRefusal(
+        modern("tools/list"),
+        { ...headersFor("tools/list"), method: null },
+        400,
+        JSON_RPC.headerMismatch
+      );
+      await modernRefusal(modern("tools/list"), headersFor("tools/call"), 400, JSON_RPC.headerMismatch);
+    });
+
+    it("refuses a tools/call whose Mcp-Name is missing or names another tool", async () => {
+      const body = modern("tools/call", { name: READING.name, arguments: {} });
+      await modernRefusal(body, headersFor("tools/call", null), 400, JSON_RPC.headerMismatch);
+      // The one that matters: a gateway routing on the header and this server executing the body
+      // must not be able to disagree about which tool ran.
+      await modernRefusal(body, headersFor("tools/call", WRITING.name), 400, JSON_RPC.headerMismatch);
+    });
+
+    it("decodes a Base64 Mcp-Name before comparing it, as the transport requires", async () => {
+      const encoded = `=?base64?${btoa(READING.name)}?=`;
+      const result = await modernResult(
+        modern("tools/call", { name: READING.name, arguments: {} }),
+        headersFor("tools/call", encoded)
+      );
+      assert.equal(result.isError, undefined);
+    });
+
+    it("decodes the sentinel and nothing else", () => {
+      assert.equal(decodeMcpHeaderValue("get_stamp"), "get_stamp");
+      assert.equal(decodeMcpHeaderValue("=?base64?SGVsbG8sIOS4lueVjA==?="), "Hello, 世界");
+      // A sentinel that does not decode can match no body value.
+      assert.equal(decodeMcpHeaderValue("=?base64?not base64!?="), null);
+      assert.equal(decodeMcpHeaderValue("=?base64?/w==?="), null, "bytes that are not UTF-8");
+    });
+  });
+
+  describe("the unsupported-revision refusal, which is also the staleness alarm", () => {
+    it("refuses a revision newer than this build with the code and data 2026-07-28 fixes", async () => {
+      const outcome = await modernOutcome(modern("tools/list", {}, 42), {
+        ...headersFor("tools/list"),
+        protocolVersion: "2027-01-01",
+      });
+      assert.equal(outcome.status, 400);
+      assert.equal(outcome.refusedRevision, "2027-01-01", "the route logs the alarm off this");
+      assert.equal(outcome.body.id, 42);
+      assert.equal(outcome.body.error?.code, JSON_RPC.unsupportedProtocolVersion);
+      assert.deepEqual(outcome.body.error?.data, {
+        supported: [...SUPPORTED_MCP_PROTOCOL_VERSIONS],
+        requested: "2027-01-01",
+      });
+    });
+
+    it("refuses it for a legacy-shaped request too, since the header alone decides", async () => {
+      const outcome = await handleMcpMessage(request("ping"), options(), {
+        protocolVersion: "2027-01-01",
+        method: null,
+        name: null,
+      });
+      assert.ok(outcome.kind === "response");
+      assert.equal(outcome.status, 400);
+      assert.equal(outcome.refusedRevision, "2027-01-01");
+    });
+
+    it("raises no alarm for any revision it speaks", async () => {
+      // The control: an alarm that fired on everything would pass the two cases above.
+      const current = await modernOutcome(modern("tools/list"), headersFor("tools/list"));
+      assert.equal(current.refusedRevision, undefined);
+      for (const revision of LEGACY_MCP_PROTOCOL_VERSIONS) {
+        const outcome = await handleMcpMessage(request("ping"), options(), {
+          protocolVersion: revision,
+          method: null,
+          name: null,
+        });
+        assert.ok(outcome.kind === "response");
+        assert.equal(outcome.status, 200, revision);
+        assert.equal(outcome.refusedRevision, undefined, revision);
+      }
+    });
   });
 });
 

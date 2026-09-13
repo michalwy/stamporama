@@ -3,10 +3,8 @@ import { assertAgentApiScope, resolveAgentApiCaller } from "@/lib/route-auth";
 import { errorResponseBody, unauthorized } from "@/lib/agent-api/errors";
 import {
   JSON_RPC,
-  MCP_PROTOCOL_VERSION,
   SUPPORTED_MCP_PROTOCOL_VERSIONS,
   handleMcpMessage,
-  isSupportedProtocolVersion,
   jsonRpcErrorResponse,
   readRequestId,
 } from "@/lib/agent-api/mcp";
@@ -64,27 +62,6 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
   const caller = await resolveAgentApiCaller(request);
   if (!caller) return unauthenticated();
 
-  const declaredRevision = request.headers.get("MCP-Protocol-Version");
-  if (declaredRevision !== null && !isSupportedProtocolVersion(declaredRevision)) {
-    // **The specification requires this `400`, and it is also this build's staleness alarm.** A
-    // hand-rolled implementation of a moving specification drifts silently (ADR-0051); the first
-    // client newer than this build is the thing that notices, so it says so in the log here rather
-    // than failing for a reason nobody can see. A client sending **no** header is not refused —
-    // the specification says to assume `2025-03-26` for it, which this build speaks.
-    console.warn(
-      `[api/mcp] a client asked for MCP revision ${declaredRevision}; this build speaks ${SUPPORTED_MCP_PROTOCOL_VERSIONS.join(", ")}. If this repeats, the implementation is behind the specification — see ADR-0051.`
-    );
-    return NextResponse.json(
-      jsonRpcErrorResponse(
-        null,
-        JSON_RPC.invalidRequest,
-        `This instance does not speak MCP revision ${declaredRevision}. It speaks ${SUPPORTED_MCP_PROTOCOL_VERSIONS.join(", ")}; negotiate one of those at initialize.`,
-        { supported: SUPPORTED_MCP_PROTOCOL_VERSIONS, requested: declaredRevision, latest: MCP_PROTOCOL_VERSION }
-      ),
-      { status: 400 }
-    );
-  }
-
   let message: unknown;
   try {
     message = await request.json();
@@ -99,6 +76,13 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
   }
 
   try {
+    // The headers 2026-07-28 mirrors out of the body. Reading them is the transport's job; what
+    // they must say, and which era a request is in, is decided in the pure module (#1222).
+    const headers = {
+      protocolVersion: request.headers.get("MCP-Protocol-Version"),
+      method: request.headers.get("Mcp-Method"),
+      name: request.headers.get("Mcp-Name"),
+    };
     const outcome = await handleMcpMessage(message, {
       operations: OPERATIONS,
       appVersion: getAppVersion(),
@@ -119,16 +103,29 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       // is deliberately in that file rather than here: the request it has to make needs a real
       // offer and a real platform, which is that suite's fixture and not this one's.
       assertScope: (operation) => assertAgentApiScope(caller, operation),
-    });
+    }, headers);
 
     // A notification gets no reply at all, which is what the specification asks for and what
     // `notifications/initialized` needs: a body here would be a response to a message that carried
     // no id to answer.
     if (outcome.kind === "accepted") return new Response(null, { status: 202 });
 
-    // A JSON-RPC error rides in the body with a `200`. The HTTP status describes the transport, and
-    // the transport worked.
-    return NextResponse.json(outcome.body);
+    if (outcome.refusedRevision !== undefined) {
+      // **The specification requires the `400` behind this, and this line is the staleness alarm.**
+      // A hand-rolled implementation of a moving specification drifts silently (ADR-0051); the first
+      // client newer than this build is the thing that notices, so it says so in the log here rather
+      // than failing for a reason nobody can see. A client sending **no** header is not refused —
+      // the specification lets a server assume `2025-03-26` for it, which this build speaks.
+      console.warn(
+        `[api/mcp] a client asked for MCP revision ${outcome.refusedRevision}; this build speaks ${SUPPORTED_MCP_PROTOCOL_VERSIONS.join(", ")}. If this repeats, the implementation is behind the specification — see ADR-0051.`
+      );
+    }
+
+    // Most JSON-RPC errors ride in the body with a `200`: the HTTP status describes the transport,
+    // and the transport worked. The exceptions are the ones 2026-07-28 names a status for — a header
+    // or `_meta` fault and an unsupported revision (`400`), an unknown method (`404`) — and the pure
+    // module says which.
+    return NextResponse.json(outcome.body, { status: outcome.status });
   } catch (error) {
     // Anything that reaches here is a defect on our side. Its message is deliberately not relayed —
     // an internal message is written for a maintainer reading a log, and putting it in front of an
