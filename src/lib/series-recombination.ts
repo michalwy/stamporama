@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
-import { buildItemFilterWhere } from "./items";
+import { buildItemFilterWhere, type ItemListFiltersPaginated } from "./items";
 import { listableOnPlatformFilters, loadPoolChecklists } from "./lot-builder";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
@@ -16,11 +16,15 @@ import { formatItemNo } from "./item-number";
 import {
   checkSeriesPicks,
   compositionOutcome,
+  copyMatchesCombination,
+  DEFAULT_SERIES_CRITERIA,
   findRecombinableSeries,
   RECOMBINABLE_OFFER_STATES,
   singlyOfferedCopies,
   type CompositionRefusal,
   type RecombinationCopy,
+  type SeriesCombination,
+  type SeriesCriteria,
   type SeriesPicks,
 } from "./series-recombination-rules";
 
@@ -36,6 +40,14 @@ import {
 //
 // A copy promised in an **agreed trade is counted and named**, never excluded — #639's gate sits at
 // `active`, and the bulk-lot builder keeps and names them for the same reason.
+//
+// **A copy no longer held never fills a slot** (#1263), by either route: the available pool carries
+// `excludeGone` inside `listableOnPlatformFilters`, and the singles are read under it too — so a sold
+// copy whose offer was left Active is still sold.
+//
+// The screen's filters (#1265) narrow **both** pools in the `where`, before completeness is judged, so
+// a series complete only thanks to a filtered-out copy is not listed; how the copies are split into
+// proposals is the rules' `SeriesCombination`.
 //
 // Composing a listed series (#1211) lives here too, because it has to read the same two pools the
 // screen lists from: the commit re-reads them rather than trusting what the screen showed (#717).
@@ -89,8 +101,14 @@ export interface RecombinationSlotView {
 }
 
 export interface RecombinationSeriesView {
+  /** The proposal's identity — one checklist is proposed once per combination (#1265). */
+  key: string;
   checklistId: string;
   checklistName: string;
+  /** What every copy in the proposal shares; what composing it sends back. */
+  combination: SeriesCombination;
+  /** The combination in words, one per axis that is not mixed: condition, certificate, format. */
+  combinationLabels: string[];
   /** The issue the checklist belongs to; null for a checklist spanning issues. */
   issue: { issueId: string; name: string | null; year: number | null } | null;
   slots: RecombinationSlotView[];
@@ -124,10 +142,31 @@ interface RecombinationPool {
   sets: { setId: string; offerId: string; itemIds: string[] }[];
 }
 
+/** The screen's four filters as the copy reads spell them (#1265). An empty filter is no filter. */
+function criteriaFilters(criteria: SeriesCriteria): ItemListFiltersPaginated {
+  return {
+    ...(criteria.conditionIds.length > 0 ? { conditionIds: criteria.conditionIds } : {}),
+    ...(criteria.certificateStatusIds.length > 0
+      ? { certificateStatusIds: criteria.certificateStatusIds }
+      : {}),
+    ...(criteria.formatIds.length > 0 ? { formatIds: criteria.formatIds } : {}),
+    ...(criteria.subtypeIds.length > 0 ? { subtypeIds: criteria.subtypeIds } : {}),
+  };
+}
+
+const POOL_COPY_SELECT = {
+  id: true,
+  stampId: true,
+  conditionId: true,
+  certificateStatusId: true,
+  formatId: true,
+} as const;
+
 async function readRecombinationPool(
   ownerId: string,
   collectionId: string,
   platformId: string,
+  criteria: SeriesCriteria,
   /** Stop before the variant chains when nothing is offered singly — the screen then has nothing to
    *  list, while the compose still needs the available copies to check its picks against. */
   opts: { stopWithoutSingles: boolean }
@@ -140,9 +179,10 @@ async function readRecombinationPool(
   if (!platform) throw new Error("Platform not found.");
 
   const [availableRows, platformSets] = await Promise.all([
-    buildItemFilterWhere(collectionId, listableOnPlatformFilters(platformId)).then((where) =>
-      prisma.item.findMany({ where, select: { id: true, stampId: true } })
-    ),
+    buildItemFilterWhere(collectionId, {
+      ...listableOnPlatformFilters(platformId),
+      ...criteriaFilters(criteria),
+    }).then((where) => prisma.item.findMany({ where, select: POOL_COPY_SELECT })),
     prisma.offerSet.findMany({
       where: {
         offer: { collectionId, platformId, state: { in: [...RECOMBINABLE_OFFER_STATES] } },
@@ -176,7 +216,8 @@ async function readRecombinationPool(
   );
 
   // The singles still have to be copies the collection holds: not sold, not traded away, not disposed
-  // of — and not under a bid on some *other* platform.
+  // of (#1263 — whatever state the offer holding them was left in) — and not under a bid on some
+  // *other* platform. The screen's filters narrow them exactly as they narrow the available copies.
   const availableIds = new Set(availableRows.map((row) => row.id));
   const singleIds = [...singles.keys()].filter((id) => !availableIds.has(id));
   const singleRows =
@@ -185,11 +226,15 @@ async function readRecombinationPool(
       : await prisma.item.findMany({
           where: {
             AND: [
-              await buildItemFilterWhere(collectionId, { ids: singleIds, excludeGone: true }),
+              await buildItemFilterWhere(collectionId, {
+                ids: singleIds,
+                excludeGone: true,
+                ...criteriaFilters(criteria),
+              }),
               NOT_IN_ACTIVE_BIDDING,
             ],
           },
-          select: { id: true, stampId: true },
+          select: POOL_COPY_SELECT,
         });
 
   const rows = [
@@ -210,6 +255,9 @@ async function readRecombinationPool(
   const copies: RecombinationCopy[] = rows.map((row) => ({
     itemId: row.id,
     stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
     variantChain: chains.get(row.stampId) ?? [row.stampId],
     offerIds: row.offerIds,
   }));
@@ -217,7 +265,8 @@ async function readRecombinationPool(
 }
 
 /**
- * The series on one platform that single offers plus available copies could complete.
+ * The series on one platform that single offers plus available copies could complete, one proposal
+ * per combination the criteria keep apart (#1265).
  *
  * Throws when the platform is not one of this collection's platforms: an empty answer would read as
  * "nothing to recombine" rather than "nothing asked".
@@ -225,15 +274,19 @@ async function readRecombinationPool(
 export async function findSeriesRecombinations(
   ownerId: string,
   collectionId: string,
-  platformId: string
+  platformId: string,
+  criteria: SeriesCriteria = DEFAULT_SERIES_CRITERIA
 ): Promise<SeriesRecombinationResult> {
-  const pool = await readRecombinationPool(ownerId, collectionId, platformId, { stopWithoutSingles: true });
+  const pool = await readRecombinationPool(ownerId, collectionId, platformId, criteria, {
+    stopWithoutSingles: true,
+  });
   if (!pool.hasSingles) return { platformName: pool.platformName, series: [] };
 
   const found = findRecombinableSeries({
     copies: pool.copies,
     checklists: await loadPoolChecklists(collectionId, pool.copies),
     offerStates: pool.offerStates,
+    mixing: criteria.mixing,
   });
   if (found.length === 0) return { platformName: pool.platformName, series: [] };
 
@@ -245,6 +298,11 @@ export async function findSeriesRecombinations(
 export interface ComposeSeriesInput {
   platformId: string;
   checklistId: string;
+  /** The card's combination (#1265): only copies sharing it are candidates, so a pick of another
+   *  combination is refused as stale rather than composed in. */
+  combination: SeriesCombination;
+  /** The screen's criteria, re-applied to the re-read. Absent: the default screen. */
+  criteria?: SeriesCriteria;
   /** The copy chosen for every slot, keyed by the slot's stamp. */
   picks: SeriesPicks;
 }
@@ -288,17 +346,24 @@ export async function composeSeriesOffer(
   collectionId: string,
   input: ComposeSeriesInput
 ): Promise<ComposeSeriesResult> {
-  const pool = await readRecombinationPool(ownerId, collectionId, input.platformId, {
-    stopWithoutSingles: false,
-  });
+  const pool = await readRecombinationPool(
+    ownerId,
+    collectionId,
+    input.platformId,
+    input.criteria ?? DEFAULT_SERIES_CRITERIA,
+    { stopWithoutSingles: false }
+  );
   const checklist = await prisma.checklist.findFirst({
     where: { id: input.checklistId, collectionId },
     select: { stamps: { select: { stampId: true }, orderBy: { sortOrder: "asc" } } },
   });
   if (!checklist) throw new Error("Series not found.");
 
+  // Exactly the card's copies (#1265): another combination's copy never fills a slot here, even one
+  // the same checklist would take under different settings.
+  const candidates = pool.copies.filter((copy) => copyMatchesCombination(copy, input.combination));
   const slots = [
-    ...checklistSlots(pool.copies, {
+    ...checklistSlots(candidates, {
       checklistId: input.checklistId,
       stampIds: checklist.stamps.map((member) => member.stampId),
     }),
@@ -423,7 +488,7 @@ async function describeRefusal(collectionId: string, refusal: CompositionRefusal
         select: { itemNo: true },
       });
       const copy = item ? `Copy ${formatItemNo(item.itemNo)}` : "The copy chosen";
-      return `${copy} can no longer fill ${slot} — since the screen was opened it has sold, gone under bid, gone into another set or left the collection. Nothing was changed.`;
+      return `${copy} can no longer fill ${slot} — since the screen was opened it has sold, gone under bid, gone into another set, left the collection or stopped matching this series' condition, certificate or format. Nothing was changed.`;
     }
   }
 }
@@ -436,7 +501,14 @@ async function nameSeries(
   const itemIds = new Set<string>();
   const stampIds = new Set<string>();
   const offerIds = new Set<string>();
+  const conditionIds = new Set<string>();
+  const certificateIds = new Set<string>();
+  const formatIds = new Set<string>();
   for (const series of found) {
+    const { conditionId, certificateStatusId, formatId } = series.combination;
+    if (conditionId) conditionIds.add(conditionId);
+    if (certificateStatusId) certificateIds.add(certificateStatusId);
+    if (formatId) formatIds.add(formatId);
     for (const slot of series.slots) {
       stampIds.add(slot.stampId);
       for (const copy of slot.copies) {
@@ -446,6 +518,39 @@ async function nameSeries(
       }
     }
   }
+
+  const dictionarySelect = { id: true, name: true, sortOrder: true } as const;
+  const [conditions, certificates, formats] = await Promise.all([
+    prisma.stampCondition.findMany({ where: { id: { in: [...conditionIds] }, collectionId }, select: dictionarySelect }),
+    prisma.certificateStatus.findMany({ where: { id: { in: [...certificateIds] }, collectionId }, select: dictionarySelect }),
+    prisma.stampFormat.findMany({ where: { id: { in: [...formatIds] }, collectionId }, select: dictionarySelect }),
+  ]);
+  const conditionById = new Map(conditions.map((row) => [row.id, row]));
+  const certificateById = new Map(certificates.map((row) => [row.id, row]));
+  const formatById = new Map(formats.map((row) => [row.id, row]));
+
+  /** The combination in words, and a rank per axis in the dictionaries' own order — a null value
+   *  (*No certificate*, *Single*) first, as the filters list it. */
+  const describe = (combination: SeriesCombination) => {
+    const labels: string[] = [];
+    const rank: number[] = [];
+    if (combination.conditionId !== undefined) {
+      const row = conditionById.get(combination.conditionId);
+      labels.push(row?.name ?? "Unknown condition");
+      rank.push(row?.sortOrder ?? 0);
+    }
+    if (combination.certificateStatusId !== undefined) {
+      const row = combination.certificateStatusId ? certificateById.get(combination.certificateStatusId) : null;
+      labels.push(combination.certificateStatusId === null ? "No certificate" : (row?.name ?? "Unknown certificate"));
+      rank.push(combination.certificateStatusId === null ? -1 : (row?.sortOrder ?? 0));
+    }
+    if (combination.formatId !== undefined) {
+      const row = combination.formatId ? formatById.get(combination.formatId) : null;
+      labels.push(combination.formatId === null ? "Single" : (row?.name ?? "Unknown format"));
+      rank.push(combination.formatId === null ? -1 : (row?.sortOrder ?? 0));
+    }
+    return { labels, rank };
+  };
 
   const [checklists, stamps, items, offers, commitments, labeller] = await Promise.all([
     prisma.checklist.findMany({
@@ -513,11 +618,17 @@ async function nameSeries(
     };
   };
 
+  const rankByKey = new Map<string, number[]>();
   const views = found.map((series): RecombinationSeriesView => {
     const checklist = checklistById.get(series.checklistId);
+    const { labels, rank } = describe(series.combination);
+    rankByKey.set(series.key, rank);
     return {
+      key: series.key,
       checklistId: series.checklistId,
       checklistName: checklist?.name ?? "A set",
+      combination: series.combination,
+      combinationLabels: labels,
       issue: checklist?.issue
         ? { issueId: checklist.issue.id, name: checklist.issue.name, year: checklist.issue.year }
         : null,
@@ -543,9 +654,18 @@ async function nameSeries(
     };
   });
 
-  // Issue by issue in catalogue order, as the Issues list reads; a checklist spanning issues last.
+  // Issue by issue in catalogue order, as the Issues list reads; a checklist spanning issues last. One
+  // checklist's proposals sit together, in the dictionaries' order (#1265).
   const sortKeyOf = (view: RecombinationSeriesView) =>
     checklistById.get(view.checklistId)?.issue?.primaryCatalogSortKey ?? null;
+  const byCombination = (a: RecombinationSeriesView, b: RecombinationSeriesView) => {
+    const ra = rankByKey.get(a.key) ?? [];
+    const rb = rankByKey.get(b.key) ?? [];
+    for (let i = 0; i < Math.max(ra.length, rb.length); i += 1) {
+      if ((ra[i] ?? 0) !== (rb[i] ?? 0)) return (ra[i] ?? 0) - (rb[i] ?? 0);
+    }
+    return a.combinationLabels.join(" ").localeCompare(b.combinationLabels.join(" ")) || a.key.localeCompare(b.key);
+  };
   return views.sort((a, b) => {
     if ((a.issue === null) !== (b.issue === null)) return a.issue === null ? 1 : -1;
     const byCatalog = compareCatalogSortKeys(sortKeyOf(a), sortKeyOf(b));
@@ -554,6 +674,10 @@ async function nameSeries(
     if (byIssue !== 0) return byIssue;
     const bySort =
       (checklistById.get(a.checklistId)?.sortOrder ?? 0) - (checklistById.get(b.checklistId)?.sortOrder ?? 0);
-    return bySort !== 0 ? bySort : a.checklistName.localeCompare(b.checklistName);
+    if (bySort !== 0) return bySort;
+    const byName = a.checklistName.localeCompare(b.checklistName);
+    if (byName !== 0) return byName;
+    if (a.checklistId !== b.checklistId) return a.checklistId.localeCompare(b.checklistId);
+    return byCombination(a, b);
   });
 }

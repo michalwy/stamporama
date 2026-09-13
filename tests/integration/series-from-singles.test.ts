@@ -5,6 +5,11 @@ import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer } from "../../src/lib/offers";
 import { createTrade } from "../../src/lib/trades";
 import { findSeriesRecombinations } from "../../src/lib/series-recombination";
+import {
+  DEFAULT_SERIES_CRITERIA,
+  NO_MIXING,
+  type SeriesCriteria,
+} from "../../src/lib/series-recombination-rules";
 import type { OfferState } from "../../src/lib/offer-rules";
 
 // The series-recombination screen's read (#1210): which series one platform's single offers plus its
@@ -25,6 +30,9 @@ describe("series from singles (#1210)", () => {
   let otherPlatformId: string;
   let partnerId: string;
   let mnhId: string;
+  let usedId: string;
+  let certId: string;
+  let saleNo = 9500;
   let variantSubtypeId: string;
   let nextIssueNo = 9800;
   let nextStamp = 0;
@@ -51,12 +59,16 @@ describe("series from singles (#1210)", () => {
     return ids;
   }
 
-  /** A for-sale copy in hand, unless told otherwise. */
-  async function copy(stampId: string, opts: { deliveryState?: string } = {}): Promise<string> {
+  /** A for-sale MNH copy in hand with no certificate, unless told otherwise. */
+  async function copy(
+    stampId: string,
+    opts: { deliveryState?: string; conditionId?: string; certificateStatusId?: string } = {}
+  ): Promise<string> {
     return (
       await createItem(userId, collectionId, {
         stampId,
-        conditionId: mnhId,
+        conditionId: opts.conditionId ?? mnhId,
+        certificateStatusId: opts.certificateStatusId,
         forSale: true,
         deliveryState: opts.deliveryState ?? "delivered",
       })
@@ -106,6 +118,38 @@ describe("series from singles (#1210)", () => {
     return result.series.find((series) => series.checklistId === checklistId) ?? null;
   }
 
+  async function listedWith(checklistId: string, criteria: SeriesCriteria) {
+    const result = await findSeriesRecombinations(userId, collectionId, platformId, criteria);
+    return result.series.find((series) => series.checklistId === checklistId) ?? null;
+  }
+
+  /** Sell the copy through a one-copy offer of its own, the offer then left in the given state —
+   *  `sold` as the lifecycle leaves it, or still `active` as an offer nobody moved (#1263). */
+  async function sell(itemId: string, offerState: OfferState, onPlatform = platformId): Promise<void> {
+    const offerId = await offer([[itemId]], { state: offerState, platformId: onPlatform });
+    const set = await prisma.offerSet.findFirstOrThrow({ where: { offerId }, select: { id: true } });
+    const sale = await prisma.sale.create({
+      data: { collectionId, saleNo: ++saleNo, platformId: onPlatform, soldAt: new Date(), currency: "EUR" },
+    });
+    const line = await prisma.saleLine.create({
+      data: { saleId: sale.id, offerId, offerSetId: set.id, price: "5.00" },
+    });
+    await prisma.saleLineItem.create({ data: { saleLineId: line.id, itemId } });
+  }
+
+  /** Give the copy to a partner in a closed trade (#644). */
+  async function tradeAway(itemId: string): Promise<void> {
+    const trade = await createTrade(userId, collectionId, { partnerId, currency: "EUR" });
+    await prisma.tradeLine.create({
+      data: { tradeId: trade.id, sectionId: trade.sections[0].id, side: "give", itemId },
+    });
+    await prisma.trade.update({ where: { id: trade.id }, data: { status: "closed" } });
+  }
+
+  async function writeOff(itemId: string): Promise<void> {
+    await prisma.item.update({ where: { id: itemId }, data: { disposedAt: new Date() } });
+  }
+
   before(async () => {
     userId = `test-user-recombine-${ts}`;
     await prisma.user.create({
@@ -129,6 +173,16 @@ describe("series from singles (#1210)", () => {
         data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
       })
     ).id;
+    usedId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 },
+      })
+    ).id;
+    certId = (
+      await prisma.certificateStatus.create({
+        data: { collectionId, name: "Certificate", abbreviation: "Cert", sortOrder: 0 },
+      })
+    ).id;
     variantSubtypeId = (
       await prisma.stampSubtype.create({
         data: { collectionId, name: "Gum variety", actsAsVariant: true, isDefault: true, sortOrder: 0 },
@@ -150,6 +204,10 @@ describe("series from singles (#1210)", () => {
   });
 
   after(async () => {
+    // A sold copy's rows restrict its item and its set, so they go first.
+    await prisma.saleLineItem.deleteMany({ where: { item: { collectionId } } });
+    await prisma.saleLine.deleteMany({ where: { sale: { collectionId } } });
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.trade.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
@@ -310,6 +368,127 @@ describe("series from singles (#1210)", () => {
     assert.ok(series, "a promise does not take the copy out");
     assert.equal(series.slots[0].fillers[0].promisedIn?.tradeId, trade.id);
     assert.equal(series.slots[0].fillers[0].promisedIn?.partnerName, "Anna");
+  });
+
+  it("does not fill a slot with a sold copy, whichever route would count it (#1263)", async () => {
+    const routes = [
+      // The sale closed the offer, so the copy sits in no open offer here and read as available.
+      ["sold through an offer now Sold", (id: string) => sell(id, "sold")],
+      // A sold copy in an offer left Active is still sold.
+      ["sold through a single offer left Active", (id: string) => sell(id, "active")],
+      // On this platform it was never offered at all.
+      ["sold on another platform, its offer left Active", (id: string) => sell(id, "active", otherPlatformId)],
+    ] as const;
+    for (const [label, sale] of routes) {
+      const ids = await stamps(2);
+      const setId = await checklist(ids);
+      await offer([[await copy(ids[0])]]);
+      const leaving = await copy(ids[1]);
+      assert.ok(await listed(setId), `${label}: listed while the copy is held`);
+      await sale(leaving);
+      assert.equal(await listed(setId), null, label);
+    }
+  });
+
+  it("does not fill a slot with a copy traded away or written off, available or in an Active single (#1263)", async () => {
+    for (const [label, leave] of [["traded away", tradeAway], ["written off", writeOff]] as const) {
+      for (const singly of [false, true]) {
+        const ids = await stamps(2);
+        const setId = await checklist(ids);
+        await offer([[await copy(ids[0])]]);
+        const leaving = await copy(ids[1]);
+        if (singly) await offer([[leaving]], { state: "active" });
+        assert.ok(await listed(setId), `${label}, ${singly ? "single" : "available"}: listed while held`);
+        await leave(leaving);
+        assert.equal(await listed(setId), null, `${label}, ${singly ? "single" : "available"}`);
+      }
+    }
+  });
+
+  it("lists a series that stays complete without a sold copy, with only the copies still held (#1263)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    await offer([[await copy(ids[0])]]);
+    await sell(await copy(ids[1]), "sold");
+    const kept = await copy(ids[1]);
+
+    const series = await listed(setId);
+    assert.ok(series);
+    assert.deepEqual(series.slots[1].fillers.map((filler) => filler.itemId), [kept]);
+  });
+
+  it("proposes a checklist complete in two conditions as two cards, each naming its combination (#1265)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    await offer([[await copy(ids[0])]]);
+    await copy(ids[1]);
+    await offer([[await copy(ids[0], { conditionId: usedId })]]);
+    await copy(ids[1], { conditionId: usedId });
+
+    const cards = (await findSeriesRecombinations(userId, collectionId, platformId)).series.filter(
+      (series) => series.checklistId === setId
+    );
+    assert.deepEqual(
+      cards.map((card) => card.combinationLabels),
+      [
+        ["Mint Never Hinged", "No certificate", "Single"],
+        ["Used", "No certificate", "Single"],
+      ],
+      "one card per condition, in the conditions' order"
+    );
+    assert.deepEqual(
+      cards.map((card) => card.slots.flatMap((slot) => slot.fillers.map((filler) => filler.condition))),
+      [["MNH", "MNH"], ["U", "U"]],
+      "neither card holds a copy of the other condition"
+    );
+    assert.notEqual(cards[0].key, cards[1].key);
+    assert.deepEqual(cards[0].combination, { conditionId: mnhId, certificateStatusId: null, formatId: null });
+  });
+
+  it("mixes conditions only when asked, and a filter that removes a copy breaks the series (#1265)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    await offer([[await copy(ids[0])]]);
+    await copy(ids[1], { conditionId: usedId });
+    const mixed: SeriesCriteria = { ...DEFAULT_SERIES_CRITERIA, mixing: { ...NO_MIXING, condition: true } };
+
+    assert.equal(await listed(setId), null, "not by default");
+    assert.deepEqual((await listedWith(setId, mixed))?.combinationLabels, ["No certificate", "Single"]);
+    assert.equal(
+      await listedWith(setId, { ...mixed, conditionIds: [mnhId] }),
+      null,
+      "complete only thanks to the used copy the filter leaves out"
+    );
+    assert.ok(await listedWith(setId, { ...mixed, conditionIds: [mnhId, usedId] }), "a filter keeping both");
+  });
+
+  it("keeps certificates apart unless certificate mixing is on, and filters on No certificate (#1265)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    await offer([[await copy(ids[0], { certificateStatusId: certId })]]);
+    await copy(ids[1]);
+    const mixed: SeriesCriteria = { ...DEFAULT_SERIES_CRITERIA, mixing: { ...NO_MIXING, certificate: true } };
+
+    assert.equal(await listed(setId), null);
+    assert.equal(
+      await listedWith(setId, { ...DEFAULT_SERIES_CRITERIA, mixing: { ...NO_MIXING, condition: true } }),
+      null,
+      "mixing another axis does not mix this one"
+    );
+    assert.deepEqual((await listedWith(setId, mixed))?.combinationLabels, ["Mint Never Hinged", "Single"]);
+    assert.equal(await listedWith(setId, { ...mixed, certificateStatusIds: ["none"] }), null);
+  });
+
+  it("narrows the variant copies with the subtype filter (#1265)", async () => {
+    const [parent, other] = await stamps(2);
+    const variant = await stamp({ parentId: parent, subtypeId: variantSubtypeId });
+    const setId = await checklist([parent, other]);
+    await copy(variant);
+    await offer([[await copy(other)]]);
+
+    assert.ok(await listed(setId), "a variant copy still fills its parent's slot");
+    assert.equal(await listedWith(setId, { ...DEFAULT_SERIES_CRITERIA, subtypeIds: ["none"] }), null);
+    assert.ok(await listedWith(setId, { ...DEFAULT_SERIES_CRITERIA, subtypeIds: ["none", variantSubtypeId] }));
   });
 
   it("refuses a platform that is not one of the collection's", async () => {

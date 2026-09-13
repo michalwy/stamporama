@@ -20,6 +20,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
   let areaId: string;
   let platformId: string;
   let mnhId: string;
+  let usedId: string;
   let nextIssueNo = 9900;
   let nextStamp = 0;
 
@@ -43,11 +44,11 @@ describe("compose a series offer out of single offers (#1211)", () => {
     return ids;
   }
 
-  async function copy(stampId: string): Promise<string> {
+  async function copy(stampId: string, conditionId = mnhId): Promise<string> {
     return (
       await createItem(userId, collectionId, {
         stampId,
-        conditionId: mnhId,
+        conditionId,
         forSale: true,
         deliveryState: "delivered",
       })
@@ -84,6 +85,12 @@ describe("compose a series offer out of single offers (#1211)", () => {
         },
       })
     ).id;
+  }
+
+  /** The combination every copy here shares — MNH, no certificate, a single — which is the one card
+   *  the default screen draws for it (#1265). */
+  function plain() {
+    return { conditionId: mnhId, certificateStatusId: null, formatId: null };
   }
 
   async function offerRow(offerId: string) {
@@ -137,6 +144,11 @@ describe("compose a series offer out of single offers (#1211)", () => {
         data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
       })
     ).id;
+    usedId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 },
+      })
+    ).id;
     platformId = (
       await prisma.contact.create({
         data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
@@ -145,6 +157,10 @@ describe("compose a series offer out of single offers (#1211)", () => {
   });
 
   after(async () => {
+    // A sold copy's rows restrict its item and its set, so they go first.
+    await prisma.saleLineItem.deleteMany({ where: { item: { collectionId } } });
+    await prisma.saleLine.deleteMany({ where: { sale: { collectionId } } });
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
@@ -162,7 +178,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId,
+      checklistId: setId, combination: plain(),
       picks: Object.fromEntries(ids.map((stampId, i) => [stampId, copies[i]])),
     });
 
@@ -198,7 +214,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId,
+      checklistId: setId, combination: plain(),
       picks: { [ids[0]]: first, [ids[1]]: second },
     });
 
@@ -229,7 +245,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId,
+      checklistId: setId, combination: plain(),
       picks: { [ids[0]]: singleFirst, [ids[1]]: second },
     });
 
@@ -258,7 +274,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId,
+      checklistId: setId, combination: plain(),
       picks: { [ids[0]]: availableFirst, [ids[1]]: second },
     });
 
@@ -285,7 +301,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
     await assert.rejects(
       composeSeriesOffer(userId, collectionId, {
         platformId,
-        checklistId: setId,
+        checklistId: setId, combination: plain(),
         picks: { [ids[0]]: bid, [ids[1]]: second },
       }),
       (error: Error) => error.message.includes(formatItemNo(itemNo)) && /Nothing was changed/.test(error.message)
@@ -303,8 +319,63 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const before = await snapshot();
     await assert.rejects(
-      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, picks: { [ids[0]]: first } }),
+      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), picks: { [ids[0]]: first } }),
       /Choose which copy fills/
+    );
+    assert.deepEqual(await snapshot(), before);
+  });
+
+  it("refuses, naming the copy, when a chosen copy sold after the screen was opened — its offer left Active (#1263)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const first = await copy(ids[0]);
+    const firstOffer = await offer([[first]], "active");
+    const second = await copy(ids[1]);
+    await offer([[second]], "preparing");
+    // The screen was opened with the series listed…
+    assert.ok((await findSeriesRecombinations(userId, collectionId, platformId)).series.some((s) => s.checklistId === setId));
+    // …and then the first copy sold, with nobody moving its offer out of Active.
+    const set = await prisma.offerSet.findFirstOrThrow({ where: { offerId: firstOffer }, select: { id: true } });
+    const sale = await prisma.sale.create({
+      data: { collectionId, saleNo: 9901, platformId, soldAt: new Date(), currency: "EUR" },
+    });
+    const line = await prisma.saleLine.create({
+      data: { saleId: sale.id, offerId: firstOffer, offerSetId: set.id, price: "5.00" },
+    });
+    await prisma.saleLineItem.create({ data: { saleLineId: line.id, itemId: first } });
+    const itemNo = (await prisma.item.findUniqueOrThrow({ where: { id: first }, select: { itemNo: true } })).itemNo;
+
+    const before = await snapshot();
+    await assert.rejects(
+      composeSeriesOffer(userId, collectionId, {
+        platformId,
+        checklistId: setId,
+        combination: plain(),
+        picks: { [ids[0]]: first, [ids[1]]: second },
+      }),
+      (error: Error) => error.message.includes(formatItemNo(itemNo)) && /Nothing was changed/.test(error.message)
+    );
+    assert.deepEqual(await snapshot(), before, "no offer created, no set taken out, no state changed");
+  });
+
+  it("composes only the card's combination: a copy of another condition is refused by name (#1265)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const first = await copy(ids[0]);
+    await offer([[first]], "active");
+    await copy(ids[1]);
+    const used = await copy(ids[1], usedId);
+    const itemNo = (await prisma.item.findUniqueOrThrow({ where: { id: used }, select: { itemNo: true } })).itemNo;
+
+    const before = await snapshot();
+    await assert.rejects(
+      composeSeriesOffer(userId, collectionId, {
+        platformId,
+        checklistId: setId,
+        combination: plain(),
+        picks: { [ids[0]]: first, [ids[1]]: used },
+      }),
+      (error: Error) => error.message.includes(formatItemNo(itemNo))
     );
     assert.deepEqual(await snapshot(), before);
   });

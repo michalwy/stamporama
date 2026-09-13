@@ -250,6 +250,10 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
   });
 
   after(async () => {
+    // A sold copy's rows restrict its item and its set, so they go first.
+    await prisma.saleLineItem.deleteMany({ where: { item: { collectionId } } });
+    await prisma.saleLine.deleteMany({ where: { sale: { collectionId } } });
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.trade.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
@@ -267,6 +271,8 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
     let setAside: string;
     let notForSale: string;
     let promised: string;
+    let soldHere: string;
+    let tradedAway: string;
 
     before(async () => {
       const s = async (name: string) => stamp(poolAreaId, name, { price: "2.00" });
@@ -302,6 +308,27 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
         },
       });
       await prisma.trade.update({ where: { id: trade.id }, data: { status: "agreed" } });
+
+      // Gone (#1263): sold through an offer here that the sale closed, so it sits in no open offer —
+      // and given to a partner in a closed trade.
+      soldHere = await copy(await s("Sold here"));
+      const soldOffer = await offerHolding(soldHere);
+      await prisma.offer.update({ where: { id: soldOffer }, data: { state: "sold" } });
+      const soldSet = await prisma.offerSet.findFirstOrThrow({ where: { offerId: soldOffer }, select: { id: true } });
+      const sale = await prisma.sale.create({
+        data: { collectionId, saleNo: 9701, platformId, soldAt: new Date(), currency: "EUR" },
+      });
+      const line = await prisma.saleLine.create({
+        data: { saleId: sale.id, offerId: soldOffer, offerSetId: soldSet.id, price: "5.00" },
+      });
+      await prisma.saleLineItem.create({ data: { saleLineId: line.id, itemId: soldHere } });
+
+      tradedAway = await copy(await s("Traded away"));
+      const closed = await createTrade(userId, collectionId, { partnerId, currency: "EUR" });
+      await prisma.tradeLine.create({
+        data: { tradeId: closed.id, sectionId: closed.sections[0].id, side: "give", itemId: tradedAway },
+      });
+      await prisma.trade.update({ where: { id: closed.id }, data: { status: "closed" } });
     });
 
     it("keeps a copy nothing has claimed, and one whose offer here is closed", async () => {
@@ -326,6 +353,12 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       assert.equal(ids.has(notDelivered), false, "not in hand");
       assert.equal(ids.has(setAside), false, "#506");
       assert.equal(ids.has(notForSale), false, "`notOfferedPlatformId` implies `forSale`");
+    });
+
+    it("drops a copy that has sold or gone to a partner, though no open offer holds it (#1263)", async () => {
+      const ids = await poolIds({ areaId: poolAreaId });
+      assert.equal(ids.has(soldHere), false, "sold through an offer the sale closed");
+      assert.equal(ids.has(tradedAway), false, "given away in a closed trade (#644)");
     });
 
     it("keeps a copy promised in an agreed trade, and reports it instead (#639)", async () => {
