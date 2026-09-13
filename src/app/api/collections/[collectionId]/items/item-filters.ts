@@ -53,6 +53,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     conditionIds: readConditionIds(sp),
     certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
     formatIds: readCsvParam(sp, "formatIds"),
+    subtypeIds: readCsvParam(sp, "subtypeIds"),
     deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
     search: sp.get("search") || undefined,

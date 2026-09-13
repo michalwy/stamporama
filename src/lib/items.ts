@@ -993,6 +993,13 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  copies with no format: null *is* the single (ADR-0020), and an absent filter cannot express it.
    *  A duplicate group addressing its own members passes the one format it grouped on. */
   formatIds?: string[];
+  /** Restrict to copies whose linked stamp carries any of these subtypes (#1002) — an **OR**,
+   *  empty/absent meaning every subtype. The literal `"none"` is a tickable value like any other and
+   *  matches the copies of a **base** stamp: a top-level stamp keeps `subtypeId = null` (ADR-0010 §2),
+   *  so null is a value here exactly as `"single"` is for format — and without it, ticking every
+   *  subtype but *Forgery* would silently drop every copy of a base stamp too (ADR-0049 §7). Read off
+   *  the copy's leading stamp, as the area and the year are. */
+  subtypeIds?: string[];
   /** Restrict to copies whose linked stamp belongs to any of these areas (the selected
    * area plus its descendants, resolved by the caller). Mirrors the stamps list area
    * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
@@ -1151,10 +1158,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
  * top level, where the search's own `OR` would collide with it.
  */
 function nullableIdWhere(
-  field: "formatId" | "certificateStatusId",
+  field: "formatId" | "certificateStatusId" | "subtypeId",
   ids: readonly string[] | undefined,
   nullSentinel: string
-): Prisma.ItemWhereInput | null {
+): Record<string, unknown> | null {
   if (!ids || ids.length === 0) return null;
   const wantsNull = ids.includes(nullSentinel);
   const real = ids.filter((id) => id !== nullSentinel);
@@ -1293,6 +1300,11 @@ function buildItemWhere(
     "none"
   );
   if (certificates) and.push(certificates);
+  // The third null-bearing axis (#1002), and the one on the linked **stamp** rather than the copy —
+  // so it is wrapped in `stamp`, and still goes into the AND list: its `OR` would collide with the
+  // search's at the top level exactly as the two above would.
+  const subtypes = nullableIdWhere("subtypeId", filters.subtypeIds, "none");
+  if (subtypes) and.push({ stamp: subtypes });
   // "No ref" (#421) is two stored values — null, and the empty string a cleared field can leave —
   // so it goes in the AND list rather than as a top-level `OR` the search would collide with.
   if (filters.locationRef === NO_LOCATION_REF) {

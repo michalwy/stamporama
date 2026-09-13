@@ -220,6 +220,11 @@ filters by every other dictionary — `conditionIds`, `certificateStatusIds`, `f
 (multi-select, OR, `MultiSelectFilter`), and it also answers *show me only the printing errors* and
 *exclude the overprints*.
 
+As built, **No subtype** is a tickable value (`"none"`), the way *Single* is for format and *No
+certificate* for certificate: a base stamp keeps `subtypeId = null` (ADR-0010 §2), and *everything but
+the forgeries* has to keep its copies. The filter reads the copy's leading stamp, as the area and year
+filters do.
+
 Title and description wording for a deliberately-sold forgery stays with the collector. **No listing
 guard, no title rule and no publishing block is built.**
 

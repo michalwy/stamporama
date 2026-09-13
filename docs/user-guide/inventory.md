@@ -100,7 +100,7 @@ axis your collection does not use at all: with no formats defined there is no fo
 storage locations there is no location filter or filing grouping.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
-one click: every filter on it — condition, delivery state, disposition, format, certificate,
+one click: every filter on it — condition, delivery state, disposition, format, subtype, certificate,
 location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It is only there to click while something is actually
 filtering, but its place on the row is held either way, so the first filter you switch on does not
@@ -179,6 +179,14 @@ right, from *which copies* to *how they are shown*.
   format filter it appears only once your collection defines certificate statuses.
 - **Format** — see [Filtering the list by format](#filtering-the-list-by-format). It appears only
   once your collection defines formats.
+- **Subtype** — show only copies of stamps carrying the [subtypes](collections.md) you tick —
+  *Error*, *Overprint*, *Forgery* and the rest — with **No subtype** among them for the copies of a
+  base stamp, which has none. Since this list is where offers are made, it is how you keep forgeries
+  out of what you are about to list: tick everything **except** *Forgery*, **No subtype** included,
+  and they are gone from the list and from anything you select on it. Tick only *Forgery* when you
+  mean to sell them deliberately. It reads the copy's own stamp; a cover carrying several stamps
+  answers for the first of them. Like the filters beside it, it is remembered between visits and the
+  year panel, the area panel and the holdings totals follow it.
 - **Several stamps** — *Any number of stamps* (the default), *Only several-stamp pieces* or *No
   several-stamp pieces*: narrow the list to the [covers and other pieces carrying several
   stamps](#covers-fragments-and-other-pieces-carrying-several-stamps), or set them aside. It is
