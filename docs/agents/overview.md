@@ -47,8 +47,10 @@ built by #649–#651).
 - **Growth is event dates, no new storage** (#397): `Item.createdAt` / `Issue.createdAt` bucketed
   by UTC month in SQL (`date_trunc`), the window filled with zero months by the pure
   `buildGrowthSeries`. The value of the holdings on a past day is unrecoverable from current
-  state — that is #652's daily snapshots, and the chart over them is #653; neither is part of
-  this screen yet.
+  state — so it is recorded as it happens by #652's daily snapshots
+  (`value-snapshots.ts`, [ADR-0053](../decisions/0053-daily-collection-value-snapshots.md)), taken
+  from this screen's own Value reads at their own scopes so a snapshot and the tile read the same
+  day cannot disagree. The chart over them is #653 and is not part of this screen yet.
 
 - **Tiles are `RowLink` cards** (#557's overlay): the whole tile navigates, and an inner link —
   the exposure line to `/auctions`, a coverage row to its area — is lifted with `ROW_LINK_ABOVE`.

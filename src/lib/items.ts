@@ -105,6 +105,7 @@ import {
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 import { buildLocationPath } from "./location-path";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { copyIdsByAreaSubtree } from "./value-snapshot-rules";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -3774,6 +3775,47 @@ async function makeHoldingsSummarizer(
         baseCurrency
       ),
     };
+  };
+}
+
+/**
+ * The holdings summary of the whole collection and of every area's subtree, from one fetch and one
+ * valuation (#652's daily snapshot). The collection figure is exactly {@link getHoldingsValuation}
+ * at the Overview's scope (`excludeGone`, disposal lifted into the write-off); each area's is the
+ * same figure with that area selected on the Copies screen — every copy whose stamp is linked into
+ * the area's subtree (`copyIdsByAreaSubtree`). Valued once and sliced, so an area costs an
+ * aggregation rather than a valuation.
+ *
+ * No ownership check: the only caller is the background sweep, which has no user.
+ */
+export async function getHoldingsValuationByAreaSubtree(
+  collectionId: string,
+  areas: { id: string; parentId: string | null }[]
+): Promise<{ collection: HoldingsSummary; areas: Map<string, HoldingsSummary> }> {
+  const filters: ItemListFiltersPaginated = { excludeGone: true, includeDisposed: true };
+  const rows = await prisma.item.findMany({
+    where: buildItemWhere(collectionId, filters, null),
+    select: {
+      ...HOLDINGS_ROW_SELECT,
+      stamp: {
+        select: {
+          ...HOLDINGS_ROW_SELECT.stamp.select,
+          stampAreaLinks: { select: { collectionAreaId: true } },
+        },
+      },
+    },
+  });
+  const summarize = await makeHoldingsSummarizer(collectionId, rows);
+  const idsByArea = copyIdsByAreaSubtree(
+    areas,
+    rows.map((row) => ({
+      id: row.id,
+      areaIds: row.stamp.stampAreaLinks.map((link) => link.collectionAreaId),
+    }))
+  );
+  return {
+    collection: summarize(),
+    areas: new Map(areas.map((area) => [area.id, summarize(idsByArea.get(area.id) ?? [])])),
   };
 }
 
