@@ -248,6 +248,26 @@ reason to stop looking for the mint one, and a generator that cannot say that co
 run of a series half of which is already in the album. On wide-open terms both rules reduce to the
 originals exactly, which is why the completeness card's button is unchanged.
 
+**A set is wanted at a depth** (#1240). A collector goes after a set as *one of each stamp, any
+variant* or as *every variant*, and a want on an umbrella beside wants on its variants is one goal
+counted twice — a copy of any variant then looks as if it met two. So the run asks **main stamps or
+variants**, and the stamps a checklist names are mapped to that depth *before* the gap is taken
+(`want-depth-rules.ts`): under *main stamps* a variant contributes the top of its variant chain,
+once; under *variants* a stamp that has variants contributes the variants below it with none of
+their own — including variants the checklist does not list — and is never wanted itself. *Variant*
+is ADR-0010 §3's edge: a distinct entry is neither climbed out of nor expanded into. Held, already
+wanted on these terms and the union across checklists all read over the mapped stamps, unchanged.
+The answer is remembered per collection, like the profile.
+
+**Each run looks at its own depth only.** A *variants* run followed by a *main stamps* run over the
+same set leaves a want on the umbrella beside wants on its variants, and that is deliberate
+(settled with the collector, 2026-09-13): the rule is about what one run writes, and a second run at
+another depth is the collector's own decision rather than a duplicate to suppress.
+
+The completeness card's button stopped being plain with this: once the run has a question to ask it
+opens the Issue list's dialog over its one checklist, confirmation and all. The paragraph above that
+gave the card no confirmation described a button with nothing to ask.
+
 Priority is there for the same reason the terms are, and its absence was the same mistake: deciding
 to go after a set is **one** decision about what to chase first, not one per stamp, and a dialog
 that could not take it wrote a dozen `normal` rows that then had to be re-prioritised one at a time

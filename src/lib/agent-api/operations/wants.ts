@@ -63,8 +63,8 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // operation that creates, narrows or closes a want**, and that is absence rather than an oversight:
 // ADR-0032 §7 makes closing and narrowing the collector's decision at the moment a copy reaches
 // their hands — *nothing closes automatically, because that would discard a record of intent* — and
-// an agent is not that moment. The gap generator (`createWantsForMissing`) is the same decision one
-// level up: it is a button the collector presses on the completeness card, having looked at it.
+// an agent is not that moment. The gap generator (`createWantsForIssue`) is the same decision one
+// level up: it is a dialog the collector confirms, having looked at the count.
 //
 // ## And nothing here computes a figure or decides a rule
 //

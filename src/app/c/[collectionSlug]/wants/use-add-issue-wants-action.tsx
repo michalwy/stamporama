@@ -17,6 +17,18 @@ import {
 import { useToast } from "@/app/toast-provider";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useInvalidateWants } from "./use-wants-query";
+import {
+  isWantDepth,
+  WANT_DEPTHS,
+  WANT_DEPTH_LABEL,
+  WANT_DEPTH_NOUN,
+  type WantDepth,
+} from "@/lib/want-depth-rules";
+import {
+  LS_LAST_WANT_DEPTH,
+  readLast,
+  writeLast,
+} from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 
 /**
  * "Add missing to want list" for a whole issue (#548), from the issue list's row menu and its
@@ -42,6 +54,10 @@ import { useInvalidateWants } from "./use-wants-query";
  * question asked at two scales, not two questions, and the gap between them was the bug: a bulk run
  * wrote a dozen `normal` wants that then had to be re-prioritised one at a time, and each door kept
  * its own idea of what the last run's terms were.
+ *
+ * And since #1240 it asks **at what depth** the set is wanted — main stamps or variants — because a
+ * want on an umbrella beside wants on its variants is one goal counted twice. Every count the dialog
+ * shows is taken at that depth, and the answer is remembered like the profile is.
  */
 export function useAddIssueWantsAction({
   collectionId,
@@ -78,13 +94,21 @@ export function useAddIssueWantsAction({
   return { action, dialog };
 }
 
-function AddIssueWantsDialog({
+/**
+ * The dialog itself — exported for the completeness card (#1240), which opens it over the one
+ * checklist it sits on. The card's button used to write straight away; once the run asks a depth it
+ * has something to ask, and one question asked in one shape is the reason this dialog exists.
+ */
+export function AddIssueWantsDialog({
   collectionId,
   issueId,
+  checklistId,
   onClose,
 }: {
   collectionId: string;
   issueId: string;
+  /** Scope the run to this one checklist of the issue: no ticks, just its own counts. */
+  checklistId?: string;
   onClose: () => void;
 }) {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
@@ -103,6 +127,14 @@ function AddIssueWantsDialog({
   // One urgency for the whole run (#695). Going after a set is a single decision about what to
   // chase first, so it is asked once here rather than left to be re-set a dozen times on the list.
   const [priority, setPriority] = useState<WantPriority>("normal");
+  // Main stamps or variants (#1240) — opened on the last run's answer, `main` before there is one:
+  // that is what a basic checklist, which names main stamps, has always been wanted as. The dialog
+  // mounts only when opened, so the browser's storage is there to read on the first render.
+  const [depth, setDepth] = useState<WantDepth>(() => {
+    const remembered = readLast(LS_LAST_WANT_DEPTH, collectionId);
+    return isWantDepth(remembered) ? remembered : "main";
+  });
+  const noun = WANT_DEPTH_NOUN[depth];
   // Any of the three axis menus being open — the shell must not take Escape from them (#361).
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -134,16 +166,17 @@ function AddIssueWantsDialog({
   const { invalidate: invalidateWants } = useInvalidateWants();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
-  const { data: gaps, isLoading, isFetching, isError } = useQuery<IssueWantGapChecklist[]>({
+  const { data: issueGaps, isLoading, isFetching, isError } = useQuery<IssueWantGapChecklist[]>({
     // Its own namespace: this is a snapshot taken to be confirmed, not a list the screen renders,
     // and it must be re-read each time the dialog opens rather than served from a stale cache.
     // **The terms are part of the key**: both halves of the gap are judged through them — a used
     // copy in the album does not answer a want for mint, and an open want for mint is not what a
     // want for used would duplicate — so a change of terms is a different question, not a filter.
-    queryKey: ["issue-want-gap", collectionId, issueId, acceptanceKey(acceptance)] as const,
+    // So is a change of depth (#1240): it changes which stamps the gap is taken over.
+    queryKey: ["issue-want-gap", collectionId, issueId, acceptanceKey(acceptance), depth] as const,
     queryFn: async () => {
       const { previewIssueMissingWantsAction } = await import("@/app/actions/wants");
-      return previewIssueMissingWantsAction(collectionId, issueId, acceptance);
+      return previewIssueMissingWantsAction(collectionId, issueId, acceptance, depth);
     },
     // Keeps the last answer on screen while the next terms are counted, so the dialog does not
     // blink back to "Checking…" on every tick of a condition box.
@@ -152,6 +185,9 @@ function AddIssueWantsDialog({
     gcTime: 0,
   });
 
+  // Read over the whole issue either way — the gap is per checklist already — and narrowed here when
+  // the card opened the dialog on one of them.
+  const gaps = checklistId ? issueGaps?.filter((g) => g.checklistId === checklistId) : issueGaps;
   const selected =
     picked ?? new Set((gaps ?? []).filter((g) => g.toCreateStampIds.length > 0).map((g) => g.checklistId));
   const chosen = (gaps ?? []).filter((g) => selected.has(g.checklistId));
@@ -183,7 +219,8 @@ function AddIssueWantsDialog({
         issueId,
         [...selected],
         acceptance,
-        priority
+        priority,
+        depth
       );
       if (result.status === "error") {
         setError(result.message);
@@ -193,6 +230,8 @@ function AddIssueWantsDialog({
       // uses: **saved, not picked**, and custom terms clear it rather than leaving the old profile
       // to seed a run just chosen against.
       rememberProfileFor(collectionId, profiles ?? [], acceptance);
+      // The depth on the same rule: what the run was saved at, not what was last clicked.
+      writeLast(LS_LAST_WANT_DEPTH, collectionId, depth);
       onClose();
       // The want chip rides on the catalogue read models as well as the want list itself, so all
       // three caches go — the rule `useAddWantAction` states: whatever a value is copied onto has
@@ -202,8 +241,8 @@ function AddIssueWantsDialog({
       toast({
         message:
           result.created === 0
-            ? "Nothing to add — every missing stamp is already on the want list"
-            : `${result.created} ${result.created === 1 ? "want" : "wants"} added, one per missing stamp`,
+            ? `Nothing to add — every missing ${noun.one} is already on the want list`
+            : `${result.created} ${result.created === 1 ? "want" : "wants"} added, one per missing ${noun.one}`,
         ...(result.created > 0
           ? { href: `/c/${collectionSlug}/wants`, linkLabel: "Open want list" }
           : {}),
@@ -231,6 +270,23 @@ function AddIssueWantsDialog({
           </p>
         ) : (
           <>
+            {/* The depth leads: it decides which stamps every figure below is about. */}
+            <div style={{ marginBottom: "0.75rem" }}>
+              <LabelWithError>Want</LabelWithError>
+              <WantDepthChoice value={depth} onChange={setDepth} disabled={isPending} />
+              <span
+                style={{
+                  display: "block",
+                  marginTop: "0.375rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                {depth === "main"
+                  ? "One want per stamp, whichever variant — a variant on the checklist is wanted as the stamp it is a variant of."
+                  : "One want per variant — a stamp that has variants is wanted as each of them, including variants the checklist does not list, and never itself."}
+              </span>
+            </div>
             {gaps.length > 1 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.75rem" }}>
                 {gaps.map((g) => (
@@ -266,10 +322,10 @@ function AddIssueWantsDialog({
               {toCreate === 0
                 ? missing === 0
                   ? hasTerms
-                    ? "Nothing is missing — you hold a copy of every stamp of the selection that these terms would take."
-                    : "Nothing is missing — every stamp of the selection is in the collection."
-                  : `All ${missing} missing ${missing === 1 ? "stamp is" : "stamps are"} already on the want list${hasTerms ? " on these terms" : ""}.`
-                : `${toCreate} ${toCreate === 1 ? "want" : "wants"} will be created, one per missing stamp${
+                    ? `Nothing is missing — you hold a copy of every ${noun.one} of the selection that these terms would take.`
+                    : `Nothing is missing — every ${noun.one} of the selection is in the collection.`
+                  : `All ${missing} missing ${missing === 1 ? `${noun.one} is` : `${noun.many} are`} already on the want list${hasTerms ? " on these terms" : ""}.`
+                : `${toCreate} ${toCreate === 1 ? "want" : "wants"} will be created, one per missing ${noun.one}${
                     alreadyWanted > 0
                       ? `; ${alreadyWanted} more ${alreadyWanted === 1 ? "is" : "are"} already wanted${hasTerms ? " on these terms" : ""}`
                       : ""
@@ -337,6 +393,56 @@ function AddIssueWantsDialog({
         onAction={confirm}
       />
     </DialogShell>
+  );
+}
+
+/**
+ * Main stamps or variants (#1240), as two chips in a `radiogroup` — `WantPriorityChoice`'s shape,
+ * for its reason: the whole vocabulary fits on one line, and a closed menu would hide the one word
+ * that says what the counts below it are counting.
+ */
+function WantDepthChoice({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: WantDepth;
+  onChange: (next: WantDepth) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Want"
+      style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", minHeight: "2rem", alignItems: "center" }}
+    >
+      {WANT_DEPTHS.map((d) => {
+        const active = d === value;
+        return (
+          <button
+            key={d}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => onChange(d)}
+            style={{
+              padding: "0.25rem 0.625rem",
+              borderRadius: "0.375rem",
+              fontSize: "0.8125rem",
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.5 : 1,
+              background: active ? "var(--color-accent-soft)" : "transparent",
+              color: active ? "var(--color-accent)" : "var(--color-text-muted)",
+              border: `1px solid ${active ? "var(--color-accent-border)" : "var(--color-border-strong)"}`,
+              fontWeight: active ? 600 : 400,
+            }}
+          >
+            {WANT_DEPTH_LABEL[d]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

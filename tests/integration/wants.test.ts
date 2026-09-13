@@ -13,7 +13,6 @@ import {
   reopenWant,
   deleteWant,
   findWantsSatisfiedBy,
-  createWantsForMissing,
   createWantsForIssue,
   previewIssueMissingWants,
   loadStampWantSummaries,
@@ -1301,32 +1300,40 @@ describe("the intake review (ADR-0032 §7)", () => {
   });
 });
 
-describe("createWantsForMissing", () => {
+describe("the completeness generator — one checklist, pressed more than once", () => {
   let f: Fixtures;
+  let issueId: string;
+  let checklistId: string;
   before(async () => {
     f = await seedFixtures(`missing-${Date.now()}`);
+    const area = await prisma.collectionArea.create({
+      data: { collectionId: f.collectionId, name: "Poland" },
+    });
+    issueId = (
+      await prisma.issue.create({
+        data: { collectionId: f.collectionId, issueNo: 9400, collectionAreaId: area.id, name: "Set" },
+      })
+    ).id;
+    checklistId = (
+      await prisma.checklist.create({
+        data: {
+          collectionId: f.collectionId,
+          issueId,
+          name: "Complete set",
+          stamps: { create: [{ stampId: f.stamp.id }, { stampId: f.otherStamp.id }] },
+        },
+      })
+    ).id;
   });
   after(() => cleanup(f.userId));
 
-  async function makeChecklist() {
-    const checklist = await prisma.checklist.create({
-      data: {
-        collectionId: f.collectionId,
-        name: "Complete set",
-        stamps: { create: [{ stampId: f.stamp.id }, { stampId: f.otherStamp.id }] },
-      },
-    });
-    return checklist.id;
-  }
-
   it("creates an open, wide-open want for each missing stamp and skips the held one", async () => {
-    const checklistId = await makeChecklist();
     await createItem(f.userId, f.collectionId, {
       stampId: f.stamp.id,
       conditionId: f.used.id,
     });
 
-    const result = await createWantsForMissing(f.userId, f.collectionId, checklistId);
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [checklistId]);
     assert.deepEqual(result, { created: 1, missing: 1 });
 
     const rows = await listWants(f.userId, f.collectionId);
@@ -1339,10 +1346,7 @@ describe("createWantsForMissing", () => {
   });
 
   it("is a no-op the second time — an open want is not a gap to fill again", async () => {
-    const checklistId = (await prisma.checklist.findFirstOrThrow({
-      where: { collectionId: f.collectionId },
-    })).id;
-    const result = await createWantsForMissing(f.userId, f.collectionId, checklistId);
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [checklistId]);
     assert.deepEqual(result, { created: 0, missing: 1 });
     assert.equal((await listWants(f.userId, f.collectionId)).length, 1);
   });
@@ -1350,10 +1354,7 @@ describe("createWantsForMissing", () => {
   it("a closed want is not a reason to skip — the gap is real again", async () => {
     const [row] = await listWants(f.userId, f.collectionId);
     await closeWant(f.userId, row.id);
-    const checklistId = (await prisma.checklist.findFirstOrThrow({
-      where: { collectionId: f.collectionId },
-    })).id;
-    const result = await createWantsForMissing(f.userId, f.collectionId, checklistId);
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [checklistId]);
     assert.deepEqual(result, { created: 1, missing: 1 });
     assert.equal((await listWants(f.userId, f.collectionId)).length, 2);
   });
@@ -1548,5 +1549,165 @@ describe("previewIssueMissingWants / createWantsForIssue", () => {
     );
     assert.equal(onMnh.length, 2);
     assert.deepEqual([...new Set(onMnh.map((r) => r.priority))], ["normal"]);
+  });
+});
+
+describe("main stamps or variants — the depth a set is wanted at (#1240)", () => {
+  let f: Fixtures;
+  let issueId: string;
+  /** `309` → variants `309A` (→ nested `309Aa`, `309Ab`) and `309B`; `309 I` a distinct entry. */
+  let umbrella: string, mid: string, nestedA: string, nestedB: string, sibling: string, error: string;
+  /** `310`, a stamp with no variants at all. */
+  let plain: string;
+  /** Basic names the umbrella and the plain stamp; Specialized names one nested variant only. */
+  let basicId: string, specializedId: string;
+
+  const ids = (gaps: { checklistId: string; toCreateStampIds: string[] }[], id: string) =>
+    [...gaps.find((g) => g.checklistId === id)!.toCreateStampIds].sort();
+
+  before(async () => {
+    f = await seedFixtures(`depth-${Date.now()}`);
+    const { collectionId } = f;
+    const area = await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } });
+    issueId = (
+      await prisma.issue.create({
+        data: { collectionId, issueNo: 9403, collectionAreaId: area.id, name: "Definitives" },
+      })
+    ).id;
+    const variant = (
+      await prisma.stampSubtype.create({
+        data: { collectionId, name: "Colour", actsAsVariant: true, isDefault: false, sortOrder: 0 },
+      })
+    ).id;
+    const distinct = (
+      await prisma.stampSubtype.create({
+        data: { collectionId, name: "Error", actsAsVariant: false, isDefault: false, sortOrder: 1 },
+      })
+    ).id;
+    const stamp = async (name: string, parentId?: string, subtypeId?: string) =>
+      (await prisma.stamp.create({ data: { collectionId, name, parentId, subtypeId } })).id;
+
+    umbrella = await stamp("309");
+    mid = await stamp("309A", umbrella, variant);
+    nestedA = await stamp("309Aa", mid, variant);
+    nestedB = await stamp("309Ab", mid, variant);
+    sibling = await stamp("309B", umbrella, variant);
+    error = await stamp("309 I", umbrella, distinct);
+    plain = await stamp("310");
+
+    const list = async (name: string, sortOrder: number, stampIds: string[]) =>
+      (
+        await prisma.checklist.create({
+          data: {
+            collectionId,
+            issueId,
+            name,
+            sortOrder,
+            stamps: { create: stampIds.map((stampId) => ({ stampId })) },
+          },
+        })
+      ).id;
+    basicId = await list("Basic", 0, [umbrella, plain]);
+    specializedId = await list("Specialized", 1, [nestedA]);
+  });
+  after(() => cleanup(f.userId));
+
+  it("variants: an umbrella becomes its concrete variants, unlisted and nested ones included", async () => {
+    const gaps = await previewIssueMissingWants(
+      f.userId,
+      f.collectionId,
+      issueId,
+      undefined,
+      "variants"
+    );
+    // No stamp that has variants — neither `309` nor the nested umbrella `309A` — and no distinct
+    // entry; every leaf variant under `309` although Basic names none of them, and `310` as itself.
+    assert.deepEqual(ids(gaps, basicId), [nestedA, nestedB, sibling, plain].sort());
+    assert.deepEqual(ids(gaps, specializedId), [nestedA]);
+  });
+
+  it("main stamps: a variant on the checklist is wanted as its main stamp, and no variant is", async () => {
+    const gaps = await previewIssueMissingWants(f.userId, f.collectionId, issueId, undefined, "main");
+    assert.deepEqual(ids(gaps, basicId), [umbrella, plain].sort());
+    assert.deepEqual(ids(gaps, specializedId), [umbrella]);
+  });
+
+  it("left unstated, each checklist is read as listed — the agent's checklist gap is unchanged", async () => {
+    const gaps = await previewIssueMissingWants(f.userId, f.collectionId, issueId);
+    assert.deepEqual(ids(gaps, basicId), [umbrella, plain].sort());
+    assert.deepEqual(ids(gaps, specializedId), [nestedA]);
+  });
+
+  it("variants: a held variant is skipped, and a copy of the umbrella holds none of them", async () => {
+    const sortOut = await createItem(f.userId, f.collectionId, {
+      stampId: sibling,
+      conditionId: f.used.id,
+    });
+    const unidentified = await createItem(f.userId, f.collectionId, {
+      stampId: umbrella,
+      conditionId: f.used.id,
+    });
+    const gaps = await previewIssueMissingWants(
+      f.userId,
+      f.collectionId,
+      issueId,
+      undefined,
+      "variants"
+    );
+    assert.deepEqual(ids(gaps, basicId), [nestedA, nestedB, plain].sort());
+
+    // And under main stamps the very same copies hold `309` — both of them answer for it.
+    const main = await previewIssueMissingWants(f.userId, f.collectionId, issueId, undefined, "main");
+    assert.deepEqual(ids(main, basicId), [plain]);
+    assert.deepEqual(ids(main, specializedId), []);
+
+    await prisma.item.deleteMany({ where: { id: { in: [sortOut.id, unidentified.id] } } });
+  });
+
+  it("variants: writes one want per concrete variant, none on an umbrella, and a rerun adds nothing", async () => {
+    const result = await createWantsForIssue(
+      f.userId,
+      f.collectionId,
+      issueId,
+      [basicId, specializedId],
+      undefined,
+      "normal",
+      "variants"
+    );
+    // `309Aa` is on both checklists at this depth and is one want.
+    assert.deepEqual(result, { created: 4, missing: 4 });
+    const wanted = (await listWants(f.userId, f.collectionId)).map((r) => r.stampId).sort();
+    assert.deepEqual(wanted, [nestedA, nestedB, sibling, plain].sort());
+    for (const umbrellaId of [umbrella, mid]) assert.ok(!wanted.includes(umbrellaId));
+
+    const again = await createWantsForIssue(
+      f.userId,
+      f.collectionId,
+      issueId,
+      [basicId, specializedId],
+      undefined,
+      "normal",
+      "variants"
+    );
+    assert.deepEqual(again, { created: 0, missing: 4 });
+  });
+
+  it("main stamps: a variant on the checklist contributes its main stamp once, a plain stamp is not wanted twice", async () => {
+    const result = await createWantsForIssue(
+      f.userId,
+      f.collectionId,
+      issueId,
+      [basicId, specializedId],
+      undefined,
+      "normal",
+      "main"
+    );
+    // `310` already carries its wide-open want from the variants run: it is both a main stamp and
+    // the concrete thing, so the same want answers both depths.
+    assert.deepEqual(result, { created: 1, missing: 2 });
+    const rows = await listWants(f.userId, f.collectionId);
+    assert.equal(rows.filter((r) => r.stampId === umbrella).length, 1);
+    assert.equal(rows.filter((r) => r.stampId === plain).length, 1);
+    assert.ok(!rows.some((r) => r.stampId === error));
   });
 });
