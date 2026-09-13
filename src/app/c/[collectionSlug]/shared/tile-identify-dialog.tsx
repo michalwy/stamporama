@@ -223,7 +223,7 @@ interface Props {
    */
   onIdentifyNew: (pieces: IdentifiedPiece[]) => void;
   /**
-   * *As the stamps of one issue* (#1220) — a ticked run handed on to be given one issue's stamps in
+   * *As the stamps of a checklist* (#1220, #1225) — a ticked run handed on to be given one checklist's stamps in
    * turn, rather than one stamp for all of it (#596). Offered only for a run: one tile is one stamp,
    * which is the picker's own question.
    */
@@ -916,15 +916,15 @@ export function TileIdentifyDialog({
           onAction={() => onIdentifyNew(pieces)}
           leading={
             <>
-              {/* A set rather than a run of duplicates (#1220): the tiles take one issue's stamps in
-                  the order they were ticked. Beside the one-stamp confirm, since the two are the
+              {/* A set rather than a run of duplicates (#1220): the tiles take one checklist's stamps
+                  (#1225) in the order they were ticked. Beside the one-stamp confirm, since the two are the
                   two answers a ticked run of pieces to identify has. */}
               {count > 1 && (
                 <DialogSecondaryButton
                   onClick={() => onIdentifyIssueRun(pieces)}
                   disabled={pending || !canIdentify}
                 >
-                  <Icon name="list" size="sm" /> As the stamps of one issue…
+                  <Icon name="list" size="sm" /> As the stamps of a checklist…
                 </DialogSecondaryButton>
               )}
               {parked ? putBack : park}

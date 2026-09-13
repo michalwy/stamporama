@@ -22,7 +22,7 @@ import {
   addTileCandidate,
   assignTileToCopy,
   discardTiles,
-  identifyTilesAsIssueStamps,
+  identifyTilesAsChecklistStamps,
   identifyTilesAsNewCopies,
   noteTile,
   parkTiles,
@@ -301,20 +301,20 @@ export async function identifyTilesAction(
 }
 
 /**
- * Identify a ticked run **as the stamps of one issue** (#1220): each tile the stamp it was given, each
- * copy with the shared answers and whatever that tile holds of its own.
+ * Identify a ticked run **as the stamps of a checklist** (#1220, #1225): each tile the stamp it was
+ * given, each copy with the shared answers and whatever that tile holds of its own.
  *
  * JSON rather than `FormData`, unlike `identifyTilesAction`: there is no single form behind this — the
  * dialog holds one answer per field for the run and one per tile where it differs, and flattening
  * that into form fields would be inventing a naming scheme for a structure JSON already has. The
  * success shape is `identifyTilesAction`'s own, `outcomes` and not `copies` for the same reason.
  */
-export async function identifyTilesAsIssueStampsAction(
+export async function identifyTilesAsChecklistStampsAction(
   input: IssueRunIdentification
 ): Promise<TilesOutcomeActionState> {
   const session = await getSession();
   try {
-    const outcomes = await identifyTilesAsIssueStamps(session.user.id, input);
+    const outcomes = await identifyTilesAsChecklistStamps(session.user.id, input);
     return { status: "success", outcomes };
   } catch (e) {
     return {

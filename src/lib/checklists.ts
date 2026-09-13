@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { DEFAULT_CHECKLIST } from "./checklist-vocabulary";
+import type { RunChecklist } from "./issue-run";
 
 // Checklists (#531; ADR-0031) — a named list of stamps that counts as one complete unit. The
 // storage and read paths; everything about *how complete* one is lives in `issue-completeness.ts`.
@@ -155,6 +156,116 @@ export async function getChecklist(
     select: CHECKLIST_SELECT,
   });
   return row ? toChecklistData(row) : null;
+}
+
+/**
+ * One checklist as a run of scan tiles is built on it (#1225): its stamps in the order its own screen
+ * shows, and the issues a tile of the run can be corrected into.
+ *
+ * **The issues it covers** are its own issue first, then — for a stamp on it that is a member of none
+ * of those yet — that stamp's issues. For an issue's own checklist that is normally the issue alone;
+ * for a checklist that spans issues it is every issue its stamps come from. Ordered by year (unknown
+ * last) and then by issue number, the order the Issues list reads in.
+ */
+export async function getRunChecklist(
+  ownerId: string,
+  collectionId: string,
+  checklistId: string
+): Promise<RunChecklist | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const row = await prisma.checklist.findFirst({
+    where: { id: checklistId, collectionId },
+    select: CHECKLIST_SELECT,
+  });
+  if (!row) return null;
+  const data = toChecklistData(row);
+  const memberships = await prisma.issueMember.findMany({
+    where: {
+      stampId: { in: data.stampIds },
+      issue: { collectionId },
+      ...(data.issueId ? { issueId: { not: data.issueId } } : {}),
+    },
+    select: { stampId: true, issueId: true },
+  });
+  const onOwnIssue = data.issueId
+    ? new Set(
+        (
+          await prisma.issueMember.findMany({
+            where: { issueId: data.issueId, stampId: { in: data.stampIds } },
+            select: { stampId: true },
+          })
+        ).map((m) => m.stampId)
+      )
+    : new Set<string>();
+  const issueIds = new Set(
+    memberships.filter((m) => !onOwnIssue.has(m.stampId)).map((m) => m.issueId)
+  );
+  const issues = await prisma.issue.findMany({
+    where: { collectionId, id: { in: [...issueIds, ...(data.issueId ? [data.issueId] : [])] } },
+    select: { id: true, name: true, year: true, collectionAreaId: true, issueNo: true },
+  });
+  issues.sort(
+    (a, b) =>
+      Number(b.id === data.issueId) - Number(a.id === data.issueId) ||
+      (a.year ?? Number.MAX_SAFE_INTEGER) - (b.year ?? Number.MAX_SAFE_INTEGER) ||
+      a.issueNo - b.issueNo
+  );
+  return {
+    id: data.id,
+    name: data.name,
+    issueId: data.issueId,
+    stampIds: data.stampIds,
+    issues: issues.map(({ id, name, year, collectionAreaId }) => ({
+      id,
+      name,
+      year,
+      collectionAreaId,
+    })),
+  };
+}
+
+/** A checklist that spans issues, as a picker offers it on the rows of the issues it covers. */
+export interface SpanningChecklistSummary {
+  id: string;
+  name: string;
+  stampIds: string[];
+  /** Every issue one of its stamps is on. */
+  issueIds: string[];
+}
+
+/**
+ * The collection's checklists that span issues (`issueId` null), each with the issues it covers —
+ * so the run picker can offer one on the row of every issue it reaches (#1225), one query for the
+ * whole picker rather than one per row. Nothing builds one from the screens yet (#531 decision 4),
+ * so this is normally empty.
+ */
+export async function listSpanningChecklists(
+  ownerId: string,
+  collectionId: string
+): Promise<SpanningChecklistSummary[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.checklist.findMany({
+    where: { collectionId, issueId: null },
+    orderBy: [...CHECKLIST_ORDER],
+    select: CHECKLIST_SELECT,
+  });
+  if (rows.length === 0) return [];
+  const stampIds = [...new Set(rows.flatMap((r) => r.stamps.map((s) => s.stampId)))];
+  const memberships = await prisma.issueMember.findMany({
+    where: { stampId: { in: stampIds }, issue: { collectionId } },
+    select: { stampId: true, issueId: true },
+  });
+  const issuesOf = new Map<string, string[]>();
+  for (const m of memberships) issuesOf.set(m.stampId, [...(issuesOf.get(m.stampId) ?? []), m.issueId]);
+  return rows.map((row) => {
+    const data = toChecklistData(row);
+    return {
+      id: data.id,
+      name: data.name,
+      stampIds: data.stampIds,
+      issueIds: [...new Set(data.stampIds.flatMap((id) => issuesOf.get(id) ?? []))],
+    };
+  });
 }
 
 /** The checklist ids each of these stamps is on, keyed by stamp id. Feeds the "in N checklists"

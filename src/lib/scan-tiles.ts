@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import type { Prisma } from "@/generated/prisma/client";
+import { getRunChecklist } from "./checklists";
 import { formatItemNo } from "./item-number";
 import { updateItem } from "./items";
 import type { ItemStampEntryInput } from "./item-stamps";
@@ -271,16 +272,16 @@ async function resolveTileLot(
   return lots[0].id;
 }
 
-// ── Identifying a run as the stamps of one issue (#1220) ─────────────────────────────────────
+// ── Identifying a run as the stamps of a checklist (#1220, #1225) ─────────────────────────────
 
 /**
- * Identify a ticked run **as the stamps of one issue** (#1220) — one copy per tile, each of its own
- * stamp, each with its own tile's pictures.
+ * Identify a ticked run **as the stamps of a checklist** (#1220, built on a checklist since #1225) —
+ * one copy per tile, each of its own stamp, each with its own tile's pictures.
  *
  * #596's pass is one answer for N tiles; this is N answers under one question. A card often holds a
- * set, and the collector already knows it is one issue and roughly in what order; the screen hands
- * the tiles the issue's stamps in turn and the collector corrects what is wrong, so what arrives here
- * is already the assignment — this checks it and writes it.
+ * set, and the collector already knows which set it is and roughly in what order; the screen hands
+ * the tiles the checklist's stamps in turn and the collector corrects what is wrong, so what arrives
+ * here is already the assignment — this checks it and writes it.
  *
  * **The copy details resolve here from the same rule the dialog drew** (`resolveRunCopyDetails`):
  * the shared answers, and a tile's own wherever it has one. Resolving on the client and sending the
@@ -288,13 +289,13 @@ async function resolveTileLot(
  *
  * **The whole pass is refused before anything is created**, #596's rule at a larger surface: every
  * tile loaded and still waiting, all on one card, none named twice, every one given a stamp, every
- * stamp on this issue, and every answer — condition, certificate, format, location, lot — one this
+ * stamp on the checklist or one of the issues it covers, and every answer — condition, certificate, format, location, lot — one this
  * collection holds and a copy can be created with. After that the copies are made one per tile, in
  * the order given, which is what keeps their internal numbers running the way the run reads; each is
  * an ordinary `intakeStamps` of one copy, so the arrived-order rule, the format and the dispositions
  * stay that function's.
  */
-export async function identifyTilesAsIssueStamps(
+export async function identifyTilesAsChecklistStamps(
   ownerId: string,
   input: IssueRunIdentification
 ): Promise<TileOutcome[]> {
@@ -314,20 +315,24 @@ export async function identifyTilesAsIssueStamps(
     }
   }
 
-  const issue = await prisma.issue.findFirst({
-    where: { id: input.issueId, collectionId },
-    select: { id: true },
-  });
-  if (!issue) throw new ScanValidationError("That issue is not in this collection.");
+  // A tile may take any stamp of the checklist, or be corrected to any other stamp of the issues it
+  // covers (#1225) — never one from outside them, which is what a stale or forged list would be. The
+  // covered issues are `getRunChecklist`'s, the very read the dialog offered its choices from.
+  const checklist = await getRunChecklist(ownerId, collectionId, input.checklistId);
+  if (!checklist) throw new ScanValidationError("That checklist is not in this collection.");
   const stampIds = [...new Set(input.tiles.map((t) => t.stampId as string))];
-  const members = await prisma.issueMember.findMany({
-    where: { issueId: issue.id, stampId: { in: stampIds } },
+  const allowed = new Set(checklist.stampIds);
+  for (const m of await prisma.issueMember.findMany({
+    where: { issueId: { in: checklist.issues.map((i) => i.id) }, stampId: { in: stampIds } },
     select: { stampId: true },
-  });
-  const onIssue = new Set(members.map((m) => m.stampId));
+  })) {
+    allowed.add(m.stampId);
+  }
   for (const [i, t] of input.tiles.entries()) {
-    if (!onIssue.has(t.stampId as string)) {
-      throw new ScanValidationError(`${tileName(i)}'s stamp is not one of this issue's stamps.`);
+    if (!allowed.has(t.stampId as string)) {
+      throw new ScanValidationError(
+        `${tileName(i)}'s stamp is not on this checklist or any of its issues.`
+      );
     }
   }
 
