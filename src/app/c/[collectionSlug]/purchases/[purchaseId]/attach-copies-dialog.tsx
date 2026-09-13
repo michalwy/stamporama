@@ -21,6 +21,10 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
+import {
+  keepRowsAcrossTreeChange,
+  type AreaSelection,
+} from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -48,9 +52,21 @@ const HINT_STYLE: React.CSSProperties = {
 
 /** The copies this lot could take on (#388). Unpaginated — the dialog scopes by area/year and
  * filters the rest client-side, exactly as the offer composition picker does. */
-function useAttachableCopies(collectionId: string, lotId: string, areaIds: string[] | null) {
+function useAttachableCopies(
+  collectionId: string,
+  lotId: string,
+  areaIds: string[] | null,
+  areaSelection: AreaSelection
+) {
   return useQuery<ItemListItem[]>({
     queryKey: ["purchases", collectionId, "attachable", lotId, areaIds] as const,
+    // An area added from the rail's `＋` must not blank the list the collector is ticking in (#977).
+    ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
+      "purchases",
+      collectionId,
+      "attachable",
+      lotId,
+    ]),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
@@ -133,7 +149,10 @@ export function AttachCopiesDialog({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: copies = [], isLoading } = useAttachableCopies(collectionId, lotId, areaIds);
+  const { data: copies = [], isLoading } = useAttachableCopies(collectionId, lotId, areaIds, {
+    areaId,
+    includeSubAreas,
+  });
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const yearFacets = useMemo(() => {
@@ -244,6 +263,7 @@ export function AttachCopiesDialog({
           yearsLoading={isLoading}
           selectedYear={year}
           onSelectYear={setYear}
+          quickAddCollectionId={collectionId}
         />
         <div
           style={{

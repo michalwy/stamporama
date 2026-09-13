@@ -1,6 +1,10 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepRowsAcrossTreeChange,
+  type AreaSelection,
+} from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
 import type {
   OfferListItem,
   OfferCollision,
@@ -366,10 +370,18 @@ export function useComposableCopies(
   collectionId: string,
   offerId: string,
   areaIds: string[] | null,
+  /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
+  areaSelection: AreaSelection,
   enabled: boolean
 ) {
   return useQuery<ItemListItem[]>({
     queryKey: ["offers", collectionId, "composable", offerId, areaIds] as const,
+    ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
+      "offers",
+      collectionId,
+      "composable",
+      offerId,
+    ]),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);

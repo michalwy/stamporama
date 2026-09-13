@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useCallback, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import { rollUpAreaCounts, type AreaFacet } from "@/lib/area-facets";
@@ -79,9 +80,13 @@ interface AreaFilterSidebarProps {
   /**
    * Turn on the **quick-add** shortcut (#776): a `＋` in the panel header that opens the same
    * create-area dialog the areas management screen uses, with the selected area pre-filled as the
-   * parent. Pass the collection the areas belong to; omit it and the panel is read-only, which is
-   * what the copy pickers do — creating taxonomy is not part of picking copies, and the dialog
-   * would stack a form on top of the picker's own.
+   * parent. Pass the collection the areas belong to; omit it and the panel is read-only.
+   *
+   * The four list screens pass it, and so do the stamp picker and the three copy pickers (#977) — a
+   * collector mid-selection who meets a country that is not in the tree yet adds it there rather
+   * than abandoning the picker. The listing workspace and the lot builder do not: there the tree
+   * narrows a working set rather than describing the collection, and a control that creates an
+   * area belongs where the collection is being described.
    *
    * The refresh after a successful create is owned here rather than by the caller. `areas` reaches
    * every one of these screens as a server-component prop, so the new area appears on a
@@ -487,21 +492,33 @@ export function AreaFilterSidebar({
       {/* The new area's parent is whatever the tree is filtered to, matching the management
           screen's per-row *Add sub-area*; with nothing selected it is a top-level area. The
           selection is deliberately left alone afterwards — a brand-new area holds nothing, so
-          jumping the filter onto it would empty the list the collector is working in. */}
-      {addingArea && quickAddCollectionId && (
-        <QuickAddAreaDialog
-          collectionId={quickAddCollectionId}
-          areas={areas}
-          defaultParentId={filterAreaId ?? undefined}
-          onClose={() => setAddingArea(false)}
-          onCreated={() => {
-            setAddingArea(false);
-            // `areas` is a server-component prop on every screen that renders this panel, so this
-            // is what puts the new area in the tree — see `quickAddCollectionId`.
-            router.refresh();
-          }}
-        />
-      )}
+          jumping the filter onto it would empty the list the collector is working in.
+
+          Portaled to <body> (#977): inside a picker this panel sits in the picker's own dialog,
+          whose panel is `transform`-centered and so the containing block for every `position:
+          fixed` descendant — un-portaled, this dialog's backdrop and panel would be clipped to the
+          picker's box. And contained for `submit`: React bubbles events along the React tree, not
+          the DOM, and the stamp picker lives inside a copy's `<form>`, so saving the area would
+          otherwise reach that form's own submit. The stamp picker's create dialogs do the same. */}
+      {addingArea &&
+        quickAddCollectionId &&
+        createPortal(
+          <div style={{ display: "contents" }} onSubmit={(e) => e.stopPropagation()}>
+            <QuickAddAreaDialog
+              collectionId={quickAddCollectionId}
+              areas={areas}
+              defaultParentId={filterAreaId ?? undefined}
+              onClose={() => setAddingArea(false)}
+              onCreated={() => {
+                setAddingArea(false);
+                // `areas` is a server-component prop on every screen that renders this panel, so
+                // this is what puts the new area in the tree — see `quickAddCollectionId`.
+                router.refresh();
+              }}
+            />
+          </div>,
+          document.body
+        )}
     </>
   );
 }

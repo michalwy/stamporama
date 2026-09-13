@@ -1,6 +1,10 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepRowsAcrossTreeChange,
+  type AreaSelection,
+} from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
 import type { ItemListItem } from "@/lib/items";
 import type { TradeData } from "@/lib/trades";
 import type { TradeReservationRead } from "@/lib/trade-reservations";
@@ -155,10 +159,16 @@ export function useOfferableCopies(
   collectionId: string,
   tradeId: string,
   areaIds: string[] | null,
+  /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
+  areaSelection: AreaSelection,
   forTradeOnly: boolean
 ) {
   return useQuery<ItemListItem[]>({
     queryKey: tradeDetailKeys.offerable(collectionId, tradeId, areaIds, forTradeOnly),
+    ...keepRowsAcrossTreeChange<ItemListItem[]>(
+      areaSelection,
+      tradeDetailKeys.offerable(collectionId, tradeId, null, forTradeOnly)
+    ),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);

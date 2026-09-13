@@ -4,10 +4,15 @@ import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
+  type InfiniteData,
 } from "@tanstack/react-query";
 import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
 import type { AreaFacet } from "@/lib/area-facets";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
+import {
+  keepRowsAcrossTreeChange,
+  type AreaSelection,
+} from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
 
 interface IssuesPage {
   items: IssueListItem[];
@@ -81,10 +86,18 @@ export const issueKeys = {
 
 export function useIssuesInfinite(
   collectionId: string,
-  filters: IssueListFilters
+  filters: IssueListFilters,
+  /** Pass it where the area ids are resolved client-side against the tree — the stamp picker —
+   *  so an area added under the selection does not blank the rows (#977). */
+  areaSelection?: AreaSelection
 ) {
   return useInfiniteQuery<IssuesPage>({
     queryKey: issueKeys.list(collectionId, filters),
+    ...(areaSelection &&
+      keepRowsAcrossTreeChange<InfiniteData<IssuesPage>>(
+        areaSelection,
+        issueKeys.list(collectionId, { ...filters, areaIds: undefined })
+      )),
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
@@ -116,10 +129,17 @@ export function useIssuesInfinite(
 
 export function useIssueYears(
   collectionId: string,
-  filters: IssueYearFacetFilters
+  filters: IssueYearFacetFilters,
+  /** As on `useIssuesInfinite` (#977). */
+  areaSelection?: AreaSelection
 ) {
   return useQuery<YearFacet[]>({
     queryKey: issueKeys.years(collectionId, filters),
+    ...(areaSelection &&
+      keepRowsAcrossTreeChange<YearFacet[]>(
+        areaSelection,
+        issueKeys.years(collectionId, { ...filters, areaIds: undefined })
+      )),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.areaIds && filters.areaIds.length > 0)
