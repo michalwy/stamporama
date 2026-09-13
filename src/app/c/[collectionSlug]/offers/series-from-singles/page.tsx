@@ -9,8 +9,8 @@ import { SeriesFromSinglesPanel } from "./series-from-singles-panel";
 
 // Series from singles (#1210; #754's design) — a nav entry of its own under Offers, beside the lot
 // builder, on #502's reasoning. It answers one question per platform: which series the singles
-// already listed there, together with the copies not offered there yet, could now complete. Acting
-// on a listed series is #1211's.
+// already listed there, together with the copies not offered there yet, could now complete — and
+// composes a listed series as one offer from its card (#1211).
 
 export const metadata = { title: "Series from singles" };
 

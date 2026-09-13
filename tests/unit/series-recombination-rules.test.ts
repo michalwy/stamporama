@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import type { OfferState } from "../../src/lib/offer-rules";
 import type { LotChecklist } from "../../src/lib/lot-builder-rules";
 import {
+  checkSeriesPicks,
+  compositionOutcome,
   fewestOffersToChange,
   findRecombinableSeries,
   singlyOfferedCopies,
@@ -196,5 +198,99 @@ describe("singlyOfferedCopies (#1210)", () => {
   it("names every offer holding a copy singly", () => {
     const singles = singlyOfferedCopies([set("o2", ["a"]), set("o1", ["a"], "preparing")]);
     assert.deepEqual(singles.get("a"), ["o1", "o2"]);
+  });
+});
+
+describe("checkSeriesPicks (#1211)", () => {
+  const slots: RecombinationSlot[] = [
+    { stampId: "s1", copies: [available("a1", "s1"), offered("c1", "s1", ["o1"])] },
+    { stampId: "s2", copies: [offered("c2", "s2", ["o2"])] },
+  ];
+
+  it("returns the chosen copies in slot order", () => {
+    const check = checkSeriesPicks(slots, { s2: "c2", s1: "c1" });
+    assert.ok(check.ok);
+    assert.deepEqual(check.copies.map((copy) => copy.itemId), ["c1", "c2"]);
+  });
+
+  it("takes the copy the collector picked where several fill a slot", () => {
+    const check = checkSeriesPicks(slots, { s1: "a1", s2: "c2" });
+    assert.ok(check.ok);
+    assert.equal(check.copies[0].itemId, "a1");
+  });
+
+  it("refuses a slot with no copy chosen, even one with a single candidate", () => {
+    assert.deepEqual(checkSeriesPicks(slots, { s1: "a1" }), {
+      ok: false,
+      refusal: { kind: "unchosen", stampId: "s2" },
+    });
+  });
+
+  it("refuses, by name, a chosen copy the re-read no longer counts for its slot", () => {
+    assert.deepEqual(checkSeriesPicks(slots, { s1: "gone", s2: "c2" }), {
+      ok: false,
+      refusal: { kind: "stale", stampId: "s1", itemId: "gone" },
+    });
+  });
+
+  it("refuses a copy chosen for the wrong slot", () => {
+    assert.deepEqual(checkSeriesPicks(slots, { s1: "c2", s2: "c2" }), {
+      ok: false,
+      refusal: { kind: "stale", stampId: "s1", itemId: "c2" },
+    });
+  });
+
+  it("refuses a pick for a stamp that is not a slot of the series", () => {
+    assert.deepEqual(checkSeriesPicks(slots, { s1: "a1", s2: "c2", s9: "x" }), {
+      ok: false,
+      refusal: { kind: "not-a-slot", stampId: "s9" },
+    });
+  });
+});
+
+describe("compositionOutcome (#1211)", () => {
+  const offers = (entries: Record<string, [OfferState, number]>) =>
+    new Map(Object.entries(entries).map(([id, [state, setCount]]) => [id, { state, setCount }]));
+
+  it("withdraws a single offer the composition empties, and says whether it was live", () => {
+    const outcome = compositionOutcome(
+      [{ offerIds: ["o1"] }, { offerIds: ["o2"] }, { offerIds: [] }],
+      offers({ o1: ["active", 1], o2: ["preparing", 1] })
+    );
+    assert.deepEqual(outcome, [
+      { offerId: "o1", setsLost: 1, setsLeft: 0, withdrawn: true, live: true },
+      { offerId: "o2", setsLost: 1, setsLeft: 0, withdrawn: true, live: false },
+    ]);
+  });
+
+  it("keeps an offer that still holds other sets", () => {
+    const outcome = compositionOutcome([{ offerIds: ["o1"] }], offers({ o1: ["paused", 3] }));
+    assert.deepEqual(outcome, [{ offerId: "o1", setsLost: 1, setsLeft: 2, withdrawn: false, live: true }]);
+  });
+
+  it("counts one set per chosen copy an offer holds singly", () => {
+    const outcome = compositionOutcome(
+      [{ offerIds: ["o1"] }, { offerIds: ["o1"] }],
+      offers({ o1: ["ready", 2] })
+    );
+    assert.deepEqual(outcome, [{ offerId: "o1", setsLost: 2, setsLeft: 0, withdrawn: true, live: false }]);
+  });
+
+  it("changes every offer a chosen copy is single in", () => {
+    const outcome = compositionOutcome(
+      [{ offerIds: ["o1", "o2"] }],
+      offers({ o1: ["active", 1], o2: ["preparing", 2] })
+    );
+    assert.deepEqual(
+      outcome.map((change) => [change.offerId, change.withdrawn]),
+      [
+        ["o1", true],
+        ["o2", false],
+      ]
+    );
+  });
+
+  it("changes nothing when every chosen copy is available", () => {
+    assert.deepEqual(compositionOutcome([{ offerIds: [] }], offers({})), []);
   });
 });

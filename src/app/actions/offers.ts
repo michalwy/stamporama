@@ -52,6 +52,7 @@ import {
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
+import { composeSeriesOffer, type ComposeSeriesResult } from "@/lib/series-recombination";
 import {
   parseLotBuilderRequest,
   toLotRecipe,
@@ -224,6 +225,35 @@ export async function commitLotBuilderAction(
     };
   } catch (e) {
     return fail(e, "Failed to create the lot. Please try again.");
+  }
+}
+
+export type ComposeSeriesActionState =
+  | ({ status: "success" } & ComposeSeriesResult)
+  | { status: "error"; message: string };
+
+/**
+ * Compose a series listed on *Series from singles* into one `preparing` offer (#1211).
+ *
+ * Takes the collector's **choice** — which copy fills each slot — and nothing else: the domain
+ * re-reads both pools and refuses, by name, a chosen copy that stopped being a candidate (#717).
+ */
+export async function composeSeriesOfferAction(
+  collectionId: string,
+  platformId: string,
+  checklistId: string,
+  picks: Record<string, string>
+): Promise<ComposeSeriesActionState> {
+  const session = await getSession();
+  try {
+    const result = await composeSeriesOffer(session.user.id, collectionId, {
+      platformId,
+      checklistId,
+      picks,
+    });
+    return { status: "success", ...result };
+  } catch (e) {
+    return fail(e, "Failed to compose the series. Please try again.");
   }
 }
 

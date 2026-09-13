@@ -243,3 +243,100 @@ export function fewestOffersToChange(
   visit(0);
   return search.best ?? { offerIds: [], liveCount: 0 };
 }
+
+// Composing a series (#1211) --------------------------------------------------------------------
+
+/** The collector's choice: which copy fills each slot, keyed by the slot's stamp. Every slot is
+ *  named, the ones with a single candidate too — the client sends the copy it showed, so a copy that
+ *  changed underneath is refused by name rather than swapped for whatever fills the slot now. */
+export type SeriesPicks = Readonly<Record<string, string>>;
+
+/** Why a composition was refused, in terms the refusal message names. */
+export type CompositionRefusal =
+  /** A slot of the series has no copy chosen. */
+  | { kind: "unchosen"; stampId: string }
+  /** The copy chosen for a slot no longer fills it: sold, under bid, composed into another set, no
+   *  longer in hand — the re-read no longer counts it. */
+  | { kind: "stale"; stampId: string; itemId: string }
+  /** A pick names a stamp that is not a slot of this series. */
+  | { kind: "not-a-slot"; stampId: string };
+
+export type CompositionCheck =
+  | { ok: true; copies: RecombinationCopy[] }
+  | { ok: false; refusal: CompositionRefusal };
+
+/**
+ * Check the collector's picks against the slots **as re-read at commit** (#717's rule: the commit
+ * re-reads; it is never handed a plan).
+ *
+ * Refuses rather than repairs. A series is atomic, so a copy that stopped being a candidate is named
+ * (#314) instead of dropping out or being replaced by another copy nobody chose — where several
+ * copies can fill a slot, nothing here chooses between them (#570, ADR-0032). Returns the chosen
+ * copies in slot order, which is the order the new set lists them in.
+ */
+export function checkSeriesPicks(
+  slots: readonly RecombinationSlot[],
+  picks: SeriesPicks
+): CompositionCheck {
+  const slotIds = new Set(slots.map((slot) => slot.stampId));
+  for (const stampId of Object.keys(picks)) {
+    if (!slotIds.has(stampId)) return { ok: false, refusal: { kind: "not-a-slot", stampId } };
+  }
+  const copies: RecombinationCopy[] = [];
+  for (const slot of slots) {
+    const itemId = picks[slot.stampId];
+    if (itemId === undefined) return { ok: false, refusal: { kind: "unchosen", stampId: slot.stampId } };
+    const copy = slot.copies.find((candidate) => candidate.itemId === itemId);
+    if (!copy) return { ok: false, refusal: { kind: "stale", stampId: slot.stampId, itemId } };
+    copies.push(copy);
+  }
+  return { ok: true, copies };
+}
+
+/** An offer a composition takes sets out of, as it stands before the change. */
+export interface CompositionOfferState {
+  state: OfferState;
+  /** Every set the offer holds now. */
+  setCount: number;
+}
+
+/** What composing does to one single offer. */
+export interface CompositionOfferChange {
+  offerId: string;
+  /** One per chosen copy the offer holds singly — an offer never lists a copy twice. */
+  setsLost: number;
+  setsLeft: number;
+  /** Nothing is left in it, so it is withdrawn. */
+  withdrawn: boolean;
+  /** Active or Paused: its listing on the platform has to be updated or taken down by hand. */
+  live: boolean;
+}
+
+/**
+ * The offers a composition changes, in the order the chosen copies name them — what the collector
+ * sees before committing, and what the commit carries out.
+ *
+ * Every chosen copy takes its one-copy set out of **each** offer holding it singly; the offer's other
+ * sets stay. An offer left with no sets is withdrawn (decided with the user on 2026-09-13). An
+ * available copy changes nothing.
+ */
+export function compositionOutcome(
+  chosen: readonly Pick<RecombinationCopy, "offerIds">[],
+  offers: ReadonlyMap<string, CompositionOfferState>
+): CompositionOfferChange[] {
+  const lost = new Map<string, number>();
+  for (const copy of chosen) {
+    for (const offerId of new Set(copy.offerIds)) lost.set(offerId, (lost.get(offerId) ?? 0) + 1);
+  }
+  return [...lost].map(([offerId, setsLost]) => {
+    const offer = offers.get(offerId);
+    const setsLeft = Math.max(0, (offer?.setCount ?? setsLost) - setsLost);
+    return {
+      offerId,
+      setsLost,
+      setsLeft,
+      withdrawn: setsLeft === 0,
+      live: offer !== undefined && isLiveForRecombination(offer.state),
+    };
+  });
+}

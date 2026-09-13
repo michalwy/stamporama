@@ -1390,7 +1390,32 @@ Paused). Where more than one copy could fill a place, the figure assumes the che
 offers: an available copy first, since it changes no offer at all, then the fewest offers, and among
 those the fewest live ones. Choose differently and more offers change.
 
-This screen only lists. Putting a listed series together as one offer is a separate step.
+### Composing a series as one offer
+
+Each card ends with **Compose one offer…**. It turns the singles and the available copies into one
+offer holding the whole series, in one step, instead of editing each single offer by hand and
+composing the series offer afterwards.
+
+- **Choose the copies.** Where only one copy can fill a stamp's place, it is taken as is. Where
+  several can, each has a radio button and **you pick** — nothing is chosen for you, because the app
+  does not rank conditions. The button stays disabled until every place has a copy.
+- **Check the outcome.** The dialog says what is about to happen: a new **Preparing** offer on the
+  platform holding the series as **one set**, and every single offer that loses a set — whether it
+  keeps other sets or, left with nothing, is **withdrawn**, and whether it is **live** (Active or
+  Paused).
+- **Compose.** The new offer opens. For every chosen copy that came from a single offer, only **its
+  own one-copy set** is taken out of that offer; the offer's other sets stay where they are. An offer
+  left with no sets is withdrawn.
+
+The app does not touch the listings on the marketplace. A live offer that lost a set and kept others
+is flagged **changed after listing**, as after any other change to a listing that is up, so you know
+to update it there; a live offer that was withdrawn has to be taken down there by hand — the dialog
+says which.
+
+**The copies are checked again when you compose.** If a chosen copy is no longer a candidate by then
+— it sold, went into active bidding, was put into another set, or is no longer in the collection — the
+series is **not** composed: the message names the copy, and nothing is changed. Nothing is written
+halfway, either: the new offer exists only together with the sets leaving their old offers.
 
 ## Bulk listing — posting a prepared batch
 
