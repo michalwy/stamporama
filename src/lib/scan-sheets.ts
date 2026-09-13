@@ -34,6 +34,7 @@ import {
   type PairingMode,
 } from "./scan-boxes";
 import { detectSheetBoxes, pickBoxAt, recogniseSheetKind, type SheetKind } from "./scan-detect";
+import { batchDeletion, batchDeletionRefusal } from "./scan-batch-deletion";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
@@ -1298,9 +1299,7 @@ export async function recutBatch(
   return { discarded: await clearBatchTiles(owner, batchNo) };
 }
 
-/** The tile side of a re-cut, without the purged-scan guard — shared with `deleteBatch`, which is
- * still allowed on a batch whose scan has been swept: what it is deleting is the record, and a
- * record whose bytes are gone is no harder to throw away than one whose bytes are there. */
+/** The tile side of a re-cut, kept apart from the purged-scan guard above. */
 async function clearBatchTiles(owner: ScanOwner, batchNo: number): Promise<number> {
   const scope = scanOwnerWhere(owner);
   const consumed = await prisma.scanTile.count({
@@ -1323,27 +1322,81 @@ async function clearBatchTiles(owner: ScanOwner, batchNo: number): Promise<numbe
   return discarded;
 }
 
-/**
- * Delete a whole batch: its tiles first, then its sheets. That order is the only one the tiles'
- * `Restrict` reference to their sheet allows, and it is also the honest one — a sheet with tiles
- * still hanging off it is not a batch anyone has finished with.
- */
+/** Delete one batch — {@link deleteBatches} with one number in it. */
 export async function deleteBatch(
   ownerId: string,
   ref: ScanOwnerRef,
   batchNo: number
 ): Promise<void> {
+  await deleteBatches(ownerId, ref, [batchNo]);
+}
+
+/**
+ * Delete whole batches: their tiles, their sheets and every byte of both (#1218). The collector's
+ * own explicit act — never a sweep, which is #578's and takes only the bytes.
+ *
+ * **Who may be deleted is `batchDeletion`'s rule**, checked here against the tiles as they stand
+ * inside the transaction: a batch nothing has become a copy from goes whatever its tiles are doing,
+ * and a batch with copies goes only once no tile on it is waiting or parked. **All or nothing** —
+ * one refused batch refuses the lot, by name, since several cards are chosen as one decision and a
+ * half-applied one would leave the collector working out which of them went.
+ *
+ * **The copies stay exactly as they are.** A consumed tile's pictures already belong to its copy
+ * (`movePhotosToItem`), so deleting the tile row takes no photograph with it; what goes is the only
+ * link from the copy back to a card, which is why it stops naming one (#1188). A discarded tile's
+ * pictures are still the tile's own and go with it.
+ *
+ * Tiles before sheets inside the one transaction, because that is the only order the tiles'
+ * `Restrict` reference to their sheet allows. The keys are read in the same transaction and the bytes
+ * deleted only after it commits — a refusal must never have destroyed a scan on the way to its
+ * message, and once the rows are gone nothing points at the files.
+ *
+ * A batch whose scan was already swept (#578) is deleted the same way: what is left of it is a
+ * record, and a record whose bytes are gone is no harder to throw away than one whose bytes are there.
+ */
+export async function deleteBatches(
+  ownerId: string,
+  ref: ScanOwnerRef,
+  batchNos: readonly number[]
+): Promise<{ batches: number; copiesKept: number }> {
   const owner = await assertScanOwner(ownerId, ref);
-  const scope = scanOwnerWhere(owner);
-  await clearBatchTiles(owner, batchNo);
-  const sheets = await prisma.scanSheet.findMany({
-    where: { ...scope, batchNo },
-    select: { id: true, storageBackend: true, storageKey: true, mime: true },
+  const wanted = [...new Set(batchNos)];
+  if (wanted.length === 0) return { batches: 0, copiesKept: 0 };
+  const where = { ...scanOwnerWhere(owner), batchNo: { in: wanted } };
+
+  const { photos, sheets, batches, copiesKept } = await prisma.$transaction(async (tx) => {
+    const tiles = await tx.scanTile.findMany({ where, select: { batchNo: true, state: true } });
+    let copiesKept = 0;
+    for (const batchNo of [...wanted].sort((a, b) => a - b)) {
+      const deletion = batchDeletion(tiles.filter((t) => t.batchNo === batchNo));
+      const refusal = batchDeletionRefusal(batchNo, deletion);
+      if (refusal) throw new ScanValidationError(refusal);
+      copiesKept += deletion.copies;
+    }
+
+    const photos = await tx.photo.findMany({
+      where: { tile: where },
+      select: { storageBackend: true, storageKey: true, mime: true },
+    });
+    const sheets = await tx.scanSheet.findMany({
+      where,
+      select: { batchNo: true, storageBackend: true, storageKey: true, mime: true },
+    });
+    await tx.scanTile.deleteMany({ where });
+    await tx.scanSheet.deleteMany({ where });
+    return {
+      photos,
+      sheets,
+      batches: new Set([...sheets.map((s) => s.batchNo), ...tiles.map((t) => t.batchNo)]).size,
+      copiesKept,
+    };
   });
-  await prisma.scanSheet.deleteMany({ where: { ...scope, batchNo } });
-  await Promise.all(
-    sheets.map((s) => deleteSheetVariants(s.storageBackend, s.storageKey, s.mime))
-  );
+
+  await Promise.all([
+    ...photos.map((p) => deletePhotoVariants(p.storageBackend, p.storageKey, p.mime)),
+    ...sheets.map((s) => deleteSheetVariants(s.storageBackend, s.storageKey, s.mime)),
+  ]);
+  return { batches, copiesKept };
 }
 
 /** Delete tiles matching a scope, taking their photo bytes with them. Prisma's cascade drops the

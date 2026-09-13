@@ -492,6 +492,9 @@ the same card, **with the previous boxes still on it**, so a bad cut is a box mo
 card redrawn.
 
 **Delete batch** removes the tiles *and* the scans. Re-cut is almost always what you want instead.
+On a card nothing has become a copy from yet — the wrong file, a cut not worth correcting — it works
+at any point. Once copies have been made from the card, it waits until the card is finished: see
+[Deleting the scan of a finished card](#deleting-the-scan-of-a-finished-card).
 
 Deleting one of the order's **lots** leaves the cards alone: they belong to the parcel, and the other
 lots still have pieces on them. A tile that had already become a copy on that lot keeps its square
@@ -1063,10 +1066,10 @@ it and they come back, each folded up into its own header line: its number, how 
 how many became copies, how many you discarded, and the day you finished it. Open any of them with
 the caret and every tile it ever held is still there, in the positions they had on the card.
 
-Nothing is ever deleted. A strip is the record of a card that came into the house, and for a
-stockbook bought sight-unseen the discarded tiles on it are the only record of what was inside — so
-a worked batch is put away, never thrown away, and the count above the list is always the way back
-to it. That is also why the count sits on the section itself: with every finished batch put away
+Setting a batch aside deletes nothing. A strip is the record of a card that came into the house, and
+for a stockbook bought sight-unseen the discarded tiles on it are the only record of what was inside
+— so a worked batch is put away rather than thrown away, and the count above the list is always the
+way back to it. Throwing one away is something only you do, and only when you ask (below). That is also why the count sits on the section itself: with every finished batch put away
 there would be no batch header left to hang it on.
 
 **The record is never deleted. The scan behind it can be, if you ask.** A finished batch's card scan
@@ -1077,6 +1080,28 @@ generated images can be made again, but a stockbook taken apart cannot be scanne
 here is deleted on a schedule you did not ask for. If you do switch it on, the batch keeps its tiles,
 its copies, its discards and their notes; its line adds **scan deleted**, and **Re-cut** stops being
 offered, because there is no longer a card to draw on.
+
+#### Deleting the scan of a finished card
+
+After a few stockbooks an order is mostly cards you will never do anything with again. You can
+delete them yourself — one at a time with **Delete batch** on the batch's own line, or several at
+once with **Delete scans…** beside the *worked-through batches* count, which lists every finished
+card by number, name, how many copies it became and the day you finished it, and deletes the ones
+you tick.
+
+- **Only a card you have finished with can go**, once copies have been made from it. A tile still
+  waiting, or one you set aside to check, is work not done — so **Delete batch** is greyed out on
+  that card, and hovering it says how many tiles are in the way. Finish them, and the button comes
+  back.
+- **Deleting takes the card away completely**: the scan, the batch line and its tiles, the discarded
+  ones and their notes included. It does not come back, and nothing can be cut from that card
+  again — a stockbook that has been broken up cannot be scanned again. The confirmation says so
+  before anything is deleted.
+- **The copies made from it stay exactly as they are**, with all their photos. They just stop naming
+  a scan on the lot's item list, as if they had been entered by hand.
+
+This is always your own decision, card by card. The scan-retention setting above is the only thing
+that ever deletes card scans on a schedule, and it leaves the batch in place.
 
 Which batches are open is worked out from the work itself: **a batch with tiles still waiting
 shows, and opens, by itself**, the same way a lot you add while the screen is open opens by itself.
