@@ -307,6 +307,8 @@ The selection **survives filtering**. Search, change the area or the year, or na
 
 The selection is **cleared when you leave the Issues list** for another screen. A stamp that is deleted drops out of it by itself. While **Reorder** is on the checkboxes are put away; the ticks stay.
 
+The selection is what bulk actions on stamps act on — see [Applying a preset to stamps you select](#applying-a-preset-to-stamps-you-select).
+
 #### Filing a stamp under a different one
 
 Sometimes a stamp turns out to be filed in the wrong place: it sits at the top level of its issue but is really a sub-variant of another stamp there, or it hangs under the wrong base. **Reassign to another parent…** in the stamp's **⋮** menu on the **Issues** list fixes that. Pick the stamp it should hang under from the issue's own tree — indented, so you can see the shape you are joining — or **No parent (top level)** to bring it back out.
@@ -785,6 +787,14 @@ What it reaches, and what it leaves alone:
 - **Cancel writes nothing.** Nor does choosing a preset: only the **Apply** button writes.
 - **The size is copied.** Correcting or deleting the preset later leaves these stamps as they are.
 - There is no way to *clear* sizes in bulk; a size is cleared on the stamp itself.
+
+#### Applying a preset to stamps you select
+
+Some stamps share a size without sharing an issue or a checklist — a handful from two issues printed on the same press. [Select them on the Issues list](#selecting-stamps-across-the-tree), then press **Apply size preset…** on the selection bar.
+
+It is the same dialog as from an issue's row, with the same counts, the same **Overwrite those too** box — unticked every time — and the same button naming how many stamps will be written. Everything under **What it reaches** above holds, and the counts are over **the stamps you ticked and everything they carry**: tick `309` and its variants are counted and written with it, which is the number the bar already showed you.
+
+Only the ticked stamps **in view** are included — ticks a filter is hiding are left out, and the button is not on the bar while none are in view. After the preset is applied the selection is cleared.
 
 ### Attributes on the lists
 

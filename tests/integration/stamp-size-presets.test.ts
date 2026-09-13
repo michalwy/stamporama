@@ -12,6 +12,8 @@ import {
   StampSizePresetPairTakenError,
 } from "../../src/lib/stamp-size-presets";
 import { describeStampSizePresetApply } from "../../src/lib/stamp-size-preset-rules";
+import { getStampSelectionSubtrees } from "../../src/lib/stamp-selection";
+import { selectionReach } from "../../src/lib/stamp-tree-selection";
 
 // Stamp size presets (#803; ADR-0048) — the dictionary, and the write that copies a pair onto stamps.
 //
@@ -432,6 +434,44 @@ describe("stamp size presets (#803)", () => {
     assert.deepEqual(await sizeOf(apa), { widthMm: 25, heightMm: 30 });
     assert.deepEqual(await sizeOf(outsider), { widthMm: 25, heightMm: 30 });
     assert.deepEqual(await sizeOf(base), { widthMm: null, heightMm: null });
+  });
+
+  it("writes to a tree selection exactly what the bar's reach and the preview state (#809)", async () => {
+    // #809's *Done when*: on a selection holding an umbrella with variants, the count shown and the
+    // count written agree. Three numbers, not two — the selection bar's reach (#808), the dialog's
+    // preview, and the rows written — over `309` ticked beside `309AP` inside it and `310` elsewhere,
+    // so a reach that double-counted the nested tick or stopped at depth one says a different number.
+    const { id: presetId } = await preset();
+    const ticks = [base, ap, second];
+    const subject = { kind: "stamps" as const, stampIds: ticks };
+
+    const answer = await getStampSelectionSubtrees(userId, collectionId, ticks);
+    const reach = selectionReach(ticks, answer.subtrees);
+    // `309` carries five below it, the plate flaw and its variant among them; `310` carries `310A`.
+    assert.equal(reach?.size, 8);
+
+    for (const overwriteStated of [false, true]) {
+      await clearSizes();
+      await prisma.stamp.update({ where: { id: a }, data: { widthMm: 22, heightMm: 26 } });
+      const label = `overwrite ${overwriteStated}`;
+
+      const preview = await applyStampSizePreset(userId, { presetId, subject, preview: true });
+      assert.equal(preview.total, reach?.size, label);
+      const { willWrite } = describeStampSizePresetApply(preview, overwriteStated);
+
+      const written = await applyStampSizePreset(userId, { presetId, subject, overwriteStated });
+      assert.equal(written.written, willWrite, label);
+      const sized = await prisma.stamp.findMany({
+        where: { collectionId, widthMm: 25, heightMm: 30 },
+        select: { id: true },
+      });
+      assert.deepEqual(
+        new Set(sized.map((s) => s.id)),
+        new Set([...reach!].filter((id) => overwriteStated || id !== a)),
+        label
+      );
+      assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null }, label);
+    }
   });
 
   it("counts without writing when asked to preview", async () => {

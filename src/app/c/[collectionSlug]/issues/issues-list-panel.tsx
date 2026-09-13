@@ -64,6 +64,8 @@ import {
 } from "./issue-row";
 import { useRowsInView } from "@/app/c/[collectionSlug]/inventory/use-rows-in-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { ApplySizePresetDialog } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
 import {
   carriedByTick,
   describeStampSelection,
@@ -417,6 +419,9 @@ export function IssuesListPanel({
   );
   /** Clearing is the collector's own act and clears everything, hidden ticks included. */
   const clearTicks = useCallback(() => setTicked(new Set()), []);
+  // The preset apply over the selection (#809; ADR-0048 §4) — #806's dialog, handed the ticks in
+  // view as a `stamps` subject. Its preview expands them through the same walk the bar's reach does.
+  const [applyPresetOpen, setApplyPresetOpen] = useState(false);
   const stampSelection = useMemo<StampTreeSelection>(
     () => ({
       ticked,
@@ -659,6 +664,35 @@ export function IssuesListPanel({
                     Clear
                   </button>
                 </Tooltip>
+                {/* The bulk actions, pushed right, acting on the ticks **in view** — and absent
+                    rather than disabled when none are (#1021): nothing here could honestly be
+                    offered over stamps the collector cannot see. */}
+                {tickedInView.length > 0 && (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
+                  >
+                    {/* The fourth way of naming the stamps a preset is written onto (#809): stamps
+                        that share a size without sharing an issue or a checklist. The same dialog,
+                        preview and default as from an issue row; only the subject differs. */}
+                    <Tooltip content="Write a size preset's width and height onto the selected stamps and everything they carry. The dialog counts them before anything is written.">
+                      <button
+                        type="button"
+                        onClick={() => setApplyPresetOpen(true)}
+                        style={{
+                          ...FILTER_CONTROL_STYLE,
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          color: "var(--color-text-secondary)",
+                          borderColor: "var(--color-border-strong)",
+                          background: "var(--color-bg-elevated)",
+                          padding: "0.375rem 0.75rem",
+                        }}
+                      >
+                        <Icon name="sizePreset" size="sm" /> Apply size preset…
+                      </button>
+                    </Tooltip>
+                  </div>
+                )}
               </div>
             ) : undefined
           }
@@ -807,6 +841,21 @@ export function IssuesListPanel({
       </div>
 
       {/* ── Dialogs ── */}
+
+      {/* What was dealt with is unticked, as on the Copies list: a selection left standing after its
+          write invites doing it twice. Nothing else is refreshed — the tree draws no sizes. */}
+      {applyPresetOpen && tickedInView.length > 0 && (
+        <ApplySizePresetDialog
+          scope={{
+            collectionId,
+            subject: { kind: "stamps", stampIds: tickedInView },
+            subjectLabel:
+              tickedInView.length === 1 ? "1 selected stamp" : `${tickedInView.length} selected stamps`,
+            onApplied: clearTicks,
+          }}
+          onClose={() => setApplyPresetOpen(false)}
+        />
+      )}
 
       {dialog.kind === "create-issue" && (
         <IssueDialog
