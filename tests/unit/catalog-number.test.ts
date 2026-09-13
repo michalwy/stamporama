@@ -498,6 +498,12 @@ describe("parseCatalogSearch", () => {
     }
   });
 
+  it("reads the label the app itself shows, copied off a row or a chip (#1261)", () => {
+    for (const q of ["Mi·SU 3637", "Mi SU 3637", "Mi SU3637"]) {
+      assert.deepEqual(parseCatalogSearch(q, vendors), { vendorId: "mi", number: "3637" }, q);
+    }
+  });
+
   it("resolves a vendor with no area code", () => {
     assert.deepEqual(parseCatalogSearch("Mi 200", vendors), { vendorId: "mi", number: "200" });
   });

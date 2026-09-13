@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import type { CollectionAreaData } from "@/lib/areas";
+import { parseCatalogSearch } from "@/lib/catalog-number";
 import type { WantCreateInput, WantListItem } from "@/lib/wants";
 // The priority vocabulary comes from the pure module: `@/lib/wants` is `server-only`.
 import { WANT_PRIORITIES, WANT_PRIORITY_LABEL } from "@/lib/want-rules";
@@ -142,6 +143,31 @@ export function WantsListPanel({
   // delay every other search box here uses.
   const debouncedQuery = useDebouncedValue(query);
 
+  // Prefixed catalog numbers (#1261), read by the same parser as the Issues and Copies lists' search
+  // boxes (#146, #289): `Mi SU 3637`, `Mi SU3637` and `Mi·SU 3637` are never stored verbatim, so the
+  // bare number — and the vendor, when its abbreviation led — travels beside the text.
+  const catalogVendors = useMemo(() => {
+    const seen = new Map<string, { id: string; abbreviation: string }>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [areas]);
+  const searchText = debouncedQuery.trim();
+  const parsedSearch = useMemo(
+    () => parseCatalogSearch(searchText, catalogVendors),
+    [searchText, catalogVendors]
+  );
+  const searchCatalogNumber = (searchText && parsedSearch.number) || undefined;
+  const searchCatalogVendorId = (searchCatalogNumber && parsedSearch.vendorId) || undefined;
+
   /**
    * Everything the year facets are counted against — that is, every filter *except* the year, so a
    * facet says how many wants that year would leave rather than how many survive a year already
@@ -154,10 +180,12 @@ export function WantsListPanel({
       priorities: priorities.length > 0 ? priorities : undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       areaIds: filterAreaIds ?? undefined,
-      search: debouncedQuery.trim() || undefined,
+      search: searchText || undefined,
+      searchCatalogNumber,
+      searchCatalogVendorId,
       stampId,
     }),
-    [status, priorities, conditionIds, filterAreaIds, debouncedQuery, stampId]
+    [status, priorities, conditionIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, stampId]
   );
   const listFilters: WantListFilters = useMemo(
     () => ({ ...facetFilters, year: year || undefined }),
@@ -178,10 +206,12 @@ export function WantsListPanel({
       priorities: priorities.length > 0 ? priorities : undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       year: year || undefined,
-      search: debouncedQuery.trim() || undefined,
+      search: searchText || undefined,
+      searchCatalogNumber,
+      searchCatalogVendorId,
       stampId,
     }),
-    [status, priorities, conditionIds, year, debouncedQuery, stampId]
+    [status, priorities, conditionIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, stampId]
   );
   const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
 
