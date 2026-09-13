@@ -8,6 +8,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getStampFormats } from "@/lib/stamp-formats";
+import { getStampSubtypes } from "@/lib/subtypes";
 import { InventoryListPanel } from "./inventory-list-panel";
 
 export const metadata = { title: "Inventory" };
@@ -25,12 +26,13 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [conditions, certificateStatuses, areas, locations, formats] = await Promise.all([
+  const [conditions, certificateStatuses, areas, locations, formats, subtypes] = await Promise.all([
     getStampConditions(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
+    getStampSubtypes(session.user.id, collection.id),
   ]);
 
   return (
@@ -60,6 +62,7 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
         conditions={conditions}
         certificateStatuses={certificateStatuses}
         formats={formats}
+        subtypes={subtypes}
         baseCurrency={collection.baseCurrency}
       />
     </div>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
+import type { StampSubtypeData } from "@/lib/subtypes";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
 import {
@@ -210,6 +211,7 @@ const REMEMBERED_FILTER_KEYS = [
   "tagMode",
   "conditionIds",
   "formatIds",
+  "subtypeIds",
   "certificateStatusIds",
   "deliveryStates",
   "locationId",
@@ -249,6 +251,9 @@ const FILTER_WIDTH = {
   conditions: "10rem",
   certificates: "10.5rem",
   formats: "9rem",
+  /** Sized for `All subtypes` and `3 subtypes`; a single subtype's own name is the collector's
+   *  dictionary text (*Perforation variety*) and ellipsises. */
+  subtypes: "9.5rem",
   /** The widest of the six, and not because its default label is: its options are whole sentences
    *  (*Include no longer held*, *Include sold & traded*) that differ only at the end, so a trigger
    *  that ellipsised one would read the same as the other. */
@@ -311,6 +316,8 @@ interface InventoryListPanelProps {
   certificateStatuses: CertificateStatusData[];
   /** The collection's physical formats (#343) — drives the format filter, and absent when empty. */
   formats: StampFormatData[];
+  /** The collection's stamp subtypes (ADR-0010) — drives the subtype filter (#1002), absent when empty. */
+  subtypes: StampSubtypeData[];
   baseCurrency: string;
 }
 
@@ -322,6 +329,7 @@ export function InventoryListPanel({
   conditions,
   certificateStatuses,
   formats,
+  subtypes,
   baseCurrency,
 }: InventoryListPanelProps) {
   const router = useRouter();
@@ -373,6 +381,11 @@ export function InventoryListPanel({
   // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
   // choice — the copies with no format — which an absent value could not express.
   const formatIds = useCsvValue(readFilterParam("formatIds"));
+  // Subtype is the one dictionary this list could not filter by until #1002 — and the list is where
+  // offers are made, so it is how a forgery is kept out of a selection or a deliberate sale narrowed
+  // to them (ADR-0049 §7). `"none"` is the base stamps, which carry no subtype (ADR-0010 §2): without
+  // it as a tickable value, *everything but forgeries* could not be asked at all.
+  const subtypeIds = useCsvValue(readFilterParam("subtypeIds"));
   // Certificate is the fourth fact a copy carries that this list reasons about — it is a
   // duplicate-grouping axis, a valuation axis and a listing axis — and until #428 it was the one with
   // no filter at all. `"none"` is a tickable value, not the absence of the filter: null *is* a value
@@ -551,6 +564,7 @@ export function InventoryListPanel({
       certificateStatusIds:
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
+      subtypeIds: subtypeIds.length > 0 ? subtypeIds : undefined,
       // The mode rides only with the ids, so an untouched filter keys the same cache entry whichever
       // reading was last left in the control.
       tagIds: tagIds.length > 0 ? tagIds : undefined,
@@ -572,7 +586,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -585,6 +599,7 @@ export function InventoryListPanel({
       certificateStatusIds:
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
+      subtypeIds: subtypeIds.length > 0 ? subtypeIds : undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
       tagMode: tagIds.length > 0 ? tagMode : undefined,
       locationId: locationId || undefined,
@@ -601,7 +616,7 @@ export function InventoryListPanel({
       includeDisposed: includeDisposed || undefined,
       multiStamp,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1091,6 +1106,7 @@ export function InventoryListPanel({
     conditionIds.length > 0 ||
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
+    subtypeIds.length > 0 ||
     tagIds.length > 0 ||
     !!locationId ||
     noPhotos ||
@@ -1767,6 +1783,28 @@ export function InventoryListPanel({
                     allLabel="All formats"
                     itemNoun="formats"
                     ariaLabel="Filter by format"
+                  />
+                </FilterSlot>
+              )}
+
+              {/* Subtype filter (#1002; ADR-0049 §7), a multi-select like the format one. Not a
+                  forgery feature: it is the dictionary this bar was missing, and it answers *only
+                  the printing errors* as readily as *everything but the forgeries*. "No subtype" is
+                  the base stamps — a top-level stamp carries none (ADR-0010 §2) — and has to be
+                  tickable for that second question to keep them. */}
+              {subtypes.length > 0 && (
+                <FilterSlot width={FILTER_WIDTH.subtypes}>
+                  <MultiSelectFilter
+                    fullWidth
+                    options={[
+                      { id: "none", label: "No subtype" },
+                      ...subtypes.map((s) => ({ id: s.id, label: s.name })),
+                    ]}
+                    selected={subtypeIds}
+                    onChange={(ids) => updateParams({ subtypeIds: ids.join(",") })}
+                    allLabel="All subtypes"
+                    itemNoun="subtypes"
+                    ariaLabel="Filter by stamp subtype"
                   />
                 </FilterSlot>
               )}

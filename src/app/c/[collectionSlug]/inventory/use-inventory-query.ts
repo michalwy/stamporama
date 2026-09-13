@@ -64,6 +64,10 @@ export interface InventoryItemFilters extends TagFilterOpts {
    * a tickable value like any other and matches the copies with no format set: null *is* the single
    * (ADR-0020), which an absent filter cannot express. */
   formatIds?: string[];
+  /** The linked stamp's subtypes in scope (#1002) — an OR, absent meaning every subtype. `"none"` is
+   * a tickable value like any other and matches the copies of a base stamp, which carries no subtype
+   * (ADR-0010 §2). */
+  subtypeIds?: string[];
   /** Restrict to copies whose linked stamp belongs to any of these areas (selected area
    * plus descendants). Mirrors the stamps list area sidebar (#106). */
   areaIds?: string[];
@@ -122,6 +126,7 @@ export interface InventoryYearFacetFilters extends TagFilterOpts {
   conditionIds?: string[];
   certificateStatusIds?: string[];
   formatIds?: string[];
+  subtypeIds?: string[];
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -196,6 +201,8 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
   if (filters.formatIds && filters.formatIds.length > 0)
     params.set("formatIds", filters.formatIds.join(","));
+  if (filters.subtypeIds && filters.subtypeIds.length > 0)
+    params.set("subtypeIds", filters.subtypeIds.join(","));
   if (filters.areaIds && filters.areaIds.length > 0)
     params.set("areaIds", filters.areaIds.join(","));
   if (filters.search) params.set("search", filters.search);
@@ -399,6 +406,7 @@ export function useHoldingsValuation(
       conditionIds: filters.conditionIds,
       certificateStatusIds: filters.certificateStatusIds,
       formatIds: filters.formatIds,
+      subtypeIds: filters.subtypeIds,
       areaIds: filters.areaIds,
       search: filters.search,
       catalogVendorId: filters.catalogVendorId,
@@ -428,6 +436,8 @@ export function useHoldingsValuation(
         params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
       if (filters.formatIds && filters.formatIds.length > 0)
         params.set("formatIds", filters.formatIds.join(","));
+      if (filters.subtypeIds && filters.subtypeIds.length > 0)
+        params.set("subtypeIds", filters.subtypeIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
@@ -477,6 +487,8 @@ export function useItemYears(
         params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
       if (filters.formatIds && filters.formatIds.length > 0)
         params.set("formatIds", filters.formatIds.join(","));
+      if (filters.subtypeIds && filters.subtypeIds.length > 0)
+        params.set("subtypeIds", filters.subtypeIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);

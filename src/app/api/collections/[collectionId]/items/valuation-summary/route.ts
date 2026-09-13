@@ -33,6 +33,7 @@ export async function GET(
       conditionIds: readConditionIds(sp),
       certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
       formatIds: readCsvParam(sp, "formatIds"),
+      subtypeIds: readCsvParam(sp, "subtypeIds"),
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
       catalogVendorId: sp.get("catalogVendorId") || undefined,
