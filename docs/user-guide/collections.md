@@ -297,6 +297,16 @@ Two things to know:
 
 While **Reorder** is on, the **Checklist** filter is put away: dragging inside a tree that is only showing some of its stamps would move one past a sibling you cannot see.
 
+#### Selecting stamps across the tree
+
+Every stamp in an expanded tree on the **Issues** list has a **checkbox** beside its caret. Tick as many as you like, in as many issues as you like — a bar under the toolbar counts them (*3 stamps selected*) and has a **Clear** link.
+
+**A ticked stamp brings everything below it** — all its variants and child stamps, at any depth, a plate flaw filed under it as much as a variant. Tick `309` and `309A`, `309AP` and `309APa` are selected with it: their boxes show ticked and cannot be unticked on their own, and resting the pointer on one says why. When the stamps you ticked carry others, the bar says how many that makes in all (*12 with their variants and child stamps*) — that is the number anything done to the selection will reach. Ticking a stamp whose child you had already ticked takes that tick over, so unticking the parent clears the whole branch.
+
+The selection **survives filtering**. Search, change the area or the year, or narrow a tree with its **Checklist** chips, and ticked stamps the list is no longer showing stay ticked: the bar then reads *2 of 5 ticked stamps in view*, says the others come back when the filter is released, and only the stamps in view count. **Clear** unticks all of them, hidden ones included. Collapsing an issue or a stamp is not a filter — what is ticked under it still counts.
+
+The selection is **cleared when you leave the Issues list** for another screen. A stamp that is deleted drops out of it by itself. While **Reorder** is on the checkboxes are put away; the ticks stay.
+
 #### Filing a stamp under a different one
 
 Sometimes a stamp turns out to be filed in the wrong place: it sits at the top level of its issue but is really a sub-variant of another stamp there, or it hangs under the wrong base. **Reassign to another parent…** in the stamp's **⋮** menu on the **Issues** list fixes that. Pick the stamp it should hang under from the issue's own tree — indented, so you can see the shape you are joining — or **No parent (top level)** to bring it back out.
