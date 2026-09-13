@@ -866,6 +866,52 @@ describe("loadStampWantSummaries", () => {
   });
 });
 
+describe("settling a want from a detail screen (#1236)", () => {
+  let f: Fixtures;
+  before(async () => {
+    f = await seedFixtures(`settle-${Date.now()}`);
+  });
+  after(() => cleanup(f.userId));
+
+  it("a closed want stays on the list but stops counting as open; a deleted one is gone", async () => {
+    const {
+      ids: [closing],
+    } = await createWant(
+      f.userId,
+      f.collectionId,
+      want(f, { priority: "high", conditionIds: [f.mnh.id] })
+    );
+    const {
+      ids: [deleting],
+    } = await createWant(f.userId, f.collectionId, want(f, { priority: "low" }));
+    const summaryOf = async () =>
+      (await loadStampWantSummaries(f.collectionId, [f.stamp.id])).get(f.stamp.id);
+    assert.equal((await summaryOf())?.openCount, 2);
+
+    await closeWant(f.userId, closing);
+    // The chip's summary — what every want signal reads — no longer counts it, nor takes its
+    // priority for the chip's colour.
+    const afterClose = await summaryOf();
+    assert.equal(afterClose?.openCount, 1);
+    assert.equal(afterClose?.topPriority, "low");
+    // …and the want list still holds it, as closed.
+    assert.deepEqual(
+      (await listWants(f.userId, f.collectionId)).map((w) => [w.id, w.closedAt !== null]),
+      [
+        [deleting, false],
+        [closing, true],
+      ]
+    );
+
+    await deleteWant(f.userId, deleting);
+    assert.equal(await summaryOf(), undefined, "no open want left, so no chip at all");
+    assert.deepEqual(
+      (await listWants(f.userId, f.collectionId)).map((w) => w.id),
+      [closing]
+    );
+  });
+});
+
 describe("listWantIssueGroups", () => {
   let f: Fixtures;
   let issueId: string;

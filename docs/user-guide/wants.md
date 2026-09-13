@@ -219,15 +219,29 @@ Hovering a row brings up two shortcuts beside its **⋮** menu: **open the stamp
 for its catalogue numbers, the prices the range came from, or the copies you hold — and
 **edit the want**. Both are still in the menu; the icons are a shortcut, not a move.
 
-### On the stamp's own page
+### On the stamp's and the copy's own pages
 
 A stamp's detail page leads its right-hand column with a **Wants** card showing what you
 are looking for of it and on what terms — including wants you have already closed, faded,
-since on one stamp those are the record that it was looked for and found. The card is
-read-only; editing happens on the want list.
+since on one stamp those are the record that it was looked for and found. A **copy's**
+detail page carries the same card, for the stamp it is a copy of, at the top of its
+right-hand column: reading a copy is often exactly when you notice a want is done with.
 
 It appears **only when the stamp is on the want list**. Most stamps are not, and a card
-saying so on every catalogue page would be a line you learn to skip.
+saying so on every catalogue page would be a line you learn to skip. A piece carrying
+several stamps has no card, since it closes no want for any of them.
+
+Each want's **⋮** menu settles it where you noticed it:
+
+- **Close want** — it is met. It stays on the want list under **Closed**, stays on the card
+  faded, and stops counting as open everywhere. Offered only on an open want.
+- **Delete want** — it was added by mistake or no longer means anything. You are asked to
+  confirm first, because it is permanent: the want is gone from the list and from every
+  page, and it cannot be undone.
+
+Nothing else about a want is changed here: its terms, priority and notes are edited on the
+want list, and a closed want is reopened there too. The want chips on the Stamps, Issues,
+Copies, auction and trade screens follow either action straight away.
 
 ## From the Stamps and Issues lists
 
