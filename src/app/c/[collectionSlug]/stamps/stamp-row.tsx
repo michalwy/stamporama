@@ -304,6 +304,7 @@ export function StampRow({
           />
           <SubtypeChip subtype={stamp.subtype} size="medium" />
           <CopyCountBadge
+            collectionId={collectionId}
             copies={stamp.copies}
             variantCopies={stamp.variantCopies}
             size="medium"
@@ -313,7 +314,7 @@ export function StampRow({
           />
           {/* Beside the copies held, because the two answer one question between them: what the
               collection has of this stamp, and what it is still after (#532). */}
-          <WantChip wants={stamp.wants} />
+          <WantChip collectionId={collectionId} wants={stamp.wants} />
           {/* The collector's own labels (#152), last of the chips because they are the one thing on
               the line the catalogue did not say. Nothing at all when there are none. */}
           <TagChips tags={stamp.tags} size="medium" />

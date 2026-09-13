@@ -238,6 +238,7 @@ export function StampVariantsCard({
             <RelativeRow
               role="Base stamp"
               stamp={relatives.parent}
+              collectionId={collectionId}
               collectionSlug={collectionSlug}
               maps={maps}
             />
@@ -249,6 +250,7 @@ export function StampVariantsCard({
                 <RelativeRow
                   role="Variant"
                   stamp={child}
+                  collectionId={collectionId}
                   collectionSlug={collectionSlug}
                   maps={maps}
                   indented={!!relatives.parent}
@@ -414,6 +416,7 @@ export function StampVariantsCard({
 function RelativeRow({
   role,
   stamp,
+  collectionId,
   collectionSlug,
   maps,
   indented = false,
@@ -426,6 +429,7 @@ function RelativeRow({
   /** How this stamp relates to the one on screen — "Base stamp" or "Variant". */
   role: string;
   stamp: StampListItem;
+  collectionId: string;
   collectionSlug: string;
   maps: ReturnType<typeof useAreaVendorMaps>;
   indented?: boolean;
@@ -496,7 +500,13 @@ function RelativeRow({
         size="small"
         href={`/c/${collectionSlug}/stamps/${stamp.id}`}
       />
-      {showCopies && <CopyCountBadge copies={stamp.copies} variantCopies={stamp.variantCopies} />}
+      {showCopies && (
+        <CopyCountBadge
+          collectionId={collectionId}
+          copies={stamp.copies}
+          variantCopies={stamp.variantCopies}
+        />
+      )}
       <span
         style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
       >

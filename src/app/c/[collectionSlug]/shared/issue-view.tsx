@@ -327,6 +327,7 @@ export function StampTitle({ node }: { node: StampNodeData }) {
 /** Stamp detail line: catalog-number chips (muted when the stamp is on no checklist of the issue,
  * #531) and the main catalog price. Renders nothing when there's neither. */
 export function StampDetailLine({
+  collectionId,
   node,
   vendorMap,
   primaryVendorId,
@@ -343,6 +344,8 @@ export function StampDetailLine({
    * The pickers and the identify dialog that also draw this line have no such view, and pass
    * nothing: the chip there previews on hover and is not a control. */
   onOpenCopies?: () => void;
+  /** Resolves the copy and want chips' panels against the collection's dictionaries. */
+  collectionId: string;
 }) {
   const primaryCN = primaryVendorId
     ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
@@ -398,13 +401,14 @@ export function StampDetailLine({
       />
       <SubtypeChip subtype={node.subtype} />
       <CopyCountBadge
+        collectionId={collectionId}
         copies={node.copies}
         variantCopies={node.variantCopies}
         onOpenCopies={onOpenCopies}
       />
       {/* Beside the copies held: what the collection has of this stamp, and what it is still
           after (#532). */}
-      <WantChip wants={node.wants} />
+      <WantChip collectionId={collectionId} wants={node.wants} />
       {/* The collector's own labels on this stamp (#152) — its own rows, never the issue's and
           never its parent's. */}
       <TagChips tags={node.tags} />

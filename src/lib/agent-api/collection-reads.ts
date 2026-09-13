@@ -296,6 +296,19 @@ export interface AgentCopyCounts {
   readonly unmarked: number;
 }
 
+/** The five figures and nothing else. The app's own counts also carry a per-combination breakdown
+ *  for the copy count chip's hover panel (#1243); a structural type would let that ride along into
+ *  every stamp read unannounced, so the projection names what is published. */
+function copyCounts(counts: AgentCopyCounts): AgentCopyCounts {
+  return {
+    total: counts.total,
+    inCollection: counts.inCollection,
+    forSale: counts.forSale,
+    forTrade: counts.forTrade,
+    unmarked: counts.unmarked,
+  };
+}
+
 export interface AgentStampIssue {
   readonly issueId: string;
   readonly name?: string;
@@ -415,8 +428,8 @@ export function stampDetail(
     // boxes with it (#763).
     widthMm: row.size.widthMm ?? undefined,
     heightMm: row.size.heightMm ?? undefined,
-    copies: row.copies,
-    variantCopies: row.variantCopies,
+    copies: copyCounts(row.copies),
+    variantCopies: copyCounts(row.variantCopies),
     openWants: row.wants?.openCount ?? undefined,
     photoUrls: photoUrls(collectionId, row.photos),
     path: extra.path,

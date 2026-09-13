@@ -6,6 +6,7 @@ import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { mergeCopyLines, type StampCopyLine } from "./copy-breakdown";
 
 // How many copies of a stamp you hold (#348), for the badge the catalog screens show beside a
 // stamp — the Issues list stamp tree and the flat Stamps list. Kept out of `items.ts` because
@@ -24,6 +25,10 @@ export interface StampCopyCounts {
    * unmarked depending on how they pair up — so it is counted rather than subtracted. It is what
    * lets a breakdown stand on its own without the total beside it. */
   unmarked: number;
+  /** The same copies by **condition × certificate × format** and the markers each combination
+   * carries (#1243) — what the chip's hover panel lists under each disposition. Off the same
+   * `groupBy` as the figures above, so a line and a total cannot be taken over different sets. */
+  lines: StampCopyLine[];
 }
 
 /**
@@ -57,13 +62,19 @@ export function heldCopiesWhere(collectionId: string, stampIds: string[]) {
   };
 }
 
-export const NO_COPIES: StampCopyCounts = {
+/** Read-only: a caller building counts starts from {@link noCopies}, which hands out its own `lines`. */
+export const NO_COPIES: StampCopyCounts = Object.freeze({
   total: 0,
   inCollection: 0,
   forSale: 0,
   forTrade: 0,
   unmarked: 0,
-};
+  lines: Object.freeze([]) as unknown as StampCopyLine[],
+});
+
+function noCopies(): StampCopyCounts {
+  return { ...NO_COPIES, lines: [] };
+}
 
 /**
  * Copies held per stamp, for the given stamp ids. Stamps with no copies are absent from the
@@ -81,8 +92,9 @@ export const NO_COPIES: StampCopyCounts = {
  * copy that is gone is not one of them. The in-flight states are deliberately still counted — a
  * copy in transit is bought, and its state is visible on the copy row itself (#272).
  *
- * One `groupBy` over the disposition flags: at most a handful of rows per stamp, so the whole
- * page's counts cost a single aggregate query rather than a count per row.
+ * One `groupBy` over the disposition flags and the three axes a copy is described on: at most a
+ * handful of rows per stamp, so the whole page's counts cost a single aggregate query rather than a
+ * count per row. The rows are kept as `lines` (#1243), and the figures are their sums.
  */
 export async function countCopiesByStamp(
   collectionId: string,
@@ -93,14 +105,31 @@ export async function countCopiesByStamp(
   if (ids.length === 0) return counts;
 
   const rows = await prisma.item.groupBy({
-    by: ["stampId", "inCollection", "forSale", "forTrade"],
+    by: [
+      "stampId",
+      "conditionId",
+      "certificateStatusId",
+      "formatId",
+      "inCollection",
+      "forSale",
+      "forTrade",
+    ],
     where: heldCopiesWhere(collectionId, ids),
     _count: { _all: true },
   });
 
   for (const row of rows) {
     const n = row._count._all;
-    const entry = counts.get(row.stampId) ?? { ...NO_COPIES };
+    const entry = counts.get(row.stampId) ?? noCopies();
+    entry.lines.push({
+      conditionId: row.conditionId,
+      certificateStatusId: row.certificateStatusId,
+      formatId: row.formatId,
+      inCollection: row.inCollection,
+      forSale: row.forSale,
+      forTrade: row.forTrade,
+      count: n,
+    });
     entry.total += n;
     if (row.inCollection) entry.inCollection += n;
     if (row.forSale) entry.forSale += n;
@@ -132,7 +161,8 @@ export async function countCopiesByStamp(
  * hold" cannot come to mean one thing in the first number and another in the second — including
  * the **disposition markers**, which are summed across the counting descendants the same way the
  * total is, so the badge can say what the variant copies are held *for* and not only how many
- * there are.
+ * there are — and the **lines**, merged per combination the same way, so the panel's variant figures
+ * are the same copies broken down.
  */
 export async function countVariantDescendantCopies(
   collectionId: string,
@@ -162,7 +192,8 @@ export async function countVariantDescendantCopies(
   );
 
   for (const [stampId, set] of descendantsByStamp) {
-    const summed: StampCopyCounts = { ...NO_COPIES };
+    const summed = noCopies();
+    const lineLists: StampCopyLine[][] = [];
     for (const id of set) {
       if (!isVariant.get(id)) continue;
       const c = counts.get(id);
@@ -172,7 +203,9 @@ export async function countVariantDescendantCopies(
       summed.forSale += c.forSale;
       summed.forTrade += c.forTrade;
       summed.unmarked += c.unmarked;
+      lineLists.push(c.lines);
     }
+    summed.lines = mergeCopyLines(lineLists);
     if (summed.total > 0) totals.set(stampId, summed);
   }
   return totals;

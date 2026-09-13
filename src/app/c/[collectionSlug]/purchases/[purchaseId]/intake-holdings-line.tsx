@@ -202,6 +202,7 @@ export function IntakeHoldingsLine({
       {/* Absent when the stamp is on no want, which is the marker's own rule — a chip on every row
           saying "0" is a column rather than a signal. */}
       <WantChip
+        collectionId={collectionId}
         wants={data?.wants ?? null}
         copy={
           conditionId

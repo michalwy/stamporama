@@ -178,3 +178,26 @@ export function narrowConditionSeed(
   if (currentConditionIds.length > 0) return [...currentConditionIds];
   return allConditionIds.filter((id) => id !== arrivedConditionId);
 }
+
+/**
+ * How one acceptance axis reads in a table cell (#1244): **`any`** when the set is empty, otherwise
+ * its members in the order the dictionary has them in its settings.
+ *
+ * `any` is a state of its own rather than an empty member list, because a blank cell and an
+ * unanswered one look identical and mean opposite things (ADR-0032 §1). And `null` stays a member —
+ * *no certificate*, *single* — never folded into `any`, since #532 a want for "no certificate"
+ * and a want for "any certificate" are both real. It leads the members, being the plain default the
+ * others are variations on; an id the dictionary does not hold goes last.
+ */
+export function acceptanceAxisView(
+  ids: readonly (string | null)[],
+  order: readonly string[]
+): { any: true } | { any: false; members: (string | null)[] } {
+  if (ids.length === 0) return { any: true };
+  const rank = (id: string | null) => {
+    if (id === null) return -1;
+    const i = order.indexOf(id);
+    return i === -1 ? order.length : i;
+  };
+  return { any: false, members: [...ids].sort((a, b) => rank(a) - rank(b)) };
+}

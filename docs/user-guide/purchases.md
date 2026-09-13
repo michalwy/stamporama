@@ -1340,7 +1340,8 @@ you compare it with.
 **The want marker.** The same line carries the **crosshair chip** when the stamp is on your
 [want list](wants.md), ringed once the condition, certificate and format you have picked would
 satisfy one of the wants — all three are axes a want is matched on, so a block of four does not ring
-for a want that only ever wanted singles — and it moves as you fill the form. Click it for the terms. The chip is on a lot's copy
+for a want that only ever wanted singles — and it moves as you fill the form. Hover it for the terms; clicking it opens your want list for that
+stamp in a new tab, so the intake stays as you left it. The chip is on a lot's copy
 rows too, and it is the same judgement the intake review below makes, so a ringed pick is one the
 review will greet you with.
 

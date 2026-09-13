@@ -123,6 +123,7 @@ export function StampDetailPanel({
             primaryVendorId={primaryVendorId}
           />
           <CopyCountBadge
+            collectionId={collectionId}
             copies={stamp.copies}
             variantCopies={stamp.variantCopies}
             size="medium"

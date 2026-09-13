@@ -430,7 +430,7 @@ function StampTreeNode({
               {quickPrice.dialog}
             </div>
 
-            <StampDetailLine
+            <StampDetailLine collectionId={collectionId}
               node={node}
               vendorMap={vendorMap}
               primaryVendorId={primaryVendorId}

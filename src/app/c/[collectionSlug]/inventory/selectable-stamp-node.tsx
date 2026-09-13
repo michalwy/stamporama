@@ -243,7 +243,7 @@ export function SelectableStampNode({
                 )}
               </div>
 
-              <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
+              <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
             </div>
           </div>
         </div>

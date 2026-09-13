@@ -651,11 +651,11 @@ panel, since a standing filter cannot afford the quieter kind.
 
 ### Lines you are looking for
 
-A line whose stamp is on your [want list](wants.md) carries a **crosshair chip**. Click it for every
-open want on that stamp.
+A line whose stamp is on your [want list](wants.md) carries a **crosshair chip**. Hover it for every
+open want on that stamp; click it to open the want list for that stamp in a new tab.
 
 When the line's own **condition, certificate and format** would satisfy one of those wants, the chip
-is **ringed** and the popover marks which want — the sharper question, and the one worth answering
+is **ringed** and the panel marks which want — the sharper question, and the one worth answering
 ninety seconds before a lot closes: not "I collect this stamp" but "this is the one I am after".
 The judgement is the same one Stamporama makes when the copy actually arrives, so a lot marked as
 matching will greet you with that want at intake.

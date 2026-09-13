@@ -356,6 +356,7 @@ export function AuctionLotLineRow({
                 the sharper question rather than only "the stamp is wanted" — which is the one worth
                 answering ninety seconds before a lot closes. */}
             <WantChip
+              collectionId={collectionId}
               wants={line.wants}
               copy={{
                 stampId: line.stampId,
