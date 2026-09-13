@@ -858,35 +858,30 @@ copy per tile, each of its own stamp and each keeping **its own pictures**, numb
 ticked. If any tile cannot be worked — dealt with meanwhile in another tab, say — the whole pass is
 refused and nothing is created.
 
-**Catalogue values while the catalogue is open.** Under *its stamp*, the tile in hand has a
-**catalog value** field for your primary catalogue, for that tile's condition and certificate —
-the same field a single tile's condition step has. It opens on the value already on file, and it is
-**one value per stamp in a condition**: two tiles of the same stamp in the same condition share it,
-so typing it on one fills the other. The run says *no catalog value* on every tile whose stamp still
-has none for its condition. The figure is always the single's, whatever format you file the piece
-as. Values are saved before any copy is created; if saving one fails, nothing is created and you can
-correct it and confirm again.
+**Catalogue values while the catalogue is open.** Once a condition is chosen, every row of the run
+has a **catalog value** field for your primary catalogue, for that tile's condition and certificate,
+so you can copy a column of numbers off the catalogue page without selecting any tile first:
 
-**Typing a set's values down one list.** Once a condition is chosen, the middle column has a
-**Catalog values** list with every value the run needs, so you can copy a column of numbers off the
-catalogue page without selecting any tile first:
-
-- **One line per stamp in a condition and certificate**, not per tile — three tiles of the same stamp
-  in the same condition are one line, saying *+2 more tiles*.
-- **In the checklist's own order**, the same order the tiles take its stamps in, whatever order you
-  ticked the tiles; a tile corrected to a stamp off the checklist comes after.
-- Each line shows the **tile's picture** (the first of its tiles, in the order you ticked them), the
-  **primary catalogue number**, the **condition** and the **certificate**. Rest the pointer on the
-  picture to see it enlarged; doing so, or even clicking it, leaves the cursor where you are typing.
+- **Each row reads on one line**: its position in the run, the tile's picture, the stamp's catalogue
+  number, the tile, its condition (and certificate), and the value. Rest the pointer on the picture to
+  see it enlarged; clicking it takes that tile in hand but leaves the cursor where you are typing.
+- **The rows follow the run**, which is the order the tiles take the checklist's stamps in — the
+  order you read the values off the page.
 - **Type straight into the field and press Tab for the next value**, Shift+Tab for the previous one.
   Nothing else is visited between two values, and **Tab from the last value goes to *Identify***,
   never to *Back*.
-- Values already on file are filled in and can be typed over. **A line with no value yet is framed
-  in amber** and says so; the note above the list counts them.
-- `1,50` and `1.50` are both accepted.
+- **One value per stamp in a condition and certificate.** Where several tiles share one, only the
+  first of them in the run has the field; the others show the same value and say which row it is
+  typed on (*as #1*), and Tab skips them. Give such a tile a condition or certificate of its own and
+  it gets a field of its own; change a tile onto a combination an earlier row already has and its
+  field becomes the shared kind.
+- Values already on file are filled in and can be typed over. **A field with no value yet is framed
+  in amber**; the note above the run counts them.
+- `1,50` and `1.50` are both accepted. The figure is always the single's, whatever format you file
+  the piece as.
 
-The list and the tile's own *catalog value* field are the same value: whatever you type in one shows
-in the other.
+Values are saved before any copy is created; if saving one fails, nothing is created and you can
+correct it and confirm again.
 
 The list is read from the card itself, not remembered for the length of a sitting: reload the page,
 come back tomorrow, open the next batch of the same order — the identifications are still there. It

@@ -138,15 +138,6 @@ export function runChoices<T extends RunMember>(
   return { onChecklist, others };
 }
 
-/** Every offered stamp's id, in the order {@link runChoices} offers them — the order the run's price
- * list reads in (#1223), so the list follows the checklist exactly as the tiles do. */
-export function runStampOrder(choices: RunChoices<RunMember>): string[] {
-  return [
-    ...choices.onChecklist.map((m) => m.stampId),
-    ...choices.others.flatMap((group) => group.nodes.map((n) => n.node.stampId)),
-  ];
-}
-
 // ── Assigning ────────────────────────────────────────────────────────────────────────────────────
 
 /** One tile of the run, as the dialog draws it and the write is handed it. */
@@ -336,65 +327,55 @@ export function runPriceSubjects(
   return out;
 }
 
-/** One line of the run's price list (#1223): a subject, and the tiles of the run it is the value for. */
-export interface RunPriceLine extends RunPriceSubject {
-  /** In the order they were ticked — the first is the one whose picture the line shows. */
-  tileIds: string[];
+// ── Values on the run's rows ─────────────────────────────────────────────────────────────────────
+
+/** Where one tile of the run records its catalogue value (#1229). */
+export interface RunValueSlot {
+  /** The subject — `catalogValueSubjectKey` — or null for a tile with no stamp or no condition yet,
+   * which has nothing to record. */
+  key: string | null;
+  /** The index, in the run, of the tile whose row carries the editable field for `key`: this tile's
+   * own index where it carries it, the first earlier tile sharing the subject where it does not. */
+  entryIndex: number | null;
 }
 
 /**
- * The run's catalogue values as **one list, typed down** (#1223): a line per subject — never per
- * tile, so Tab never visits one figure twice — in the order the set reads.
+ * The run's catalogue values **on the run's own rows** (#1229), where #1223 had put them in a second
+ * list of the same stamps above the run.
  *
- * **The set's order** is `stampOrder` — {@link runStampOrder}: the checklist's own order, then the
- * other stamps a tile was corrected to, as they are offered (#1225). The lines of one stamp follow
- * the order the collection lists its conditions in, and within a condition *no certificate* comes
- * before the certificates, in theirs. A stamp not in `stampOrder` (still being read) and a condition
- * or certificate not in its list keep the order of the run, after the ones that are.
+ * A value is a fact about stamp × condition × certificate, never about a tile (#593), so of several
+ * tiles sharing one **only the first in run order carries the field**; the others show its figure and
+ * name the row it is typed on, and Tab never visits a figure twice. Rows follow the run, which is the
+ * order the values are read in (#1225).
+ *
+ * Re-derived from the resolved details on every render, so **the field follows the combination**: a
+ * tile whose condition or certificate is changed away from the tile above it gets a field of its own,
+ * and one changed onto a subject an earlier tile already carries loses it.
  */
-export function runPriceLines(
+export function runValueSlots(
   assignments: readonly RunAssignment[],
-  resolved: readonly RunCopyDetails[],
-  stampOrder: readonly string[],
-  conditionOrder: readonly string[],
-  certificateOrder: readonly string[]
-): RunPriceLine[] {
-  const subjects = runPriceSubjects(assignments, resolved);
-  const tilesByKey = new Map<string, string[]>();
-  for (const [i, a] of assignments.entries()) {
+  resolved: readonly RunCopyDetails[]
+): RunValueSlot[] {
+  const entries = new Map<string, number>();
+  return assignments.map((a, i) => {
     const d = resolved[i];
-    if (!a.stampId || !d?.conditionId) continue;
+    if (!a.stampId || !d?.conditionId) return { key: null, entryIndex: null };
     const key = catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId);
-    tilesByKey.set(key, [...(tilesByKey.get(key) ?? []), a.tileId]);
-  }
-  const rankIn = (order: ReadonlyMap<string, number>, id: string) =>
-    order.get(id) ?? Number.MAX_SAFE_INTEGER;
-  const stampRank = new Map(stampOrder.map((id, i) => [id, i]));
-  const conditionRank = new Map(conditionOrder.map((id, i) => [id, i]));
-  // No certificate first, then the certificates in the collection's own order.
-  const certificateRank = new Map(certificateOrder.map((id, i) => [id, i + 1]));
-  const certificateRankOf = (id: string | null) => (id ? rankIn(certificateRank, id) : 0);
-  return subjects
-    .map((subject, runIndex) => ({ subject, runIndex }))
-    .sort(
-      (a, b) =>
-        rankIn(stampRank, a.subject.stampId) - rankIn(stampRank, b.subject.stampId) ||
-        rankIn(conditionRank, a.subject.conditionId) -
-          rankIn(conditionRank, b.subject.conditionId) ||
-        certificateRankOf(a.subject.certificateStatusId) -
-          certificateRankOf(b.subject.certificateStatusId) ||
-        a.runIndex - b.runIndex
-    )
-    .map(({ subject }) => ({ ...subject, tileIds: tilesByKey.get(subject.key) ?? [] }));
+    const entryIndex = entries.get(key) ?? i;
+    entries.set(key, entryIndex);
+    return { key, entryIndex };
+  });
 }
 
 /**
- * Where Tab goes from a value of the price list (#1223): the next value, or with Shift the previous
- * one — and **off the last value, the confirm action**, never Cancel (#726's bug, met again here
- * because the footer draws Back before Identify). `null` leaves the key to the browser: Shift+Tab off
- * the first value, and Tab off the last while confirming is not possible and so cannot hold focus.
+ * Where Tab goes from a value field of the run (#1223, on the rows since #1229): the next field, or
+ * with Shift the previous one — and **off the last value, the confirm action**, never Cancel (#726's
+ * bug, met again here because the footer draws Back before Identify). `keys` are the editable fields
+ * in run order, so a shared row, which has none, is never stopped on. `null` leaves the key to the
+ * browser: Shift+Tab off the first value, and Tab off the last while confirming is not possible and so
+ * cannot hold focus.
  */
-export function priceListTabTarget(
+export function runValueTabTarget(
   keys: readonly string[],
   from: string,
   shift: boolean,
