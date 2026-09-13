@@ -763,6 +763,33 @@ Six things worth not re-deriving:
   card group in the divergence report without `printedCardGroups` being told about it. Both are
   handled; a third of the same shape is what to look for next.
 
+**A row break is a box's, not a position's** (#1214). `album_row_break` is presence-only and keyed
+`(entry, stamp)`; `album-plan.ts` puts it on the box as `rowBreakBefore`, and `measureBlock` closes the
+row in front of that box. Four things worth not re-deriving:
+
+- **Its own table, not a column on `album_box_adjustment`.** That row is *this piece of hawid is a
+  different size*: both deltas zero deletes it and *undo every box correction* clears the entry's
+  rows. Either rule would silently take a break with it.
+- **It only adds a row.** The break is a second reason to open a row and never a reason to keep one
+  open, so the row after it is packed by the same width test and still wraps. On a block's first box
+  it changes nothing — the editor's `rowBreakable` is false there, and the tab and checkbox are not
+  offered, so neither promises a break the layout would ignore. `rowBreakable` indexes the **block's**
+  boxes, not the sheet's: the second sheet of a split checklist opens on a box that is not the
+  block's first, and a break on it is real.
+- **Natural width is the widest hand-broken row.** Band pairing refuses a block that would have to
+  *wrap* to fit its share, and a row the collector ended himself is not a wrap. So a checklist broken
+  five and five can now pair where the same ten on one line could not. That is the rule read
+  honestly, and it is pinned in `tests/unit/album-layout.test.ts`; do not "fix" it back to the sum.
+- **A stamp that leaves the checklist leaves its row behind, inert** — the same as a box correction.
+  The plan reads breaks only for the stamps a block holds, so the page is right; a stamp that later
+  rejoins gets its break back. A cascade from `checklist_stamp` was the obvious alternative and is
+  wrong here: `putStampOnChecklists` rewrites a stamp's memberships by delete-and-insert on every stamp
+  edit, so it would wipe every break on the stamp whenever the stamp was saved.
+
+A printed card is untouched: the snapshot stores placed geometry and copies box fields by name, so no
+flag reaches it, and the divergence report compares facts rather than coordinates, so a break set
+later is not reported against a card. The PDF needs nothing — it draws the plan.
+
 **A reorder is carried in state and drawn; the mark and the drop read one function** (#816). The
 three millimetre gestures ride in `CanvasDrag` and the canvas draws them, but reordering was held in
 a `useRef` — which by design does not re-render, so between press and release nothing knew a drag was

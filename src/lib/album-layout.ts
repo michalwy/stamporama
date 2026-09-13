@@ -59,7 +59,8 @@
 // ## The collector's corrections are inputs to this module, not a second pass over its output
 //
 // #769 lets the collector overrule the packing: extra space before or after a block, a forced break
-// and a forced *no* break, a text block of their own, a box a couple of millimetres bigger. Every one
+// and a forced *no* break, a text block of their own, a box a couple of millimetres bigger — and
+// #1214 a row of boxes ended early, *a new row starts at this stamp*. Every one
 // of them arrives on the specs this function is given and is packed **with** the automatic layout
 // rather than applied to the plan afterwards. That is what makes a correction survive a content
 // change: adding a stamp re-flows the page and the deltas are still the deltas.
@@ -209,6 +210,14 @@ export interface AlbumBoxSpec {
   heightMm: number;
   /** The rendered box label. Blank prints nothing and reserves nothing. */
   label: string;
+  /** The collector has asked for **a new row to start at this box** (#1214). Absent means the row
+   *  wraps only where the width runs out, which is every box before the editor could say otherwise.
+   *
+   *  It rides on the box rather than on a position in the block, so a stamp added or removed
+   *  elsewhere in the checklist leaves it in front of the same stamp. It only ever **adds** a row: on
+   *  a block's first box it is a row that has already started, and the row after it still wraps where
+   *  the width runs out. */
+  rowBreakBefore?: boolean;
 }
 
 /**
@@ -514,16 +523,33 @@ interface MeasuredBlock<T extends AlbumBoxSpec> {
 }
 
 /**
- * The width a block would take if nothing constrained it — its boxes on one line.
+ * The width a block would take if nothing constrained it — its boxes on one line, or on the lines the
+ * collector broke them into (#1214).
  *
  * This is what decides whether two blocks may share a band, and it reads only the boxes: a heading
  * always wraps and so constrains nothing, while a one-stamp checklist is genuinely narrow and is
  * exactly the case the collector pairs.
+ *
+ * **A hand-made row break narrows it to the widest of its rows.** The pairing rule is that a block
+ * which would have to *wrap* to be paired is one the pairing has made worse, and a row the collector
+ * ended himself is not a wrap. Measuring ten boxes on one line when he has set them five and five
+ * would refuse a pairing that changes nothing about how the block reads.
  */
 function naturalBlockWidthMm(block: AlbumBlockSpec, gapXMm: number): number {
-  if (block.boxes.length === 0) return 0;
-  const boxes = block.boxes.reduce((sum, box) => sum + box.widthMm, 0);
-  return roundSizeMm(boxes + gapXMm * (block.boxes.length - 1));
+  let widest = 0;
+  let line = 0;
+  let count = 0;
+  for (const box of block.boxes) {
+    if (count > 0 && box.rowBreakBefore) {
+      widest = Math.max(widest, roundSizeMm(line + gapXMm * (count - 1)));
+      line = 0;
+      count = 0;
+    }
+    line += box.widthMm;
+    count += 1;
+  }
+  if (count > 0) widest = Math.max(widest, roundSizeMm(line + gapXMm * (count - 1)));
+  return widest;
 }
 
 /**
@@ -602,7 +628,12 @@ function measureBlock<T extends AlbumBoxSpec>(
       : 0;
     // A row always accepts its first box however wide: a mount wider than the page is an oversize
     // piece (#765), and it belongs on the page overhanging rather than dropped.
-    if (!row || wouldBe > widthMm + FIT_EPSILON) {
+    //
+    // A **hand-made break** (#1214) closes the row in front of its box. It is a second reason to
+    // start a row and never a reason not to: the row it opens is packed by the same width test as
+    // any other, so one still wider than the page wraps exactly as it always did. And on a block's
+    // first box there is no row to close, so a break there changes nothing.
+    if (!row || box.rowBreakBefore || wouldBe > widthMm + FIT_EPSILON) {
       row = {
         boxes: [],
         boxHeightMm: 0,

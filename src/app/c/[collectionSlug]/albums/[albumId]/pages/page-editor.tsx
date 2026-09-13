@@ -43,6 +43,7 @@ import {
   setAlbumBoxAdjustmentAction,
   setAlbumEntryLayoutAction,
   setAlbumEntryStampOrderAction,
+  setAlbumRowBreakAction,
   updateAlbumTextBlockAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
@@ -253,6 +254,12 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     form.set("widthDeltaMm", String(mm(widthDeltaMm)));
     form.set("heightDeltaMm", String(mm(heightDeltaMm)));
     run(() => setAlbumBoxAdjustmentAction(box.entryId, box.stampId, form));
+  }
+
+  /** Start a new row at a box, or stop (#1214) — from the canvas's tab or the panel's checkbox, one
+   *  write either way. */
+  function commitRowBreak(entryId: string, stampId: string, on: boolean) {
+    run(() => setAlbumRowBreakAction(entryId, stampId, on));
   }
 
   /**
@@ -536,6 +543,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               }}
               onReorder={reorderStamps}
               onReorderBlocks={reorderBlocks}
+              onToggleRowBreak={commitRowBreak}
               onOpenGaps={(text, at) => setGapPopover({ gaps: text.gaps, at })}
             />
           ) : (
@@ -572,6 +580,9 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                   setPreview(null);
                   commitSize(selectedBox, w, h);
                 }}
+                onRowBreak={(on) =>
+                  commitRowBreak(selectedBox.entryId, selectedBox.stampId, on)
+                }
                 onSelectBlock={() =>
                   setSelection({ kind: "block", id: selectedBox.entryId })
                 }
@@ -845,18 +856,21 @@ function PrintedSheetPanel({
   );
 }
 
-/** One box: its numbers, and the two millimetres the collector may correct. */
+/** One box: its numbers, the two millimetres the collector may correct, and whether a row starts at
+ *  it. */
 function BoxPanel({
   box,
   disabled,
   onPreview,
   onCommit,
+  onRowBreak,
   onSelectBlock,
 }: {
   box: AlbumEditorBox;
   disabled: boolean;
   onPreview: (dxMm: number, dyMm: number) => void;
   onCommit: (widthDeltaMm: number, heightDeltaMm: number) => void;
+  onRowBreak: (on: boolean) => void;
   onSelectBlock: () => void;
 }) {
   const stored = box.adjustment ?? { widthDeltaMm: 0, heightDeltaMm: 0 };
@@ -951,6 +965,41 @@ function BoxPanel({
           Millimetres on the piece, not on the box. The width is the cut and moves with what you
           type; <strong>the height comes out of the drawer</strong> — it is the shortest strip the
           piece fits into, so it moves in strip steps and may not move at all.
+        </p>
+      </div>
+
+      <div>
+        <PanelHeading>Row</PanelHeading>
+        {box.rowBreakable ? (
+          <label
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
+              fontSize: "0.8125rem",
+              cursor: disabled ? "default" : "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={box.rowBreakBefore}
+              disabled={disabled}
+              onChange={(e) => onRowBreak(e.target.checked)}
+            />
+            Start a new row at this box
+          </label>
+        ) : null}
+        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+          {box.rowBreakable ? (
+            <>
+              The row before it ends here, and the break stays in front of this stamp when others
+              are added to the checklist or taken off it. <strong>It only adds a row</strong>: if
+              what follows is still wider than the page, it wraps as usual. The corner tab on the
+              sheet does the same.
+            </>
+          ) : (
+            "The first box of its checklist, so a row already starts here."
+          )}
         </p>
       </div>
 
