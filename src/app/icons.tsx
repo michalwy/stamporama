@@ -78,6 +78,7 @@ import {
   Share2,
   Unlink2,
   List,
+  ListChecks,
   Lock,
   LockOpen,
   Pin,
@@ -236,6 +237,9 @@ const GLYPHS = {
   // Controls that are the same everywhere.
   /** The single `⋮` row-action trigger. */
   rowActions: EllipsisVertical,
+  /** The menu of what the **selection** can do, opened from a ticked row's gutter (#991). Never the
+   *  `⋮`: that one acts on its own row, and this one acts on every ticked row at once. */
+  selectionActions: ListChecks,
   /** A horizontal `⋯`, for a control that opens more of the same. */
   more: Ellipsis,
   /** A read-only list opened over the current screen. */

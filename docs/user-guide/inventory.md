@@ -994,7 +994,8 @@ still drafts.
 Every copy you still hold carries a **checkbox** on the left of its row. Tick a few and a bar
 appears under the toolbar saying how many are picked, with **Clear**, [**Bulk
 edit…**](#bulk-editing-the-selection), the [new-offer shortcuts](#the-new-offer-shortcuts) and
-**🏷 Add selected to offer**.
+**🏷 Add selected to offer**. The same actions are a click away from the row you are on, through
+[the selection menu](#the-selection-menu-on-a-ticked-row).
 
 The bar **stays put while you scroll**, like the toolbar above it. It takes its space from the list,
 so **the first tick pushes the rows down** by the height of the bar — and then nothing moves again
@@ -1094,6 +1095,23 @@ on a single copy's **⋮** menu.
 
 With a **single** copy ticked there is no packaging to decide, so the pair collapses into one
 **＋ New offer** button that does the same thing.
+
+### The selection menu on a ticked row
+
+The bar's buttons sit at the far end of the bar, a long way from the checkboxes you have just been
+ticking. So while copies are ticked, **resting the pointer on a ticked row** shows a small checklist
+button just under that row's checkbox. It opens a menu of **everything the bar can do** — for the
+whole selection, not for that one row — and every entry says how many copies it reaches:
+*Bulk edit 5 copies…*, *New offer · 5 sets*, *Add 5 to offer*.
+
+It is a shortcut, not a second place to look things up: the bar is still where you see what is
+ticked, how many are hidden by a filter, and whether the selection is already offered. When it is,
+the offer entries in the menu repeat the warning under their names. Anything added to the bar in
+future appears in this menu too.
+
+Nothing appears on an unticked row or with nothing ticked, and the button takes no room of its own,
+so ticking never moves anything. It works the same on the copies inside an expanded group. Press
+**Escape** or click elsewhere to close the menu.
 
 The same checkboxes are on the copies inside an expanded [duplicate group](#grouping-duplicates), and
 a group row can tick all of its copies at once — see [Listing a group's
