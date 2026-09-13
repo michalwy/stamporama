@@ -6,7 +6,7 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   commitCut,
-  deleteBatch,
+  deleteBatches,
   pairTilesManually,
   pickBox,
   proposeCut,
@@ -543,19 +543,25 @@ export async function returnTilesToQueueAction(tileIds: string[]): Promise<ScanA
   }
 }
 
-/** Delete a batch outright: its tiles and its retained scans. */
-export async function deleteBatchAction(
+/** Delete batches outright — their tiles and their retained scans, keeping any copies made from
+ * them (#1218). One batch or several, all or nothing: see `deleteBatches`. */
+export async function deleteBatchesAction(
   owner: ScanOwnerRef,
-  batchNo: number
+  batchNos: number[]
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await deleteBatch(session.user.id, owner, batchNo);
+    await deleteBatches(session.user.id, owner, batchNos);
     return { status: "success" };
   } catch (e) {
     return {
       status: "error",
-      message: e instanceof Error ? e.message : "Failed to delete the batch. Please try again.",
+      message:
+        e instanceof Error
+          ? e.message
+          : batchNos.length === 1
+            ? "Failed to delete the batch. Please try again."
+            : "Failed to delete the batches. Please try again.",
     };
   }
 }

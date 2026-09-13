@@ -6,10 +6,10 @@ import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { usePurchaseScansUi } from "./purchase-ui-state";
-import { ConfirmDialog } from "@/app/dialog-shell";
+import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import {
   commitCutAction,
-  deleteBatchAction,
+  deleteBatchesAction,
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
@@ -17,6 +17,7 @@ import {
   setBatchLabelAction,
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
+import { batchDeletion, batchDeletionRefusal } from "@/lib/scan-batch-deletion";
 import type { Box } from "@/lib/scan-boxes";
 import {
   MAX_BATCH_LABEL_LENGTH,
@@ -344,6 +345,10 @@ export function ScansCard({
     | { kind: "sheetKind"; batchNo: number; to: SheetKind; sheet: ScanCutEditorSheet | null }
     | null
   >(null);
+  /** The several-cards delete dialog (#1218), and what it was refused with — its own error rather
+   * than the section's banner, which is behind the dialog while it is open. */
+  const [deletingScans, setDeletingScans] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const batches = data?.batches ?? [];
@@ -607,6 +612,22 @@ export function ScansCard({
     });
   };
 
+  /** Delete the worked-through cards ticked in the dialog (#1218). The dialog is its own
+   * confirmation — it carries the same warning the single-batch one does — and it stays open on a
+   * refusal so the collector can see which card stopped it. */
+  const deleteScans = (batchNos: number[]) => {
+    setDeleteError(null);
+    startTransition(async () => {
+      const result = await deleteBatchesAction(ownerRef, batchNos);
+      if (result.status === "error") {
+        setDeleteError(result.message);
+        return;
+      }
+      setDeletingScans(false);
+      refresh(true);
+    });
+  };
+
   const runConfirmed = () => {
     if (!confirm) return;
     const target = confirm;
@@ -625,13 +646,15 @@ export function ScansCard({
       }
       const result =
         target.kind === "delete"
-          ? await deleteBatchAction(ownerRef, target.batchNo)
+          ? await deleteBatchesAction(ownerRef, [target.batchNo])
           : await recutBatchAction(ownerRef, target.batchNo);
       if (result.status === "error") {
         setError(result.message);
         return;
       }
-      refresh();
+      // A deleted card takes the scan name off every copy made from it (#1188), and those rows are
+      // the lot's copies list, not this section.
+      refresh(target.kind === "delete");
       // Straight back into the editor on the cut that was just thrown away, so the correction is
       // one box moved rather than a card redrawn.
       if (target.kind === "recut" && target.reopen) setEditor(target.reopen);
@@ -873,7 +896,23 @@ export function ScansCard({
           at is a fact about the work. Reaching for the record of a card you finished last week is
           a deliberate act, and it should start from the same place every time. */}
       {doneCount > 0 && !filtered && (
-        <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone(!showDone)} />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <SetAsideToggle count={doneCount} shown={showDone} onToggle={() => setShowDone(!showDone)} />
+          {/* **Several finished cards at once** (#1218), beside the count of them because piling
+              up is the problem it answers. A dialog that names each card rather than ticks on the
+              batch lines: a finished batch is folded shut or set aside altogether, and a delete
+              should never reach a card the collector cannot currently read. */}
+          <SmallButton
+            onClick={() => {
+              setDeleteError(null);
+              setDeletingScans(true);
+            }}
+            disabled={uploading || pending || detecting}
+            danger
+          >
+            <Icon name="delete" size="sm" /> Delete scans…
+          </SmallButton>
+        </div>
       )}
 
       {/* **One bar for the whole card, above the batches** (#596), the copy list's own arrangement
@@ -1106,15 +1145,23 @@ export function ScansCard({
                 )}
               </>
             ) : (
-              <>
-                The batch&rsquo;s tiles <strong>and its scans</strong> are deleted. A stockbook that
-                has been broken up cannot be scanned again — re-cut instead if the cut is what was
-                wrong.
-              </>
+              <DeletionMessage
+                batches={batches.filter((b) => b.batchNo === confirm.batchNo)}
+              />
             )
           }
           onConfirm={runConfirmed}
           onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {deletingScans && (
+        <DeleteScansDialog
+          batches={batches.filter((b) => b.doneAt != null)}
+          busy={pending}
+          error={deleteError}
+          onDelete={deleteScans}
+          onClose={() => setDeletingScans(false)}
         />
       )}
         </>
@@ -1210,6 +1257,179 @@ function SetAsideToggle({
       {count} worked-through {count === 1 ? "batch" : "batches"}
       <span style={{ color: "var(--color-text-secondary)" }}>{shown ? "— hide" : "— show"}</span>
     </button>
+  );
+}
+
+/**
+ * What deleting card scans does, said before it is done (#1218) — one wording for the single
+ * batch's confirmation and the several-cards dialog, which describe the same act.
+ *
+ * Three things it must say, because the card image is a **source**: that it is permanent, that
+ * nothing can be cut from the card again, and — whenever copies were made from it — that those copies
+ * and their photos are kept. The discards are named too, as a re-cut's warning names them: for a
+ * sight-unseen stockbook they are the only record of what the parcel held.
+ */
+function DeletionMessage({ batches }: { batches: ScanBatchData[] }) {
+  const one = batches.length === 1;
+  const it = one ? "it" : "them";
+  let copies = 0;
+  let discarded = 0;
+  for (const b of batches) {
+    const d = batchDeletion(b.tiles);
+    copies += d.copies;
+    discarded += d.discarded;
+  }
+  // Re-cutting is the better answer only while there is still a card to cut and nothing has been
+  // made from it — the one case the old warning was written for.
+  const recuttable =
+    one &&
+    copies === 0 &&
+    batches[0].tiles.length > 0 &&
+    !(batches[0].front?.purged ?? false) &&
+    !(batches[0].back?.purged ?? false);
+  return (
+    <>
+      {one ? "The card scan and its tiles are" : `These ${batches.length} card scans and their tiles are`}{" "}
+      <strong>deleted permanently</strong>. Nothing can be cut from {it} again, and a stockbook that
+      has been broken up cannot be scanned again.
+      {copies > 0 && (
+        <>
+          {" "}
+          <strong>
+            The {copies === 1 ? "copy" : `${copies} copies`} made from {it}{" "}
+            {copies === 1 ? "is" : "are"} kept
+          </strong>
+          , with all {copies === 1 ? "its" : "their"} photos — {copies === 1 ? "it" : "they"} simply
+          stop{copies === 1 ? "s" : ""} naming a scan.
+        </>
+      )}
+      {discarded > 0 && (
+        <>
+          {" "}
+          <strong>
+            {discarded} discarded tile{discarded === 1 ? "" : "s"}
+          </strong>{" "}
+          and their notes go with {it} — the only record of what the parcel held.
+        </>
+      )}
+      {recuttable && " Re-cut instead if the cut is what was wrong."}
+    </>
+  );
+}
+
+/**
+ * Delete several worked-through card scans in one decision (#1218).
+ *
+ * Offers only batches that are finished with — the same `doneAt` the *worked-through* count reads,
+ * so the dialog lists exactly the cards that count is counting. Nothing is ticked when it opens: a
+ * deletion that cannot be undone is chosen card by card, or all at once on purpose, never accepted by
+ * default. Each card is named the way its batch line names it, since a folded or set-aside batch
+ * is not on screen to be recognised from.
+ */
+function DeleteScansDialog({
+  batches,
+  busy,
+  error,
+  onDelete,
+  onClose,
+}: {
+  batches: ScanBatchData[];
+  busy: boolean;
+  error: string | null;
+  onDelete: (batchNos: number[]) => void;
+  onClose: () => void;
+}) {
+  const [ticked, setTicked] = useState<ReadonlySet<number>>(new Set());
+  const chosen = batches.filter((b) => ticked.has(b.batchNo));
+  const allState: TileBoxState =
+    chosen.length === 0 ? "off" : chosen.length === batches.length ? "on" : "partial";
+  const toggle = (batchNo: number) =>
+    setTicked((s) => {
+      const next = new Set(s);
+      if (next.has(batchNo)) next.delete(batchNo);
+      else next.add(batchNo);
+      return next;
+    });
+
+  return (
+    <DialogShell title="Delete worked-through card scans" onClose={onClose} maxWidth="36rem">
+      <DialogBody>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+            Only cards whose tiles have all been dealt with are listed. A card with a tile still
+            waiting or set aside to check stays until it is finished.
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem" }}>
+            <TickBox
+              state={allState}
+              label={allState === "on" ? "Untick every card" : "Tick every card"}
+              disabled={busy}
+              onToggle={() =>
+                setTicked(allState === "on" ? new Set() : new Set(batches.map((b) => b.batchNo)))
+              }
+            />
+            <span style={{ color: "var(--color-text-muted)" }}>
+              {chosen.length} of {batches.length} ticked
+            </span>
+          </div>
+          <ul
+            style={{
+              listStyle: "none",
+              margin: 0,
+              padding: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.375rem",
+            }}
+          >
+            {batches.map((b) => {
+              const d = batchDeletion(b.tiles);
+              const purged = (b.front?.purged ?? false) || (b.back?.purged ?? false);
+              return (
+                <li
+                  key={b.batchNo}
+                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem" }}
+                >
+                  <TickBox
+                    state={ticked.has(b.batchNo) ? "on" : "off"}
+                    label={`Delete the scan of batch ${b.batchNo}`}
+                    disabled={busy}
+                    onToggle={() => toggle(b.batchNo)}
+                  />
+                  <strong>Batch {b.batchNo}</strong>
+                  {b.label && <span>{b.label}</span>}
+                  <span style={{ color: "var(--color-text-muted)" }}>
+                    {b.tiles.length} {b.tiles.length === 1 ? "tile" : "tiles"}
+                    {d.copies > 0 && ` · ${d.copies} ${d.copies === 1 ? "copy" : "copies"}`}
+                    {d.discarded > 0 && ` · ${d.discarded} discarded`}
+                    {b.doneAt && ` · done ${b.doneAt.slice(0, 10)}`}
+                    {purged && " · scan deleted"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {chosen.length > 0 && (
+            <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.6 }}>
+              <DeletionMessage batches={chosen} />
+            </p>
+          )}
+        </div>
+      </DialogBody>
+      <DialogActions
+        variant="destructive"
+        actionLabel={
+          chosen.length === 0
+            ? "Delete"
+            : `Delete ${chosen.length} ${chosen.length === 1 ? "scan" : "scans"}`
+        }
+        disabled={busy || chosen.length === 0}
+        cancelDisabled={busy}
+        error={error}
+        onCancel={onClose}
+        onAction={() => onDelete(chosen.map((b) => b.batchNo))}
+      />
+    </DialogShell>
   );
 }
 
@@ -1344,6 +1564,9 @@ function BatchSection({
   // offered and refused. The server refuses it too; this is only the part that keeps a collector
   // from reaching for a button that cannot work.
   const scansPurged = (batch.front?.purged ?? false) || (batch.back?.purged ?? false);
+  // Why this card cannot be deleted yet, or null (#1218) — the server's own sentence, from the
+  // same rule, so the hint and a refusal can never disagree.
+  const deletionRefusal = batchDeletionRefusal(batch.batchNo, batchDeletion(batch.tiles));
 
   const editorSheet = (sheet: ScanSheetData): ScanCutEditorSheet =>
     editorSheetOf(batch, sheet);
@@ -1496,10 +1719,15 @@ function BatchSection({
             <Icon name="refresh" size="sm" /> Re-cut
           </SmallButton>
         )}
+        {/* Greyed out rather than hidden when copies have been made from the card and a tile on
+            it is still open (#1218), with the reason in the hint — a button that vanished would
+            leave the collector wondering how a card is ever deleted at all. */}
         {open && (
-          <SmallButton onClick={onDelete} disabled={busy} danger>
-            <Icon name="delete" size="sm" /> Delete batch
-          </SmallButton>
+          <Tooltip content={deletionRefusal}>
+            <SmallButton onClick={onDelete} disabled={busy || deletionRefusal != null} danger>
+              <Icon name="delete" size="sm" /> Delete batch
+            </SmallButton>
+          </Tooltip>
         )}
       </div>
 

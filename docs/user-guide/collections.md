@@ -1125,6 +1125,8 @@ This setting can have it deleted after a while. **It is off unless you switch it
 
 If you do switch it on, the batch itself stays exactly where it is: the tiles, the copies they became, the discards and their notes are all untouched, and the batch line simply adds **scan deleted**. What you lose is the ability to re-cut that card — Stamporama says so plainly instead of failing on a file that is not there, and the **Re-cut** button stops being offered.
 
+To get rid of a finished card now rather than on a schedule — the scan and the batch line together, keeping the copies — delete it yourself: see [deleting the scan of a finished card](purchases.md#deleting-the-scan-of-a-finished-card).
+
 Worth knowing before you pick a number: the mistake this protects against is a box that clipped a stamp's perforation by a few pixels, which is easy to miss while reviewing the cut and usually noticed later, looking at the copy's own photo — while the parcel is still on the desk. A period measured in weeks covers that. After it, the answer is to re-photograph that one stamp, which is cheap, because the copy's ref says which box it is in.
 
 
