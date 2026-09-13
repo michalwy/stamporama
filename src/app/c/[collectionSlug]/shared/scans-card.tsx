@@ -43,6 +43,7 @@ import {
 } from "@/lib/scan-tile-filter";
 import {
   batchBoxState,
+  inTickOrder,
   isSelectableTile,
   pruneSelection,
   selectedInOrder,
@@ -170,6 +171,9 @@ interface Props {
    * chain at the condition step instead of the picker, the picker's question having been answered.
    * Everything after that is identical, confirm included. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
+  /** *As the stamps of one issue* (#1220): the ticked run handed up **in the order it was ticked**,
+   * which is the order the pieces take the issue's stamps in. */
+  onIdentifyIssueRun: (pieces: IdentifiedPiece[]) => void;
   /** A row of the identification history, pressed (#757): the same handover as `onIdentifyTiles`,
    * for a tile that is to be identified the way an earlier one of this screen was. The answers come
    * from **here** — they are read off the screen's own consumed tiles — and the panel above owns
@@ -203,6 +207,7 @@ export function ScansCard({
   scanSheetCount,
   canIdentify,
   onIdentifyTiles,
+  onIdentifyIssueRun,
   onReidentifyTile,
   onRepeatIdentification,
   onChanged,
@@ -387,6 +392,13 @@ export function ScansCard({
    * *is it on screen*.
    */
   const selectedTiles = selectedInView(live, allTiles, filter);
+  /**
+   * Each ticked tile's turn (#1220) — its place in the order it was ticked, among the ticked tiles in
+   * view. Drawn in its tick box while ticking, because identifying a set as one issue's stamps hands
+   * the first ticked tile the first stamp: the number on the square is the stamp it is about to take,
+   * and a slip in the clicking is seen here rather than three dialogs on.
+   */
+  const tickOrdinals = new Map(inTickOrder(live, selectedTiles).map((t, i) => [t.id, i + 1]));
   // A selection worked through to nothing takes its dialog with it — and, more importantly, closes
   // the door behind it: a flag left standing would make the *next* tick open the dialog on its own.
   if (selectionOpen && selectedTiles.length === 0) setSelectionOpen(false);
@@ -924,6 +936,7 @@ export function ScansCard({
           onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
           selected={live}
+          tickOrdinals={tickOrdinals}
           onToggleTile={(id) => setSelected((s) => toggleTile(s, id))}
           // The whole batch, and the chip that says how much of it is on screen (#863): a box
           // over "everything here" means everything the filter is showing, so a press under the
@@ -984,6 +997,17 @@ export function ScansCard({
           onReidentify={(piece, copy) => {
             closeDialog();
             onReidentifyTile(piece, copy);
+          }}
+          // A set, not a run of duplicates (#1220): the pieces go up **in the order they were
+          // ticked**, since that is the order they take the issue's stamps in — the dialog is handed
+          // them in card order, which is #596's numbering and not this sequence.
+          onIdentifyIssueRun={(pieces) => {
+            closeDialog();
+            onIdentifyIssueRun(
+              [...pieces].sort(
+                (a, b) => (tickOrdinals.get(a.tileId) ?? 0) - (tickOrdinals.get(b.tileId) ?? 0)
+              )
+            );
           }}
           // What has already been identified on this screen (#757) — derived here, where the batches
           // are, rather than fetched by the dialog: a consumed tile carries the whole of what it
@@ -1230,6 +1254,7 @@ function BatchSection({
   onToggleExpanded,
   onOpenTile,
   selected,
+  tickOrdinals,
   onToggleTile,
   onToggleBatchSelection,
   busy,
@@ -1260,6 +1285,8 @@ function BatchSection({
   /** The tiles ticked to be identified together (#596) — the whole card's, since one selection
    * spans the batches. */
   selected: ReadonlySet<string>;
+  /** Each ticked tile's place in the order it was ticked (#1220). */
+  tickOrdinals: ReadonlyMap<string, number>;
   onToggleTile: (tileId: string) => void;
   /** Tick every tile of this batch that is still waiting, or untick them all. */
   onToggleBatchSelection: () => void;
@@ -1504,6 +1531,7 @@ function BatchSection({
               // other side settles.
               droppable={dragging != null && tile.backPhotoId == null && isSelectableTile(tile)}
               selected={selected.has(tile.id)}
+              ordinal={tickOrdinals.get(tile.id)}
               onToggleSelected={() => onToggleTile(tile.id)}
               onOpen={() => onOpenTile(tile.id)}
               onDropBack={(backTileId) => {
@@ -1829,6 +1857,7 @@ function TileCell({
   worklist,
   droppable,
   selected,
+  ordinal,
   onToggleSelected,
   onOpen,
   onDropBack,
@@ -1846,6 +1875,8 @@ function TileCell({
   droppable: boolean;
   /** Ticked to be identified with the others (#596). */
   selected: boolean;
+  /** Its place in the order the ticked tiles were ticked (#1220), while it is ticked. */
+  ordinal?: number;
   onToggleSelected: () => void;
   onOpen: () => void;
   onDropBack: (backTileId: string) => void;
@@ -2049,7 +2080,12 @@ function TileCell({
       {selectable && (
         <TickBox
           state={selected ? "on" : "off"}
-          label={`Identify tile ${tile.position + 1} together with the others`}
+          ordinal={selected ? ordinal : undefined}
+          label={
+            selected && ordinal != null
+              ? `Ticked ${ordinal}${ordinalSuffix(ordinal)} — untick to leave it out`
+              : `Identify tile ${tile.position + 1} together with the others`
+          }
           onToggle={onToggleSelected}
           style={{ position: "absolute", top: "0.15rem", right: "0.15rem" }}
         />
@@ -2073,12 +2109,16 @@ function TileCell({
  */
 function TickBox({
   state,
+  ordinal,
   label,
   disabled,
   onToggle,
   style,
 }: {
   state: TileBoxState;
+  /** The tile's turn in the order ticked (#1220) — drawn in place of the tick, so the strip reads as
+   * the sequence the pieces will take an issue's stamps in. Absent on a batch box. */
+  ordinal?: number;
   label: string;
   disabled?: boolean;
   onToggle: () => void;
@@ -2103,13 +2143,13 @@ function TickBox({
           onToggle();
         }}
         style={{
-          width: "1.05rem",
+          minWidth: "1.05rem",
           height: "1.05rem",
           flexShrink: 0,
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 0,
+          padding: ordinal != null && ordinal > 9 ? "0 0.2rem" : 0,
           borderRadius: "0.25rem",
           border: "none",
           background: on ? "var(--color-accent)" : "var(--color-bg-elevated)",
@@ -2121,7 +2161,9 @@ function TickBox({
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        {state === "on" ? (
+        {state === "on" && ordinal != null ? (
+          <span style={{ fontSize: "0.625rem", fontWeight: 700, lineHeight: 1 }}>{ordinal}</span>
+        ) : state === "on" ? (
           <Icon name="check" size="xs" />
         ) : state === "partial" ? (
           // The dash every level of #571's selection shows while only part of it is in.
@@ -2176,6 +2218,13 @@ function TickBox({
  * than a wide clear he was warned about. The rule's second half is about an **identification**
  * reaching a square nobody looked at; clearing writes nothing to a tile.
  */
+/** `1st`, `2nd`, `3rd`, `11th` — the tick box's hint names a tile's turn the way it is said. */
+function ordinalSuffix(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return "th";
+  return n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th";
+}
+
 function TileSelectionBar({
   count,
   tickedCount,
@@ -2229,7 +2278,7 @@ function TileSelectionBar({
           // together is what ticking is for, and the other two are why they are named here at all.
           // Omitted with nothing in view, where there is no pass on offer to describe.
           count > 0
-            ? "Identify them as one stamp, set them aside to check, or discard them — together."
+            ? "Identify them as one stamp or as the stamps of one issue, set them aside to check, or discard them — together."
             : null,
           // And where the chip is hiding some, what became of them — in the two terms that stop the
           // number reading as a loss: still ticked, and back when the chip goes.

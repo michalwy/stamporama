@@ -30,6 +30,7 @@ import {
   discardTile,
   discardTiles,
   identifyTileAsNewCopy,
+  identifyTilesAsIssueStamps,
   identifyTilesAsNewCopies,
   noteTile,
   parkTile,
@@ -39,6 +40,7 @@ import {
   returnTilesToQueue,
 } from "../../src/lib/scan-tiles";
 import type { Box } from "../../src/lib/scan-boxes";
+import type { RunCopyDetails } from "../../src/lib/issue-run";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-tiles-"));
 process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
@@ -1315,6 +1317,213 @@ describe("identifying scan tiles into copies (#567)", () => {
       [stampId, 1, null],
       [describedStampId, 1, null],
     ]);
+  });
+
+  // ── A run as the stamps of one issue (#1220) ──────────────────────────────────────────────────
+
+  /** An issue of its own with these stamps on it, in this order. */
+  async function issueWithStamps(names: string[]): Promise<{ issueId: string; stampIds: string[] }> {
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: `Run area ${names.join("-")}-${Math.random()}` },
+    });
+    const last = await prisma.issue.findFirst({
+      where: { collectionId },
+      orderBy: { issueNo: "desc" },
+      select: { issueNo: true },
+    });
+    const issue = await prisma.issue.create({
+      data: { collectionId, collectionAreaId: area.id, issueNo: (last?.issueNo ?? 0) + 1, name: "Run" },
+    });
+    const stampIds: string[] = [];
+    for (const [i, name] of names.entries()) {
+      const stamp = await prisma.stamp.create({
+        data: { collectionId, name, issueMemberships: { create: { issueId: issue.id, sortOrder: i } } },
+      });
+      stampIds.push(stamp.id);
+    }
+    return { issueId: issue.id, stampIds };
+  }
+
+  const runShared = (over: Partial<RunCopyDetails> = {}): RunCopyDetails => ({
+    conditionId,
+    certificateStatusId,
+    formatId: "",
+    lotId: "",
+    location: { locationId: "", locationRef: "" },
+    disposition: { inCollection: true, forSale: false, forTrade: false },
+    ...over,
+  });
+
+  it("identifies a run as the stamps of one issue: each tile its own stamp, its own pictures, its own overrides (#1220)", async () => {
+    const { tileIds, lotId } = await orderWithTiles();
+    const { issueId, stampIds } = await issueWithStamps(["Run 1", "Run 2"]);
+    const photosBefore = await prisma.photo.findMany({
+      where: { tileId: { in: tileIds } },
+      select: { id: true, tileId: true },
+    });
+
+    // Ticked the other way round from the card — the second square first — and the first square
+    // holding a condition and a certificate of its own.
+    const outcomes = await identifyTilesAsIssueStamps(userId, {
+      issueId,
+      shared: runShared(),
+      tiles: [
+        { tileId: tileIds[1], stampId: stampIds[0] },
+        {
+          tileId: tileIds[0],
+          stampId: stampIds[1],
+          overrides: { conditionId: mintConditionId, certificateStatusId: "" },
+        },
+      ],
+    });
+    assert.equal(outcomes.length, 2);
+    // Numbered in the order the run was given, not the card's.
+    assert.ok(outcomes[0].itemNo < outcomes[1].itemNo);
+
+    const copy = async (itemId: string) =>
+      prisma.item.findUniqueOrThrow({
+        where: { id: itemId },
+        select: {
+          stampId: true,
+          conditionId: true,
+          certificateStatusId: true,
+          lotId: true,
+          inCollection: true,
+          photos: { select: { id: true } },
+        },
+      });
+    const second = await copy(outcomes[0].itemId);
+    const first = await copy(outcomes[1].itemId);
+
+    assert.equal(second.stampId, stampIds[0]);
+    assert.equal(first.stampId, stampIds[1]);
+    // The shared answers where the tile has none of its own…
+    assert.equal(second.conditionId, conditionId);
+    assert.equal(second.certificateStatusId, certificateStatusId);
+    // …and the tile's own, an emptied certificate included, where it has.
+    assert.equal(first.conditionId, mintConditionId);
+    assert.equal(first.certificateStatusId, null);
+    assert.equal(first.lotId, lotId);
+    assert.equal(first.inCollection, true);
+
+    // Each copy took its **own** tile's photo rows.
+    const photoIdsOf = (tileId: string) =>
+      photosBefore.filter((p) => p.tileId === tileId).map((p) => p.id).sort();
+    assert.ok(photoIdsOf(tileIds[0]).length > 0);
+    assert.deepEqual(first.photos.map((p) => p.id).sort(), photoIdsOf(tileIds[0]));
+    assert.deepEqual(second.photos.map((p) => p.id).sort(), photoIdsOf(tileIds[1]));
+
+    const tiles = await prisma.scanTile.findMany({
+      where: { id: { in: tileIds } },
+      select: { id: true, state: true, itemId: true },
+    });
+    assert.deepEqual(
+      tiles.map((t) => [t.id, t.state, t.itemId]).sort(),
+      [
+        [tileIds[0], "consumed", outcomes[1].itemId],
+        [tileIds[1], "consumed", outcomes[0].itemId],
+      ].sort()
+    );
+  });
+
+  it("refuses the whole run before creating anything when any tile cannot be worked (#1220)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const { issueId, stampIds } = await issueWithStamps(["Only"]);
+    const copiesBefore = await prisma.item.count({ where: { collectionId } });
+    const refused = (pattern: RegExp) => (e: unknown) =>
+      e instanceof ScanValidationError && pattern.test(e.message);
+
+    // More tiles than stamps: the second is left with none.
+    await assert.rejects(
+      () =>
+        identifyTilesAsIssueStamps(userId, {
+          issueId,
+          shared: runShared(),
+          tiles: [
+            { tileId: tileIds[0], stampId: stampIds[0] },
+            { tileId: tileIds[1], stampId: null },
+          ],
+        }),
+      refused(/Tile 2 has no stamp/)
+    );
+    // A stamp that is not on the issue.
+    await assert.rejects(
+      () =>
+        identifyTilesAsIssueStamps(userId, {
+          issueId,
+          shared: runShared(),
+          tiles: [
+            { tileId: tileIds[0], stampId: stampIds[0] },
+            { tileId: tileIds[1], stampId },
+          ],
+        }),
+      refused(/not one of this issue's stamps/)
+    );
+    // An answer that only the last tile carries, and that the collection does not hold.
+    await assert.rejects(
+      () =>
+        identifyTilesAsIssueStamps(userId, {
+          issueId,
+          shared: runShared(),
+          tiles: [
+            { tileId: tileIds[0], stampId: stampIds[0] },
+            { tileId: tileIds[1], stampId: stampIds[0], overrides: { formatId: "no-such-format" } },
+          ],
+        }),
+      refused(/Format not found/)
+    );
+    // No condition for all, and none of its own on one tile.
+    await assert.rejects(
+      () =>
+        identifyTilesAsIssueStamps(userId, {
+          issueId,
+          shared: runShared({ conditionId: "" }),
+          tiles: [
+            { tileId: tileIds[0], stampId: stampIds[0], overrides: { conditionId } },
+            { tileId: tileIds[1], stampId: stampIds[0] },
+          ],
+        }),
+      refused(/Tile 2 has no condition/)
+    );
+
+    assert.equal(await prisma.item.count({ where: { collectionId } }), copiesBefore);
+    const states = await prisma.scanTile.findMany({
+      where: { id: { in: tileIds } },
+      select: { state: true },
+    });
+    assert.deepEqual(states.map((t) => t.state), ["unidentified", "unidentified"]);
+  });
+
+  it("identifies a run off a card that belongs to no order, with no lot (#1220, #725)", async () => {
+    const sheet = await uploadSheet(userId, { collectionId }, {
+      source: await card(),
+      mime: "image/png",
+      side: "front",
+    });
+    await commitCut(userId, sheet.id, BOXES);
+    const tiles = await prisma.scanTile.findMany({
+      where: { frontSheetId: sheet.id },
+      orderBy: { position: "asc" },
+      select: { id: true },
+    });
+    const { issueId, stampIds } = await issueWithStamps(["Shelf 1", "Shelf 2"]);
+    const outcomes = await identifyTilesAsIssueStamps(userId, {
+      issueId,
+      // A lot named on a card with no order is not a question, and is ignored.
+      shared: runShared({ lotId: "ignored" }),
+      tiles: tiles.map((t, i) => ({ tileId: t.id, stampId: stampIds[i] })),
+    });
+    const items = await prisma.item.findMany({
+      where: { id: { in: outcomes.map((o) => o.itemId) } },
+      select: { lotId: true, deliveryState: true },
+    });
+    assert.deepEqual(
+      items.map((i) => [i.lotId, i.deliveryState]),
+      [
+        [null, "delivered"],
+        [null, "delivered"],
+      ]
+    );
   });
 
   it("corrects a cover as a cover, and takes it back down to a single stamp (#750)", async () => {

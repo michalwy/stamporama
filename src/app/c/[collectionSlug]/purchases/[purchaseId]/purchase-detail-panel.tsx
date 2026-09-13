@@ -902,6 +902,7 @@ export function PurchaseDetailPanel({
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={tileChain.onIdentifyTiles}
         onReidentifyTile={tileChain.onReidentifyTile}
+        onIdentifyIssueRun={tileChain.onIdentifyIssueRun}
         onRepeatIdentification={tileChain.onRepeatIdentification}
         onChanged={() => router.refresh()}
       />

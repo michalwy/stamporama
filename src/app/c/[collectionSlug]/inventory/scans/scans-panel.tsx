@@ -127,6 +127,7 @@ export function ScansPanel({
         canIdentify
         onIdentifyTiles={tileChain.onIdentifyTiles}
         onReidentifyTile={tileChain.onReidentifyTile}
+        onIdentifyIssueRun={tileChain.onIdentifyIssueRun}
         onRepeatIdentification={tileChain.onRepeatIdentification}
         onChanged={() => router.refresh()}
       />

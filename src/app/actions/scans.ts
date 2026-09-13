@@ -22,6 +22,7 @@ import {
   addTileCandidate,
   assignTileToCopy,
   discardTiles,
+  identifyTilesAsIssueStamps,
   identifyTilesAsNewCopies,
   noteTile,
   parkTiles,
@@ -30,6 +31,7 @@ import {
   returnTilesToQueue,
 } from "@/lib/scan-tiles";
 import type { Box } from "@/lib/scan-boxes";
+import type { IssueRunIdentification } from "@/lib/issue-run";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import type { ScanOwnerRef } from "@/lib/scan-sheets";
 
@@ -294,6 +296,30 @@ export async function identifyTilesAction(
           : tileIds.length === 1
             ? "Failed to identify the tile. Please try again."
             : "Failed to identify the tiles. Please try again.",
+    };
+  }
+}
+
+/**
+ * Identify a ticked run **as the stamps of one issue** (#1220): each tile the stamp it was given, each
+ * copy with the shared answers and whatever that tile holds of its own.
+ *
+ * JSON rather than `FormData`, unlike `identifyTilesAction`: there is no single form behind this — the
+ * dialog holds one answer per field for the run and one per tile where it differs, and flattening
+ * that into form fields would be inventing a naming scheme for a structure JSON already has. The
+ * success shape is `identifyTilesAction`'s own, `outcomes` and not `copies` for the same reason.
+ */
+export async function identifyTilesAsIssueStampsAction(
+  input: IssueRunIdentification
+): Promise<TilesOutcomeActionState> {
+  const session = await getSession();
+  try {
+    const outcomes = await identifyTilesAsIssueStamps(session.user.id, input);
+    return { status: "success", outcomes };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to identify the tiles. Please try again.",
     };
   }
 }

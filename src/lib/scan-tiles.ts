@@ -16,6 +16,13 @@ import {
   type ScanOwner,
 } from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
+import {
+  resolveRunCopyDetails,
+  type IssueRunIdentification,
+  type RunCopyDetails,
+} from "./issue-run";
+
+export type { IssueRunIdentification } from "./issue-run";
 
 /**
  * Turning a scan tile into something (#567, ADR-0033) — the second half of the scan-first intake.
@@ -262,6 +269,159 @@ async function resolveTileLot(
     throw new ScanValidationError("Choose which lot this copy belongs to.");
   }
   return lots[0].id;
+}
+
+// ── Identifying a run as the stamps of one issue (#1220) ─────────────────────────────────────
+
+/**
+ * Identify a ticked run **as the stamps of one issue** (#1220) — one copy per tile, each of its own
+ * stamp, each with its own tile's pictures.
+ *
+ * #596's pass is one answer for N tiles; this is N answers under one question. A card often holds a
+ * set, and the collector already knows it is one issue and roughly in what order; the screen hands
+ * the tiles the issue's stamps in turn and the collector corrects what is wrong, so what arrives here
+ * is already the assignment — this checks it and writes it.
+ *
+ * **The copy details resolve here from the same rule the dialog drew** (`resolveRunCopyDetails`):
+ * the shared answers, and a tile's own wherever it has one. Resolving on the client and sending the
+ * result would work today and drift the moment either side changed its reading of an override.
+ *
+ * **The whole pass is refused before anything is created**, #596's rule at a larger surface: every
+ * tile loaded and still waiting, all on one card, none named twice, every one given a stamp, every
+ * stamp on this issue, and every answer — condition, certificate, format, location, lot — one this
+ * collection holds and a copy can be created with. After that the copies are made one per tile, in
+ * the order given, which is what keeps their internal numbers running the way the run reads; each is
+ * an ordinary `intakeStamps` of one copy, so the arrived-order rule, the format and the dispositions
+ * stay that function's.
+ */
+export async function identifyTilesAsIssueStamps(
+  ownerId: string,
+  input: IssueRunIdentification
+): Promise<TileOutcome[]> {
+  if (input.tiles.length === 0) throw new ScanValidationError("Pick at least one tile to identify.");
+  const tiles = await loadSelectedTiles(
+    ownerId,
+    input.tiles.map((t) => t.tileId)
+  );
+  const { collectionId, purchaseId } = tiles[0];
+  const tileName = (i: number) => `Tile ${tiles[i].position + 1}`;
+
+  for (const [i, t] of input.tiles.entries()) {
+    if (!t.stampId) {
+      throw new ScanValidationError(
+        `${tileName(i)} has no stamp. Give it one, or take it out of the run.`
+      );
+    }
+  }
+
+  const issue = await prisma.issue.findFirst({
+    where: { id: input.issueId, collectionId },
+    select: { id: true },
+  });
+  if (!issue) throw new ScanValidationError("That issue is not in this collection.");
+  const stampIds = [...new Set(input.tiles.map((t) => t.stampId as string))];
+  const members = await prisma.issueMember.findMany({
+    where: { issueId: issue.id, stampId: { in: stampIds } },
+    select: { stampId: true },
+  });
+  const onIssue = new Set(members.map((m) => m.stampId));
+  for (const [i, t] of input.tiles.entries()) {
+    if (!onIssue.has(t.stampId as string)) {
+      throw new ScanValidationError(`${tileName(i)}'s stamp is not one of this issue's stamps.`);
+    }
+  }
+
+  const answers = input.tiles.map((t) => resolveRunCopyDetails(input.shared, t.overrides));
+  for (const [i, a] of answers.entries()) {
+    if (!a.conditionId) {
+      throw new ScanValidationError(`${tileName(i)} has no condition. Choose one for it.`);
+    }
+  }
+  await assertRunAnswersExist(collectionId, answers);
+  // Which lot each copy goes onto — resolved per distinct answer before anything exists, so a lot
+  // closed in another tab or one missing on an order with several is a sentence and not a run cut
+  // off halfway. A card that belongs to no order has no lot to ask about (#725).
+  const lotByAnswer = new Map<string, string>();
+  if (purchaseId) {
+    for (const lotId of new Set(answers.map((a) => a.lotId))) {
+      const resolved = await resolveTileLot(purchaseId, lotId || null);
+      const lot = await prisma.purchaseLot.findUniqueOrThrow({
+        where: { id: resolved },
+        select: { status: true },
+      });
+      if (lot.status !== "open") {
+        throw new ScanValidationError(
+          "That lot is closed. Reopen it before identifying more copies into it."
+        );
+      }
+      lotByAnswer.set(lotId, resolved);
+    }
+  }
+
+  const outcomes: TileOutcome[] = [];
+  for (const [i, tile] of tiles.entries()) {
+    const a = answers[i];
+    const target = purchaseId
+      ? { lotId: lotByAnswer.get(a.lotId) as string }
+      : { collectionId };
+    const [copy] = await intakeStamps(ownerId, target, {
+      stampId: input.tiles[i].stampId,
+      conditionId: a.conditionId,
+      certificateStatusId: a.certificateStatusId || null,
+      formatId: a.formatId || null,
+      locationId: a.location.locationId || null,
+      locationRef: a.location.locationRef || null,
+      inCollection: a.disposition.inCollection,
+      forSale: a.disposition.forSale,
+      forTrade: a.disposition.forTrade,
+    });
+    // Each copy gets **its own** tile's pictures — #596's rule, unchanged.
+    await consumeTile(tile.id, copy.itemId);
+    await seedStampImage(ownerId, copy.itemId);
+    outcomes.push({ itemId: copy.itemId, itemNo: copy.itemNo });
+  }
+  return outcomes;
+}
+
+/**
+ * Every dictionary answer a run names, checked against the collection **before** the first copy is
+ * created — `intakeStamps` checks the same things, but one copy at a time, and a refusal on the ninth
+ * would leave eight tiles identified and the rest not.
+ */
+async function assertRunAnswersExist(
+  collectionId: string,
+  answers: readonly RunCopyDetails[]
+): Promise<void> {
+  const distinct = (pick: (a: RunCopyDetails) => string) =>
+    [...new Set(answers.map(pick).filter(Boolean))];
+  const conditionIds = distinct((a) => a.conditionId);
+  const certIds = distinct((a) => a.certificateStatusId);
+  const formatIds = distinct((a) => a.formatId);
+  const locationIds = distinct((a) => a.location.locationId);
+  const [conditions, certs, formats, locations] = await Promise.all([
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
+    prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds } } }),
+    prisma.location.findMany({
+      where: { collectionId, id: { in: locationIds } },
+      select: { assignable: true },
+    }),
+  ]);
+  if (conditions !== conditionIds.length) {
+    throw new ScanValidationError("Condition not found in this collection.");
+  }
+  if (certs !== certIds.length) {
+    throw new ScanValidationError("Certificate status not found in this collection.");
+  }
+  if (formats !== formatIds.length) {
+    throw new ScanValidationError("Format not found in this collection.");
+  }
+  if (locations.length !== locationIds.length) {
+    throw new ScanValidationError("Location not found in this collection.");
+  }
+  if (locations.some((l) => !l.assignable)) {
+    throw new ScanValidationError("This location cannot hold copies. Pick an assignable location.");
+  }
 }
 
 // ── Assigning a tile to a copy that already exists ────────────────────────────────────────────
@@ -819,6 +979,8 @@ async function loadTileForOwner(ownerId: string, tileId: string) {
       collectionId: true,
       purchaseId: true,
       batchNo: true,
+      // Only for naming a tile in a refusal — *Tile 7 has no stamp* is findable on the card.
+      position: true,
       state: true,
       note: true,
       // Only a consumed tile has one, and only `reidentifyTileCopy` reads it — the copy the tile
