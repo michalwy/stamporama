@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   wantMatchesCopy,
   narrowConditionSeed,
+  groupWantMatches,
   acceptanceSetsEqual,
   acceptanceAxisView,
   type AcceptanceSets,
@@ -104,28 +105,66 @@ describe("wantMatchesCopy", () => {
 
 describe("narrowConditionSeed", () => {
   it("seeds an 'anything' want with every condition except the one that arrived", () => {
-    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, U, []), [MNG, MH, MNH]);
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [U], []), [MNG, MH, MNH]);
   });
 
   it("keeps the dictionary's own order, which is display order and nothing more", () => {
-    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, MH, []), [U, MNG, MNH]);
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [MH], []), [U, MNG, MNH]);
   });
 
   it("leaves an already-narrowed set exactly as it is — that question was answered once", () => {
-    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, U, [MNH]), [MNH]);
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [U], [MNH]), [MNH]);
     // Even when the arrived condition is in it: closing or leaving it open is the collector's call.
-    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, MNH, [MNH, MH]), [MNH, MH]);
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [MNH], [MNH, MH]), [MNH, MH]);
+  });
+
+  it("drops every condition that arrived when one pass brought several (#1262)", () => {
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [U, MH], []), [MNG, MNH]);
+    // The same condition twice is the one condition.
+    assert.deepEqual(narrowConditionSeed(ALL_CONDITIONS, [U, U], []), [MNG, MH, MNH]);
   });
 
   it("returns an empty seed when there is nothing left to narrow to, rather than inventing one", () => {
-    assert.deepEqual(narrowConditionSeed([U], U, []), []);
+    assert.deepEqual(narrowConditionSeed([U], [U], []), []);
   });
 
   it("does not mutate the set it was handed", () => {
     const current = [MNH];
-    const seeded = narrowConditionSeed(ALL_CONDITIONS, U, current);
+    const seeded = narrowConditionSeed(ALL_CONDITIONS, [U], current);
     seeded.push(MH);
     assert.deepEqual(current, [MNH]);
+  });
+});
+
+describe("groupWantMatches", () => {
+  const w1 = { id: "w1" };
+  const w2 = { id: "w2" };
+
+  it("asks each want once, naming every copy that raised it, in the order they came (#1262)", () => {
+    const rows = groupWantMatches([
+      { itemId: "c1", want: w1 },
+      { itemId: "c1", want: w2 },
+      { itemId: "c2", want: w1 },
+      { itemId: "c3", want: w1 },
+    ]);
+    assert.deepEqual(rows, [
+      { want: w1, itemIds: ["c1", "c2", "c3"] },
+      { want: w2, itemIds: ["c1"] },
+    ]);
+  });
+
+  it("names a copy once against one want, however often it was matched", () => {
+    assert.deepEqual(
+      groupWantMatches([
+        { itemId: "c1", want: w1 },
+        { itemId: "c1", want: w1 },
+      ]),
+      [{ want: w1, itemIds: ["c1"] }]
+    );
+  });
+
+  it("returns no rows for no matches", () => {
+    assert.deepEqual(groupWantMatches([]), []);
   });
 });
 

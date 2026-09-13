@@ -34,6 +34,7 @@ import type { Box } from "@/lib/scan-boxes";
 import type { IssueRunIdentification } from "@/lib/issue-run";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import type { ScanOwnerRef } from "@/lib/scan-sheets";
+import type { ArrivingCopy } from "@/lib/want-rules";
 
 // Scan sheet ingest actions (#566, ADR-0033). JSON-shaped, like everything else under
 // `src/app/actions/`; the one binary boundary — uploading the scan itself — is a route handler
@@ -225,13 +226,14 @@ export type TileOutcomeActionState =
  * The same, for a pass over several tiles (#596): one copy per tile, in the order the pieces are
  * laid out on the card.
  *
- * `outcomes` and deliberately **not** `copies`: the purchase screen's shared `run` reads a `copies`
- * field as the want review's `ArrivingCopy[]` (#532), and a differently-shaped list under that name
- * would be handed to it silently. Tile intake raises no want review today, and this is not the
- * change that should start one by accident.
+ * Each outcome is the created copy as the want review reads it (`ArrivingCopy`), and the field is
+ * still `outcomes`, deliberately **not** `copies`: the purchase screen's shared `run` raises the
+ * review from a `copies` field (#532), and a tile copy on an order is created `ordered` or `to_sort`
+ * — its review comes when it is stored (ADR-0032 §6b). Only the collection's own Card scans screen
+ * reads `outcomes` as arrivals (#1262), because a copy identified there is created `delivered`.
  */
 export type TilesOutcomeActionState =
-  | { status: "success"; outcomes: { itemId: string; itemNo: number }[] }
+  | { status: "success"; outcomes: ArrivingCopy[] }
   | { status: "error"; message: string };
 
 /**

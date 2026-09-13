@@ -13,6 +13,9 @@ import {
 } from "@/app/c/[collectionSlug]/shared/tile-identify-chain";
 import { useInvalidateScans } from "@/app/c/[collectionSlug]/shared/use-scans-query";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
+import type { ArrivingCopy } from "@/lib/want-rules";
+import type { WantMatchForCopy } from "@/lib/wants";
 
 /**
  * Card scans that belong to **no order** (#725) — a stockbook already owned, a gift, an
@@ -64,6 +67,11 @@ export function ScansPanel({
   const { invalidateScans } = useInvalidateScans();
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const tileChain = useTileIdentifyChain({ setError });
+  // The open wants the copies just identified could satisfy (#1262) — see `run`.
+  const [wantReview, setWantReview] = useState<{
+    copies: ArrivingCopy[];
+    matches: WantMatchForCopy[];
+  } | null>(null);
 
   /**
    * The screen's runner — the two things that follow a copy being created here.
@@ -74,14 +82,19 @@ export function ScansPanel({
    * want marker on every picker row, and the stamp thumbnail a tile's front may have just become
    * (#149's auto-seed, reached from this path too).
    *
-   * **No want review** (#532). It is raised where a copy *arrives* — an order taken in against a
-   * list of what was wanted — and material already on the shelf being catalogued is not an arrival:
-   * offering to close a want because a stamp that has been in the album for years was finally typed
-   * in would be reading the list backwards. `identifyTilesAction` raises none either, so this is the
-   * two ends agreeing rather than the screen declining to draw one.
+   * **And the want review** (#532, #1262), after every pass that created copies — one tile, several
+   * as one stamp (#596), a run (#1220). The review belongs to the moment a copy reaches the
+   * collector's hands (ADR-0032 §6b), and a copy identified here is created `delivered`: the piece is
+   * on the desk under the scanner, exactly as a copy added by hand is. It was once left out on the
+   * reading that cataloguing a shelf is not an arrival, and the want then stayed open beside the copy
+   * that answered it, with nothing saying so — the collector found wants for stamps already held.
+   *
+   * Raised from `outcomes`, the field the order screen's runner deliberately does not read (its tile
+   * copies are `ordered` or `to_sort` and reviewed when stored), after the chain has closed, and only
+   * when something matches — a review with nothing in it is not worth a click.
    */
   function run(
-    fn: () => Promise<{ status: string; message?: string }>,
+    fn: () => Promise<{ status: string; message?: string; outcomes?: ArrivingCopy[] }>,
     onDone?: (result: { status: string; message?: string }) => void
   ) {
     setError(undefined);
@@ -91,6 +104,12 @@ export function ScansPanel({
         router.refresh();
         invalidateInventory(collectionId);
         onDone?.(result);
+        if (result.outcomes?.length) {
+          const copies = result.outcomes;
+          const { findWantsSatisfiedByAction } = await import("@/app/actions/wants");
+          const matches = await findWantsSatisfiedByAction(collectionId, copies);
+          if (matches.length > 0) setWantReview({ copies, matches });
+        }
       } else if (result.status === "error") {
         setError(result.message);
       }
@@ -148,6 +167,16 @@ export function ScansPanel({
         run={run}
         onIdentified={() => void invalidateScans(collectionId)}
       />
+
+      {/* Closes nothing on its own (#532): close, narrow or leave open, per want. */}
+      {wantReview && (
+        <WantReviewDialog
+          collectionId={collectionId}
+          copies={wantReview.copies}
+          matches={wantReview.matches}
+          onClose={() => setWantReview(null)}
+        />
+      )}
     </>
   );
 }

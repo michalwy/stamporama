@@ -17,6 +17,7 @@ import {
   type ScanOwner,
 } from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
+import type { ArrivingCopy } from "./want-rules";
 import {
   resolveRunCopyDetails,
   type IssueRunIdentification,
@@ -173,12 +174,16 @@ export async function identifyTileAsNewCopy(
  * The internal numbers come out as one consecutive range because `intakeStamps` is asked for the
  * copies **once** (`copies: N`) rather than called in a loop, which is also what makes the arrived
  * order rule, the format and the dispositions stay that function's.
+ *
+ * **Each outcome is the copy as the want review reads it** (#1262): `intakeStamps`' own
+ * `ArrivingCopy`, so a card scanned outside any order — whose copies are created `delivered` — can
+ * put the review up from what came back, judged on the very answers that were written.
  */
 export async function identifyTilesAsNewCopies(
   ownerId: string,
   tileIds: string[],
   input: TileIdentification
-): Promise<TileOutcome[]> {
+): Promise<ArrivingCopy[]> {
   if (tileIds.length === 0) throw new ScanValidationError("Pick at least one tile to identify.");
   if (!input.stampId) {
     throw new ScanValidationError(
@@ -223,14 +228,12 @@ export async function identifyTilesAsNewCopies(
   // No role clash is possible on any of them: the copies were created a moment ago and this path
   // refuses a photo change-set, so both slots are free. That is why the check lives on the assign
   // path, which is the one that can meet an occupied slot.
-  const outcomes: TileOutcome[] = [];
   for (const [i, tile] of tiles.entries()) {
     const copy = copies[i];
     await consumeTile(tile.id, copy.itemId);
     await seedStampImage(ownerId, copy.itemId);
-    outcomes.push({ itemId: copy.itemId, itemNo: copy.itemNo });
   }
-  return outcomes;
+  return copies;
 }
 
 /**
@@ -298,7 +301,7 @@ async function resolveTileLot(
 export async function identifyTilesAsChecklistStamps(
   ownerId: string,
   input: IssueRunIdentification
-): Promise<TileOutcome[]> {
+): Promise<ArrivingCopy[]> {
   if (input.tiles.length === 0) throw new ScanValidationError("Pick at least one tile to identify.");
   const tiles = await loadSelectedTiles(
     ownerId,
@@ -363,7 +366,8 @@ export async function identifyTilesAsChecklistStamps(
     }
   }
 
-  const outcomes: TileOutcome[] = [];
+  // What came back from each `intakeStamps`, which is what the want review reads (#1262).
+  const outcomes: ArrivingCopy[] = [];
   for (const [i, tile] of tiles.entries()) {
     const a = answers[i];
     const target = purchaseId
@@ -383,7 +387,7 @@ export async function identifyTilesAsChecklistStamps(
     // Each copy gets **its own** tile's pictures — #596's rule, unchanged.
     await consumeTile(tile.id, copy.itemId);
     await seedStampImage(ownerId, copy.itemId);
-    outcomes.push({ itemId: copy.itemId, itemNo: copy.itemNo });
+    outcomes.push(copy);
   }
   return outcomes;
 }

@@ -1357,8 +1357,8 @@ review will greet you with.
 entry on your [want list](wants.md), Stamporama shows it right after the intake and lets you
 **close** the want, **narrow** it (the common case: the want was "anything", a used copy
 arrived, so it becomes "any mint"), or **leave it open**. Nothing is closed automatically —
-holding a copy is not the same as having what you wanted. Dismissing the dialog changes
-nothing.
+holding a copy is not the same as having what you wanted. A want that several of the copies
+could satisfy is shown once, naming them all. Dismissing the dialog changes nothing.
 
 While the lot is **open**, each copy shows a **live estimated cost-basis** (prefixed with
 `~`) — the share of the lot's pool it would receive if you closed the lot right now, computed

@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
 import { createItem, getCollectionIntakePage } from "../../src/lib/items";
 import { getPhotoForServing } from "../../src/lib/photos";
-import { createLot } from "../../src/lib/lots";
+import { createLot, intakeStamps } from "../../src/lib/lots";
 import { createPurchase } from "../../src/lib/purchases";
 import {
   ScanAuthError,
@@ -19,7 +19,15 @@ import {
   setBatchLabel,
   uploadSheet,
 } from "../../src/lib/scan-sheets";
-import { assignTileToCopy, discardTile, identifyTilesAsNewCopies } from "../../src/lib/scan-tiles";
+import {
+  assignTileToCopy,
+  discardTile,
+  identifyTilesAsChecklistStamps,
+  identifyTilesAsNewCopies,
+} from "../../src/lib/scan-tiles";
+import type { RunCopyDetails } from "../../src/lib/issue-run";
+import { createWant, findWantsSatisfiedBy, type WantInput } from "../../src/lib/wants";
+import { groupWantMatches } from "../../src/lib/want-rules";
 import type { Box } from "../../src/lib/scan-boxes";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-collection-"));
@@ -42,6 +50,8 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     which is null here, so every tile on the screen drew a broken image;
 //   - and the ownership check still runs, now against the collection rather than through a
 //     purchase that may not exist.
+//   - and the copies a pass creates come back in the shape the **want review** reads (#1262), judged
+//     by the same matching purchase intake uses, with nothing closed on the collector's behalf.
 
 describe("scanning into the collection, with no purchase (#725)", () => {
   let userId: string;
@@ -264,6 +274,142 @@ describe("scanning into the collection, with no purchase (#725)", () => {
     const tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
     assert.equal(tile.state, "consumed");
     assert.equal(tile.itemId, item.id);
+  });
+
+  /** An open want on `forStamp` taking anything unless told otherwise. */
+  const openWant = (forStamp: string, over: Partial<WantInput> = {}): WantInput => ({
+    stampId: forStamp,
+    conditionIds: [],
+    certificateStatusIds: [],
+    formatIds: [],
+    priority: "normal",
+    notes: null,
+    ...over,
+  });
+
+  /** Which copies each want was raised by, the way the review groups them. */
+  const reviewRows = async (copies: Parameters<typeof findWantsSatisfiedBy>[2]) =>
+    groupWantMatches(await findWantsSatisfiedBy(userId, collectionId, copies)).map((row) => ({
+      wantId: row.want.id,
+      itemIds: row.itemIds,
+    }));
+
+  it("hands back the copies the want review reads, and offers each want once for several tiles (#1262)", async () => {
+    const { tileIds } = await cardWithTiles();
+    const wanted = await createWant(userId, collectionId, openWant(stampId));
+    const wantId = wanted.ids[0];
+
+    // Two tiles ticked as the same stamp (#596).
+    const outcomes = await identifyTilesAsNewCopies(userId, tileIds, {
+      stampId,
+      conditionId,
+      inCollection: true,
+    });
+    assert.equal(outcomes.length, 2);
+
+    // What came back is what was written — the review is judged on these, not on a re-read.
+    for (const outcome of outcomes) {
+      const item = await prisma.item.findUniqueOrThrow({ where: { id: outcome.itemId } });
+      assert.deepEqual(
+        {
+          itemNo: outcome.itemNo,
+          stampId: outcome.stampId,
+          conditionId: outcome.conditionId,
+          certificateStatusId: outcome.certificateStatusId,
+          formatId: outcome.formatId,
+        },
+        {
+          itemNo: item.itemNo,
+          stampId: item.stampId,
+          conditionId: item.conditionId,
+          certificateStatusId: item.certificateStatusId,
+          formatId: item.formatId,
+        }
+      );
+    }
+
+    assert.deepEqual(
+      await reviewRows(outcomes),
+      [{ wantId, itemIds: outcomes.map((o) => o.itemId) }],
+      "one want, one row, naming both copies"
+    );
+
+    // The same want purchase intake would offer for the same copy: one matching, not two versions.
+    const purchase = await createPurchase(userId, collectionId, {
+      currency: "EUR",
+      purchasedAt: "2026-02-01",
+    });
+    const lotId = await createLot(userId, purchase.id, 10);
+    const bought = await intakeStamps(userId, { lotId }, { stampId, conditionId });
+    assert.deepEqual(
+      (await reviewRows(bought)).map((r) => r.wantId),
+      (await reviewRows(outcomes)).map((r) => r.wantId)
+    );
+
+    // Offered, never acted on.
+    const want = await prisma.want.findUniqueOrThrow({ where: { id: wantId } });
+    assert.equal(want.closedAt, null, "identifying closes no want on its own");
+    await prisma.want.deleteMany({ where: { collectionId } });
+  });
+
+  it("offers a run's wants on their own terms, per stamp (#1220, #1262)", async () => {
+    const { tileIds } = await cardWithTiles();
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: `Run area ${Date.now()}` },
+    });
+    const issue = await prisma.issue.create({
+      data: { collectionId, collectionAreaId: area.id, issueNo: 1, name: "Run" },
+    });
+    const runStamps: string[] = [];
+    for (const [i, name] of ["Run 1", "Run 2"].entries()) {
+      const stamp = await prisma.stamp.create({
+        data: { collectionId, name, issueMemberships: { create: { issueId: issue.id, sortOrder: i } } },
+      });
+      runStamps.push(stamp.id);
+    }
+    const checklist = await prisma.checklist.create({
+      data: {
+        collectionId,
+        issueId: issue.id,
+        name: "Run",
+        sortOrder: 0,
+        stamps: { create: runStamps.map((id, i) => ({ stampId: id, sortOrder: i })) },
+      },
+    });
+    const mint = await prisma.stampCondition.create({
+      data: { collectionId, name: "Mint", abbreviation: "MNH", sortOrder: 1 },
+    });
+
+    // The first stamp is wanted mint only, so a used copy leaves it alone; the second takes anything.
+    await createWant(userId, collectionId, openWant(runStamps[0], { conditionIds: [mint.id] }));
+    const second = await createWant(userId, collectionId, openWant(runStamps[1]));
+
+    const shared: RunCopyDetails = {
+      conditionId,
+      certificateStatusId: "",
+      formatId: "",
+      lotId: "",
+      location: { locationId: "", locationRef: "" },
+      disposition: { inCollection: true, forSale: false, forTrade: false },
+    };
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId: checklist.id,
+      shared,
+      tiles: [
+        { tileId: tileIds[0], stampId: runStamps[0] },
+        { tileId: tileIds[1], stampId: runStamps[1] },
+      ],
+    });
+    assert.deepEqual(
+      outcomes.map((o) => o.stampId),
+      runStamps,
+      "each copy comes back as the stamp its tile was given"
+    );
+
+    assert.deepEqual(await reviewRows(outcomes), [
+      { wantId: second.ids[0], itemIds: [outcomes[1].itemId] },
+    ]);
+    await prisma.want.deleteMany({ where: { collectionId } });
   });
 
   it("assigns a tile to any copy of the collection", async () => {

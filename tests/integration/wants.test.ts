@@ -1264,7 +1264,7 @@ describe("the intake review (ADR-0032 §7)", () => {
 
     // What the review's seed offers: every condition except the one that arrived.
     await narrowWant(f.userId, id, {
-      conditionIds: narrowConditionSeed([f.used.id, f.mnh.id, f.mh.id], f.used.id, []),
+      conditionIds: narrowConditionSeed([f.used.id, f.mnh.id, f.mh.id], [f.used.id], []),
       certificateStatusIds: [],
       formatIds: [],
     });

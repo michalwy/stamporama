@@ -558,6 +558,13 @@ Two differences, and both are things you are **not** asked:
   order's screen instead, where the cost is worked out.
 - **You are never asked which lot a piece belongs to**, because there is no lot to choose.
 
+**Wants the new copies could satisfy.** As soon as you identify a piece — one tile, several tiles as
+the same stamp, or a run as the stamps of a set — Stamporama shows the open entries on your [want
+list](wants.md) the new copies could satisfy, exactly as it does for a copy added by hand or a parcel
+you have sorted, and lets you **close**, **narrow** or **leave open** each one. A want that several of
+the new copies answer is shown once, naming them all. Nothing is closed automatically — see [Taking a
+copy in](wants.md#taking-a-copy-in).
+
 Cards you scan here are numbered separately from any order's — *Batch 1, 2, 3* on this screen counts
 only the cards you scanned outside a purchase — and they appear only here, never on an order.
 
