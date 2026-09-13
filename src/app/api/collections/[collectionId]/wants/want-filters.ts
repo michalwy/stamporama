@@ -28,6 +28,8 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     issueId: params.get("issueId") ?? undefined,
     stampId: params.get("stampId") ?? undefined,
     search: params.get("search") ?? undefined,
+    searchCatalogNumber: params.get("searchCatalogNumber") ?? undefined,
+    searchCatalogVendorId: params.get("searchCatalogVendorId") ?? undefined,
     // A junk offset is page one, not an error: the parameter is ours, and a 400 here would break
     // scrolling over something nobody typed.
     offset: Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0,

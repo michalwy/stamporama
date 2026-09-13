@@ -25,6 +25,10 @@ export interface WantListFilters {
   /** One stamp's wants — what the stamp detail screen's card reads (#518). */
   stampId?: string;
   search?: string;
+  /** What `parseCatalogSearch` read out of `search` (#1261): the bare number, and the vendor when
+   *  its abbreviation led. Sent beside the text, which the server still matches as typed. */
+  searchCatalogNumber?: string;
+  searchCatalogVendorId?: string;
 }
 
 /** The filters the year facets are counted against — everything except the year itself. */
@@ -58,6 +62,10 @@ function toParams(filters: WantListFilters): URLSearchParams {
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.search) params.set("search", filters.search);
+  if (filters.searchCatalogNumber) params.set("searchCatalogNumber", filters.searchCatalogNumber);
+  if (filters.searchCatalogVendorId) {
+    params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
+  }
   return params;
 }
 

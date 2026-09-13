@@ -28,6 +28,8 @@ import {
 import { createPurchase } from "../../src/lib/purchases";
 import { narrowConditionSeed, wantMatchesCopy } from "../../src/lib/want-rules";
 import { NO_ISSUE } from "../../src/lib/issue-groups";
+import { parseCatalogSearch } from "../../src/lib/catalog-number";
+import { listStampsPaginated } from "../../src/lib/stamps";
 
 async function seedFixtures(suffix: string) {
   const user = await prisma.user.create({
@@ -1709,5 +1711,86 @@ describe("main stamps or variants — the depth a set is wanted at (#1240)", () 
     assert.equal(rows.filter((r) => r.stampId === umbrella).length, 1);
     assert.equal(rows.filter((r) => r.stampId === plain).length, 1);
     assert.ok(!rows.some((r) => r.stampId === error));
+  });
+});
+
+describe("the want list search by a catalogue number typed with its prefix (#1261)", () => {
+  let f: Fixtures;
+  let vendors: { id: string; abbreviation: string }[];
+  /** A Fischer stamp sharing the Michel number, so a leading `Mi` has something to narrow away. */
+  let fischerStamp: string;
+  before(async () => {
+    f = await seedFixtures(`prefixed-${Date.now()}`);
+    const michel = await prisma.catalogVendor.create({
+      data: { collectionId: f.collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const fischer = await prisma.catalogVendor.create({
+      data: { collectionId: f.collectionId, name: "Fischer", abbreviation: "Fi" },
+    });
+    vendors = [michel, fischer].map((v) => ({ id: v.id, abbreviation: v.abbreviation }));
+    const area = await prisma.collectionArea.create({
+      data: { collectionId: f.collectionId, name: "Soviet Union" },
+    });
+    await prisma.collectionAreaVendor.create({
+      data: { collectionAreaId: area.id, catalogVendorId: michel.id, areaPrefix: "SU" },
+    });
+    const fi = await prisma.stamp.create({ data: { collectionId: f.collectionId, name: "Stamp 311" } });
+    fischerStamp = fi.id;
+    for (const [stampId, catalogVendorId, number] of [
+      [f.stamp.id, michel.id, "3637"],
+      [f.otherStamp.id, michel.id, "3638"],
+      [fi.id, fischer.id, "3637"],
+    ] as const) {
+      await prisma.stampCatalogNumber.create({ data: { stampId, catalogVendorId, number } });
+      await prisma.stampCollectionArea.create({
+        data: { stampId, collectionAreaId: area.id, isPrimary: true },
+      });
+      await createWant(f.userId, f.collectionId, want(f, { stampId }));
+    }
+  });
+  after(() => cleanup(f.userId));
+
+  /** What the want list's box sends for `text` — the text itself plus what the shared parser read. */
+  async function wantedStampIds(text: string) {
+    const parsed = parseCatalogSearch(text, vendors);
+    const { items } = await listWantsPaginated(f.userId, f.collectionId, {
+      search: text,
+      searchCatalogNumber: parsed.number || undefined,
+      searchCatalogVendorId: (parsed.number && parsed.vendorId) || undefined,
+    });
+    return items.map((w) => w.stampId).sort();
+  }
+
+  /** What the Stamps list's catalog-number box finds for the same text (#146). */
+  async function stampsListIds(text: string) {
+    const parsed = parseCatalogSearch(text, vendors);
+    const { items } = await listStampsPaginated(f.userId, f.collectionId, {
+      catalogNumber: parsed.number,
+      catalogVendorId: parsed.vendorId ?? undefined,
+    });
+    return items.map((s) => s.id).sort();
+  }
+
+  it("finds the want for Mi SU 3637, Mi SU3637 and Mi·SU 3637", async () => {
+    for (const text of ["Mi SU 3637", "Mi SU3637", "Mi·SU 3637"]) {
+      assert.deepEqual(await wantedStampIds(text), [f.stamp.id], text);
+    }
+  });
+
+  it("gives the same stamps as the Stamps list for the same text", async () => {
+    for (const text of ["Mi SU 3637", "Mi SU3637", "Mi·SU 3637", "3637"]) {
+      assert.deepEqual(await wantedStampIds(text), await stampsListIds(text), text);
+    }
+  });
+
+  it("the typed text alone never matched — the parsed number is what finds it", async () => {
+    const { items } = await listWantsPaginated(f.userId, f.collectionId, { search: "Mi SU 3637" });
+    assert.equal(items.length, 0);
+  });
+
+  it("a bare number and a name search as before", async () => {
+    assert.deepEqual(await wantedStampIds("3637"), [f.stamp.id, fischerStamp].sort());
+    assert.deepEqual(await wantedStampIds("3638"), [f.otherStamp.id]);
+    assert.deepEqual(await wantedStampIds("Stamp 310"), [f.otherStamp.id]);
   });
 });

@@ -211,7 +211,10 @@ Above the rows: the list opens on **Open** wants, which is what it is for. Switc
 **Closed** or **All** to see the ones you have settled. You can also narrow by
 **priority**, by **acceptable condition** — which asks "which wants would take a copy in
 this condition", so a want that accepts anything matches every condition you pick — and by
-free-text search over catalog numbers, stamp and issue names and notes.
+free-text search over catalog numbers, stamp and issue names and notes. Catalog numbers are
+read exactly as on the other lists: with the catalog abbreviation and country prefix and in any
+spacing — `Mi SU 3637`, `Mi SU3637`, `Mi·SU 3637` as copied off a row, or just `3637` — and a
+leading catalog abbreviation narrows the number to that catalog.
 
 Open wants come first, High priority before the rest.
 

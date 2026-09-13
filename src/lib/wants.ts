@@ -341,6 +341,11 @@ export interface WantListFilters {
   issueId?: string;
   /** Free text over the stamp's name and catalog numbers, its issue's name, and the want's note. */
   search?: string;
+  /** The catalog number parsed out of `search` by `parseCatalogSearch` (#146, #1261) — `3637` for
+   *  `Mi SU 3637` — and the vendor when its abbreviation led the text. Only ever read alongside
+   *  `search`, which they widen and never replace. */
+  searchCatalogNumber?: string;
+  searchCatalogVendorId?: string;
   offset?: number;
   pageSize?: number;
 }
@@ -399,18 +404,33 @@ function buildWantListWhere(
   const text = filters.search?.trim();
   if (text) {
     const contains = { contains: text, mode: "insensitive" as const };
+    const or: Prisma.WantWhereInput[] = [
+      { notes: contains },
+      { stamp: { name: contains } },
+      { stamp: { catalogNumbers: { some: { number: contains } } } },
+      { stamp: { issueMemberships: { some: { issue: { name: contains } } } } },
+    ];
+    // Prefixed catalog numbers (#1261), on the Issues list's quick-search rule (#289): the raw text
+    // of `Mi SU 3637` is never a substring of a stored `3637`, so the number parsed out of it — and
+    // the vendor, when its abbreviation led — is matched as well. `contains`, like the rest of the
+    // search, so `Fi BL31` still reaches a stored `BL31`.
+    if (filters.searchCatalogNumber) {
+      or.push({
+        stamp: {
+          catalogNumbers: {
+            some: {
+              number: { contains: filters.searchCatalogNumber, mode: "insensitive" },
+              ...(filters.searchCatalogVendorId
+                ? { catalogVendorId: filters.searchCatalogVendorId }
+                : {}),
+            },
+          },
+        },
+      });
+    }
     // ANDed with the condition `OR` above rather than merged into it — two independent questions,
     // and one `OR` array holding both would make either alone enough to match.
-    where.AND = [
-      {
-        OR: [
-          { notes: contains },
-          { stamp: { name: contains } },
-          { stamp: { catalogNumbers: { some: { number: contains } } } },
-          { stamp: { issueMemberships: { some: { issue: { name: contains } } } } },
-        ],
-      },
-    ];
+    where.AND = [{ OR: or }];
   }
   return where;
 }
