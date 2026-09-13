@@ -4,9 +4,17 @@ import type { OfferState } from "../../src/lib/offer-rules";
 import type { LotChecklist } from "../../src/lib/lot-builder-rules";
 import {
   checkSeriesPicks,
+  combinationKey,
+  combinationOf,
   compositionOutcome,
+  copyMatchesCombination,
+  DEFAULT_SERIES_CRITERIA,
   fewestOffersToChange,
   findRecombinableSeries,
+  NO_MIXING,
+  parseSeriesCombination,
+  parseSeriesCriteria,
+  seriesCriteriaParams,
   singlyOfferedCopies,
   type RecombinationCopy,
   type RecombinationOfferSet,
@@ -15,12 +23,22 @@ import {
 
 // Which series single offers plus available copies could complete (#1210; #754's design).
 
-function available(itemId: string, stampId: string, chain: string[] = [stampId]): RecombinationCopy {
-  return { itemId, stampId, variantChain: chain, offerIds: [] };
+type Axes = Partial<Pick<RecombinationCopy, "conditionId" | "certificateStatusId" | "formatId">>;
+
+/** Every copy is MNH, uncertified and a single unless a case says otherwise (#1265). */
+const PLAIN = { conditionId: "mnh", certificateStatusId: null, formatId: null } as const;
+
+function available(
+  itemId: string,
+  stampId: string,
+  chain: string[] = [stampId],
+  axes: Axes = {}
+): RecombinationCopy {
+  return { itemId, stampId, variantChain: chain, offerIds: [], ...PLAIN, ...axes };
 }
 
-function offered(itemId: string, stampId: string, offerIds: string[]): RecombinationCopy {
-  return { itemId, stampId, variantChain: [stampId], offerIds };
+function offered(itemId: string, stampId: string, offerIds: string[], axes: Axes = {}): RecombinationCopy {
+  return { itemId, stampId, variantChain: [stampId], offerIds, ...PLAIN, ...axes };
 }
 
 const series: LotChecklist = { checklistId: "set", stampIds: ["s1", "s2", "s3", "s4", "s5"] };
@@ -322,5 +340,137 @@ describe("compositionOutcome (#1211)", () => {
 
   it("changes nothing when every chosen copy is available", () => {
     assert.deepEqual(compositionOutcome([{ offerIds: [] }], offers({})), []);
+  });
+});
+
+// One condition, one certificate status and one format per proposal by default (#1265).
+
+describe("findRecombinableSeries — combinations (#1265)", () => {
+  const pair: LotChecklist = { checklistId: "pair", stampIds: ["s1", "s2"] };
+  const offerStates = states({ o1: "active", o2: "active", o3: "active" });
+
+  it("proposes a checklist complete in two conditions twice, each card naming its condition", () => {
+    const found = findRecombinableSeries({
+      copies: [
+        offered("m1", "s1", ["o1"]),
+        available("m2", "s2"),
+        offered("u1", "s1", ["o2"], { conditionId: "used" }),
+        available("u2", "s2", ["s2"], { conditionId: "used" }),
+      ],
+      checklists: [pair],
+      offerStates,
+    });
+    assert.deepEqual(
+      found.map((series) => series.combination),
+      [
+        { conditionId: "mnh", certificateStatusId: null, formatId: null },
+        { conditionId: "used", certificateStatusId: null, formatId: null },
+      ]
+    );
+    assert.deepEqual(
+      found.map((series) => series.slots.flatMap((slot) => slot.copies.map((copy) => copy.itemId))),
+      [["m1", "m2"], ["u1", "u2"]],
+      "no card holds a copy of the other condition"
+    );
+    assert.notEqual(found[0].key, found[1].key, "two cards of one checklist have two identities");
+  });
+
+  it("does not propose a series complete only by mixing conditions — unless condition mixing is on", () => {
+    const copies = [offered("m1", "s1", ["o1"]), available("u2", "s2", ["s2"], { conditionId: "used" })];
+    assert.deepEqual(findRecombinableSeries({ copies, checklists: [pair], offerStates }), []);
+
+    const mixed = findRecombinableSeries({
+      copies,
+      checklists: [pair],
+      offerStates,
+      mixing: { ...NO_MIXING, condition: true },
+    });
+    assert.equal(mixed.length, 1);
+    assert.deepEqual(mixed[0].combination, { certificateStatusId: null, formatId: null });
+  });
+
+  it("mixes only the axis whose switch is on", () => {
+    const copies = [
+      offered("a", "s1", ["o1"], { certificateStatusId: "cert" }),
+      available("b", "s2", ["s2"], { conditionId: "used" }),
+    ];
+    assert.deepEqual(
+      findRecombinableSeries({ copies, checklists: [pair], offerStates, mixing: { ...NO_MIXING, condition: true } }),
+      [],
+      "conditions may mix, certificates still may not"
+    );
+    const both = findRecombinableSeries({
+      copies,
+      checklists: [pair],
+      offerStates,
+      mixing: { condition: true, certificate: true, format: false },
+    });
+    assert.deepEqual(both.map((series) => series.combination), [{ formatId: null }]);
+
+    const formats = [offered("c", "s1", ["o1"]), available("d", "s2", ["s2"], { formatId: "pair" })];
+    assert.deepEqual(
+      findRecombinableSeries({ copies: formats, checklists: [pair], offerStates, mixing: { ...NO_MIXING, condition: true, certificate: true } }),
+      [],
+      "a single and a pair are two formats"
+    );
+    assert.equal(
+      findRecombinableSeries({ copies: formats, checklists: [pair], offerStates, mixing: { ...NO_MIXING, format: true } }).length,
+      1
+    );
+  });
+
+  it("asks 'complete over the available copies alone' within the combination", () => {
+    const found = findRecombinableSeries({
+      copies: [
+        // MNH: the available copies complete it on their own — no card.
+        available("m1", "s1"),
+        available("m2", "s2"),
+        // Used: only with the single.
+        offered("u1", "s1", ["o1"], { conditionId: "used" }),
+        available("u2", "s2", ["s2"], { conditionId: "used" }),
+      ],
+      checklists: [pair],
+      offerStates,
+    });
+    assert.deepEqual(found.map((series) => series.combination.conditionId), ["used"]);
+  });
+});
+
+describe("combination helpers (#1265)", () => {
+  it("tells a single from a mixed format, and no certificate from a mixed certificate", () => {
+    const copy = { conditionId: "mnh", certificateStatusId: null, formatId: null };
+    assert.equal(copyMatchesCombination(copy, { formatId: null }), true);
+    assert.equal(copyMatchesCombination({ ...copy, formatId: "pair" }, { formatId: null }), false);
+    assert.equal(copyMatchesCombination({ ...copy, formatId: "pair" }, {}), true, "absent is mixed");
+    assert.notEqual(combinationKey({ formatId: null }), combinationKey({}));
+    assert.deepEqual(combinationOf(copy, { condition: true, certificate: false, format: true }), {
+      certificateStatusId: null,
+    });
+  });
+
+  it("reads a combination off the wire, refusing anything that is not one", () => {
+    assert.deepEqual(parseSeriesCombination({ conditionId: "mnh", certificateStatusId: null }), {
+      conditionId: "mnh",
+      certificateStatusId: null,
+    });
+    assert.deepEqual(parseSeriesCombination({}), {});
+    for (const bad of [null, "mnh", [], { conditionId: null }, { formatId: 3 }, { subtypeId: "x" }]) {
+      assert.equal(parseSeriesCombination(bad), null, JSON.stringify(bad));
+    }
+  });
+
+  it("round-trips the criteria through the address, and keeps the default address bare", () => {
+    const criteria = parseSeriesCriteria(
+      new URLSearchParams("conditionIds=mnh,mh&formatIds=single&subtypeIds=none&mixCertificates=true&mixFormats=yes")
+    );
+    assert.deepEqual(criteria, {
+      conditionIds: ["mnh", "mh"],
+      certificateStatusIds: [],
+      formatIds: ["single"],
+      subtypeIds: ["none"],
+      mixing: { condition: false, certificate: true, format: false },
+    });
+    assert.deepEqual(parseSeriesCriteria(new URLSearchParams(seriesCriteriaParams(criteria))), criteria);
+    assert.deepEqual(seriesCriteriaParams(DEFAULT_SERIES_CRITERIA), []);
   });
 });

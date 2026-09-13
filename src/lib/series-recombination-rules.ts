@@ -8,9 +8,16 @@
 // completeness (#563) already say so.
 //
 // "Complete" is not decided here. It is `checklistCoverage`, the bulk-lot builder's own coverage over
-// a pool — a variant copy covers its parent's slot (#661), condition and format are free to differ —
-// asked over two pools. #754's own comment is the reason: one derivation, not a second answer to "is
-// this series complete".
+// a pool — a variant copy covers its parent's slot (#661) — asked over two pools. #754's own comment
+// is the reason: one derivation, not a second answer to "is this series complete".
+//
+// **What may sit together in one proposal is decided here** (#1265), and it is narrower than the lot
+// builder's reading: by default one proposal holds copies of one condition, one certificate status and
+// one format, because buyers look for a set in one condition. So the copies are split by
+// {@link SeriesCombination} first and the two-pool question is asked **within each group** — a
+// checklist complete in MNH and in used is two proposals, and "complete over the available copies
+// alone" is asked of the same combination. Mixing is a switch per axis, and a mixed axis simply
+// stops splitting the copies.
 
 import { OPEN_OFFER_STATES, type OfferState } from "./offer-rules";
 import {
@@ -90,9 +97,160 @@ export function singlyOfferedCopies(sets: readonly RecombinationOfferSet[]): Map
 export interface RecombinationCopy extends CoverageCopy {
   itemId: string;
   stampId: string;
+  conditionId: string;
+  /** Null: no certificate — a value on this axis (ADR-0006 §2), not a missing one. */
+  certificateStatusId: string | null;
+  /** Null: a single (ADR-0020) — a value on this axis too. */
+  formatId: string | null;
   /** The offers holding it singly on the platform. **Empty means available** — not offered there
    *  yet, in the bulk-lot builder's reading (#759). */
   offerIds: readonly string[];
+}
+
+// Which copies may sit together (#1265) --------------------------------------------------------
+
+/** Which axes one proposal may mix. **All off is the default**: a series in one condition, one
+ *  certificate status and one format. */
+export interface SeriesMixing {
+  condition: boolean;
+  certificate: boolean;
+  format: boolean;
+}
+
+export const NO_MIXING: SeriesMixing = { condition: false, certificate: false, format: false };
+
+/**
+ * What one proposal's copies share: a value on every axis that is **not** mixed, and nothing on an
+ * axis that is. An absent key is a mixed axis; `null` on the certificate or format axis is the value
+ * *no certificate* / *single*, so the two must not be confused.
+ */
+export interface SeriesCombination {
+  conditionId?: string;
+  certificateStatusId?: string | null;
+  formatId?: string | null;
+}
+
+type CombinationCopy = Pick<RecombinationCopy, "conditionId" | "certificateStatusId" | "formatId">;
+
+/** The combination a copy belongs to under the given mixing. */
+export function combinationOf(copy: CombinationCopy, mixing: SeriesMixing): SeriesCombination {
+  return {
+    ...(mixing.condition ? {} : { conditionId: copy.conditionId }),
+    ...(mixing.certificate ? {} : { certificateStatusId: copy.certificateStatusId }),
+    ...(mixing.format ? {} : { formatId: copy.formatId }),
+  };
+}
+
+/** Whether a copy belongs to a combination: equal on every axis the combination names. */
+export function copyMatchesCombination(copy: CombinationCopy, combination: SeriesCombination): boolean {
+  return (
+    (combination.conditionId === undefined || combination.conditionId === copy.conditionId) &&
+    (combination.certificateStatusId === undefined ||
+      combination.certificateStatusId === copy.certificateStatusId) &&
+    (combination.formatId === undefined || combination.formatId === copy.formatId)
+  );
+}
+
+/** A stable identity for a combination. JSON of a fixed key order, so `null` and an absent key — a
+ *  single and a mixed format — stay different strings. */
+export function combinationKey(combination: SeriesCombination): string {
+  return JSON.stringify([
+    combination.conditionId === undefined ? "*" : combination.conditionId,
+    combination.certificateStatusId === undefined ? "*" : combination.certificateStatusId,
+    combination.formatId === undefined ? "*" : combination.formatId,
+  ]);
+}
+
+/**
+ * The screen's own criteria, as they live in the address: the four filters, which narrow the
+ * candidate copies **before** completeness is judged, and the three mixing switches.
+ *
+ * The filter parameters are spelled as the Copies list spells them (`conditionIds`, …, comma
+ * separated, `"none"` / `"single"` as tickable null values), so one reading of each axis serves both.
+ */
+export interface SeriesCriteria {
+  conditionIds: string[];
+  certificateStatusIds: string[];
+  formatIds: string[];
+  subtypeIds: string[];
+  mixing: SeriesMixing;
+}
+
+export const DEFAULT_SERIES_CRITERIA: SeriesCriteria = {
+  conditionIds: [],
+  certificateStatusIds: [],
+  formatIds: [],
+  subtypeIds: [],
+  mixing: NO_MIXING,
+};
+
+/**
+ * A combination handed across the wire (#1265's compose), checked for shape. Null when it is not
+ * one: a malformed card identity must refuse rather than read as *every axis mixed*, which would let
+ * copies of another combination in.
+ */
+export function parseSeriesCombination(value: unknown): SeriesCombination | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const out: SeriesCombination = {};
+  for (const key of Object.keys(raw)) {
+    if (key !== "conditionId" && key !== "certificateStatusId" && key !== "formatId") return null;
+  }
+  if ("conditionId" in raw) {
+    if (typeof raw.conditionId !== "string") return null;
+    out.conditionId = raw.conditionId;
+  }
+  for (const key of ["certificateStatusId", "formatId"] as const) {
+    if (!(key in raw)) continue;
+    const v = raw[key];
+    if (v !== null && typeof v !== "string") return null;
+    out[key] = v;
+  }
+  return out;
+}
+
+export const SERIES_FILTER_PARAMS =["conditionIds", "certificateStatusIds", "formatIds", "subtypeIds"] as const;
+
+export const SERIES_MIXING_PARAMS: Record<keyof SeriesMixing, string> = {
+  condition: "mixConditions",
+  certificate: "mixCertificates",
+  format: "mixFormats",
+};
+
+function csv(sp: URLSearchParams, key: string): string[] {
+  return (sp.get(key) ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+/** Read the criteria off a query string. Anything unrecognised is no filter and no mixing, so a
+ *  stale link shows the default screen rather than an empty one. */
+export function parseSeriesCriteria(sp: URLSearchParams): SeriesCriteria {
+  return {
+    conditionIds: csv(sp, "conditionIds"),
+    certificateStatusIds: csv(sp, "certificateStatusIds"),
+    formatIds: csv(sp, "formatIds"),
+    subtypeIds: csv(sp, "subtypeIds"),
+    mixing: {
+      condition: sp.get(SERIES_MIXING_PARAMS.condition) === "true",
+      certificate: sp.get(SERIES_MIXING_PARAMS.certificate) === "true",
+      format: sp.get(SERIES_MIXING_PARAMS.format) === "true",
+    },
+  };
+}
+
+/** The criteria as query parameters — only what differs from the default, so the default screen's
+ *  address carries nothing but its platform. */
+export function seriesCriteriaParams(criteria: SeriesCriteria): [string, string][] {
+  const out: [string, string][] = [];
+  for (const key of SERIES_FILTER_PARAMS) {
+    if (criteria[key].length > 0) out.push([key, criteria[key].join(",")]);
+  }
+  for (const axis of Object.keys(SERIES_MIXING_PARAMS) as (keyof SeriesMixing)[]) {
+    if (criteria.mixing[axis]) out.push([SERIES_MIXING_PARAMS[axis], "true"]);
+  }
+  return out;
 }
 
 export interface RecombinationInput {
@@ -100,6 +258,8 @@ export interface RecombinationInput {
   checklists: readonly LotChecklist[];
   /** The state of every offer a copy names. */
   offerStates: ReadonlyMap<string, OfferState>;
+  /** Which axes a proposal may mix. Absent: none — the product default (#1265). */
+  mixing?: SeriesMixing;
 }
 
 /** One slot of the series, with every copy that can fill it — available copies first. */
@@ -117,6 +277,10 @@ export interface OffersToChange {
 
 export interface RecombinableSeries {
   checklistId: string;
+  /** What every copy in the proposal shares (#1265). */
+  combination: SeriesCombination;
+  /** The proposal's identity: one checklist can be proposed once per combination. */
+  key: string;
   /** In the checklist's own order. */
   slots: RecombinationSlot[];
   offersToChange: OffersToChange;
@@ -129,45 +293,66 @@ export const MIN_SERIES_STAMPS = 2;
 /**
  * The series on this platform that single offers plus available copies could complete.
  *
- * Listed when complete over **every** copy and not complete over the available ones alone. A series
- * still missing a slot after the singles are counted is not listed either: it is not a recombination
- * yet, only a want. **Nor is a checklist of one stamp** (#1257): the single offer holding it already
- * is the whole series, so composing it would only duplicate that offer.
+ * The copies are split by {@link SeriesCombination} under the input's mixing first (#1265), and every
+ * question below is asked **within one combination**. A proposal is listed when complete over
+ * **every** copy of its combination and not complete over that combination's available ones alone. A
+ * series still missing a slot after the singles are counted is not listed either: it is not a
+ * recombination yet, only a want. **Nor is a checklist of one stamp** (#1257): the single offer
+ * holding it already is the whole series, so composing it would only duplicate that offer.
+ *
+ * Checklist by checklist, each checklist's proposals in the order their combinations first appear
+ * among the copies; the read names and orders them.
  */
 export function findRecombinableSeries(input: RecombinationInput): RecombinableSeries[] {
-  const available = input.copies.filter((copy) => copy.offerIds.length === 0);
-  const completeIds = (pool: readonly CoverageCopy[]) =>
-    new Set(
-      checklistCoverage(pool, input.checklists)
-        .filter((coverage) => coverage.complete)
-        .map((coverage) => coverage.checklistId)
-    );
-  const completeOverAll = completeIds(input.copies);
-  const completeOverAvailable = completeIds(available);
+  const mixing = input.mixing ?? NO_MIXING;
+  const groups = new Map<string, { combination: SeriesCombination; copies: RecombinationCopy[] }>();
+  for (const copy of input.copies) {
+    const combination = combinationOf(copy, mixing);
+    const key = combinationKey(combination);
+    const group = groups.get(key);
+    if (group) group.copies.push(copy);
+    else groups.set(key, { combination, copies: [copy] });
+  }
 
+  const listable = input.checklists.filter(
+    (checklist) => new Set(checklist.stampIds).size >= MIN_SERIES_STAMPS
+  );
   const isLive = (offerId: string) => {
     const state = input.offerStates.get(offerId);
     return state !== undefined && isLiveForRecombination(state);
   };
 
-  return input.checklists
-    .filter(
-      (checklist) =>
-        new Set(checklist.stampIds).size >= MIN_SERIES_STAMPS &&
-        completeOverAll.has(checklist.checklistId) &&
-        !completeOverAvailable.has(checklist.checklistId)
-    )
-    .map((checklist) => {
-      const slots = [...checklistSlots(input.copies, checklist)].map(([stampId, copies]) => ({
+  const byChecklist = new Map<string, RecombinableSeries[]>();
+  for (const [groupKey, group] of groups) {
+    const completeIds = (pool: readonly CoverageCopy[]) =>
+      new Set(
+        checklistCoverage(pool, listable)
+          .filter((coverage) => coverage.complete)
+          .map((coverage) => coverage.checklistId)
+      );
+    const completeOverAll = completeIds(group.copies);
+    if (completeOverAll.size === 0) continue;
+    const completeOverAvailable = completeIds(group.copies.filter((copy) => copy.offerIds.length === 0));
+
+    for (const checklist of listable) {
+      if (!completeOverAll.has(checklist.checklistId)) continue;
+      if (completeOverAvailable.has(checklist.checklistId)) continue;
+      const slots = [...checklistSlots(group.copies, checklist)].map(([stampId, copies]) => ({
         stampId,
         copies: [...copies].sort(availableFirst),
       }));
-      return {
+      const found = byChecklist.get(checklist.checklistId) ?? [];
+      found.push({
         checklistId: checklist.checklistId,
+        combination: group.combination,
+        key: `${checklist.checklistId}:${groupKey}`,
         slots,
         offersToChange: fewestOffersToChange(slots, isLive),
-      };
-    });
+      });
+      byChecklist.set(checklist.checklistId, found);
+    }
+  }
+  return listable.flatMap((checklist) => byChecklist.get(checklist.checklistId) ?? []);
 }
 
 function availableFirst(a: RecombinationCopy, b: RecombinationCopy): number {

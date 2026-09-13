@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { findSeriesRecombinations } from "@/lib/series-recombination";
+import { parseSeriesCriteria } from "@/lib/series-recombination-rules";
 
-// The series one platform's single offers plus its available copies could complete (#1210). Read-only;
-// composing a listed series (#1211) is the `composeSeriesOfferAction` server action.
+// The series one platform's single offers plus its available copies could complete (#1210), under the
+// screen's filters and mixing switches (#1265). Read-only; composing a listed series (#1211) is the
+// `composeSeriesOfferAction` server action.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -23,7 +25,12 @@ export async function GET(
 
   try {
     return NextResponse.json(
-      await findSeriesRecombinations(session.user.id, collectionId, platformId)
+      await findSeriesRecombinations(
+        session.user.id,
+        collectionId,
+        platformId,
+        parseSeriesCriteria(request.nextUrl.searchParams)
+      )
     );
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

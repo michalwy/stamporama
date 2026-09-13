@@ -522,13 +522,15 @@ export function useLotProposal(collectionId: string, request: LotBuilderRequest)
 }
 
 /** The series one platform's single offers plus its available copies could complete (#1210). In the
- *  offers namespace, so anything that changes an offer or a copy's availability re-asks it. */
-export function useSeriesFromSingles(collectionId: string, platformId: string) {
+ *  offers namespace, so anything that changes an offer or a copy's availability re-asks it.
+ *  `criteriaQuery` is the screen's filters and mixing switches (#1265), already a query string —
+ *  `seriesCriteriaParams`' output — so the key and the request cannot spell them differently. */
+export function useSeriesFromSingles(collectionId: string, platformId: string, criteriaQuery: string) {
   return useQuery<SeriesRecombinationResult>({
-    queryKey: ["offers", collectionId, "series-from-singles", platformId] as const,
+    queryKey: ["offers", collectionId, "series-from-singles", platformId, criteriaQuery] as const,
     queryFn: async () => {
       const res = await fetch(
-        `/api/collections/${collectionId}/offers/series-from-singles?platformId=${encodeURIComponent(platformId)}`
+        `/api/collections/${collectionId}/offers/series-from-singles?platformId=${encodeURIComponent(platformId)}${criteriaQuery ? `&${criteriaQuery}` : ""}`
       );
       if (!res.ok) throw new Error("Failed to read the series");
       return res.json();

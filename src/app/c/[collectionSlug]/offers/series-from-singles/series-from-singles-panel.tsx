@@ -9,10 +9,18 @@ import type {
   RecombinationSeriesView,
   RecombinationStampName,
 } from "@/lib/series-recombination";
-import { compositionOutcome, type CompositionOfferChange } from "@/lib/series-recombination-rules";
+import {
+  compositionOutcome,
+  parseSeriesCriteria,
+  SERIES_FILTER_PARAMS,
+  SERIES_MIXING_PARAMS,
+  seriesCriteriaParams,
+  type CompositionOfferChange,
+} from "@/lib/series-recombination-rules";
 import { formatItemNo } from "@/lib/item-number";
 import { Icon } from "@/app/icons";
-import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
@@ -35,6 +43,11 @@ import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 // picks (#1211) — nothing is pre-selected, since conditions are not ranked (#570, ADR-0032) — and the
 // card composes the series as one offer, after a dialog saying which offers lose a set, which of those
 // are live and which are withdrawn.
+//
+// A card is one **combination** (#1265): by default one condition, one certificate status and one
+// format, named in its heading, so one checklist can be two cards. The *Copies* band steers it — four
+// filters narrowing the candidates and a mixing switch per axis — and all of it lives in the URL
+// beside the platform, spelled as the Copies list spells its filters.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -73,31 +86,59 @@ const SLOT_ROW: React.CSSProperties = {
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)", textDecoration: "none" };
 
+type Named = { id: string; name: string };
+
 interface SeriesFromSinglesPanelProps {
   collectionId: string;
   collectionSlug: string;
-  platforms: { id: string; name: string }[];
+  platforms: Named[];
+  conditions: Named[];
+  certificateStatuses: Named[];
+  formats: Named[];
+  subtypes: Named[];
 }
+
+const FILTER_ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  flexWrap: "wrap",
+};
 
 export function SeriesFromSinglesPanel({
   collectionId,
   collectionSlug,
   platforms,
+  conditions,
+  certificateStatuses,
+  formats,
+  subtypes,
 }: SeriesFromSinglesPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requested = searchParams.get("platformId") ?? "";
   const platformId = platforms.some((p) => p.id === requested) ? requested : "";
-  const query = useSeriesFromSingles(collectionId, platformId);
+  const criteria = parseSeriesCriteria(new URLSearchParams(searchParams.toString()));
+  const criteriaQuery = new URLSearchParams(seriesCriteriaParams(criteria)).toString();
+  const query = useSeriesFromSingles(collectionId, platformId, criteriaQuery);
+  const filtered = SERIES_FILTER_PARAMS.some((key) => criteria[key].length > 0);
 
-  function choosePlatform(id: string) {
+  /** Set or clear parameters; an empty value removes its key, so the default screen's address stays
+   *  bare. */
+  function updateParams(patch: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
-    if (id) params.set("platformId", id);
-    else params.delete("platformId");
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
     const qs = params.toString();
     router.replace(`/c/${collectionSlug}/offers/series-from-singles${qs ? `?${qs}` : ""}`, {
       scroll: false,
     });
+  }
+
+  function choosePlatform(id: string) {
+    updateParams({ platformId: id });
   }
 
   return (
@@ -122,6 +163,90 @@ export function SeriesFromSinglesPanel({
         </select>
       </div>
 
+      <div style={BAND}>
+        <SectionHeading
+          title="Copies"
+          note="By default a series holds one condition, one certificate status and one format. Filters narrow the copies considered before a series counts as complete."
+        />
+        <div style={FILTER_ROW}>
+          <MultiSelectFilter
+            options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+            selected={criteria.conditionIds}
+            onChange={(ids) => updateParams({ conditionIds: ids.join(",") })}
+            allLabel="All conditions"
+            itemNoun="conditions"
+            ariaLabel="Filter by condition"
+          />
+          {/* "No certificate", "Single" and "No subtype" are tickable values, not the absence of a
+              filter — the Copies list's reading of each null-bearing axis, to the parameter. */}
+          {certificateStatuses.length > 0 ? (
+            <MultiSelectFilter
+              options={[
+                { id: "none", label: "No certificate" },
+                ...certificateStatuses.map((c) => ({ id: c.id, label: c.name })),
+              ]}
+              selected={criteria.certificateStatusIds}
+              onChange={(ids) => updateParams({ certificateStatusIds: ids.join(",") })}
+              allLabel="All certificates"
+              itemNoun="certificates"
+              ariaLabel="Filter by certificate status"
+            />
+          ) : null}
+          {formats.length > 0 ? (
+            <MultiSelectFilter
+              options={[{ id: "single", label: "Single" }, ...formats.map((f) => ({ id: f.id, label: f.name }))]}
+              selected={criteria.formatIds}
+              onChange={(ids) => updateParams({ formatIds: ids.join(",") })}
+              allLabel="All formats"
+              itemNoun="formats"
+              ariaLabel="Filter by format"
+            />
+          ) : null}
+          {subtypes.length > 0 ? (
+            <MultiSelectFilter
+              options={[{ id: "none", label: "No subtype" }, ...subtypes.map((s) => ({ id: s.id, label: s.name }))]}
+              selected={criteria.subtypeIds}
+              onChange={(ids) => updateParams({ subtypeIds: ids.join(",") })}
+              allLabel="All subtypes"
+              itemNoun="subtypes"
+              ariaLabel="Filter by stamp subtype"
+            />
+          ) : null}
+          <span style={{ ...NOTE, marginLeft: "0.5rem" }}>A series may mix:</span>
+          {/* One switch per axis, independent of each other — so *any certificate, but all MNH
+              singles* can be said. An axis with nothing defined has only one value, so its switch
+              could change nothing and is not drawn. */}
+          <FilterChip
+            label="Conditions"
+            toggle
+            active={criteria.mixing.condition}
+            onClick={() =>
+              updateParams({ [SERIES_MIXING_PARAMS.condition]: criteria.mixing.condition ? "" : "true" })
+            }
+          />
+          {certificateStatuses.length > 0 ? (
+            <FilterChip
+              label="Certificates"
+              toggle
+              active={criteria.mixing.certificate}
+              onClick={() =>
+                updateParams({ [SERIES_MIXING_PARAMS.certificate]: criteria.mixing.certificate ? "" : "true" })
+              }
+            />
+          ) : null}
+          {formats.length > 0 ? (
+            <FilterChip
+              label="Formats"
+              toggle
+              active={criteria.mixing.format}
+              onClick={() =>
+                updateParams({ [SERIES_MIXING_PARAMS.format]: criteria.mixing.format ? "" : "true" })
+              }
+            />
+          ) : null}
+        </div>
+      </div>
+
       <div style={{ padding: "0.875rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {!platformId ? (
           <Empty>
@@ -135,9 +260,9 @@ export function SeriesFromSinglesPanel({
           <Callout tone="warning">The series could not be read. Try again in a moment.</Callout>
         ) : query.data.series.length === 0 ? (
           <Empty>
-            No series on {query.data.platformName} can be completed by recombining single offers. A
-            series the available copies complete on their own is not listed here — the lot builder
-            already offers it whole.
+            No series on {query.data.platformName} can be completed by recombining single offers
+            {filtered ? " out of the copies these filters keep" : ""}. A series the available copies
+            complete on their own is not listed here — the lot builder already offers it whole.
           </Empty>
         ) : (
           <>
@@ -150,12 +275,13 @@ export function SeriesFromSinglesPanel({
             </span>
             {query.data.series.map((series) => (
               <SeriesCard
-                key={series.checklistId}
+                key={series.key}
                 series={series}
                 collectionId={collectionId}
                 collectionSlug={collectionSlug}
                 platformId={platformId}
                 platformName={query.data.platformName}
+                criteriaQuery={criteriaQuery}
               />
             ))}
           </>
@@ -171,12 +297,14 @@ function SeriesCard({
   collectionSlug,
   platformId,
   platformName,
+  criteriaQuery,
 }: {
   series: RecombinationSeriesView;
   collectionId: string;
   collectionSlug: string;
   platformId: string;
   platformName: string;
+  criteriaQuery: string;
 }) {
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [composing, setComposing] = useState(false);
@@ -211,6 +339,12 @@ function SeriesCard({
           </>
         ) : null}
         <span>{series.checklistName}</span>
+        {/* The combination this card holds (#1265) — what tells two cards of one checklist apart. */}
+        {series.combinationLabels.map((label) => (
+          <span key={label} style={{ ...ROW_CHIP, fontWeight: 400 }}>
+            {label}
+          </span>
+        ))}
         <span style={{ flex: 1 }} />
         <span style={{ ...NOTE, fontWeight: 400 }}>
           {series.slots.length} stamps · at least {offers} would change
@@ -238,7 +372,9 @@ function SeriesCard({
                   >
                     <input
                       type="radio"
-                      name={`${series.checklistId}:${slot.stamp.stampId}`}
+                      // Keyed by the card, not the checklist: two cards of one checklist must not
+                      // share a radio group.
+                      name={`${series.key}:${slot.stamp.stampId}`}
                       checked={picks[slot.stamp.stampId] === filler.itemId}
                       onChange={() =>
                         setChosen((prev) => ({ ...prev, [slot.stamp.stampId]: filler.itemId }))
@@ -281,6 +417,7 @@ function SeriesCard({
           collectionSlug={collectionSlug}
           platformId={platformId}
           platformName={platformName}
+          criteriaQuery={criteriaQuery}
           onClose={() => setComposing(false)}
         />
       ) : null}
@@ -300,6 +437,7 @@ function ComposeSeriesDialog({
   collectionSlug,
   platformId,
   platformName,
+  criteriaQuery,
   onClose,
 }: {
   series: RecombinationSeriesView;
@@ -308,6 +446,7 @@ function ComposeSeriesDialog({
   collectionSlug: string;
   platformId: string;
   platformName: string;
+  criteriaQuery: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -330,7 +469,14 @@ function ComposeSeriesDialog({
     setError(undefined);
     startTransition(async () => {
       const { composeSeriesOfferAction } = await import("@/app/actions/offers");
-      const result = await composeSeriesOfferAction(collectionId, platformId, series.checklistId, picks);
+      const result = await composeSeriesOfferAction(
+        collectionId,
+        platformId,
+        series.checklistId,
+        series.combination,
+        criteriaQuery,
+        picks
+      );
       if (result.status === "success") {
         await invalidateAll(collectionId);
         router.push(`/c/${collectionSlug}/offers/${result.offerId}`);

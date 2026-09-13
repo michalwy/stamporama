@@ -118,6 +118,11 @@ export function listableOnPlatformFilters(platformId: string): ItemListFiltersPa
     // lot is never built that could not be posted. Narrowed here rather than in the shared clause,
     // which every other caller still wants as it is.
     deliveryStates: [...LISTABLE_DELIVERY_STATES],
+    // **Still held** (#1263). `notOfferedPlatformId` asks about offers on the platform, and a copy
+    // that sold — through an offer now closed, or on another platform — or went to a partner in a
+    // closed trade sits in none, so it read as free to list. It is not in the envelope to count.
+    // Written off is already out: `disposedAt` is hidden unless asked for.
+    excludeGone: true,
   };
 }
 

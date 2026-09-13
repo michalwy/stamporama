@@ -5,6 +5,10 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { listContacts } from "@/lib/contacts";
+import { getStampConditions } from "@/lib/conditions";
+import { getCertificateStatuses } from "@/lib/certificate-statuses";
+import { getStampFormats } from "@/lib/stamp-formats";
+import { getStampSubtypes } from "@/lib/subtypes";
 import { SeriesFromSinglesPanel } from "./series-from-singles-panel";
 
 // Series from singles (#1210; #754's design) — a nav entry of its own under Offers, beside the lot
@@ -27,8 +31,15 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const contacts = await listContacts(session.user.id, collection.id);
+  const [contacts, conditions, certificateStatuses, formats, subtypes] = await Promise.all([
+    listContacts(session.user.id, collection.id),
+    getStampConditions(session.user.id, collection.id),
+    getCertificateStatuses(session.user.id, collection.id),
+    getStampFormats(session.user.id, collection.id),
+    getStampSubtypes(session.user.id, collection.id),
+  ]);
   const platforms = contacts.filter((c) => c.platform).map((c) => ({ id: c.id, name: c.name }));
+  const named = (rows: { id: string; name: string }[]) => rows.map((row) => ({ id: row.id, name: row.name }));
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -54,6 +65,10 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         platforms={platforms}
+        conditions={named(conditions)}
+        certificateStatuses={named(certificateStatuses)}
+        formats={named(formats)}
+        subtypes={named(subtypes)}
       />
     </div>
   );

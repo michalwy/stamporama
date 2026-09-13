@@ -1151,8 +1151,9 @@ them. Once you have a set of criteria that works, [save it](#saved-criteria) so 
 again.
 
 The **platform** comes first, because everything else is judged against it. The lot is drawn from the
-copies that are marked *for sale*, have **arrived and been sorted**, are not already listed on that
-platform, are not under bid anywhere, and that you have not set aside as never-on-that-platform.
+copies you **still have** — not sold, not given away in a closed trade, not written off — that are
+marked *for sale*, have **arrived and been sorted**, are not already listed on that platform, are not
+under bid anywhere, and that you have not set aside as never-on-that-platform.
 
 *Delivered* is stricter here than on the Copies list's *not offered on X* worklist, which happily
 shows you a copy still in the post — you can write a listing ahead of a parcel. A bulk lot is a
@@ -1357,13 +1358,48 @@ A series here is a **checklist** — one of an issue's sets. It is listed when t
 platform, taken together, cover every stamp of it:
 
 - **Available copies** — the same *not offered there yet* the [Lot builder](#building-a-bulk-lot)
-  draws from: marked for sale, arrived and sorted, not already in an open offer on that platform, not
-  under bid anywhere, and not set aside as never-on-that-platform.
+  draws from: still in the collection, marked for sale, arrived and sorted, not already in an open
+  offer on that platform, not under bid anywhere, and not set aside as never-on-that-platform.
 - **Singles** — a copy that is the **only copy in its set**, in an offer on that platform that is
   **Preparing**, **Ready**, **Active** or **Paused**.
 
-"Covers" means what it means in the lot builder: a copy of a **variant** covers its parent's place,
-and the conditions and formats do not have to match across the series.
+**A copy you no longer have never fills a place**, whichever of the two it would otherwise count as:
+one that has **sold**, gone to a partner in a **closed trade**, or been **written off**. That holds
+even when the offer it sold through was never moved out of **Active** — a sold copy is still sold. A
+series complete only thanks to such a copy is not listed; one that stays complete without it is
+listed with the copies you still have.
+
+"Covers" means what it means in the lot builder: a copy of a **variant** covers its parent's place.
+Condition, certificate and format are different — see the next section.
+
+### One condition, certificate and format per series
+
+A buyer looks for a set in **one** condition, so by default a series here holds copies of **one
+condition, one certificate status and one format** — all MNH, all without a certificate, all
+singles, say. A checklist that could be completed in two ways, for example once in MNH and once in
+used, is listed **twice**: two cards, each naming what it holds in its heading (*Mint Never Hinged ·
+No certificate · Single*). Whether a series is already complete out of the available copies alone is
+asked of that card's copies too.
+
+The **Copies** band under the platform steers it:
+
+- **A series may mix** — one switch each for **Conditions**, **Certificates** and **Formats**. Turn one
+  on and a series may combine values on **that** axis only: with *Conditions* on, an MNH stamp and a
+  used one can make one series, but a certified copy and an uncertified one still cannot. The heading
+  then names only the axes that are not mixed. The *Certificates* and *Formats* switches appear only
+  when the collection defines certificate statuses or formats.
+- **Filters** for **condition**, **certificate**, **format** and **subtype**, each a multi-select like
+  the ones on the [Copies list](inventory.md). *No certificate*, *Single* and *No subtype* can be
+  ticked like any other value. A filter narrows the copies **before** a series counts as complete, so
+  a series complete only thanks to a copy the filter leaves out is not listed. Filters and switches
+  combine plainly: filtering to MNH and MH with *Conditions* off gives separate MNH and MH cards; with
+  it on, one card may hold both.
+
+A copy of a **variant** still fills its parent's place whatever the switches say; the subtype filter is
+how to narrow that (tick *No subtype* to leave the variants out).
+
+The filters and switches are written into the address with the platform, so a refresh or a shared
+link opens the screen as you left it.
 
 Four things are deliberately **not** listed:
 
@@ -1389,7 +1425,7 @@ A copy **promised in an agreed trade** still fills its place and is chipped **Pr
 It is not left out: a draft competes for nothing, but an offer holding it cannot go live while the
 trade stands.
 
-The card's heading says **how many offers would change** — *at least N, M of them live* (Active or
+The card's heading also says **how many offers would change** — *at least N, M of them live* (Active or
 Paused). Where more than one copy could fill a place, the figure assumes the cheapest choice in
 offers: an available copy first, since it changes no offer at all, then the fewest offers, and among
 those the fewest live ones. Choose differently and more offers change.
@@ -1400,7 +1436,8 @@ Each card ends with **Compose one offer…**. It turns the singles and the avail
 offer holding the whole series, in one step, instead of editing each single offer by hand and
 composing the series offer afterwards.
 
-- **Choose the copies.** Where only one copy can fill a stamp's place, it is taken as is. Where
+- **Choose the copies.** Only the card's own copies are offered — never a copy of another card's
+  condition, certificate or format. Where only one copy can fill a stamp's place, it is taken as is. Where
   several can, each has a radio button and **you pick** — nothing is chosen for you, because the app
   does not rank conditions. The button stays disabled until every place has a copy.
 - **Check the outcome.** The dialog says what is about to happen: a new **Preparing** offer on the
@@ -1417,7 +1454,8 @@ to update it there; a live offer that was withdrawn has to be taken down there b
 says which.
 
 **The copies are checked again when you compose.** If a chosen copy is no longer a candidate by then
-— it sold, went into active bidding, was put into another set, or is no longer in the collection — the
+— it sold (even if its offer is still Active), went into active bidding, was put into another set, is
+no longer in the collection, or no longer matches the card's condition, certificate or format — the
 series is **not** composed: the message names the copy, and nothing is changed. Nothing is written
 halfway, either: the new offer exists only together with the sets leaving their old offers.
 
