@@ -72,6 +72,36 @@ describe("findRecombinableSeries (#1210)", () => {
     assert.deepEqual(found, []);
   });
 
+  it("does not list a checklist of one stamp, which the single offer already is (#1257)", () => {
+    const one: LotChecklist = { checklistId: "one", stampIds: ["s1"] };
+    const found = findRecombinableSeries({
+      copies: [offered("c1", "s1", ["o1"])],
+      checklists: [one],
+      offerStates: states({ o1: "active" }),
+    });
+    assert.deepEqual(found, []);
+  });
+
+  it("counts a stamp repeated in a checklist once when deciding it is a one-stamp checklist (#1257)", () => {
+    const repeated: LotChecklist = { checklistId: "repeated", stampIds: ["s1", "s1"] };
+    const found = findRecombinableSeries({
+      copies: [offered("c1", "s1", ["o1"])],
+      checklists: [repeated],
+      offerStates: states({ o1: "active" }),
+    });
+    assert.deepEqual(found, []);
+  });
+
+  it("lists a checklist of two stamps as before (#1257)", () => {
+    const pair: LotChecklist = { checklistId: "pair", stampIds: ["s1", "s2"] };
+    const found = findRecombinableSeries({
+      copies: [offered("c1", "s1", ["o1"]), available("a2", "s2")],
+      checklists: [pair],
+      offerStates: states({ o1: "active" }),
+    });
+    assert.deepEqual(found.map((series) => series.checklistId), ["pair"]);
+  });
+
   it("lets a variant copy fill its parent's slot (#661)", () => {
     const pair: LotChecklist = { checklistId: "pair", stampIds: ["226", "227"] };
     const found = findRecombinableSeries({

@@ -216,6 +216,28 @@ describe("series from singles (#1210)", () => {
     assert.equal(await listed(setId), null);
   });
 
+  it("does not list a checklist of one stamp, whether its stamp is offered singly or available (#1257)", async () => {
+    const [offeredStamp] = await stamps(1);
+    const offeredSetId = await checklist([offeredStamp]);
+    await offer([[await copy(offeredStamp)]]);
+
+    const [availableStamp] = await stamps(1);
+    const availableSetId = await checklist([availableStamp]);
+    await copy(availableStamp);
+    await offer([[await copy(availableStamp)]]);
+
+    // A two-stamp series on the same platform in the same read is still listed, so the empty answers
+    // above are the one-stamp rule and not a read that found nothing.
+    const pair = await stamps(2);
+    const pairSetId = await checklist(pair);
+    await offer([[await copy(pair[0])]]);
+    await copy(pair[1]);
+
+    assert.equal(await listed(offeredSetId), null, "its stamp offered singly");
+    assert.equal(await listed(availableSetId), null, "its stamp available");
+    assert.ok(await listed(pairSetId), "a two-stamp series beside it is listed as before");
+  });
+
   it("does not fill a slot with a copy in an offer in active bidding — here or on another platform (#334)", async () => {
     const ids = await stamps(2);
     const setId = await checklist(ids);

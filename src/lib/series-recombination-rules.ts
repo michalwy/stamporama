@@ -122,12 +122,17 @@ export interface RecombinableSeries {
   offersToChange: OffersToChange;
 }
 
+/** The fewest distinct stamps a checklist needs to be listed (#1257). Counted as `checklistCoverage`
+ *  counts its required slots, so a stamp repeated in a checklist is one slot here too. */
+export const MIN_SERIES_STAMPS = 2;
+
 /**
  * The series on this platform that single offers plus available copies could complete.
  *
  * Listed when complete over **every** copy and not complete over the available ones alone. A series
  * still missing a slot after the singles are counted is not listed either: it is not a recombination
- * yet, only a want.
+ * yet, only a want. **Nor is a checklist of one stamp** (#1257): the single offer holding it already
+ * is the whole series, so composing it would only duplicate that offer.
  */
 export function findRecombinableSeries(input: RecombinationInput): RecombinableSeries[] {
   const available = input.copies.filter((copy) => copy.offerIds.length === 0);
@@ -148,6 +153,7 @@ export function findRecombinableSeries(input: RecombinationInput): RecombinableS
   return input.checklists
     .filter(
       (checklist) =>
+        new Set(checklist.stampIds).size >= MIN_SERIES_STAMPS &&
         completeOverAll.has(checklist.checklistId) &&
         !completeOverAvailable.has(checklist.checklistId)
     )
