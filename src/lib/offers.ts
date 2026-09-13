@@ -4681,7 +4681,14 @@ export async function createOffer(
   ownerId: string,
   collectionId: string,
   input: OfferInput,
-  opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
+  opts: {
+    seedItemIds?: string[];
+    seedPerCopy?: boolean;
+    /** Further writes that must stand or fall with the new offer, run inside its transaction once the
+     *  offer and its seed exist. Composing a series out of single offers (#1211) takes the copies'
+     *  sets out of their old offers here: no new offer without that, and none of that without it. */
+    inTransaction?: (tx: Prisma.TransactionClient, offerId: string) => Promise<void>;
+  } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, input.platformId);
@@ -4809,6 +4816,7 @@ export async function createOffer(
         },
       });
     }
+    await opts.inTransaction?.(tx, offer.id);
     return offer.id;
   });
   await syncOfferContextTexts(ownerId, offerId, platform);

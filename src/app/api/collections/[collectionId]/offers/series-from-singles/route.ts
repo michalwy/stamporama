@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { findSeriesRecombinations } from "@/lib/series-recombination";
 
 // The series one platform's single offers plus its available copies could complete (#1210). Read-only;
-// acting on a listed series is #1211's.
+// composing a listed series (#1211) is the `composeSeriesOfferAction` server action.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
