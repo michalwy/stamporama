@@ -156,6 +156,10 @@ export interface StampNodeData {
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
+  /** True when the stamp is an unknown-variant umbrella (`isUnknownVariantStamp`): it has variants
+   *  of its own, at any depth — read off every variant child, not only the ones on this issue. A copy
+   *  of it is an unknown-variant copy (#130), which is what a series run warns about (#1247). */
+  isUmbrella: boolean;
   /** The stamp's subtype for display (#340), or null for a base stamp. The collection default is
    *  reported as stored and dropped by the chip, not here. */
   subtype: SubtypeLabel | null;
@@ -382,6 +386,7 @@ function toStampNode(
     mainCatalogPriceUncertain: headline.uncertain,
     mainCatalogPriceDerived: headline.derived,
     actsAsVariant: childIsVariant(m.stamp),
+    isUmbrella: isUnknownVariantStamp(m.stamp),
     subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
     copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,

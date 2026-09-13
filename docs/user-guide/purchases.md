@@ -849,8 +849,16 @@ stamps first, then the other stamps of its issue — and **its own details**.
   after it.
 - **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
   #3* so a slip is noticed.
+- **A tile on an umbrella is flagged.** Checklists often hold a stamp that has variants of its own
+  (a variant with sub-variants counts too), and a tile that takes one is on the umbrella rather than
+  on the variant it really is. Its row carries an amber **umbrella** flag, and the note above the run
+  counts them — *4 on an umbrella* — so you need not scroll a long run to find them. Pick the variant
+  on the right and the flag goes at once. It is a signal, not a block: *Identify* still works, and a
+  tile left on an umbrella becomes an unknown-variant copy, which is right when the picture cannot
+  tell the variant.
 - **More tiles than stamps leaves the extra tiles with no stamp.** Give each one a stamp, take it out
-  of the run with the **−** button (it stays ticked on the card, and *Taken out* puts it back), or add
+  of the run with the small **×** at the end of its row (nothing is deleted: it stays ticked on the
+  card, and *Taken out* puts it back; Tab passes over the ×), or add
   the missing stamp with **+ New stamp on this checklist** — it joins the checklist at the end, and a
   tile still waiting for its turn takes it. (A checklist spanning issues has no such link: add the
   stamp from its issue first.)
